@@ -47,6 +47,12 @@ interface SyncContextValue {
   selectProject: (project: Project | null) => void;
   refresh: () => void;
   isConfigured: boolean;
+  /**
+   * Send an index update to notify other devices of pending execution.
+   * This sends via the index WebSocket so desktop can receive it without
+   * being connected to the specific session room.
+   */
+  sendIndexUpdate: (sessionId: string, update: { pendingExecution?: { messageId: string; sentAt: number; sentBy: 'mobile' | 'desktop' } }) => void;
 }
 
 // ============================================================================
@@ -411,6 +417,44 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
     }
   }, []);
 
+  // Send an index update to notify other devices
+  const sendIndexUpdate = useCallback(
+    (sessionId: string, update: { pendingExecution?: { messageId: string; sentAt: number; sentBy: 'mobile' | 'desktop' } }) => {
+      if (wsRef.current?.readyState !== WebSocket.OPEN) {
+        console.warn('[CollabV3] Cannot send index update - not connected');
+        return;
+      }
+
+      // Find the session in our cache to get its project_id
+      const session = allSessions.find((s) => s.id === sessionId);
+      if (!session) {
+        console.warn('[CollabV3] Cannot send index update - session not found:', sessionId);
+        return;
+      }
+
+      const msg: ClientMessage = {
+        type: 'index_update',
+        session: {
+          session_id: sessionId,
+          project_id: session.workspaceId || 'default',
+          title: session.title,
+          provider: session.provider,
+          model: session.model,
+          mode: session.mode,
+          message_count: session.messageCount,
+          last_message_at: session.lastMessageAt,
+          created_at: session.createdAt,
+          updated_at: Date.now(),
+          pendingExecution: update.pendingExecution,
+        },
+      };
+
+      console.log('[CollabV3] Sending index_update for session:', sessionId, 'pendingExecution:', update.pendingExecution);
+      wsRef.current.send(JSON.stringify(msg));
+    },
+    [allSessions]
+  );
+
   // Connect to IndexRoom
   const connect = useCallback(() => {
     if (!config) return;
@@ -577,6 +621,7 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
     selectProject,
     refresh,
     isConfigured: config !== null,
+    sendIndexUpdate,
   };
 
   return <SyncContext.Provider value={value}>{children}</SyncContext.Provider>;

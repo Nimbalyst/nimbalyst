@@ -198,13 +198,18 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
     metadata?: Record<string, unknown>,
     hidden?: boolean
   ): Promise<void> {
+    // Create timestamp HERE - this is the authoritative source
+    // This same timestamp must be used for message.created_at, session.updated_at, and sync index
+    const createdAt = new Date();
+
     return AgentMessagesRepository.create({
       sessionId,
       source,
       direction,
       content,
       metadata,
-      hidden
+      hidden,
+      createdAt,
     }).then(() => {
       // Emit event to notify listeners that new message was written to database
       // Include hidden flag so sync handlers can skip hidden messages

@@ -171,6 +171,17 @@ class RepositoryManager {
   }
 
   /**
+   * Get the base (unwrapped) agent messages store.
+   * Use this when saving messages from sync to avoid feedback loops.
+   */
+  getBaseAgentMessagesStore(): AgentMessagesStore {
+    if (!this.baseAgentMessagesStore) {
+      throw new Error('RepositoryManager not initialized. Call initialize() first.');
+    }
+    return this.baseAgentMessagesStore;
+  }
+
+  /**
    * Reinitialize sync with new configuration.
    * Called when sync settings are changed at runtime.
    */
@@ -242,4 +253,8 @@ export function getSessionFileStore(): SessionFileStore {
 
 export function getAgentMessagesStore(): AgentMessagesStore {
   return repositoryManager.getAgentMessagesStore();
+}
+
+export function getBaseAgentMessagesStore(): AgentMessagesStore {
+  return repositoryManager.getBaseAgentMessagesStore();
 }

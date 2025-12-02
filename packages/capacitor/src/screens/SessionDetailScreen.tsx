@@ -51,30 +51,10 @@ interface SyncedMessage {
   hidden?: boolean;
 }
 
-// Wire protocol type for index updates (snake_case to match server)
-interface WireSessionIndexEntry {
-  session_id: string;
-  project_id: string;
-  title: string;
-  provider: string;
-  model?: string;
-  mode?: 'agent' | 'planning';
-  message_count: number;
-  last_message_at: number;
-  created_at: number;
-  updated_at: number;
-  pendingExecution?: {
-    messageId: string;
-    sentAt: number;
-    sentBy: 'mobile' | 'desktop';
-  };
-}
-
 type ClientMessage =
   | { type: 'sync_request'; since_id?: string; since_seq?: number }
   | { type: 'append_message'; message: EncryptedMessage }
-  | { type: 'update_metadata'; metadata: Partial<WireSessionMetadata> }
-  | { type: 'index_update'; session: Partial<WireSessionIndexEntry> & { session_id: string } };
+  | { type: 'update_metadata'; metadata: Partial<WireSessionMetadata> };
 
 type ServerMessage =
   | {
@@ -216,7 +196,7 @@ interface SessionDetailScreenProps {
 export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenProps) {
   const navigate = useNavigate();
   const { sessionId } = useParams<{ sessionId: string }>();
-  const { config } = useSync();
+  const { config, sendIndexUpdate } = useSync();
 
   console.log('[SessionDetail] Render - sessionId:', sessionId, 'config:', config ? 'present' : 'null');
 
@@ -491,24 +471,16 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
         sentBy: 'mobile' as const,
       };
 
-      // Send metadata update for the session room
+      // Send metadata update for the session room (for any connected devices watching this session)
       const pendingMsg: ClientMessage = {
         type: 'update_metadata',
         metadata: { pendingExecution },
       };
       wsRef.current.send(JSON.stringify(pendingMsg));
 
-      // Also send index_update so desktop receives via index broadcast
-      // (desktop may not be connected to this specific session room)
-      const indexMsg: ClientMessage = {
-        type: 'index_update',
-        session: {
-          session_id: sessionId,
-          pendingExecution,
-          updated_at: Date.now(),
-        },
-      };
-      wsRef.current.send(JSON.stringify(indexMsg));
+      // Send index_update via the INDEX WebSocket so desktop receives via index_broadcast
+      // (desktop listens to index broadcasts, not individual session rooms)
+      sendIndexUpdate(sessionId, { pendingExecution });
 
       // Optimistically add to local state
       setMessages((prev) => [

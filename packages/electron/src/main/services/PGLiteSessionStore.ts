@@ -79,13 +79,20 @@ export async function getAllSessionsForSync(includeMessages = false): Promise<Ar
   createdAt: number;
   messages?: SyncedMessage[];
 }>> {
+  // Log stack trace to identify callers
+  const stack = new Error().stack?.split('\n').slice(1, 5).join('\n') || 'no stack';
+  console.log('[PGLiteSessionStore] getAllSessionsForSync called from:\n' + stack);
+
+  const startTime = performance.now();
   if (!moduleDb) {
     throw new Error('Session store not initialized');
   }
   if (moduleEnsureReady) {
     await moduleEnsureReady();
   }
+  const ensureTime = performance.now() - startTime;
 
+  const queryStart = performance.now();
   const { rows } = await moduleDb.query<any>(
     `SELECT s.id, s.provider, s.model, s.mode, s.title, s.workspace_id, s.draft_input,
             s.created_at, s.updated_at, COUNT(m.id) as message_count
@@ -95,6 +102,7 @@ export async function getAllSessionsForSync(includeMessages = false): Promise<Ar
      GROUP BY s.id, s.provider, s.model, s.mode, s.title, s.workspace_id, s.draft_input, s.created_at, s.updated_at
      ORDER BY s.updated_at DESC`
   );
+  const queryTime = performance.now() - queryStart;
 
   const sessions = rows.map((row: any) => ({
     id: row.id,
@@ -137,7 +145,45 @@ export async function getAllSessionsForSync(includeMessages = false): Promise<Ar
     }
   }
 
+  const totalTime = performance.now() - startTime;
+  console.log(`[PGLiteSessionStore] getAllSessionsForSync() - ensureReady: ${ensureTime.toFixed(1)}ms, query: ${queryTime.toFixed(1)}ms, total: ${totalTime.toFixed(1)}ms, rows: ${rows.length}`);
   return sessions;
+}
+
+/**
+ * Get messages for a session, optionally starting from an offset.
+ * Used for delta sync - only fetch messages the server doesn't have.
+ */
+export async function getSessionMessagesForSync(
+  sessionId: string,
+  offset: number = 0
+): Promise<SyncedMessage[]> {
+  if (!moduleDb) {
+    throw new Error('Session store not initialized');
+  }
+  if (moduleEnsureReady) {
+    await moduleEnsureReady();
+  }
+
+  const { rows: msgRows } = await moduleDb.query<any>(
+    `SELECT id, session_id, created_at, source, direction, content, metadata, hidden
+     FROM ai_agent_messages
+     WHERE session_id = $1
+     ORDER BY created_at ASC
+     OFFSET $2`,
+    [sessionId, offset]
+  );
+
+  return msgRows.map((m: any): AgentMessage => ({
+    id: m.id,
+    sessionId: m.session_id,
+    createdAt: m.created_at instanceof Date ? m.created_at : new Date(toMillis(m.created_at)),
+    source: m.source,
+    direction: m.direction,
+    content: m.content,
+    metadata: m.metadata,
+    hidden: m.hidden ?? false,
+  }));
 }
 
 export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureReadyFn): SessionStore {
@@ -303,10 +349,13 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
     },
 
     async list(workspaceId: string, options?: SessionListOptions): Promise<SessionListItem[]> {
+      const startTime = performance.now();
       await ensureReady();
+      const ensureTime = performance.now() - startTime;
       const includeArchived = options?.includeArchived ?? false;
       const archiveFilter = includeArchived ? '' : 'AND (s.is_archived = FALSE OR s.is_archived IS NULL)';
 
+      const queryStart = performance.now();
       const { rows } = await db.query<any>(
         `SELECT s.id, s.provider, s.model, s.session_type, s.mode, s.title, s.workspace_id,
                 s.created_at, s.updated_at, s.is_archived, COUNT(m.id) as message_count
@@ -318,6 +367,9 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
          ORDER BY s.updated_at DESC`,
         [workspaceId]
       );
+      const queryTime = performance.now() - queryStart;
+      const totalTime = performance.now() - startTime;
+      console.log(`[PGLiteSessionStore] list() - ensureReady: ${ensureTime.toFixed(1)}ms, query: ${queryTime.toFixed(1)}ms, total: ${totalTime.toFixed(1)}ms, rows: ${rows.length}`);
       return rows.map(row => {
         const createdAt = toMillis(row.created_at);
         const updatedAt = toMillis(row.updated_at);

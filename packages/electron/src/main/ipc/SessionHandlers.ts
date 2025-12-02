@@ -143,7 +143,10 @@ export async function registerSessionHandlers() {
     // List sessions for workspace
     ipcMain.handle('sessions:list', async (event, workspacePath: string, options?: { includeArchived?: boolean }) => {
         try {
+            const startTime = performance.now();
             const entries = await AISessionsRepository.list(workspacePath, options);
+            const listTime = performance.now() - startTime;
+            console.log(`[SessionHandlers] sessions:list query took ${listTime.toFixed(1)}ms for ${entries.length} sessions`);
             // Use entry data directly - it already has all the info we need including updatedAt
             const sessions = entries.map(entry => ({
                 id: entry.id,

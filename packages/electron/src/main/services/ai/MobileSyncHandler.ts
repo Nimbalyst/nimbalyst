@@ -171,30 +171,15 @@ export class MobileSyncHandler {
 
     // Subscribe to remote changes
     const unsubscribe = this.syncProvider.onRemoteChange(sessionId, async (change: SessionChange) => {
-      logger.main.info('[MobileSyncHandler] Received remote change:', change.type, 'for session:', sessionId);
-
-      // Handle new messages from mobile - save them to database
-      if (change.type === 'message_added') {
-        logger.main.info('[MobileSyncHandler] Received message from mobile, saving to database...');
-
-        try {
-          // Save message to database
-          const { AgentMessagesRepository } = await import('@nimbalyst/runtime');
-          await AgentMessagesRepository.create({
-            sessionId,
-            source: change.message.source,
-            direction: change.message.direction,
-            content: change.message.content,
-            metadata: change.message.metadata,
-            hidden: change.message.hidden,
-            createdAt: change.message.createdAt,
-          });
-
-          logger.main.info('[MobileSyncHandler] Mobile message saved to database');
-        } catch (error) {
-          logger.main.error('[MobileSyncHandler] Failed to save mobile message to database:', error);
-        }
+      // Only log metadata changes, not message floods
+      if (change.type !== 'message_added') {
+        logger.main.info('[MobileSyncHandler] Received remote change:', change.type, 'for session:', sessionId);
       }
+
+      // NOTE: We intentionally do NOT save message_added events here.
+      // Messages from mobile are saved when they trigger pendingExecution processing.
+      // Trying to save all message_added events causes feedback loops and floods
+      // because the sync server broadcasts all historical messages on connect.
 
       // Handle pending execution requests
       if (change.type === 'metadata_updated' && change.metadata?.pendingExecution) {

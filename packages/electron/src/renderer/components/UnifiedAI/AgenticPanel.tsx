@@ -160,6 +160,40 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // Constants
   const MAX_CLOSED_SESSION_HISTORY = 10;
 
+  // Lazy load session data when a tab becomes active (for tabs created with placeholder data)
+  useEffect(() => {
+    if (!activeTabId) return;
+
+    const activeTab = sessionTabs.find(tab => tab.id === activeTabId);
+    if (!activeTab) return;
+
+    // Check if this tab needs to load its data
+    if ((activeTab.sessionData as any)?._needsLoad) {
+      const loadActiveSession = async () => {
+        try {
+          console.log('[AgenticPanel] Lazy loading session data for:', activeTabId);
+          const sessionData = await window.electronAPI.aiLoadSession(activeTabId, workspacePath);
+          if (sessionData) {
+            setSessionTabs(prev => prev.map(tab =>
+              tab.id === activeTabId
+                ? {
+                    ...tab,
+                    sessionData,
+                    draftInput: sessionData.draftInput || tab.draftInput,
+                    mode: sessionData.mode || tab.mode,
+                    model: sessionData.model || sessionData.provider || tab.model,
+                  }
+                : tab
+            ));
+          }
+        } catch (err) {
+          console.error('[AgenticPanel] Failed to lazy load session:', activeTabId, err);
+        }
+      };
+      loadActiveSession();
+    }
+  }, [activeTabId, workspacePath]); // Note: intentionally not including sessionTabs to avoid loops
+
   // Helper to get or create ref for a session
   const getSessionViewRef = useCallback((sessionId: string) => {
     const refsMap = sessionViewRefsRef.current;
@@ -782,28 +816,71 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           const savedTabs = tabStateResult?.tabs || [];
 
           if (savedTabs.length > 0) {
+            console.log('[AgenticPanel] PERF: Starting tab restore, savedTabs count:', savedTabs.length);
+            const restoreStart = performance.now();
+
             const restoredTabs: SessionTab[] = [];
+            const activeId = tabStateResult.activeTabId?.replace(/^(session|agentic):\/\//, '') || tabStateResult.activeTabId;
+            console.log('[AgenticPanel] PERF: Active tab ID:', activeId);
+
+            // PERFORMANCE FIX: Only load messages for the ACTIVE tab
+            // Other tabs get placeholder data and load lazily when activated
+            let activeLoadTime = 0;
+            let placeholderCount = 0;
             for (const savedTab of savedTabs) {
               try {
                 const sessionId = savedTab.filePath.replace(/^(session|agentic):\/\//, '') || savedTab.id;
-                const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspacePath);
-                if (sessionData) {
+                const isActiveTab = sessionId === activeId;
+
+                if (isActiveTab) {
+                  // Load full session data for active tab
+                  const loadStart = performance.now();
+                  console.log('[AgenticPanel] PERF: Loading ACTIVE session:', sessionId);
+                  const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspacePath);
+                  activeLoadTime = performance.now() - loadStart;
+                  console.log(`[AgenticPanel] PERF: Active session load took ${activeLoadTime.toFixed(1)}ms for ${sessionData.messages.length} messages`);
+                  if (sessionData) {
+                    restoredTabs.push({
+                      id: sessionId,
+                      name: savedTab.fileName,
+                      sessionData,
+                      isPinned: savedTab.isPinned,
+                      draftInput: sessionData.draftInput,
+                      mode: sessionData.mode || 'agent',
+                      model: sessionData.model || sessionData.provider || 'claude-code'
+                    });
+                  }
+                } else {
+                  placeholderCount++;
+                  // Create placeholder for background tabs - they'll load when activated
                   restoredTabs.push({
                     id: sessionId,
                     name: savedTab.fileName,
-                    sessionData,
+                    sessionData: {
+                      id: sessionId,
+                      title: savedTab.fileName,
+                      messages: [], // Empty - will load when tab becomes active
+                      provider: 'claude-code',
+                      createdAt: Date.now(),
+                      updatedAt: Date.now(),
+                      _needsLoad: true, // Flag to indicate lazy loading needed
+                    } as any,
                     isPinned: savedTab.isPinned,
-                    draftInput: sessionData.draftInput,
-                    mode: sessionData.mode || 'agent',
-                    model: sessionData.model || sessionData.provider || 'claude-code'
+                    draftInput: '',
+                    mode: 'agent',
+                    model: 'claude-code'
                   });
                 }
               } catch (err) {
                 console.error('[AgenticPanel] Failed to load saved session:', savedTab.filePath, err);
               }
             }
+            console.log(`[AgenticPanel] PERF: Created ${placeholderCount} placeholder tabs`);
 
             if (restoredTabs.length > 0) {
+              const restoreEnd = performance.now();
+              console.log(`[AgenticPanel] PERF: Tab restore loop took ${(restoreEnd - restoreStart).toFixed(1)}ms for ${restoredTabs.length} tabs`);
+
               setSessionTabs(restoredTabs);
               const activeId = tabStateResult.activeTabId?.replace(/^(session|agentic):\/\//, '') || tabStateResult.activeTabId || restoredTabs[0].id;
               setActiveTabId(activeId);

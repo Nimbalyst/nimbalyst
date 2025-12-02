@@ -30,6 +30,7 @@ import {AnalyticsService} from "../analytics/AnalyticsService.ts";
 import { historyManager } from '../../HistoryManager';
 import { getAIProviderOverrides, saveAIProviderOverrides, clearAIProviderOverrides } from '../../utils/store';
 import { mergeAISettings } from '../../utils/aiSettingsMerge';
+import { MobileSyncHandler } from './MobileSyncHandler';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -299,13 +300,16 @@ export class AIService {
   private sendMessageHandler: ((event: Electron.IpcMainInvokeEvent, message: string, documentContext?: DocumentContext, sessionId?: string, workspacePath?: string) => Promise<{ content: string }>) | null = null;
   // NOTE: Providers are now tracked per-session in ProviderFactory, not per-window
   // This allows multiple concurrent sessions in the same window (e.g., agent mode tabs)
-  private mobileSyncHandler: any = null; // MobileSyncHandler instance (lazy loaded)
+  private mobileSyncHandler: MobileSyncHandler | null = null;
 
   constructor(sessionStore: SessionStore) {
+    logger.main.info('[AIService] Constructor called');
     this.sessionManager = new SessionManager(sessionStore);
 
     // Initialize mobile sync handler if sync is enabled
-    this.initializeMobileSyncHandler();
+    this.initializeMobileSyncHandler().catch(err => {
+      logger.main.error('[AIService] initializeMobileSyncHandler threw:', err);
+    });
 
     // Initialize SessionStateManager with the database worker
     // Import dynamically to avoid circular dependencies
@@ -438,6 +442,8 @@ export class AIService {
     const maxRetries = 5;
     const retryDelayMs = 1000;
 
+    logger.main.info('[AIService] Attempting to initialize mobile sync handler...');
+
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         const { getSyncProvider } = await import('../SyncManager');
@@ -445,16 +451,17 @@ export class AIService {
 
         if (!syncProvider) {
           if (attempt < maxRetries) {
-            logger.main.debug(`[AIService] Sync not ready yet, retrying in ${retryDelayMs}ms (attempt ${attempt}/${maxRetries})`);
+            logger.main.info(`[AIService] Sync not ready yet, retrying in ${retryDelayMs}ms (attempt ${attempt}/${maxRetries})`);
             await new Promise(resolve => setTimeout(resolve, retryDelayMs));
             continue;
           }
-          logger.main.debug('[AIService] Sync not enabled after retries, mobile sync handler not initialized');
+          logger.main.info('[AIService] Sync not enabled after retries, mobile sync handler not initialized');
           return;
         }
 
         logger.main.info('[AIService] Initializing mobile sync handler...');
-        const { MobileSyncHandler } = await import('./MobileSyncHandler');
+        logger.main.info('[AIService] syncProvider has onIndexChange:', !!syncProvider.onIndexChange);
+
         this.mobileSyncHandler = new MobileSyncHandler(syncProvider);
 
         // Set the message handler so we can process mobile messages
@@ -464,6 +471,7 @@ export class AIService {
 
         // Start listening for pending executions via index changes
         // This is more efficient than connecting to every session's WebSocket
+        logger.main.info('[AIService] Calling startIndexListener...');
         await this.mobileSyncHandler.startIndexListener();
 
         logger.main.info('[AIService] Mobile sync handler initialized successfully');
@@ -904,15 +912,9 @@ export class AIService {
       // NOTE: No longer tracking provider per-window - ProviderFactory handles per-session tracking
       // This allows multiple concurrent sessions in the same window
 
-      // Watch for mobile messages if sync is enabled
-      if (this.mobileSyncHandler) {
-        await this.mobileSyncHandler.watchSession(
-          session.id,
-          async (sessionId: string, messageId: string) => {
-            await this.processMobileMessage(sessionId, messageId);
-          }
-        );
-      }
+      // NOTE: Mobile message handling is done via startIndexListener() which watches
+      // the index for pendingExecution flags. We do NOT call watchSession() here because
+      // it creates a WebSocket connection per session, causing performance issues.
 
       this.analytics.sendEvent('create_ai_session', { provider });
       return session;
@@ -1904,7 +1906,10 @@ export class AIService {
 
     // Load a session
     ipcMain.handle('ai:loadSession', async (event, sessionId: string, workspacePath?: string) => {
+      const loadStart = performance.now();
       const session = await this.sessionManager.loadSession(sessionId, workspacePath);
+      const loadTime = performance.now() - loadStart;
+      console.log(`[ai:loadSession] PERF: sessionManager.loadSession took ${loadTime.toFixed(1)}ms for ${sessionId}, messages: ${session?.messages?.length || 0}`);
       if (!session) {
         console.log(`[SESSION] Session not found: ${sessionId} (this is normal if the session was deleted)`);
         return null;
@@ -1922,15 +1927,9 @@ export class AIService {
         });
       }
 
-      // Watch for mobile messages if sync is enabled
-      if (this.mobileSyncHandler) {
-        await this.mobileSyncHandler.watchSession(
-          session.id,
-          async (sessionId: string, messageId: string) => {
-            await this.processMobileMessage(sessionId, messageId);
-          }
-        );
-      }
+      // NOTE: Mobile message handling is done via startIndexListener() which watches
+      // the index for pendingExecution flags. We do NOT call watchSession() here because
+      // it creates a WebSocket connection per session, causing performance issues.
 
       return session;
     });
