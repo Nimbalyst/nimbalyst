@@ -554,6 +554,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
     setSessionId: (sessionId: string) => ipcRenderer.invoke('analytics:set-session-id', sessionId),
   },
 
+  // Credentials (for sync and mobile pairing)
+  credentials: {
+    getUserId: () => ipcRenderer.invoke('credentials:get-user-id'),
+    get: () => ipcRenderer.invoke('credentials:get'),
+    reset: () => ipcRenderer.invoke('credentials:reset'),
+    generateQRPayload: (serverUrl: string, expiresInMinutes?: number) =>
+      ipcRenderer.invoke('credentials:generate-qr-payload', serverUrl, expiresInMinutes),
+    isSecure: () => ipcRenderer.invoke('credentials:is-secure'),
+  },
+
+  // Network utilities
+  network: {
+    getLocalIP: () => ipcRenderer.invoke('network:get-local-ip'),
+  },
+
   // Generic IPC methods for services that need them
   invoke: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args),
   send: (channel: string, ...args: any[]) => ipcRenderer.send(channel, ...args),

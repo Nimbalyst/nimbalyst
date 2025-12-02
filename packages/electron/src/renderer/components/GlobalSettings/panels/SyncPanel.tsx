@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { QRPairingModal } from './QRPairingModal';
 
 export interface SyncConfig {
   enabled: boolean;
@@ -30,6 +31,24 @@ export function SyncPanel({
 }: SyncPanelProps) {
   const isDevelopment = import.meta.env.DEV;
   const [projects, setProjects] = useState<Project[]>([]);
+  const [userId, setUserId] = useState<string>('');
+  const [isSecureStorage, setIsSecureStorage] = useState<boolean>(false);
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [copiedUserId, setCopiedUserId] = useState(false);
+
+  // Load credentials info on mount
+  useEffect(() => {
+    async function loadCredentials() {
+      try {
+        const creds = await window.electronAPI.credentials.get();
+        setUserId(creds.userId);
+        setIsSecureStorage(creds.isSecure);
+      } catch (error) {
+        console.error('Failed to load credentials:', error);
+      }
+    }
+    loadCredentials();
+  }, []);
 
   // Load projects from workspace store
   useEffect(() => {
@@ -66,14 +85,43 @@ export function SyncPanel({
     return config.enabledProjects.includes(projectPath);
   };
 
+  const handleCopyUserId = async () => {
+    try {
+      await navigator.clipboard.writeText(userId);
+      setCopiedUserId(true);
+      setTimeout(() => setCopiedUserId(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy user ID:', error);
+    }
+  };
+
   return (
     <div className="provider-panel">
       <div className="provider-panel-header">
         <h3 className="provider-panel-title">Session Sync</h3>
         <p className="provider-panel-description">
-          Sync AI sessions across devices using Y.js real-time collaboration.
-          This is an experimental feature for development and testing.
+          Sync AI sessions across devices with end-to-end encryption.
+          Pair your mobile device using a QR code to access sessions on the go.
         </p>
+      </div>
+
+      {/* Device Identity Section */}
+      <div className="provider-panel-section">
+        <h4 className="provider-panel-section-title">Device Identity</h4>
+        <p className="provider-panel-hint" style={{ marginBottom: '12px' }}>
+          Your unique device ID is auto-generated and stored securely{isSecureStorage ? ' in your system keychain' : ''}.
+        </p>
+
+        <div className="user-id-display">
+          <span className="user-id-value">{userId || 'Loading...'}</span>
+          <button
+            className="user-id-copy-button"
+            onClick={handleCopyUserId}
+            disabled={!userId}
+          >
+            {copiedUserId ? 'Copied!' : 'Copy'}
+          </button>
+        </div>
       </div>
 
       <div className="provider-panel-section">
@@ -119,34 +167,38 @@ export function SyncPanel({
                 WebSocket URL of the sync server (e.g., ws://localhost:8790 or wss://sync.example.com)
               </span>
             </div>
+          </div>
 
-            <div className="api-key-section">
-              <label className="api-key-label">User ID</label>
-              <input
-                type="text"
-                className="api-key-input"
-                value={config.userId}
-                onChange={(e) => handleFieldChange('userId', e.target.value)}
-                placeholder="your-user-id"
-              />
-              <span className="api-key-hint">
-                Your unique user identifier for session routing
-              </span>
-            </div>
+          {/* Mobile Pairing Section */}
+          <div className="provider-panel-section">
+            <h4 className="provider-panel-section-title">Mobile Device Pairing</h4>
+            <p className="provider-panel-hint" style={{ marginBottom: '16px' }}>
+              Scan the QR code with the Nimbalyst mobile app to sync sessions to your phone or tablet.
+              The QR code contains your encrypted credentials.
+            </p>
 
-            <div className="api-key-section">
-              <label className="api-key-label">Auth Token</label>
-              <input
-                type="password"
-                className="api-key-input"
-                value={config.authToken}
-                onChange={(e) => handleFieldChange('authToken', e.target.value)}
-                placeholder="your-auth-token"
-              />
-              <span className="api-key-hint">
-                Authentication token for the sync server
-              </span>
-            </div>
+            <button
+              className="pair-device-button"
+              onClick={() => setShowQRModal(true)}
+              disabled={!config.serverUrl}
+            >
+              <svg className="pair-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="3" width="7" height="7" rx="1" />
+                <rect x="14" y="3" width="7" height="7" rx="1" />
+                <rect x="3" y="14" width="7" height="7" rx="1" />
+                <rect x="14" y="14" width="3" height="3" />
+                <rect x="18" y="14" width="3" height="3" />
+                <rect x="14" y="18" width="3" height="3" />
+                <rect x="18" y="18" width="3" height="3" />
+              </svg>
+              Pair Mobile Device
+            </button>
+
+            {!config.serverUrl && (
+              <p className="provider-panel-hint" style={{ marginTop: '8px', color: 'var(--text-tertiary)' }}>
+                Enter a server URL above to enable mobile pairing.
+              </p>
+            )}
           </div>
 
           <div className="provider-panel-section">
@@ -156,7 +208,7 @@ export function SyncPanel({
               <button
                 className={`test-connection-button ${testStatus}`}
                 onClick={onTestConnection}
-                disabled={testStatus === 'testing' || !config.serverUrl || !config.userId}
+                disabled={testStatus === 'testing' || !config.serverUrl}
               >
                 {testStatus === 'testing' ? 'Testing...' : 'Test Connection'}
               </button>
@@ -227,18 +279,23 @@ npm run dev`}
                   onConfigChange({
                     ...config,
                     serverUrl: 'ws://localhost:8790',
-                    userId: 'dev-user',
-                    authToken: 'dev-token',
                   });
                 }}
                 style={{ marginTop: '8px' }}
               >
-                Use Local Dev Defaults
+                Use Local Dev Server
               </button>
             </div>
           )}
         </>
       )}
+
+      {/* QR Pairing Modal */}
+      <QRPairingModal
+        isOpen={showQRModal}
+        onClose={() => setShowQRModal(false)}
+        serverUrl={config.serverUrl}
+      />
     </div>
   );
 }

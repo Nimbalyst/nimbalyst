@@ -7,8 +7,27 @@ import { ProjectPicker } from '../components/ProjectPicker';
 
 export function SessionListScreen() {
   const navigate = useNavigate();
-  const { sessions, projects, selectedProject, selectProject, isConfigured, refresh } = useSync();
+  const {
+    sessions,
+    projects,
+    selectedProject,
+    selectProject,
+    isConfigured,
+    refresh,
+    status,
+  } = useSync();
   const [showProjectPicker, setShowProjectPicker] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    refresh();
+    // Give the sync a moment to complete
+    setTimeout(() => setIsRefreshing(false), 1000);
+  };
+
+  // Show loading state when syncing and no sessions yet
+  const isLoading = status.syncing && sessions.length === 0;
 
   return (
     <div className="flex flex-col h-screen">
@@ -67,6 +86,10 @@ export function SessionListScreen() {
               </button>
             }
           />
+        ) : isLoading ? (
+          <LoadingState />
+        ) : status.error ? (
+          <ErrorState error={status.error} onRetry={handleRefresh} />
         ) : sessions.length === 0 ? (
           <EmptyState
             icon={
@@ -78,10 +101,11 @@ export function SessionListScreen() {
             description="AI sessions from your desktop will appear here when synced."
             action={
               <button
-                onClick={refresh}
-                className="px-6 py-2 rounded-lg font-medium text-[var(--primary-color)] border border-[var(--primary-color)] hover:bg-[var(--primary-color)] hover:text-white transition-colors"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                className="px-6 py-2 rounded-lg font-medium text-[var(--primary-color)] border border-[var(--primary-color)] hover:bg-[var(--primary-color)] hover:text-white transition-colors disabled:opacity-50"
               >
-                Refresh
+                {isRefreshing ? 'Refreshing...' : 'Refresh'}
               </button>
             }
           />
@@ -123,6 +147,48 @@ function EmptyState({ icon, title, description, action }: EmptyStateProps) {
       <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-2">{title}</h2>
       <p className="text-sm text-[var(--text-secondary)] mb-6 max-w-xs">{description}</p>
       {action}
+    </div>
+  );
+}
+
+function LoadingState() {
+  return (
+    <div className="flex flex-col items-center justify-center h-full min-h-[300px] px-8 text-center">
+      <div className="mb-4">
+        <svg className="animate-spin h-10 w-10 text-[var(--primary-color)]" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+        </svg>
+      </div>
+      <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-2">Loading Sessions</h2>
+      <p className="text-sm text-[var(--text-secondary)]">Syncing with server...</p>
+    </div>
+  );
+}
+
+interface ErrorStateProps {
+  error: string;
+  onRetry: () => void;
+}
+
+function ErrorState({ error, onRetry }: ErrorStateProps) {
+  return (
+    <div className="flex flex-col items-center justify-center h-full min-h-[300px] px-8 text-center">
+      <div className="mb-4">
+        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--error-color)]">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" x2="12" y1="8" y2="12"/>
+          <line x1="12" x2="12.01" y1="16" y2="16"/>
+        </svg>
+      </div>
+      <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-2">Connection Error</h2>
+      <p className="text-sm text-[var(--text-secondary)] mb-6 max-w-xs">{error}</p>
+      <button
+        onClick={onRetry}
+        className="px-6 py-2 rounded-lg font-medium text-white bg-[var(--primary-color)] hover:opacity-90 transition-opacity"
+      >
+        Retry
+      </button>
     </div>
   );
 }

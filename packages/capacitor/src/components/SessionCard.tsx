@@ -4,15 +4,48 @@ import type { SessionIndexEntry } from '../contexts/CollabV3SyncContext';
 
 interface SessionCardProps {
   session: SessionIndexEntry;
+  compact?: boolean;
+  isSelected?: boolean;
+  onClick?: () => void;
 }
 
-export function SessionCard({ session }: SessionCardProps) {
+export function SessionCard({ session, compact, isSelected, onClick }: SessionCardProps) {
   const navigate = useNavigate();
   const formattedTime = formatRelativeTime(session.lastMessageAt);
 
   const handleClick = () => {
-    navigate(`/session/${session.id}`);
+    if (onClick) {
+      onClick();
+    } else {
+      navigate(`/session/${session.id}`);
+    }
   };
+
+  // Compact mode for iPad sidebar
+  if (compact) {
+    return (
+      <div
+        className={`p-3 rounded-lg ${isSelected ? '' : 'hover:bg-[var(--surface-tertiary)]'} transition-colors cursor-pointer`}
+        onClick={handleClick}
+      >
+        <div className="flex items-center gap-2 mb-1">
+          <ProviderIcon provider={session.provider} size="small" />
+          <span className={`font-medium text-sm line-clamp-1 ${isSelected ? 'text-[var(--primary-color)]' : 'text-[var(--text-primary)]'}`}>
+            {session.title || 'Untitled Session'}
+          </span>
+          {session.pendingExecution && (
+            <span className="px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-[var(--warning-color)] text-white flex-shrink-0">
+              Pending
+            </span>
+          )}
+        </div>
+        <div className="flex items-center justify-between text-xs text-[var(--text-tertiary)] pl-6">
+          <span>{formattedTime}</span>
+          <span>{session.messageCount || 0} msgs</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -52,26 +85,29 @@ export function SessionCard({ session }: SessionCardProps) {
   );
 }
 
-function ProviderIcon({ provider }: { provider: string }) {
+function ProviderIcon({ provider, size = 'normal' }: { provider: string; size?: 'small' | 'normal' }) {
+  const sizeClass = size === 'small' ? 'w-4 h-4' : 'w-5 h-5';
+  const textClass = size === 'small' ? 'text-[10px]' : 'text-xs';
+
   // Simple provider icons
   switch (provider?.toLowerCase()) {
     case 'claude':
     case 'claude-code':
       return (
-        <div className="w-5 h-5 rounded flex items-center justify-center bg-orange-100 text-orange-600">
-          <span className="text-xs font-bold">C</span>
+        <div className={`${sizeClass} rounded flex items-center justify-center bg-orange-100 text-orange-600 flex-shrink-0`}>
+          <span className={`${textClass} font-bold`}>C</span>
         </div>
       );
     case 'openai':
       return (
-        <div className="w-5 h-5 rounded flex items-center justify-center bg-green-100 text-green-600">
-          <span className="text-xs font-bold">O</span>
+        <div className={`${sizeClass} rounded flex items-center justify-center bg-green-100 text-green-600 flex-shrink-0`}>
+          <span className={`${textClass} font-bold`}>O</span>
         </div>
       );
     default:
       return (
-        <div className="w-5 h-5 rounded flex items-center justify-center bg-gray-100 text-gray-600">
-          <span className="text-xs font-bold">AI</span>
+        <div className={`${sizeClass} rounded flex items-center justify-center bg-gray-100 text-gray-600 flex-shrink-0`}>
+          <span className={`${textClass} font-bold`}>AI</span>
         </div>
       );
   }

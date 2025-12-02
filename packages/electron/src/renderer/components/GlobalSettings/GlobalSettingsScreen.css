@@ -851,3 +851,346 @@
   background: var(--surface-hover);
   color: var(--text-primary);
 }
+
+/* QR Pairing Modal */
+.qr-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  backdrop-filter: blur(4px);
+}
+
+.qr-modal-content {
+  width: 400px;
+  max-width: 90vw;
+  background: var(--surface-primary);
+  border-radius: 16px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+.qr-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.qr-modal-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.qr-modal-close {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.qr-modal-close:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.qr-modal-body {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.qr-code-container {
+  padding: 16px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.qr-code-image {
+  display: block;
+  width: 280px;
+  height: 280px;
+}
+
+.qr-instructions {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.qr-step {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
+  padding-left: 24px;
+  position: relative;
+}
+
+.qr-step::before {
+  content: counter(step);
+  counter-increment: step;
+  position: absolute;
+  left: 0;
+  width: 18px;
+  height: 18px;
+  background: var(--primary-color);
+  color: white;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.qr-instructions {
+  counter-reset: step;
+}
+
+.qr-expiry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--surface-secondary);
+  border-radius: 8px;
+}
+
+.qr-expiry-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.qr-expiry-time {
+  font-size: 16px;
+  font-weight: 600;
+  font-family: 'SF Mono', monospace;
+  color: var(--text-primary);
+}
+
+.qr-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.qr-warning-icon {
+  flex-shrink: 0;
+  color: rgb(245, 158, 11);
+  margin-top: 1px;
+}
+
+.qr-regenerate-button {
+  padding: 10px 20px;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.qr-regenerate-button:hover {
+  background: var(--surface-hover);
+}
+
+.qr-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 40px 0;
+  color: var(--text-secondary);
+}
+
+.qr-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border-primary);
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: qr-spin 0.8s linear infinite;
+}
+
+@keyframes qr-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.qr-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 20px;
+  color: var(--error-color);
+  text-align: center;
+}
+
+/* Sync Panel: User ID display */
+.user-id-display {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--surface-secondary);
+  border-radius: 8px;
+  border: 1px solid var(--border-primary);
+}
+
+.user-id-value {
+  font-family: 'SF Mono', monospace;
+  font-size: 13px;
+  color: var(--text-primary);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-id-copy-button {
+  padding: 6px 12px;
+  background: var(--surface-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.user-id-copy-button:hover {
+  background: var(--surface-hover);
+}
+
+/* Pair Mobile Device button */
+.pair-device-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: var(--primary-color);
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: white;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.pair-device-button:hover {
+  opacity: 0.9;
+}
+
+.pair-device-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pair-device-icon {
+  width: 18px;
+  height: 18px;
+}
+
+/* QR Dev Server Notice */
+.qr-dev-notice {
+  width: 100%;
+  padding: 12px 16px;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.qr-dev-notice-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgb(180, 120, 20);
+  margin-bottom: 8px;
+}
+
+.qr-dev-notice-icon {
+  color: rgb(245, 158, 11);
+  flex-shrink: 0;
+}
+
+.qr-dev-notice-text {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 0 0 10px 0;
+  line-height: 1.5;
+}
+
+.qr-dev-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+
+.qr-dev-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary-color);
+}
+
+.qr-dev-toggle-text {
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.qr-dev-toggle-text code {
+  background: var(--surface-tertiary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'SF Mono', monospace;
+  font-size: 11px;
+}
+
+.qr-dev-notice-url {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin: 0;
+}
+
+.qr-dev-notice-url code {
+  background: var(--surface-tertiary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'SF Mono', monospace;
+  word-break: break-all;
+}

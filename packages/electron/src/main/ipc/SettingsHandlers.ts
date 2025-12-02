@@ -1,9 +1,29 @@
 import { ipcMain } from 'electron';
+import * as os from 'os';
 import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel, getRecentItems, getDefaultAIModel, setDefaultAIModel, isAnalyticsEnabled, setAnalyticsEnabled, isWireframeLMEnabled, setWireframeLMEnabled, getSessionSyncConfig, setSessionSyncConfig, SessionSyncConfig } from '../utils/store';
 import { logger } from '../utils/logger';
 import { SoundNotificationService } from '../services/SoundNotificationService';
 import { autoUpdaterService } from '../services/autoUpdater';
 import type { OnboardingState } from '../utils/store';
+import { getCredentials, getUserId, resetCredentials, generateQRPairingPayload, isUsingSecureStorage } from '../services/CredentialService';
+
+/**
+ * Get the local network IP address (for LAN access from mobile devices)
+ */
+function getLocalNetworkIP(): string | null {
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+        const iface = interfaces[name];
+        if (!iface) continue;
+        for (const info of iface) {
+            // Skip internal (loopback) and non-IPv4 addresses
+            if (info.internal || info.family !== 'IPv4') continue;
+            // Return the first non-internal IPv4 address
+            return info.address;
+        }
+    }
+    return null;
+}
 
 export function registerSettingsHandlers() {
     // Get sidebar width
@@ -272,5 +292,52 @@ export function registerSettingsHandlers() {
         logger.store.info(`[sync:toggle-project] Project sync ${enabled ? 'enabled' : 'disabled'} for: ${workspacePath}`);
 
         return { success: true };
+    });
+
+    // ============================================================
+    // Credential Management (for sync and mobile pairing)
+    // ============================================================
+
+    // Get user ID (read-only, for display in settings)
+    ipcMain.handle('credentials:get-user-id', () => {
+        return getUserId();
+    });
+
+    // Get full credentials (for internal use, not exposed to UI except user ID)
+    ipcMain.handle('credentials:get', () => {
+        const creds = getCredentials();
+        return {
+            userId: creds.userId,
+            createdAt: creds.createdAt,
+            isSecure: isUsingSecureStorage(),
+        };
+    });
+
+    // Reset credentials (generates new ones - invalidates paired devices)
+    ipcMain.handle('credentials:reset', () => {
+        const creds = resetCredentials();
+        return {
+            userId: creds.userId,
+            createdAt: creds.createdAt,
+            isSecure: isUsingSecureStorage(),
+        };
+    });
+
+    // Generate QR pairing payload for mobile device
+    ipcMain.handle('credentials:generate-qr-payload', (_event, serverUrl: string, expiresInMinutes?: number) => {
+        if (!serverUrl) {
+            throw new Error('serverUrl is required for QR pairing');
+        }
+        return generateQRPairingPayload(serverUrl, expiresInMinutes);
+    });
+
+    // Check if secure storage (keychain) is available
+    ipcMain.handle('credentials:is-secure', () => {
+        return isUsingSecureStorage();
+    });
+
+    // Get local network IP for mobile pairing with local dev server
+    ipcMain.handle('network:get-local-ip', () => {
+        return getLocalNetworkIP();
     });
 }
