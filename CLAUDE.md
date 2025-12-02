@@ -232,6 +232,7 @@ The application supports multiple AI providers, including two distinct ways to a
   - Manages its own model selection internally (do not pass model IDs)
 - **Installation**: Requires `npm install -g @anthropic-ai/claude-agent-sdk` or local installation
 - **When to use**: For advanced code editing tasks that benefit from MCP's context protocol
+- **Internal MCP Servers**: See [INTERNAL_MCP_SERVERS.md](docs/INTERNAL_MCP_SERVERS.md) for how to implement and add new MCP servers
 
 #### Other Providers
 - **OpenAI**: GPT-4 and GPT-3.5 models via OpenAI API
