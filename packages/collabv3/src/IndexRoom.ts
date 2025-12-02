@@ -46,37 +46,29 @@ export class IndexRoom implements DurableObject {
 
   /**
    * Restore connection state from WebSocket tags after hibernation
+   * Note: Device info is NOT restored here because we can't map WebSockets to device IDs.
+   * Clients will need to re-announce their device after reconnection.
    */
   private restoreConnectionsFromHibernation(): void {
     const webSockets = this.state.getWebSockets();
     for (const ws of webSockets) {
       const tags = this.state.getTags(ws);
       const userTag = tags.find(t => t.startsWith(TAG_USER));
-      const deviceTag = tags.find(t => t.startsWith(TAG_DEVICE));
 
       if (userTag) {
         const userId = userTag.slice(TAG_USER.length);
-        let device: DeviceInfo | undefined;
 
-        // Restore device info from tag if available
-        if (deviceTag) {
-          try {
-            device = JSON.parse(decodeURIComponent(deviceTag.slice(TAG_DEVICE.length)));
-          } catch {
-            // Ignore parse errors
-          }
-        }
-
-        // After hibernation, assume all connections are synced
+        // After hibernation, connections are restored but device info is lost
+        // Clients will re-announce when they detect the connection is still open
         this.connections.set(ws, {
           auth: { user_id: userId },
           synced: true,
-          device,
+          device: undefined, // Will be set when client re-announces
         });
       }
     }
     if (webSockets.length > 0) {
-      console.log(`[IndexRoom] Restored ${webSockets.length} connections from hibernation`);
+      console.log(`[IndexRoom] Restored ${webSockets.length} connections from hibernation (devices will re-announce)`);
     }
   }
 
@@ -211,6 +203,10 @@ export class IndexRoom implements DurableObject {
           await this.handleIndexUpdate(ws, connState, message.session);
           break;
 
+        case 'index_batch_update':
+          await this.handleIndexBatchUpdate(ws, connState, message.sessions);
+          break;
+
         case 'index_delete':
           await this.handleIndexDelete(ws, connState, message.session_id);
           break;
@@ -311,6 +307,68 @@ export class IndexRoom implements DurableObject {
   }
 
   /**
+   * Handle batch index update from desktop (efficient bulk sync)
+   */
+  private async handleIndexBatchUpdate(
+    ws: WebSocket,
+    connState: ConnectionState,
+    sessions: SessionIndexEntry[]
+  ): Promise<void> {
+    const sql = this.state.storage.sql;
+    const affectedProjects = new Set<string>();
+
+    console.log('[IndexRoom] Processing batch update of', sessions.length, 'sessions');
+
+    // Use transaction for atomic batch update
+    sql.exec('BEGIN TRANSACTION');
+    try {
+      for (const session of sessions) {
+        sql.exec(
+          `INSERT OR REPLACE INTO session_index
+           (session_id, project_id, title, provider, model, mode, message_count, last_message_at, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          session.session_id,
+          session.project_id,
+          session.title,
+          session.provider,
+          session.model ?? null,
+          session.mode ?? null,
+          session.message_count,
+          session.last_message_at,
+          session.created_at,
+          session.updated_at
+        );
+        affectedProjects.add(session.project_id);
+      }
+      sql.exec('COMMIT');
+    } catch (err) {
+      sql.exec('ROLLBACK');
+      throw err;
+    }
+
+    // Update project stats for all affected projects
+    for (const projectId of affectedProjects) {
+      await this.updateProjectStats(projectId);
+    }
+
+    // Broadcast each session update to other connections
+    // (They may want to update their local state)
+    const connectionId = this.getConnectionId(ws);
+    for (const session of sessions) {
+      this.broadcast(
+        {
+          type: 'index_broadcast',
+          session,
+          from_connection_id: connectionId,
+        },
+        ws
+      );
+    }
+
+    console.log('[IndexRoom] Batch update complete:', sessions.length, 'sessions,', affectedProjects.size, 'projects');
+  }
+
+  /**
    * Handle session deletion from index
    */
   private async handleIndexDelete(
@@ -362,15 +420,9 @@ export class IndexRoom implements DurableObject {
     // Update connection state with device info
     connState.device = device;
 
-    // Store device info in WebSocket tag for hibernation recovery
-    // Note: Tags have a max length, so we encode compactly
-    const deviceTag = `${TAG_DEVICE}${encodeURIComponent(JSON.stringify(device))}`;
-    try {
-      // We can't update tags after accepting, but we store in connection state
-      // The device info will be restored from the tag on hibernation recovery
-    } catch {
-      // Tag update not supported, connection state is sufficient
-    }
+    // Store device info in DO storage for hibernation recovery
+    // Key by device_id so it persists across reconnections
+    await this.state.storage.put(`device:${device.device_id}`, device);
 
     console.log('[IndexRoom] Device announced:', device.name, device.type, device.platform);
 
@@ -392,12 +444,16 @@ export class IndexRoom implements DurableObject {
 
   /**
    * Get list of all connected devices
+   * Returns devices from active connections that have announced themselves
    */
   private getConnectedDevices(): DeviceInfo[] {
     const devices: DeviceInfo[] = [];
+    const seenIds = new Set<string>();
+
     for (const [, state] of this.connections) {
-      if (state.device) {
+      if (state.device && !seenIds.has(state.device.device_id)) {
         devices.push(state.device);
+        seenIds.add(state.device.device_id);
       }
     }
     return devices;

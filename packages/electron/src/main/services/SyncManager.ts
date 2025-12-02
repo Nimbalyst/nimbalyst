@@ -168,6 +168,7 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
 
       // Get device info for presence awareness
       const deviceInfo = getDeviceInfo(credentials.userId);
+      logger.main.info('[SyncManager] Generated device info:', JSON.stringify(deviceInfo));
 
       provider = createCollabV3Sync({
         serverUrl: config.serverUrl,
@@ -200,103 +201,140 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
       autoConnect: true,
     });
 
-    // Sync existing sessions and projects to index after a short delay to allow connection
-    logger.main.info('[SyncManager] Setting up bulk sync timer...');
+    // Sync existing sessions and projects to index using delta sync
+    logger.main.info('[SyncManager] Setting up incremental sync...');
     setTimeout(async () => {
-      logger.main.info('[SyncManager] Bulk sync timer fired');
+      logger.main.info('[SyncManager] Starting incremental sync...');
       try {
-        logger.main.info('[SyncManager] syncSessionsToIndex available:', !!provider.syncSessionsToIndex);
-        if (provider.syncSessionsToIndex) {
-          // Use getAllSessionsForSync which doesn't filter by workspace
-          logger.main.info('[SyncManager] Importing getAllSessionsForSync...');
-          const { getAllSessionsForSync } = await import('./PGLiteSessionStore');
-          logger.main.info('[SyncManager] Calling getAllSessionsForSync...');
-          const allSessions = await getAllSessionsForSync(true); // Include messages
-          logger.main.info('[SyncManager] Got sessions:', allSessions.length);
+        if (!provider.syncSessionsToIndex || !provider.fetchIndex) {
+          logger.main.warn('[SyncManager] Provider missing required sync methods');
+          return;
+        }
 
-          // Build projects list from recent workspaces store
-          const { getRecentItems, store } = await import('../utils/store');
-          const recentWorkspaces = getRecentItems('workspaces');
-          const syncSettings = store.get('sessionSync');
-          const enabledProjects = syncSettings?.enabledProjects;
+        // Step 1: Fetch the server's current index
+        logger.main.info('[SyncManager] Fetching server index...');
+        let serverIndex: Awaited<ReturnType<NonNullable<typeof provider.fetchIndex>>>;
+        try {
+          serverIndex = await provider.fetchIndex();
+          logger.main.info('[SyncManager] Server has', serverIndex.sessions.length, 'sessions');
+        } catch (fetchError) {
+          logger.main.warn('[SyncManager] Failed to fetch server index, falling back to full sync:', fetchError);
+          // Fall back to full sync if we can't fetch the index
+          serverIndex = { sessions: [], projects: [] };
+        }
 
-          logger.main.info('[SyncManager] Found', recentWorkspaces.length, 'workspaces in store');
-          logger.main.info('[SyncManager] Enabled projects:', enabledProjects);
+        // Build a map of server sessions for quick lookup
+        const serverSessionMap = new Map(
+          serverIndex.sessions.map(s => [s.session_id, s])
+        );
 
-          // Build session counts for each workspace
-          const sessionCounts = new Map<string, number>();
-          const lastActivity = new Map<string, number>();
+        // Step 2: Get local sessions (without messages first for comparison)
+        const { getAllSessionsForSync } = await import('./PGLiteSessionStore');
+        const allLocalSessions = await getAllSessionsForSync(false); // No messages yet
+        logger.main.info('[SyncManager] Local has', allLocalSessions.length, 'sessions');
 
-          for (const session of allSessions) {
-            const workspaceId = session.workspaceId || 'default';
-            sessionCounts.set(workspaceId, (sessionCounts.get(workspaceId) || 0) + 1);
-            lastActivity.set(workspaceId, Math.max(lastActivity.get(workspaceId) || 0, session.updatedAt));
+        // Step 3: Build project list from workspaces
+        const { getRecentItems, store } = await import('../utils/store');
+        const recentWorkspaces = getRecentItems('workspaces');
+        const syncSettings = store.get('sessionSync');
+        const enabledProjects = syncSettings?.enabledProjects;
+
+        const sessionCounts = new Map<string, number>();
+        const lastActivity = new Map<string, number>();
+
+        for (const session of allLocalSessions) {
+          const workspaceId = session.workspaceId || 'default';
+          sessionCounts.set(workspaceId, (sessionCounts.get(workspaceId) || 0) + 1);
+          lastActivity.set(workspaceId, Math.max(lastActivity.get(workspaceId) || 0, session.updatedAt));
+        }
+
+        const projects = recentWorkspaces.map(ws => ({
+          id: ws.path,
+          name: ws.name,
+          path: ws.path,
+          sessionCount: sessionCounts.get(ws.path) || 0,
+          lastActivityAt: lastActivity.get(ws.path) || Date.now(),
+          enabled: !enabledProjects || enabledProjects.includes(ws.path),
+        }));
+
+        if (sessionCounts.has('default')) {
+          projects.push({
+            id: 'default',
+            name: 'Default Project',
+            path: 'default',
+            sessionCount: sessionCounts.get('default') || 0,
+            lastActivityAt: lastActivity.get('default') || Date.now(),
+            enabled: !enabledProjects || enabledProjects.includes('default'),
+          });
+        }
+
+        const enabledProjectIds = new Set(projects.filter(p => p.enabled).map(p => p.id));
+
+        // Step 4: Find sessions that need syncing
+        const sessionsNeedingIndexUpdate: typeof allLocalSessions = [];
+        const sessionsNeedingMessageSync: string[] = [];
+
+        for (const localSession of allLocalSessions) {
+          const workspaceId = localSession.workspaceId || 'default';
+
+          // Skip sessions from disabled projects
+          if (!enabledProjectIds.has(workspaceId)) {
+            continue;
           }
 
-          // Create project entries from workspaces
-          const projects = recentWorkspaces.map(ws => ({
-            id: ws.path,
-            name: ws.name,
-            path: ws.path,
-            sessionCount: sessionCounts.get(ws.path) || 0,
-            lastActivityAt: lastActivity.get(ws.path) || Date.now(),
-            // If enabledProjects is not set, all projects are enabled by default
-            enabled: !enabledProjects || enabledProjects.includes(ws.path),
-          }));
+          const serverSession = serverSessionMap.get(localSession.id);
 
-          // Add "Default Project" if there are sessions without workspace
-          if (sessionCounts.has('default')) {
-            projects.push({
-              id: 'default',
-              name: 'Default Project',
-              path: 'default',
-              sessionCount: sessionCounts.get('default') || 0,
-              lastActivityAt: lastActivity.get('default') || Date.now(),
-              enabled: !enabledProjects || enabledProjects.includes('default'),
-            });
-          }
-
-          logger.main.info('[SyncManager] Built', projects.length, 'projects from workspace store');
-          logger.main.info('[SyncManager] Enabled projects:', projects.filter(p => p.enabled).map(p => p.name));
-
-          if (allSessions.length > 0) {
-
-            // Log workspace distribution
-            const workspaceStats = new Map<string, number>();
-            for (const session of allSessions) {
-              const wsId = session.workspaceId || 'null';
-              workspaceStats.set(wsId, (workspaceStats.get(wsId) || 0) + 1);
+          if (!serverSession) {
+            // New session - needs full sync (index + messages)
+            sessionsNeedingIndexUpdate.push(localSession);
+            sessionsNeedingMessageSync.push(localSession.id);
+          } else if (localSession.updatedAt > serverSession.updated_at) {
+            // Session updated locally - needs index update
+            sessionsNeedingIndexUpdate.push(localSession);
+            // Check if message count changed (new messages added)
+            if (localSession.messageCount > serverSession.message_count) {
+              sessionsNeedingMessageSync.push(localSession.id);
             }
-            logger.main.info('[SyncManager] Workspace distribution:', Object.fromEntries(workspaceStats));
-
-            // Sync projects first
-            logger.main.info('[SyncManager] provider.syncProjectsToIndex exists:', !!provider.syncProjectsToIndex);
-            logger.main.info('[SyncManager] Projects to sync:', JSON.stringify(projects, null, 2));
-
-            if (provider.syncProjectsToIndex) {
-              logger.main.info('[SyncManager] Calling syncProjectsToIndex with', projects.length, 'projects');
-              provider.syncProjectsToIndex(projects);
-              logger.main.info('[SyncManager] syncProjectsToIndex call completed');
-            } else {
-              logger.main.error('[SyncManager] syncProjectsToIndex method not available on provider!');
-            }
-
-            // Filter sessions to only enabled projects
-            const enabledProjectIds = new Set(projects.filter(p => p.enabled).map(p => p.id));
-            const sessionsToSync = allSessions.filter(session => {
-              const workspaceId = session.workspaceId || 'default';
-              return enabledProjectIds.has(workspaceId);
-            });
-
-            logger.main.info(`[SyncManager] Syncing ${sessionsToSync.length} of ${allSessions.length} sessions (from enabled projects)`);
-            // Enable message sync now that append-only fix prevents tombstone bloat
-            provider.syncSessionsToIndex(sessionsToSync, { syncMessages: true });
-          } else {
-            logger.main.info('[SyncManager] No sessions to sync');
           }
+          // else: Session is up to date, skip it
+        }
+
+        logger.main.info('[SyncManager] Delta sync results:', {
+          totalLocal: allLocalSessions.length,
+          totalServer: serverIndex.sessions.length,
+          needingIndexUpdate: sessionsNeedingIndexUpdate.length,
+          needingMessageSync: sessionsNeedingMessageSync.length,
+        });
+
+        // Step 5: Sync projects (still do this every time, it's cheap)
+        if (provider.syncProjectsToIndex) {
+          provider.syncProjectsToIndex(projects);
+        }
+
+        // Step 6: Sync only the sessions that need it
+        if (sessionsNeedingIndexUpdate.length === 0) {
+          logger.main.info('[SyncManager] All sessions up to date, no sync needed');
+        } else {
+          // For sessions needing message sync, load their messages
+          if (sessionsNeedingMessageSync.length > 0) {
+            const sessionsWithMessages = await getAllSessionsForSync(true);
+            const messageMap = new Map(sessionsWithMessages.map(s => [s.id, s.messages]));
+
+            // Attach messages to sessions that need them
+            for (const session of sessionsNeedingIndexUpdate) {
+              if (sessionsNeedingMessageSync.includes(session.id)) {
+                session.messages = messageMap.get(session.id);
+              }
+            }
+          }
+
+          logger.main.info(`[SyncManager] Syncing ${sessionsNeedingIndexUpdate.length} sessions (${sessionsNeedingMessageSync.length} with messages)`);
+          provider.syncSessionsToIndex(sessionsNeedingIndexUpdate, {
+            syncMessages: sessionsNeedingMessageSync.length > 0,
+          });
         }
       } catch (error) {
-        logger.main.warn('[SyncManager] Failed to sync existing sessions to index:', error);
+        logger.main.warn('[SyncManager] Failed to sync sessions:', error);
       }
     }, 2000); // Wait for index connection
 

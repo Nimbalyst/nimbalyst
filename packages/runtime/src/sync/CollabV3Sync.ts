@@ -72,6 +72,7 @@ type ClientMessage =
   | { type: 'delete_session' }
   | { type: 'index_sync_request'; project_id?: string }
   | { type: 'index_update'; session: SessionIndexEntry }
+  | { type: 'index_batch_update'; sessions: SessionIndexEntry[] }
   | { type: 'index_delete'; session_id: string }
   | { type: 'device_announce'; device: DeviceInfo };
 
@@ -201,10 +202,51 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
   const sessionIndexCache = new Map<string, CachedSessionIndex>();
   let indexWs: WebSocket | null = null;
   let indexConnected = false;
+  let deviceAnnounceInterval: ReturnType<typeof setInterval> | null = null;
 
   // Queue for operations that need to wait for index connection
   type PendingOperation = { type: 'sessions'; data: SessionIndexData[]; options?: { syncMessages?: boolean } } | { type: 'projects'; data: ProjectIndexEntry[] };
   const pendingOperations: PendingOperation[] = [];
+
+  // Pending fetch index request (resolves when index_sync_response is received)
+  let pendingIndexFetch: {
+    resolve: (result: { sessions: SessionIndexEntry[]; projects: Array<{ project_id: string; name: string; session_count: number; last_activity_at: number; sync_enabled: boolean }> }) => void;
+    reject: (error: Error) => void;
+  } | null = null;
+
+  // Helper to announce device to the index server
+  function announceDevice(): void {
+    if (config.deviceInfo && indexWs && indexConnected) {
+      const announceMsg: ClientMessage = {
+        type: 'device_announce',
+        device: {
+          ...config.deviceInfo,
+          last_active_at: Date.now(), // Update last active time
+        },
+      };
+      indexWs.send(JSON.stringify(announceMsg));
+      console.log('[CollabV3] Announced device:', config.deviceInfo.name);
+    }
+  }
+
+  // Start periodic device re-announcement to handle server hibernation
+  function startDeviceAnnounceInterval(): void {
+    stopDeviceAnnounceInterval();
+    if (config.deviceInfo) {
+      // Re-announce every 30 seconds to handle server hibernation
+      deviceAnnounceInterval = setInterval(() => {
+        announceDevice();
+      }, 30000);
+    }
+  }
+
+  // Stop the periodic re-announcement
+  function stopDeviceAnnounceInterval(): void {
+    if (deviceAnnounceInterval) {
+      clearInterval(deviceAnnounceInterval);
+      deviceAnnounceInterval = null;
+    }
+  }
 
   function getRoomId(sessionId: string): string {
     return `user:${config.userId}:session:${sessionId}`;
@@ -447,22 +489,20 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       console.log('[CollabV3] Connected to index');
 
       // Send device announcement if device info is provided
-      if (config.deviceInfo && indexWs) {
-        const announceMsg: ClientMessage = {
-          type: 'device_announce',
-          device: config.deviceInfo,
-        };
-        indexWs.send(JSON.stringify(announceMsg));
-        console.log('[CollabV3] Announced device:', config.deviceInfo.name);
-      }
+      announceDevice();
 
       // Process any operations that were queued while connecting
       processPendingOperations();
+
+      // Set up periodic re-announcement to handle server hibernation
+      // The server may hibernate and lose device state, so we re-announce every 30 seconds
+      startDeviceAnnounceInterval();
     };
 
     indexWs.onclose = () => {
       indexConnected = false;
       indexWs = null;
+      stopDeviceAnnounceInterval();
       console.log('[CollabV3] Disconnected from index');
     };
 
@@ -471,6 +511,55 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         ? { message: event.message, error: event.error }
         : { type: event.type };
       console.error('[CollabV3] Index WebSocket error:', errorInfo, 'URL:', wsUrl);
+    };
+
+    indexWs.onmessage = (event) => {
+      try {
+        const message: ServerMessage = JSON.parse(
+          typeof event.data === 'string' ? event.data : new TextDecoder().decode(event.data)
+        );
+
+        switch (message.type) {
+          case 'index_sync_response':
+            console.log('[CollabV3] Received index_sync_response:', message.sessions.length, 'sessions');
+            if (pendingIndexFetch) {
+              pendingIndexFetch.resolve({
+                sessions: message.sessions,
+                projects: message.projects,
+              });
+              pendingIndexFetch = null;
+            }
+            break;
+
+          case 'index_broadcast':
+            // Another device updated a session, cache it
+            sessionIndexCache.set(message.session.session_id, message.session);
+            console.log('[CollabV3] Received index_broadcast for session:', message.session.session_id);
+            break;
+
+          case 'devices_list':
+            console.log('[CollabV3] Received devices list:', message.devices.length, 'devices');
+            break;
+
+          case 'device_joined':
+            console.log('[CollabV3] Device joined:', message.device.name);
+            break;
+
+          case 'device_left':
+            console.log('[CollabV3] Device left:', message.device_id);
+            break;
+
+          case 'error':
+            console.error('[CollabV3] Index error:', message.code, message.message);
+            if (pendingIndexFetch) {
+              pendingIndexFetch.reject(new Error(message.message));
+              pendingIndexFetch = null;
+            }
+            break;
+        }
+      } catch (err) {
+        console.error('[CollabV3] Error parsing index message:', err);
+      }
     };
   }
 
@@ -611,7 +700,8 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
     console.log('[CollabV3] Syncing', sessionsData.length, 'sessions to index');
 
-    for (const session of sessionsData) {
+    // Build all entries
+    const entries: SessionIndexEntry[] = sessionsData.map(session => {
       const entry: SessionIndexEntry = {
         session_id: session.id,
         project_id: session.workspaceId ?? 'default',
@@ -627,8 +717,16 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
       // Cache the entry for partial update merging later
       sessionIndexCache.set(session.id, entry);
+      return entry;
+    });
 
-      const msg: ClientMessage = { type: 'index_update', session: entry };
+    // Use batch API if we have multiple sessions, otherwise single update
+    if (entries.length > 1) {
+      const msg: ClientMessage = { type: 'index_batch_update', sessions: entries };
+      indexWs.send(JSON.stringify(msg));
+      console.log('[CollabV3] Sent batch index update for', entries.length, 'sessions');
+    } else if (entries.length === 1) {
+      const msg: ClientMessage = { type: 'index_update', session: entries[0] };
       indexWs.send(JSON.stringify(msg));
     }
 
@@ -879,6 +977,56 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       // Projects are derived from sessions in CollabV3
       // The index room calculates project stats from session data
       console.log('[CollabV3] Projects are auto-calculated from sessions');
+    },
+
+    async fetchIndex(): Promise<{ sessions: SessionIndexEntry[]; projects: Array<{ project_id: string; name: string; session_count: number; last_activity_at: number; sync_enabled: boolean }> }> {
+      // Wait for connection if not ready
+      if (!indexWs || !indexConnected) {
+        console.log('[CollabV3] Waiting for index connection before fetching...');
+        await new Promise<void>((resolve) => {
+          const checkConnection = setInterval(() => {
+            if (indexWs && indexConnected) {
+              clearInterval(checkConnection);
+              resolve();
+            }
+          }, 100);
+          // Timeout after 10 seconds
+          setTimeout(() => {
+            clearInterval(checkConnection);
+            resolve();
+          }, 10000);
+        });
+      }
+
+      if (!indexWs || !indexConnected) {
+        throw new Error('Index connection not available');
+      }
+
+      return new Promise((resolve, reject) => {
+        // Set timeout for response
+        const timeout = setTimeout(() => {
+          if (pendingIndexFetch) {
+            pendingIndexFetch = null;
+            reject(new Error('Timeout waiting for index response'));
+          }
+        }, 30000);
+
+        pendingIndexFetch = {
+          resolve: (result) => {
+            clearTimeout(timeout);
+            resolve(result);
+          },
+          reject: (error) => {
+            clearTimeout(timeout);
+            reject(error);
+          },
+        };
+
+        // Send index sync request
+        const request: ClientMessage = { type: 'index_sync_request' };
+        indexWs!.send(JSON.stringify(request));
+        console.log('[CollabV3] Sent index_sync_request');
+      });
     },
   };
 

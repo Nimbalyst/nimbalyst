@@ -88,6 +88,29 @@ export interface SyncProvider {
 
   /** Sync projects to the ProjectsIndex (tells mobile which projects exist and are enabled) */
   syncProjectsToIndex?(projects: ProjectIndexEntry[]): void;
+
+  /** Fetch the current server index to compare with local state */
+  fetchIndex?(): Promise<{
+    sessions: Array<{
+      session_id: string;
+      project_id: string;
+      title: string;
+      provider: string;
+      model?: string;
+      mode?: 'agent' | 'planning';
+      message_count: number;
+      last_message_at: number;
+      created_at: number;
+      updated_at: number;
+    }>;
+    projects: Array<{
+      project_id: string;
+      name: string;
+      session_count: number;
+      last_activity_at: number;
+      sync_enabled: boolean;
+    }>;
+  }>;
 }
 
 /** Session data for bulk index sync */

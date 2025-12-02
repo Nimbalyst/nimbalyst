@@ -29,6 +29,7 @@ export type ClientMessage =
   | DeleteSessionMessage
   | IndexSyncRequestMessage
   | IndexUpdateMessage
+  | IndexBatchUpdateMessage
   | IndexDeleteMessage
   | DeviceAnnounceMessage;
 
@@ -66,6 +67,12 @@ export interface IndexSyncRequestMessage {
 export interface IndexUpdateMessage {
   type: 'index_update';
   session: SessionIndexEntry;
+}
+
+/** Batch update sessions in index (for efficient bulk sync) */
+export interface IndexBatchUpdateMessage {
+  type: 'index_batch_update';
+  sessions: SessionIndexEntry[];
 }
 
 /** Delete session from index */
