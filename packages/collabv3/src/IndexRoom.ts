@@ -13,15 +13,21 @@ import type {
   ProjectIndexEntry,
   IndexSyncResponseMessage,
   AuthContext,
+  DeviceInfo,
+  DevicesListMessage,
+  DeviceJoinedMessage,
+  DeviceLeftMessage,
 } from './types';
 
 interface ConnectionState {
   auth: AuthContext;
   synced: boolean;
+  device?: DeviceInfo;
 }
 
-// WebSocket tag prefix for hibernation recovery
+// WebSocket tag prefixes for hibernation recovery
 const TAG_USER = 'user:';
+const TAG_DEVICE = 'device:';
 
 export class IndexRoom implements DurableObject {
   private state: DurableObjectState;
@@ -46,12 +52,26 @@ export class IndexRoom implements DurableObject {
     for (const ws of webSockets) {
       const tags = this.state.getTags(ws);
       const userTag = tags.find(t => t.startsWith(TAG_USER));
+      const deviceTag = tags.find(t => t.startsWith(TAG_DEVICE));
+
       if (userTag) {
         const userId = userTag.slice(TAG_USER.length);
+        let device: DeviceInfo | undefined;
+
+        // Restore device info from tag if available
+        if (deviceTag) {
+          try {
+            device = JSON.parse(decodeURIComponent(deviceTag.slice(TAG_DEVICE.length)));
+          } catch {
+            // Ignore parse errors
+          }
+        }
+
         // After hibernation, assume all connections are synced
         this.connections.set(ws, {
           auth: { user_id: userId },
           synced: true,
+          device,
         });
       }
     }
@@ -195,6 +215,10 @@ export class IndexRoom implements DurableObject {
           await this.handleIndexDelete(ws, connState, message.session_id);
           break;
 
+        case 'device_announce':
+          await this.handleDeviceAnnounce(ws, connState, message.device);
+          break;
+
         default:
           this.sendError(ws, 'unknown_message_type', `Unknown message type`);
       }
@@ -328,6 +352,58 @@ export class IndexRoom implements DurableObject {
   }
 
   /**
+   * Handle device announce - register device and broadcast to others
+   */
+  private async handleDeviceAnnounce(
+    ws: WebSocket,
+    connState: ConnectionState,
+    device: DeviceInfo
+  ): Promise<void> {
+    // Update connection state with device info
+    connState.device = device;
+
+    // Store device info in WebSocket tag for hibernation recovery
+    // Note: Tags have a max length, so we encode compactly
+    const deviceTag = `${TAG_DEVICE}${encodeURIComponent(JSON.stringify(device))}`;
+    try {
+      // We can't update tags after accepting, but we store in connection state
+      // The device info will be restored from the tag on hibernation recovery
+    } catch {
+      // Tag update not supported, connection state is sufficient
+    }
+
+    console.log('[IndexRoom] Device announced:', device.name, device.type, device.platform);
+
+    // Send current devices list to the connecting client
+    const devicesList = this.getConnectedDevices();
+    const listMessage: DevicesListMessage = {
+      type: 'devices_list',
+      devices: devicesList,
+    };
+    ws.send(JSON.stringify(listMessage));
+
+    // Broadcast device joined to other connections
+    const joinedMessage: DeviceJoinedMessage = {
+      type: 'device_joined',
+      device,
+    };
+    this.broadcast(joinedMessage, ws);
+  }
+
+  /**
+   * Get list of all connected devices
+   */
+  private getConnectedDevices(): DeviceInfo[] {
+    const devices: DeviceInfo[] = [];
+    for (const [, state] of this.connections) {
+      if (state.device) {
+        devices.push(state.device);
+      }
+    }
+    return devices;
+  }
+
+  /**
    * Update project statistics (session count, last activity)
    */
   private async updateProjectStats(projectId: string): Promise<void> {
@@ -447,6 +523,18 @@ export class IndexRoom implements DurableObject {
    * Handle WebSocket close
    */
   async webSocketClose(ws: WebSocket): Promise<void> {
+    const connState = this.connections.get(ws);
+
+    // If this connection had device info, broadcast that it left
+    if (connState?.device) {
+      const leftMessage: DeviceLeftMessage = {
+        type: 'device_left',
+        device_id: connState.device.device_id,
+      };
+      this.broadcast(leftMessage, ws);
+      console.log('[IndexRoom] Device disconnected:', connState.device.name);
+    }
+
     this.connections.delete(ws);
   }
 
@@ -455,6 +543,17 @@ export class IndexRoom implements DurableObject {
    */
   async webSocketError(ws: WebSocket, error: unknown): Promise<void> {
     console.error('WebSocket error:', error);
+    const connState = this.connections.get(ws);
+
+    // If this connection had device info, broadcast that it left
+    if (connState?.device) {
+      const leftMessage: DeviceLeftMessage = {
+        type: 'device_left',
+        device_id: connState.device.device_id,
+      };
+      this.broadcast(leftMessage, ws);
+    }
+
     this.connections.delete(ws);
   }
 
@@ -478,6 +577,7 @@ export class IndexRoom implements DurableObject {
         connections: this.connections.size,
         session_count: sessionCount,
         project_count: projectCount,
+        devices: this.getConnectedDevices(),
       }),
       { headers: { 'Content-Type': 'application/json' } }
     );

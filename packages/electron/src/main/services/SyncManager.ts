@@ -14,8 +14,12 @@
  */
 
 import type { SessionStore } from '@nimbalyst/runtime';
+import type { DeviceInfo } from '@nimbalyst/runtime/sync';
 import { getSessionSyncConfig, type SessionSyncConfig } from '../utils/store';
 import { logger } from '../utils/logger';
+import { getCredentials } from './CredentialService';
+import { app } from 'electron';
+import * as os from 'os';
 
 // Lazy import to avoid loading sync code if not needed
 let syncModule: typeof import('@nimbalyst/runtime/sync') | null = null;
@@ -67,6 +71,59 @@ const state: SyncManagerState = {
   messageSyncHandler: null,
 };
 
+// Cache the device ID so it's stable across sync reinitializations
+let cachedDeviceId: string | null = null;
+
+/**
+ * Get or generate a stable device ID.
+ * Uses the user ID + a hash of machine identifiers for stability.
+ */
+function getDeviceId(userId: string): string {
+  if (cachedDeviceId) {
+    return cachedDeviceId;
+  }
+
+  // Use hostname + platform as a simple machine identifier
+  // This isn't perfect but gives reasonable stability
+  const machineId = `${os.hostname()}-${process.platform}`;
+  const crypto = require('crypto');
+  const hash = crypto.createHash('sha256')
+    .update(`${userId}:${machineId}`)
+    .digest('hex')
+    .substring(0, 16);
+
+  cachedDeviceId = hash;
+  return cachedDeviceId;
+}
+
+/**
+ * Get device info for sync presence awareness.
+ */
+function getDeviceInfo(userId: string): DeviceInfo {
+  const platform = process.platform === 'darwin' ? 'macos'
+    : process.platform === 'win32' ? 'windows'
+    : process.platform === 'linux' ? 'linux'
+    : 'unknown';
+
+  // Get a friendly device name
+  const hostname = os.hostname();
+  // Clean up common hostname patterns
+  const friendlyName = hostname
+    .replace(/\.local$/, '')
+    .replace(/-/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase());
+
+  return {
+    device_id: getDeviceId(userId),
+    name: friendlyName || 'Desktop',
+    type: 'desktop',
+    platform,
+    app_version: app.getVersion(),
+    connected_at: Date.now(),
+    last_active_at: Date.now(),
+  };
+}
+
 /**
  * Initialize sync if configured.
  * Returns a wrapped session store if sync is enabled, or the original store if not.
@@ -79,17 +136,20 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
     return baseStore;
   }
 
-  if (!config.serverUrl || !config.userId || !config.authToken) {
-    logger.main.warn('[SyncManager] Session sync enabled but missing configuration');
+  if (!config.serverUrl) {
+    logger.main.warn('[SyncManager] Session sync enabled but missing server URL');
     return baseStore;
   }
+
+  // Get credentials from CredentialService (auto-generated)
+  const credentials = getCredentials();
 
   try {
     const backend = config.backend ?? 'collabv3';
     logger.main.info('[SyncManager] Initializing session sync...', {
       backend,
       serverUrl: config.serverUrl,
-      userId: config.userId,
+      userId: credentials.userId,
     });
 
     const {
@@ -103,26 +163,26 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
     let provider: import('@nimbalyst/runtime/sync').SyncProvider;
 
     if (backend === 'collabv3') {
-      // CollabV3 requires encryption key for E2E encryption
-      if (!config.encryptionPassphrase) {
-        logger.main.warn('[SyncManager] CollabV3 requires encryption passphrase - using userId as fallback');
-      }
-      const passphrase = config.encryptionPassphrase || config.userId;
-      const encryptionKey = await deriveEncryptionKey(passphrase, `nimbalyst:${config.userId}`);
+      // CollabV3 uses the encryption key seed from CredentialService for E2E encryption
+      const encryptionKey = await deriveEncryptionKey(credentials.encryptionKeySeed, `nimbalyst:${credentials.userId}`);
+
+      // Get device info for presence awareness
+      const deviceInfo = getDeviceInfo(credentials.userId);
 
       provider = createCollabV3Sync({
         serverUrl: config.serverUrl,
-        userId: config.userId,
-        authToken: config.authToken,
+        userId: credentials.userId,
+        authToken: credentials.authToken,
         encryptionKey,
+        deviceInfo,
       });
-      logger.main.info('[SyncManager] Created CollabV3 sync provider');
+      logger.main.info('[SyncManager] Created CollabV3 sync provider with device:', deviceInfo.name);
     } else {
       // Legacy Y.js backend
       provider = createYjsSessionSync({
         serverUrl: config.serverUrl,
-        userId: config.userId,
-        authToken: config.authToken,
+        userId: credentials.userId,
+        authToken: credentials.authToken,
       });
       logger.main.info('[SyncManager] Created Y.js sync provider (legacy)');
     }

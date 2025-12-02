@@ -29,7 +29,8 @@ export type ClientMessage =
   | DeleteSessionMessage
   | IndexSyncRequestMessage
   | IndexUpdateMessage
-  | IndexDeleteMessage;
+  | IndexDeleteMessage
+  | DeviceAnnounceMessage;
 
 /** Request messages since a cursor */
 export interface SyncRequestMessage {
@@ -73,6 +74,12 @@ export interface IndexDeleteMessage {
   session_id: string;
 }
 
+/** Announce device presence and info */
+export interface DeviceAnnounceMessage {
+  type: 'device_announce';
+  device: DeviceInfo;
+}
+
 // ============================================================================
 // Server → Client Messages
 // ============================================================================
@@ -84,6 +91,9 @@ export type ServerMessage =
   | IndexSyncResponseMessage
   | IndexBroadcastMessage
   | IndexDeleteBroadcastMessage
+  | DevicesListMessage
+  | DeviceJoinedMessage
+  | DeviceLeftMessage
   | ErrorMessage;
 
 /** Response to sync_request */
@@ -130,6 +140,24 @@ export interface IndexDeleteBroadcastMessage {
   from_connection_id?: string;
 }
 
+/** List of currently connected devices (sent on connect and device changes) */
+export interface DevicesListMessage {
+  type: 'devices_list';
+  devices: DeviceInfo[];
+}
+
+/** Broadcast when a device joins */
+export interface DeviceJoinedMessage {
+  type: 'device_joined';
+  device: DeviceInfo;
+}
+
+/** Broadcast when a device leaves */
+export interface DeviceLeftMessage {
+  type: 'device_left';
+  device_id: string;
+}
+
 /** Error response */
 export interface ErrorMessage {
   type: 'error';
@@ -140,6 +168,27 @@ export interface ErrorMessage {
 // ============================================================================
 // Data Types
 // ============================================================================
+
+/**
+ * Information about a connected device.
+ * Used for device awareness/presence in the IndexRoom.
+ */
+export interface DeviceInfo {
+  /** Unique device ID (stable across sessions, generated per device) */
+  device_id: string;
+  /** Human-readable device name (e.g., "MacBook Pro", "iPhone 15") */
+  name: string;
+  /** Device type for icon display */
+  type: 'desktop' | 'mobile' | 'tablet' | 'unknown';
+  /** Platform (e.g., "macos", "ios", "windows", "android", "web") */
+  platform: string;
+  /** App version */
+  app_version?: string;
+  /** When this device connected (Unix timestamp ms) */
+  connected_at: number;
+  /** Last activity timestamp (Unix timestamp ms) */
+  last_active_at: number;
+}
 
 /**
  * Encrypted message as stored on server.

@@ -1,6 +1,32 @@
 import React, { useState, useEffect } from 'react';
 import { QRPairingModal } from './QRPairingModal';
 
+/** Format a timestamp as relative time (e.g., "5 minutes ago") */
+function formatRelativeTime(timestamp: number): string {
+  const seconds = Math.floor((Date.now() - timestamp) / 1000);
+
+  if (seconds < 60) {
+    return 'just now';
+  }
+
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) {
+    return `${minutes}m ago`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return `${hours}h ago`;
+  }
+
+  const days = Math.floor(hours / 24);
+  if (days < 7) {
+    return `${days}d ago`;
+  }
+
+  return new Date(timestamp).toLocaleDateString();
+}
+
 export interface SyncConfig {
   enabled: boolean;
   serverUrl: string;
@@ -12,6 +38,16 @@ export interface SyncConfig {
 interface Project {
   path: string;
   name: string;
+}
+
+interface DeviceInfo {
+  device_id: string;
+  name: string;
+  type: 'desktop' | 'mobile' | 'tablet' | 'unknown';
+  platform: string;
+  app_version?: string;
+  connected_at: number;
+  last_active_at: number;
 }
 
 interface SyncPanelProps {
@@ -35,6 +71,9 @@ export function SyncPanel({
   const [isSecureStorage, setIsSecureStorage] = useState<boolean>(false);
   const [showQRModal, setShowQRModal] = useState(false);
   const [copiedUserId, setCopiedUserId] = useState(false);
+  const [connectedDevices, setConnectedDevices] = useState<DeviceInfo[]>([]);
+  const [devicesLoading, setDevicesLoading] = useState(false);
+  const [devicesError, setDevicesError] = useState<string | null>(null);
 
   // Load credentials info on mount
   useEffect(() => {
@@ -65,6 +104,45 @@ export function SyncPanel({
     }
     loadProjects();
   }, []);
+
+  // Load connected devices when sync is enabled
+  const loadDevices = async () => {
+    if (!config.enabled || !config.serverUrl) {
+      setConnectedDevices([]);
+      return;
+    }
+
+    setDevicesLoading(true);
+    setDevicesError(null);
+    try {
+      const result = await window.electronAPI.invoke('sync:get-devices');
+      if (result.success) {
+        setConnectedDevices(result.devices || []);
+      } else {
+        setDevicesError(result.error || 'Failed to load devices');
+        setConnectedDevices([]);
+      }
+    } catch (error) {
+      console.error('Failed to load devices:', error);
+      setDevicesError('Failed to load devices');
+      setConnectedDevices([]);
+    } finally {
+      setDevicesLoading(false);
+    }
+  };
+
+  // Load devices on mount and when sync becomes enabled
+  useEffect(() => {
+    if (config.enabled && config.serverUrl) {
+      loadDevices();
+      // Refresh devices every 30 seconds
+      const interval = setInterval(loadDevices, 30000);
+      return () => clearInterval(interval);
+    } else {
+      setConnectedDevices([]);
+      return undefined;
+    }
+  }, [config.enabled, config.serverUrl]);
 
   const handleFieldChange = (field: keyof SyncConfig, value: string | boolean) => {
     onConfigChange({ ...config, [field]: value });
@@ -220,6 +298,132 @@ export function SyncPanel({
                 <span className="test-status error">{testMessage || 'Connection failed'}</span>
               )}
             </div>
+          </div>
+
+          {/* Connected Devices Section */}
+          <div className="provider-panel-section">
+            <h4 className="provider-panel-section-title">
+              Connected Devices
+              <button
+                className="refresh-devices-button"
+                onClick={loadDevices}
+                disabled={devicesLoading}
+                style={{
+                  marginLeft: '8px',
+                  padding: '2px 8px',
+                  fontSize: '11px',
+                  background: 'var(--surface-secondary)',
+                  border: '1px solid var(--border-primary)',
+                  borderRadius: '4px',
+                  cursor: devicesLoading ? 'wait' : 'pointer',
+                  color: 'var(--text-secondary)',
+                }}
+              >
+                {devicesLoading ? 'Loading...' : 'Refresh'}
+              </button>
+            </h4>
+            <p className="provider-panel-hint">
+              Devices currently connected to your sync server.
+            </p>
+
+            {devicesError && (
+              <p className="test-status error" style={{ marginTop: '8px' }}>
+                {devicesError}
+              </p>
+            )}
+
+            {!devicesError && connectedDevices.length === 0 && !devicesLoading && (
+              <p className="provider-panel-hint" style={{ fontStyle: 'italic', marginTop: '12px' }}>
+                No devices connected. This device will appear after saving settings.
+              </p>
+            )}
+
+            {connectedDevices.length > 0 && (
+              <div style={{ marginTop: '12px' }}>
+                {connectedDevices.map((device) => (
+                  <div
+                    key={device.device_id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '10px 12px',
+                      background: 'var(--surface-secondary)',
+                      borderRadius: '6px',
+                      marginBottom: '8px',
+                    }}
+                  >
+                    {/* Device Icon */}
+                    <div style={{
+                      width: '32px',
+                      height: '32px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: 'var(--surface-tertiary)',
+                      borderRadius: '6px',
+                      color: 'var(--text-secondary)',
+                    }}>
+                      {device.type === 'desktop' && (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <rect x="2" y="3" width="20" height="14" rx="2" />
+                          <line x1="8" y1="21" x2="16" y2="21" />
+                          <line x1="12" y1="17" x2="12" y2="21" />
+                        </svg>
+                      )}
+                      {device.type === 'mobile' && (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <rect x="5" y="2" width="14" height="20" rx="2" />
+                          <line x1="12" y1="18" x2="12" y2="18" strokeWidth="3" strokeLinecap="round" />
+                        </svg>
+                      )}
+                      {device.type === 'tablet' && (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <rect x="4" y="2" width="16" height="20" rx="2" />
+                          <line x1="12" y1="18" x2="12" y2="18" strokeWidth="3" strokeLinecap="round" />
+                        </svg>
+                      )}
+                      {device.type === 'unknown' && (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <circle cx="12" cy="12" r="10" />
+                          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                          <line x1="12" y1="17" x2="12" y2="17" strokeWidth="3" strokeLinecap="round" />
+                        </svg>
+                      )}
+                    </div>
+
+                    {/* Device Info */}
+                    <div style={{ flex: 1 }}>
+                      <div style={{
+                        fontWeight: 500,
+                        color: 'var(--text-primary)',
+                        fontSize: '13px',
+                      }}>
+                        {device.name}
+                      </div>
+                      <div style={{
+                        fontSize: '11px',
+                        color: 'var(--text-tertiary)',
+                        marginTop: '2px',
+                      }}>
+                        {device.platform}
+                        {device.app_version && ` • v${device.app_version}`}
+                        {' • '}
+                        Connected {formatRelativeTime(device.connected_at)}
+                      </div>
+                    </div>
+
+                    {/* Online indicator */}
+                    <div style={{
+                      width: '8px',
+                      height: '8px',
+                      borderRadius: '50%',
+                      background: '#22c55e',
+                    }} title="Online" />
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="provider-panel-section">

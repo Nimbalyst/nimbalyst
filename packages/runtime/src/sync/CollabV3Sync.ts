@@ -20,6 +20,7 @@ import type {
   SyncedSessionMetadata,
   SessionIndexData,
   ProjectIndexEntry,
+  DeviceInfo,
 } from './types';
 
 // ============================================================================
@@ -71,7 +72,8 @@ type ClientMessage =
   | { type: 'delete_session' }
   | { type: 'index_sync_request'; project_id?: string }
   | { type: 'index_update'; session: SessionIndexEntry }
-  | { type: 'index_delete'; session_id: string };
+  | { type: 'index_delete'; session_id: string }
+  | { type: 'device_announce'; device: DeviceInfo };
 
 type ServerMessage =
   | { type: 'sync_response'; messages: EncryptedMessage[]; metadata: SessionMetadata | null; has_more: boolean; cursor: string | null }
@@ -79,6 +81,9 @@ type ServerMessage =
   | { type: 'metadata_broadcast'; metadata: Partial<SessionMetadata>; from_connection_id?: string }
   | { type: 'index_sync_response'; sessions: SessionIndexEntry[]; projects: Array<{ project_id: string; name: string; session_count: number; last_activity_at: number; sync_enabled: boolean }> }
   | { type: 'index_broadcast'; session: SessionIndexEntry; from_connection_id?: string }
+  | { type: 'devices_list'; devices: DeviceInfo[] }
+  | { type: 'device_joined'; device: DeviceInfo }
+  | { type: 'device_left'; device_id: string }
   | { type: 'error'; code: string; message: string };
 
 // ============================================================================
@@ -196,6 +201,10 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
   const sessionIndexCache = new Map<string, CachedSessionIndex>();
   let indexWs: WebSocket | null = null;
   let indexConnected = false;
+
+  // Queue for operations that need to wait for index connection
+  type PendingOperation = { type: 'sessions'; data: SessionIndexData[]; options?: { syncMessages?: boolean } } | { type: 'projects'; data: ProjectIndexEntry[] };
+  const pendingOperations: PendingOperation[] = [];
 
   function getRoomId(sessionId: string): string {
     return `user:${config.userId}:session:${sessionId}`;
@@ -407,6 +416,23 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
     );
   }
 
+  // Process pending operations that were queued before connection was established
+  function processPendingOperations(): void {
+    if (!indexWs || !indexConnected) return;
+
+    console.log('[CollabV3] Processing', pendingOperations.length, 'pending operations');
+
+    // Process in order they were queued
+    while (pendingOperations.length > 0) {
+      const op = pendingOperations.shift()!;
+      if (op.type === 'sessions') {
+        // Call the sync function directly (now that we're connected)
+        doSyncSessionsToIndex(op.data, op.options);
+      }
+      // Projects are auto-calculated from sessions in CollabV3, so nothing to do
+    }
+  }
+
   // Connect to index for session list updates
   function connectToIndex(): void {
     if (indexWs) return;
@@ -419,6 +445,19 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
     indexWs.onopen = () => {
       indexConnected = true;
       console.log('[CollabV3] Connected to index');
+
+      // Send device announcement if device info is provided
+      if (config.deviceInfo && indexWs) {
+        const announceMsg: ClientMessage = {
+          type: 'device_announce',
+          device: config.deviceInfo,
+        };
+        indexWs.send(JSON.stringify(announceMsg));
+        console.log('[CollabV3] Announced device:', config.deviceInfo.name);
+      }
+
+      // Process any operations that were queued while connecting
+      processPendingOperations();
     };
 
     indexWs.onclose = () => {
@@ -445,7 +484,163 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
   // Start index connection
   connectToIndex();
 
-  return {
+  // Sync messages to a session room (internal function)
+  async function syncSessionMessages(
+    sessionId: string,
+    messages: AgentMessage[],
+    metadata?: { title?: string; provider?: string; model?: string; mode?: string }
+  ): Promise<void> {
+    if (!config.encryptionKey) {
+      console.error('[CollabV3] Cannot sync messages - no encryption key');
+      return;
+    }
+
+    console.log('[CollabV3] Syncing', messages.length, 'messages to session', sessionId);
+
+    // Connect to session room
+    const roomId = getRoomId(sessionId);
+    const url = getWebSocketUrl(roomId);
+    const wsUrl = `${url}?user_id=${config.userId}&token=${config.authToken}`;
+
+    return new Promise((resolve, reject) => {
+      const ws = new WebSocket(wsUrl);
+      let resolved = false;
+
+      const timeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          ws.close();
+          reject(new Error('Timeout syncing messages'));
+        }
+      }, 30000);
+
+      ws.onopen = async () => {
+        try {
+          // First update metadata if provided
+          if (metadata) {
+            const metadataMsg: ClientMessage = {
+              type: 'update_metadata',
+              metadata: {
+                title: metadata.title,
+                provider: metadata.provider,
+                model: metadata.model,
+                mode: metadata.mode as 'agent' | 'planning' | undefined,
+              },
+            };
+            ws.send(JSON.stringify(metadataMsg));
+          }
+
+          // Send each message
+          for (const message of messages) {
+            const encrypted = await encryptMessage(message, config.encryptionKey!);
+            const clientMsg: ClientMessage = { type: 'append_message', message: encrypted };
+            ws.send(JSON.stringify(clientMsg));
+          }
+
+          // Small delay to ensure messages are processed
+          await new Promise(r => setTimeout(r, 500));
+
+          clearTimeout(timeout);
+          resolved = true;
+          ws.close();
+          resolve();
+        } catch (err) {
+          clearTimeout(timeout);
+          resolved = true;
+          ws.close();
+          reject(err);
+        }
+      };
+
+      ws.onerror = (err) => {
+        if (!resolved) {
+          clearTimeout(timeout);
+          resolved = true;
+          reject(err);
+        }
+      };
+
+      ws.onclose = () => {
+        if (!resolved) {
+          clearTimeout(timeout);
+          resolved = true;
+          resolve();
+        }
+      };
+    });
+  }
+
+  // Batch sync session messages with delay to prevent server overload (internal function)
+  async function doBatchSyncSessionMessages(sessionsData: SessionIndexData[]): Promise<void> {
+    const sessionsWithMessages = sessionsData.filter(s => s.messages && s.messages.length > 0);
+    const batchSize = 3;
+    const delayMs = 1000;
+
+    console.log('[CollabV3] Batch syncing', sessionsWithMessages.length, 'sessions in batches of', batchSize);
+
+    for (let i = 0; i < sessionsWithMessages.length; i += batchSize) {
+      const batch = sessionsWithMessages.slice(i, i + batchSize);
+
+      console.log(`[CollabV3] Syncing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(sessionsWithMessages.length / batchSize)} (${batch.length} sessions)`);
+
+      // Sync batch in parallel
+      await Promise.all(batch.map(session =>
+        syncSessionMessages(session.id, session.messages!, {
+          title: session.title,
+          provider: session.provider,
+          model: session.model,
+          mode: session.mode,
+        })
+      ));
+
+      // Delay before next batch
+      if (i + batchSize < sessionsWithMessages.length) {
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
+
+    console.log('[CollabV3] Batch sync complete');
+  }
+
+  // Helper function to actually sync sessions to index (requires connection)
+  function doSyncSessionsToIndex(sessionsData: SessionIndexData[], options?: { syncMessages?: boolean }): void {
+    if (!indexWs || !indexConnected) {
+      console.error('[CollabV3] doSyncSessionsToIndex called but not connected!');
+      return;
+    }
+
+    console.log('[CollabV3] Syncing', sessionsData.length, 'sessions to index');
+
+    for (const session of sessionsData) {
+      const entry: SessionIndexEntry = {
+        session_id: session.id,
+        project_id: session.workspaceId ?? 'default',
+        title: session.title,
+        provider: session.provider,
+        model: session.model,
+        mode: session.mode as SessionIndexEntry['mode'],
+        message_count: session.messageCount,
+        last_message_at: session.updatedAt,
+        created_at: session.createdAt,
+        updated_at: session.updatedAt,
+      };
+
+      // Cache the entry for partial update merging later
+      sessionIndexCache.set(session.id, entry);
+
+      const msg: ClientMessage = { type: 'index_update', session: entry };
+      indexWs.send(JSON.stringify(msg));
+    }
+
+    // Sync messages if requested
+    if (options?.syncMessages === true) {
+      console.log('[CollabV3] Batching message sync for', sessionsData.length, 'sessions');
+      doBatchSyncSessionMessages(sessionsData);
+    }
+  }
+
+  // Create provider object
+  const provider: SyncProvider = {
     async connect(sessionId: string): Promise<void> {
       if (sessions.has(sessionId)) {
         return; // Already connected
@@ -670,160 +865,14 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
     syncSessionsToIndex(sessionsData: SessionIndexData[], options?: { syncMessages?: boolean }): void {
       if (!indexWs || !indexConnected) {
-        console.warn('[CollabV3] Cannot sync to index - not connected');
+        // Queue the operation to run when connection is established
+        console.log('[CollabV3] Index not connected yet, queueing sync of', sessionsData.length, 'sessions');
+        pendingOperations.push({ type: 'sessions', data: sessionsData, options });
         return;
       }
 
-      console.log('[CollabV3] Syncing', sessionsData.length, 'sessions to index');
-
-      for (const session of sessionsData) {
-        const entry: SessionIndexEntry = {
-          session_id: session.id,
-          project_id: session.workspaceId ?? 'default',
-          title: session.title,
-          provider: session.provider,
-          model: session.model,
-          mode: session.mode as SessionIndexEntry['mode'],
-          message_count: session.messageCount,
-          last_message_at: session.updatedAt,
-          created_at: session.createdAt,
-          updated_at: session.updatedAt,
-        };
-
-        // Cache the entry for partial update merging later
-        sessionIndexCache.set(session.id, entry);
-
-        const msg: ClientMessage = { type: 'index_update', session: entry };
-        indexWs.send(JSON.stringify(msg));
-      }
-
-      // Sync messages if requested
-      if (options?.syncMessages === true) {
-        console.log('[CollabV3] Batching message sync for', sessionsData.length, 'sessions');
-        this.batchSyncSessionMessages(sessionsData);
-      }
-    },
-
-    /**
-     * Batch sync session messages with delay to prevent server overload
-     */
-    async batchSyncSessionMessages(sessionsData: SessionIndexData[]): Promise<void> {
-      const sessionsWithMessages = sessionsData.filter(s => s.messages && s.messages.length > 0);
-      const batchSize = 3;
-      const delayMs = 1000;
-
-      console.log('[CollabV3] Batch syncing', sessionsWithMessages.length, 'sessions in batches of', batchSize);
-
-      for (let i = 0; i < sessionsWithMessages.length; i += batchSize) {
-        const batch = sessionsWithMessages.slice(i, i + batchSize);
-
-        console.log(`[CollabV3] Syncing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(sessionsWithMessages.length / batchSize)} (${batch.length} sessions)`);
-
-        // Sync batch in parallel
-        await Promise.all(batch.map(session =>
-          this.syncSessionMessages(session.id, session.messages!, {
-            title: session.title,
-            provider: session.provider,
-            model: session.model,
-            mode: session.mode,
-          })
-        ));
-
-        // Delay before next batch
-        if (i + batchSize < sessionsWithMessages.length) {
-          await new Promise(resolve => setTimeout(resolve, delayMs));
-        }
-      }
-
-      console.log('[CollabV3] Batch sync complete');
-    },
-
-    /**
-     * Sync messages to a session room
-     */
-    async syncSessionMessages(
-      sessionId: string,
-      messages: AgentMessage[],
-      metadata?: { title?: string; provider?: string; model?: string; mode?: string }
-    ): Promise<void> {
-      if (!config.encryptionKey) {
-        console.error('[CollabV3] Cannot sync messages - no encryption key');
-        return;
-      }
-
-      console.log('[CollabV3] Syncing', messages.length, 'messages to session', sessionId);
-
-      // Connect to session room
-      const roomId = getRoomId(sessionId);
-      const url = getWebSocketUrl(roomId);
-      const wsUrl = `${url}?user_id=${config.userId}&token=${config.authToken}`;
-
-      return new Promise((resolve, reject) => {
-        const ws = new WebSocket(wsUrl);
-        let resolved = false;
-
-        const timeout = setTimeout(() => {
-          if (!resolved) {
-            resolved = true;
-            ws.close();
-            reject(new Error('Timeout syncing messages'));
-          }
-        }, 30000);
-
-        ws.onopen = async () => {
-          try {
-            // First update metadata if provided
-            if (metadata) {
-              const metadataMsg: ClientMessage = {
-                type: 'update_metadata',
-                metadata: {
-                  title: metadata.title,
-                  provider: metadata.provider,
-                  model: metadata.model,
-                  mode: metadata.mode as 'agent' | 'planning' | undefined,
-                },
-              };
-              ws.send(JSON.stringify(metadataMsg));
-            }
-
-            // Send each message
-            for (const message of messages) {
-              const encrypted = await encryptMessage(message, config.encryptionKey!);
-              const clientMsg: ClientMessage = { type: 'append_message', message: encrypted };
-              ws.send(JSON.stringify(clientMsg));
-            }
-
-            // Small delay to ensure messages are processed
-            await new Promise(r => setTimeout(r, 500));
-
-            clearTimeout(timeout);
-            resolved = true;
-            ws.close();
-            resolve();
-          } catch (err) {
-            clearTimeout(timeout);
-            resolved = true;
-            ws.close();
-            reject(err);
-          }
-        };
-
-        ws.onerror = (err) => {
-          if (!resolved) {
-            clearTimeout(timeout);
-            resolved = true;
-            reject(err);
-          }
-        };
-
-        ws.onclose = () => {
-          if (!resolved) {
-            clearTimeout(timeout);
-            resolved = true;
-            resolve();
-          }
-        };
-      });
+      // Call the helper function
+      doSyncSessionsToIndex(sessionsData, options);
     },
 
     syncProjectsToIndex(projects: ProjectIndexEntry[]): void {
@@ -832,4 +881,6 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       console.log('[CollabV3] Projects are auto-calculated from sessions');
     },
   };
+
+  return provider;
 }

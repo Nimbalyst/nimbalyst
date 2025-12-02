@@ -148,9 +148,17 @@ export function registerSettingsHandlers() {
         return getSessionSyncConfig();
     });
 
-    ipcMain.handle('sync:set-config', (_event, config: SessionSyncConfig | null) => {
+    ipcMain.handle('sync:set-config', async (_event, config: SessionSyncConfig | null) => {
         setSessionSyncConfig(config ?? undefined);
         logger.store.info(`[SettingsHandlers] Session sync ${config?.enabled ? 'enabled' : 'disabled'}`);
+
+        // Reinitialize sync with the new configuration
+        try {
+            const { repositoryManager } = await import('../services/RepositoryManager');
+            await repositoryManager.reinitializeSyncWithNewConfig();
+        } catch (error) {
+            logger.store.error('[SettingsHandlers] Failed to reinitialize sync:', error);
+        }
     });
 
     ipcMain.handle('sync:test-connection', async (_event, config: SessionSyncConfig) => {
@@ -190,6 +198,50 @@ export function registerSettingsHandlers() {
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Connection failed';
             return { success: false, error: message };
+        }
+    });
+
+    // Get connected devices from the sync server
+    ipcMain.handle('sync:get-devices', async () => {
+        const config = getSessionSyncConfig();
+
+        if (!config?.enabled || !config.serverUrl) {
+            return { success: false, devices: [], error: 'Sync not configured' };
+        }
+
+        try {
+            // Get credentials
+            const { getCredentials } = await import('../services/CredentialService');
+            const credentials = getCredentials();
+
+            // Fetch via the /api/sessions endpoint which forwards to IndexRoom status
+            const httpUrl = config.serverUrl
+                .replace(/^ws:/, 'http:')
+                .replace(/^wss:/, 'https:')
+                .replace(/\/$/, '');
+
+            const response = await fetch(`${httpUrl}/api/sessions`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${credentials.userId}:${credentials.authToken}`,
+                },
+                signal: AbortSignal.timeout(5000),
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                return {
+                    success: true,
+                    devices: data.devices || [],
+                    sessionCount: data.session_count || 0,
+                    projectCount: data.project_count || 0,
+                };
+            } else {
+                return { success: false, devices: [], error: `Server returned ${response.status}` };
+            }
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to get devices';
+            return { success: false, devices: [], error: message };
         }
     });
 

@@ -19,6 +19,30 @@ export interface SyncConfig {
 
   /** Optional encryption key for E2E encryption (Phase 2) */
   encryptionKey?: CryptoKey;
+
+  /** Device info for presence awareness */
+  deviceInfo?: DeviceInfo;
+}
+
+/**
+ * Information about a connected device.
+ * Used for device awareness/presence in the IndexRoom.
+ */
+export interface DeviceInfo {
+  /** Unique device ID (stable across sessions, generated per device) */
+  device_id: string;
+  /** Human-readable device name (e.g., "MacBook Pro", "iPhone 15") */
+  name: string;
+  /** Device type for icon display */
+  type: 'desktop' | 'mobile' | 'tablet' | 'unknown';
+  /** Platform (e.g., "macos", "ios", "windows", "android", "web") */
+  platform: string;
+  /** App version */
+  app_version?: string;
+  /** When this device connected (Unix timestamp ms) */
+  connected_at: number;
+  /** Last activity timestamp (Unix timestamp ms) */
+  last_active_at: number;
 }
 
 export interface SyncStatus {

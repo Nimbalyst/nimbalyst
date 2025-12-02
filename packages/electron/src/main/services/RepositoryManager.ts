@@ -19,12 +19,14 @@ import { createPGLiteWorkspaceRepository } from './PGLiteWorkspaceRepository';
 import { createPGLiteDocumentsRepository } from './PGLiteDocumentsRepository';
 import { database } from '../database/PGLiteDatabaseWorker';
 import { logger } from '../utils/logger';
-import { initializeSync, shutdownSync, isSyncEnabled } from './SyncManager';
+import { initializeSync, shutdownSync, isSyncEnabled, reinitializeSync } from './SyncManager';
 
 class RepositoryManager {
   private sessionStore: SessionStore | null = null;
+  private baseSessionStore: SessionStore | null = null; // Unwrapped store for sync reinitialization
   private sessionFileStore: SessionFileStore | null = null;
   private agentMessagesStore: AgentMessagesStore | null = null;
+  private baseAgentMessagesStore: AgentMessagesStore | null = null; // Unwrapped store for sync reinitialization
   private workspaceRepository: WorkspaceRepository | null = null;
   private documentsRepository: DocumentsRepository | null = null;
   private initialized = false;
@@ -51,7 +53,7 @@ class RepositoryManager {
       };
 
       // Create base session store
-      const baseSessionStore = createPGLiteSessionStore(
+      this.baseSessionStore = createPGLiteSessionStore(
         dbAdapter,
         async () => {
           if (!database.isInitialized()) {
@@ -61,7 +63,7 @@ class RepositoryManager {
       );
 
       // Wrap with sync if configured (returns base store if sync not enabled)
-      this.sessionStore = await initializeSync(baseSessionStore);
+      this.sessionStore = await initializeSync(this.baseSessionStore);
 
       // Register session store with runtime's AISessionsRepository
       AISessionsRepository.setStore(this.sessionStore);
@@ -80,7 +82,7 @@ class RepositoryManager {
       SessionFilesRepository.setStore(this.sessionFileStore);
 
       // Create base agent messages store
-      const baseAgentMessagesStore = createPGLiteAgentMessagesStore(
+      this.baseAgentMessagesStore = createPGLiteAgentMessagesStore(
         dbAdapter,
         async () => {
           if (!database.isInitialized()) {
@@ -91,8 +93,8 @@ class RepositoryManager {
 
       // Wrap with sync if enabled (must happen after initializeSync)
       this.agentMessagesStore = isSyncEnabled()
-        ? createSyncedAgentMessagesStore(baseAgentMessagesStore)
-        : baseAgentMessagesStore;
+        ? createSyncedAgentMessagesStore(this.baseAgentMessagesStore)
+        : this.baseAgentMessagesStore;
 
       // Register agent messages store with runtime's AgentMessagesRepository
       AgentMessagesRepository.setStore(this.agentMessagesStore);
@@ -166,6 +168,31 @@ class RepositoryManager {
       throw new Error('RepositoryManager not initialized. Call initialize() first.');
     }
     return this.agentMessagesStore;
+  }
+
+  /**
+   * Reinitialize sync with new configuration.
+   * Called when sync settings are changed at runtime.
+   */
+  async reinitializeSyncWithNewConfig(): Promise<void> {
+    if (!this.initialized || !this.baseSessionStore || !this.baseAgentMessagesStore) {
+      logger.main.warn('[RepositoryManager] Cannot reinitialize sync - not initialized yet');
+      return;
+    }
+
+    logger.main.info('[RepositoryManager] Reinitializing sync with new configuration...');
+
+    // Reinitialize sync (this shuts down existing sync and starts new one if enabled)
+    this.sessionStore = await reinitializeSync(this.baseSessionStore);
+    AISessionsRepository.setStore(this.sessionStore);
+
+    // Rewrap agent messages store with sync if enabled
+    this.agentMessagesStore = isSyncEnabled()
+      ? createSyncedAgentMessagesStore(this.baseAgentMessagesStore)
+      : this.baseAgentMessagesStore;
+    AgentMessagesRepository.setStore(this.agentMessagesStore);
+
+    logger.main.info('[RepositoryManager] Sync reinitialization complete, sync enabled:', isSyncEnabled());
   }
 
   /**
