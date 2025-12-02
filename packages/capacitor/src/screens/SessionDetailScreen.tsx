@@ -231,7 +231,7 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
           direction: encrypted.direction,
           content: parsed.content,
           metadata: parsed.metadata,
-          hidden: false,
+          hidden: parsed.hidden ?? false,
         };
       } catch (err) {
         console.error('[SessionDetail] Failed to decrypt message:', err);
