@@ -43,6 +43,9 @@ import { detectFileWorkspace, suggestWorkspaceForFile } from './utils/workspaceD
 import { cliManager } from './services/CLIManager';
 import { registerWorkspaceWindow, shutdownHttpServer, startMcpHttpServer, updateDocumentState } from './mcp/httpServer';
 import { SessionNamingService } from './services/SessionNamingService';
+import { WireframeScreenshotService } from './services/WireframeScreenshotService';
+import { registerWireframeHandlers } from './ipc/WireframeHandlers';
+import { ClaudeCodeProvider } from '@nimbalyst/runtime/ai/server';
 import { logger, overrideConsole } from './utils/logger';
 import { startPerformanceMonitoring, stopPerformanceMonitoring } from './utils/performanceMonitor';
 import { setupForceQuit } from './utils/forceQuit';
@@ -302,6 +305,7 @@ app.whenReady().then(async () => {
     registerNotificationHandlers();
     registerGitStatusHandlers();
     registerMCPConfigHandlers();
+    registerWireframeHandlers();
 
     // Initialize AI service
     if (!runtimeSessionStore) {
@@ -320,6 +324,9 @@ app.whenReady().then(async () => {
 
         // Store the actual port for providers to use
         (global as any).mcpServerPort = result.port;
+
+        // Inject the port into ClaudeCodeProvider so it can configure the MCP server
+        ClaudeCodeProvider.setMcpServerPort(result.port);
     } catch (error) {
             logger.mcp.error('Failed to start MCP SSE server:', error);
     }
@@ -822,6 +829,14 @@ app.on('before-quit', async (event) => {
                 fs.appendFileSync(debugLog, `[QUIT] Error closing session naming MCP server: ${error}\n`);
             } catch (e) {}
         }
+    }
+
+    try {
+        // Cleanup wireframe screenshot service
+        const wireframeScreenshotService = WireframeScreenshotService.getInstance();
+        wireframeScreenshotService.cleanup();
+    } catch (error) {
+        console.error('[QUIT] Error cleaning up wireframe screenshot service:', error);
     }
 
     try {

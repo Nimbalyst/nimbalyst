@@ -58,10 +58,22 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     reject: (error: Error) => void;
   }> = new Map();
 
+  // Shared MCP server port (injected from electron main process)
+  // This server provides multiple tools: applyDiff, streamContent, capture_wireframe_screenshot
+  private static mcpServerPort: number | null = null;
+
   // Session naming MCP server port (injected from electron main process)
   private static sessionNamingServerPort: number | null = null;
 
   static readonly DEFAULT_MODEL = 'claude-code:sonnet';
+
+  /**
+   * Set the shared MCP server port (called from electron main process)
+   * This allows the runtime package to use the MCP server without directly depending on electron code
+   */
+  public static setMcpServerPort(port: number | null): void {
+    ClaudeCodeProvider.mcpServerPort = port;
+  }
 
   /**
    * Set the session naming MCP server port (called from electron main process)
@@ -1422,8 +1434,19 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
   private async getMcpServersConfig(sessionId?: string, workspacePath?: string) {
     // Load MCP servers from .mcp.json in the workspace (if available)
-    // and merge with built-in session naming server
+    // and merge with built-in MCP servers
     const config: any = {};
+
+    // Include shared MCP server if it's started (provides capture_wireframe_screenshot tool)
+    // Note: applyDiff and streamContent are used via direct IPC, not through Claude Code MCP
+    if (ClaudeCodeProvider.mcpServerPort !== null && workspacePath) {
+      config['nimbalyst-mcp'] = {
+        type: 'sse',
+        transport: 'sse',
+        url: `http://127.0.0.1:${ClaudeCodeProvider.mcpServerPort}/mcp?workspacePath=${encodeURIComponent(workspacePath)}`
+      };
+      console.log('[CLAUDE-CODE] Shared MCP server configured on port', ClaudeCodeProvider.mcpServerPort, 'for workspace', workspacePath);
+    }
 
     // Include session naming MCP server if it's started
     if (ClaudeCodeProvider.sessionNamingServerPort !== null && sessionId) {

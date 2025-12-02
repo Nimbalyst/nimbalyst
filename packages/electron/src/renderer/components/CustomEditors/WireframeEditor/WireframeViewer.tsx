@@ -9,6 +9,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { CustomEditorProps } from '../types';
 import { MonacoCodeEditor } from '../../MonacoCodeEditor';
 import { logger } from '../../../utils/logger';
+import { captureWireframeComposite, base64ToBlob } from './screenshotUtils';
 
 type ViewMode = 'preview' | 'source';
 
@@ -509,87 +510,14 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
     }
 
     try {
-      const iframe = iframeRef.current;
-      const iframeWindow = iframe.contentWindow;
-      const iframeDoc = iframe.contentDocument || iframeWindow?.document;
-
-      if (!iframeDoc || !iframeDoc.body) {
-        throw new Error('Cannot access iframe document');
-      }
-
-      // Wait for iframe to be fully loaded
-      if (iframeDoc.readyState !== 'complete') {
-        await new Promise((resolve) => {
-          iframeWindow?.addEventListener('load', resolve, { once: true });
-          setTimeout(resolve, 5000);
-        });
-      }
-
-      const iframeWidth = iframe.offsetWidth;
-      const iframeHeight = iframe.offsetHeight;
-
-      if (iframeWidth === 0 || iframeHeight === 0) {
-        throw new Error(`Iframe has zero dimensions: ${iframeWidth}x${iframeHeight}`);
-      }
-
       logger.ui.info('[WireframeViewer] Creating composite screenshot for AI');
 
-      // Import html2canvas
-      const html2canvas = (await import('html2canvas')).default;
-
-      // Capture the wireframe iframe content
-      const targetElement = iframeDoc.body;
-      const elemWidth = targetElement.scrollWidth || targetElement.offsetWidth || iframeWidth;
-      const elemHeight = targetElement.scrollHeight || targetElement.offsetHeight || iframeHeight;
-
-      if (elemWidth === 0 || elemHeight === 0) {
-        throw new Error(`Target element has zero dimensions: ${elemWidth}x${elemHeight}`);
-      }
-
-      const wireframeCanvas = await html2canvas(targetElement, {
-        backgroundColor: '#ffffff',
-        scale: 2,
-        logging: false,
-        useCORS: false,
-        allowTaint: true,
-        foreignObjectRendering: true,
-        imageTimeout: 0,
-        width: elemWidth,
-        height: elemHeight,
-        windowWidth: elemWidth,
-        windowHeight: elemHeight,
-      });
-
-      // Create a new canvas to composite wireframe + drawing
-      const compositeCanvas = document.createElement('canvas');
-      compositeCanvas.width = wireframeCanvas.width;
-      compositeCanvas.height = wireframeCanvas.height;
-      const ctx = compositeCanvas.getContext('2d');
-
-      if (!ctx) {
-        throw new Error('Failed to get canvas context');
-      }
-
-      // Draw wireframe
-      ctx.drawImage(wireframeCanvas, 0, 0);
-
-      // Draw the drawing overlay if it exists
-      const drawingCanvas = drawingCanvasRef.current;
-      if (drawingCanvas && drawingDataUrl) {
-        // Scale the drawing to match the wireframe canvas size
-        const scaleX = wireframeCanvas.width / drawingCanvas.width;
-        const scaleY = wireframeCanvas.height / drawingCanvas.height;
-        ctx.scale(scaleX, scaleY);
-        ctx.drawImage(drawingCanvas, 0, 0);
-      }
+      // Use shared utility to capture screenshot
+      const drawingCanvas = drawingDataUrl ? drawingCanvasRef.current : null;
+      const base64Data = await captureWireframeComposite(iframeRef.current, drawingCanvas);
 
       // Convert to blob
-      const blob = await new Promise<Blob>((resolve, reject) => {
-        compositeCanvas.toBlob((b) => {
-          if (b) resolve(b);
-          else reject(new Error('Failed to create blob'));
-        }, 'image/png');
-      });
+      const blob = base64ToBlob(base64Data);
 
       // Create file from blob
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
@@ -630,6 +558,52 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
       alert('Failed to capture screenshot: ' + errorMessage);
     }
   }, [drawingDataUrl]);
+
+  // Handle screenshot capture requests from MCP server (via main process)
+  useEffect(() => {
+    const handleCaptureRequest = async (data: { requestId: string; filePath: string }) => {
+      // Only respond if this viewer has the requested file open
+      if (data.filePath !== filePath) {
+        return; // Not our file, ignore
+      }
+
+      logger.ui.info('[WireframeViewer] Received MCP screenshot request for:', filePath);
+
+      try {
+        if (!iframeRef.current) {
+          throw new Error('Iframe not ready');
+        }
+
+        // Use shared utility to capture screenshot
+        const drawingCanvas = drawingDataUrl ? drawingCanvasRef.current : null;
+        const base64Data = await captureWireframeComposite(iframeRef.current, drawingCanvas);
+
+        logger.ui.info('[WireframeViewer] MCP screenshot captured successfully');
+
+        // Send result back to main process
+        await window.electronAPI.invoke('wireframe:screenshot-result', {
+          requestId: data.requestId,
+          success: true,
+          imageBase64: base64Data,
+          mimeType: 'image/png'
+        });
+      } catch (err) {
+        logger.ui.error('[WireframeViewer] MCP screenshot capture failed:', err);
+        const errorMessage = err instanceof Error ? err.message : String(err);
+
+        // Send error result back to main process
+        await window.electronAPI.invoke('wireframe:screenshot-result', {
+          requestId: data.requestId,
+          success: false,
+          error: errorMessage
+        });
+      }
+    };
+
+    // Listen for capture requests from main process
+    const cleanup = window.electronAPI.on('wireframe:capture-screenshot', handleCaptureRequest);
+    return cleanup;
+  }, [filePath, drawingDataUrl]);
 
   // Handle file watching - reload if file changes externally
   useEffect(() => {

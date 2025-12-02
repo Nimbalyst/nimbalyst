@@ -9,6 +9,7 @@ import {
 import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { BrowserWindow, ipcMain } from 'electron';
 import { parse as parseUrl } from 'url';
+import { WireframeScreenshotService } from '../services/WireframeScreenshotService';
 
 // Store document state PER SESSION to avoid cross-window contamination
 const documentStateBySession = new Map<string, any>();
@@ -302,6 +303,10 @@ async function tryCreateServer(port: number): Promise<any> {
     if (pathname === '/mcp' && req.method === 'GET') {
       // console.log('[MCP Server] SSE connection request');
 
+      // Extract workspace path from query parameter (used by capture_wireframe_screenshot)
+      const workspacePath = parsedUrl.query.workspacePath as string | undefined;
+      console.log('[MCP Server] Connection established with workspacePath:', workspacePath);
+
       // Create a new MCP server instance for this connection
       const server = new Server(
         {
@@ -370,6 +375,20 @@ async function tryCreateServer(port: number): Promise<any> {
                   }
                 },
                 required: ['content']
+              }
+            },
+            {
+              name: 'capture_wireframe_screenshot',
+              description: 'Capture a screenshot of a .wireframe.html file. Returns the screenshot as a base64-encoded PNG image. If the file is open in the editor, the screenshot will include any user annotations (drawings, highlights). If the file is not open, it will be rendered in a headless window (without annotations).',
+              inputSchema: {
+                type: 'object',
+                properties: {
+                  file_path: {
+                    type: 'string',
+                    description: 'The absolute path to the .wireframe.html file to capture.'
+                  }
+                },
+                required: ['file_path']
               }
             }
           ]
@@ -566,6 +585,111 @@ async function tryCreateServer(port: number): Promise<any> {
               ],
               isError: true
             };
+          }
+
+          case 'capture_wireframe_screenshot': {
+            const filePath = args?.file_path as string;
+            console.log('[MCP Server] capture_wireframe_screenshot called with:', { filePath, workspacePath });
+
+            // Validate file path
+            if (!filePath || typeof filePath !== 'string') {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: 'Error: file_path is required and must be a string'
+                  }
+                ],
+                isError: true
+              };
+            }
+
+            // Validate it's a wireframe file
+            if (!filePath.endsWith('.wireframe.html')) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: `Error: File must be a .wireframe.html file. Got: ${filePath}`
+                  }
+                ],
+                isError: true
+              };
+            }
+
+            try {
+              // Get the wireframe screenshot service
+              const wireframeService = WireframeScreenshotService.getInstance();
+
+              // Use workspace path from query parameter (captured in closure)
+              // If not provided, fall back to document state
+              let effectiveWorkspacePath = workspacePath;
+
+              if (!effectiveWorkspacePath) {
+                // Try to find workspace from document state as fallback
+                for (const state of documentStateBySession.values()) {
+                  if (state?.workspacePath) {
+                    effectiveWorkspacePath = state.workspacePath;
+                    break;
+                  }
+                }
+              }
+
+              // If still no workspace found, return error
+              if (!effectiveWorkspacePath) {
+                return {
+                  content: [
+                    {
+                      type: 'text',
+                      text: 'Error: No workspace context available. Please ensure a workspace is open and the MCP server was connected with a workspace path.'
+                    }
+                  ],
+                  isError: true
+                };
+              }
+
+              // Call the capture method
+              const result = await wireframeService.captureScreenshotForMCP(filePath, effectiveWorkspacePath);
+
+              if (!result.success) {
+                return {
+                  content: [
+                    {
+                      type: 'text',
+                      text: `Error capturing screenshot: ${result.error || 'Unknown error'}`
+                    }
+                  ],
+                  isError: true
+                };
+              }
+
+              console.log(`[MCP Server] Captured screenshot for ${filePath}`);
+
+              // Return the image as base64-encoded content
+              return {
+                content: [
+                  {
+                    type: 'image',
+                    data: result.imageBase64!,
+                    mimeType: result.mimeType || 'image/png'
+                  }
+                ],
+                isError: false
+              };
+            } catch (error) {
+              console.error('[MCP Server] Failed to capture screenshot:', error);
+              const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: `Error capturing screenshot: ${errorMessage}`
+                  }
+                ],
+                isError: true
+              };
+            }
           }
 
           default:
