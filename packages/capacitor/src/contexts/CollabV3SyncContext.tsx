@@ -272,6 +272,7 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const deviceAnnounceIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const setConfig = useCallback((newConfig: SyncConfig | null) => {
     setConfigState(newConfig);
@@ -339,8 +340,8 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
             const convertedSessions = message.sessions.map(convertSession);
             const convertedProjects = message.projects.map(convertProject);
 
-            // Sort sessions by last message time
-            convertedSessions.sort((a, b) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0));
+            // Sort sessions by updated_at to match desktop sort order
+            convertedSessions.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
             // Sort projects by session count
             convertedProjects.sort((a, b) => b.sessionCount - a.sessionCount);
 
@@ -369,10 +370,12 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
               if (existing >= 0) {
                 const updated = [...prev];
                 updated[existing] = updatedSession;
-                return updated.sort((a, b) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0));
+                // Sort by updated_at to match desktop sort order
+                return updated.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
               } else {
+                // Sort by updated_at to match desktop sort order
                 return [updatedSession, ...prev].sort(
-                  (a, b) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0)
+                  (a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)
                 );
               }
             });
@@ -447,14 +450,27 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
         error: null,
       }));
 
-      // Announce this device to the server
-      const deviceInfo = getDeviceInfo();
-      const announceMsg: ClientMessage = {
-        type: 'device_announce',
-        device: deviceInfo,
+      // Helper to announce device
+      const announceDevice = () => {
+        if (ws.readyState === WebSocket.OPEN) {
+          const deviceInfo = getDeviceInfo();
+          const announceMsg: ClientMessage = {
+            type: 'device_announce',
+            device: deviceInfo,
+          };
+          ws.send(JSON.stringify(announceMsg));
+          console.log('[CollabV3] Announced device:', deviceInfo.name, deviceInfo.type, deviceInfo.platform);
+        }
       };
-      ws.send(JSON.stringify(announceMsg));
-      console.log('[CollabV3] Announced device:', deviceInfo.name, deviceInfo.type, deviceInfo.platform);
+
+      // Announce this device to the server
+      announceDevice();
+
+      // Set up periodic re-announcement to handle server hibernation
+      if (deviceAnnounceIntervalRef.current) {
+        clearInterval(deviceAnnounceIntervalRef.current);
+      }
+      deviceAnnounceIntervalRef.current = setInterval(announceDevice, 30000);
 
       // Request initial sync
       requestSync();
@@ -467,6 +483,12 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
         connected: false,
       }));
       wsRef.current = null;
+
+      // Clear device announce interval
+      if (deviceAnnounceIntervalRef.current) {
+        clearInterval(deviceAnnounceIntervalRef.current);
+        deviceAnnounceIntervalRef.current = null;
+      }
 
       // Attempt reconnect after 5 seconds
       reconnectTimeoutRef.current = setTimeout(() => {
@@ -496,6 +518,10 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
+    }
+    if (deviceAnnounceIntervalRef.current) {
+      clearInterval(deviceAnnounceIntervalRef.current);
+      deviceAnnounceIntervalRef.current = null;
     }
     if (wsRef.current) {
       wsRef.current.close();
