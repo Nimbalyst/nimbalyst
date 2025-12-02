@@ -36,7 +36,7 @@ interface FileTreeProps {
 }
 
 // Special directories that should always appear first with distinct styling
-const SPECIAL_DIRECTORIES = ['.nimbalyst-local'];
+const SPECIAL_DIRECTORIES = ['nimbalyst-local'];
 
 function isSpecialDirectory(name: string): boolean {
   return SPECIAL_DIRECTORIES.includes(name);

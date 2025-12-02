@@ -240,14 +240,14 @@ export function createWindow(
                 // console.log('[MAIN] Restored navigation history for workspace:', workspacePath);
             }
 
-            // Ensure .nimbalyst-local directory exists
-            const nimbalystLocalPath = join(workspacePath, '.nimbalyst-local');
+            // Ensure nimbalyst-local directory exists
+            const nimbalystLocalPath = join(workspacePath, 'nimbalyst-local');
             if (!existsSync(nimbalystLocalPath)) {
                 try {
                     mkdirSync(nimbalystLocalPath, { recursive: true });
-                    // console.log('[MAIN] Created .nimbalyst-local directory:', nimbalystLocalPath);
+                    // console.log('[MAIN] Created nimbalyst-local directory:', nimbalystLocalPath);
                 } catch (error) {
-                    console.error('[MAIN] Failed to create .nimbalyst-local directory:', error);
+                    console.error('[MAIN] Failed to create nimbalyst-local directory:', error);
                 }
             }
         }

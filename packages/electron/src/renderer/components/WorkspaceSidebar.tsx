@@ -35,7 +35,7 @@ interface WorkspaceSidebarProps {
 const FILE_TREE_FILTER_OPTIONS: ReadonlyArray<FileTreeFilter> = ['all', 'markdown', 'known', 'git-uncommitted', 'git-worktree', 'ai-read', 'ai-written'];
 const CLAUDE_SESSION_FILTERS = new Set<FileTreeFilter>(['ai-read', 'ai-written']);
 const GIT_FILTERS = new Set<FileTreeFilter>(['git-uncommitted', 'git-worktree']);
-const SPECIAL_DIRECTORIES = ['.nimbalyst-local'];
+const SPECIAL_DIRECTORIES = ['nimbalyst-local'];
 
 function isSpecialDirectory(name: string): boolean {
   return SPECIAL_DIRECTORIES.includes(name);

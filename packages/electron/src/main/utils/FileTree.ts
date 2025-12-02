@@ -17,7 +17,7 @@ const MAX_TOTAL_ITEMS = 5000;
 let totalItemCount = 0;
 
 // Special directories that should always appear first
-const SPECIAL_DIRECTORIES = ['.nimbalyst-local'];
+const SPECIAL_DIRECTORIES = ['nimbalyst-local'];
 
 function isSpecialDirectory(name: string): boolean {
     return SPECIAL_DIRECTORIES.includes(name);
@@ -63,7 +63,7 @@ export function getFolderContents(dirPath: string, depth: number = 0): FileTreeI
             }
 
             // Skip hidden files except special ones
-            if (item.startsWith('.') && item !== '.nimbalyst' && item !== '.nimbalyst-local' && item !== '.claude') {
+            if (item.startsWith('.') && item !== '.nimbalyst' && item !== '.claude') {
                 continue;
             }
 

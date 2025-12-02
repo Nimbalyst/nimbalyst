@@ -300,7 +300,7 @@
   color: #1e40af;
 }
 
-/* Special directories (.claude, .nimbalyst, .nimbalyst-local) */
+/* Special directories (.claude, .nimbalyst, nimbalyst-local) */
 .file-tree-directory.special-directory .file-tree-icon {
   color: #7c3aed; /* Purple/violet color */
 }
