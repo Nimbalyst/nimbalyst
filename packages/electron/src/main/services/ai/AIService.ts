@@ -28,6 +28,8 @@ import { windowStates } from '../../window/WindowManager';
 import { sessionFileTracker } from '../SessionFileTracker';
 import {AnalyticsService} from "../analytics/AnalyticsService.ts";
 import { historyManager } from '../../HistoryManager';
+import { getAIProviderOverrides, saveAIProviderOverrides, clearAIProviderOverrides } from '../../utils/store';
+import { mergeAISettings } from '../../utils/aiSettingsMerge';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -391,7 +393,6 @@ export class AIService {
 
     // Check for project-level API key override
     if (workspacePath) {
-      const { getAIProviderOverrides } = require('../../utils/store');
       const overrides = getAIProviderOverrides(workspacePath);
       if (overrides?.providers?.[provider]?.apiKey) {
         return overrides.providers[provider].apiKey;
@@ -422,7 +423,6 @@ export class AIService {
 
     // Check for project-level override
     if (workspacePath) {
-      const { getAIProviderOverrides } = require('../../utils/store');
       const overrides = getAIProviderOverrides(workspacePath);
       if (overrides?.providers?.[provider]?.enabled !== undefined) {
         return overrides.providers[provider].enabled;
@@ -2439,7 +2439,6 @@ export class AIService {
         return { success: false, error: 'workspacePath is required' };
       }
 
-      const { getAIProviderOverrides } = await import('../../utils/store');
       const overrides = getAIProviderOverrides(workspacePath);
 
       return {
@@ -2454,8 +2453,6 @@ export class AIService {
         return { success: false, error: 'workspacePath is required' };
       }
 
-      const { saveAIProviderOverrides } = await import('../../utils/store');
-
       // If overrides is null/undefined or empty, clear the overrides
       if (!overrides || (Object.keys(overrides).length === 0)) {
         saveAIProviderOverrides(workspacePath, undefined);
@@ -2468,7 +2465,6 @@ export class AIService {
 
     // Get effective (merged) AI settings for a workspace
     ipcMain.handle('ai:getEffectiveSettings', async (_event, workspacePath?: string) => {
-      const { mergeAISettings } = await import('../../utils/aiSettingsMerge');
 
       // Get global settings
       const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
@@ -2500,7 +2496,6 @@ export class AIService {
         return { success: false, error: 'workspacePath is required' };
       }
 
-      const { clearAIProviderOverrides } = await import('../../utils/store');
       clearAIProviderOverrides(workspacePath);
 
       return { success: true };
