@@ -877,6 +877,16 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                 type: 'error',
                 error: errorMessage
               };
+
+              // CRITICAL: Send completion and break on result errors (like "prompt too long")
+              // Without this, the UI thinks the agent is still processing and /compact won't work
+              yield {
+                type: 'complete',
+                isComplete: true
+              };
+
+              // Break out of the loop since we have an error
+              break;
             }
             // Don't yield result content as text - it's already been sent in the assistant message
             // Only errors need to be displayed from result chunks
