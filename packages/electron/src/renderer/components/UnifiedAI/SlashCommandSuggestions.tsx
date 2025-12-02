@@ -40,7 +40,8 @@ function shuffleArray<T>(array: T[]): T[] {
  * when a Claude Code session is empty.
  *
  * Only shows commands from packages installed via the Tool Packages screen.
- * Shows a random selection of up to 3 commands.
+ * Shows a random selection of up to 3 commands initially, with a "(+X)" pill
+ * to expand and show all available commands.
  *
  * Clicking a pill populates the input with the slash command.
  */
@@ -53,6 +54,7 @@ export const SlashCommandSuggestions: React.FC<SlashCommandSuggestionsProps> = (
   const posthog = usePostHog();
   const [installedCommands, setInstalledCommands] = useState<CommandWithPackage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   // Only show for claude-code provider with empty session
   const shouldShow = provider === 'claude-code' && !hasMessages;
@@ -99,13 +101,21 @@ export const SlashCommandSuggestions: React.FC<SlashCommandSuggestionsProps> = (
     fetchInstalledCommands();
   }, [shouldShow, workspacePath]);
 
-  // Get random selection of up to 3 commands (memoized to prevent re-shuffle on every render)
-  const displayCommands = useMemo(() => {
-    if (installedCommands.length <= 3) {
-      return installedCommands;
-    }
-    return shuffleArray(installedCommands).slice(0, 3);
+  // Shuffle commands once for consistent display (memoized to prevent re-shuffle on every render)
+  const shuffledCommands = useMemo(() => {
+    return shuffleArray(installedCommands);
   }, [installedCommands]);
+
+  // Get commands to display based on expanded state
+  const displayCommands = useMemo(() => {
+    if (isExpanded || shuffledCommands.length <= 3) {
+      return shuffledCommands;
+    }
+    return shuffledCommands.slice(0, 3);
+  }, [shuffledCommands, isExpanded]);
+
+  // Calculate how many additional commands are hidden
+  const hiddenCount = shuffledCommands.length - 3;
 
   const handleCommandClick = useCallback((cmd: CommandWithPackage) => {
     // Track the suggestion click in analytics.
@@ -121,6 +131,10 @@ export const SlashCommandSuggestions: React.FC<SlashCommandSuggestionsProps> = (
 
     onCommandSelect(`/${cmd.command.name} `);
   }, [onCommandSelect, posthog]);
+
+  const handleExpandClick = useCallback(() => {
+    setIsExpanded(true);
+  }, []);
 
   // Don't render if not applicable or no installed commands
   if (!shouldShow || isLoading || displayCommands.length === 0) {
@@ -149,6 +163,14 @@ export const SlashCommandSuggestions: React.FC<SlashCommandSuggestionsProps> = (
             )}
           </div>
         ))}
+        {!isExpanded && hiddenCount > 0 && (
+          <button
+            className="slash-command-pill slash-command-expand-pill"
+            onClick={handleExpandClick}
+          >
+            <span className="slash-command-pill-name">+{hiddenCount}</span>
+          </button>
+        )}
       </div>
     </div>
   );

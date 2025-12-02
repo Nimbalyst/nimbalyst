@@ -62,6 +62,16 @@
   white-space: nowrap;
 }
 
+/* Expand pill for showing more commands */
+.slash-command-expand-pill {
+  color: var(--text-tertiary);
+  font-weight: 600;
+}
+
+.slash-command-expand-pill:hover {
+  color: var(--text-primary);
+}
+
 /* Pill wrapper for tooltip positioning */
 .slash-command-pill-wrapper {
   position: relative;
