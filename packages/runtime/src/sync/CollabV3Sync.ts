@@ -215,6 +215,14 @@ interface CachedSessionIndex {
   last_message_at: number;
   created_at: number;
   updated_at: number;
+  // Execution state fields synced via index updates to mobile
+  pendingExecution?: {
+    messageId: string;
+    sentAt: number;
+    sentBy: 'mobile' | 'desktop';
+  };
+  isExecuting?: boolean;
+  queuedPrompts?: Array<{ id: string; prompt: string; timestamp: number }>;
 }
 
 // ============================================================================
@@ -234,6 +242,50 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
   // Queue for operations that need to wait for index connection
   type PendingOperation = { type: 'sessions'; data: SessionIndexData[]; options?: { syncMessages?: boolean } } | { type: 'projects'; data: ProjectIndexEntry[] };
   const pendingOperations: PendingOperation[] = [];
+
+  // Queue for partial metadata updates waiting for the session to be cached
+  // Key: sessionId, Value: partial metadata to merge when session is cached
+  const pendingMetadataUpdates = new Map<string, Partial<SyncedSessionMetadata>>();
+
+  /**
+   * Apply any pending metadata updates for a session that was just cached.
+   * This handles the case where isExecuting is pushed before the session is in the cache.
+   */
+  function applyPendingMetadataUpdates(sessionId: string): void {
+    const pending = pendingMetadataUpdates.get(sessionId);
+    if (!pending) return;
+
+    pendingMetadataUpdates.delete(sessionId);
+
+    const cached = sessionIndexCache.get(sessionId);
+    if (!cached || !indexWs || !indexConnected) return;
+
+    console.log('[CollabV3] Applying pending metadata update for session:', sessionId, pending);
+
+    // Merge pending update with cached entry
+    const indexEntry: SessionIndexEntry = {
+      session_id: sessionId,
+      project_id: cached.project_id,
+      title: cached.title,
+      provider: cached.provider,
+      model: cached.model,
+      mode: cached.mode,
+      message_count: cached.message_count,
+      last_message_at: cached.last_message_at,
+      created_at: cached.created_at,
+      updated_at: Date.now(),
+      pendingExecution: 'pendingExecution' in pending ? pending.pendingExecution : cached.pendingExecution,
+      isExecuting: 'isExecuting' in pending ? pending.isExecuting : cached.isExecuting,
+    };
+
+    // Update cache
+    sessionIndexCache.set(sessionId, indexEntry);
+
+    // Send to server
+    const indexMsg: ClientMessage = { type: 'index_update', session: indexEntry };
+    console.log('[CollabV3] Sending deferred index_update for session:', sessionId, 'isExecuting:', indexEntry.isExecuting);
+    indexWs.send(JSON.stringify(indexMsg));
+  }
 
   // Pending fetch index request (resolves when index_sync_response is received)
   let pendingIndexFetch: {
@@ -600,7 +652,11 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
             sessionIndexCache.set(message.session.session_id, message.session);
             console.log('[CollabV3] Received index_broadcast for session:', message.session.session_id,
               'queuedPrompts:', message.session.queuedPrompts?.length ?? 0,
-              'pendingExecution:', message.session.pendingExecution);
+              'pendingExecution:', message.session.pendingExecution,
+              'isExecuting:', message.session.isExecuting);
+
+            // Apply any pending metadata updates that were waiting for this session
+            applyPendingMetadataUpdates(message.session.session_id);
 
             // Notify all index change listeners
             indexChangeListeners.forEach((callback) => {
@@ -792,6 +848,10 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
       // Cache the entry for partial update merging later
       sessionIndexCache.set(session.id, entry);
+
+      // Apply any pending metadata updates (e.g., isExecuting set before cache was populated)
+      applyPendingMetadataUpdates(session.id);
+
       return entry;
     });
 
@@ -1062,7 +1122,19 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
             console.log('[CollabV3] Sending index_update (new) for session:', sessionId, 'isExecuting:', indexEntry.isExecuting);
             indexWs.send(JSON.stringify(indexMsg));
           } else {
-            console.log('[CollabV3] Skipping index update - no cached data and missing required fields for session:', sessionId);
+            // No cached data and missing required fields for a full update.
+            // Queue the partial update to be applied when the session is cached.
+            // This handles cases like isExecuting being set before syncSessionsToIndex runs.
+            const hasPartialUpdate = 'isExecuting' in meta || 'pendingExecution' in meta;
+            if (hasPartialUpdate) {
+              console.log('[CollabV3] Queueing partial metadata update for session:', sessionId, { isExecuting: meta.isExecuting, pendingExecution: meta.pendingExecution });
+              const existing = pendingMetadataUpdates.get(sessionId) || {};
+              if ('isExecuting' in meta) existing.isExecuting = meta.isExecuting;
+              if ('pendingExecution' in meta) existing.pendingExecution = meta.pendingExecution;
+              pendingMetadataUpdates.set(sessionId, existing);
+            } else {
+              console.log('[CollabV3] Skipping index update - no cached data and missing required fields for session:', sessionId);
+            }
           }
         }
       }
@@ -1149,6 +1221,11 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
     getCachedMetadata(sessionId: string): Partial<SessionMetadata> | undefined {
       const session = sessions.get(sessionId);
       return session?.cachedMetadata;
+    },
+
+    /** Get cached index entry for a session (from index_sync_response and index_broadcast) */
+    getCachedIndexEntry(sessionId: string): SessionIndexEntry | undefined {
+      return sessionIndexCache.get(sessionId);
     },
   };
 

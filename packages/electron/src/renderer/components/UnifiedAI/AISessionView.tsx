@@ -77,6 +77,7 @@ interface TranscriptSectionProps {
   mode: 'chat' | 'agent';
   todos: Todo[];
   queuedPrompts: any[];
+  isProcessing?: boolean;
   onFileClick?: (filePath: string) => void;
   onTodoClick?: (todo: TodoItem) => void;
   onCancelQueuedPrompt: (id: string) => void;
@@ -89,6 +90,7 @@ const TranscriptSectionComponent: React.FC<TranscriptSectionProps> = ({
   mode,
   todos,
   queuedPrompts,
+  isProcessing,
   onFileClick,
   onTodoClick,
   onCancelQueuedPrompt
@@ -111,6 +113,7 @@ const TranscriptSectionComponent: React.FC<TranscriptSectionProps> = ({
           sessionId={sessionId}
           sessionData={sessionData}
           todos={todos}
+          isProcessing={isProcessing}
           onFileClick={onFileClick}
           onTodoClick={onTodoClick}
           hideSidebar={mode === 'chat'} // Hide sidebar in chat mode
@@ -146,14 +149,15 @@ const TranscriptSectionComponent: React.FC<TranscriptSectionProps> = ({
 
 // Memoize TranscriptSection to prevent re-renders when input changes
 const TranscriptSection = React.memo(TranscriptSectionComponent, (prevProps, nextProps) => {
-  // Only re-render if session data, todos, or queue actually changed
+  // Only re-render if session data, todos, queue, or processing state actually changed
   return (
     prevProps.sessionId === nextProps.sessionId &&
     prevProps.sessionData === nextProps.sessionData &&
     prevProps.workspacePath === nextProps.workspacePath &&
     prevProps.mode === nextProps.mode &&
     prevProps.todos === nextProps.todos &&
-    prevProps.queuedPrompts === nextProps.queuedPrompts
+    prevProps.queuedPrompts === nextProps.queuedPrompts &&
+    prevProps.isProcessing === nextProps.isProcessing
   );
 });
 
@@ -448,6 +452,7 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
         mode={mode}
         todos={todos}
         queuedPrompts={queuedPrompts}
+        isProcessing={isLoading}
         onFileClick={handleFileClick}
         onTodoClick={handleTodoClick}
         onCancelQueuedPrompt={handleCancelQueuedPrompt}

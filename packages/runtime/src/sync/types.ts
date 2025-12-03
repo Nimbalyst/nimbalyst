@@ -148,6 +148,27 @@ export interface SyncProvider {
     }>;
     [key: string]: unknown;
   } | undefined;
+
+  /** Get cached index entry for a session (populated from index_sync_response and index_broadcast) */
+  getCachedIndexEntry?(sessionId: string): {
+    session_id: string;
+    project_id: string;
+    title: string;
+    provider: string;
+    model?: string;
+    mode?: 'agent' | 'planning';
+    message_count: number;
+    last_message_at: number;
+    created_at: number;
+    updated_at: number;
+    pendingExecution?: {
+      messageId: string;
+      sentAt: number;
+      sentBy: 'mobile' | 'desktop';
+    };
+    isExecuting?: boolean;
+    queuedPrompts?: Array<{ id: string; prompt: string; timestamp: number }>;
+  } | undefined;
 }
 
 /** Session data for bulk index sync */

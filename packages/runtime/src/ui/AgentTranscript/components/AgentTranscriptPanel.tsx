@@ -17,6 +17,7 @@ interface AgentTranscriptPanelProps {
   sessionId: string;
   sessionData: SessionData;
   todos?: Todo[];
+  isProcessing?: boolean; // Whether the session is currently processing a request
   onSettingsChange?: (settings: TranscriptSettings) => void;
   showSettings?: boolean;
   initialSettings?: TranscriptSettings;
@@ -29,6 +30,7 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
   sessionId,
   sessionData,
   todos = [],
+  isProcessing,
   onSettingsChange,
   showSettings,
   initialSettings,
@@ -206,6 +208,7 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
           ref={transcriptRef}
           sessionId={sessionId}
           sessionStatus={sessionData.metadata?.sessionStatus as string}
+          isProcessing={isProcessing}
           messages={sessionData.messages}
           provider={sessionData.provider}
           settings={initialSettings}

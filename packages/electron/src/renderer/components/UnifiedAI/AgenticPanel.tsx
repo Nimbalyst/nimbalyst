@@ -1197,10 +1197,21 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // Listen for queued prompts notification - triggers processing from the queued_prompts table
   // The actual prompts are fetched from the database, not from the IPC payload
   useEffect(() => {
-    const handleQueuedPromptsReceived = async (data: { sessionId: string; promptCount?: number }) => {
+    const effectId = Math.random().toString(36).slice(2, 8);
+    console.log(`[AgenticPanel] Setting up queue listener (effectId: ${effectId})`);
+
+    const handleQueuedPromptsReceived = async (data: { sessionId: string; promptCount?: number; workspacePath?: string }) => {
+      console.log(`[AgenticPanel] Handler invoked (effectId: ${effectId})`);
       if (!data || !data.sessionId) return;
 
-      console.log('[AgenticPanel] Received queue notification for session:', data.sessionId, 'promptCount:', data.promptCount);
+      // Only process if this panel's workspace matches the session's workspace
+      // This prevents duplicate processing when multiple windows are open
+      if (data.workspacePath && data.workspacePath !== workspacePathRef.current) {
+        console.log('[AgenticPanel] Ignoring queue notification for different workspace:', data.workspacePath, 'vs', workspacePathRef.current);
+        return;
+      }
+
+      console.log('[AgenticPanel] Received queue notification for session:', data.sessionId, 'promptCount:', data.promptCount, 'workspace:', workspacePathRef.current);
 
       // Check if this session tab is already open
       const existingTab = sessionTabsRef.current.find(t => t?.id === data.sessionId);
@@ -1228,6 +1239,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     const cleanup = window.electronAPI.on('ai:queuedPromptsReceived', handleQueuedPromptsReceived);
 
     return () => {
+      console.log(`[AgenticPanel] Cleaning up queue listener (effectId: ${effectId})`);
       cleanup?.();
     };
   }, []);
@@ -1698,31 +1710,47 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     const currentTab = sessionTabs.filter(tab => tab != null).find(tab => tab.id === sessionId);
     const sessionType = currentTab?.sessionData?.sessionType || (mode === 'agent' ? 'coding' : 'chat');
 
-    // Add user message immediately
-    setSessionTabs(prev => prev.filter(tab => tab != null).map(tab => {
-      if (tab.id === sessionId) {
-        const userMessage = {
-          role: 'user' as const,
-          content: message,
-          timestamp: Date.now(),
-          attachments: attachments.length > 0 ? attachments : undefined
-        };
-        const thinkingMessage = {
-          role: 'assistant' as const,
-          content: '',
-          timestamp: Date.now(),
-          isThinking: true
-        };
-        return {
-          ...tab,
-          sessionData: {
-            ...tab.sessionData,
-            messages: [...tab.sessionData.messages, userMessage, thinkingMessage]
-          }
-        };
+    // Add user message and thinking indicator immediately
+    // For queued prompts from mobile, the tab might have just been opened
+    setSessionTabs(prev => {
+      const existingTab = prev.find(tab => tab?.id === sessionId);
+      const isQueuedPrompt = !!queuedPromptId;
+
+      console.log('[AgenticPanel] Adding thinking message - tab exists:', !!existingTab, 'sessionId:', sessionId, 'isQueuedPrompt:', isQueuedPrompt);
+
+      if (!existingTab) {
+        console.warn('[AgenticPanel] Tab not found in state when trying to add thinking message. This should not happen.');
+        return prev;
       }
-      return tab;
-    }));
+
+      const userMessage = {
+        role: 'user' as const,
+        content: message,
+        timestamp: Date.now(),
+        attachments: attachments.length > 0 ? attachments : undefined
+      };
+      const thinkingMessage = {
+        role: 'assistant' as const,
+        content: '',
+        timestamp: Date.now(),
+        isThinking: true
+      };
+
+      console.log('[AgenticPanel] Added thinking message for session:', sessionId, 'current message count:', existingTab.sessionData.messages.length);
+
+      return prev.filter(tab => tab != null).map(tab => {
+        if (tab.id === sessionId) {
+          return {
+            ...tab,
+            sessionData: {
+              ...tab.sessionData,
+              messages: [...tab.sessionData.messages, userMessage, thinkingMessage]
+            }
+          };
+        }
+        return tab;
+      });
+    });
 
     try {
       // Prepare document context - strip out non-serializable functions
@@ -1843,9 +1871,20 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     }
   }, [onFileOpen]);
 
+  // Track sessions currently being processed to prevent duplicate processing
+  const processingQueueRef = useRef(new Set<string>());
+
   // Process queued prompts for a session (from mobile sync or local queue)
   // Uses the new queued_prompts table with atomic claim
   const processQueuedPrompts = useCallback(async (sessionId: string, _tab: SessionTab) => {
+    // Prevent duplicate processing if another call is already handling this session
+    if (processingQueueRef.current.has(sessionId)) {
+      console.log(`[AgenticPanel] Already processing queue for session ${sessionId}, skipping duplicate call`);
+      return;
+    }
+    processingQueueRef.current.add(sessionId);
+
+    try {
     // Fetch pending prompts from the new queued_prompts table
     const pendingPrompts = await window.electronAPI.invoke('ai:listPendingPrompts', sessionId) as Array<{
       id: string;
@@ -1883,6 +1922,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
       console.log(`[AgenticPanel] Successfully claimed prompt: ${claimedPrompt.id}`);
 
+      // Log current session tabs state before sending
+      console.log('[AgenticPanel] Current session tabs before handleSendMessage:', sessionTabsRef.current.map(t => t?.id));
+
       try {
         // Send the message using the same flow as normal messages
         await handleSendMessage(
@@ -1919,6 +1961,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     }
 
     console.log(`[AgenticPanel] Finished processing queued prompts for session ${sessionId}`);
+    } finally {
+      processingQueueRef.current.delete(sessionId);
+    }
   }, [handleSendMessage]);
 
   // Keep ref in sync with the callback
@@ -2299,7 +2344,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             onFileMentionSearch={handleFileMentionSearch}
             onFileMentionSelect={handleFileMentionSelect}
             onFileClick={handleFileClick}
-            isLoading={sendingSessions.has(activeTab.id)}
+            isLoading={processingSessions.has(activeTab.id)}
             aiMode={activeTab.mode || 'agent'}
             onAIModeChange={(newMode) => handleModeChange(activeTab.id, newMode)}
             currentModel={activeTab.model || activeTab.sessionData.model || 'claude-code'}
@@ -2406,7 +2451,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                 onFileMentionSearch={handleFileMentionSearch}
                 onFileMentionSelect={handleFileMentionSelect}
                 onFileClick={handleFileClick}
-                isLoading={sendingSessions.has(tab.id)}
+                isLoading={processingSessions.has(tab.id)}
                 aiMode={tab.mode || 'agent'}
                 onAIModeChange={(newMode) => handleModeChange(tab.id, newMode)}
                 currentModel={tab.model || tab.sessionData.model || 'claude-code'}

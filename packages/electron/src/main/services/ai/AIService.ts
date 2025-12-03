@@ -522,7 +522,8 @@ export class AIService {
                     logger.main.info('[AIService] Notifying window to process queue for workspace:', session.workspacePath);
                     targetWindow.webContents.send('ai:queuedPromptsReceived', {
                       sessionId,
-                      promptCount: newPromptsCount
+                      promptCount: newPromptsCount,
+                      workspacePath: session.workspacePath  // Include for renderer-side filtering
                     });
                   } else {
                     logger.main.warn('[AIService] No window found for workspace:', session.workspacePath);

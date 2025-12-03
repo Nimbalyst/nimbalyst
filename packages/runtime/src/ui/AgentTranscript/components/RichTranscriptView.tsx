@@ -15,6 +15,7 @@ import './RichTranscriptView.css';
 interface RichTranscriptViewProps {
   sessionId: string;
   sessionStatus?: string;
+  isProcessing?: boolean; // Whether the session is currently processing a request
   messages: Message[];
   provider?: string;
   settings?: TranscriptSettings;
@@ -219,7 +220,7 @@ const extractEditsFromToolMessage = (message: Message): any[] => {
 export const RichTranscriptView = React.forwardRef<
   { scrollToMessage: (index: number) => void },
   RichTranscriptViewProps
->(({ sessionId, sessionStatus, messages, provider, settings: propsSettings, onSettingsChange, showSettings, documentContext, workspacePath }, ref) => {
+>(({ sessionId, sessionStatus, isProcessing, messages, provider, settings: propsSettings, onSettingsChange, showSettings, documentContext, workspacePath }, ref) => {
   const [collapsedMessages, setCollapsedMessages] = useState<Set<number>>(new Set());
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -350,13 +351,15 @@ export const RichTranscriptView = React.forwardRef<
   };
 
   const isWaitingForResponse = useMemo(() => {
+    // Check isProcessing prop first (most reliable for queued prompts from mobile)
+    if (isProcessing) return true;
     if (sessionStatus === 'running') return true;
     if (sessionStatus === 'waiting' && messages.length > 0) {
       const lastMessage = messages[messages.length - 1];
       return lastMessage.role === 'user';
     }
     return false;
-  }, [messages, sessionStatus]);
+  }, [messages, sessionStatus, isProcessing]);
 
   // Auto-expand sub-agent (Task) tools
   useEffect(() => {
