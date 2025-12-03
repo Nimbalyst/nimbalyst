@@ -90,14 +90,33 @@ The Electron app supports notarized distribution for macOS:
 - **JAR exclusion**: Automatically removes JAR files that can't be notarized
 - **Entitlements**: Configured for hardened runtime with necessary exceptions
 
-## Electron App Debug Logging
+## Electron App Logging
 
-The Electron app (`packages/electron/`) includes a debug logging feature that captures all browser console messages in development mode. This is useful for debugging renderer-side issues and browser load problems.
+The Electron app has multiple log outputs:
 
-- **Log file location**: `~/Library/Application Support/@nimbalyst/electron/nimbalyst-debug.log` (macOS)
-- **What's logged**: All browser console messages, main process logs, timestamps, source locations, and log levels
+### Main Process Logs (electron-log)
+- **Location**: `~/Library/Logs/@nimbalyst/electron/main.log` (macOS)
+- **View live**: `tail -f ~/Library/Logs/@nimbalyst/electron/main.log`
+- **What's logged**: Main process events, AI service, sync operations, file operations
+- **Categories**: `(MAIN)`, `(AI)`, `(API)`, `(SYNC)`, etc.
+
+### Renderer Console Logs
+- **Location**: `~/Library/Application Support/@nimbalyst/electron/nimbalyst-debug.log` (macOS)
+- **What's logged**: Browser console messages from renderer process
 - **When active**: Only in development mode (`NODE_ENV !== 'production'`)
-- **Implementation**: See `packages/electron/src/main/index.ts` - uses `webContents.on('console-message')` event
+- **Implementation**: `packages/electron/src/main/index.ts` - uses `webContents.on('console-message')`
+
+### Quick Debug Commands
+```bash
+# Watch main process logs live
+tail -f ~/Library/Logs/@nimbalyst/electron/main.log
+
+# Search for specific events
+grep "queuedPrompts\|index_broadcast" ~/Library/Logs/@nimbalyst/electron/main.log | tail -50
+
+# Watch sync-related logs
+tail -f ~/Library/Logs/@nimbalyst/electron/main.log | grep -E "CollabV3|Sync"
+```
 
 ## Theme Support
 
