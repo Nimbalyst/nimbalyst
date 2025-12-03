@@ -19,6 +19,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.46.3] - 2025-12-03
+
+
+### Added
+- Slash command suggestions displayed in empty chat sessions
+- Mouseover tooltips for slash command suggestions
+- (+) button to expand and show all suggested slash commands
+- Description text for slash commands in autocomplete
+- `/mockup` command for creating wireframe mockups
+- "Are you sure?" confirmation dialog when starting fresh database
+- WireframeLM instructions added to system prompt and `/plan` command
+- MCP tool for wireframeLM with headless render fallback
+- Documentation update instructions to `/review-branch` command
+- PostHog tracking for slash command suggestion clicks
+- PostHog tracking for wireframe file creation
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- `/compact` command broken after "prompt too long" error
+- Two absolute imports failing in modules
+- Command regex to list speckit in autocomplete
+- Directory naming: `.nimbalyst-local` corrected to `nimbalyst-local`
+- WireframeLM annotations now sent to agent when present
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.46.2] - 2025-11-26
 
 
