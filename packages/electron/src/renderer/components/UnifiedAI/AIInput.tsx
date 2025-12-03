@@ -6,6 +6,7 @@ import { AttachmentPreviewList } from '../AgenticCoding/AttachmentPreviewList';
 import { ModeTag, AIMode } from './ModeTag';
 import { ModelSelector } from './ModelSelector';
 import { ContextUsageDisplay } from './ContextUsageDisplay';
+import { WireframeAnnotationIndicator } from './WireframeAnnotationIndicator';
 import {
   MemoryPromptIndicator,
   MemorySaveButton,
@@ -67,6 +68,10 @@ interface AIInputProps {
   // Queue support
   onQueue?: (message: string) => void;
   queueCount?: number;
+
+  // Wireframe annotation indicator support
+  currentFilePath?: string;
+  lastUserMessageTimestamp?: number | null;
 }
 
 /**
@@ -105,7 +110,9 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
     tokenUsage,
     provider,
     onQueue,
-    queueCount = 0
+    queueCount = 0,
+    currentFilePath,
+    lastUserMessageTimestamp
   }, ref) => {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const [typeaheadMatch, setTypeaheadMatch] = useState<TriggerMatch | null>(null);
@@ -608,6 +615,12 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
             onRemove={handleRemoveAttachment}
           />
         )}
+
+        {/* Wireframe annotation indicator - shown when there are new annotations */}
+        <WireframeAnnotationIndicator
+          currentFilePath={currentFilePath}
+          lastUserMessageTimestamp={lastUserMessageTimestamp ?? null}
+        />
 
         {/* Inline controls row - hidden in memory mode */}
         {!isMemoryMode && (onModeChange || onModelChange || (tokenUsage && provider === 'claude-code')) && (

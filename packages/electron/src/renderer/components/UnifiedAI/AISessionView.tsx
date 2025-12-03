@@ -436,6 +436,14 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
   const enableAttachments = true; // Available in both chat and agent modes
   const enableHistoryNavigation = true; // Available in both chat and agent modes
 
+  // Calculate last user message timestamp for wireframe annotation indicator
+  const lastUserMessageTimestamp = React.useMemo(() => {
+    const userMessages = sessionData.messages?.filter(m => m.role === 'user') || [];
+    if (userMessages.length === 0) return null;
+    const lastUserMessage = userMessages[userMessages.length - 1];
+    return lastUserMessage.timestamp || null;
+  }, [sessionData.messages]);
+
   return (
     <div
       style={{
@@ -511,6 +519,8 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
         provider={sessionData.provider}
         onQueue={handleQueue}
         queueCount={queuedPrompts.length}
+        currentFilePath={documentContext?.filePath}
+        lastUserMessageTimestamp={lastUserMessageTimestamp}
       />
     </div>
   );

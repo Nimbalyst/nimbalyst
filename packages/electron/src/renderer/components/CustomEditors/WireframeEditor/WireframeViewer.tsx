@@ -37,6 +37,7 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [drawingColor, setDrawingColor] = useState('#FF0000'); // Red by default
   const [drawingDataUrl, setDrawingDataUrl] = useState<string | null>(null);
+  const [annotationTimestamp, setAnnotationTimestamp] = useState<number | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const getMonacoContentRef = useRef<(() => string) | null>(null);
   const drawingCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -231,7 +232,26 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
     };
 
     loadContent();
+
+    // Clear annotations when wireframe content is updated
+    // (but only when initialContent changes, not on first load)
   }, [filePath, initialContent]);
+
+  // Clear annotations when filePath changes (switching to different wireframe)
+  useEffect(() => {
+    // Clear drawing canvas
+    const canvas = drawingCanvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    }
+    // Clear states
+    setDrawingDataUrl(null);
+    setSelectedElement(null);
+    setAnnotationTimestamp(null);
+  }, [filePath]);
 
   // Generate a CSS selector for an element
   const generateSelector = useCallback((element: Element): string => {
@@ -298,6 +318,9 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
       outerHTML,
       tagName,
     });
+
+    // Update annotation timestamp when selecting an element
+    setAnnotationTimestamp(Date.now());
 
     // Add visual highlight to selected element
     const iframeDoc = iframeRef.current?.contentDocument;
@@ -375,6 +398,43 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
     }
   }, [viewMode]);
 
+  // Expose file path to window for AI context (only when active)
+  useEffect(() => {
+    if (isActive) {
+      (window as any).__wireframeFilePath = filePath;
+      // Dispatch event to notify indicator with current annotation state
+      const hasAnnotations = !!(drawingDataUrl || selectedElement);
+      const event = new CustomEvent('wireframe-annotation-changed', {
+        detail: {
+          filePath,
+          annotationTimestamp,
+          hasAnnotations,
+          hasDrawing: !!drawingDataUrl,
+          hasSelection: !!selectedElement
+        }
+      });
+      window.dispatchEvent(event);
+    } else {
+      // Clear when not active so indicator hides when switching tabs
+      delete (window as any).__wireframeFilePath;
+      // Dispatch event to notify indicator
+      const event = new CustomEvent('wireframe-annotation-changed', {
+        detail: {
+          filePath: '',
+          annotationTimestamp: null,
+          hasAnnotations: false,
+          hasDrawing: false,
+          hasSelection: false
+        }
+      });
+      window.dispatchEvent(event);
+    }
+
+    return () => {
+      delete (window as any).__wireframeFilePath;
+    };
+  }, [filePath, isActive, annotationTimestamp, drawingDataUrl, selectedElement]);
+
   // Expose selected element to window for AI context
   useEffect(() => {
     (window as any).__wireframeSelectedElement = selectedElement;
@@ -392,6 +452,56 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
       delete (window as any).__wireframeDrawing;
     };
   }, [drawingDataUrl]);
+
+  // Expose annotation timestamp to window for AI context
+  useEffect(() => {
+    (window as any).__wireframeAnnotationTimestamp = annotationTimestamp;
+
+    return () => {
+      delete (window as any).__wireframeAnnotationTimestamp;
+    };
+  }, [annotationTimestamp]);
+
+  // Dispatch custom event when annotations change (for AI chat indicator)
+  useEffect(() => {
+    const hasAnnotations = !!(drawingDataUrl || selectedElement);
+    const event = new CustomEvent('wireframe-annotation-changed', {
+      detail: {
+        filePath,
+        annotationTimestamp,
+        hasAnnotations,
+        hasDrawing: !!drawingDataUrl,
+        hasSelection: !!selectedElement
+      }
+    });
+    window.dispatchEvent(event);
+  }, [filePath, annotationTimestamp, drawingDataUrl, selectedElement]);
+
+  // Clear all annotations (drawing, selection, timestamp)
+  const clearAllAnnotations = useCallback(() => {
+    // Clear drawing canvas
+    const canvas = drawingCanvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    }
+    // Clear states
+    setDrawingDataUrl(null);
+    setSelectedElement(null);
+    setAnnotationTimestamp(null);
+
+    // Remove visual highlight in iframe
+    const iframeDoc = iframeRef.current?.contentDocument;
+    if (iframeDoc) {
+      iframeDoc.querySelectorAll('.nimbalyst-selected').forEach(el => {
+        el.classList.remove('nimbalyst-selected');
+      });
+    }
+
+    logger.ui.info('[WireframeViewer] All annotations cleared');
+  }, []);
 
   // Clear drawing
   const handleClearDrawing = useCallback(() => {
@@ -433,6 +543,9 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
 
     isDrawingRef.current = true;
     lastPointRef.current = { x, y };
+
+    // Update annotation timestamp when drawing starts
+    setAnnotationTimestamp(Date.now());
   }, [isDrawingMode]);
 
   const handleDrawingMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -618,6 +731,8 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
             if (onDirtyChange) {
               onDirtyChange(false);
             }
+            // Clear annotations when wireframe content is updated from disk
+            clearAllAnnotations();
           }
         } catch (err) {
           logger.ui.error('[WireframeViewer] Failed to reload file:', err);
@@ -629,7 +744,7 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
       const cleanup = window.electronAPI.onFileChangedOnDisk(handleFileChanged);
       return cleanup;
     }
-  }, [filePath, onDirtyChange]);
+  }, [filePath, onDirtyChange, clearAllAnnotations]);
 
   if (error) {
     return (

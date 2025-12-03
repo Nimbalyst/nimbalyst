@@ -14,6 +14,7 @@ export interface DocumentContext {
     tagName: string;
   };
   wireframeDrawing?: string; // Data URL of drawing annotations
+  wireframeAnnotationTimestamp?: number | null; // Timestamp when annotations were created
 }
 
 interface UseDocumentContextProps {
@@ -89,13 +90,17 @@ export function useDocumentContext({ activeTab, getContentRef }: UseDocumentCont
 
     const fileType = detectFileType(activeTab.filePath || '');
 
-    // Get wireframe selection and drawing if file is a wireframe
+    // Get wireframe selection, drawing, and annotation timestamp if file is a wireframe
     const wireframeSelection = fileType === 'wireframe'
       ? (window as any).__wireframeSelectedElement
       : undefined;
 
     const wireframeDrawing = fileType === 'wireframe'
       ? (window as any).__wireframeDrawing
+      : undefined;
+
+    const wireframeAnnotationTimestamp = fileType === 'wireframe'
+      ? (window as any).__wireframeAnnotationTimestamp
       : undefined;
 
     return {
@@ -106,7 +111,8 @@ export function useDocumentContext({ activeTab, getContentRef }: UseDocumentCont
       selection: undefined, // TODO: Get selected text from Lexical
       getLatestContent: getContentRef.current || undefined,
       wireframeSelection,
-      wireframeDrawing
+      wireframeDrawing,
+      wireframeAnnotationTimestamp
     };
   }, [activeTab, activeTab?.filePath, getContentRef.current]);
 }
