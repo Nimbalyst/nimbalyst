@@ -567,3 +567,685 @@
   font-size: 14px;
   color: var(--text-secondary);
 }
+
+/* ========================================
+   Provider Panel Styles (used by AI provider panels, Sync panel, etc.)
+   ======================================== */
+
+.provider-panel {
+  max-width: 800px;
+}
+
+.provider-panel-header {
+  margin-bottom: 24px;
+}
+
+.provider-panel-title {
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.provider-panel-description {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.provider-panel-section {
+  margin-bottom: 32px;
+}
+
+.provider-panel-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.provider-panel-hint {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* Enable toggle */
+.provider-enable {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: var(--surface-secondary);
+  border-radius: 8px;
+  margin-bottom: 24px;
+}
+
+.provider-enable-label {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.provider-toggle {
+  position: relative;
+  width: 48px;
+  height: 24px;
+}
+
+.provider-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.provider-toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--surface-tertiary);
+  border: 1px solid var(--border-primary);
+  transition: .4s;
+  border-radius: 24px;
+}
+
+.provider-toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 2px;
+  background-color: white;
+  transition: .4s;
+  border-radius: 50%;
+}
+
+.provider-toggle input:checked + .provider-toggle-slider {
+  background-color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.provider-toggle input:checked + .provider-toggle-slider:before {
+  transform: translateX(24px);
+}
+
+/* Setting item (checkbox with label) */
+.setting-item {
+  margin-bottom: 16px;
+}
+
+.setting-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.setting-checkbox {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: var(--accent-primary);
+  cursor: pointer;
+}
+
+.setting-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.setting-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.setting-description {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+/* API Key Section */
+.api-key-section {
+  margin-bottom: 24px;
+}
+
+.api-key-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.api-key-row {
+  display: flex;
+  gap: 12px;
+}
+
+.api-key-input {
+  flex: 1;
+  padding: 10px 12px;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+}
+
+.api-key-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.api-key-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.api-key-hint {
+  display: block;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-top: 8px;
+}
+
+/* Test Connection */
+.test-connection-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.test-connection-button {
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  background: var(--surface-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
+}
+
+.test-connection-button:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.test-connection-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.test-connection-button.testing {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+
+.test-connection-button.success {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: #22c55e;
+  color: #22c55e;
+}
+
+.test-connection-button.error {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+.test-status {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.test-status.success {
+  color: #22c55e;
+}
+
+.test-status.error {
+  color: #ef4444;
+}
+
+/* Test button (same as test-connection-button, used by provider panels) */
+.test-button {
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  background: var(--surface-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
+}
+
+.test-button:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.test-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.test-button.testing {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+
+.test-button.success {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: #22c55e;
+  color: #22c55e;
+}
+
+.test-button.error {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+.test-error {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 4px;
+  color: #ef4444;
+  font-size: 13px;
+}
+
+/* User ID Display (Sync Panel) */
+.user-id-display {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+}
+
+.user-id-value {
+  flex: 1;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+  font-size: 13px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-id-copy-button {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--surface-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.user-id-copy-button:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.user-id-copy-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Pair Device Button (Sync Panel) */
+.pair-device-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  color: white;
+  background: var(--accent-primary);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pair-device-button:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.pair-device-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pair-device-icon {
+  width: 20px;
+  height: 20px;
+}
+
+/* Models Section (Provider Panels) */
+.models-section {
+  margin-top: 24px;
+}
+
+.models-loading {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.models-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.models-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.models-action-btn {
+  padding: 4px 8px;
+  font-size: 12px;
+  background: var(--surface-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.models-action-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.models-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+  padding: 12px;
+  background: var(--surface-secondary);
+  border-radius: 8px;
+}
+
+.model-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.model-checkbox:hover {
+  background: var(--surface-hover);
+}
+
+.model-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--accent-primary);
+}
+
+.model-checkbox span {
+  font-size: 13px;
+}
+
+/* Installation Status */
+.installation-status {
+  padding: 16px;
+  background: var(--surface-secondary);
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.installation-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.installation-status-row:last-child {
+  margin-bottom: 0;
+}
+
+.installation-status-label {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.installation-status-value {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.installation-status.not-installed {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.installation-status.installed {
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.2);
+}
+
+.installation-status.installing {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.installation-status.error {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+/* Installation Actions */
+.installation-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.button-install,
+.button-update,
+.button-uninstall {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: none;
+}
+
+.button-install {
+  background: var(--accent-primary);
+  color: white;
+}
+
+.button-install:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.button-install:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.button-update {
+  background: #3b82f6;
+  color: white;
+}
+
+.button-update:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.button-uninstall {
+  background: var(--surface-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
+}
+
+.button-uninstall:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+/* CLI Configuration */
+.cli-config-section {
+  margin-top: 24px;
+}
+
+.cli-config-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.cli-config-label {
+  width: 140px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.cli-config-select {
+  flex: 1;
+  padding: 8px 12px;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.cli-config-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+/* Progress Modal */
+.installation-progress-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.installation-progress-content {
+  width: 500px;
+  background: var(--surface-primary);
+  border-radius: 12px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+}
+
+.installation-progress-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.installation-progress-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.installation-progress-body {
+  padding: 20px;
+  background: var(--surface-primary);
+}
+
+.installation-progress-status {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+
+.installation-progress-bar {
+  height: 8px;
+  background: var(--surface-secondary);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.installation-progress-fill {
+  height: 100%;
+  background: var(--accent-primary);
+  width: 0;
+  transition: width 0.3s ease;
+}
+
+.installation-progress-log {
+  max-height: 200px;
+  overflow-y: auto;
+  background: var(--surface-secondary);
+  border-radius: 6px;
+  padding: 12px;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.installation-progress-footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-primary);
+  display: flex;
+  justify-content: flex-end;
+  background: var(--surface-primary);
+}
+
+.installation-progress-cancel {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  background: var(--surface-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
+}
+
+.installation-progress-cancel:hover {
+  background: var(--surface-hover);
+}
