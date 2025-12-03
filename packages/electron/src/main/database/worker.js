@@ -530,6 +530,39 @@ class PGLiteWorker {
       console.error('[PGLite Worker] Failed to add hidden column:', error);
       throw error;
     }
+
+    // Queued Prompts table - stores prompts queued from any device for execution
+    // Uses simple row-level atomic updates instead of JSONB array manipulation
+    console.log('[PGLite Worker] Creating queued_prompts table...');
+    try {
+      await this.db.exec(`
+        CREATE TABLE IF NOT EXISTS queued_prompts (
+          id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          prompt TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'executing', 'completed', 'failed')),
+          attachments JSONB,
+          document_context JSONB,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          claimed_at TIMESTAMP,
+          completed_at TIMESTAMP,
+          error_message TEXT,
+          CONSTRAINT fk_queued_prompts_session
+            FOREIGN KEY (session_id)
+            REFERENCES ai_sessions(id)
+            ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_queued_prompts_session ON queued_prompts(session_id);
+        CREATE INDEX IF NOT EXISTS idx_queued_prompts_status ON queued_prompts(status);
+        CREATE INDEX IF NOT EXISTS idx_queued_prompts_session_status ON queued_prompts(session_id, status);
+        CREATE INDEX IF NOT EXISTS idx_queued_prompts_created ON queued_prompts(created_at);
+      `);
+      console.log('[PGLite Worker] queued_prompts table created successfully');
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to create queued_prompts table:', error);
+      throw error;
+    }
   }
 
   async query(message) {

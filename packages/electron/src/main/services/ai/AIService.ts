@@ -24,7 +24,7 @@ import { ToolExecutor, toolRegistry, BUILT_IN_TOOLS } from './tools';
 import { SoundNotificationService } from '../SoundNotificationService';
 import { notificationService } from '../NotificationService';
 import { logger } from '../../utils/logger';
-import { windowStates } from '../../window/WindowManager';
+import { windowStates, findWindowByWorkspace } from '../../window/WindowManager';
 import { sessionFileTracker } from '../SessionFileTracker';
 import {AnalyticsService} from "../analytics/AnalyticsService.ts";
 import { historyManager } from '../../HistoryManager';
@@ -301,6 +301,11 @@ export class AIService {
   // NOTE: Providers are now tracked per-session in ProviderFactory, not per-window
   // This allows multiple concurrent sessions in the same window (e.g., agent mode tabs)
 
+  // Track queued prompt IDs currently being processed to prevent duplicate execution
+  // This is a backup to the atomic database claim - catches cases where claim succeeds
+  // but the same prompt ID is somehow passed to sendMessage twice
+  private processingQueuedPromptIds = new Set<string>();
+
   constructor(sessionStore: SessionStore) {
     logger.main.info('[AIService] Constructor called');
     this.sessionManager = new SessionManager(sessionStore);
@@ -460,48 +465,87 @@ export class AIService {
           return;
         }
 
-        // Listen for index changes and update local session metadata with queuedPrompts
+        // Listen for index changes and insert queued prompts into the queued_prompts table
         if (syncProvider.onIndexChange) {
           syncProvider.onIndexChange(async (sessionId, entry) => {
-            // Only update if there are queuedPrompts in the broadcast
+            // Only process if there are queuedPrompts in the broadcast
             if (entry.queuedPrompts && entry.queuedPrompts.length > 0) {
-              logger.main.info('[AIService] Received queuedPrompts from mobile, updating local metadata:', {
+              logger.main.info('[AIService] Received queuedPrompts from mobile via onIndexChange:', {
                 sessionId,
-                count: entry.queuedPrompts.length
+                count: entry.queuedPrompts.length,
+                promptIds: entry.queuedPrompts.map(p => p.id)
               });
 
               try {
-                // Update the local session metadata with queuedPrompts
-                // This makes them available when the renderer loads the session
-                const { AISessionsRepository } = await import('@nimbalyst/runtime/storage/repositories/AISessionsRepository');
+                // Insert prompts into the queued_prompts table
+                const { getQueuedPromptsStore } = await import('../RepositoryManager');
+                const queueStore = getQueuedPromptsStore();
 
-                // First load existing metadata to merge
-                const existingSession = await this.sessionManager.loadSession(sessionId);
-                const existingMetadata = existingSession?.metadata || {};
-
-                await AISessionsRepository.updateMetadata(sessionId, {
-                  metadata: {
-                    ...existingMetadata,
-                    queuedPrompts: entry.queuedPrompts
+                let newPromptsCount = 0;
+                for (const prompt of entry.queuedPrompts) {
+                  // Check if prompt already exists
+                  const existing = await queueStore.get(prompt.id);
+                  if (existing) {
+                    logger.main.info(`[AIService] Prompt ${prompt.id} already exists, skipping`);
+                    continue;
                   }
-                });
 
-                // Notify ALL renderer windows that queuedPrompts arrived
-                // If the session tab is already open, it should process them
-                const { BrowserWindow } = await import('electron');
-                BrowserWindow.getAllWindows().forEach(window => {
-                  window.webContents.send('ai:queuedPromptsReceived', {
+                  // Create the prompt in the queued_prompts table
+                  await queueStore.create({
+                    id: prompt.id,
                     sessionId,
-                    queuedPrompts: entry.queuedPrompts
+                    prompt: prompt.prompt,
+                    // TODO: Handle attachments and documentContext when mobile supports them
                   });
-                });
+                  newPromptsCount++;
+                }
+
+                if (newPromptsCount === 0) {
+                  logger.main.info('[AIService] No new prompts to process, all already exist');
+                  return;
+                }
+
+                logger.main.info(`[AIService] Inserted ${newPromptsCount} new prompts into queued_prompts table`);
+
+                // Load session to get its workspacePath
+                const session = await this.sessionManager.loadSession(sessionId);
+                if (!session) {
+                  logger.main.warn('[AIService] Session not found for queuedPrompts:', sessionId);
+                  return;
+                }
+
+                // Only notify the window that owns this session's workspace
+                // This prevents duplicate execution when multiple windows are open
+                if (session.workspacePath) {
+                  const targetWindow = findWindowByWorkspace(session.workspacePath);
+                  if (targetWindow && !targetWindow.isDestroyed()) {
+                    logger.main.info('[AIService] Notifying window to process queue for workspace:', session.workspacePath);
+                    targetWindow.webContents.send('ai:queuedPromptsReceived', {
+                      sessionId,
+                      promptCount: newPromptsCount
+                    });
+                  } else {
+                    logger.main.warn('[AIService] No window found for workspace:', session.workspacePath);
+                  }
+                } else {
+                  // Fallback: if no workspacePath, send to first window (legacy behavior)
+                  logger.main.warn('[AIService] Session has no workspacePath, sending to first window');
+                  const { BrowserWindow } = await import('electron');
+                  const windows = BrowserWindow.getAllWindows();
+                  if (windows.length > 0) {
+                    windows[0].webContents.send('ai:queuedPromptsReceived', {
+                      sessionId,
+                      promptCount: newPromptsCount
+                    });
+                  }
+                }
               } catch (err) {
-                logger.main.error('[AIService] Failed to update session metadata with queuedPrompts:', err);
+                logger.main.error('[AIService] Failed to insert queuedPrompts into table:', err);
               }
             }
           });
 
-          logger.main.info('[AIService] Mobile sync handler initialized (metadata sync only)');
+          logger.main.info('[AIService] Mobile sync handler initialized (using queued_prompts table)');
         } else {
           logger.main.info('[AIService] onIndexChange not available, mobile sync handler not initialized');
         }
@@ -616,8 +660,7 @@ export class AIService {
         return;
       }
 
-      // Set up sync handler to sync responses back to mobile
-      this.setupSyncHandler(provider, sessionId);
+      // NOTE: Message sync is handled automatically by SyncedAgentMessagesStore
 
       // Create the user message (this is what mobile would have sent)
       // The provider's chat method will log this as an input message
@@ -697,40 +740,9 @@ export class AIService {
     }
   }
 
-  private setupSyncHandler(provider: AIProvider, sessionId: string): void {
-    // Only set up sync handler once per provider
-    if ((provider as any)._syncHandlerSetup) {
-      return;
-    }
-    (provider as any)._syncHandlerSetup = true;
-
-    // Get sync handler (imported at top of file)
-    const messageSyncHandler = getMessageSyncHandler();
-
-    if (!messageSyncHandler) {
-      // Sync not enabled
-      return;
-    }
-
-    // Listen for message:logged events and push to sync
-    // Include hidden messages - mobile will filter them client-side
-    provider.on('message:logged', async ({ sessionId: eventSessionId, direction, hidden }: { sessionId: string; direction: string; hidden?: boolean }) => {
-      try {
-        // Only sync after the message is written to database
-        // Get the most recent message for this session (include hidden so they sync with the flag)
-        const { AgentMessagesRepository } = await import('@nimbalyst/runtime');
-        const messages = await AgentMessagesRepository.list(eventSessionId, { limit: 1, offset: 0, includeHidden: true });
-
-        if (messages && messages.length > 0) {
-          const latestMessage = messages[0];
-          logger.main.debug(`[AIService] Syncing message for session ${eventSessionId}, hidden: ${latestMessage.hidden}`);
-          messageSyncHandler.onMessageCreated(latestMessage);
-        }
-      } catch (error) {
-        logger.main.warn('[AIService] Failed to sync message:', error);
-      }
-    });
-  }
+  // NOTE: Message sync is handled by SyncedAgentMessagesStore.create() which wraps
+  // AgentMessagesRepository and calls onMessageCreated() automatically.
+  // We do NOT need to listen to message:logged events here - that would cause duplicates.
 
   private async getProviderForSession(session: SessionData): Promise<AIProvider | null> {
     const providerType = session.provider as AIProviderType;
@@ -749,8 +761,7 @@ export class AIService {
       }
     }
 
-    // Hook up sync handler if sync is enabled
-    this.setupSyncHandler(provider, session.id);
+    // NOTE: Message sync is handled automatically by SyncedAgentMessagesStore
 
     return provider;
   }
@@ -1074,6 +1085,20 @@ export class AIService {
       sessionId?: string,
       workspacePath?: string
     ) => {
+      // Check for queued prompt deduplication - prevents duplicate execution from multiple renderer panels
+      const queuedPromptId = (documentContext as any)?.queuedPromptId as string | undefined;
+      if (queuedPromptId) {
+        if (this.processingQueuedPromptIds.has(queuedPromptId)) {
+          logger.main.info(`[AIService] SKIPPING duplicate queued prompt: ${queuedPromptId}`);
+          return { content: '' }; // Already being processed, return empty response
+        }
+
+        // Mark prompt ID as processing
+        // Note: session lock is already set in claimQueuedPrompt handler, no need to check here
+        this.processingQueuedPromptIds.add(queuedPromptId);
+        logger.main.info(`[AIService] Processing queued prompt: ${queuedPromptId}, session: ${sessionId}, total prompts in progress: ${this.processingQueuedPromptIds.size}`);
+      }
+
       // Extract attachments from documentContext if present
       const attachments = (documentContext as any)?.attachments;
       const startTime = Date.now();
@@ -1922,6 +1947,12 @@ export class AIService {
 
         // Queue processing is handled by the renderer (AgenticPanel) to keep SDK instantiation in one place
 
+        // Clean up queued prompt tracking
+        if (queuedPromptId) {
+          this.processingQueuedPromptIds.delete(queuedPromptId);
+          logger.main.info(`[AIService] Cleared prompt tracking for ${queuedPromptId}`);
+        }
+
         return { content: fullResponse };
       } catch (error) {
         const errorTime = Date.now() - startTime;
@@ -1979,6 +2010,12 @@ export class AIService {
             sessionId: session?.id,
             message: error instanceof Error ? error.message : 'Unknown error occurred'
           });
+        }
+
+        // Clean up queued prompt tracking on error
+        if (queuedPromptId) {
+          this.processingQueuedPromptIds.delete(queuedPromptId);
+          logger.main.info(`[AIService] Cleared prompt tracking for ${queuedPromptId} (error path)`);
         }
 
         throw error;
@@ -2064,6 +2101,110 @@ export class AIService {
       const { AISessionsRepository } = await import('@nimbalyst/runtime/storage/repositories/AISessionsRepository');
       await AISessionsRepository.updateMetadata(sessionId, { metadata });
       return { success: true };
+    });
+
+    // Atomically claim a queued prompt for processing
+    // Returns the prompt data if successfully claimed, null if already claimed by another instance
+    // Uses the new queued_prompts table with proper row-level atomic updates
+    ipcMain.handle('ai:claimQueuedPrompt', async (
+      event,
+      sessionId: string,
+      promptId: string
+    ) => {
+      // Use the new QueuedPromptsStore for atomic claim
+      const { getQueuedPromptsStore } = await import('../RepositoryManager');
+      const queueStore = getQueuedPromptsStore();
+
+      // Atomic claim - only succeeds if status is still 'pending'
+      const claimed = await queueStore.claim(promptId);
+
+      if (claimed) {
+        logger.main.info(`[AIService] claimQueuedPrompt: claimed ${promptId} for session ${sessionId}`);
+        // Return in the format expected by the renderer
+        return {
+          id: claimed.id,
+          prompt: claimed.prompt,
+          timestamp: claimed.createdAt,
+          attachments: claimed.attachments,
+          documentContext: claimed.documentContext,
+        };
+      }
+
+      logger.main.info(`[AIService] claimQueuedPrompt: prompt ${promptId} not found or already claimed`);
+      return null;
+    });
+
+    // Mark a queued prompt as completed
+    ipcMain.handle('ai:completeQueuedPrompt', async (
+      event,
+      promptId: string
+    ) => {
+      const { getQueuedPromptsStore } = await import('../RepositoryManager');
+      const queueStore = getQueuedPromptsStore();
+      await queueStore.complete(promptId);
+      logger.main.info(`[AIService] completeQueuedPrompt: ${promptId}`);
+    });
+
+    // Mark a queued prompt as failed
+    ipcMain.handle('ai:failQueuedPrompt', async (
+      event,
+      promptId: string,
+      errorMessage: string
+    ) => {
+      const { getQueuedPromptsStore } = await import('../RepositoryManager');
+      const queueStore = getQueuedPromptsStore();
+      await queueStore.fail(promptId, errorMessage);
+      logger.main.info(`[AIService] failQueuedPrompt: ${promptId} - ${errorMessage}`);
+    });
+
+    // List pending prompts for a session
+    ipcMain.handle('ai:listPendingPrompts', async (
+      event,
+      sessionId: string
+    ) => {
+      const { getQueuedPromptsStore } = await import('../RepositoryManager');
+      const queueStore = getQueuedPromptsStore();
+      const pending = await queueStore.listPending(sessionId);
+      return pending.map(p => ({
+        id: p.id,
+        prompt: p.prompt,
+        timestamp: p.createdAt,
+        attachments: p.attachments,
+        documentContext: p.documentContext,
+      }));
+    });
+
+    // Create a new queued prompt (for local queuing)
+    ipcMain.handle('ai:createQueuedPrompt', async (
+      event,
+      sessionId: string,
+      prompt: string,
+      attachments?: any[],
+      documentContext?: any
+    ) => {
+      const { getQueuedPromptsStore } = await import('../RepositoryManager');
+      const queueStore = getQueuedPromptsStore();
+
+      // Generate a unique ID
+      const promptId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+      const created = await queueStore.create({
+        id: promptId,
+        sessionId,
+        prompt,
+        attachments,
+        documentContext,
+      });
+
+      logger.main.info(`[AIService] createQueuedPrompt: created ${promptId} for session ${sessionId}`);
+
+      return {
+        id: created.id,
+        prompt: created.prompt,
+        timestamp: created.createdAt,
+        attachments: created.attachments,
+        documentContext: created.documentContext,
+      };
     });
 
     // Save draft input

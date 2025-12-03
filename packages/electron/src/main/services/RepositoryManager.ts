@@ -17,6 +17,7 @@ import { createPGLiteAgentMessagesStore } from './PGLiteAgentMessagesStore';
 import { createSyncedAgentMessagesStore } from './SyncedAgentMessagesStore';
 import { createPGLiteWorkspaceRepository } from './PGLiteWorkspaceRepository';
 import { createPGLiteDocumentsRepository } from './PGLiteDocumentsRepository';
+import { createPGLiteQueuedPromptsStore, type QueuedPromptsStore } from './PGLiteQueuedPromptsStore';
 import { database } from '../database/PGLiteDatabaseWorker';
 import { logger } from '../utils/logger';
 import { initializeSync, shutdownSync, isSyncEnabled, reinitializeSync } from './SyncManager';
@@ -29,6 +30,7 @@ class RepositoryManager {
   private baseAgentMessagesStore: AgentMessagesStore | null = null; // Unwrapped store for sync reinitialization
   private workspaceRepository: WorkspaceRepository | null = null;
   private documentsRepository: DocumentsRepository | null = null;
+  private queuedPromptsStore: QueuedPromptsStore | null = null;
   private initialized = false;
 
   /**
@@ -105,6 +107,16 @@ class RepositoryManager {
       // Create documents repository
       this.documentsRepository = createPGLiteDocumentsRepository(dbAdapter);
 
+      // Create queued prompts store
+      this.queuedPromptsStore = createPGLiteQueuedPromptsStore(
+        dbAdapter,
+        async () => {
+          if (!database.isInitialized()) {
+            await database.initialize();
+          }
+        }
+      );
+
       this.initialized = true;
       logger.main.info('[RepositoryManager] All repositories initialized successfully');
     } catch (error) {
@@ -114,13 +126,24 @@ class RepositoryManager {
   }
 
   /**
-   * Get the session store instance
+   * Get the session store instance (potentially wrapped with sync)
    */
   getSessionStore(): SessionStore {
     if (!this.sessionStore) {
       throw new Error('RepositoryManager not initialized. Call initialize() first.');
     }
     return this.sessionStore;
+  }
+
+  /**
+   * Get the base session store (without sync wrapper)
+   * Used for methods like claimQueuedPrompt that are specific to PGLite
+   */
+  getBaseSessionStore(): SessionStore {
+    if (!this.baseSessionStore) {
+      throw new Error('RepositoryManager not initialized. Call initialize() first.');
+    }
+    return this.baseSessionStore;
   }
 
   /**
@@ -182,6 +205,17 @@ class RepositoryManager {
   }
 
   /**
+   * Get the queued prompts store instance.
+   * Used for atomic prompt claiming and queue management.
+   */
+  getQueuedPromptsStore(): QueuedPromptsStore {
+    if (!this.queuedPromptsStore) {
+      throw new Error('RepositoryManager not initialized. Call initialize() first.');
+    }
+    return this.queuedPromptsStore;
+  }
+
+  /**
    * Reinitialize sync with new configuration.
    * Called when sync settings are changed at runtime.
    */
@@ -227,6 +261,7 @@ class RepositoryManager {
     this.agentMessagesStore = null;
     this.workspaceRepository = null;
     this.documentsRepository = null;
+    this.queuedPromptsStore = null;
     this.initialized = false;
   }
 }
@@ -237,6 +272,10 @@ export const repositoryManager = new RepositoryManager();
 // Export convenience getters
 export function getSessionStore(): SessionStore {
   return repositoryManager.getSessionStore();
+}
+
+export function getBaseSessionStore(): SessionStore {
+  return repositoryManager.getBaseSessionStore();
 }
 
 export function getWorkspaceRepository(): WorkspaceRepository {
@@ -257,4 +296,8 @@ export function getAgentMessagesStore(): AgentMessagesStore {
 
 export function getBaseAgentMessagesStore(): AgentMessagesStore {
   return repositoryManager.getBaseAgentMessagesStore();
+}
+
+export function getQueuedPromptsStore(): QueuedPromptsStore {
+  return repositoryManager.getQueuedPromptsStore();
 }

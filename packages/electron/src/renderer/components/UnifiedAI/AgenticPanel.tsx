@@ -62,6 +62,9 @@ type SessionListItem = Pick<SessionData, 'id' | 'createdAt' | 'name' | 'title' |
 
 const SESSION_HISTORY_REFRESH_EVENT = 'agentic:session-history-refresh';
 
+// NOTE: Queue deduplication is now handled atomically in the database via ai:claimQueuedPrompt
+// The old globalProcessingPromptIds Set has been removed - database is the single source of truth
+
 interface SessionHistoryRefreshDetail {
   workspacePath?: string;
   sourceId: string;
@@ -142,6 +145,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // Ref to hold processQueuedPrompts function (defined later, used in openSessionInTab)
   const processQueuedPromptsRef = useRef<((sessionId: string, tab: SessionTab) => Promise<void>) | null>(null);
   const openSessionInTabRef = useRef<((sessionId: string) => Promise<void>) | null>(null);
+  // NOTE: Prompt ID tracking is now done via globalProcessingPromptIds (module-level)
+  // to prevent duplicate execution across multiple AgenticPanel instances
 
   // Read state tracking - synchronous ref to avoid React state update delay
   const readStateRef = useRef<Map<string, { lastReadMessageTimestamp: number | null }>>(new Map());
@@ -1189,12 +1194,13 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     };
   }, []);
 
-  // Listen for queued prompts from mobile - process immediately regardless of which tab is active
+  // Listen for queued prompts notification - triggers processing from the queued_prompts table
+  // The actual prompts are fetched from the database, not from the IPC payload
   useEffect(() => {
-    const handleQueuedPromptsReceived = async (data: { sessionId: string; queuedPrompts: Array<{ id: string; prompt: string; timestamp: number }> }) => {
-      if (!data || !data.sessionId || !data.queuedPrompts || data.queuedPrompts.length === 0) return;
+    const handleQueuedPromptsReceived = async (data: { sessionId: string; promptCount?: number }) => {
+      if (!data || !data.sessionId) return;
 
-      console.log('[AgenticPanel] Received queuedPrompts from mobile:', data.sessionId, 'count:', data.queuedPrompts.length);
+      console.log('[AgenticPanel] Received queue notification for session:', data.sessionId, 'promptCount:', data.promptCount);
 
       // Check if this session tab is already open
       const existingTab = sessionTabsRef.current.find(t => t?.id === data.sessionId);
@@ -1208,42 +1214,15 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         return;
       }
 
-      // Tab exists - load fresh session data and process the queue
-      console.log('[AgenticPanel] Session tab exists, loading fresh data and processing queue:', data.sessionId);
+      // Tab exists - process the queue immediately
+      // The processQueuedPrompts function fetches pending prompts from the database
+      console.log('[AgenticPanel] Session tab exists, processing queue:', data.sessionId);
 
-      try {
-        const sessionData = await window.electronAPI.aiLoadSession(data.sessionId, workspacePath);
-        if (!sessionData) {
-          console.error('[AgenticPanel] Failed to load session data for queue processing');
-          return;
+      setTimeout(() => {
+        if (processQueuedPromptsRef.current) {
+          processQueuedPromptsRef.current(data.sessionId, existingTab);
         }
-
-        // Create updated tab with fresh data and queued prompts
-        const updatedTab: SessionTab = {
-          ...existingTab,
-          sessionData: {
-            ...sessionData,
-            metadata: {
-              ...sessionData.metadata,
-              queuedPrompts: data.queuedPrompts
-            }
-          }
-        };
-
-        // Update tab state
-        setSessionTabs(prev => prev.map(t =>
-          t?.id === data.sessionId ? updatedTab : t
-        ));
-
-        // Process the queue immediately
-        setTimeout(() => {
-          if (processQueuedPromptsRef.current) {
-            processQueuedPromptsRef.current(data.sessionId, updatedTab);
-          }
-        }, 100);
-      } catch (err) {
-        console.error('[AgenticPanel] Failed to load session for queue processing:', err);
-      }
+      }, 100);
     };
 
     const cleanup = window.electronAPI.on('ai:queuedPromptsReceived', handleQueuedPromptsReceived);
@@ -1251,7 +1230,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     return () => {
       cleanup?.();
     };
-  }, [workspacePath]);
+  }, []);
 
   // Listen for streaming responses and completion
   // This handles real-time updates during AI streaming:
@@ -1686,7 +1665,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   }, []);
 
   // Handle send message
-  const handleSendMessage = useCallback(async (sessionId: string, message: string, attachments: ChatAttachment[]) => {
+  // queuedPromptId is optional - only passed when processing queued prompts from mobile sync
+  const handleSendMessage = useCallback(async (sessionId: string, message: string, attachments: ChatAttachment[], queuedPromptId?: string) => {
     if (!message.trim() || !sessionId) return;
 
     // Reset history navigation state when sending a message
@@ -1765,7 +1745,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           ...serializableContext,
           workspacePath,  // CRITICAL: Add workspacePath for MCP tool routing
           sessionType,  // Include sessionType for MCP tool availability
-          attachments: attachments.length > 0 ? attachments : undefined
+          attachments: attachments.length > 0 ? attachments : undefined,
+          queuedPromptId  // For deduplication in main process
         };
 
         // Debug log to verify filePath is included
@@ -1778,10 +1759,10 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           contentLength: contextToSend.content?.length
         });
       } else if (attachments.length > 0) {
-        contextToSend = { attachments, sessionType, workspacePath };  // Include workspacePath even without document
+        contextToSend = { attachments, sessionType, workspacePath, queuedPromptId };  // Include workspacePath even without document
       } else {
         // Even without document context or attachments, pass sessionType and workspacePath
-        contextToSend = { sessionType, workspacePath };  // Include workspacePath for routing
+        contextToSend = { sessionType, workspacePath, queuedPromptId };  // Include workspacePath for routing
       }
 
       await window.electronAPI.aiSendMessage(
@@ -1862,61 +1843,83 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     }
   }, [onFileOpen]);
 
-  // Process queued prompts for a session (from mobile sync)
-  const processQueuedPrompts = useCallback(async (sessionId: string, tab: SessionTab) => {
-    const queuedPrompts = tab.sessionData?.metadata?.queuedPrompts as Array<{
+  // Process queued prompts for a session (from mobile sync or local queue)
+  // Uses the new queued_prompts table with atomic claim
+  const processQueuedPrompts = useCallback(async (sessionId: string, _tab: SessionTab) => {
+    // Fetch pending prompts from the new queued_prompts table
+    const pendingPrompts = await window.electronAPI.invoke('ai:listPendingPrompts', sessionId) as Array<{
       id: string;
       prompt: string;
       timestamp: number;
       documentContext?: any;
       attachments?: ChatAttachment[];
-    }> | undefined;
+    }>;
 
-    if (!queuedPrompts || queuedPrompts.length === 0) {
+    if (!pendingPrompts || pendingPrompts.length === 0) {
       return;
     }
 
-    console.log(`[AgenticPanel] Processing ${queuedPrompts.length} queued prompts for session ${sessionId}`);
+    console.log(`[AgenticPanel] Processing ${pendingPrompts.length} pending prompts for session ${sessionId}`);
 
     // Process prompts one at a time
-    for (const queuedPrompt of queuedPrompts) {
-      console.log(`[AgenticPanel] Processing queued prompt: ${queuedPrompt.id}`);
+    for (const queuedPrompt of pendingPrompts) {
+      // ATOMIC CLAIM: Use database to atomically claim this prompt
+      // The claim changes status from 'pending' to 'executing'
+      // Only succeeds if status is still 'pending' - prevents duplicate execution
+      console.log(`[AgenticPanel] Attempting to claim prompt: ${queuedPrompt.id}`);
 
-      // Send the message using the same flow as normal messages
-      await handleSendMessage(
-        sessionId,
-        queuedPrompt.prompt,
-        queuedPrompt.attachments || []
-      );
+      const claimedPrompt = await window.electronAPI.invoke('ai:claimQueuedPrompt', sessionId, queuedPrompt.id) as {
+        id: string;
+        prompt: string;
+        timestamp: number;
+        attachments?: any[];
+        documentContext?: any;
+      } | null;
 
-      // Remove processed prompt from queue
-      const remainingPrompts = queuedPrompts.filter(p => p.id !== queuedPrompt.id);
-      try {
-        await window.electronAPI.invoke('ai:updateSessionMetadata', sessionId, {
-          ...tab.sessionData.metadata,
-          queuedPrompts: remainingPrompts
-        }, workspacePath);
-      } catch (err) {
-        console.error('[AgenticPanel] Failed to update queue after processing:', err);
+      if (!claimedPrompt) {
+        console.log(`[AgenticPanel] Prompt ${queuedPrompt.id} already claimed by another instance, skipping`);
+        continue;
       }
 
-      // Wait for response to complete before processing next prompt
-      // The sendingSessions state will clear when response finishes
-      await new Promise<void>(resolve => {
-        const checkDone = () => {
-          if (!sendingSessionsRef.current.has(sessionId)) {
-            resolve();
-          } else {
-            setTimeout(checkDone, 500);
-          }
-        };
-        // Give a small delay for the send to start
-        setTimeout(checkDone, 100);
-      });
+      console.log(`[AgenticPanel] Successfully claimed prompt: ${claimedPrompt.id}`);
+
+      try {
+        // Send the message using the same flow as normal messages
+        await handleSendMessage(
+          sessionId,
+          claimedPrompt.prompt,
+          claimedPrompt.attachments || [],
+          claimedPrompt.id  // Pass for logging/tracking purposes
+        );
+
+        // Wait for response to complete before processing next prompt
+        // The sendingSessions state will clear when response finishes
+        await new Promise<void>(resolve => {
+          const checkDone = () => {
+            if (!sendingSessionsRef.current.has(sessionId)) {
+              resolve();
+            } else {
+              setTimeout(checkDone, 500);
+            }
+          };
+          // Give a small delay for the send to start
+          setTimeout(checkDone, 100);
+        });
+
+        // Mark the prompt as completed
+        await window.electronAPI.invoke('ai:completeQueuedPrompt', claimedPrompt.id);
+        console.log(`[AgenticPanel] Marked prompt ${claimedPrompt.id} as completed`);
+
+      } catch (err) {
+        console.error(`[AgenticPanel] Error processing claimed prompt ${claimedPrompt.id}:`, err);
+        // Mark the prompt as failed
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        await window.electronAPI.invoke('ai:failQueuedPrompt', claimedPrompt.id, errorMessage);
+      }
     }
 
     console.log(`[AgenticPanel] Finished processing queued prompts for session ${sessionId}`);
-  }, [handleSendMessage, workspacePath]);
+  }, [handleSendMessage]);
 
   // Keep ref in sync with the callback
   useEffect(() => {

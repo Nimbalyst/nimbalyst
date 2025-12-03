@@ -117,7 +117,8 @@ export function createSyncedSessionStore(
 
       // Only sync metadata fields that are relevant for cross-device sync
       // Don't push changes for fields like providerSessionId, etc.
-      const syncableFields = ['title', 'mode', 'isArchived', 'provider', 'model', 'draftInput', 'queuedPrompts'];
+      // NOTE: queuedPrompts removed - now uses separate queued_prompts table for atomic operations
+      const syncableFields = ['title', 'mode', 'isArchived', 'provider', 'model', 'draftInput'];
       const hasSyncableField = syncableFields.some(
         (field) => (metadata as Record<string, unknown>)[field] !== undefined
       );
@@ -136,7 +137,6 @@ export function createSyncedSessionStore(
       if ((metadata as any).provider !== undefined) syncMetadata.provider = (metadata as any).provider;
       if ((metadata as any).model !== undefined) syncMetadata.model = (metadata as any).model;
       if (metadata.draftInput !== undefined) syncMetadata.draftInput = metadata.draftInput;
-      if ((metadata as any).queuedPrompts !== undefined) syncMetadata.queuedPrompts = (metadata as any).queuedPrompts;
 
       // NOTE: Do NOT call ensureSyncConnected here!
       // Metadata updates should only push to sessions that are ALREADY connected.

@@ -293,7 +293,12 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       if (metadata.documentContext !== undefined) pushUpdate('document_context =', metadata.documentContext ?? null);
       if (metadata.draftInput !== undefined) pushUpdate('draft_input =', metadata.draftInput ?? null);
       // NOTE: tokenUsage removed - it's derived from ai_agent_messages /context responses
-      if ((metadata as any).metadata !== undefined) pushUpdate('metadata =', (metadata as any).metadata ?? {});
+      // NOTE: queuedPrompts removed - now uses separate queued_prompts table for atomic operations
+      // Handle metadata field (the JSON blob) - do a shallow merge
+      if ((metadata as any).metadata !== undefined) {
+        updates.push(`metadata = COALESCE(metadata, '{}'::jsonb) || $${values.length + 1}::jsonb`);
+        values.push(JSON.stringify((metadata as any).metadata));
+      }
       if ((metadata as any).hasBeenNamed !== undefined) pushUpdate('has_been_named =', (metadata as any).hasBeenNamed);
       if (metadata.isArchived !== undefined) pushUpdate('is_archived =', metadata.isArchived);
 
@@ -507,5 +512,8 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       );
       return rows.length > 0;
     },
+
+    // Note: claimQueuedPrompt has been moved to the new queued_prompts table
+    // See PGLiteQueuedPromptsStore.ts for the new implementation
   };
 }
