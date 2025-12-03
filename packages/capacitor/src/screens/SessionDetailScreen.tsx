@@ -40,6 +40,11 @@ interface WireSessionMetadata {
     sentBy: 'mobile' | 'desktop';
   };
   isExecuting?: boolean;
+  queuedPrompts?: Array<{
+    id: string;
+    prompt: string;
+    timestamp: number;
+  }>;
 }
 
 interface SyncedMessage {
@@ -405,11 +410,11 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
 
     // Determine session status for "Thinking..." indicator
     // isExecuting means the desktop is currently processing
-    // pendingExecution means we sent a message and are waiting for desktop to pick it up
+    // queuedPrompts means we have prompts waiting for desktop to process
     let sessionStatus: string | undefined;
     if (metadata.isExecuting) {
       sessionStatus = 'running';
-    } else if (metadata.pendingExecution) {
+    } else if (metadata.queuedPrompts && metadata.queuedPrompts.length > 0) {
       sessionStatus = 'waiting';
     }
 
@@ -439,83 +444,48 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
     // Note: Draft sync via metadata is not yet implemented in CollabV3
   };
 
-  // Handle sending a message
+  // Handle sending a message by adding it to the queue
+  // Desktop will process the queue and create both user message and AI response
   const handleSendMessage = async (message: string) => {
-    if (!message.trim() || !sessionId || !wsRef.current || !encryptionKeyRef.current) {
+    if (!message.trim() || !sessionId || !wsRef.current) {
       console.log('[SessionDetail] Cannot send: missing data');
       return;
     }
 
     setIsSending(true);
     try {
-      // Encrypt the message content
-      const content = JSON.stringify({
-        content: message,
-        metadata: {},
-      });
-      const { encrypted, iv } = await encrypt(content, encryptionKeyRef.current);
-
-      // Create encrypted message
-      const encryptedMessage: EncryptedMessage = {
+      // Create a queued prompt entry
+      const queuedPrompt = {
         id: generateId(),
-        sequence: 0, // Server assigns sequence
-        created_at: Date.now(),
-        source: 'user',
-        direction: 'input',
-        encrypted_content: encrypted,
-        iv,
-        metadata: {
-          content_length: message.length,
-        },
+        prompt: message,
+        timestamp: Date.now(),
       };
 
-      // Send to server
-      const clientMsg: ClientMessage = {
-        type: 'append_message',
-        message: encryptedMessage,
-      };
-      wsRef.current.send(JSON.stringify(clientMsg));
+      // Get current queue and add the new prompt
+      const currentQueue = metadata.queuedPrompts || [];
+      const newQueue = [...currentQueue, queuedPrompt];
 
-      // Set pendingExecution to signal desktop to process this message
-      const pendingExecution = {
-        messageId: encryptedMessage.id,
-        sentAt: Date.now(),
-        sentBy: 'mobile' as const,
-      };
-
-      // Send metadata update for the session room (for any connected devices watching this session)
-      const pendingMsg: ClientMessage = {
+      // Send metadata update to add to queue (session room)
+      const queueMsg: ClientMessage = {
         type: 'update_metadata',
-        metadata: { pendingExecution },
+        metadata: { queuedPrompts: newQueue },
       };
-      wsRef.current.send(JSON.stringify(pendingMsg));
+      wsRef.current.send(JSON.stringify(queueMsg));
 
-      // Send index_update via the INDEX WebSocket so desktop receives via index_broadcast
-      // (desktop listens to index broadcasts, not individual session rooms)
-      sendIndexUpdate(sessionId, { pendingExecution });
+      // Also send index update so desktop (listening to index) can get the full queue
+      sendIndexUpdate(sessionId, { queuedPrompts: newQueue });
 
-      // Optimistically add to local state
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: encryptedMessage.id,
-          createdAt: encryptedMessage.created_at,
-          source: 'user',
-          direction: 'input',
-          content: message,
-          metadata: {},
-          hidden: false,
-        },
-      ]);
+      // Update local metadata state
+      setMetadata((prev) => ({ ...prev, queuedPrompts: newQueue }));
 
       // Clear input
       setInputValue('');
       setAttachments([]);
 
-      console.log('[SessionDetail] Message sent with pendingExecution flag');
+      console.log('[SessionDetail] Added prompt to queue:', queuedPrompt.id, 'total:', newQueue.length);
     } catch (err) {
-      console.error('[SessionDetail] Failed to send message:', err);
-      setError('Failed to send message');
+      console.error('[SessionDetail] Failed to queue message:', err);
+      setError('Failed to queue message');
     } finally {
       setIsSending(false);
     }

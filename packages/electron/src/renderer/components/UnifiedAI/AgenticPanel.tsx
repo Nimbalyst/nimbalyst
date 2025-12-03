@@ -139,6 +139,10 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   const panelInstanceIdRef = useRef<string>(`agentic-panel-${Math.random().toString(36).slice(2)}`);
   const autoContextSessionsRef = useRef<Set<string>>(new Set());
 
+  // Ref to hold processQueuedPrompts function (defined later, used in openSessionInTab)
+  const processQueuedPromptsRef = useRef<((sessionId: string, tab: SessionTab) => Promise<void>) | null>(null);
+  const openSessionInTabRef = useRef<((sessionId: string) => Promise<void>) | null>(null);
+
   // Read state tracking - synchronous ref to avoid React state update delay
   const readStateRef = useRef<Map<string, { lastReadMessageTimestamp: number | null }>>(new Map());
 
@@ -622,6 +626,13 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         // Mark as read when opening a new session
         await markSessionAsRead(sessionData.id);
         // console.log('[AgenticPanel] Session marked as read');
+
+        // Process any queued prompts (from mobile sync)
+        setTimeout(() => {
+          if (processQueuedPromptsRef.current) {
+            processQueuedPromptsRef.current(sessionData.id, newTab);
+          }
+        }, 100);
       } else {
         console.error('[AgenticPanel] Session data is null or undefined');
       }
@@ -629,6 +640,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       console.error('[AgenticPanel] Failed to load session:', err);
     }
   }, [sessionTabs, workspacePath, mode, onSessionChange, markSessionAsRead]);
+
+  // Keep ref in sync with openSessionInTab
+  openSessionInTabRef.current = openSessionInTab;
 
   // Delete a session
   const deleteSession = useCallback(async (sessionId: string) => {
@@ -1175,6 +1189,70 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     };
   }, []);
 
+  // Listen for queued prompts from mobile - process immediately regardless of which tab is active
+  useEffect(() => {
+    const handleQueuedPromptsReceived = async (data: { sessionId: string; queuedPrompts: Array<{ id: string; prompt: string; timestamp: number }> }) => {
+      if (!data || !data.sessionId || !data.queuedPrompts || data.queuedPrompts.length === 0) return;
+
+      console.log('[AgenticPanel] Received queuedPrompts from mobile:', data.sessionId, 'count:', data.queuedPrompts.length);
+
+      // Check if this session tab is already open
+      const existingTab = sessionTabsRef.current.find(t => t?.id === data.sessionId);
+
+      if (!existingTab) {
+        // Session not open - open it (which will load the session and process the queue)
+        console.log('[AgenticPanel] Session not open, opening it:', data.sessionId);
+        if (openSessionInTabRef.current) {
+          await openSessionInTabRef.current(data.sessionId);
+        }
+        return;
+      }
+
+      // Tab exists - load fresh session data and process the queue
+      console.log('[AgenticPanel] Session tab exists, loading fresh data and processing queue:', data.sessionId);
+
+      try {
+        const sessionData = await window.electronAPI.aiLoadSession(data.sessionId, workspacePath);
+        if (!sessionData) {
+          console.error('[AgenticPanel] Failed to load session data for queue processing');
+          return;
+        }
+
+        // Create updated tab with fresh data and queued prompts
+        const updatedTab: SessionTab = {
+          ...existingTab,
+          sessionData: {
+            ...sessionData,
+            metadata: {
+              ...sessionData.metadata,
+              queuedPrompts: data.queuedPrompts
+            }
+          }
+        };
+
+        // Update tab state
+        setSessionTabs(prev => prev.map(t =>
+          t?.id === data.sessionId ? updatedTab : t
+        ));
+
+        // Process the queue immediately
+        setTimeout(() => {
+          if (processQueuedPromptsRef.current) {
+            processQueuedPromptsRef.current(data.sessionId, updatedTab);
+          }
+        }, 100);
+      } catch (err) {
+        console.error('[AgenticPanel] Failed to load session for queue processing:', err);
+      }
+    };
+
+    const cleanup = window.electronAPI.on('ai:queuedPromptsReceived', handleQueuedPromptsReceived);
+
+    return () => {
+      cleanup?.();
+    };
+  }, [workspacePath]);
+
   // Listen for streaming responses and completion
   // This handles real-time updates during AI streaming:
   // - Updates assistant message content as it streams in
@@ -1278,42 +1356,6 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     const cleanupStreamResponse = window.electronAPI.onAIStreamResponse(handleStreamResponse);
     const cleanupError = window.electronAPI.onAIError(handleStreamError);
 
-    // Handle queued prompt starting
-    const handleQueuePromptStarting = (data: { sessionId: string; message: string }) => {
-      if (!data || !data.sessionId) return;
-      // Mark session as sending/loading
-      sendingSessionsRef.current.add(data.sessionId);
-      setSendingSessions(prev => new Set(prev).add(data.sessionId));
-
-      // Add user message to UI immediately
-      setSessionTabs(prev => prev.filter(tab => tab != null).map(tab => {
-        if (tab.id === data.sessionId) {
-          const baseMessages = tab.sessionData.messages || [];
-          const userMessage = {
-            role: 'user' as const,
-            content: data.message,
-            timestamp: Date.now()
-          };
-          const thinkingMessage = {
-            role: 'assistant' as const,
-            content: '',
-            timestamp: Date.now(),
-            isThinking: true
-          };
-          return {
-            ...tab,
-            sessionData: {
-              ...tab.sessionData,
-              messages: [...baseMessages, userMessage, thinkingMessage]
-            }
-          };
-        }
-        return tab;
-      }));
-    };
-
-    const cleanupQueuePromptStarting = window.electronAPI.on('ai:queue-prompt-starting', handleQueuePromptStarting);
-
     // Handle token usage updates
     const handleTokenUsageUpdated = (data: {
       sessionId: string;
@@ -1351,7 +1393,6 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     return () => {
       cleanupStreamResponse();
       cleanupError();
-      cleanupQueuePromptStarting();
       cleanupTokenUsageUpdated();
     };
   }, [activeTabId, workspacePath, scheduleSessionReload]);
@@ -1821,6 +1862,67 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     }
   }, [onFileOpen]);
 
+  // Process queued prompts for a session (from mobile sync)
+  const processQueuedPrompts = useCallback(async (sessionId: string, tab: SessionTab) => {
+    const queuedPrompts = tab.sessionData?.metadata?.queuedPrompts as Array<{
+      id: string;
+      prompt: string;
+      timestamp: number;
+      documentContext?: any;
+      attachments?: ChatAttachment[];
+    }> | undefined;
+
+    if (!queuedPrompts || queuedPrompts.length === 0) {
+      return;
+    }
+
+    console.log(`[AgenticPanel] Processing ${queuedPrompts.length} queued prompts for session ${sessionId}`);
+
+    // Process prompts one at a time
+    for (const queuedPrompt of queuedPrompts) {
+      console.log(`[AgenticPanel] Processing queued prompt: ${queuedPrompt.id}`);
+
+      // Send the message using the same flow as normal messages
+      await handleSendMessage(
+        sessionId,
+        queuedPrompt.prompt,
+        queuedPrompt.attachments || []
+      );
+
+      // Remove processed prompt from queue
+      const remainingPrompts = queuedPrompts.filter(p => p.id !== queuedPrompt.id);
+      try {
+        await window.electronAPI.invoke('ai:updateSessionMetadata', sessionId, {
+          ...tab.sessionData.metadata,
+          queuedPrompts: remainingPrompts
+        }, workspacePath);
+      } catch (err) {
+        console.error('[AgenticPanel] Failed to update queue after processing:', err);
+      }
+
+      // Wait for response to complete before processing next prompt
+      // The sendingSessions state will clear when response finishes
+      await new Promise<void>(resolve => {
+        const checkDone = () => {
+          if (!sendingSessionsRef.current.has(sessionId)) {
+            resolve();
+          } else {
+            setTimeout(checkDone, 500);
+          }
+        };
+        // Give a small delay for the send to start
+        setTimeout(checkDone, 100);
+      });
+    }
+
+    console.log(`[AgenticPanel] Finished processing queued prompts for session ${sessionId}`);
+  }, [handleSendMessage, workspacePath]);
+
+  // Keep ref in sync with the callback
+  useEffect(() => {
+    processQueuedPromptsRef.current = processQueuedPrompts;
+  }, [processQueuedPrompts]);
+
   // Tab management (agent mode only)
   const handleTabSelect = useCallback(async (tabId: string) => {
     setActiveTabId(tabId);
@@ -1830,7 +1932,18 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
     // Mark the session as read when switching to it
     await markSessionAsRead(tabId);
-  }, [onSessionChange, markSessionAsRead]);
+
+    // Check for and process any queued prompts (from mobile)
+    const tab = sessionTabs.find(t => t?.id === tabId);
+    if (tab && processQueuedPromptsRef.current) {
+      // Use setTimeout to avoid blocking the tab switch
+      setTimeout(() => {
+        if (processQueuedPromptsRef.current) {
+          processQueuedPromptsRef.current(tabId, tab);
+        }
+      }, 100);
+    }
+  }, [onSessionChange, markSessionAsRead, sessionTabs]);
 
   const handleTabClose = useCallback((tabId: string) => {
     const closingTab = sessionTabs.filter(t => t != null).find(t => t.id === tabId);

@@ -42,6 +42,7 @@ export type {
   SyncProvider,
   SessionChange,
   SyncedSessionMetadata,
+  SyncedQueuedPrompt,
   SessionIndexEntry,
   DeviceInfo,
 } from './types';

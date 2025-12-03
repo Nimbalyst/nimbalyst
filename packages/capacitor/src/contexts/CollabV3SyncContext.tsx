@@ -50,11 +50,14 @@ interface SyncContextValue {
   /** Whether we've received the initial data from the server (true even if sessions array is empty) */
   hasReceivedInitialData: boolean;
   /**
-   * Send an index update to notify other devices of pending execution.
+   * Send an index update to notify other devices of queue changes.
    * This sends via the index WebSocket so desktop can receive it without
    * being connected to the specific session room.
    */
-  sendIndexUpdate: (sessionId: string, update: { pendingExecution?: { messageId: string; sentAt: number; sentBy: 'mobile' | 'desktop' } }) => void;
+  sendIndexUpdate: (sessionId: string, update: {
+    pendingExecution?: { messageId: string; sentAt: number; sentBy: 'mobile' | 'desktop' };
+    queuedPrompts?: Array<{ id: string; prompt: string; timestamp: number }>;
+  }) => void;
 }
 
 // ============================================================================
@@ -78,6 +81,10 @@ interface ServerSessionEntry {
     sentBy: string;
   };
   isExecuting?: boolean;
+  /** Number of prompts queued from mobile, waiting for desktop to process */
+  queuedPromptCount?: number;
+  /** Full queue of prompts (sent with index_update for desktop to process) */
+  queuedPrompts?: Array<{ id: string; prompt: string; timestamp: number }>;
 }
 
 interface ServerProjectEntry {
@@ -424,7 +431,10 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
 
   // Send an index update to notify other devices
   const sendIndexUpdate = useCallback(
-    (sessionId: string, update: { pendingExecution?: { messageId: string; sentAt: number; sentBy: 'mobile' | 'desktop' } }) => {
+    (sessionId: string, update: {
+      pendingExecution?: { messageId: string; sentAt: number; sentBy: 'mobile' | 'desktop' };
+      queuedPrompts?: Array<{ id: string; prompt: string; timestamp: number }>;
+    }) => {
       if (wsRef.current?.readyState !== WebSocket.OPEN) {
         console.warn('[CollabV3] Cannot send index update - not connected');
         return;
@@ -451,10 +461,12 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
           created_at: session.createdAt,
           updated_at: Date.now(),
           pendingExecution: update.pendingExecution,
+          queuedPromptCount: update.queuedPrompts?.length ?? 0,
+          queuedPrompts: update.queuedPrompts,
         },
       };
 
-      console.log('[CollabV3] Sending index_update for session:', sessionId, 'pendingExecution:', update.pendingExecution);
+      console.log('[CollabV3] Sending index_update for session:', sessionId, 'queuedPrompts:', update.queuedPrompts?.length ?? 0);
       wsRef.current.send(JSON.stringify(msg));
     },
     [allSessions]

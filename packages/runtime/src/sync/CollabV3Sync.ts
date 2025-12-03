@@ -56,6 +56,11 @@ interface SessionMetadata {
     sentBy: 'mobile' | 'desktop';
   };
   isExecuting?: boolean;
+  queuedPrompts?: Array<{
+    id: string;
+    prompt: string;
+    timestamp: number;
+  }>;
 }
 
 interface SessionIndexEntry {
@@ -76,6 +81,10 @@ interface SessionIndexEntry {
   };
   /** Whether the session is currently executing (processing AI request) */
   isExecuting?: boolean;
+  /** Number of prompts queued from mobile, waiting for desktop to process */
+  queuedPromptCount?: number;
+  /** Full queue of prompts (sent via index_update for desktop to process) */
+  queuedPrompts?: Array<{ id: string; prompt: string; timestamp: number }>;
 }
 
 type ClientMessage =
@@ -190,6 +199,8 @@ interface SessionConnection {
   changeListeners: Set<(change: SessionChange) => void>;
   lastSequence: number;
   encryptionKey?: CryptoKey;
+  /** Cached metadata from sync_response and metadata_broadcast */
+  cachedMetadata?: Partial<SessionMetadata>;
 }
 
 // Cache of session index entries for partial update merging
@@ -412,6 +423,12 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       session.lastSequence = response.messages[response.messages.length - 1].sequence;
     }
 
+    // Cache metadata from sync response (includes queuedPrompts if present)
+    if (response.metadata) {
+      session.cachedMetadata = { ...session.cachedMetadata, ...response.metadata };
+      console.log('[CollabV3] Cached metadata from sync_response:', sessionId, 'queuedPrompts:', response.metadata.queuedPrompts?.length ?? 0);
+    }
+
     // Decrypt and emit messages as remote changes
     if (session.encryptionKey && response.messages.length > 0) {
       for (const encrypted of response.messages) {
@@ -479,6 +496,9 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       return;
     }
 
+    // Cache the metadata broadcast (merge with existing cache)
+    session.cachedMetadata = { ...session.cachedMetadata, ...broadcast.metadata };
+
     const metadata: Partial<SyncedSessionMetadata> = {
       title: broadcast.metadata.title,
       mode: broadcast.metadata.mode,
@@ -487,9 +507,10 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       updatedAt: broadcast.metadata.updated_at ?? Date.now(),
       pendingExecution: broadcast.metadata.pendingExecution,
       isExecuting: broadcast.metadata.isExecuting,
+      queuedPrompts: broadcast.metadata.queuedPrompts,
     };
 
-    console.log('[CollabV3] Notifying', session.changeListeners.size, 'change listeners with pendingExecution:', metadata.pendingExecution, 'isExecuting:', metadata.isExecuting);
+    console.log('[CollabV3] Notifying', session.changeListeners.size, 'change listeners with queuedPrompts:', metadata.queuedPrompts?.length ?? 0);
 
     session.changeListeners.forEach((cb) =>
       cb({ type: 'metadata_updated', metadata })
@@ -577,7 +598,9 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
           case 'index_broadcast':
             // Another device updated a session, cache it
             sessionIndexCache.set(message.session.session_id, message.session);
-            console.log('[CollabV3] Received index_broadcast for session:', message.session.session_id, 'pendingExecution:', message.session.pendingExecution);
+            console.log('[CollabV3] Received index_broadcast for session:', message.session.session_id,
+              'queuedPrompts:', message.session.queuedPrompts?.length ?? 0,
+              'pendingExecution:', message.session.pendingExecution);
 
             // Notify all index change listeners
             indexChangeListeners.forEach((callback) => {
@@ -957,6 +980,10 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
           if ('isExecuting' in change.metadata) {
             metadata.isExecuting = change.metadata.isExecuting;
           }
+          // queuedPrompts can be set or explicitly cleared
+          if ('queuedPrompts' in change.metadata) {
+            metadata.queuedPrompts = change.metadata.queuedPrompts;
+          }
           clientMessage = { type: 'update_metadata', metadata };
           break;
         }
@@ -1116,6 +1143,12 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         indexChangeListeners.delete(callback);
         console.log('[CollabV3] Removed index change listener, total:', indexChangeListeners.size);
       };
+    },
+
+    /** Get cached metadata for a session (from sync_response and metadata_broadcast) */
+    getCachedMetadata(sessionId: string): Partial<SessionMetadata> | undefined {
+      const session = sessions.get(sessionId);
+      return session?.cachedMetadata;
     },
   };
 

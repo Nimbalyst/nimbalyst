@@ -133,7 +133,21 @@ export interface SyncProvider {
       sentBy: 'mobile' | 'desktop';
     };
     isExecuting?: boolean;
+    /** Number of prompts queued from mobile, waiting for desktop to process */
+    queuedPromptCount?: number;
+    /** Full queue of prompts (sent via index_update for desktop to process) */
+    queuedPrompts?: Array<{ id: string; prompt: string; timestamp: number }>;
   }) => void): () => void;
+
+  /** Get cached metadata for a session (populated from sync_response and metadata_broadcast) */
+  getCachedMetadata?(sessionId: string): {
+    queuedPrompts?: Array<{
+      id: string;
+      prompt: string;
+      timestamp: number;
+    }>;
+    [key: string]: unknown;
+  } | undefined;
 }
 
 /** Session data for bulk index sync */
@@ -161,6 +175,14 @@ export type SessionChange =
 // AgentMessage is imported from ai/server/types.ts - the real database type
 // We sync the raw database format, both sides transform it for UI using transformAgentMessagesToUI()
 
+/** Queued prompt for cross-device sync */
+export interface SyncedQueuedPrompt {
+  id: string;           // Unique ID for this queued item
+  prompt: string;       // The user's message
+  timestamp: number;    // When queued
+  // Note: documentContext and attachments are NOT synced - they're device-local
+}
+
 /** Session metadata that gets synced */
 export interface SyncedSessionMetadata {
   title?: string;
@@ -172,6 +194,8 @@ export interface SyncedSessionMetadata {
   isArchived?: boolean;
   draftInput?: string;
   updatedAt: number;
+  /** Queued prompts waiting to be processed by desktop */
+  queuedPrompts?: SyncedQueuedPrompt[];
   /** Signals that a message is waiting for desktop to process it */
   pendingExecution?: {
     messageId: string;

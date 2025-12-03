@@ -30,7 +30,7 @@ import {AnalyticsService} from "../analytics/AnalyticsService.ts";
 import { historyManager } from '../../HistoryManager';
 import { getAIProviderOverrides, saveAIProviderOverrides, clearAIProviderOverrides } from '../../utils/store';
 import { mergeAISettings } from '../../utils/aiSettingsMerge';
-import { MobileSyncHandler } from './MobileSyncHandler';
+import { getMessageSyncHandler, getSyncProvider } from '../SyncManager';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -300,7 +300,6 @@ export class AIService {
   private sendMessageHandler: ((event: Electron.IpcMainInvokeEvent, message: string, documentContext?: DocumentContext, sessionId?: string, workspacePath?: string) => Promise<{ content: string }>) | null = null;
   // NOTE: Providers are now tracked per-session in ProviderFactory, not per-window
   // This allows multiple concurrent sessions in the same window (e.g., agent mode tabs)
-  private mobileSyncHandler: MobileSyncHandler | null = null;
 
   constructor(sessionStore: SessionStore) {
     logger.main.info('[AIService] Constructor called');
@@ -437,12 +436,14 @@ export class AIService {
   }
 
   private async initializeMobileSyncHandler() {
-    // Lazy load sync manager and mobile sync handler
-    // Retry a few times since sync may not be initialized yet
+    // NOTE: We don't process prompts from the backend anymore (causes child process issues).
+    // Instead, we just listen for index changes and store queuedPrompts in local session metadata.
+    // The renderer will process them when the user opens the session.
+
     const maxRetries = 5;
     const retryDelayMs = 1000;
 
-    logger.main.info('[AIService] Attempting to initialize mobile sync handler...');
+    logger.main.info('[AIService] Initializing mobile sync handler (metadata sync only)...');
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
@@ -459,22 +460,52 @@ export class AIService {
           return;
         }
 
-        logger.main.info('[AIService] Initializing mobile sync handler...');
-        logger.main.info('[AIService] syncProvider has onIndexChange:', !!syncProvider.onIndexChange);
+        // Listen for index changes and update local session metadata with queuedPrompts
+        if (syncProvider.onIndexChange) {
+          syncProvider.onIndexChange(async (sessionId, entry) => {
+            // Only update if there are queuedPrompts in the broadcast
+            if (entry.queuedPrompts && entry.queuedPrompts.length > 0) {
+              logger.main.info('[AIService] Received queuedPrompts from mobile, updating local metadata:', {
+                sessionId,
+                count: entry.queuedPrompts.length
+              });
 
-        this.mobileSyncHandler = new MobileSyncHandler(syncProvider);
+              try {
+                // Update the local session metadata with queuedPrompts
+                // This makes them available when the renderer loads the session
+                const { AISessionsRepository } = await import('@nimbalyst/runtime/storage/repositories/AISessionsRepository');
 
-        // Set the message handler so we can process mobile messages
-        this.mobileSyncHandler.setMessageHandler(async (sessionId: string, messageId: string) => {
-          await this.processMobileMessage(sessionId, messageId);
-        });
+                // First load existing metadata to merge
+                const existingSession = await this.sessionManager.loadSession(sessionId);
+                const existingMetadata = existingSession?.metadata || {};
 
-        // Start listening for pending executions via index changes
-        // This is more efficient than connecting to every session's WebSocket
-        logger.main.info('[AIService] Calling startIndexListener...');
-        await this.mobileSyncHandler.startIndexListener();
+                await AISessionsRepository.updateMetadata(sessionId, {
+                  metadata: {
+                    ...existingMetadata,
+                    queuedPrompts: entry.queuedPrompts
+                  }
+                });
 
-        logger.main.info('[AIService] Mobile sync handler initialized successfully');
+                // Notify ALL renderer windows that queuedPrompts arrived
+                // If the session tab is already open, it should process them
+                const { BrowserWindow } = await import('electron');
+                BrowserWindow.getAllWindows().forEach(window => {
+                  window.webContents.send('ai:queuedPromptsReceived', {
+                    sessionId,
+                    queuedPrompts: entry.queuedPrompts
+                  });
+                });
+              } catch (err) {
+                logger.main.error('[AIService] Failed to update session metadata with queuedPrompts:', err);
+              }
+            }
+          });
+
+          logger.main.info('[AIService] Mobile sync handler initialized (metadata sync only)');
+        } else {
+          logger.main.info('[AIService] onIndexChange not available, mobile sync handler not initialized');
+        }
+
         return;
       } catch (error) {
         logger.main.error('[AIService] Failed to initialize mobile sync handler:', error);
@@ -550,6 +581,122 @@ export class AIService {
     }
   }
 
+  /**
+   * Process a queued prompt from mobile.
+   * This creates the user message and sends it to the AI provider.
+   */
+  private async processQueuedPrompt(
+    sessionId: string,
+    queuedPrompt: { id: string; prompt: string; timestamp: number }
+  ): Promise<void> {
+    logger.main.info('[AIService] Processing queued prompt:', { sessionId, promptId: queuedPrompt.id });
+
+    try {
+      // Load session to get provider/model config
+      const session = await this.sessionManager.loadSession(sessionId);
+      if (!session) {
+        logger.main.error('[AIService] Session not found in local database:', sessionId);
+        return;
+      }
+
+      logger.main.info('[AIService] Loaded session for queued prompt:', {
+        sessionId,
+        provider: session.provider,
+        model: session.model,
+        workspacePath: session.workspacePath,
+      });
+
+      // Get workspace path from session
+      const workspacePath = session.workspacePath || undefined;
+
+      // Get provider for this session
+      const provider = await this.getProviderForSession(session);
+      if (!provider) {
+        logger.main.error('[AIService] Failed to get provider for session:', sessionId, 'provider type:', session.provider);
+        return;
+      }
+
+      // Set up sync handler to sync responses back to mobile
+      this.setupSyncHandler(provider, sessionId);
+
+      // Create the user message (this is what mobile would have sent)
+      // The provider's chat method will log this as an input message
+      const userMessage: Message = {
+        role: 'user',
+        content: queuedPrompt.prompt,
+        timestamp: queuedPrompt.timestamp,
+      };
+
+      // Get existing messages to build context
+      const { AgentMessagesRepository } = await import('@nimbalyst/runtime');
+      const agentMessages = await AgentMessagesRepository.list(sessionId);
+      const { transformAgentMessagesToUI } = await import('@nimbalyst/runtime/ai/server/SessionManager');
+      const existingMessages = transformAgentMessagesToUI(agentMessages);
+
+      // Add the new user message
+      const uiMessages = [...existingMessages, userMessage];
+
+      logger.main.info('[AIService] Processing queued prompt with messages:', {
+        existingCount: existingMessages.length,
+        newPrompt: previewForLog(queuedPrompt.prompt),
+      });
+
+      // No document context for mobile messages
+      const documentContext: DocumentContext | undefined = undefined;
+
+      // Register tool handler - mobile messages don't have specific target file
+      const toolHandler = this.createToolHandler(
+        null as any, // No event sender for mobile
+        documentContext,
+        sessionId,
+        workspacePath
+      );
+      provider.registerToolHandler(toolHandler);
+
+      // Mark session as executing (getSyncProvider imported at top of file)
+      const syncProvider = getSyncProvider();
+      if (syncProvider) {
+        syncProvider.pushChange(sessionId, {
+          type: 'metadata_updated',
+          metadata: { isExecuting: true } as any,
+        });
+      }
+
+      try {
+        // Send to AI provider with message history
+        const response = await provider.chat(
+          uiMessages,
+          documentContext,
+          toolHandler,
+          {
+            onChunk: async () => {
+              // Chunks are streamed to Y.Doc via normal message sync
+              // Mobile will receive them via onRemoteChange
+            },
+          }
+        );
+
+        logger.main.info('[AIService] Queued prompt processed successfully', {
+          responsePreview: previewForLog(response.content),
+        });
+      } finally {
+        // Clear executing flag
+        if (syncProvider) {
+          syncProvider.pushChange(sessionId, {
+            type: 'metadata_updated',
+            metadata: { isExecuting: false } as any,
+          });
+        }
+      }
+
+      // Response is automatically added to database by provider
+      // and synced to mobile via message sync handler
+    } catch (error) {
+      logger.main.error('[AIService] Failed to process queued prompt:', error);
+      throw error;
+    }
+  }
+
   private setupSyncHandler(provider: AIProvider, sessionId: string): void {
     // Only set up sync handler once per provider
     if ((provider as any)._syncHandlerSetup) {
@@ -557,8 +704,7 @@ export class AIService {
     }
     (provider as any)._syncHandlerSetup = true;
 
-    // Import sync handler
-    const { getMessageSyncHandler } = require('../SyncManager');
+    // Get sync handler (imported at top of file)
     const messageSyncHandler = getMessageSyncHandler();
 
     if (!messageSyncHandler) {
@@ -586,22 +732,22 @@ export class AIService {
     });
   }
 
-  private async getProviderForSession(session: SessionData): Promise<AIProvider> {
+  private async getProviderForSession(session: SessionData): Promise<AIProvider | null> {
     const providerType = session.provider as AIProviderType;
-    const model = session.model;
 
-    // Get API keys
-    const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
+    // Try to get existing provider first
+    let provider = ProviderFactory.getProvider(providerType, session.id);
 
-    // Create provider config
-    const config: ProviderConfig = {
-      provider: providerType,
-      apiKey: apiKeys[providerType === 'claude' || providerType === 'claude-code' ? 'anthropic' : providerType] || '',
-      model: model,
-    };
-
-    // Get or create provider
-    const provider = await ProviderFactory.getProvider(session.id, config);
+    // If no existing provider, create one
+    if (!provider) {
+      logger.main.info('[AIService] Creating new provider for session:', session.id, 'type:', providerType);
+      try {
+        provider = ProviderFactory.createProvider(providerType, session.id);
+      } catch (error) {
+        logger.main.error('[AIService] Failed to create provider:', providerType, error);
+        return null;
+      }
+    }
 
     // Hook up sync handler if sync is enabled
     this.setupSyncHandler(provider, session.id);
@@ -1774,64 +1920,7 @@ export class AIService {
 
         await stateManager.endSession(session.id);
 
-        // QUEUE PROCESSING: Check if there are queued prompts and process the next one
-        // console.log(`[AIService] Message stream completed, checking for queued prompts...`);
-
-        const reloadedSession = await this.sessionManager.loadSession(session.id, workspacePath);
-        const queuedPrompts = (reloadedSession?.metadata?.queuedPrompts as any[]) || [];
-
-        // console.log(`[AIService] Queue check: found ${queuedPrompts.length} queued prompts`);
-
-        if (queuedPrompts.length > 0) {
-          console.log(`[AIService] Processing next queued prompt...`);
-
-          // Get the first queued prompt
-          const nextPrompt = queuedPrompts[0];
-          const remainingQueue = queuedPrompts.slice(1);
-
-          // Update session metadata to remove the processed prompt from queue
-          const { AISessionsRepository } = await import('@nimbalyst/runtime/storage/repositories/AISessionsRepository');
-          await AISessionsRepository.updateMetadata(session.id, {
-            metadata: {
-              ...reloadedSession.metadata,
-              queuedPrompts: remainingQueue
-            }
-          });
-
-          // Notify renderer that queue was updated
-          event.sender.send('ai:queue-updated', {
-            sessionId: session.id,
-            queueLength: remainingQueue.length
-          });
-
-          // console.log(`[AIService] Auto-processing queued prompt: ${nextPrompt.prompt.substring(0, 100)}...`);
-
-          // Notify renderer that a queued prompt is starting
-          event.sender.send('ai:queue-prompt-starting', {
-            sessionId: session.id,
-            message: nextPrompt.prompt
-          });
-
-          // Process the queued prompt using the stored handler
-          setImmediate(() => {
-            if (this.sendMessageHandler) {
-              // console.log('[AIService] Invoking sendMessageHandler for queued prompt');
-              this.sendMessageHandler(event, nextPrompt.prompt, nextPrompt.documentContext, session.id, workspacePath)
-                .then(() => {
-                  console.log('[AIService] Queued prompt completed successfully');
-                })
-                .catch((queueError: Error) => {
-                  console.error('[AIService] Error processing queued prompt:', queueError);
-                  event.sender.send('ai:error', {
-                    sessionId: session.id,
-                    message: `Failed to process queued prompt: ${queueError.message || 'Unknown error'}`
-                  });
-                });
-            } else {
-              console.error('[AIService] sendMessageHandler not available!');
-            }
-          });
-        }
+        // Queue processing is handled by the renderer (AgenticPanel) to keep SDK instantiation in one place
 
         return { content: fullResponse };
       } catch (error) {
@@ -2002,11 +2091,6 @@ export class AIService {
       // Clean up provider if it exists
       if (success) {
         ProviderFactory.destroyProvider(sessionId);
-
-        // Stop watching for mobile messages
-        if (this.mobileSyncHandler) {
-          this.mobileSyncHandler.unwatchSession(sessionId);
-        }
       }
 
       return { success };

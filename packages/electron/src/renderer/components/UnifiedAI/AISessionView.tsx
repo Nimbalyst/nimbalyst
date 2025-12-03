@@ -253,21 +253,6 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
     }
   }, [sessionData.metadata?.queuedPrompts]);
 
-  // Listen for queue updates from backend
-  useEffect(() => {
-    const handleQueueUpdate = (_event: any, data: { sessionId: string; queueLength: number }) => {
-      if (data.sessionId === sessionId) {
-        // Queue was updated by backend, reload session data will happen automatically
-        // This just ensures UI is responsive
-      }
-    };
-
-    window.electronAPI.on('ai:queue-updated', handleQueueUpdate);
-    return () => {
-      window.electronAPI.off('ai:queue-updated', handleQueueUpdate);
-    };
-  }, [sessionId]);
-
   // Extract todos from session metadata when sessionData changes
   useEffect(() => {
     if (sessionData.metadata?.currentTodos) {
