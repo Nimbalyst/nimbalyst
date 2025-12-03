@@ -250,6 +250,7 @@
   white-space: nowrap;
   overflow: hidden;
   height: 28px;
+  border-radius: 4px;
 }
 
 .file-tree-directory:hover,
@@ -494,7 +495,7 @@
   html:not(.light-theme):not(.dark-theme) .workspace-sidebar .workspace-name {
     color: #f3f4f6;
   }
-  
+
   html:not(.light-theme):not(.dark-theme) .workspace-path {
     color: #9ca3af;
   }
