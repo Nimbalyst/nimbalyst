@@ -91,6 +91,35 @@ When the user types \`/plan [description]\`:
 5. Create file in \`nimbalyst-local/plans/\` with proper frontmatter
 6. Include relevant sections based on plan type
 
+## Visual Mockups
+
+When a plan involves UI components, screens, or visual design, use the \`/mockup\` command in a sub-agent to create wireframe mockups. This keeps visual design work separate from planning.
+
+**When to create a mockup:**
+- Planning new UI components or screens
+- Designing layout and structure
+- Changes that need visual feedback before implementation
+
+**When NOT to create a mockup:**
+- Backend-only changes
+- Refactoring that doesn't change UI
+- Bug fixes with obvious solutions
+- Infrastructure or configuration changes
+- Minor and well-described UI changes where there are no remaining design choices
+
+If a visual mockup would help communicate the plan, tell the user you'll use \`/mockup\` to create one, and do so after completing the plan document.
+Make sure the plan document references and links the mockup file using the mockup image syntax, and use your Capture Wireframe Screenshot tool to view it once the sub-agent completes and verify that it conforms to the plan.
+
+**Mockup image syntax:**
+\`\`\`markdown
+![Description](screenshot.png){mockup:path/to/mockup.wireframe.html}
+\`\`\`
+
+With optional size:
+\`\`\`markdown
+![Description](screenshot.png){mockup:path/to/mockup.wireframe.html}{800x600}
+\`\`\` 
+
 ## Best Practices
 
 - Keep plans focused on a single objective
