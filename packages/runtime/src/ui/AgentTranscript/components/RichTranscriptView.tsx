@@ -11,6 +11,7 @@ import { EditToolResultCard } from './EditToolResultCard';
 import { TranscriptSearchBar } from './TranscriptSearchBar';
 import { formatToolDisplayName } from '../utils/toolNameFormatter';
 import { useVirtualizedMessages } from '../hooks/useVirtualizedMessages';
+import { getCustomToolWidget } from './CustomToolWidgets';
 import './RichTranscriptView.css';
 
 /**
@@ -667,6 +668,25 @@ export const RichTranscriptView = React.forwardRef<
     const isExpanded = expandedTools.has(toolId);
     const isSubAgent = tool.isSubAgent && tool.name === 'Task';
     const hasChildren = tool.childToolCalls && tool.childToolCalls.length > 0;
+
+    // Check for custom widget first
+    const CustomWidget = tool.name ? getCustomToolWidget(tool.name) : undefined;
+    if (CustomWidget) {
+      return (
+        <div
+          key={`tool-${toolIndex}-${depth}`}
+          className={`rich-transcript-tool-container ${depth > 0 ? 'nested' : ''}`}
+          style={{ marginLeft: depth > 0 ? '1rem' : '0' }}
+        >
+          <CustomWidget
+            message={toolMsg}
+            isExpanded={isExpanded}
+            onToggle={() => toggleToolExpand(toolId)}
+            workspacePath={workspacePath}
+          />
+        </div>
+      );
+    }
 
     const editTool = isEditToolName(tool.name);
     const editEntries = editTool ? extractEditsFromToolMessage(toolMsg) : [];

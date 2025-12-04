@@ -304,6 +304,10 @@ The application supports multiple AI providers, including two distinct ways to a
 - Provider types: `claude`, `claude-code`, `openai`, `openai-codex`, `lmstudio`
 - Each provider is cached per session for efficiency
 
+### Custom Tool Widgets
+
+Custom widgets can replace the generic tool call display for specific MCP tools. See [CUSTOM_TOOL_WIDGETS.md](docs/CUSTOM_TOOL_WIDGETS.md) for implementation details.
+
 ## Data Persistence
 
 The Nimbalyst app uses **PGLite** (PostgreSQL in WebAssembly) for all data storage, providing a robust database system that works both in development and packaged builds.
