@@ -9,7 +9,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { CustomEditorProps } from '../types';
 import { MonacoCodeEditor } from '../../MonacoCodeEditor';
 import { logger } from '../../../utils/logger';
-import { captureWireframeComposite, base64ToBlob } from './screenshotUtils';
+import { captureWireframeComposite } from './screenshotUtils';
 
 type ViewMode = 'preview' | 'source';
 
@@ -720,64 +720,6 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
     redrawCanvas();
   }, [scrollOffset, redrawCanvas]);
 
-  // Capture composite screenshot (wireframe + drawing) and send to AI chat
-  const handleSendToAI = useCallback(async () => {
-    if (!iframeRef.current) {
-      logger.ui.error('[WireframeViewer] No iframe reference for composite screenshot');
-      alert('Failed to capture: iframe not ready');
-      return;
-    }
-
-    try {
-      logger.ui.info('[WireframeViewer] Creating composite screenshot for AI');
-
-      // Use shared utility to capture screenshot with drawing paths (absolute coordinates)
-      const paths = drawingPathsRef.current.length > 0 ? drawingPathsRef.current : undefined;
-      const base64Data = await captureWireframeComposite(iframeRef.current, null, paths);
-
-      // Convert to blob
-      const blob = base64ToBlob(base64Data);
-
-      // Create file from blob
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-      const file = new File([blob], `wireframe-${timestamp}.png`, { type: 'image/png' });
-
-      logger.ui.info('[WireframeViewer] Composite screenshot created, adding to AI chat');
-
-      // Add to AI chat as attachment
-      // This will be handled by the parent component via window event
-      const event = new CustomEvent('wireframe-screenshot-ready', {
-        detail: { file }
-      });
-      window.dispatchEvent(event);
-
-      // Show success notification
-      const notification = document.createElement('div');
-      notification.textContent = 'Screenshot added to AI chat';
-      notification.style.cssText = `
-        position: fixed;
-        top: 60px;
-        right: 20px;
-        background: var(--surface-secondary);
-        border: 1px solid var(--border-primary);
-        color: var(--text-primary);
-        padding: 12px 20px;
-        border-radius: 6px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-        z-index: 10000;
-        font-size: 14px;
-      `;
-      document.body.appendChild(notification);
-      setTimeout(() => {
-        notification.remove();
-      }, 3000);
-    } catch (err) {
-      logger.ui.error('[WireframeViewer] Failed to create composite screenshot:', err);
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      alert('Failed to capture screenshot: ' + errorMessage);
-    }
-  }, [drawingDataUrl]);
-
   // Handle screenshot capture requests from MCP server (via main process)
   useEffect(() => {
     const handleCaptureRequest = async (data: { requestId: string; filePath: string }) => {
@@ -984,22 +926,6 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
                   </button>
                 </>
               )}
-              <button
-                onClick={handleSendToAI}
-                style={{
-                  padding: '4px 12px',
-                  fontSize: '12px',
-                  backgroundColor: 'var(--primary-color)',
-                  border: '1px solid var(--border-primary)',
-                  borderRadius: '4px',
-                  color: 'white',
-                  cursor: 'pointer',
-                  fontWeight: 'bold',
-                }}
-                title="Send screenshot with annotations to AI chat"
-              >
-                Send to AI
-              </button>
               <button
                 onClick={handleCaptureScreenshot}
                 disabled={isCapturing}

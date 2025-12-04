@@ -1484,64 +1484,6 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     });
   }, []);
 
-  // Listen for wireframe screenshot events
-  useEffect(() => {
-    const handleWireframeScreenshot = async (event: CustomEvent<{ file: File }>) => {
-      const { file } = event.detail;
-      const activeTab = sessionTabs.find(tab => tab.id === activeTabId);
-
-      if (!activeTab) {
-        console.warn('[AgenticPanel] No active tab to add wireframe screenshot');
-        return;
-      }
-
-      try {
-        // Validate the file
-        const validation = await window.electronAPI.invoke('attachment:validate', {
-          fileSize: file.size,
-          mimeType: file.type
-        });
-
-        if (!validation.valid) {
-          console.error('[AgenticPanel] Wireframe screenshot validation failed:', validation.error);
-          alert(validation.error || 'Invalid screenshot file');
-          return;
-        }
-
-        // Save the file to disk via AttachmentService (same as pasted images)
-        const arrayBuffer = await file.arrayBuffer();
-        const uint8Array = new Uint8Array(arrayBuffer);
-
-        const result = await window.electronAPI.invoke('attachment:save', {
-          fileBuffer: Array.from(uint8Array),
-          filename: file.name,
-          mimeType: file.type,
-          sessionId: activeTabId
-        });
-
-        if (result.success && result.attachment) {
-          // Add to active tab's draft attachments
-          const currentAttachments = activeTab.draftAttachments || [];
-          handleDraftAttachmentsChange(activeTabId!, [...currentAttachments, result.attachment]);
-
-          console.log('[AgenticPanel] Wireframe screenshot saved and added to attachments:', file.name);
-        } else {
-          console.error('[AgenticPanel] Failed to save wireframe screenshot:', result.error);
-          alert(result.error || 'Failed to save screenshot');
-        }
-      } catch (error) {
-        console.error('[AgenticPanel] Error handling wireframe screenshot:', error);
-        alert('Failed to attach screenshot');
-      }
-    };
-
-    window.addEventListener('wireframe-screenshot-ready', handleWireframeScreenshot as EventListener);
-
-    return () => {
-      window.removeEventListener('wireframe-screenshot-ready', handleWireframeScreenshot as EventListener);
-    };
-  }, [sessionTabs, activeTabId, handleDraftAttachmentsChange]);
-
   // Handle history navigation (up/down arrow in input)
   const handleNavigateHistory = useCallback((sessionId: string, direction: 'up' | 'down') => {
     const currentTab = sessionTabs.filter(tab => tab != null).find(tab => tab.id === sessionId);
