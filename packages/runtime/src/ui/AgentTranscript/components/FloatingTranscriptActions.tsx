@@ -12,6 +12,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import type { PromptMarker } from '../types';
 import { formatShortTime } from '../../../utils/dateUtils';
+import { MaterialSymbol } from '../../icons/MaterialSymbol';
 import './FloatingTranscriptActions.css';
 
 // =============================================================================
@@ -168,17 +169,11 @@ export const FloatingTranscriptActions: React.FC<FloatingTranscriptActionsProps>
         title={isSidebarCollapsed ? 'Show file history' : 'Hide file history'}
       >
         {isSidebarCollapsed ? (
-          // Show history icon (chevron left to expand)
-          <>
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ width: '20px', height: '20px' }}>
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </>
+          // Show history icon (clock to expand)
+          <MaterialSymbol icon="schedule" size={20} />
         ) : (
           // Hide history icon (chevron right to collapse)
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ width: '20px', height: '20px' }}>
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
+          <MaterialSymbol icon="chevron_right" size={20} />
         )}
       </button>
     </div>

@@ -5,6 +5,7 @@ import type { TranscriptSettings } from '../types';
 import { MessageSegment } from './MessageSegment';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { ProviderIcon } from '../../icons/ProviderIcons';
+import { MaterialSymbol } from '../../icons/MaterialSymbol';
 import { formatMessageTime } from '../../../utils/dateUtils';
 import { JSONViewer } from './JSONViewer';
 import { formatToolArguments } from '../utils/pathResolver';
@@ -551,15 +552,10 @@ export const RichTranscriptView = React.forwardRef<
           <button onClick={() => toggleToolExpand(toolId)} className="rich-transcript-tool-button">
             {isSubAgent ? (
               // Document/clipboard icon for sub-agents
-              <svg className="rich-transcript-tool-icon sub-agent-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
+              <MaterialSymbol icon="description" size={16} className="rich-transcript-tool-icon sub-agent-icon" />
             ) : (
               // Wrench icon for regular tools
-              <svg className="rich-transcript-tool-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
+              <MaterialSymbol icon="build" size={16} className="rich-transcript-tool-icon" />
             )}
             <span className="rich-transcript-tool-name" title={tool.name || undefined}>
               {isSubAgent ? 'Sub-Agent' : toolDisplayName}
@@ -572,18 +568,12 @@ export const RichTranscriptView = React.forwardRef<
               return argStr ? <span className="rich-transcript-tool-args">{argStr}</span> : null;
             })()}
             {tool.result && !(toolMsg as any).isError && (
-              <svg className="rich-transcript-tool-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+              <MaterialSymbol icon="check_circle" size={16} className="rich-transcript-tool-success" />
             )}
             {tool.result && (toolMsg as any).isError && (
-              <svg className="rich-transcript-tool-error" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+              <MaterialSymbol icon="cancel" size={16} className="rich-transcript-tool-error" />
             )}
-            <svg className="rich-transcript-tool-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isExpanded ? "M19 9l-7 7-7-7" : "M9 5l7 7-7 7"} />
-            </svg>
+            <MaterialSymbol icon={isExpanded ? "expand_more" : "chevron_right"} size={16} className="rich-transcript-tool-chevron" />
           </button>
 
           {isExpanded && (
@@ -790,9 +780,7 @@ export const RichTranscriptView = React.forwardRef<
                           <div className="rich-transcript-message-header">
                             <div className={`rich-transcript-message-avatar ${isUser ? 'user' : 'assistant'}`}>
                               {isUser && (
-                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                </svg>
+                                <MaterialSymbol icon="person" size={18} />
                               )}
                             </div>
                             <div className="rich-transcript-message-meta">
@@ -811,13 +799,9 @@ export const RichTranscriptView = React.forwardRef<
                                   title="Copy message content"
                                 >
                                   {copiedMessageIndex === index ? (
-                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                    </svg>
+                                    <MaterialSymbol icon="check" size={16} />
                                   ) : (
-                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                    </svg>
+                                    <MaterialSymbol icon="content_copy" size={16} />
                                   )}
                                 </button>
                               )}
@@ -828,14 +812,9 @@ export const RichTranscriptView = React.forwardRef<
                                   title={isCollapsed ? "Show full message" : "Collapse message"}
                                 >
                                   {isCollapsed ? (
-                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                    </svg>
+                                    <MaterialSymbol icon="visibility" size={16} />
                                   ) : (
-                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                                    </svg>
+                                    <MaterialSymbol icon="visibility_off" size={16} />
                                   )}
                                 </button>
                               )}
@@ -890,9 +869,7 @@ export const RichTranscriptView = React.forwardRef<
               className="rich-transcript-scroll-button"
               title="Scroll to bottom"
             >
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-              </svg>
+              <MaterialSymbol icon="arrow_downward" size={20} />
             </button>
           </div>
         )}

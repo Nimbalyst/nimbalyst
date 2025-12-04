@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import type { FileEditSummary } from '../types';
 import { formatTimeAgo } from '../../../utils/dateUtils';
+import { MaterialSymbol } from '../../icons/MaterialSymbol';
 import './FileEditsSidebar.css';
 
 interface FileEditsSidebarProps {
@@ -131,27 +132,19 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
     switch (operation) {
       case 'create':
         return (
-          <svg className="file-edits-sidebar__icon file-edits-sidebar__icon--create" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
+          <MaterialSymbol icon="add" size={14} className="file-edits-sidebar__icon file-edits-sidebar__icon--create" />
         );
       case 'edit':
         return (
-          <svg className="file-edits-sidebar__icon file-edits-sidebar__icon--edit" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-          </svg>
+          <MaterialSymbol icon="edit" size={14} className="file-edits-sidebar__icon file-edits-sidebar__icon--edit" />
         );
       case 'delete':
         return (
-          <svg className="file-edits-sidebar__icon file-edits-sidebar__icon--delete" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
+          <MaterialSymbol icon="delete" size={14} className="file-edits-sidebar__icon file-edits-sidebar__icon--delete" />
         );
       case 'rename':
         return (
-          <svg className="file-edits-sidebar__icon file-edits-sidebar__icon--rename" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-          </svg>
+          <MaterialSymbol icon="drive_file_rename_outline" size={14} className="file-edits-sidebar__icon file-edits-sidebar__icon--rename" />
         );
       default:
         return null;
@@ -195,22 +188,15 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
     switch (linkType) {
       case 'edited':
         return (
-          <svg className="file-edits-sidebar__section-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-          </svg>
+          <MaterialSymbol icon="edit" size={14} className="file-edits-sidebar__section-icon" />
         );
       case 'referenced':
         return (
-          <svg className="file-edits-sidebar__section-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
-          </svg>
+          <MaterialSymbol icon="tag" size={14} className="file-edits-sidebar__section-icon" />
         );
       case 'read':
         return (
-          <svg className="file-edits-sidebar__section-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-          </svg>
+          <MaterialSymbol icon="visibility" size={14} className="file-edits-sidebar__section-icon" />
         );
     }
   };
@@ -237,14 +223,11 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
               {files.length}
             </span>
           </div>
-          <svg
+          <MaterialSymbol
+            icon={isCollapsed ? "chevron_right" : "expand_more"}
+            size={16}
             className={`file-edits-sidebar__section-chevron ${isCollapsed ? 'file-edits-sidebar__section-chevron--collapsed' : ''}`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
+          />
         </button>
 
         {!isCollapsed && (

@@ -1,5 +1,6 @@
 import React from 'react';
 import type { TodoItem } from '../types';
+import { MaterialSymbol } from '../../icons/MaterialSymbol';
 
 interface TodosSidebarProps {
   todos: TodoItem[];
@@ -14,21 +15,21 @@ export const TodosSidebar: React.FC<TodosSidebarProps> = ({
     switch (status) {
       case 'completed':
         return (
-          <svg style={{ width: '1rem', height: '1rem', color: 'var(--success-color)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
+          <span style={{ color: 'var(--success-color)' }}>
+            <MaterialSymbol icon="check_circle" size={16} />
+          </span>
         );
       case 'in_progress':
         return (
-          <svg style={{ width: '1rem', height: '1rem', color: 'var(--accent-primary)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
+          <span style={{ color: 'var(--accent-primary)' }}>
+            <MaterialSymbol icon="sync" size={16} />
+          </span>
         );
       case 'pending':
         return (
-          <svg style={{ width: '1rem', height: '1rem', color: 'var(--text-tertiary)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
+          <span style={{ color: 'var(--text-tertiary)' }}>
+            <MaterialSymbol icon="schedule" size={16} />
+          </span>
         );
     }
   };
@@ -89,9 +90,7 @@ export const TodosSidebar: React.FC<TodosSidebarProps> = ({
     <div className="flex flex-col h-full bg-surface-secondary border-r border-border-primary">
       <div className="p-4 border-b border-border-primary">
         <h3 className="font-semibold text-text-primary flex items-center gap-2">
-          <svg className="w-4 h-4" style={{ width: '1rem', height: '1rem' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-          </svg>
+          <MaterialSymbol icon="checklist" size={16} />
           Tasks
         </h3>
         <div className="mt-2">

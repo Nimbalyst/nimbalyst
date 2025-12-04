@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { MaterialSymbol } from '../../icons/MaterialSymbol';
 import './TranscriptSearchBar.css';
 
  /**
@@ -356,14 +357,7 @@ export const TranscriptSearchBar: React.FC<TranscriptSearchBarProps> = ({
           disabled={matchCount === 0}
           title="Previous match (Shift+Enter or Cmd+Shift+G)"
         >
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M5 15l7-7 7 7"
-            />
-          </svg>
+          <MaterialSymbol icon="keyboard_arrow_up" size={18} />
         </button>
 
         <button
@@ -372,14 +366,7 @@ export const TranscriptSearchBar: React.FC<TranscriptSearchBarProps> = ({
           disabled={matchCount === 0}
           title="Next match (Enter or Cmd+G)"
         >
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M19 9l-7 7-7-7"
-            />
-          </svg>
+          <MaterialSymbol icon="keyboard_arrow_down" size={18} />
         </button>
 
         <button
@@ -396,14 +383,7 @@ export const TranscriptSearchBar: React.FC<TranscriptSearchBarProps> = ({
           onClick={onClose}
           title="Close (Escape)"
         >
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M6 18L18 6M6 6l12 12"
-            />
-          </svg>
+          <MaterialSymbol icon="close" size={18} />
         </button>
       </div>
     </div>
