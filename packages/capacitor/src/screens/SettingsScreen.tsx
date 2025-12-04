@@ -27,6 +27,11 @@ export function SettingsScreen() {
   const [authToken, setAuthToken] = useState(config?.authToken ?? '');
   const [encryptionKey, setEncryptionKey] = useState('');
 
+  // Dev mode setup
+  const [showDevSetup, setShowDevSetup] = useState(false);
+  const [devJsonInput, setDevJsonInput] = useState('');
+  const [devJsonError, setDevJsonError] = useState<string | null>(null);
+
   // Load credentials on mount
   useEffect(() => {
     async function load() {
@@ -396,6 +401,102 @@ export function SettingsScreen() {
             <li>Scan the QR code with this app</li>
           </ol>
         </div>
+
+        {/* Dev Mode Setup - Only visible in development */}
+        {import.meta.env.DEV && (
+          <div className="mt-8">
+            <button
+              onClick={() => setShowDevSetup(!showDevSetup)}
+              className="w-full py-3 px-4 rounded-lg font-medium text-white bg-orange-500 hover:bg-orange-600 transition-colors flex items-center justify-center gap-2"
+            >
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+              </svg>
+              {showDevSetup ? 'Hide Dev Setup' : 'Dev Mode Setup'}
+            </button>
+
+            {showDevSetup && (
+              <div className="mt-4 p-4 rounded-lg bg-orange-500/10 border-2 border-orange-500/50">
+                <h3 className="text-sm font-semibold text-orange-500 mb-3 flex items-center gap-2">
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                    <line x1="12" y1="9" x2="12" y2="13" />
+                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                  </svg>
+                  Development Only
+                </h3>
+                <p className="text-xs text-[var(--text-secondary)] mb-4">
+                  To test sync in a desktop browser:
+                </p>
+
+                <ol className="text-xs text-[var(--text-secondary)] space-y-2 list-decimal list-inside mb-4">
+                  <li>Open Nimbalyst desktop app (in dev mode)</li>
+                  <li>Go to Settings &gt; Session Sync</li>
+                  <li>Click "Pair Mobile Device"</li>
+                  <li>Click the orange "Copy JSON (Dev Mode)" button</li>
+                  <li>Paste the JSON below</li>
+                </ol>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-orange-500 mb-1">
+                      Paste QR JSON Payload
+                    </label>
+                    <textarea
+                      value={devJsonInput}
+                      onChange={(e) => {
+                        setDevJsonInput(e.target.value);
+                        setDevJsonError(null);
+                      }}
+                      placeholder='{"version":1,"serverUrl":"ws://...","userId":"...","authToken":"...","encryptionKeySeed":"...","expiresAt":...}'
+                      className="w-full px-3 py-2 rounded-lg border border-orange-500/50 bg-[var(--surface-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono text-xs"
+                      rows={4}
+                    />
+                  </div>
+
+                  {devJsonError && (
+                    <div className="p-2 rounded-lg bg-[rgba(239,68,68,0.1)] border border-[rgba(239,68,68,0.3)]">
+                      <p className="text-xs text-[var(--error-color)]">{devJsonError}</p>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={async () => {
+                      try {
+                        const payload = parseQRPayload(devJsonInput);
+                        if (!payload) {
+                          setDevJsonError('Invalid JSON format. Make sure to copy the full payload from the desktop app.');
+                          return;
+                        }
+
+                        // Save credentials from payload
+                        const creds = await saveFromQRPayload(payload);
+                        setCredentials(creds);
+
+                        // Update sync config
+                        const syncConfig = await toSyncConfig();
+                        if (syncConfig) {
+                          setConfig(syncConfig);
+                        }
+
+                        setDevJsonInput('');
+                        setShowDevSetup(false);
+                        navigate('/');
+                      } catch (error) {
+                        console.error('[SettingsScreen] Dev setup error:', error);
+                        setDevJsonError(error instanceof Error ? error.message : 'Failed to parse JSON');
+                      }
+                    }}
+                    disabled={!devJsonInput.trim()}
+                    className="w-full py-2 px-4 rounded-lg font-medium text-white bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Connect with JSON
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </main>
     </div>
   );
