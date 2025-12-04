@@ -220,6 +220,14 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
   const encryptionKeyRef = useRef<ForgeKey | null>(null);
   const lastSequenceRef = useRef<number>(0);
 
+  // Reset state when sessionId changes
+  useEffect(() => {
+    setMessages([]);
+    setMetadata({});
+    setError(null);
+    lastSequenceRef.current = 0;
+  }, [sessionId]);
+
   // Decrypt a message
   const decryptMessage = useCallback(
     async (encrypted: EncryptedMessage): Promise<SyncedMessage | null> => {
@@ -546,6 +554,7 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
           </div>
         ) : (
           <AgentTranscriptPanel
+            key={sessionId}
             sessionId={sessionId || ''}
             sessionData={sessionData}
             hideSidebar={true}
