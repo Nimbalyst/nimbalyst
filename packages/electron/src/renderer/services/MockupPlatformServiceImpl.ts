@@ -5,7 +5,7 @@
  * to communicate with the main process for file operations.
  */
 
-import type { MockupPlatformService, WireframeFileInfo } from '@nimbalyst/runtime';
+import type { MockupPlatformService, MockupFileInfo } from '@nimbalyst/runtime';
 
 export class MockupPlatformServiceImpl implements MockupPlatformService {
   private static instance: MockupPlatformServiceImpl | null = null;
@@ -20,10 +20,10 @@ export class MockupPlatformServiceImpl implements MockupPlatformService {
   }
 
   /**
-   * Capture a screenshot of a wireframe and save it to the output path.
+   * Capture a screenshot of a mockup and save it to the output path.
    */
   async captureScreenshot(
-    wireframePath: string,
+    mockupPath: string,
     outputPath: string,
   ): Promise<void> {
     const electronAPI = (window as any).electronAPI;
@@ -35,7 +35,7 @@ export class MockupPlatformServiceImpl implements MockupPlatformService {
       // Use the mockup-specific IPC handler to capture and save
       const result = await electronAPI.invoke(
         'mockup:capture-and-save-screenshot',
-        wireframePath,
+        mockupPath,
         outputPath,
       );
 
@@ -49,9 +49,9 @@ export class MockupPlatformServiceImpl implements MockupPlatformService {
   }
 
   /**
-   * Open the wireframe file in the editor.
+   * Open the mockup file in the editor.
    */
-  openWireframeEditor(wireframePath: string): void {
+  openMockupEditor(mockupPath: string): void {
     const electronAPI = (window as any).electronAPI;
     if (!electronAPI) {
       console.error('[MockupPlatformService] electronAPI not available');
@@ -62,9 +62,9 @@ export class MockupPlatformServiceImpl implements MockupPlatformService {
     // handleWorkspaceFileSelect in the renderer
     electronAPI.invoke('workspace:open-file', {
       workspacePath: (window as any).__workspacePath || '',
-      filePath: wireframePath,
+      filePath: mockupPath,
     }).catch((error: Error) => {
-      console.error('[MockupPlatformService] Failed to open wireframe:', error);
+      console.error('[MockupPlatformService] Failed to open mockup:', error);
     });
   }
 
@@ -169,40 +169,40 @@ export class MockupPlatformServiceImpl implements MockupPlatformService {
   }
 
   /**
-   * List all wireframe files in the workspace.
+   * List all mockup files in the workspace.
    */
-  async listWireframeFiles(): Promise<WireframeFileInfo[]> {
+  async listMockupFiles(): Promise<MockupFileInfo[]> {
     const electronAPI = (window as any).electronAPI;
     if (!electronAPI) {
       return [];
     }
 
     try {
-      const result = await electronAPI.invoke('mockup:list-wireframes');
+      const result = await electronAPI.invoke('mockup:list-mockups');
       return result || [];
     } catch (error) {
-      console.error('[MockupPlatformService] Failed to list wireframe files:', error);
+      console.error('[MockupPlatformService] Failed to list mockup files:', error);
       return [];
     }
   }
 
   /**
-   * Create a new wireframe file.
+   * Create a new mockup file.
    */
-  async createWireframeFile(name: string, directory: string): Promise<string> {
+  async createMockupFile(name: string, directory: string): Promise<string> {
     const electronAPI = (window as any).electronAPI;
     if (!electronAPI) {
       throw new Error('electronAPI not available');
     }
 
     try {
-      const result = await electronAPI.invoke('mockup:create-wireframe', name, directory);
+      const result = await electronAPI.invoke('mockup:create-mockup', name, directory);
       if (!result.success) {
-        throw new Error(result.error || 'Failed to create wireframe');
+        throw new Error(result.error || 'Failed to create mockup');
       }
       return result.filePath;
     } catch (error) {
-      console.error('[MockupPlatformService] Failed to create wireframe:', error);
+      console.error('[MockupPlatformService] Failed to create mockup:', error);
       throw error;
     }
   }

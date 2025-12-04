@@ -30,8 +30,8 @@ import { loadFileIntoWindow } from '../file/FileOperations';
 function getFileType(filePath: string): string {
     const lowerPath = filePath.toLowerCase();
     // Check for compound extensions first
-    if (lowerPath.endsWith('.wireframe.html')) {
-        return 'wireframe';
+    if (lowerPath.endsWith('.mockup.html')) {
+        return 'mockup';
     }
     const ext = extname(filePath).toLowerCase();
     const typeMap: Record<string, string> = {

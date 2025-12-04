@@ -36,9 +36,9 @@ You can still answer questions, provide information, and have general conversati
   }
 
   const fileType = documentContext?.fileType || 'markdown';
-  const isWireframe = fileType === 'wireframe';
-  const wireframeSelection = (documentContext as any)?.wireframeSelection;
-  const wireframeDrawing = (documentContext as any)?.wireframeDrawing;
+  const isMockup = fileType === 'mockup';
+  const mockupSelection = (documentContext as any)?.mockupSelection;
+  const mockupDrawing = (documentContext as any)?.mockupDrawing;
 
   return base + `
 
@@ -49,22 +49,22 @@ File path: ${documentContext?.filePath || 'untitled'}
 File type: ${fileType}
 ${(documentContext as any)?.cursorPosition ? `Cursor position: Line ${(documentContext as any).cursorPosition.line}, Column ${(documentContext as any).cursorPosition.column}` : ''}
 ${selectionPreview ? `Selected text: "${selectionPreview}"` : ''}
-${wireframeSelection ? `
-🎯 SELECTED WIREFRAME ELEMENT:
-The user has clicked on this element in the wireframe preview:
-- Tag: <${wireframeSelection.tagName}>
-- CSS Selector: ${wireframeSelection.selector}
+${mockupSelection ? `
+🎯 SELECTED MOCKUP ELEMENT:
+The user has clicked on this element in the mockup preview:
+- Tag: <${mockupSelection.tagName}>
+- CSS Selector: ${mockupSelection.selector}
 - HTML:
 \`\`\`html
-${wireframeSelection.outerHTML}
+${mockupSelection.outerHTML}
 \`\`\`
 
 When the user refers to "this element", "this button", "this section", etc.,
 they mean THIS selected element above. Use its CSS selector to target it precisely in edits.
 ` : ''}
-${wireframeDrawing ? `
+${mockupDrawing ? `
 ✏️ USER DRAWING ANNOTATIONS:
-The user has drawn annotations on the wireframe to show you what they want.
+The user has drawn annotations on the mockup to show you what they want.
 The drawing includes circles, arrows, and marks to indicate:
 - Which elements to modify (circled items)
 - Where to move things (arrows)
@@ -86,14 +86,14 @@ The user expects you to understand their visual intent from the drawing.
 they are referring to THIS file above (${documentContext?.filePath || 'untitled'}),
 NOT any other files mentioned in project instructions or context.
 
-${documentContext?.content ? `Full content of the active document:\n\`\`\`${isWireframe ? 'html' : ''}\n${documentContext.content}\n\`\`\`\n` : ''}
+${documentContext?.content ? `Full content of the active document:\n\`\`\`${isMockup ? 'html' : ''}\n${documentContext.content}\n\`\`\`\n` : ''}
 ═══════════════════════════════════════════════════════════
 
-${isWireframe ? `
-🎨 WIREFRAME EDITING MODE
-You are editing a WireframeLM design file (.wireframe.html).
+${isMockup ? `
+🎨 MOCKUP EDITING MODE
+You are editing a MockupLM design file (.mockup.html).
 
-WIREFRAME DESIGN GUIDELINES:
+MOCKUP DESIGN GUIDELINES:
 - This is a static HTML mockup for UI/UX design - NOT a functional web app
 - Focus on layout, visual hierarchy, and design patterns
 - Use semantic HTML and clean, minimal CSS
@@ -102,7 +102,7 @@ WIREFRAME DESIGN GUIDELINES:
 - Use modern CSS (flexbox, grid, CSS variables) for layouts
 - Include responsive design patterns when appropriate
 
-COMMON WIREFRAME PATTERNS:
+COMMON MOCKUP PATTERNS:
 - Navigation bars, headers, footers
 - Card layouts, grids, lists
 - Forms with inputs, labels, buttons
@@ -110,10 +110,10 @@ COMMON WIREFRAME PATTERNS:
 - Loading states, empty states, error states
 - Mobile-first responsive designs
 
-EDITING WIREFRAMES:
+EDITING MOCKUPS:
 - Use applyDiff to modify existing HTML/CSS
 - Use streamContent to add new sections
-- Be concise - wireframes should be clean and focused
+- Be concise - mockups should be clean and focused
 - Provide semantic HTML structure with appropriate ARIA labels
 - Use CSS variables for colors and spacing for easy theming
 
@@ -123,9 +123,9 @@ EXAMPLE REQUESTS:
 - "add a navigation bar" → Create semantic <nav> with links
 - "use a card layout" → Wrap content in grid/flex containers with card styling
 
-You can edit this wireframe using your native Edit and Write tools.
+You can edit this mockup using your native Edit and Write tools.
 Changes will appear as visual diffs that the user can review and approve/reject.
-The wireframe will render in real-time in the editor's preview iframe.
+The mockup will render in real-time in the editor's preview iframe.
 ` : `You can edit this ${fileType} file using your native Edit and Write tools.
 When you edit files, changes will appear as visual diffs that the user can review and approve/reject.`}
 
@@ -252,19 +252,19 @@ IMPORTANT: Call the \`name_session\` tool ONCE at the very start of this convers
 Do NOT call this tool more than once per session. It should be called early, typically in your first response after understanding what the user wants to accomplish.`;
   }
 
-  // Add WireframeLM instructions
+  // Add MockupLM instructions
   base += `
 
-## WireframeLM - Visual Planning
+## MockupLM - Visual Planning
 
-For any planning, UI mockups, or visual design requests, create a \`.wireframe.html\` file with HTML/CSS. If you are already implementing, you do not need to create a wireframeLM mockup, only for planning. The purpose is to share and iterate on designs with the user.
+For any planning, UI mockups, or visual design requests, create a \`.mockup.html\` file with HTML/CSS. If you are already implementing, you do not need to create a mockupLM mockup, only for planning. The purpose is to share and iterate on designs with the user.
 
-The user may draw annotations on the wireframe (circles, arrows, highlights). You can ONLY see these annotations by using the \`mcp__nimbalyst-mcp__capture_wireframe_screenshot\` tool - they are not in the HTML source.
+The user may draw annotations on the mockup (circles, arrows, highlights). You can ONLY see these annotations by using the \`mcp__nimbalyst-mcp__capture_mockup_screenshot\` tool - they are not in the HTML source.
 
 **Workflow:**
-1. Create wireframe file (e.g., \`plans/feature.wireframe.html\`) with HTML and inline CSS
-2. Use Task tool to spawn a sub-agent that will iteratively verify and fix the wireframe:
-   - Capture screenshot with \`mcp__nimbalyst-mcp__capture_wireframe_screenshot\`
+1. Create mockup file (e.g., \`plans/feature.mockup.html\`) with HTML and inline CSS
+2. Use Task tool to spawn a sub-agent that will iteratively verify and fix the mockup:
+   - Capture screenshot with \`mcp__nimbalyst-mcp__capture_mockup_screenshot\`
    - Analyze for layout/visual issues AND user annotations
    - Fix with Edit tool
    - Re-capture and repeat until correct`;

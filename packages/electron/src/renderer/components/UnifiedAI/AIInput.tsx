@@ -6,7 +6,7 @@ import { AttachmentPreviewList } from '../AgenticCoding/AttachmentPreviewList';
 import { ModeTag, AIMode } from './ModeTag';
 import { ModelSelector } from './ModelSelector';
 import { ContextUsageDisplay } from './ContextUsageDisplay';
-import { WireframeAnnotationIndicator } from './WireframeAnnotationIndicator';
+import { MockupAnnotationIndicator } from './MockupAnnotationIndicator';
 import {
   MemoryPromptIndicator,
   MemorySaveButton,
@@ -69,7 +69,7 @@ interface AIInputProps {
   onQueue?: (message: string) => void;
   queueCount?: number;
 
-  // Wireframe annotation indicator support
+  // Mockup annotation indicator support
   currentFilePath?: string;
   lastUserMessageTimestamp?: number | null;
 }
@@ -616,8 +616,8 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
           />
         )}
 
-        {/* Wireframe annotation indicator - shown when there are new annotations */}
-        <WireframeAnnotationIndicator
+        {/* Mockup annotation indicator - shown when there are new annotations */}
+        <MockupAnnotationIndicator
           currentFilePath={currentFilePath}
           lastUserMessageTimestamp={lastUserMessageTimestamp ?? null}
         />

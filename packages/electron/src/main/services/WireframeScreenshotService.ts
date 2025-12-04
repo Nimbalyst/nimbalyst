@@ -4,11 +4,11 @@ import * as path from 'path';
 import { findWindowByWorkspace } from '../window/WindowManager';
 
 /**
- * Service to provide wireframe screenshot capture capabilities
+ * Service to provide mockup screenshot capture capabilities
  * This runs in the electron main process and is called by the shared MCP server
  */
-export class WireframeScreenshotService {
-  private static instance: WireframeScreenshotService | null = null;
+export class MockupScreenshotService {
+  private static instance: MockupScreenshotService | null = null;
 
   // Store pending screenshot requests by request ID
   private pendingRequests = new Map<string, {
@@ -19,11 +19,11 @@ export class WireframeScreenshotService {
 
   private constructor() {}
 
-  public static getInstance(): WireframeScreenshotService {
-    if (!WireframeScreenshotService.instance) {
-      WireframeScreenshotService.instance = new WireframeScreenshotService();
+  public static getInstance(): MockupScreenshotService {
+    if (!MockupScreenshotService.instance) {
+      MockupScreenshotService.instance = new MockupScreenshotService();
     }
-    return WireframeScreenshotService.instance;
+    return MockupScreenshotService.instance;
   }
 
   /**
@@ -39,8 +39,8 @@ export class WireframeScreenshotService {
   }
 
   /**
-   * Capture a screenshot of a wireframe file for MCP
-   * This is called by the shared MCP server when the capture_wireframe_screenshot tool is invoked
+   * Capture a screenshot of a mockup file for MCP
+   * This is called by the shared MCP server when the capture_mockup_screenshot tool is invoked
    */
   public async captureScreenshotForMCP(filePath: string, workspacePath: string): Promise<{ success: boolean; imageBase64?: string; mimeType?: string; error?: string }> {
     // First, try to capture from an open window/tab (this includes user annotations)
@@ -52,7 +52,7 @@ export class WireframeScreenshotService {
     }
 
     // Fall back to headless capture (no annotations, but works for any file)
-    console.log('[WireframeScreenshotService] File not open in tab, falling back to headless capture');
+    console.log('[MockupScreenshotService] File not open in tab, falling back to headless capture');
     return this.captureHeadless(filePath);
   }
 
@@ -79,7 +79,7 @@ export class WireframeScreenshotService {
     }
 
     // Generate unique request ID
-    const requestId = `wireframe-screenshot-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    const requestId = `mockup-screenshot-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
     // Create promise for the result
     return new Promise((resolve) => {
@@ -96,7 +96,7 @@ export class WireframeScreenshotService {
 
       // Send IPC message to renderer to capture screenshot
       try {
-        targetWindow!.webContents.send('wireframe:capture-screenshot', {
+        targetWindow!.webContents.send('mockup:capture-screenshot', {
           requestId,
           filePath
         });
@@ -119,7 +119,7 @@ export class WireframeScreenshotService {
     let headlessWindow: BrowserWindow | null = null;
 
     try {
-      // Read the wireframe HTML file
+      // Read the mockup HTML file
       const htmlContent = await fs.readFile(filePath, 'utf-8');
 
       // Create a hidden window for rendering
@@ -148,7 +148,7 @@ export class WireframeScreenshotService {
         await headlessWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(htmlWithBase)}`);
       } catch (loadError) {
         const errorMsg = loadError instanceof Error ? loadError.message : 'Unknown error';
-        throw new Error(`Failed to load wireframe HTML (file may be too large or contain invalid content): ${errorMsg}`);
+        throw new Error(`Failed to load mockup HTML (file may be too large or contain invalid content): ${errorMsg}`);
       }
 
       // Wait for the page to fully render
@@ -159,7 +159,7 @@ export class WireframeScreenshotService {
       const pngBuffer = image.toPNG();
       const base64Data = pngBuffer.toString('base64');
 
-      console.log('[WireframeScreenshotService] Headless screenshot captured successfully');
+      console.log('[MockupScreenshotService] Headless screenshot captured successfully');
 
       return {
         success: true,
@@ -167,7 +167,7 @@ export class WireframeScreenshotService {
         mimeType: 'image/png'
       };
     } catch (error) {
-      console.error('[WireframeScreenshotService] Headless capture failed:', error);
+      console.error('[MockupScreenshotService] Headless capture failed:', error);
       return {
         success: false,
         error: `Failed to capture screenshot: ${error instanceof Error ? error.message : 'Unknown error'}`
@@ -193,6 +193,6 @@ export class WireframeScreenshotService {
       });
     }
     this.pendingRequests.clear();
-    console.log('[WireframeScreenshotService] Cleanup complete');
+    console.log('[MockupScreenshotService] Cleanup complete');
   }
 }

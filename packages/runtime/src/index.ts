@@ -85,7 +85,7 @@ export {
 } from './plugins/MockupPlugin';
 export type {
   MockupPlatformService,
-  WireframeFileInfo,
+  MockupFileInfo,
   MockupPickerResult,
 } from './plugins/MockupPlugin/MockupPlatformService';
 export {

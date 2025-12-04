@@ -36,8 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CollabV3 sync system with E2E encryption (replaces Y.js for mobile sync)
 - Click to enlarge image attachments in AI chat input
 - Close attachment viewer with Escape key
-- Wireframe mockup nodes now support resizing with size persistence
-- Embed wireframe mockups as screenshot nodes in documents
+- Mockup mockup nodes now support resizing with size persistence
+- Embed mockup mockups as screenshot nodes in documents
 
 ### Changed
 - Consolidated icons under unified MaterialSymbol system
@@ -54,8 +54,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sync no longer creates duplicate messages or excessive WebSockets
 - Mobile-queued prompts no longer duplicate or refire on desktop
 - Mobile-queued prompts now show thinking indicator on desktop
-- Wireframe drawings render correctly on scrolled content
-- Wireframe Edit button now opens file in tab
+- Mockup drawings render correctly on scrolled content
+- Mockup Edit button now opens file in tab
 - File tree items now have border-radius
 - SyncPanel and provider panels display correctly in settings
 
@@ -70,13 +70,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mouseover tooltips for slash command suggestions
 - (+) button to expand and show all suggested slash commands
 - Description text for slash commands in autocomplete
-- `/mockup` command for creating wireframe mockups
+- `/mockup` command for creating mockup mockups
 - "Are you sure?" confirmation dialog when starting fresh database
-- WireframeLM instructions added to system prompt and `/plan` command
-- MCP tool for wireframeLM with headless render fallback
+- MockupLM instructions added to system prompt and `/plan` command
+- MCP tool for mockupLM with headless render fallback
 - Documentation update instructions to `/review-branch` command
 - PostHog tracking for slash command suggestion clicks
-- PostHog tracking for wireframe file creation
+- PostHog tracking for mockup file creation
 
 ### Changed
 <!-- Changes to existing functionality go here -->
@@ -86,7 +86,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Two absolute imports failing in modules
 - Command regex to list speckit in autocomplete
 - Directory naming: `.nimbalyst-local` corrected to `nimbalyst-local`
-- WireframeLM annotations now sent to agent when present
+- MockupLM annotations now sent to agent when present
 
 ### Removed
 <!-- Removed features go here -->
@@ -95,7 +95,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
-- WireframeLM-style wireframe editor with AI integration
+- MockupLM-style mockup editor with AI integration
 - Recursive scanning for Claude commands and agents (BMAD v4 fix)
 - Maximum file scan limit increased from 1,000 to 2,000
 - TypeScript files now show distinct TS icon in file tree

@@ -11,7 +11,7 @@ Nimbalyst runs MCP servers **inside the Electron main process** to provide AI ca
 1. **Shared MCP Server** (`httpServer.ts`) - Port varies, provides:
    - `applyDiff` - Apply code replacements to documents
    - `streamContent` - Stream content to documents
-   - `capture_wireframe_screenshot` - Capture annotated wireframe screenshots
+   - `capture_mockup_screenshot` - Capture annotated mockup screenshots
 
 2. **Session Naming MCP Server** (`sessionNamingServer.ts`) - Port varies, provides:
    - `update_session_title` - Update AI session titles
@@ -43,7 +43,7 @@ Nimbalyst runs MCP servers **inside the Electron main process** to provide AI ca
 │              Service Layer                        │
 │  (electron/src/main/services/*)                  │
 │                                                   │
-│  - WireframeScreenshotService                    │
+│  - MockupScreenshotService                    │
 │  - SessionNamingService                          │
 │  - EditorRegistry (via IPC)                      │
 └─────────────────────────────────────────────────┘
@@ -52,7 +52,7 @@ Nimbalyst runs MCP servers **inside the Electron main process** to provide AI ca
 │            Renderer Process                       │
 │  (electron/src/renderer/*)                       │
 │                                                   │
-│  - WireframeViewer (screenshot capture)          │
+│  - MockupViewer (screenshot capture)          │
 │  - Editor components (content streaming)         │
 └─────────────────────────────────────────────────┘
 ```
@@ -525,7 +525,7 @@ app.whenReady().then(async () => {
 
 ### Pattern 1: Hot vs Cold Path
 
-Used in `WireframeScreenshotService`:
+Used in `MockupScreenshotService`:
 
 ```typescript
 // Try hot path first (e.g., open tab with annotations)
@@ -541,7 +541,7 @@ return this.tryColdPath();
 
 ### Pattern 2: Request-Response via IPC
 
-Used in `WireframeScreenshotService`:
+Used in `MockupScreenshotService`:
 
 ```typescript
 // Generate unique request ID
@@ -642,7 +642,7 @@ See existing implementations:
    - Session-scoped context
    - Direct database updates
 
-3. **Wireframe Screenshot Service**: `packages/electron/src/main/services/WireframeScreenshotService.ts`
+3. **Mockup Screenshot Service**: `packages/electron/src/main/services/MockupScreenshotService.ts`
    - Hot/cold path pattern
    - Request-response via IPC
    - Timeout handling

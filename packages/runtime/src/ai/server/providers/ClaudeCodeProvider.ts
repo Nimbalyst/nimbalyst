@@ -59,7 +59,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   }> = new Map();
 
   // Shared MCP server port (injected from electron main process)
-  // This server provides multiple tools: applyDiff, streamContent, capture_wireframe_screenshot
+  // This server provides multiple tools: applyDiff, streamContent, capture_mockup_screenshot
   private static mcpServerPort: number | null = null;
 
   // Session naming MCP server port (injected from electron main process)
@@ -1447,7 +1447,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     // and merge with built-in MCP servers
     const config: any = {};
 
-    // Include shared MCP server if it's started (provides capture_wireframe_screenshot tool)
+    // Include shared MCP server if it's started (provides capture_mockup_screenshot tool)
     // Note: applyDiff and streamContent are used via direct IPC, not through Claude Code MCP
     if (ClaudeCodeProvider.mcpServerPort !== null && workspacePath) {
       config['nimbalyst-mcp'] = {

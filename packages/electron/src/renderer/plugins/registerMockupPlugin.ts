@@ -3,7 +3,7 @@
  *
  * This sets up the MockupPlatformService implementation that provides
  * the Electron-specific functionality for capturing screenshots and
- * opening wireframes, and registers the plugin with the plugin registry.
+ * opening mockups, and registers the plugin with the plugin registry.
  */
 
 import {
@@ -39,9 +39,9 @@ export function registerMockupPlugin(): void {
     userCommands: [
       {
         title: 'Mockup',
-        description: 'Insert a wireframe mockup',
+        description: 'Insert a mockup mockup',
         icon: 'design_services',
-        keywords: ['mockup', 'wireframe', 'design', 'prototype', 'ui', 'layout'],
+        keywords: ['mockup', 'mockup', 'design', 'prototype', 'ui', 'layout'],
         command: INSERT_MOCKUP_COMMAND,
         // When called without payload, the plugin calls showMockupPicker which opens the picker menu
       },

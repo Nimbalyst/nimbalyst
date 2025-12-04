@@ -129,7 +129,7 @@ export function WorkspaceSidebar({
   const hasLoadedSettingsRef = useRef(false);
   const [showNewFileMenu, setShowNewFileMenu] = useState(false);
   const [newFileMenuPosition, setNewFileMenuPosition] = useState({ x: 0, y: 0 });
-  const [wireframeEnabled, setWireframeEnabled] = useState(false);
+  const [mockupEnabled, setMockupEnabled] = useState(false);
   const [pendingFileType, setPendingFileType] = useState<NewFileType | null>(null);
 
   // Load file tree settings from workspace state
@@ -203,12 +203,12 @@ export function WorkspaceSidebar({
     setIsFileModalOpen(true);
   };
 
-  const createWireframeContent = () => `<!DOCTYPE html>
+  const createMockupContent = () => `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wireframe</title>
+    <title>Mockup</title>
     <style>
         body {
             margin: 0;
@@ -226,8 +226,8 @@ export function WorkspaceSidebar({
 </head>
 <body>
     <div class="container">
-        <h1>New Wireframe</h1>
-        <p>Start designing your wireframe here.</p>
+        <h1>New Mockup</h1>
+        <p>Start designing your mockup here.</p>
     </div>
 </body>
 </html>`;
@@ -255,9 +255,9 @@ export function WorkspaceSidebar({
     if (fileType === 'markdown') {
       // Add .md extension if not present
       fullFileName = fileName.endsWith('.md') || fileName.endsWith('.markdown') ? fileName : `${fileName}.md`;
-    } else if (fileType === 'wireframe') {
-      // Add .wireframe.html extension if not present
-      fullFileName = fileName.endsWith('.wireframe.html') ? fileName : `${fileName}.wireframe.html`;
+    } else if (fileType === 'mockup') {
+      // Add .mockup.html extension if not present
+      fullFileName = fileName.endsWith('.mockup.html') ? fileName : `${fileName}.mockup.html`;
     } else {
       // Any type - keep filename as-is
       fullFileName = fileName;
@@ -266,7 +266,7 @@ export function WorkspaceSidebar({
     try {
       const basePath = targetFolder || workspacePath;
       const filePath = `${basePath}/${fullFileName}`;
-      const content = fileType === 'wireframe' ? createWireframeContent() : createInitialFileContent(fullFileName);
+      const content = fileType === 'mockup' ? createMockupContent() : createInitialFileContent(fullFileName);
 
       const result = await (window as any).electronAPI?.createFile?.(filePath, content);
       if (result?.success) {
@@ -450,20 +450,20 @@ export function WorkspaceSidebar({
       });
   }, [workspacePath]);
 
-  // Check if wireframe feature is enabled
+  // Check if mockup feature is enabled
   useEffect(() => {
     if (!window.electronAPI?.invoke) {
-      setWireframeEnabled(false);
+      setMockupEnabled(false);
       return;
     }
 
-    window.electronAPI.invoke('wireframeLM:is-enabled')
+    window.electronAPI.invoke('mockupLM:is-enabled')
       .then(result => {
-        setWireframeEnabled(result === true);
+        setMockupEnabled(result === true);
       })
       .catch(error => {
-        console.error('Failed to check wireframe enabled status:', error);
-        setWireframeEnabled(false);
+        console.error('Failed to check mockup enabled status:', error);
+        setMockupEnabled(false);
       });
   }, []);
 
@@ -994,7 +994,7 @@ export function WorkspaceSidebar({
               y={newFileMenuPosition.y}
               onSelect={handleNewFileTypeSelect}
               onClose={() => setShowNewFileMenu(false)}
-              wireframeEnabled={wireframeEnabled}
+              mockupEnabled={mockupEnabled}
             />
           )}
         </>
@@ -1010,22 +1010,22 @@ export function WorkspaceSidebar({
         title={
           pendingFileType === 'markdown'
             ? (targetFolder ? `New Markdown File in ${getFileName(targetFolder)}` : "New Markdown File")
-            : pendingFileType === 'wireframe'
-              ? (targetFolder ? `New Wireframe in ${getFileName(targetFolder)}` : "New Wireframe")
+            : pendingFileType === 'mockup'
+              ? (targetFolder ? `New Mockup in ${getFileName(targetFolder)}` : "New Mockup")
               : (targetFolder ? `New File in ${getFileName(targetFolder)}` : "New File")
         }
         placeholder={
           pendingFileType === 'markdown'
             ? "Enter name"
-            : pendingFileType === 'wireframe'
+            : pendingFileType === 'mockup'
               ? "Enter name"
               : "Enter file name with extension"
         }
         suffix={
           pendingFileType === 'markdown'
             ? ".md"
-            : pendingFileType === 'wireframe'
-              ? ".wireframe.html"
+            : pendingFileType === 'mockup'
+              ? ".mockup.html"
               : undefined
         }
         defaultValue=""

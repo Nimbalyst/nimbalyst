@@ -46,7 +46,7 @@ import ProjectSettingsScreen from './components/ProjectSettingsScreen/ProjectSet
 import { SettingsView } from './components/Settings/SettingsView';
 import { loadCustomTrackers } from './services/CustomTrackerLoader';
 import { customEditorRegistry } from './components/CustomEditors';
-import { WireframeViewer } from './components/CustomEditors/WireframeEditor/WireframeViewer';
+import { MockupViewer } from './components/CustomEditors/MockupEditor/MockupViewer';
 import { MockupPickerMenuHost } from './components/MockupPickerMenu';
 import './WorkspaceWelcome.css';
 
@@ -81,7 +81,7 @@ if (!pluginsRegistered) {
   registerAIChatPlugin();
   registerDiffApprovalBarPlugin(); // Diff approval bar in fixed tab header
   registerSearchReplacePlugin(); // Search/replace bar in fixed tab header
-  registerMockupPlugin(); // Mockup/wireframe embedding support
+  registerMockupPlugin(); // Mockup/mockup embedding support
   pluginsRegistered = true;
 }
 
@@ -94,16 +94,16 @@ export default function App() {
     const registerCustomEditors = async () => {
       try {
 
-        // Conditionally register WireframeLM based on settings
-        const wireframeLMEnabled = await window.electronAPI.invoke('wireframeLM:is-enabled');
-        if (wireframeLMEnabled) {
+        // Conditionally register MockupLM based on settings
+        const mockupLMEnabled = await window.electronAPI.invoke('mockupLM:is-enabled');
+        if (mockupLMEnabled) {
           customEditorRegistry.register({
-            extensions: ['.wireframe.html'],
-            component: WireframeViewer,
-            name: 'WireframeLM',
+            extensions: ['.mockup.html'],
+            component: MockupViewer,
+            name: 'MockupLM',
             supportsAI: true,
           });
-          logger.ui.info('[CustomEditors] WireframeLM editor registered');
+          logger.ui.info('[CustomEditors] MockupLM editor registered');
         }
 
         logger.ui.info('[CustomEditors] Custom editors registration complete');

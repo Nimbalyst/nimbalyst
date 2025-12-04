@@ -1,19 +1,19 @@
 /**
- * WireframeViewer - Custom editor for .wireframe.html files
+ * MockupViewer - Custom editor for .mockup.html files
  *
- * Renders HTML wireframes in an isolated iframe with theme support
- * and configuration from .nimbalyst/wireframe-lm/
+ * Renders HTML mockups in an isolated iframe with theme support
+ * and configuration from .nimbalyst/mockup-lm/
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { CustomEditorProps } from '../types';
 import { MonacoCodeEditor } from '../../MonacoCodeEditor';
 import { logger } from '../../../utils/logger';
-import { captureWireframeComposite } from './screenshotUtils';
+import { captureMockupComposite } from './screenshotUtils';
 
 type ViewMode = 'preview' | 'source';
 
-export const WireframeViewer: React.FC<CustomEditorProps> = ({
+export const MockupViewer: React.FC<CustomEditorProps> = ({
   filePath,
   fileName,
   initialContent,
@@ -46,10 +46,10 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
   const lastPointRef = useRef<{ x: number; y: number } | null>(null);
   const drawingPathsRef = useRef<Array<{ points: { x: number; y: number }[]; color: string }>>([]);
 
-  // Capture screenshot of the wireframe (based on WireframeLM implementation)
+  // Capture screenshot of the mockup (based on MockupLM implementation)
   const handleCaptureScreenshot = useCallback(async () => {
     if (!iframeRef.current) {
-      logger.ui.error('[WireframeViewer] No iframe reference available');
+      logger.ui.error('[MockupViewer] No iframe reference available');
       alert('Screenshot failed: iframe not ready');
       return;
     }
@@ -67,7 +67,7 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
 
       // Wait for iframe to be fully loaded
       if (iframeDoc.readyState !== 'complete') {
-        logger.ui.info('[WireframeViewer] Waiting for iframe to load...');
+        logger.ui.info('[MockupViewer] Waiting for iframe to load...');
         await new Promise((resolve) => {
           iframeWindow?.addEventListener('load', resolve, { once: true });
           // Timeout after 5 seconds
@@ -83,7 +83,7 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
         throw new Error(`Iframe has zero dimensions: ${iframeWidth}x${iframeHeight}`);
       }
 
-      logger.ui.info('[WireframeViewer] Starting screenshot capture', {
+      logger.ui.info('[MockupViewer] Starting screenshot capture', {
         iframeWidth,
         iframeHeight,
         readyState: iframeDoc.readyState,
@@ -99,7 +99,7 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
       const elemWidth = targetElement.scrollWidth || targetElement.offsetWidth || iframeWidth;
       const elemHeight = targetElement.scrollHeight || targetElement.offsetHeight || iframeHeight;
 
-      logger.ui.info('[WireframeViewer] Capturing element:', {
+      logger.ui.info('[MockupViewer] Capturing element:', {
         tagName: targetElement.tagName,
         hasStyles: iframeDoc.styleSheets.length,
         scrollWidth: targetElement.scrollWidth,
@@ -129,7 +129,7 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
         windowHeight: elemHeight,
       });
 
-      logger.ui.info('[WireframeViewer] Canvas created:', {
+      logger.ui.info('[MockupViewer] Canvas created:', {
         width: canvas.width,
         height: canvas.height,
       });
@@ -140,14 +140,14 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
           throw new Error('Failed to create image blob from canvas');
         }
 
-        logger.ui.info('[WireframeViewer] Blob created, size:', blob.size);
+        logger.ui.info('[MockupViewer] Blob created, size:', blob.size);
 
-        // Try to write to clipboard first (like WireframeLM)
+        // Try to write to clipboard first (like MockupLM)
         try {
           await navigator.clipboard.write([
             new ClipboardItem({ 'image/png': blob })
           ]);
-          logger.ui.info('[WireframeViewer] Screenshot copied to clipboard');
+          logger.ui.info('[MockupViewer] Screenshot copied to clipboard');
           // Show success feedback - use a more subtle notification
           const notification = document.createElement('div');
           notification.textContent = 'Screenshot copied to clipboard';
@@ -171,21 +171,21 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
           }, 3000);
         } catch (clipboardErr) {
           // Fallback to download if clipboard fails
-          logger.ui.warn('[WireframeViewer] Clipboard failed, downloading instead:', clipboardErr);
+          logger.ui.warn('[MockupViewer] Clipboard failed, downloading instead:', clipboardErr);
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
           a.href = url;
-          a.download = `${fileName.replace('.wireframe.html', '')}-screenshot-${timestamp}.png`;
+          a.download = `${fileName.replace('.mockup.html', '')}-screenshot-${timestamp}.png`;
           document.body.appendChild(a);
           a.click();
           document.body.removeChild(a);
           URL.revokeObjectURL(url);
-          logger.ui.info('[WireframeViewer] Screenshot downloaded');
+          logger.ui.info('[MockupViewer] Screenshot downloaded');
         }
       }, 'image/png');
     } catch (err) {
-      logger.ui.error('[WireframeViewer] Failed to capture screenshot:', err);
+      logger.ui.error('[MockupViewer] Failed to capture screenshot:', err);
       const errorMessage = err instanceof Error ? err.message : String(err);
       alert('Failed to capture screenshot: ' + errorMessage);
     } finally {
@@ -218,7 +218,7 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
     }
   }, [content, viewMode, onGetContentReady]);
 
-  // Load wireframe HTML content
+  // Load mockup HTML content
   useEffect(() => {
     const loadContent = async () => {
       try {
@@ -228,18 +228,18 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
         setError(null);
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : String(err);
-        logger.ui.error('[WireframeViewer] Failed to load content:', errorMsg);
+        logger.ui.error('[MockupViewer] Failed to load content:', errorMsg);
         setError(errorMsg);
       }
     };
 
     loadContent();
 
-    // Clear annotations when wireframe content is updated
+    // Clear annotations when mockup content is updated
     // (but only when initialContent changes, not on first load)
   }, [filePath, initialContent]);
 
-  // Clear annotations when filePath changes (switching to different wireframe)
+  // Clear annotations when filePath changes (switching to different mockup)
   useEffect(() => {
     // Clear drawing canvas
     const canvas = drawingCanvasRef.current;
@@ -309,7 +309,7 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
     const outerHTML = target.outerHTML;
     const tagName = target.tagName.toLowerCase();
 
-    logger.ui.info('[WireframeViewer] Element selected:', {
+    logger.ui.info('[MockupViewer] Element selected:', {
       selector,
       tagName,
       htmlLength: outerHTML.length,
@@ -349,7 +349,7 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
       });
     }
 
-    logger.ui.info('[WireframeViewer] Element deselected');
+    logger.ui.info('[MockupViewer] Element deselected');
   }, []);
 
   // Update iframe when content changes or when switching back to preview mode
@@ -377,7 +377,7 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
           iframeDoc.addEventListener('click', handleElementClick as any);
         }
       } catch (err) {
-        logger.ui.error('[WireframeViewer] Failed to update iframe:', err);
+        logger.ui.error('[MockupViewer] Failed to update iframe:', err);
       }
     }
 
@@ -403,10 +403,10 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
   // Expose file path to window for AI context (only when active)
   useEffect(() => {
     if (isActive) {
-      (window as any).__wireframeFilePath = filePath;
+      (window as any).__mockupFilePath = filePath;
       // Dispatch event to notify indicator with current annotation state
       const hasAnnotations = !!(drawingDataUrl || selectedElement);
-      const event = new CustomEvent('wireframe-annotation-changed', {
+      const event = new CustomEvent('mockup-annotation-changed', {
         detail: {
           filePath,
           annotationTimestamp,
@@ -418,9 +418,9 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
       window.dispatchEvent(event);
     } else {
       // Clear when not active so indicator hides when switching tabs
-      delete (window as any).__wireframeFilePath;
+      delete (window as any).__mockupFilePath;
       // Dispatch event to notify indicator
-      const event = new CustomEvent('wireframe-annotation-changed', {
+      const event = new CustomEvent('mockup-annotation-changed', {
         detail: {
           filePath: '',
           annotationTimestamp: null,
@@ -433,41 +433,41 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
     }
 
     return () => {
-      delete (window as any).__wireframeFilePath;
+      delete (window as any).__mockupFilePath;
     };
   }, [filePath, isActive, annotationTimestamp, drawingDataUrl, selectedElement]);
 
   // Expose selected element to window for AI context
   useEffect(() => {
-    (window as any).__wireframeSelectedElement = selectedElement;
+    (window as any).__mockupSelectedElement = selectedElement;
 
     return () => {
-      delete (window as any).__wireframeSelectedElement;
+      delete (window as any).__mockupSelectedElement;
     };
   }, [selectedElement]);
 
   // Expose drawing to window for AI context
   useEffect(() => {
-    (window as any).__wireframeDrawing = drawingDataUrl;
+    (window as any).__mockupDrawing = drawingDataUrl;
 
     return () => {
-      delete (window as any).__wireframeDrawing;
+      delete (window as any).__mockupDrawing;
     };
   }, [drawingDataUrl]);
 
   // Expose annotation timestamp to window for AI context
   useEffect(() => {
-    (window as any).__wireframeAnnotationTimestamp = annotationTimestamp;
+    (window as any).__mockupAnnotationTimestamp = annotationTimestamp;
 
     return () => {
-      delete (window as any).__wireframeAnnotationTimestamp;
+      delete (window as any).__mockupAnnotationTimestamp;
     };
   }, [annotationTimestamp]);
 
   // Dispatch custom event when annotations change (for AI chat indicator)
   useEffect(() => {
     const hasAnnotations = !!(drawingDataUrl || selectedElement);
-    const event = new CustomEvent('wireframe-annotation-changed', {
+    const event = new CustomEvent('mockup-annotation-changed', {
       detail: {
         filePath,
         annotationTimestamp,
@@ -502,7 +502,7 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
       });
     }
 
-    logger.ui.info('[WireframeViewer] All annotations cleared');
+    logger.ui.info('[MockupViewer] All annotations cleared');
   }, []);
 
   // Redraw all paths with current scroll offset
@@ -546,7 +546,7 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         drawingPathsRef.current = [];
         setDrawingDataUrl(null);
-        logger.ui.info('[WireframeViewer] Drawing cleared');
+        logger.ui.info('[MockupViewer] Drawing cleared');
       }
     }
   }, []);
@@ -560,7 +560,7 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
       if (canvas) {
         const dataUrl = canvas.toDataURL('image/png');
         setDrawingDataUrl(dataUrl);
-        logger.ui.info('[WireframeViewer] Drawing saved for AI context');
+        logger.ui.info('[MockupViewer] Drawing saved for AI context');
       }
     }
   }, [isDrawingMode]);
@@ -571,13 +571,13 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
 
     const canvas = drawingCanvasRef.current;
     if (!canvas) {
-      logger.ui.warn('[WireframeViewer] No canvas ref on mouse down');
+      logger.ui.warn('[MockupViewer] No canvas ref on mouse down');
       return;
     }
 
     // Check if canvas has valid dimensions
     if (canvas.width === 0 || canvas.height === 0) {
-      logger.ui.warn('[WireframeViewer] Canvas has zero dimensions, cannot draw');
+      logger.ui.warn('[MockupViewer] Canvas has zero dimensions, cannot draw');
       return;
     }
 
@@ -599,7 +599,7 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
       color: drawingColor
     });
 
-    logger.ui.info('[WireframeViewer] Drawing started at:', { x, y });
+    logger.ui.info('[MockupViewer] Drawing started at:', { x, y });
   }, [isDrawingMode, scrollOffset, drawingColor]);
 
   const handleDrawingMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -668,10 +668,10 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
         if (width > 0 && height > 0) {
           canvas.width = width;
           canvas.height = height;
-          logger.ui.info('[WireframeViewer] Canvas sized to viewport:', { width, height });
+          logger.ui.info('[MockupViewer] Canvas sized to viewport:', { width, height });
           redrawCanvas(); // Redraw after resize
         } else {
-          logger.ui.warn('[WireframeViewer] Iframe has zero dimensions, deferring canvas setup');
+          logger.ui.warn('[MockupViewer] Iframe has zero dimensions, deferring canvas setup');
         }
       };
 
@@ -728,7 +728,7 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
         return; // Not our file, ignore
       }
 
-      logger.ui.info('[WireframeViewer] Received MCP screenshot request for:', filePath);
+      logger.ui.info('[MockupViewer] Received MCP screenshot request for:', filePath);
 
       try {
         if (!iframeRef.current) {
@@ -737,23 +737,23 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
 
         // Use shared utility to capture screenshot with drawing paths (absolute coordinates)
         const paths = drawingPathsRef.current.length > 0 ? drawingPathsRef.current : undefined;
-        const base64Data = await captureWireframeComposite(iframeRef.current, null, paths);
+        const base64Data = await captureMockupComposite(iframeRef.current, null, paths);
 
-        logger.ui.info('[WireframeViewer] MCP screenshot captured successfully');
+        logger.ui.info('[MockupViewer] MCP screenshot captured successfully');
 
         // Send result back to main process
-        await window.electronAPI.invoke('wireframe:screenshot-result', {
+        await window.electronAPI.invoke('mockup:screenshot-result', {
           requestId: data.requestId,
           success: true,
           imageBase64: base64Data,
           mimeType: 'image/png'
         });
       } catch (err) {
-        logger.ui.error('[WireframeViewer] MCP screenshot capture failed:', err);
+        logger.ui.error('[MockupViewer] MCP screenshot capture failed:', err);
         const errorMessage = err instanceof Error ? err.message : String(err);
 
         // Send error result back to main process
-        await window.electronAPI.invoke('wireframe:screenshot-result', {
+        await window.electronAPI.invoke('mockup:screenshot-result', {
           requestId: data.requestId,
           success: false,
           error: errorMessage
@@ -762,7 +762,7 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
     };
 
     // Listen for capture requests from main process
-    const cleanup = window.electronAPI.on('wireframe:capture-screenshot', handleCaptureRequest);
+    const cleanup = window.electronAPI.on('mockup:capture-screenshot', handleCaptureRequest);
     return cleanup;
   }, [filePath, drawingDataUrl]);
 
@@ -770,7 +770,7 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
   useEffect(() => {
     const handleFileChanged = async (data: { path: string }) => {
       if (data.path === filePath) {
-        logger.ui.info('[WireframeViewer] File changed on disk, reloading:', filePath);
+        logger.ui.info('[MockupViewer] File changed on disk, reloading:', filePath);
         try {
           const result = await window.electronAPI.readFileContent(filePath);
           if (result?.content) {
@@ -779,11 +779,11 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
             if (onDirtyChange) {
               onDirtyChange(false);
             }
-            // Clear annotations when wireframe content is updated from disk
+            // Clear annotations when mockup content is updated from disk
             clearAllAnnotations();
           }
         } catch (err) {
-          logger.ui.error('[WireframeViewer] Failed to reload file:', err);
+          logger.ui.error('[MockupViewer] Failed to reload file:', err);
         }
       }
     };
@@ -803,7 +803,7 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
           backgroundColor: 'var(--surface-primary)',
         }}
       >
-        <h3 style={{ color: 'var(--text-primary)' }}>Error Loading Wireframe</h3>
+        <h3 style={{ color: 'var(--text-primary)' }}>Error Loading Mockup</h3>
         <p style={{ color: 'var(--text-secondary)' }}>{error}</p>
         <p style={{ fontSize: '14px', color: 'var(--text-tertiary)', marginTop: '12px' }}>
           File: {fileName}
@@ -874,7 +874,7 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
-            {viewMode === 'preview' ? 'Wireframe Preview' : 'HTML Source'}
+            {viewMode === 'preview' ? 'Mockup Preview' : 'HTML Source'}
           </span>
           {viewMode === 'preview' && (
             <>
@@ -939,7 +939,7 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
                   cursor: isCapturing ? 'wait' : 'pointer',
                   opacity: isCapturing ? 0.6 : 1,
                 }}
-                title="Capture screenshot of wireframe"
+                title="Capture screenshot of mockup"
               >
                 {isCapturing ? 'Capturing...' : 'Screenshot'}
               </button>
@@ -984,7 +984,7 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
               left: 0,
             }}
             sandbox="allow-scripts allow-same-origin"
-            title={`Wireframe: ${fileName}`}
+            title={`Mockup: ${fileName}`}
           />
           {/* Drawing Canvas Overlay - matches iframe viewport exactly */}
           <canvas

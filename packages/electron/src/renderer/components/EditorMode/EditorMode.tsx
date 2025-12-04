@@ -432,25 +432,25 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     return cleanup;
   }, [selectedFolderPath]);
 
-  // Listen for file-new-wireframe IPC event from menu
+  // Listen for file-new-mockup IPC event from menu
   useEffect(() => {
-    const handleNewWireframe = async () => {
+    const handleNewMockup = async () => {
       if (!workspacePath || !window.electronAPI) return;
 
       try {
-        // Create a default wireframe file name
+        // Create a default mockup file name
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-        const fileName = `wireframe-${timestamp}.wireframe.html`;
+        const fileName = `mockup-${timestamp}.mockup.html`;
         const directory = selectedFolderPath || workspacePath;
         const filePath = `${directory}/${fileName}`;
 
-        // Create basic wireframe HTML content
+        // Create basic mockup HTML content
         const content = `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wireframe</title>
+    <title>Mockup</title>
     <style>
         body {
             margin: 0;
@@ -468,23 +468,23 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
 </head>
 <body>
     <div class="container">
-        <h1>New Wireframe</h1>
-        <p>Edit this wireframe using the AI chat or edit the HTML directly.</p>
+        <h1>New Mockup</h1>
+        <p>Edit this mockup using the AI chat or edit the HTML directly.</p>
     </div>
 </body>
 </html>`;
 
         await window.electronAPI.createFile(filePath, content);
 
-        // Open the new wireframe file
+        // Open the new mockup file
         await handleWorkspaceFileSelect(filePath);
       } catch (error) {
-        console.error('Error creating new wireframe:', error);
+        console.error('Error creating new mockup:', error);
       }
     };
 
     if (window.electronAPI?.on) {
-      const cleanup = window.electronAPI.on('file-new-wireframe', handleNewWireframe);
+      const cleanup = window.electronAPI.on('file-new-mockup', handleNewMockup);
       return cleanup;
     }
 

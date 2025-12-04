@@ -430,7 +430,7 @@ export async function createApplicationMenu() {
                     }
                 },
                 {
-                    label: 'New Wireframe',
+                    label: 'New Mockup',
                     click: async () => {
                         const focusedWindow = getFocusedWindow();
 
@@ -441,8 +441,8 @@ export async function createApplicationMenu() {
                                 const state = windowStates.get(windowId);
 
                                 if (state?.mode === 'workspace' && state.workspacePath) {
-                                    // Send event to renderer to create a new wireframe file
-                                    focusedWindow.webContents.send('file-new-wireframe', {
+                                    // Send event to renderer to create a new mockup file
+                                    focusedWindow.webContents.send('file-new-mockup', {
                                         workspacePath: state.workspacePath
                                     });
                                 }

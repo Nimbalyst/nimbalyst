@@ -425,7 +425,7 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
   const enableAttachments = true; // Available in both chat and agent modes
   const enableHistoryNavigation = true; // Available in both chat and agent modes
 
-  // Calculate last user message timestamp for wireframe annotation indicator
+  // Calculate last user message timestamp for mockup annotation indicator
   const lastUserMessageTimestamp = React.useMemo(() => {
     const userMessages = sessionData.messages?.filter(m => m.role === 'user') || [];
     if (userMessages.length === 0) return null;

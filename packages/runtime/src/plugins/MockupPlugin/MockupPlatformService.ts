@@ -5,8 +5,8 @@
  * Each platform (Electron, Capacitor) provides its own implementation.
  */
 
-export interface WireframeFileInfo {
-  /** Absolute path to the wireframe file */
+export interface MockupFileInfo {
+  /** Absolute path to the mockup file */
   absolutePath: string;
   /** Relative path from workspace root */
   relativePath: string;
@@ -15,28 +15,28 @@ export interface WireframeFileInfo {
 }
 
 export interface MockupPickerResult {
-  /** 'new' to create a new wireframe, 'existing' to link an existing one, null if cancelled */
+  /** 'new' to create a new mockup, 'existing' to link an existing one, null if cancelled */
   action: 'new' | 'existing';
-  /** For 'existing': the selected wireframe's absolute path */
-  wireframePath?: string;
-  /** For 'new': the name for the new wireframe */
+  /** For 'existing': the selected mockup's absolute path */
+  mockupPath?: string;
+  /** For 'new': the name for the new mockup */
   newName?: string;
 }
 
 export interface MockupPlatformService {
   /**
-   * Capture a screenshot of a wireframe file and save it to the specified output path.
-   * @param wireframePath - Absolute path to the .wireframe.html file
+   * Capture a screenshot of a mockup file and save it to the specified output path.
+   * @param mockupPath - Absolute path to the .mockup.html file
    * @param outputPath - Absolute path where the screenshot should be saved
    * @returns Promise that resolves when the screenshot is saved
    */
-  captureScreenshot(wireframePath: string, outputPath: string): Promise<void>;
+  captureScreenshot(mockupPath: string, outputPath: string): Promise<void>;
 
   /**
-   * Open the wireframe file in the appropriate editor.
-   * @param wireframePath - Absolute path to the .wireframe.html file
+   * Open the mockup file in the appropriate editor.
+   * @param mockupPath - Absolute path to the .mockup.html file
    */
-  openWireframeEditor(wireframePath: string): void;
+  openMockupEditor(mockupPath: string): void;
 
   /**
    * Get the last modified time of a file.
@@ -69,18 +69,18 @@ export interface MockupPlatformService {
   getRelativePath(fromDocumentPath: string, toFilePath: string): string;
 
   /**
-   * List all wireframe files in the workspace.
-   * @returns Promise that resolves to an array of wireframe file info
+   * List all mockup files in the workspace.
+   * @returns Promise that resolves to an array of mockup file info
    */
-  listWireframeFiles(): Promise<WireframeFileInfo[]>;
+  listMockupFiles(): Promise<MockupFileInfo[]>;
 
   /**
-   * Create a new wireframe file.
-   * @param name - Name for the wireframe (without extension)
+   * Create a new mockup file.
+   * @param name - Name for the mockup (without extension)
    * @param directory - Directory to create the file in (absolute path)
    * @returns Promise that resolves to the absolute path of the created file
    */
-  createWireframeFile(name: string, directory: string): Promise<string>;
+  createMockupFile(name: string, directory: string): Promise<string>;
 
   /**
    * Show the mockup picker UI for selecting new or existing mockup.

@@ -44,8 +44,7 @@ import { detectFileWorkspace, suggestWorkspaceForFile } from './utils/workspaceD
 import { cliManager } from './services/CLIManager';
 import { registerWorkspaceWindow, shutdownHttpServer, startMcpHttpServer, updateDocumentState } from './mcp/httpServer';
 import { SessionNamingService } from './services/SessionNamingService';
-import { WireframeScreenshotService } from './services/WireframeScreenshotService';
-import { registerWireframeHandlers } from './ipc/WireframeHandlers';
+import { MockupScreenshotService } from './services/MockupScreenshotService';
 import { registerMockupHandlers } from './ipc/MockupHandlers';
 import { ClaudeCodeProvider } from '@nimbalyst/runtime/ai/server';
 import { logger, overrideConsole } from './utils/logger';
@@ -308,7 +307,6 @@ app.whenReady().then(async () => {
     registerGitStatusHandlers();
     registerMCPConfigHandlers();
     registerDatabaseBrowserHandlers();
-    registerWireframeHandlers();
     registerMockupHandlers();
 
     // Initialize AI service
@@ -835,11 +833,11 @@ app.on('before-quit', async (event) => {
     }
 
     try {
-        // Cleanup wireframe screenshot service
-        const wireframeScreenshotService = WireframeScreenshotService.getInstance();
-        wireframeScreenshotService.cleanup();
+        // Cleanup mockup screenshot service
+        const mockupScreenshotService = MockupScreenshotService.getInstance();
+        mockupScreenshotService.cleanup();
     } catch (error) {
-        console.error('[QUIT] Error cleaning up wireframe screenshot service:', error);
+        console.error('[QUIT] Error cleaning up mockup screenshot service:', error);
     }
 
     try {

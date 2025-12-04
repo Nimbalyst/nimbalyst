@@ -9,7 +9,7 @@ import {
 import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { BrowserWindow, ipcMain } from 'electron';
 import { parse as parseUrl } from 'url';
-import { WireframeScreenshotService } from '../services/WireframeScreenshotService';
+import { MockupScreenshotService } from '../services/MockupScreenshotService';
 
 // Store document state PER SESSION to avoid cross-window contamination
 const documentStateBySession = new Map<string, any>();
@@ -303,7 +303,7 @@ async function tryCreateServer(port: number): Promise<any> {
     if (pathname === '/mcp' && req.method === 'GET') {
       // console.log('[MCP Server] SSE connection request');
 
-      // Extract workspace path from query parameter (used by capture_wireframe_screenshot)
+      // Extract workspace path from query parameter (used by capture_mockup_screenshot)
       const workspacePath = parsedUrl.query.workspacePath as string | undefined;
       console.log('[MCP Server] Connection established with workspacePath:', workspacePath);
 
@@ -378,14 +378,14 @@ async function tryCreateServer(port: number): Promise<any> {
               }
             },
             {
-              name: 'capture_wireframe_screenshot',
-              description: 'Capture a screenshot of a .wireframe.html file. Returns the screenshot as a base64-encoded PNG image. If the file is open in the editor, the screenshot will include any user annotations (drawings, highlights). If the file is not open, it will be rendered in a headless window (without annotations).',
+              name: 'capture_mockup_screenshot',
+              description: 'Capture a screenshot of a .mockup.html file. Returns the screenshot as a base64-encoded PNG image. If the file is open in the editor, the screenshot will include any user annotations (drawings, highlights). If the file is not open, it will be rendered in a headless window (without annotations).',
               inputSchema: {
                 type: 'object',
                 properties: {
                   file_path: {
                     type: 'string',
-                    description: 'The absolute path to the .wireframe.html file to capture.'
+                    description: 'The absolute path to the .mockup.html file to capture.'
                   }
                 },
                 required: ['file_path']
@@ -587,9 +587,9 @@ async function tryCreateServer(port: number): Promise<any> {
             };
           }
 
-          case 'capture_wireframe_screenshot': {
+          case 'capture_mockup_screenshot': {
             const filePath = args?.file_path as string;
-            console.log('[MCP Server] capture_wireframe_screenshot called with:', { filePath, workspacePath });
+            console.log('[MCP Server] capture_mockup_screenshot called with:', { filePath, workspacePath });
 
             // Validate file path
             if (!filePath || typeof filePath !== 'string') {
@@ -604,13 +604,13 @@ async function tryCreateServer(port: number): Promise<any> {
               };
             }
 
-            // Validate it's a wireframe file
-            if (!filePath.endsWith('.wireframe.html')) {
+            // Validate it's a mockup file
+            if (!filePath.endsWith('.mockup.html')) {
               return {
                 content: [
                   {
                     type: 'text',
-                    text: `Error: File must be a .wireframe.html file. Got: ${filePath}`
+                    text: `Error: File must be a .mockup.html file. Got: ${filePath}`
                   }
                 ],
                 isError: true
@@ -618,8 +618,8 @@ async function tryCreateServer(port: number): Promise<any> {
             }
 
             try {
-              // Get the wireframe screenshot service
-              const wireframeService = WireframeScreenshotService.getInstance();
+              // Get the mockup screenshot service
+              const mockupService = MockupScreenshotService.getInstance();
 
               // Use workspace path from query parameter (captured in closure)
               // If not provided, fall back to document state
@@ -649,7 +649,7 @@ async function tryCreateServer(port: number): Promise<any> {
               }
 
               // Call the capture method
-              const result = await wireframeService.captureScreenshotForMCP(filePath, effectiveWorkspacePath);
+              const result = await mockupService.captureScreenshotForMCP(filePath, effectiveWorkspacePath);
 
               if (!result.success) {
                 return {

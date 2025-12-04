@@ -1,5 +1,5 @@
 /**
- * MockupPlugin - Lexical plugin for embedding wireframe mockups in documents.
+ * MockupPlugin - Lexical plugin for embedding mockup mockups in documents.
  *
  * Provides:
  * - MockupNode for rendering mockup screenshots
@@ -36,22 +36,22 @@ export {
 
 /**
  * Command to insert a mockup into the editor.
- * If called with payload (wireframePath + screenshotPath), inserts directly.
+ * If called with payload (mockupPath + screenshotPath), inserts directly.
  * If called without payload, shows the mockup picker UI.
  */
 export const INSERT_MOCKUP_COMMAND: LexicalCommand<MockupPayload | undefined> =
   createCommand('INSERT_MOCKUP_COMMAND');
 
 /**
- * Generates a screenshot for a wireframe and returns the paths.
+ * Generates a screenshot for a mockup and returns the paths.
  * Uses the platform service to capture the screenshot.
  *
- * @param wireframePath - Absolute path to the wireframe file
+ * @param mockupPath - Absolute path to the mockup file
  * @param documentPath - Absolute path to the document (for determining assets folder)
  * @returns Object with screenshotPath (relative) and absoluteScreenshotPath
  */
 export async function generateMockupScreenshot(
-  wireframePath: string,
+  mockupPath: string,
   documentPath: string,
 ): Promise<{ screenshotPath: string; absoluteScreenshotPath: string }> {
   if (!hasMockupPlatformService()) {
@@ -61,20 +61,20 @@ export async function generateMockupScreenshot(
   const { getMockupPlatformService } = await import('./MockupPlatformService');
   const service = getMockupPlatformService();
 
-  // Extract wireframe filename to use for screenshot name
-  const wireframeFilename = wireframePath
+  // Extract mockup filename to use for screenshot name
+  const mockupFilename = mockupPath
     .split('/')
     .pop()
-    ?.replace('.wireframe.html', '') || 'mockup';
+    ?.replace('.mockup.html', '') || 'mockup';
 
   // Determine the document directory and assets folder
   const documentDir = documentPath.substring(0, documentPath.lastIndexOf('/'));
   const assetsDir = `${documentDir}/assets`;
-  const screenshotFilename = `${wireframeFilename}.wireframe.png`;
+  const screenshotFilename = `${mockupFilename}.mockup.png`;
   const absoluteScreenshotPath = `${assetsDir}/${screenshotFilename}`;
 
   // Capture the screenshot
-  await service.captureScreenshot(wireframePath, absoluteScreenshotPath);
+  await service.captureScreenshot(mockupPath, absoluteScreenshotPath);
 
   // Return relative path from document directory
   const screenshotPath = `assets/${screenshotFilename}`;
@@ -86,7 +86,7 @@ export async function generateMockupScreenshot(
  * MockupPlugin component - registers the INSERT_MOCKUP_COMMAND handler.
  *
  * This handles inserting MockupNodes when the command is dispatched with a
- * valid payload. The component picker integration (dynamic wireframe selection
+ * valid payload. The component picker integration (dynamic mockup selection
  * menu) is handled in the platform-specific registration code.
  */
 export default function MockupPlugin(): null {
@@ -96,9 +96,9 @@ export default function MockupPlugin(): null {
     return editor.registerCommand<MockupPayload | undefined>(
       INSERT_MOCKUP_COMMAND,
       (payload) => {
-        // If payload has wireframePath, insert the mockup node
+        // If payload has mockupPath, insert the mockup node
         // screenshotPath can be empty (will show loading state)
-        if (payload?.wireframePath) {
+        if (payload?.mockupPath) {
           const mockupNode = $createMockupNode({
             ...payload,
             screenshotPath: payload.screenshotPath || '',

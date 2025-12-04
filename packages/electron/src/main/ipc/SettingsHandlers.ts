@@ -1,6 +1,6 @@
 import { ipcMain, BrowserWindow } from 'electron';
 import * as os from 'os';
-import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel, getRecentItems, getDefaultAIModel, setDefaultAIModel, isAnalyticsEnabled, setAnalyticsEnabled, isWireframeLMEnabled, setWireframeLMEnabled, getSessionSyncConfig, setSessionSyncConfig, SessionSyncConfig } from '../utils/store';
+import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel, getRecentItems, getDefaultAIModel, setDefaultAIModel, isAnalyticsEnabled, setAnalyticsEnabled, isMockupLMEnabled, setMockupLMEnabled, getSessionSyncConfig, setSessionSyncConfig, SessionSyncConfig } from '../utils/store';
 import { logger } from '../utils/logger';
 import { SoundNotificationService } from '../services/SoundNotificationService';
 import { autoUpdaterService } from '../services/autoUpdater';
@@ -137,14 +137,14 @@ export function registerSettingsHandlers() {
         setAnalyticsEnabled(enabled);
     });
 
-    // WireframeLM settings
-    ipcMain.handle('wireframeLM:is-enabled', () => {
-        return isWireframeLMEnabled();
+    // MockupLM settings
+    ipcMain.handle('mockupLM:is-enabled', () => {
+        return isMockupLMEnabled();
     });
 
-    ipcMain.handle('wireframeLM:set-enabled', (_event, enabled: boolean) => {
-        setWireframeLMEnabled(enabled);
-        logger.store.info(`[SettingsHandlers] WireframeLM ${enabled ? 'enabled' : 'disabled'}`);
+    ipcMain.handle('mockupLM:set-enabled', (_event, enabled: boolean) => {
+        setMockupLMEnabled(enabled);
+        logger.store.info(`[SettingsHandlers] MockupLM ${enabled ? 'enabled' : 'disabled'}`);
     });
 
     // Session sync settings

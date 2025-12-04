@@ -41,7 +41,7 @@
 import type { Message } from '../../../../ai/server/types';
 
 // Re-export widgets
-export { WireframeScreenshotWidget } from './WireframeScreenshotWidget';
+export { MockupScreenshotWidget } from './MockupScreenshotWidget';
 
 /**
  * Props passed to custom tool widgets
@@ -68,7 +68,7 @@ export type CustomToolWidgetComponent = React.FC<CustomToolWidgetProps>;
 export type CustomToolWidgetRegistry = Record<string, CustomToolWidgetComponent>;
 
 // Import custom widgets
-import { WireframeScreenshotWidget } from './WireframeScreenshotWidget';
+import { MockupScreenshotWidget } from './MockupScreenshotWidget';
 
 /**
  * Registry of custom tool widgets
@@ -76,13 +76,13 @@ import { WireframeScreenshotWidget } from './WireframeScreenshotWidget';
  * Keys are tool names (as they appear in message.toolCall.name)
  * Values are React components that render the custom widget
  *
- * Note: MCP tools may have prefixed names (e.g., mcp__nimbalyst__capture_wireframe_screenshot)
+ * Note: MCP tools may have prefixed names (e.g., mcp__nimbalyst__capture_mockup_screenshot)
  * Register both the base name and prefixed variants for full compatibility.
  */
 export const CUSTOM_TOOL_WIDGETS: CustomToolWidgetRegistry = {
-  // Wireframe screenshot capture tool
-  'capture_wireframe_screenshot': WireframeScreenshotWidget,
-  'mcp__nimbalyst__capture_wireframe_screenshot': WireframeScreenshotWidget,
+  // Mockup screenshot capture tool
+  'capture_mockup_screenshot': MockupScreenshotWidget,
+  'mcp__nimbalyst__capture_mockup_screenshot': MockupScreenshotWidget,
 };
 
 /**

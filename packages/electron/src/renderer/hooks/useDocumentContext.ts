@@ -8,13 +8,13 @@ export interface DocumentContext {
   cursorPosition: undefined;
   selection: undefined;
   getLatestContent: (() => string) | undefined;
-  wireframeSelection?: {
+  mockupSelection?: {
     selector: string;
     outerHTML: string;
     tagName: string;
   };
-  wireframeDrawing?: string; // Data URL of drawing annotations
-  wireframeAnnotationTimestamp?: number | null; // Timestamp when annotations were created
+  mockupDrawing?: string; // Data URL of drawing annotations
+  mockupAnnotationTimestamp?: number | null; // Timestamp when annotations were created
 }
 
 interface UseDocumentContextProps {
@@ -31,7 +31,7 @@ function detectFileType(filePath: string): string {
   const lowerPath = filePath.toLowerCase();
 
   // Check for compound extensions first (more specific)
-  if (lowerPath.endsWith('.wireframe.html')) return 'wireframe';
+  if (lowerPath.endsWith('.mockup.html')) return 'mockup';
 
   // Check single extensions
   const lastDot = lowerPath.lastIndexOf('.');
@@ -90,17 +90,17 @@ export function useDocumentContext({ activeTab, getContentRef }: UseDocumentCont
 
     const fileType = detectFileType(activeTab.filePath || '');
 
-    // Get wireframe selection, drawing, and annotation timestamp if file is a wireframe
-    const wireframeSelection = fileType === 'wireframe'
-      ? (window as any).__wireframeSelectedElement
+    // Get mockup selection, drawing, and annotation timestamp if file is a mockup
+    const mockupSelection = fileType === 'mockup'
+      ? (window as any).__mockupSelectedElement
       : undefined;
 
-    const wireframeDrawing = fileType === 'wireframe'
-      ? (window as any).__wireframeDrawing
+    const mockupDrawing = fileType === 'mockup'
+      ? (window as any).__mockupDrawing
       : undefined;
 
-    const wireframeAnnotationTimestamp = fileType === 'wireframe'
-      ? (window as any).__wireframeAnnotationTimestamp
+    const mockupAnnotationTimestamp = fileType === 'mockup'
+      ? (window as any).__mockupAnnotationTimestamp
       : undefined;
 
     return {
@@ -110,9 +110,9 @@ export function useDocumentContext({ activeTab, getContentRef }: UseDocumentCont
       cursorPosition: undefined, // TODO: Get from Lexical editor
       selection: undefined, // TODO: Get selected text from Lexical
       getLatestContent: getContentRef.current || undefined,
-      wireframeSelection,
-      wireframeDrawing,
-      wireframeAnnotationTimestamp
+      mockupSelection,
+      mockupDrawing,
+      mockupAnnotationTimestamp
     };
   }, [activeTab, activeTab?.filePath, getContentRef.current]);
 }

@@ -1,13 +1,13 @@
 import React, { useSyncExternalStore, useCallback } from 'react';
 
-interface WireframeAnnotationIndicatorProps {
+interface MockupAnnotationIndicatorProps {
   /** Current document file path */
   currentFilePath?: string;
   /** Timestamp of the last user message in the session (or null if no messages) */
   lastUserMessageTimestamp: number | null;
 }
 
-// Store for wireframe annotation state
+// Store for mockup annotation state
 // This allows React to properly subscribe to changes
 let listeners: Set<() => void> = new Set();
 let snapshotVersion = 0;
@@ -20,11 +20,11 @@ function subscribe(callback: () => void): () => void {
     snapshotVersion++;
     callback();
   };
-  window.addEventListener('wireframe-annotation-changed', handleEvent);
+  window.addEventListener('mockup-annotation-changed', handleEvent);
 
   return () => {
     listeners.delete(callback);
-    window.removeEventListener('wireframe-annotation-changed', handleEvent);
+    window.removeEventListener('mockup-annotation-changed', handleEvent);
   };
 }
 
@@ -33,12 +33,12 @@ function getSnapshot(): number {
 }
 
 /**
- * Indicator that shows when there are new wireframe annotations
+ * Indicator that shows when there are new mockup annotations
  * that haven't been sent with a prompt yet.
  *
- * Shows "+ wireframe annotations" between attachments and the prompt box.
+ * Shows "+ mockup annotations" between attachments and the prompt box.
  */
-export const WireframeAnnotationIndicator: React.FC<WireframeAnnotationIndicatorProps> = ({
+export const MockupAnnotationIndicator: React.FC<MockupAnnotationIndicatorProps> = ({
   currentFilePath,
   lastUserMessageTimestamp
 }) => {
@@ -48,16 +48,16 @@ export const WireframeAnnotationIndicator: React.FC<WireframeAnnotationIndicator
 
   // Read current state directly from window globals
   // This ensures we always have the latest values
-  const wireframeFilePath = (window as any).__wireframeFilePath as string | undefined;
-  const annotationTimestamp = (window as any).__wireframeAnnotationTimestamp as number | null;
-  const hasDrawing = !!(window as any).__wireframeDrawing;
-  const hasSelection = !!(window as any).__wireframeSelectedElement;
+  const mockupFilePath = (window as any).__mockupFilePath as string | undefined;
+  const annotationTimestamp = (window as any).__mockupAnnotationTimestamp as number | null;
+  const hasDrawing = !!(window as any).__mockupDrawing;
+  const hasSelection = !!(window as any).__mockupSelectedElement;
   const hasAnnotations = hasDrawing || hasSelection;
 
   // Determine if we should show the indicator
   const shouldShow = useCallback((): boolean => {
-    // Must have a wireframe file path (indicates a wireframe is currently open/active)
-    if (!wireframeFilePath) {
+    // Must have a mockup file path (indicates a mockup is currently open/active)
+    if (!mockupFilePath) {
       return false;
     }
 
@@ -78,7 +78,7 @@ export const WireframeAnnotationIndicator: React.FC<WireframeAnnotationIndicator
 
     // Show if annotations were made after the last prompt
     return annotationTimestamp > lastUserMessageTimestamp;
-  }, [hasAnnotations, annotationTimestamp, wireframeFilePath, lastUserMessageTimestamp]);
+  }, [hasAnnotations, annotationTimestamp, mockupFilePath, lastUserMessageTimestamp]);
 
   if (!shouldShow()) {
     return null;
@@ -87,10 +87,10 @@ export const WireframeAnnotationIndicator: React.FC<WireframeAnnotationIndicator
   return (
     <>
       <style>
-        {`.wireframe-annotation-indicator[data-tooltip] {
+        {`.mockup-annotation-indicator[data-tooltip] {
           position: relative;
         }
-        .wireframe-annotation-indicator[data-tooltip]:hover::after {
+        .mockup-annotation-indicator[data-tooltip]:hover::after {
           content: attr(data-tooltip);
           position: absolute;
           bottom: 100%;
@@ -108,7 +108,7 @@ export const WireframeAnnotationIndicator: React.FC<WireframeAnnotationIndicator
         }`}
       </style>
       <div
-        className="wireframe-annotation-indicator"
+        className="mockup-annotation-indicator"
         data-tooltip="Annotations drawn on your mockup will be included with your prompt"
         style={{
           padding: '4px 8px',
@@ -120,7 +120,7 @@ export const WireframeAnnotationIndicator: React.FC<WireframeAnnotationIndicator
           gap: '4px'
         }}
       >
-        <span>+ wireframe annotations</span>
+        <span>+ mockup annotations</span>
       </div>
     </>
   );

@@ -1,7 +1,7 @@
 /**
- * Custom widget for the capture_wireframe_screenshot MCP tool
+ * Custom widget for the capture_mockup_screenshot MCP tool
  *
- * Displays a preview of the captured wireframe screenshot with:
+ * Displays a preview of the captured mockup screenshot with:
  * - Thumbnail image preview (click to enlarge)
  * - File path information
  * - Success/error status badge
@@ -10,23 +10,23 @@
 
 import React, { useState } from 'react';
 import type { CustomToolWidgetProps } from './index';
-import './WireframeScreenshotWidget.css';
+import './MockupScreenshotWidget.css';
 
 /**
- * Extract just the wireframe name from a file path
- * e.g., "/path/to/my_mockup.wireframe.html" -> "my_mockup"
+ * Extract just the mockup name from a file path
+ * e.g., "/path/to/my_mockup.mockup.html" -> "my_mockup"
  */
-function extractWireframeName(filePath: string): string {
-  if (!filePath) return 'wireframe';
+function extractMockupName(filePath: string): string {
+  if (!filePath) return 'mockup';
 
   // Get the filename from the path
   const parts = filePath.split('/');
   const filename = parts[parts.length - 1] || '';
 
-  // Remove .wireframe.html extension
-  const name = filename.replace(/\.wireframe\.html$/i, '');
+  // Remove .mockup.html extension
+  const name = filename.replace(/\.mockup\.html$/i, '');
 
-  return name || 'wireframe';
+  return name || 'mockup';
 }
 
 /**
@@ -142,7 +142,7 @@ function extractErrorMessage(result: any, message: any): string | null {
   return null;
 }
 
-export const WireframeScreenshotWidget: React.FC<CustomToolWidgetProps> = ({
+export const MockupScreenshotWidget: React.FC<CustomToolWidgetProps> = ({
   message,
   workspacePath
 }) => {
@@ -153,14 +153,14 @@ export const WireframeScreenshotWidget: React.FC<CustomToolWidgetProps> = ({
 
   // DEBUG: Log the tool result structure to understand what we're getting
   const firstEl = Array.isArray(tool.result) ? tool.result[0] : null;
-  console.log('[WireframeScreenshotWidget] Tool result - firstElement keys:', firstEl ? Object.keys(firstEl) : 'no first element');
-  console.log('[WireframeScreenshotWidget] Tool result - firstElement type:', firstEl?.type);
-  console.log('[WireframeScreenshotWidget] Tool result - firstElement has data:', !!firstEl?.data);
-  console.log('[WireframeScreenshotWidget] Tool result - firstElement has source:', !!firstEl?.source);
+  console.log('[MockupScreenshotWidget] Tool result - firstElement keys:', firstEl ? Object.keys(firstEl) : 'no first element');
+  console.log('[MockupScreenshotWidget] Tool result - firstElement type:', firstEl?.type);
+  console.log('[MockupScreenshotWidget] Tool result - firstElement has data:', !!firstEl?.data);
+  console.log('[MockupScreenshotWidget] Tool result - firstElement has source:', !!firstEl?.source);
 
   // Extract file path from arguments and get simple name
   const filePath = tool.arguments?.file_path || tool.arguments?.filePath || '';
-  const wireframeName = extractWireframeName(filePath);
+  const mockupName = extractMockupName(filePath);
 
   // Extract image data from result
   const imageData = extractImageData(tool.result);
@@ -168,7 +168,7 @@ export const WireframeScreenshotWidget: React.FC<CustomToolWidgetProps> = ({
   const errorMessage = extractErrorMessage(tool.result, message);
 
   // DEBUG: Log extraction results
-  console.log('[WireframeScreenshotWidget] Extraction results:', {
+  console.log('[MockupScreenshotWidget] Extraction results:', {
     imageData: imageData ? 'found' : 'null',
     hasError,
     errorMessage,
@@ -185,37 +185,37 @@ export const WireframeScreenshotWidget: React.FC<CustomToolWidgetProps> = ({
     : null;
 
   return (
-    <div className="wireframe-screenshot-widget">
-      <div className="wireframe-screenshot-widget__header">
-        <div className="wireframe-screenshot-widget__details">
-          <div className="wireframe-screenshot-widget__label">Viewing Mockup Image</div>
-          <div className="wireframe-screenshot-widget__filename" title={filePath}>
-            {wireframeName}
+    <div className="mockup-screenshot-widget">
+      <div className="mockup-screenshot-widget__header">
+        <div className="mockup-screenshot-widget__details">
+          <div className="mockup-screenshot-widget__label">Viewing Mockup Image</div>
+          <div className="mockup-screenshot-widget__filename" title={filePath}>
+            {mockupName}
           </div>
         </div>
         {/* Thumbnail on the right if we have an image */}
         {imageSrc && (
           <button
-            className="wireframe-screenshot-widget__header-thumbnail"
+            className="mockup-screenshot-widget__header-thumbnail"
             onClick={() => setShowLightbox(true)}
             title="Click to enlarge"
           >
             <img
               src={imageSrc}
-              alt={wireframeName}
+              alt={mockupName}
             />
           </button>
         )}
         {/* Show error badge if there was an error */}
         {hasError && (
-          <span className="wireframe-screenshot-widget__status wireframe-screenshot-widget__status--error">
+          <span className="mockup-screenshot-widget__status mockup-screenshot-widget__status--error">
             Failed
           </span>
         )}
       </div>
 
       {errorMessage && (
-        <div className="wireframe-screenshot-widget__error">
+        <div className="mockup-screenshot-widget__error">
           {errorMessage}
         </div>
       )}
@@ -223,15 +223,15 @@ export const WireframeScreenshotWidget: React.FC<CustomToolWidgetProps> = ({
       {/* Lightbox modal */}
       {showLightbox && imageSrc && (
         <div
-          className="wireframe-screenshot-widget__lightbox"
+          className="mockup-screenshot-widget__lightbox"
           onClick={() => setShowLightbox(false)}
         >
           <div
-            className="wireframe-screenshot-widget__lightbox-content"
+            className="mockup-screenshot-widget__lightbox-content"
             onClick={(e) => e.stopPropagation()}
           >
             <button
-              className="wireframe-screenshot-widget__lightbox-close"
+              className="mockup-screenshot-widget__lightbox-close"
               onClick={() => setShowLightbox(false)}
               aria-label="Close"
             >
@@ -241,11 +241,11 @@ export const WireframeScreenshotWidget: React.FC<CustomToolWidgetProps> = ({
             </button>
             <img
               src={imageSrc}
-              alt={wireframeName}
-              className="wireframe-screenshot-widget__lightbox-image"
+              alt={mockupName}
+              className="mockup-screenshot-widget__lightbox-image"
             />
-            <div className="wireframe-screenshot-widget__lightbox-caption">
-              {wireframeName}
+            <div className="mockup-screenshot-widget__lightbox-caption">
+              {mockupName}
             </div>
           </div>
         </div>

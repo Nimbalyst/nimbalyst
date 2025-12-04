@@ -1,7 +1,7 @@
 /**
  * MockupComponent - React component for rendering MockupNode.
  *
- * Displays the wireframe screenshot with an edit button overlay.
+ * Displays the mockup screenshot with an edit button overlay.
  * Supports resizing and selection like ImageComponent.
  */
 
@@ -312,7 +312,7 @@ function MockupResizer({
 }
 
 export default function MockupComponent({
-  wireframePath,
+  mockupPath,
   screenshotPath,
   altText,
   width,
@@ -320,7 +320,7 @@ export default function MockupComponent({
   nodeKey,
   resizable,
 }: {
-  wireframePath: string;
+  mockupPath: string;
   screenshotPath: string;
   altText: string;
   width: 'inherit' | number;
@@ -432,20 +432,20 @@ export default function MockupComponent({
 
       const service = getMockupPlatformService();
 
-      // Resolve the wireframe path using the platform service
-      let absoluteWireframePath = wireframePath;
+      // Resolve the mockup path using the platform service
+      let absoluteMockupPath = mockupPath;
       if (
         typeof window !== 'undefined' &&
         (window as any).__currentDocumentPath &&
-        !wireframePath.startsWith('/')
+        !mockupPath.startsWith('/')
       ) {
         const documentPath = (window as any).__currentDocumentPath;
-        absoluteWireframePath = service.resolveRelativePath(wireframePath, documentPath);
+        absoluteMockupPath = service.resolveRelativePath(mockupPath, documentPath);
       }
 
-      service.openWireframeEditor(absoluteWireframePath);
+      service.openMockupEditor(absoluteMockupPath);
     },
-    [wireframePath],
+    [mockupPath],
   );
 
   // Handle resize
@@ -522,7 +522,7 @@ export default function MockupComponent({
           <div className="mockup-error">
             <span className="mockup-error-icon">!</span>
             <span className="mockup-error-text">Screenshot not found</span>
-            <span className="mockup-error-hint">Click Edit to open the wireframe</span>
+            <span className="mockup-error-hint">Click Edit to open the mockup</span>
           </div>
         ) : (
           <img

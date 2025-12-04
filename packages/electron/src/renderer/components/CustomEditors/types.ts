@@ -47,7 +47,7 @@ export type CustomEditorComponent = React.FC<CustomEditorProps>;
  * Custom editor registration entry
  */
 export interface CustomEditorRegistration {
-  // File extensions this editor handles (e.g., ['.wireframe.html'])
+  // File extensions this editor handles (e.g., ['.mockup.html'])
   extensions: string[];
 
   // The React component to render

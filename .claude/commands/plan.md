@@ -64,24 +64,24 @@ After the frontmatter, include:
 5. Key components or phases
 6. Acceptance criteria when applicable
 
-## WireframeLM - Visual Planning
+## MockupLM - Visual Planning
 
-For plans that involve UI mockups or visual design, create a `.wireframe.html` file alongside your plan document. This allows you to iterate on visual designs with the user before implementation.
+For plans that involve UI mockups or visual design, create a `.mockup.html` file alongside your plan document. This allows you to iterate on visual designs with the user before implementation.
 
-**When to use WireframeLM:**
+**When to use MockupLM:**
 - Planning new UI components or screens
 - Designing layout and structure
 - Mockups that need visual feedback
 
 **Workflow:**
-1. Create wireframe file (e.g., `nimbalyst-local/plans/feature.wireframe.html`) with HTML and inline CSS
-2. Use Task tool to spawn a sub-agent that will iteratively verify and fix the wireframe:
-   - Capture screenshot with `mcp__nimbalyst-mcp__capture_wireframe_screenshot`
+1. Create mockup file (e.g., `nimbalyst-local/plans/feature.mockup.html`) with HTML and inline CSS
+2. Use Task tool to spawn a sub-agent that will iteratively verify and fix the mockup:
+   - Capture screenshot with `mcp__nimbalyst-mcp__capture_mockup_screenshot`
    - Analyze for layout/visual issues AND user annotations
    - Fix with Edit tool
    - Re-capture and repeat until correct
 
-**Important:** The user may draw annotations on the wireframe (circles, arrows, highlights). You can ONLY see these annotations by using the `mcp__nimbalyst-mcp__capture_wireframe_screenshot` tool - they are not in the HTML source.
+**Important:** The user may draw annotations on the mockup (circles, arrows, highlights). You can ONLY see these annotations by using the `mcp__nimbalyst-mcp__capture_mockup_screenshot` tool - they are not in the HTML source.
 
 ## CRITICAL: What NOT to Include
 

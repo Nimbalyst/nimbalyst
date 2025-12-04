@@ -96,7 +96,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   // Detect file type (markdown vs code vs image vs custom)
   const fileType = useMemo(() => {
     // Extract extension and check if custom editor is registered
-    // Handle compound extensions like .wireframe.html by checking multiple levels
+    // Handle compound extensions like .mockup.html by checking multiple levels
     const checkCustomEditor = (ext: string): boolean => {
       const lastDot = filePath.lastIndexOf('.');
       if (lastDot <= 0) return false;
@@ -108,7 +108,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         return true;
       }
 
-      // Check compound extension (e.g., .wireframe.html)
+      // Check compound extension (e.g., .mockup.html)
       const secondLastDot = filePath.lastIndexOf('.', lastDot - 1);
       if (secondLastDot > 0) {
         const compoundExt = filePath.substring(secondLastDot).toLowerCase();
@@ -1386,7 +1386,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         />
           {isCustom ? (() => {
             // Render custom editor if one is registered for this file type
-            // Check for compound extensions like .wireframe.html
+            // Check for compound extensions like .mockup.html
             const lastDot = filePath.lastIndexOf('.');
             let CustomEditor = null;
 

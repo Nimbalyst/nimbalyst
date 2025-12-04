@@ -2,7 +2,7 @@
  * MockupPickerMenu - A typeahead submenu for selecting or creating mockups.
  *
  * This appears as a floating menu when user selects "Mockup" from the component picker.
- * Shows "New Mockup" at top + list of existing wireframes.
+ * Shows "New Mockup" at top + list of existing mockups.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -11,7 +11,7 @@ import {
   hasMockupPlatformService,
   generateMockupScreenshot,
   INSERT_MOCKUP_COMMAND,
-  type WireframeFileInfo,
+  type MockupFileInfo,
   type MockupPayload,
 } from '@nimbalyst/runtime';
 import { $getRoot } from 'lexical';
@@ -71,7 +71,7 @@ export function MockupPickerMenuHost(): JSX.Element | null {
 }
 
 function MockupPickerMenu({ onClose }: MockupPickerMenuProps): JSX.Element {
-  const [wireframes, setWireframes] = useState<WireframeFileInfo[]>([]);
+  const [mockups, setMockups] = useState<MockupFileInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -80,9 +80,9 @@ function MockupPickerMenu({ onClose }: MockupPickerMenuProps): JSX.Element {
   const inputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Load wireframe files
+  // Load mockup files
   useEffect(() => {
-    async function loadWireframes() {
+    async function loadMockups() {
       if (!hasMockupPlatformService()) {
         setIsLoading(false);
         return;
@@ -90,16 +90,16 @@ function MockupPickerMenu({ onClose }: MockupPickerMenuProps): JSX.Element {
 
       try {
         const service = getMockupPlatformService();
-        const files = await service.listWireframeFiles();
-        setWireframes(files);
+        const files = await service.listMockupFiles();
+        setMockups(files);
       } catch (error) {
-        console.error('[MockupPickerMenu] Failed to load wireframes:', error);
+        console.error('[MockupPickerMenu] Failed to load mockups:', error);
       } finally {
         setIsLoading(false);
       }
     }
 
-    loadWireframes();
+    loadMockups();
   }, []);
 
   // Focus input on initial mount
@@ -128,22 +128,22 @@ function MockupPickerMenu({ onClose }: MockupPickerMenuProps): JSX.Element {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [onClose]);
 
-  // Filter wireframes by search
-  const filteredWireframes = wireframes.filter(
+  // Filter mockups by search
+  const filteredMockups = mockups.filter(
     (wf) =>
       wf.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       wf.relativePath.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Options: "New Mockup" + filtered wireframes
+  // Options: "New Mockup" + filtered mockups
   const options = [
     { id: 'new', label: '+ New Mockup', isNew: true },
-    ...filteredWireframes.map((wf) => ({
+    ...filteredMockups.map((wf) => ({
       id: wf.absolutePath,
       label: wf.name,
       description: wf.relativePath,
       isNew: false,
-      wireframe: wf,
+      mockup: wf,
     })),
   ];
 
@@ -186,14 +186,14 @@ function MockupPickerMenu({ onClose }: MockupPickerMenuProps): JSX.Element {
     (option: (typeof options)[0]) => {
       if (option.isNew) {
         setIsCreatingNew(true);
-      } else if ('wireframe' in option && option.wireframe) {
-        handleInsertExisting(option.wireframe);
+      } else if ('mockup' in option && option.mockup) {
+        handleInsertExisting(option.mockup);
       }
     },
     []
   );
 
-  // Create new wireframe
+  // Create new mockup
   async function handleCreateNew(name: string) {
     if (!hasMockupPlatformService()) return;
 
@@ -207,12 +207,12 @@ function MockupPickerMenu({ onClose }: MockupPickerMenuProps): JSX.Element {
     try {
       const service = getMockupPlatformService();
       const documentDir = documentPath.substring(0, documentPath.lastIndexOf('/'));
-      const wireframePath = await service.createWireframeFile(name, documentDir);
-      const relativeWireframePath = service.getRelativePath(documentPath, wireframePath);
+      const mockupPath = await service.createMockupFile(name, documentDir);
+      const relativeMockupPath = service.getRelativePath(documentPath, mockupPath);
 
       // Insert node immediately with empty screenshot (shows loading state)
       dispatchInsertCommand({
-        wireframePath: relativeWireframePath,
+        mockupPath: relativeMockupPath,
         screenshotPath: '', // Empty - will show loading state
         altText: name,
       });
@@ -221,24 +221,24 @@ function MockupPickerMenu({ onClose }: MockupPickerMenuProps): JSX.Element {
       onClose();
 
       // Open for editing
-      service.openWireframeEditor(wireframePath);
+      service.openMockupEditor(mockupPath);
 
       // Generate screenshot in background and update node
-      generateMockupScreenshot(wireframePath, documentPath).then(({ screenshotPath }: { screenshotPath: string }) => {
-        updateNodeScreenshotByPath(relativeWireframePath, screenshotPath);
+      generateMockupScreenshot(mockupPath, documentPath).then(({ screenshotPath }: { screenshotPath: string }) => {
+        updateNodeScreenshotByPath(relativeMockupPath, screenshotPath);
       }).catch((error: Error) => {
         console.error('[MockupPickerMenu] Failed to generate screenshot:', error);
         // Even if screenshot generation fails, set an expected path so the image can load if it exists
-        const expectedScreenshotPath = `assets/${name}.wireframe.png`;
-        updateNodeScreenshotByPath(relativeWireframePath, expectedScreenshotPath);
+        const expectedScreenshotPath = `assets/${name}.mockup.png`;
+        updateNodeScreenshotByPath(relativeMockupPath, expectedScreenshotPath);
       });
     } catch (error) {
       console.error('[MockupPickerMenu] Failed to create mockup:', error);
     }
   }
 
-  // Insert existing wireframe
-  async function handleInsertExisting(wireframe: WireframeFileInfo) {
+  // Insert existing mockup
+  async function handleInsertExisting(mockup: MockupFileInfo) {
     if (!hasMockupPlatformService()) return;
 
     const documentPath = (window as any).__currentDocumentPath;
@@ -250,27 +250,27 @@ function MockupPickerMenu({ onClose }: MockupPickerMenuProps): JSX.Element {
 
     try {
       const service = getMockupPlatformService();
-      const relativeWireframePath = service.getRelativePath(documentPath, wireframe.absolutePath);
+      const relativeMockupPath = service.getRelativePath(documentPath, mockup.absolutePath);
 
       // Insert node immediately with empty screenshot (shows loading state)
       dispatchInsertCommand({
-        wireframePath: relativeWireframePath,
+        mockupPath: relativeMockupPath,
         screenshotPath: '', // Empty - will show loading state
-        altText: wireframe.name,
+        altText: mockup.name,
       });
 
       // Close menu immediately for snappy UX
       onClose();
 
       // Generate screenshot in background and update node
-      generateMockupScreenshot(wireframe.absolutePath, documentPath).then(({ screenshotPath }: { screenshotPath: string }) => {
-        updateNodeScreenshotByPath(relativeWireframePath, screenshotPath);
+      generateMockupScreenshot(mockup.absolutePath, documentPath).then(({ screenshotPath }: { screenshotPath: string }) => {
+        updateNodeScreenshotByPath(relativeMockupPath, screenshotPath);
       }).catch((error: Error) => {
         console.error('[MockupPickerMenu] Failed to generate screenshot:', error);
         // Even if screenshot generation fails, check if an existing screenshot exists
         // and update the node with a placeholder or error state
-        const expectedScreenshotPath = `assets/${wireframe.name}.wireframe.png`;
-        updateNodeScreenshotByPath(relativeWireframePath, expectedScreenshotPath);
+        const expectedScreenshotPath = `assets/${mockup.name}.mockup.png`;
+        updateNodeScreenshotByPath(relativeMockupPath, expectedScreenshotPath);
       });
     } catch (error) {
       console.error('[MockupPickerMenu] Failed to insert mockup:', error);
@@ -290,7 +290,7 @@ function MockupPickerMenu({ onClose }: MockupPickerMenuProps): JSX.Element {
 
   // Insert mockup node into the active editor
   // Returns a function that can be called later to find the node key
-  function dispatchInsertCommand(payload: { wireframePath: string; screenshotPath: string; altText: string }): string | null {
+  function dispatchInsertCommand(payload: { mockupPath: string; screenshotPath: string; altText: string }): string | null {
     const editor = getEditor();
     if (!editor) return null;
 
@@ -298,30 +298,30 @@ function MockupPickerMenu({ onClose }: MockupPickerMenuProps): JSX.Element {
     editor.dispatchCommand(INSERT_MOCKUP_COMMAND, payload as MockupPayload);
 
     // The node key will be found asynchronously after the editor updates
-    // We return the wireframePath as identifier since it's unique
-    return payload.wireframePath;
+    // We return the mockupPath as identifier since it's unique
+    return payload.mockupPath;
   }
 
-  // Find the mockup node by wireframePath and update its screenshot
-  function updateNodeScreenshotByPath(wireframePath: string, screenshotPath: string) {
+  // Find the mockup node by mockupPath and update its screenshot
+  function updateNodeScreenshotByPath(mockupPath: string, screenshotPath: string) {
     const editor = getEditor();
     if (!editor) {
       console.warn('[MockupPickerMenu] No editor found for update');
       return;
     }
 
-    console.log('[MockupPickerMenu] Attempting to update node with wireframePath:', wireframePath);
+    console.log('[MockupPickerMenu] Attempting to update node with mockupPath:', mockupPath);
 
     editor.update(() => {
       const root = $getRoot();
       let found = false;
-      const findAndUpdate = (node: { getType: () => string; getWireframePath?: () => string; setScreenshotPath?: (path: string) => void; getChildren?: () => { getType: () => string; getWireframePath?: () => string; setScreenshotPath?: (path: string) => void }[] }) => {
+      const findAndUpdate = (node: { getType: () => string; getMockupPath?: () => string; setScreenshotPath?: (path: string) => void; getChildren?: () => { getType: () => string; getMockupPath?: () => string; setScreenshotPath?: (path: string) => void }[] }) => {
         if (node.getType() === 'mockup') {
-          const nodePath = node.getWireframePath ? node.getWireframePath() : 'N/A';
+          const nodePath = node.getMockupPath ? node.getMockupPath() : 'N/A';
           console.log('[MockupPickerMenu] Found mockup node with path:', nodePath);
-          if (node.getWireframePath && node.getWireframePath() === wireframePath) {
+          if (node.getMockupPath && node.getMockupPath() === mockupPath) {
             if (node.setScreenshotPath) {
-              console.log('[MockupPickerMenu] Updating screenshot for:', wireframePath, '->', screenshotPath);
+              console.log('[MockupPickerMenu] Updating screenshot for:', mockupPath, '->', screenshotPath);
               node.setScreenshotPath(screenshotPath);
               found = true;
             }
@@ -337,7 +337,7 @@ function MockupPickerMenu({ onClose }: MockupPickerMenuProps): JSX.Element {
       };
       root.getChildren().forEach(findAndUpdate);
       if (!found) {
-        console.warn('[MockupPickerMenu] Could not find mockup node with wireframePath:', wireframePath);
+        console.warn('[MockupPickerMenu] Could not find mockup node with mockupPath:', mockupPath);
       }
     });
   }

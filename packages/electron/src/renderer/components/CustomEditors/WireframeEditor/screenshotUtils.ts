@@ -1,16 +1,16 @@
 /**
- * Utilities for capturing wireframe screenshots with annotations
+ * Utilities for capturing mockup screenshots with annotations
  */
 
 /**
- * Capture a composite screenshot of a wireframe iframe with optional drawing overlay
+ * Capture a composite screenshot of a mockup iframe with optional drawing overlay
  *
- * @param iframe - The iframe element containing the wireframe
+ * @param iframe - The iframe element containing the mockup
  * @param drawingCanvas - Optional canvas element with drawing annotations
  * @param drawingPaths - Optional array of drawing paths with absolute coordinates
  * @returns Base64-encoded PNG image data (without data URL prefix)
  */
-export async function captureWireframeComposite(
+export async function captureMockupComposite(
   iframe: HTMLIFrameElement,
   drawingCanvas?: HTMLCanvasElement | null,
   drawingPaths?: Array<{ points: { x: number; y: number }[]; color: string }>
@@ -40,7 +40,7 @@ export async function captureWireframeComposite(
   // Import html2canvas
   const html2canvas = (await import('html2canvas')).default;
 
-  // Capture the wireframe iframe content
+  // Capture the mockup iframe content
   const targetElement = iframeDoc.body;
   const elemWidth = targetElement.scrollWidth || targetElement.offsetWidth || iframeWidth;
   const elemHeight = targetElement.scrollHeight || targetElement.offsetHeight || iframeHeight;
@@ -49,7 +49,7 @@ export async function captureWireframeComposite(
     throw new Error(`Target element has zero dimensions: ${elemWidth}x${elemHeight}`);
   }
 
-  const wireframeCanvas = await html2canvas(targetElement, {
+  const mockupCanvas = await html2canvas(targetElement, {
     backgroundColor: '#ffffff',
     scale: 2,
     logging: false,
@@ -63,23 +63,23 @@ export async function captureWireframeComposite(
     windowHeight: elemHeight,
   });
 
-  // Create a new canvas to composite wireframe + drawing
+  // Create a new canvas to composite mockup + drawing
   const compositeCanvas = document.createElement('canvas');
-  compositeCanvas.width = wireframeCanvas.width;
-  compositeCanvas.height = wireframeCanvas.height;
+  compositeCanvas.width = mockupCanvas.width;
+  compositeCanvas.height = mockupCanvas.height;
   const ctx = compositeCanvas.getContext('2d');
 
   if (!ctx) {
     throw new Error('Failed to get canvas context');
   }
 
-  // Draw wireframe
-  ctx.drawImage(wireframeCanvas, 0, 0);
+  // Draw mockup
+  ctx.drawImage(mockupCanvas, 0, 0);
 
   // Draw the drawing paths if provided (preferred - uses absolute coordinates)
   if (drawingPaths && drawingPaths.length > 0) {
     // Calculate scale factor (html2canvas uses scale: 2)
-    const scale = wireframeCanvas.width / elemWidth;
+    const scale = mockupCanvas.width / elemWidth;
 
     drawingPaths.forEach(path => {
       if (path.points.length < 2) return;
@@ -101,8 +101,8 @@ export async function captureWireframeComposite(
     });
   } else if (drawingCanvas) {
     // Fallback: draw canvas overlay (legacy behavior, doesn't handle scroll correctly)
-    const scaleX = wireframeCanvas.width / drawingCanvas.width;
-    const scaleY = wireframeCanvas.height / drawingCanvas.height;
+    const scaleX = mockupCanvas.width / drawingCanvas.width;
+    const scaleY = mockupCanvas.height / drawingCanvas.height;
     ctx.scale(scaleX, scaleY);
     ctx.drawImage(drawingCanvas, 0, 0);
   }

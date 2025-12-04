@@ -1,8 +1,8 @@
 /**
- * MockupNode - A Lexical DecoratorNode for embedding wireframe mockups in documents.
+ * MockupNode - A Lexical DecoratorNode for embedding mockup mockups in documents.
  *
- * Displays a screenshot of the wireframe with an edit button overlay.
- * References both the wireframe source file and its cached screenshot.
+ * Displays a screenshot of the mockup with an edit button overlay.
+ * References both the mockup source file and its cached screenshot.
  */
 
 import type {
@@ -23,7 +23,7 @@ import * as React from 'react';
 const MockupComponent = React.lazy(() => import('./MockupComponent'));
 
 export interface MockupPayload {
-  wireframePath: string;
+  mockupPath: string;
   screenshotPath: string;
   altText?: string;
   width?: number;
@@ -33,7 +33,7 @@ export interface MockupPayload {
 
 export type SerializedMockupNode = Spread<
   {
-    wireframePath: string;
+    mockupPath: string;
     screenshotPath: string;
     altText: string;
     width?: number;
@@ -44,15 +44,15 @@ export type SerializedMockupNode = Spread<
 
 function $convertMockupElement(domNode: Node): null | DOMConversionOutput {
   const element = domNode as HTMLElement;
-  const wireframePath = element.getAttribute('data-wireframe-path');
+  const mockupPath = element.getAttribute('data-mockup-path');
   const screenshotPath = element.getAttribute('data-screenshot-path');
   const altText = element.getAttribute('data-alt-text') || 'Mockup';
   const width = element.getAttribute('data-width');
   const height = element.getAttribute('data-height');
 
-  if (wireframePath && screenshotPath) {
+  if (mockupPath && screenshotPath) {
     const node = $createMockupNode({
-      wireframePath,
+      mockupPath,
       screenshotPath,
       altText,
       width: width ? parseInt(width) : undefined,
@@ -65,7 +65,7 @@ function $convertMockupElement(domNode: Node): null | DOMConversionOutput {
 }
 
 export class MockupNode extends DecoratorNode<JSX.Element> {
-  __wireframePath: string;
+  __mockupPath: string;
   __screenshotPath: string;
   __altText: string;
   __width: 'inherit' | number;
@@ -77,7 +77,7 @@ export class MockupNode extends DecoratorNode<JSX.Element> {
 
   static clone(node: MockupNode): MockupNode {
     return new MockupNode(
-      node.__wireframePath,
+      node.__mockupPath,
       node.__screenshotPath,
       node.__altText,
       node.__width,
@@ -87,10 +87,10 @@ export class MockupNode extends DecoratorNode<JSX.Element> {
   }
 
   static importJSON(serializedNode: SerializedMockupNode): MockupNode {
-    const { wireframePath, screenshotPath, altText, width, height } =
+    const { mockupPath, screenshotPath, altText, width, height } =
       serializedNode;
     return $createMockupNode({
-      wireframePath,
+      mockupPath,
       screenshotPath,
       altText,
       width,
@@ -99,7 +99,7 @@ export class MockupNode extends DecoratorNode<JSX.Element> {
   }
 
   constructor(
-    wireframePath: string,
+    mockupPath: string,
     screenshotPath: string,
     altText: string = 'Mockup',
     width?: 'inherit' | number,
@@ -107,7 +107,7 @@ export class MockupNode extends DecoratorNode<JSX.Element> {
     key?: NodeKey,
   ) {
     super(key);
-    this.__wireframePath = wireframePath;
+    this.__mockupPath = mockupPath;
     this.__screenshotPath = screenshotPath;
     this.__altText = altText;
     this.__width = width || 'inherit';
@@ -117,7 +117,7 @@ export class MockupNode extends DecoratorNode<JSX.Element> {
   exportJSON(): SerializedMockupNode {
     return {
       ...super.exportJSON(),
-      wireframePath: this.__wireframePath,
+      mockupPath: this.__mockupPath,
       screenshotPath: this.__screenshotPath,
       altText: this.__altText,
       width: this.__width === 'inherit' ? undefined : this.__width,
@@ -128,7 +128,7 @@ export class MockupNode extends DecoratorNode<JSX.Element> {
   exportDOM(): DOMExportOutput {
     const element = document.createElement('div');
     element.setAttribute('data-lexical-mockup', 'true');
-    element.setAttribute('data-wireframe-path', this.__wireframePath);
+    element.setAttribute('data-mockup-path', this.__mockupPath);
     element.setAttribute('data-screenshot-path', this.__screenshotPath);
     element.setAttribute('data-alt-text', this.__altText);
     if (this.__width !== 'inherit') {
@@ -181,8 +181,8 @@ export class MockupNode extends DecoratorNode<JSX.Element> {
     return false;
   }
 
-  getWireframePath(): string {
-    return this.__wireframePath;
+  getMockupPath(): string {
+    return this.__mockupPath;
   }
 
   getScreenshotPath(): string {
@@ -210,7 +210,7 @@ export class MockupNode extends DecoratorNode<JSX.Element> {
   decorate(): JSX.Element {
     return (
       <MockupComponent
-        wireframePath={this.__wireframePath}
+        mockupPath={this.__mockupPath}
         screenshotPath={this.__screenshotPath}
         altText={this.__altText}
         width={this.__width}
@@ -223,7 +223,7 @@ export class MockupNode extends DecoratorNode<JSX.Element> {
 }
 
 export function $createMockupNode({
-  wireframePath,
+  mockupPath,
   screenshotPath,
   altText = 'Mockup',
   width,
@@ -231,7 +231,7 @@ export function $createMockupNode({
   key,
 }: MockupPayload): MockupNode {
   return $applyNodeReplacement(
-    new MockupNode(wireframePath, screenshotPath, altText, width, height, key),
+    new MockupNode(mockupPath, screenshotPath, altText, width, height, key),
   );
 }
 

@@ -30,7 +30,7 @@ export const MyToolWidget: React.FC<CustomToolWidgetProps> = ({
 
 2. **Create CSS file** for the widget (e.g., `MyToolWidget.css`):
    - Use CSS variables from `PlaygroundEditorTheme.css` for theming
-   - Follow existing patterns in `WireframeScreenshotWidget.css`
+   - Follow existing patterns in `MockupScreenshotWidget.css`
 
 3. **Register the widget** in `CustomToolWidgets/index.ts`:
 ```typescript
@@ -58,24 +58,24 @@ interface CustomToolWidgetProps {
 
 ## Existing Custom Widgets
 
-### WireframeScreenshotWidget
+### MockupScreenshotWidget
 
-Displays captured wireframe screenshots with thumbnail preview and lightbox modal.
+Displays captured mockup screenshots with thumbnail preview and lightbox modal.
 
-- **Tool name**: `capture_wireframe_screenshot`
+- **Tool name**: `capture_mockup_screenshot`
 - **Shows**: Image thumbnail, file path, success/error status
 - **Features**: Click-to-enlarge lightbox
 
 ## Key Files
 
 - `CustomToolWidgets/index.ts` - Registry and helper functions
-- `CustomToolWidgets/WireframeScreenshotWidget.tsx` - Example widget implementation
-- `CustomToolWidgets/WireframeScreenshotWidget.css` - Widget styling
+- `CustomToolWidgets/MockupScreenshotWidget.tsx` - Example widget implementation
+- `CustomToolWidgets/MockupScreenshotWidget.css` - Widget styling
 - `RichTranscriptView.tsx` - Integration point in renderToolCard
 
 ## MCP Tool Name Handling
 
-MCP tools often have prefixed names (e.g., `mcp__nimbalyst__capture_wireframe_screenshot`). The `getCustomToolWidget()` function handles this automatically by:
+MCP tools often have prefixed names (e.g., `mcp__nimbalyst__capture_mockup_screenshot`). The `getCustomToolWidget()` function handles this automatically by:
 
 1. First checking for an exact match
 2. Then stripping `mcp__nimbalyst__` prefix and checking again

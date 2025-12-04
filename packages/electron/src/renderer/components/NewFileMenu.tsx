@@ -2,14 +2,14 @@ import React, { useEffect, useRef, useState } from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import './NewFileMenu.css';
 
-export type NewFileType = 'markdown' | 'wireframe' | 'any';
+export type NewFileType = 'markdown' | 'mockup' | 'any';
 
 interface NewFileMenuProps {
   x: number;
   y: number;
   onSelect: (fileType: NewFileType) => void;
   onClose: () => void;
-  wireframeEnabled?: boolean;
+  mockupEnabled?: boolean;
 }
 
 export function NewFileMenu({
@@ -17,7 +17,7 @@ export function NewFileMenu({
   y,
   onSelect,
   onClose,
-  wireframeEnabled = false
+  mockupEnabled = false
 }: NewFileMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [adjustedPosition, setAdjustedPosition] = useState({ x, y });
@@ -86,13 +86,13 @@ export function NewFileMenu({
         <span>New Markdown File</span>
       </div>
 
-      {wireframeEnabled && (
+      {mockupEnabled && (
         <div
           className="new-file-menu-item"
-          onClick={() => handleSelect('wireframe')}
+          onClick={() => handleSelect('mockup')}
         >
           <MaterialSymbol icon="web" size={18} />
-          <span>New Wireframe</span>
+          <span>New Mockup</span>
         </div>
       )}
 

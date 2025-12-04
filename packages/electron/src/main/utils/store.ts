@@ -41,7 +41,7 @@ interface AppStoreSchema {
   userEmail?: string; // Optional email provided during onboarding
   onboardingNextPrompt?: number; // Timestamp for when to show onboarding again (if deferred)
   // Custom Editors
-  wireframeLMEnabled?: boolean; // Enable WireframeLM custom editor
+  mockupLMEnabled?: boolean; // Enable MockupLM custom editor
   // Session Sync (optional device sync)
   sessionSync?: {
     enabled: boolean;
@@ -780,13 +780,13 @@ export function setAnalyticsEnabled(enabled: boolean): void {
   appStore.set('analyticsEnabled', enabled);
 }
 
-// WireframeLM Settings
-export function isWireframeLMEnabled(): boolean {
-  return appStore.get('wireframeLMEnabled', true); // Default to enabled
+// MockupLM Settings
+export function isMockupLMEnabled(): boolean {
+  return appStore.get('mockupLMEnabled', true); // Default to enabled
 }
 
-export function setWireframeLMEnabled(enabled: boolean): void {
-  appStore.set('wireframeLMEnabled', enabled);
+export function setMockupLMEnabled(enabled: boolean): void {
+  appStore.set('mockupLMEnabled', enabled);
 }
 
 // Session Sync Settings

@@ -2,10 +2,10 @@
  * MockupTransformer - Markdown transformer for mockup nodes.
  *
  * Uses extended image syntax to maintain compatibility with other markdown editors.
- * Format: ![alt](screenshot.png){mockup:wireframe.wireframe.html}{width}x{height}
+ * Format: ![alt](screenshot.png){mockup:mockup.mockup.html}{width}x{height}
  *
  * The screenshot path is primary for compatibility, the {mockup:...} extension
- * stores the wireframe source path.
+ * stores the mockup source path.
  */
 
 import { TextMatchTransformer } from '@lexical/markdown';
@@ -14,12 +14,12 @@ import { $createMockupNode, $isMockupNode, MockupNode } from './MockupNode';
 
 /**
  * Regex for importing mockup from markdown.
- * Matches: ![alt](screenshot.png){mockup:wireframe.wireframe.html}{widthxheight}
+ * Matches: ![alt](screenshot.png){mockup:mockup.mockup.html}{widthxheight}
  *
  * Groups:
  * 1. alt text
  * 2. screenshot path (can be empty)
- * 3. wireframe path
+ * 3. mockup path
  * 4. width (optional)
  * 5. height (optional)
  *
@@ -45,12 +45,12 @@ export const MOCKUP_TRANSFORMER: TextMatchTransformer = {
 
     const altText = node.getAltText();
     const screenshotPath = node.getScreenshotPath();
-    const wireframePath = node.getWireframePath();
+    const mockupPath = node.getMockupPath();
     const width = node.__width;
     const height = node.__height;
 
     // Build the markdown string
-    let markdown = `![${altText}](${screenshotPath}){mockup:${wireframePath}}`;
+    let markdown = `![${altText}](${screenshotPath}){mockup:${mockupPath}}`;
 
     // Add size if both width and height are set (format: {widthxheight})
     if (width !== 'inherit' && height !== 'inherit') {
@@ -64,10 +64,10 @@ export const MOCKUP_TRANSFORMER: TextMatchTransformer = {
   regExp: MOCKUP_TYPING_REGEX,
 
   replace: (textNode, match) => {
-    const [, altText, screenshotPath, wireframePath, width, height] = match;
+    const [, altText, screenshotPath, mockupPath, width, height] = match;
 
     const mockupNode = $createMockupNode({
-      wireframePath,
+      mockupPath,
       screenshotPath,
       altText: altText || 'Mockup',
       width: width ? parseInt(width) : undefined,

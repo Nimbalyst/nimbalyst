@@ -2,14 +2,14 @@
  * IPC handlers for mockup-related operations.
  *
  * Provides handlers for:
- * - Capturing and saving wireframe screenshots
+ * - Capturing and saving mockup screenshots
  * - File existence and modification time checks
  */
 
 import { ipcMain, BrowserWindow } from 'electron';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { WireframeScreenshotService } from '../services/WireframeScreenshotService';
+import { MockupScreenshotService } from '../services/MockupScreenshotService';
 import { logger } from '../utils/logger';
 import { getWindowId, windowStates } from '../window/WindowManager';
 
@@ -17,21 +17,21 @@ import { getWindowId, windowStates } from '../window/WindowManager';
  * Register IPC handlers for mockup operations.
  */
 export function registerMockupHandlers(): void {
-  // Capture wireframe screenshot and save to file
+  // Capture mockup screenshot and save to file
   ipcMain.handle(
     'mockup:capture-and-save-screenshot',
-    async (_event, wireframePath: string, outputPath: string) => {
-      logger.main.info(`[MockupHandlers] Capturing screenshot: ${wireframePath} -> ${outputPath}`);
+    async (_event, mockupPath: string, outputPath: string) => {
+      logger.main.info(`[MockupHandlers] Capturing screenshot: ${mockupPath} -> ${outputPath}`);
 
       try {
-        // Get the workspace path from the wireframe path
+        // Get the workspace path from the mockup path
         // We assume the workspace is a parent directory
-        const workspacePath = path.dirname(wireframePath);
+        const workspacePath = path.dirname(mockupPath);
 
-        // Use the existing WireframeScreenshotService
-        const service = WireframeScreenshotService.getInstance();
+        // Use the existing MockupScreenshotService
+        const service = MockupScreenshotService.getInstance();
         const result = await service.captureScreenshotForMCP(
-          wireframePath,
+          mockupPath,
           workspacePath,
         );
 
@@ -86,8 +86,8 @@ export function registerMockupHandlers(): void {
     }
   });
 
-  // List all wireframe files in the workspace
-  ipcMain.handle('mockup:list-wireframes', async (event) => {
+  // List all mockup files in the workspace
+  ipcMain.handle('mockup:list-mockups', async (event) => {
     try {
       // Get the workspace path from the sender window
       const senderWindow = BrowserWindow.fromWebContents(event.sender);
@@ -107,8 +107,8 @@ export function registerMockupHandlers(): void {
         return [];
       }
 
-      // Recursively find all .wireframe.html files
-      const wireframes: Array<{
+      // Recursively find all .mockup.html files
+      const mockups: Array<{
         absolutePath: string;
         relativePath: string;
         name: string;
@@ -125,11 +125,11 @@ export function registerMockupHandlers(): void {
               if (!entry.name.startsWith('.') && entry.name !== 'node_modules') {
                 await scanDirectory(fullPath);
               }
-            } else if (entry.name.endsWith('.wireframe.html')) {
-              wireframes.push({
+            } else if (entry.name.endsWith('.mockup.html')) {
+              mockups.push({
                 absolutePath: fullPath,
                 relativePath: path.relative(workspacePath, fullPath),
-                name: entry.name.replace('.wireframe.html', ''),
+                name: entry.name.replace('.mockup.html', ''),
               });
             }
           }
@@ -139,19 +139,19 @@ export function registerMockupHandlers(): void {
       }
 
       await scanDirectory(workspacePath);
-      return wireframes;
+      return mockups;
     } catch (error) {
-      logger.main.error('[MockupHandlers] Failed to list wireframes:', error);
+      logger.main.error('[MockupHandlers] Failed to list mockups:', error);
       return [];
     }
   });
 
-  // Create a new wireframe file
+  // Create a new mockup file
   ipcMain.handle(
-    'mockup:create-wireframe',
+    'mockup:create-mockup',
     async (_event, name: string, directory: string) => {
       try {
-        const fileName = `${name}.wireframe.html`;
+        const fileName = `${name}.mockup.html`;
         const filePath = path.join(directory, fileName);
 
         // Check if file already exists
@@ -159,13 +159,13 @@ export function registerMockupHandlers(): void {
           await fs.access(filePath);
           return {
             success: false,
-            error: `Wireframe "${fileName}" already exists`,
+            error: `Mockup "${fileName}" already exists`,
           };
         } catch {
           // File doesn't exist, which is what we want
         }
 
-        // Create a basic wireframe template
+        // Create a basic mockup template
         const template = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -179,7 +179,7 @@ export function registerMockupHandlers(): void {
       background: #f5f5f5;
       padding: 20px;
     }
-    .wireframe-container {
+    .mockup-container {
       background: white;
       border: 2px dashed #ccc;
       border-radius: 8px;
@@ -193,20 +193,20 @@ export function registerMockupHandlers(): void {
   </style>
 </head>
 <body>
-  <div class="wireframe-container">
-    <p>Edit this wireframe to create your design</p>
+  <div class="mockup-container">
+    <p>Edit this mockup to create your design</p>
   </div>
 </body>
 </html>`;
 
         await fs.writeFile(filePath, template, 'utf-8');
-        logger.main.info(`[MockupHandlers] Created wireframe: ${filePath}`);
+        logger.main.info(`[MockupHandlers] Created mockup: ${filePath}`);
 
         return { success: true, filePath };
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : 'Unknown error';
-        logger.main.error(`[MockupHandlers] Failed to create wireframe: ${errorMessage}`);
+        logger.main.error(`[MockupHandlers] Failed to create mockup: ${errorMessage}`);
         return { success: false, error: errorMessage };
       }
     },
