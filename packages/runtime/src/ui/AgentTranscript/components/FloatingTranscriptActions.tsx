@@ -11,6 +11,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import type { PromptMarker } from '../types';
+import { formatShortTime } from '../../../utils/dateUtils';
 import './FloatingTranscriptActions.css';
 
 // =============================================================================
@@ -96,10 +97,7 @@ export const PromptsMenuButton: React.FC<PromptsMenuButtonProps> = ({
                 {truncatePrompt(prompt.promptText)}
               </div>
               <div className="prompts-item-timestamp">
-                {new Date(prompt.timestamp).toLocaleTimeString([], {
-                  hour: '2-digit',
-                  minute: '2-digit'
-                })}
+                {formatShortTime(prompt.timestamp)}
               </div>
             </li>
           ))}

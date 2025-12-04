@@ -76,6 +76,7 @@
     "openai": "^6.9.1",
     "pkce-challenge": "^5.0.0",
     "raw-body": "^3.0.1",
+    "virtua": "^0.48.2",
     "zod-to-json-schema": "^3.25.0"
   },
   "overrides": {

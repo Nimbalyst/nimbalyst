@@ -130,3 +130,58 @@ export function safeTimestamp(timestamp: number | string | Date | undefined | nu
   const date = parseTimestamp(timestamp);
   return date ? date.getTime() : Date.now();
 }
+
+/**
+ * Check if a date is today
+ */
+export function isToday(date: Date): boolean {
+  const today = new Date();
+  return (
+    date.getDate() === today.getDate() &&
+    date.getMonth() === today.getMonth() &&
+    date.getFullYear() === today.getFullYear()
+  );
+}
+
+/**
+ * Format a timestamp for message display:
+ * - If today: shows time only (e.g., "3:45:30 PM")
+ * - If not today: shows short date + time (e.g., "Dec 4, 3:45 PM")
+ * Returns empty string for invalid timestamps
+ */
+export function formatMessageTime(timestamp: number | string | Date | undefined | null): string {
+  const date = parseTimestamp(timestamp);
+  if (!date) return '';
+
+  try {
+    if (isToday(date)) {
+      return date.toLocaleTimeString();
+    }
+    return date.toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit'
+    });
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Format a timestamp as short time (HH:MM)
+ * Returns empty string for invalid timestamps
+ */
+export function formatShortTime(timestamp: number | string | Date | undefined | null): string {
+  const date = parseTimestamp(timestamp);
+  if (!date) return '';
+
+  try {
+    return date.toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch {
+    return '';
+  }
+}

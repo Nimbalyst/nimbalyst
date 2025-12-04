@@ -175,9 +175,17 @@ export const errorNotificationService = new ErrorNotificationService();
 // Global error handler
 if (typeof window !== 'undefined') {
   window.addEventListener('error', (event) => {
+    const message = event.error?.message || event.message;
+
+    // Ignore benign ResizeObserver errors from virtualization libraries (virtua)
+    // This error occurs when ResizeObserver callbacks trigger layout changes that cause more resize events
+    if (message === 'ResizeObserver loop completed with undelivered notifications.') {
+      return;
+    }
+
     errorNotificationService.showError(
       'Uncaught Error',
-      event.error?.message || event.message,
+      message,
       {
         stack: event.error?.stack,
         context: {
