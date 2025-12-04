@@ -100,7 +100,7 @@ export function createSyncedSessionStore(
           workspaceId: payload.workspaceId,
           updatedAt: Date.now(),
         };
-        console.log('[SyncedSessionStore] Creating session with metadata:', payload.id, metadata);
+        // console.log('[SyncedSessionStore] Creating session with metadata:', payload.id, metadata);
         pushToSync(payload.id, {
           type: 'metadata_updated',
           metadata,
@@ -229,17 +229,17 @@ export function createMessageSyncHandler(syncProvider: SyncProvider) {
     async onMessageCreated(message: AgentMessage, sessionUpdatedAt?: number): Promise<void> {
       // Auto-connect session if not already connected
       if (!syncProvider.isConnected(message.sessionId)) {
-        console.log(`[MessageSyncHandler] Session ${message.sessionId} not connected, auto-connecting...`);
+        // console.log(`[MessageSyncHandler] Session ${message.sessionId} not connected, auto-connecting...`);
         try {
           await syncProvider.connect(message.sessionId);
-          console.log(`[MessageSyncHandler] Successfully connected session ${message.sessionId}`);
+          // console.log(`[MessageSyncHandler] Successfully connected session ${message.sessionId}`);
         } catch (error) {
           console.error(`[MessageSyncHandler] Failed to connect session ${message.sessionId}:`, error);
           return;
         }
       }
 
-      console.log(`[MessageSyncHandler] Pushing message_added for session ${message.sessionId}`);
+      // console.log(`[MessageSyncHandler] Pushing message_added for session ${message.sessionId}`);
       syncProvider.pushChange(message.sessionId, {
         type: 'message_added',
         message,

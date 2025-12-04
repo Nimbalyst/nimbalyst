@@ -67,9 +67,9 @@ export class IndexRoom implements DurableObject {
         });
       }
     }
-    if (webSockets.length > 0) {
-      console.log(`[IndexRoom] Restored ${webSockets.length} connections from hibernation (devices will re-announce)`);
-    }
+    // if (webSockets.length > 0) {
+    //   console.log(`[IndexRoom] Restored ${webSockets.length} connections from hibernation (devices will re-announce)`);
+    // }
   }
 
   /**
@@ -317,7 +317,7 @@ export class IndexRoom implements DurableObject {
     const sql = this.state.storage.sql;
     const affectedProjects = new Set<string>();
 
-    console.log('[IndexRoom] Processing batch update of', sessions.length, 'sessions');
+    // console.log('[IndexRoom] Processing batch update of', sessions.length, 'sessions');
 
     // Use transaction for atomic batch update
     sql.exec('BEGIN TRANSACTION');
@@ -365,7 +365,7 @@ export class IndexRoom implements DurableObject {
       );
     }
 
-    console.log('[IndexRoom] Batch update complete:', sessions.length, 'sessions,', affectedProjects.size, 'projects');
+    // console.log('[IndexRoom] Batch update complete:', sessions.length, 'sessions,', affectedProjects.size, 'projects');
   }
 
   /**
@@ -386,7 +386,7 @@ export class IndexRoom implements DurableObject {
 
     if (!session) {
       // Session not found in index, nothing to delete
-      console.log('[IndexRoom] Session not found for deletion:', sessionId);
+      // console.log('[IndexRoom] Session not found for deletion:', sessionId);
       return;
     }
 
@@ -406,7 +406,7 @@ export class IndexRoom implements DurableObject {
       ws
     );
 
-    console.log('[IndexRoom] Deleted session from index:', sessionId);
+    // console.log('[IndexRoom] Deleted session from index:', sessionId);
   }
 
   /**
@@ -424,7 +424,7 @@ export class IndexRoom implements DurableObject {
     // Key by device_id so it persists across reconnections
     await this.state.storage.put(`device:${device.device_id}`, device);
 
-    console.log('[IndexRoom] Device announced:', device.name, device.type, device.platform);
+    // console.log('[IndexRoom] Device announced:', device.name, device.type, device.platform);
 
     // Send current devices list to the connecting client
     const devicesList = this.getConnectedDevices();
@@ -588,7 +588,7 @@ export class IndexRoom implements DurableObject {
         device_id: connState.device.device_id,
       };
       this.broadcast(leftMessage, ws);
-      console.log('[IndexRoom] Device disconnected:', connState.device.name);
+      // console.log('[IndexRoom] Device disconnected:', connState.device.name);
     }
 
     this.connections.delete(ws);

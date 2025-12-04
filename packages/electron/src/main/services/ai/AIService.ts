@@ -2036,7 +2036,7 @@ export class AIService {
       const loadStart = performance.now();
       const session = await this.sessionManager.loadSession(sessionId, workspacePath);
       const loadTime = performance.now() - loadStart;
-      console.log(`[ai:loadSession] PERF: sessionManager.loadSession took ${loadTime.toFixed(1)}ms for ${sessionId}, messages: ${session?.messages?.length || 0}`);
+      // console.log(`[ai:loadSession] PERF: sessionManager.loadSession took ${loadTime.toFixed(1)}ms for ${sessionId}, messages: ${session?.messages?.length || 0}`);
       if (!session) {
         console.log(`[SESSION] Session not found: ${sessionId} (this is normal if the session was deleted)`);
         return null;

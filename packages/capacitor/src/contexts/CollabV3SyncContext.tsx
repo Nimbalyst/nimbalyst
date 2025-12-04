@@ -367,13 +367,13 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
               lastSyncedAt: Date.now(),
             }));
 
-            console.log(
-              '[CollabV3] Synced',
-              convertedSessions.length,
-              'sessions and',
-              convertedProjects.length,
-              'projects'
-            );
+            // console.log(
+            //   '[CollabV3] Synced',
+            //   convertedSessions.length,
+            //   'sessions and',
+            //   convertedProjects.length,
+            //   'projects'
+            // );
             break;
           }
 
@@ -393,14 +393,14 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
                 );
               }
             });
-            console.log('[CollabV3] Session updated:', updatedSession.id);
+            // console.log('[CollabV3] Session updated:', updatedSession.id);
             break;
           }
 
           case 'index_delete_broadcast': {
             const deletedSessionId = message.session_id;
             setAllSessions((prev) => prev.filter((s) => s.id !== deletedSessionId));
-            console.log('[CollabV3] Session deleted:', deletedSessionId);
+            // console.log('[CollabV3] Session deleted:', deletedSessionId);
             break;
           }
 
@@ -466,7 +466,7 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
         },
       };
 
-      console.log('[CollabV3] Sending index_update for session:', sessionId, 'queuedPrompts:', update.queuedPrompts?.length ?? 0);
+      // console.log('[CollabV3] Sending index_update for session:', sessionId, 'queuedPrompts:', update.queuedPrompts?.length ?? 0);
       wsRef.current.send(JSON.stringify(msg));
     },
     [allSessions]
@@ -494,13 +494,13 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
     const roomId = `user:${config.userId}:index`;
     const wsUrl = `${wsBase}/sync/${roomId}?user_id=${config.userId}&token=${config.authToken}`;
 
-    console.log('[CollabV3] Connecting to:', wsUrl);
+    // console.log('[CollabV3] Connecting to:', wsUrl);
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {
-      console.log('[CollabV3] Connected to index');
+      // console.log('[CollabV3] Connected to index');
       setStatus((prev) => ({
         ...prev,
         connected: true,
@@ -516,7 +516,7 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
             device: deviceInfo,
           };
           ws.send(JSON.stringify(announceMsg));
-          console.log('[CollabV3] Announced device:', deviceInfo.name, deviceInfo.type, deviceInfo.platform);
+          // console.log('[CollabV3] Announced device:', deviceInfo.name, deviceInfo.type, deviceInfo.platform);
         }
       };
 
@@ -534,7 +534,7 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
     };
 
     ws.onclose = () => {
-      console.log('[CollabV3] Disconnected from index');
+      // console.log('[CollabV3] Disconnected from index');
       setStatus((prev) => ({
         ...prev,
         connected: false,
@@ -550,7 +550,7 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
       // Attempt reconnect after 5 seconds
       reconnectTimeoutRef.current = setTimeout(() => {
         if (config) {
-          console.log('[CollabV3] Attempting reconnect...');
+          // console.log('[CollabV3] Attempting reconnect...');
           connect();
         }
       }, 5000);
@@ -619,7 +619,7 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible' && config && !wsRef.current) {
-        console.log('[CollabV3] App became visible, reconnecting...');
+        // console.log('[CollabV3] App became visible, reconnecting...');
         connect();
       }
     };
