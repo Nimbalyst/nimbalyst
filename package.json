@@ -58,8 +58,7 @@
     "packages/runtime",
     "packages/core",
     "packages/rexical",
-    "packages/collab",
-    "packages/collabv2"
+    "packages/collabv3"
   ],
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.1.51",
