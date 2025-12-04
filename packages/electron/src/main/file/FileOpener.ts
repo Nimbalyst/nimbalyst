@@ -231,12 +231,12 @@ export async function openFile(options: OpenFileOptions): Promise<OpenFileResult
   // Focus window
   window.focus();
 
-  console.log('[FileOpener] Opened file:', {
+  console.log('[FileOpener] Opened file:', JSON.stringify({
     filePath: basename(filePath),
     window: windowId,
     workspace: workspacePath ? basename(workspacePath) : null,
     source
-  });
+  }));
 
   return {
     window,

@@ -91,11 +91,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('file-save-as', callback);
     return () => ipcRenderer.removeListener('file-save-as', callback);
   },
-  onFileOpenedFromOS: (callback: (data: { filePath: string; content: string }) => void) => {
-    const handler = (_event: any, data: any) => callback(data);
-    ipcRenderer.on('file-opened-from-os', handler);
-    return () => ipcRenderer.removeListener('file-opened-from-os', handler);
-  },
   onNewUntitledDocument: (callback: (data: { untitledName: string }) => void) => {
     const handler = (_event: any, data: any) => callback(data);
     ipcRenderer.on('new-untitled-document', handler);

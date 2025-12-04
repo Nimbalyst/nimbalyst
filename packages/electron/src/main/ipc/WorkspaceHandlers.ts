@@ -725,10 +725,15 @@ export function registerWorkspaceHandlers() {
 
     ipcMain.handle('workspace:open-file', async (event, options: { workspacePath: string; filePath: string }) => {
         try {
-            const { workspacePath, filePath } = options;
+            const { filePath } = options;
 
-            // Use unified FileOpener API
-            await openWorkspaceFile(workspacePath, filePath, 'workspace_tree');
+            // Send open-document event to the renderer to trigger handleWorkspaceFileSelect
+            // which handles tab creation via switchWorkspaceFile (returns file content)
+            const window = BrowserWindow.fromWebContents(event.sender);
+            if (!window) {
+                throw new Error('No window found for event sender');
+            }
+            window.webContents.send('open-document', { path: filePath });
 
             return { success: true };
         } catch (error: any) {

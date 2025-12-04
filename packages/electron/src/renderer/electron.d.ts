@@ -13,7 +13,6 @@ interface ElectronAPI {
   onFileOpen: (callback: () => void) => () => void;
   onFileSave: (callback: () => void) => () => void;
   onFileSaveAs: (callback: () => void) => () => void;
-  onFileOpenedFromOS: (callback: (data: { filePath: string; content: string }) => void) => () => void;
   onNewUntitledDocument: (callback: (data: { untitledName: string }) => void) => () => void;
 
   // Workspace callbacks

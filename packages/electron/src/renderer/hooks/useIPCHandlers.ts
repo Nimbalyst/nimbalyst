@@ -362,69 +362,9 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       }));
     }
 
-    cleanupFns.push(window.electronAPI.onFileOpenedFromOS(async (data) => {
-      // console.log('[FILE_OPS] ✓✓✓ File opened from OS event received:', data.filePath);
-      // NOTE: contentVersion removed - EditorContainer handles remounting via destroy/create
-      isInitializedRef.current = false;
-      handlersRef.current.setCurrentFilePath(data.filePath);
-      handlersRef.current.setCurrentFileName(getFileName(data.filePath));
-      isDirtyRef.current = false;
-      handlersRef.current.setIsDirty(false);
-      // NOTE: initialContentRef removed - TabEditor tracks this per-tab
+    // NOTE: onFileOpenedFromOS removed - all file opening now goes through open-document
+    // which triggers handleWorkspaceFileSelect -> switchWorkspaceFile for content loading
 
-      // Add tab for the opened file (works for both single-file and workspace modes)
-      // console.log('[FILE_OPS] Checking tabs object:', !!editorModeRef.current?.tabs);
-      if (editorModeRef.current?.tabs) {
-        // console.log('[FILE_OPS] Adding tab for file opened from OS:', data.filePath);
-
-        // TabContent/TabEditor will handle editor creation and state management
-        const tabId = editorModeRef.current.tabs.addTab(data.filePath, data.content);
-        console.log('[FILE_OPS] addTab returned:', tabId);
-        if (tabId) {
-          console.log('[FILE_OPS] Tab added with ID:', tabId);
-        } else {
-          console.error('[FILE_OPS] Failed to add tab for file opened from OS:', data.filePath);
-          console.error('[FILE_OPS] This should not happen - tabs should be unlimited');
-        }
-      } else {
-        console.error('[FILE_OPS] tabs object not available in editorModeRef!');
-      }
-
-      // Create automatic snapshot when file is opened from OS
-      if (window.electronAPI.history) {
-        try {
-          // Check if we have previous snapshots
-          const snapshots = await window.electronAPI.history.listSnapshots(data.filePath);
-          if (snapshots.length === 0) {
-            // First time opening this file, create initial snapshot
-            await window.electronAPI.history.createSnapshot(
-              data.filePath,
-              data.content,
-              'auto',
-              'Initial file open'
-            );
-          } else {
-            // Check if content changed since last snapshot
-            const latestSnapshot = snapshots[0]; // Assuming sorted by timestamp desc
-            const lastContent = await window.electronAPI.history.loadSnapshot(
-              data.filePath,
-              latestSnapshot.timestamp
-            );
-            if (lastContent !== data.content) {
-              // Content actually changed, create snapshot
-              await window.electronAPI.history.createSnapshot(
-                data.filePath,
-                data.content,
-                'auto',
-                'File changed externally'
-              );
-            }
-          }
-        } catch (error) {
-          console.error('Failed to create automatic snapshot:', error);
-        }
-      }
-    }));
     cleanupFns.push(window.electronAPI.onNewUntitledDocument((data) => {
       console.log('Received new-untitled-document event:', data.untitledName);
       handlersRef.current.setCurrentFilePath(null);

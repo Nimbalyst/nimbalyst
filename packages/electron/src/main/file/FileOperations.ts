@@ -1,15 +1,13 @@
 import { BrowserWindow } from 'electron';
-import { readFileSync, writeFileSync } from 'fs';
+import { writeFileSync } from 'fs';
 import { basename } from 'path';
 import { windowStates, getWindowId } from '../window/WindowManager';
 import { addToRecentItems } from '../utils/store';
-import { startFileWatcher } from './FileWatcher';
 
-// Function to load file into window
+// Function to open a file in a window - sends open-document event to renderer
+// which triggers handleWorkspaceFileSelect to load content and create tab
 export function loadFileIntoWindow(window: BrowserWindow, filePath: string) {
     try {
-        // console.log('[LOAD_FILE] Loading file into window:', filePath, 'window:', window.id);
-        const content = readFileSync(filePath, 'utf-8');
         const windowId = getWindowId(window);
         if (windowId === null) {
             console.error('[LOAD_FILE] Failed to find custom window ID');
@@ -24,10 +22,8 @@ export function loadFileIntoWindow(window: BrowserWindow, filePath: string) {
             console.error('[LOAD_FILE] No window state found for window ID:', windowId);
         }
 
-        // console.log('[LOAD_FILE] Sending file-opened-from-os event to window', window.id);
-        // console.log('[LOAD_FILE] Event payload:', { filePath, contentLength: content.length });
-        window.webContents.send('file-opened-from-os', { filePath, content });
-        // console.log('[LOAD_FILE] Event sent successfully');
+        // Send open-document event - renderer handles content loading via switchWorkspaceFile
+        window.webContents.send('open-document', { path: filePath });
 
         // Set represented filename for macOS
         if (process.platform === 'darwin') {
@@ -36,10 +32,6 @@ export function loadFileIntoWindow(window: BrowserWindow, filePath: string) {
 
         // Add to recent documents
         addToRecentItems('documents', filePath, basename(filePath));
-
-        // Start watching the file for changes
-        // console.log('[LOAD_FILE] Starting file watcher');
-        startFileWatcher(window, filePath);
 
     } catch (error) {
         console.error('[LOAD_FILE] Error loading file from OS:', error);
