@@ -81,7 +81,7 @@ if (!pluginsRegistered) {
   registerAIChatPlugin();
   registerDiffApprovalBarPlugin(); // Diff approval bar in fixed tab header
   registerSearchReplacePlugin(); // Search/replace bar in fixed tab header
-  registerMockupPlugin(); // Mockup/mockup embedding support
+  registerMockupPlugin(); // Mockup embedding support
   pluginsRegistered = true;
 }
 

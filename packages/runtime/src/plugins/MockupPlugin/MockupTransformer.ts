@@ -2,7 +2,7 @@
  * MockupTransformer - Markdown transformer for mockup nodes.
  *
  * Uses extended image syntax to maintain compatibility with other markdown editors.
- * Format: ![alt](screenshot.png){mockup:mockup.mockup.html}{width}x{height}
+ * Format: ![alt](screenshot.png){mockup:feature.mockup.html}{width}x{height}
  *
  * The screenshot path is primary for compatibility, the {mockup:...} extension
  * stores the mockup source path.
@@ -14,7 +14,7 @@ import { $createMockupNode, $isMockupNode, MockupNode } from './MockupNode';
 
 /**
  * Regex for importing mockup from markdown.
- * Matches: ![alt](screenshot.png){mockup:mockup.mockup.html}{widthxheight}
+ * Matches: ![alt](screenshot.png){mockup:feature.mockup.html}{widthxheight}
  *
  * Groups:
  * 1. alt text

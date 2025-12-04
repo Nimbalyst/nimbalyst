@@ -456,7 +456,7 @@ Separate tabs for "All", "Files", "Commands", "Searches". Rejected because it fr
 
 ## Next Steps
 
-1. Create mockups/mockups of proposed designs
+1. Create mockups of proposed designs
 2. Implement Phase 1 core improvements
 3. Gather user feedback on new format
 4. Iterate on collapsing/grouping logic
