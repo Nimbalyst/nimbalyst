@@ -19,6 +19,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.46.4] - 2025-12-04
+
+
+### Added
+- Cross-device AI session sync between desktop and mobile app
+- Mobile messages now trigger AI processing on desktop
+- Running/pending status indicators for AI sessions on mobile
+- QR code pairing for mobile app sync with E2E encryption
+- Device awareness showing connected devices in sync settings
+- Sync status button in navigation gutter with visual indicator
+- Unified settings view with project-level AI provider overrides
+- Database browser developer tool (Developer menu)
+- Incremental sync that only syncs changed sessions on startup
+- iOS Capacitor project files for mobile builds
+- CollabV3 sync system with E2E encryption (replaces Y.js for mobile sync)
+- Click to enlarge image attachments in AI chat input
+- Close attachment viewer with Escape key
+- Wireframe mockup nodes now support resizing with size persistence
+- Embed wireframe mockups as screenshot nodes in documents
+
+### Changed
+- Consolidated icons under unified MaterialSymbol system
+- Settings now opens as full view instead of modal window
+- Session history sorts by last message time instead of last activity
+- Removed abandoned v2 collab implementation
+
+### Fixed
+- Hidden messages now stay hidden when synced to mobile app
+- Mobile session list now matches desktop sort order
+- Session title updates now sync to mobile app
+- Token usage bar now shows actual usage instead of appearing full
+- Lazy-load session tabs to prevent slow startup with many open sessions
+- Sync no longer creates duplicate messages or excessive WebSockets
+- Mobile-queued prompts no longer duplicate or refire on desktop
+- Mobile-queued prompts now show thinking indicator on desktop
+- Wireframe drawings render correctly on scrolled content
+- Wireframe Edit button now opens file in tab
+- File tree items now have border-radius
+- SyncPanel and provider panels display correctly in settings
+
+### Removed
+- Abandoned v2 collab implementation (Y.js overuse)
+
 ## [0.46.3] - 2025-12-03
 
 
