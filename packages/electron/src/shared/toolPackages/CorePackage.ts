@@ -93,7 +93,7 @@ When the user types \`/plan [description]\`:
 
 ## Visual Mockups
 
-When a plan involves UI components, screens, or visual design, use the \`/mockup\` command in a sub-agent to create mockup mockups. This keeps visual design work separate from planning.
+When a plan involves UI components, screens, or visual design, use the \`/mockup\` command in a sub-agent to create mockups. This keeps visual design work separate from planning.
 
 **When to create a mockup:**
 - Planning new UI components or screens
@@ -201,13 +201,13 @@ The \`/track\` command automatically detects which tracker schemas are installed
     },
     {
       name: 'mockup',
-      description: 'Create a UX mockup mockup using MockupLM',
+      description: 'Create a UX mockup using MockupLM',
       content: `---
 packageVersion: 1.0.0
 packageId: core
 ---
 
-Create a visual UX mockup mockup for: {{arg1}}
+Create a visual UX mockup for: {{arg1}}
 
 ## Determine Mockup Type
 

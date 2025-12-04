@@ -257,7 +257,7 @@ Do NOT call this tool more than once per session. It should be called early, typ
 
 ## MockupLM - Visual Planning
 
-For any planning, UI mockups, or visual design requests, create a \`.mockup.html\` file with HTML/CSS. If you are already implementing, you do not need to create a mockupLM mockup, only for planning. The purpose is to share and iterate on designs with the user.
+For any planning, UI mockups, or visual design requests, create a \`.mockup.html\` file with HTML/CSS. If you are already implementing, you do not need to create a MockupLM file, only for planning. The purpose is to share and iterate on designs with the user.
 
 The user may draw annotations on the mockup (circles, arrows, highlights). You can ONLY see these annotations by using the \`mcp__nimbalyst-mcp__capture_mockup_screenshot\` tool - they are not in the HTML source.
 

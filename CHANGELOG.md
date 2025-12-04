@@ -36,8 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CollabV3 sync system with E2E encryption (replaces Y.js for mobile sync)
 - Click to enlarge image attachments in AI chat input
 - Close attachment viewer with Escape key
-- Mockup mockup nodes now support resizing with size persistence
-- Embed mockup mockups as screenshot nodes in documents
+- Mockup nodes now support resizing with size persistence
+- Embed mockups as screenshot nodes in documents
 
 ### Changed
 - Consolidated icons under unified MaterialSymbol system
@@ -70,7 +70,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mouseover tooltips for slash command suggestions
 - (+) button to expand and show all suggested slash commands
 - Description text for slash commands in autocomplete
-- `/mockup` command for creating mockup mockups
+- `/mockup` command for creating mockups
 - "Are you sure?" confirmation dialog when starting fresh database
 - MockupLM instructions added to system prompt and `/plan` command
 - MCP tool for mockupLM with headless render fallback

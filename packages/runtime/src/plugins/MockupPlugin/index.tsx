@@ -1,5 +1,5 @@
 /**
- * MockupPlugin - Lexical plugin for embedding mockup mockups in documents.
+ * MockupPlugin - Lexical plugin for embedding mockups in documents.
  *
  * Provides:
  * - MockupNode for rendering mockup screenshots

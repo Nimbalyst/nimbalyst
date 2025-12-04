@@ -1,5 +1,5 @@
 /**
- * MockupNode - A Lexical DecoratorNode for embedding mockup mockups in documents.
+ * MockupNode - A Lexical DecoratorNode for embedding mockups in documents.
  *
  * Displays a screenshot of the mockup with an edit button overlay.
  * References both the mockup source file and its cached screenshot.

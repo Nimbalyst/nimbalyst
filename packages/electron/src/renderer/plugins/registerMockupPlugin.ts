@@ -39,9 +39,9 @@ export function registerMockupPlugin(): void {
     userCommands: [
       {
         title: 'Mockup',
-        description: 'Insert a mockup mockup',
+        description: 'Insert a mockup',
         icon: 'design_services',
-        keywords: ['mockup', 'mockup', 'design', 'prototype', 'ui', 'layout'],
+        keywords: ['mockup', 'design', 'prototype', 'ui', 'layout'],
         command: INSERT_MOCKUP_COMMAND,
         // When called without payload, the plugin calls showMockupPicker which opens the picker menu
       },
