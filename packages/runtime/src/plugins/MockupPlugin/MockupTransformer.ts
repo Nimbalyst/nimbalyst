@@ -14,7 +14,7 @@ import { $createMockupNode, $isMockupNode, MockupNode } from './MockupNode';
 
 /**
  * Regex for importing mockup from markdown.
- * Matches: ![alt](screenshot.png){mockup:wireframe.wireframe.html}{width}x{height}
+ * Matches: ![alt](screenshot.png){mockup:wireframe.wireframe.html}{widthxheight}
  *
  * Groups:
  * 1. alt text
@@ -24,16 +24,16 @@ import { $createMockupNode, $isMockupNode, MockupNode } from './MockupNode';
  * 5. height (optional)
  *
  * Note: screenshot path can be empty (e.g., `()`) for mockups still generating.
- * Size syntax is `{width}x{height}` with the x outside the braces.
+ * Size syntax is `{widthxheight}` matching the image format.
  */
 const MOCKUP_IMPORT_REGEX =
-  /!(?:\[([^[]*)\])(?:\(([^)]*)\))(?:\{mockup:([^}]+)\})(?:\{(\d+)\}x\{(\d+)\})?/;
+  /!(?:\[([^[]*)\])(?:\(([^)]*)\))(?:\{mockup:([^}]+)\})(?:\{(\d+)x(\d+)\})?/;
 
 /**
  * Regex for detecting mockup while typing (triggers on closing brace).
  */
 const MOCKUP_TYPING_REGEX =
-  /!(?:\[([^[]*)\])(?:\(([^)]*)\))(?:\{mockup:([^}]+)\})(?:\{(\d+)\}x\{(\d+)\})?$/;
+  /!(?:\[([^[]*)\])(?:\(([^)]*)\))(?:\{mockup:([^}]+)\})(?:\{(\d+)x(\d+)\})?$/;
 
 export const MOCKUP_TRANSFORMER: TextMatchTransformer = {
   dependencies: [MockupNode],
@@ -52,9 +52,9 @@ export const MOCKUP_TRANSFORMER: TextMatchTransformer = {
     // Build the markdown string
     let markdown = `![${altText}](${screenshotPath}){mockup:${wireframePath}}`;
 
-    // Add size if both width and height are set (format: {width}x{height})
+    // Add size if both width and height are set (format: {widthxheight})
     if (width !== 'inherit' && height !== 'inherit') {
-      markdown += `{${Math.round(width)}}x{${Math.round(height)}}`;
+      markdown += `{${Math.round(width)}x${Math.round(height)}}`;
     }
 
     return markdown;

@@ -131,18 +131,70 @@
   pointer-events: none;
 }
 
+.mockup-control-wrapper--resizing {
+  touch-action: none;
+}
+
 .mockup-resizer-handle {
   position: absolute;
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   background-color: var(--primary-color, #3b82f6);
   border: 2px solid var(--surface-primary, #ffffff);
-  border-radius: 2px;
+  border-radius: 50%;
   pointer-events: auto;
+  box-sizing: border-box;
+}
+
+/* Corner handles */
+.mockup-resizer-n {
+  top: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  cursor: n-resize;
+}
+
+.mockup-resizer-ne {
+  top: -5px;
+  right: -5px;
+  cursor: ne-resize;
+}
+
+.mockup-resizer-e {
+  top: 50%;
+  right: -5px;
+  transform: translateY(-50%);
+  cursor: e-resize;
+}
+
+.mockup-resizer-se {
+  bottom: -5px;
+  right: -5px;
   cursor: se-resize;
 }
 
-.mockup-resizer-handle-se {
-  bottom: -6px;
-  right: -6px;
+.mockup-resizer-s {
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  cursor: s-resize;
+}
+
+.mockup-resizer-sw {
+  bottom: -5px;
+  left: -5px;
+  cursor: sw-resize;
+}
+
+.mockup-resizer-w {
+  top: 50%;
+  left: -5px;
+  transform: translateY(-50%);
+  cursor: w-resize;
+}
+
+.mockup-resizer-nw {
+  top: -5px;
+  left: -5px;
+  cursor: nw-resize;
 }
