@@ -85,18 +85,43 @@ export const WireframeAnnotationIndicator: React.FC<WireframeAnnotationIndicator
   }
 
   return (
-    <div
-      style={{
-        padding: '4px 8px',
-        marginBottom: '4px',
-        fontSize: '12px',
-        color: 'var(--text-secondary)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '4px'
-      }}
-    >
-      <span>+ wireframe annotations</span>
-    </div>
+    <>
+      <style>
+        {`.wireframe-annotation-indicator[data-tooltip] {
+          position: relative;
+        }
+        .wireframe-annotation-indicator[data-tooltip]:hover::after {
+          content: attr(data-tooltip);
+          position: absolute;
+          bottom: 100%;
+          left: 0;
+          background: var(--surface-tertiary);
+          color: var(--text-secondary);
+          padding: 4px 8px;
+          border-radius: 4px;
+          font-size: 11px;
+          white-space: normal;
+          max-width: 250px;
+          z-index: 1000;
+          pointer-events: none;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }`}
+      </style>
+      <div
+        className="wireframe-annotation-indicator"
+        data-tooltip="Annotations drawn on your mockup will be included with your prompt"
+        style={{
+          padding: '4px 8px',
+          marginBottom: '4px',
+          fontSize: '12px',
+          color: 'var(--info-color)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '4px'
+        }}
+      >
+        <span>+ wireframe annotations</span>
+      </div>
+    </>
   );
 };
