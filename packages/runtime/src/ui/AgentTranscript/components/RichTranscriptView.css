@@ -637,3 +637,13 @@
   background-color: var(--surface-tertiary);
   border-color: var(--border-primary);
 }
+
+/* Virtualization support */
+.rich-transcript-spacer {
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+.virtualized-message-wrapper {
+  /* Wrapper for height measurement - should not affect layout */
+}

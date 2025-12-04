@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import type { Message, SessionData } from '../../../ai/server/types';
 import type { TranscriptSettings } from '../types';
 import { MessageSegment } from './MessageSegment';
@@ -10,7 +10,58 @@ import { formatToolArguments } from '../utils/pathResolver';
 import { EditToolResultCard } from './EditToolResultCard';
 import { TranscriptSearchBar } from './TranscriptSearchBar';
 import { formatToolDisplayName } from '../utils/toolNameFormatter';
+import { useVirtualizedMessages } from '../hooks/useVirtualizedMessages';
 import './RichTranscriptView.css';
+
+/**
+ * Wrapper component that measures its children and reports height changes
+ */
+interface VirtualizedMessageWrapperProps {
+  index: number;
+  onMeasured: (index: number, height: number) => void;
+  children: React.ReactNode;
+}
+
+const VirtualizedMessageWrapper = React.memo(({ index, onMeasured, children }: VirtualizedMessageWrapperProps) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const lastHeightRef = useRef<number>(0);
+
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!element) return;
+
+    // Create ResizeObserver to track height changes
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const height = entry.contentRect.height;
+        // Only report if height changed significantly (>1px)
+        if (Math.abs(height - lastHeightRef.current) > 1) {
+          lastHeightRef.current = height;
+          onMeasured(index, height);
+        }
+      }
+    });
+
+    // Initial measurement
+    const initialHeight = element.offsetHeight;
+    if (initialHeight > 0) {
+      lastHeightRef.current = initialHeight;
+      onMeasured(index, initialHeight);
+    }
+
+    resizeObserver.observe(element);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [index, onMeasured]);
+
+  return (
+    <div ref={containerRef} className="virtualized-message-wrapper">
+      {children}
+    </div>
+  );
+});
 
 interface RichTranscriptViewProps {
   sessionId: string;
@@ -234,23 +285,169 @@ export const RichTranscriptView = React.forwardRef<
 
   const settings = propsSettings || defaultSettings;
 
+  // Virtualization hook
+  const {
+    virtualizedRange,
+    isVirtualized,
+    handleScroll: handleVirtualScroll,
+    onMessageMeasured,
+    scrollToIndex,
+    invalidateHeight,
+    isAtBottom,
+    setIsAtBottom,
+    getBottomOffset,
+  } = useVirtualizedMessages(messages, expandedTools, {
+    compactMode: settings.compactMode,
+    overscan: 10, // Render 10 extra items above/below viewport for smoother scrolling
+    virtualizationThreshold: 50, // Enable virtualization at 50+ messages
+  });
+
   // Expose scroll method via ref
   React.useImperativeHandle(ref, () => ({
     scrollToMessage: (index: number) => {
-      const messageDiv = messageRefs.current.get(index);
-      if (messageDiv && scrollContainerRef.current) {
-        messageDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const container = scrollContainerRef.current;
+      if (!container) return;
 
-        // Add highlight effect
-        messageDiv.classList.add('highlight-message');
-        setTimeout(() => {
-          messageDiv.classList.remove('highlight-message');
-        }, 2000);
-      }
+      // TODO: Debug logging - uncomment if needed
+      // console.log('[scrollToMessage] Starting scroll to index:', index, {
+      //   isVirtualized,
+      //   virtualizedRange: { start: virtualizedRange.startIndex, end: virtualizedRange.endIndex },
+      //   messageCount: messages.length,
+      // });
+
+      // Helper to check if element is attached to DOM and in viewport
+      const isElementAttached = (element: HTMLElement): boolean => {
+        return document.body.contains(element);
+      };
+
+      // Helper to check if element is centered in viewport
+      const isInViewport = (element: HTMLElement): boolean => {
+        if (!isElementAttached(element)) return false;
+        const rect = element.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+        const viewportTop = containerRect.top;
+        const viewportBottom = containerRect.bottom;
+        const viewportCenter = (viewportTop + viewportBottom) / 2;
+        const elementCenter = rect.top + rect.height / 2;
+        // Check if element center is within 150px of viewport center
+        return Math.abs(elementCenter - viewportCenter) < 150;
+      };
+
+      // Retry loop to ensure we scroll to the right place
+      let attempts = 0;
+      const maxAttempts = 10;
+
+      const attemptScroll = () => {
+        attempts++;
+        const messageDiv = messageRefs.current.get(index);
+        const isAttached = messageDiv ? isElementAttached(messageDiv) : false;
+
+        // TODO: Debug logging - uncomment if needed
+        // console.log(`[scrollToMessage] Attempt ${attempts}/${maxAttempts}:`, {
+        //   hasMessageDiv: !!messageDiv,
+        //   isAttached,
+        //   refsSize: messageRefs.current.size,
+        //   scrollTop: container.scrollTop,
+        //   clientHeight: container.clientHeight,
+        // });
+
+        // If element exists but is detached, remove it from refs and treat as not found
+        if (messageDiv && !isAttached) {
+          // TODO: Debug logging - uncomment if needed
+          // console.log('[scrollToMessage] Element is detached, removing stale ref');
+          messageRefs.current.delete(index);
+        }
+
+        if (messageDiv && isAttached) {
+          const inViewport = isInViewport(messageDiv);
+          // TODO: Debug logging - uncomment if needed
+          // console.log(`[scrollToMessage] Element found and attached, inViewport: ${inViewport}`);
+
+          // Element exists in DOM - check if it's in viewport
+          if (!inViewport) {
+            // Not in viewport, scroll to it
+            messageDiv.scrollIntoView({ behavior: 'instant' as ScrollBehavior, block: 'center' });
+            // Immediately update scroll state
+            handleVirtualScroll(container.scrollTop, container.clientHeight);
+          }
+
+          // Check again after scroll
+          if (isInViewport(messageDiv)) {
+            // TODO: Debug logging - uncomment if needed
+            // console.log('[scrollToMessage] Element now in viewport, finishing with highlight');
+            // Add highlight effect
+            messageDiv.classList.add('highlight-message');
+            setTimeout(() => {
+              messageDiv.classList.remove('highlight-message');
+            }, 2000);
+            return;
+          }
+
+          // If we've done enough attempts, finish anyway
+          if (attempts >= maxAttempts) {
+            // TODO: Debug logging - uncomment if needed
+            // console.log('[scrollToMessage] Max attempts, finishing with highlight anyway');
+            messageDiv.classList.add('highlight-message');
+            setTimeout(() => {
+              messageDiv.classList.remove('highlight-message');
+            }, 2000);
+            return;
+          }
+
+          // Schedule another attempt with delay for React to process
+          setTimeout(attemptScroll, 50);
+        } else {
+          // Element not in DOM yet - use height cache to scroll to approximate position
+          const scrollInfo = scrollToIndex(index);
+          // TODO: Debug logging - uncomment if needed
+          // console.log('[scrollToMessage] Element not in DOM, scrollInfo:', scrollInfo);
+
+          if (scrollInfo) {
+            const targetScrollTop = scrollInfo.offset - (container.clientHeight / 2) + (scrollInfo.height / 2);
+            // TODO: Debug logging - uncomment if needed
+            // console.log('[scrollToMessage] Scrolling to:', targetScrollTop, 'current:', container.scrollTop);
+            container.scrollTo({ top: Math.max(0, targetScrollTop), behavior: 'instant' as ScrollBehavior });
+            // TODO: Debug logging - uncomment if needed
+            // console.log('[scrollToMessage] After scroll, scrollTop:', container.scrollTop);
+            handleVirtualScroll(container.scrollTop, container.clientHeight);
+          }
+
+          // If we still have attempts left, try again after DOM updates
+          // Use setTimeout to give React time to process the scroll state update and re-render
+          if (attempts < maxAttempts) {
+            setTimeout(attemptScroll, 100); // Longer delay when waiting for element to appear
+          }
+          // TODO: Debug logging - uncomment if needed
+          // else {
+          //   console.log('[scrollToMessage] Max attempts reached without finding element');
+          // }
+        }
+      };
+
+      // Start the scroll attempt loop
+      attemptScroll();
     }
-  }), []);
+  }), [scrollToIndex, handleVirtualScroll, isVirtualized, virtualizedRange, messages.length]);
 
-  // Auto-scroll to bottom when messages change
+  // Initialize scroll to bottom when session loads
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container || messages.length === 0) return;
+
+    // Use double RAF to ensure DOM is fully rendered before scrolling
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        // Scroll to bottom
+        if (messagesEndRef.current) {
+          messagesEndRef.current.scrollIntoView({ behavior: 'instant' as ScrollBehavior });
+        }
+        // Update virtualization with actual scroll position
+        handleVirtualScroll(container.scrollTop, container.clientHeight);
+      });
+    });
+  }, [sessionId]); // Re-run when session changes
+
+  // Auto-scroll to bottom when messages change (if user was at bottom)
   useEffect(() => {
     if (messagesEndRef.current && wasAtBottomRef.current) {
       requestAnimationFrame(() => {
@@ -268,14 +465,18 @@ export const RichTranscriptView = React.forwardRef<
       const { scrollTop, scrollHeight, clientHeight } = container;
       const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
       wasAtBottomRef.current = distanceFromBottom < 50;
+      setIsAtBottom(distanceFromBottom < 50);
       setShowScrollButton(distanceFromBottom > clientHeight);
+
+      // Feed scroll position to virtualization hook
+      handleVirtualScroll(scrollTop, clientHeight);
     };
 
     container.addEventListener('scroll', handleScroll);
     handleScroll();
 
     return () => container.removeEventListener('scroll', handleScroll);
-  }, [messages]);
+  }, [messages, handleVirtualScroll, setIsAtBottom]);
 
   // Listen for routed search events from the menu system
   // Only respond if this session is the active one
@@ -328,7 +529,7 @@ export const RichTranscriptView = React.forwardRef<
     });
   };
 
-  const toggleToolExpand = (toolId: string) => {
+  const toggleToolExpand = useCallback((toolId: string) => {
     setExpandedTools(prev => {
       const next = new Set(prev);
       if (next.has(toolId)) {
@@ -338,7 +539,13 @@ export const RichTranscriptView = React.forwardRef<
       }
       return next;
     });
-  };
+
+    // Find the message index for this tool and invalidate its height
+    const toolIndex = messages.findIndex(m => m.toolCall?.id === toolId);
+    if (toolIndex >= 0) {
+      invalidateHeight(toolIndex);
+    }
+  }, [messages, invalidateHeight]);
 
   const copyMessageContent = async (message: Message, index: number) => {
     try {
@@ -685,15 +892,19 @@ export const RichTranscriptView = React.forwardRef<
             </div>
           ) : (
             <div className="rich-transcript-messages">
+              {/* Top spacer for virtualization */}
+              {isVirtualized && virtualizedRange.topSpacerHeight > 0 && (
+                <div
+                  className="rich-transcript-spacer"
+                  style={{ height: virtualizedRange.topSpacerHeight }}
+                  aria-hidden="true"
+                />
+              )}
+
               {messages.map((message, index) => {
-                // Debug logging
-                if (index === 0 || message.toolCall) {
-                  // console.log(`[RichTranscriptView] Message ${index}:`, {
-                  //   role: message.role,
-                  //   hasToolCall: !!message.toolCall,
-                  //   toolCallName: message.toolCall?.name,
-                  //   contentLength: message.content?.length || 0
-                  // });
+                // Skip messages outside the visible range when virtualized
+                if (isVirtualized && (index < virtualizedRange.startIndex || index > virtualizedRange.endIndex)) {
+                  return null;
                 }
 
                 const isUser = message.role === 'user';
@@ -743,125 +954,145 @@ export const RichTranscriptView = React.forwardRef<
                 // Render tool calls (orphaned tools)
                 if (isTool && message.toolCall) {
                   return (
-                    <div key={`${sessionId}-${index}`} className="rich-transcript-tool-container orphan">
-                      {renderToolCard(message, index, 0)}
-                    </div>
+                    <VirtualizedMessageWrapper
+                      key={`${sessionId}-${index}`}
+                      index={index}
+                      onMeasured={onMessageMeasured}
+                    >
+                      <div className="rich-transcript-tool-container orphan">
+                        {renderToolCard(message, index, 0)}
+                      </div>
+                    </VirtualizedMessageWrapper>
                   );
                 }
 
                 return (
-                  <div
+                  <VirtualizedMessageWrapper
                     key={`${sessionId}-${index}`}
-                    ref={(el) => {
-                      if (el) messageRefs.current.set(index, el);
-                    }}
-                    className={`rich-transcript-message ${isUser ? 'user' : 'assistant'} ${settings.compactMode ? 'compact' : 'normal'} ${!isNewGroup ? 'continuation' : ''}`}
+                    index={index}
+                    onMeasured={onMessageMeasured}
                   >
-                    {/* Message Header - only show for new message groups */}
-                    {isNewGroup && (
-                      <div className="rich-transcript-message-header">
-                      <div className={`rich-transcript-message-avatar ${isUser ? 'user' : 'assistant'}`}>
-                        {isUser && (
-                          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                          </svg>
-                        )}
-                      </div>
-                      <div className="rich-transcript-message-meta">
-                        <span className="rich-transcript-message-sender">
-                          {isUser ? 'You' : ''}
-                        </span>
-                        <span className="rich-transcript-message-time">
-                          {(() => {
-                            const date = parseTimestamp(message.timestamp);
-                            if (!date) return '';
+                    <div
+                      ref={(el) => {
+                        if (el) messageRefs.current.set(index, el);
+                      }}
+                      className={`rich-transcript-message ${isUser ? 'user' : 'assistant'} ${settings.compactMode ? 'compact' : 'normal'} ${!isNewGroup ? 'continuation' : ''}`}
+                    >
+                      {/* Message Header - only show for new message groups */}
+                      {isNewGroup && (
+                        <div className="rich-transcript-message-header">
+                        <div className={`rich-transcript-message-avatar ${isUser ? 'user' : 'assistant'}`}>
+                          {isUser && (
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                          )}
+                        </div>
+                        <div className="rich-transcript-message-meta">
+                          <span className="rich-transcript-message-sender">
+                            {isUser ? 'You' : ''}
+                          </span>
+                          <span className="rich-transcript-message-time">
+                            {(() => {
+                              const date = parseTimestamp(message.timestamp);
+                              if (!date) return '';
 
-                            const today = new Date();
-                            const isToday =
-                              date.getDate() === today.getDate() &&
-                              date.getMonth() === today.getMonth() &&
-                              date.getFullYear() === today.getFullYear();
+                              const today = new Date();
+                              const isToday =
+                                date.getDate() === today.getDate() &&
+                                date.getMonth() === today.getMonth() &&
+                                date.getFullYear() === today.getFullYear();
 
-                            if (isToday) {
-                              return date.toLocaleTimeString();
-                            } else {
-                              return date.toLocaleString(undefined, {
-                                month: 'short',
-                                day: 'numeric',
-                                hour: 'numeric',
-                                minute: '2-digit'
-                              });
-                            }
-                          })()}
-                        </span>
+                              if (isToday) {
+                                return date.toLocaleTimeString();
+                              } else {
+                                return date.toLocaleString(undefined, {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  hour: 'numeric',
+                                  minute: '2-digit'
+                                });
+                              }
+                            })()}
+                          </span>
+                        </div>
+                        {/* Action buttons */}
+                        <div className="rich-transcript-message-actions">
+                          {!isUser && (
+                            <button
+                              onClick={() => copyMessageContent(message, index)}
+                              className={`rich-transcript-action-button ${copiedMessageIndex === index ? 'copied' : ''}`}
+                              title="Copy message content"
+                            >
+                              {copiedMessageIndex === index ? (
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                              ) : (
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                              )}
+                            </button>
+                          )}
+                          {message.content.length > 200 && (
+                            <button
+                              onClick={() => toggleMessageCollapse(index)}
+                              className="rich-transcript-collapse-button"
+                              title={isCollapsed ? "Show full message" : "Collapse message"}
+                            >
+                              {isCollapsed ? (
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                              ) : (
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                                </svg>
+                              )}
+                            </button>
+                          )}
+                        </div>
                       </div>
-                      {/* Action buttons */}
-                      <div className="rich-transcript-message-actions">
-                        {!isUser && (
-                          <button
-                            onClick={() => copyMessageContent(message, index)}
-                            className={`rich-transcript-action-button ${copiedMessageIndex === index ? 'copied' : ''}`}
-                            title="Copy message content"
-                          >
-                            {copiedMessageIndex === index ? (
-                              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                            ) : (
-                              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                              </svg>
-                            )}
-                          </button>
-                        )}
-                        {message.content.length > 200 && (
-                          <button
-                            onClick={() => toggleMessageCollapse(index)}
-                            className="rich-transcript-collapse-button"
-                            title={isCollapsed ? "Show full message" : "Collapse message"}
-                          >
-                            {isCollapsed ? (
-                              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                              </svg>
-                            ) : (
-                              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                              </svg>
-                            )}
-                          </button>
-                        )}
+                      )}
+
+                      {/* Tool messages that came before this assistant message */}
+                      {toolMessagesBefore.length > 0 && (
+                        <div className={`rich-transcript-tool-messages ${isNewGroup ? 'indented' : ''}`}>
+                          {toolMessagesBefore.map(({ message: toolMsg, index: toolIndex }) =>
+                            renderToolCard(toolMsg, toolIndex, 0)
+                          )}
+                        </div>
+                      )}
+
+                      {/* Message Content */}
+                      <div className={`rich-transcript-message-content ${isNewGroup ? '' : 'no-indent'}`}>
+                        <MessageSegment
+                          message={message}
+                          isUser={isUser}
+                          isCollapsed={isCollapsed}
+                          showToolCalls={false}
+                          showThinking={settings.showThinking}
+                          expandedTools={expandedTools}
+                          onToggleToolExpand={toggleToolExpand}
+                          documentContext={documentContext}
+                          shouldShowLoginWidget={shouldShowLoginWidgetForIndex(index)}
+                        />
                       </div>
                     </div>
-                    )}
-
-                    {/* Tool messages that came before this assistant message */}
-                    {toolMessagesBefore.length > 0 && (
-                      <div className={`rich-transcript-tool-messages ${isNewGroup ? 'indented' : ''}`}>
-                        {toolMessagesBefore.map(({ message: toolMsg, index: toolIndex }) =>
-                          renderToolCard(toolMsg, toolIndex, 0)
-                        )}
-                      </div>
-                    )}
-
-                    {/* Message Content */}
-                    <div className={`rich-transcript-message-content ${isNewGroup ? '' : 'no-indent'}`}>
-                      <MessageSegment
-                        message={message}
-                        isUser={isUser}
-                        isCollapsed={isCollapsed}
-                        showToolCalls={false}
-                        showThinking={settings.showThinking}
-                        expandedTools={expandedTools}
-                        onToggleToolExpand={toggleToolExpand}
-                        documentContext={documentContext}
-                        shouldShowLoginWidget={shouldShowLoginWidgetForIndex(index)}
-                      />
-                    </div>
-                  </div>
+                  </VirtualizedMessageWrapper>
                 );
               })}
+
+              {/* Bottom spacer for virtualization */}
+              {isVirtualized && virtualizedRange.bottomSpacerHeight > 0 && (
+                <div
+                  className="rich-transcript-spacer"
+                  style={{ height: virtualizedRange.bottomSpacerHeight }}
+                  aria-hidden="true"
+                />
+              )}
 
               {isWaitingForResponse && (
                 <div className="rich-transcript-waiting">

@@ -24,6 +24,11 @@ interface AgentTranscriptPanelProps {
   onFileClick?: (filePath: string) => void;
   hideSidebar?: boolean;  // Hide the prompts/files sidebar
   workspacePath?: string; // Explicit workspace path (falls back to sessionData.workspacePath)
+  /** Optional: render function for custom header content (receives prompts and navigation callback) */
+  renderHeaderActions?: (props: {
+    prompts: PromptMarker[];
+    onNavigateToPrompt: (marker: PromptMarker) => void;
+  }) => React.ReactNode;
 }
 
 export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
@@ -36,7 +41,8 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
   initialSettings,
   onFileClick,
   hideSidebar = false,
-  workspacePath: workspacePathProp
+  workspacePath: workspacePathProp,
+  renderHeaderActions
 }) => {
   // Use prop if provided, otherwise fall back to sessionData.workspacePath
   const effectiveWorkspacePath = workspacePathProp || sessionData.workspacePath;
@@ -72,6 +78,11 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
   }, [sidebarWidth, sessionId]);
 
   // Removed - no longer need to save active tab since sidebar only shows Files
+
+  // Reset prompts when session changes
+  useEffect(() => {
+    setPrompts([]);
+  }, [sessionId]);
 
   // Extract prompts from messages
   useEffect(() => {
@@ -227,6 +238,9 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
             onNavigateToPrompt={handleNavigateToPrompt}
           />
         )}
+
+        {/* Custom header actions (e.g., for mobile prompts menu in Capacitor) */}
+        {renderHeaderActions && renderHeaderActions({ prompts, onNavigateToPrompt: handleNavigateToPrompt })}
       </div>
 
       {/* Sidebar with tabs - hidden if hideSidebar is true */}

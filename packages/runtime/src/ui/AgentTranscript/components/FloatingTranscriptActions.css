@@ -9,6 +9,12 @@
   pointer-events: none; /* Container ignores pointer events */
 }
 
+/* Standalone prompts menu container (for mobile use) */
+.prompts-menu-container {
+  position: relative;
+  display: inline-flex;
+}
+
 /* Floating Action Buttons */
 .floating-transcript-button {
   pointer-events: auto; /* Buttons capture clicks */

@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useSync } from '../contexts/CollabV3SyncContext';
-import { AgentTranscriptPanel, transformAgentMessagesToUI } from '@nimbalyst/runtime';
+import { AgentTranscriptPanel, transformAgentMessagesToUI, PromptsMenuButton } from '@nimbalyst/runtime';
 import { AIInput } from '@nimbalyst/runtime/ui';
-import type { SessionData, ChatAttachment } from '@nimbalyst/runtime';
+import type { SessionData, ChatAttachment, PromptMarker } from '@nimbalyst/runtime';
 import forge from 'node-forge';
 
 /**
@@ -531,6 +531,7 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
             <span className={`status-dot ${connected ? 'connected' : 'disconnected'}`} />
           </div>
         </div>
+        {/* Prompts count badge - prompts menu rendered via renderHeaderActions */}
       </header>
 
       {/* Transcript - Scrollable */}
@@ -548,6 +549,17 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
             sessionId={sessionId || ''}
             sessionData={sessionData}
             hideSidebar={true}
+            renderHeaderActions={({ prompts, onNavigateToPrompt }) => (
+              <div className="mobile-prompts-menu-container">
+                <PromptsMenuButton
+                  prompts={prompts}
+                  onNavigateToPrompt={onNavigateToPrompt}
+                  buttonClassName="mobile-prompts-button"
+                  dropdownClassName="mobile-prompts-dropdown"
+                  usePortal={true}
+                />
+              </div>
+            )}
           />
         )}
       </main>

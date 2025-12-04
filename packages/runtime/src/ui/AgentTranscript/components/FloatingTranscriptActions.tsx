@@ -9,8 +9,134 @@
  * in the TabEditor, with consistent styling, positioning, and interaction patterns.
  */
 import React, { useState, useRef, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import type { PromptMarker } from '../types';
 import './FloatingTranscriptActions.css';
+
+// =============================================================================
+// PromptsMenuButton - Standalone prompts menu dropdown
+// =============================================================================
+
+interface PromptsMenuButtonProps {
+  prompts: PromptMarker[];
+  onNavigateToPrompt: (marker: PromptMarker) => void;
+  /** Optional class name for the container */
+  className?: string;
+  /** Optional class name for the button */
+  buttonClassName?: string;
+  /** Optional class name for the dropdown menu */
+  dropdownClassName?: string;
+  /** Use portal to render dropdown at document body (fixes position:fixed issues with transformed ancestors) */
+  usePortal?: boolean;
+}
+
+/**
+ * Standalone prompts menu button with dropdown.
+ * Can be used independently (e.g., in mobile header) or as part of FloatingTranscriptActions.
+ */
+export const PromptsMenuButton: React.FC<PromptsMenuButtonProps> = ({
+  prompts,
+  onNavigateToPrompt,
+  className,
+  buttonClassName,
+  dropdownClassName,
+  usePortal = false
+}) => {
+  const [showMenu, setShowMenu] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        buttonRef.current &&
+        !buttonRef.current.contains(event.target as Node) &&
+        menuRef.current &&
+        !menuRef.current.contains(event.target as Node)
+      ) {
+        setShowMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  // Handle prompt selection
+  const handlePromptClick = (marker: PromptMarker) => {
+    onNavigateToPrompt(marker);
+    setShowMenu(false);
+  };
+
+  // Truncate prompt text for display
+  const truncatePrompt = (text: string, maxLength: number = 80): string => {
+    if (text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + '...';
+  };
+
+  const dropdownContent = showMenu ? (
+    <div
+      className={dropdownClassName || 'floating-transcript-prompts-dropdown'}
+      ref={menuRef}
+    >
+      {prompts.length > 0 ? (
+        <ul className="prompts-list">
+          {prompts.map((prompt) => (
+            <li
+              key={prompt.id}
+              className="prompts-item"
+              onClick={() => handlePromptClick(prompt)}
+              title={prompt.promptText}
+            >
+              <div className="prompts-item-number">#{prompt.id}</div>
+              <div className="prompts-item-text">
+                {truncatePrompt(prompt.promptText)}
+              </div>
+              <div className="prompts-item-timestamp">
+                {new Date(prompt.timestamp).toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="prompts-empty">No prompts in this session</div>
+      )}
+    </div>
+  ) : null;
+
+  return (
+    <div className={className || 'prompts-menu-container'}>
+      <button
+        ref={buttonRef}
+        className={buttonClassName || 'floating-transcript-button'}
+        onClick={() => setShowMenu(!showMenu)}
+        aria-label="Prompts Menu"
+        title="Show prompts in this session"
+      >
+        {/* Table of contents icon */}
+        <i className="icon table-of-contents" />
+        {prompts.length > 0 && (
+          <span className="prompts-badge">{prompts.length}</span>
+        )}
+      </button>
+
+      {/* Prompts Dropdown Menu - optionally rendered via portal */}
+      {usePortal && dropdownContent
+        ? ReactDOM.createPortal(dropdownContent, document.body)
+        : dropdownContent}
+    </div>
+  );
+};
+
+// =============================================================================
+// FloatingTranscriptActions - Container with prompts menu + history toggle
+// =============================================================================
 
 interface FloatingTranscriptActionsProps {
   prompts: PromptMarker[];
@@ -25,89 +151,15 @@ export const FloatingTranscriptActions: React.FC<FloatingTranscriptActionsProps>
   onToggleSidebar,
   onNavigateToPrompt
 }) => {
-  const [showPromptsMenu, setShowPromptsMenu] = useState(false);
-  const promptsButtonRef = useRef<HTMLButtonElement>(null);
-  const promptsMenuRef = useRef<HTMLDivElement>(null);
   const historyButtonRef = useRef<HTMLButtonElement>(null);
-
-  // Close prompts menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        promptsButtonRef.current &&
-        !promptsButtonRef.current.contains(event.target as Node) &&
-        promptsMenuRef.current &&
-        !promptsMenuRef.current.contains(event.target as Node)
-      ) {
-        setShowPromptsMenu(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
-
-  // Handle prompt selection
-  const handlePromptClick = (marker: PromptMarker) => {
-    onNavigateToPrompt(marker);
-    setShowPromptsMenu(false);
-  };
-
-  // Truncate prompt text for display
-  const truncatePrompt = (text: string, maxLength: number = 80): string => {
-    if (text.length <= maxLength) return text;
-    return text.substring(0, maxLength) + '...';
-  };
 
   return (
     <div className="floating-transcript-actions">
-      {/* Table of Contents / Prompts Menu Button */}
-      <button
-        ref={promptsButtonRef}
-        className="floating-transcript-button"
-        onClick={() => setShowPromptsMenu(!showPromptsMenu)}
-        aria-label="Prompts Menu"
-        title="Show prompts in this session"
-      >
-        {/* Same icon used in FloatingDocumentActionsPlugin */}
-        <i className="icon table-of-contents" />
-        {prompts.length > 0 && (
-          <span className="prompts-badge">{prompts.length}</span>
-        )}
-      </button>
-
-      {/* Prompts Dropdown Menu */}
-      {showPromptsMenu && (
-        <div className="floating-transcript-prompts-dropdown" ref={promptsMenuRef}>
-          {prompts.length > 0 ? (
-            <ul className="prompts-list">
-              {prompts.map((prompt) => (
-                <li
-                  key={prompt.id}
-                  className="prompts-item"
-                  onClick={() => handlePromptClick(prompt)}
-                  title={prompt.promptText}
-                >
-                  <div className="prompts-item-number">#{prompt.id}</div>
-                  <div className="prompts-item-text">
-                    {truncatePrompt(prompt.promptText)}
-                  </div>
-                  <div className="prompts-item-timestamp">
-                    {new Date(prompt.timestamp).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="prompts-empty">No prompts in this session</div>
-          )}
-        </div>
-      )}
+      {/* Prompts Menu Button */}
+      <PromptsMenuButton
+        prompts={prompts}
+        onNavigateToPrompt={onNavigateToPrompt}
+      />
 
       {/* Toggle History Button */}
       <button
