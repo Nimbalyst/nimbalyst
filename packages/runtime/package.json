@@ -64,6 +64,10 @@
       "import": "./dist/plugins/shared/fixedTabHeader/index.js",
       "types": "./dist/plugins/shared/fixedTabHeader/index.d.ts"
     },
+    "./plugins/MockupPlugin": {
+      "import": "./dist/plugins/MockupPlugin/index.js",
+      "types": "./dist/plugins/MockupPlugin/index.d.ts"
+    },
     "./storage/repositories/AgentMessagesRepository": {
       "import": "./dist/storage/repositories/AgentMessagesRepository.js",
       "types": "./dist/storage/repositories/AgentMessagesRepository.d.ts"

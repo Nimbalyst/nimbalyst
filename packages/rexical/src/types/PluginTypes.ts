@@ -32,6 +32,16 @@ export interface UserCommand {
   payload?: any;
 }
 
+/** Dynamic option for the component picker menu */
+export interface DynamicMenuOption {
+  id: string;
+  label: string;
+  icon?: string;
+  description?: string;
+  keywords?: string[];
+  onSelect: () => void;
+}
+
 export interface PluginPackage<T = any> {
   /** Unique identifier for the plugin */
   name: string;
@@ -50,6 +60,14 @@ export interface PluginPackage<T = any> {
 
   /** User-facing commands for ComponentPicker */
   userCommands?: UserCommand[];
+
+  /**
+   * Function to provide dynamic menu options for the component picker.
+   * Called when user types in the component picker to get filtered options.
+   * @param queryString - The current search query
+   * @returns Array of dynamic options, or a Promise that resolves to them
+   */
+  getDynamicOptions?: (queryString: string) => DynamicMenuOption[] | Promise<DynamicMenuOption[]>;
 
   /** Optional configuration passed to the plugin component */
   config?: T;

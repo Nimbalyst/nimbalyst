@@ -68,3 +68,29 @@ export * from './ui/icons/MaterialSymbol';
 export * from './ui/icons/fileIcons';
 // Utils
 export * from './utils/dateUtils';
+// Mockup Plugin - Node exported separately to avoid circular dependency
+export {
+  MockupNode,
+  $createMockupNode,
+  $isMockupNode,
+} from './plugins/MockupPlugin/MockupNode';
+export type {
+  MockupPayload,
+  SerializedMockupNode,
+} from './plugins/MockupPlugin/MockupNode';
+export { MOCKUP_TRANSFORMER } from './plugins/MockupPlugin/MockupTransformer';
+export {
+  INSERT_MOCKUP_COMMAND,
+  generateMockupScreenshot,
+} from './plugins/MockupPlugin';
+export type {
+  MockupPlatformService,
+  WireframeFileInfo,
+  MockupPickerResult,
+} from './plugins/MockupPlugin/MockupPlatformService';
+export {
+  setMockupPlatformService,
+  getMockupPlatformService,
+  hasMockupPlatformService,
+} from './plugins/MockupPlugin/MockupPlatformService';
+export { default as MockupPlugin } from './plugins/MockupPlugin';

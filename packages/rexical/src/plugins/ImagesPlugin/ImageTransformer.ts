@@ -24,8 +24,10 @@ export const IMAGE_TRANSFORMER: TextMatchTransformer = {
 
     return `![${altText}](${src})`;
   },
-  importRegExp: /!(?:\[([^[]*)\])(?:\(([^(]+)\))(?:\{(\d+)x(\d+)\})?/,
-  regExp: /!(?:\[([^[]*)\])(?:\(([^(]+)\))(?:\{(\d+)x(\d+)\})?$/,
+  // Note: This regex must NOT match mockup syntax which has {mockup:...} after the image
+  // The negative lookahead (?!\{mockup:) ensures we don't capture mockup syntax
+  importRegExp: /!(?:\[([^[]*)\])(?:\(([^(]+)\))(?!\{mockup:)(?:\{(\d+)x(\d+)\})?/,
+  regExp: /!(?:\[([^[]*)\])(?:\(([^(]+)\))(?!\{mockup:)(?:\{(\d+)x(\d+)\})?$/,
   replace: (textNode, match) => {
     const [, altText, src, width, height] = match;
     const imageNode = $createImageNode({

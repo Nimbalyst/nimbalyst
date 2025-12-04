@@ -62,7 +62,7 @@ export {
 } from './plugins/SearchReplacePlugin';
 
 // Plugin system exports
-export type { PluginPackage } from './types/PluginTypes';
+export type { PluginPackage, DynamicMenuOption, UserCommand } from './types/PluginTypes';
 export { pluginRegistry } from './plugins/PluginRegistry';
 export { PluginManager } from './plugins/PluginManager';
 

@@ -382,11 +382,49 @@ export default function ComponentPickerMenuPlugin(): JSX.Element {
   const [editor] = useLexicalComposerContext();
   const [modal, showModal] = useModal();
   const [queryString, setQueryString] = useState<string | null>(null);
+  const [pluginDynamicOptions, setPluginDynamicOptions] = useState<TypeaheadMenuOption[]>([]);
 
   // Ensure Material Symbols font is loaded
   useEffect(() => {
     ensureMaterialSymbolsLoaded();
   }, []);
+
+  // Fetch dynamic options from plugins when query changes
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchPluginOptions() {
+      if (!queryString) {
+        setPluginDynamicOptions([]);
+        return;
+      }
+
+      try {
+        const dynamicOptions = await pluginRegistry.getDynamicOptions(queryString);
+        if (!cancelled) {
+          // Convert DynamicMenuOption to TypeaheadMenuOption
+          const typeaheadOptions: TypeaheadMenuOption[] = dynamicOptions.map((opt) => ({
+            id: opt.id,
+            label: opt.label,
+            icon: opt.icon ? <MaterialIcon name={opt.icon} /> : undefined,
+            description: opt.description,
+            keywords: opt.keywords || [],
+            section: 'Plugins',
+            onSelect: opt.onSelect,
+          }));
+          setPluginDynamicOptions(typeaheadOptions);
+        }
+      } catch (error) {
+        console.error('[ComponentPickerPlugin] Error fetching dynamic options:', error);
+      }
+    }
+
+    fetchPluginOptions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [queryString]);
 
   const options = useMemo(() => {
     const baseOptions = getBaseOptions(editor, showModal);
@@ -399,13 +437,14 @@ export default function ComponentPickerMenuPlugin(): JSX.Element {
 
     return [
       ...getDynamicOptions(editor, queryString),
+      ...pluginDynamicOptions,
       ...baseOptions.filter(
         (option) =>
           regex.test(option.label) ||
           (option.keywords && option.keywords.some((keyword) => regex.test(keyword))),
       ),
     ];
-  }, [editor, queryString, showModal]);
+  }, [editor, queryString, showModal, pluginDynamicOptions]);
 
   const triggerFn = useMemo(
     () => createBasicTriggerFunction('/', {minLength: 0}),

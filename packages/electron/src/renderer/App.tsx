@@ -41,11 +41,13 @@ import { registerAIChatPlugin } from './plugins/registerAIChatPlugin';
 import { registerTrackerPlugin } from './plugins/registerTrackerPlugin';
 import { registerDiffApprovalBarPlugin } from './plugins/registerDiffApprovalBarPlugin';
 import { registerSearchReplacePlugin } from './plugins/registerSearchReplacePlugin';
+import { registerMockupPlugin } from './plugins/registerMockupPlugin';
 import ProjectSettingsScreen from './components/ProjectSettingsScreen/ProjectSettingsScreen.tsx';
 import { SettingsView } from './components/Settings/SettingsView';
 import { loadCustomTrackers } from './services/CustomTrackerLoader';
 import { customEditorRegistry } from './components/CustomEditors';
 import { WireframeViewer } from './components/CustomEditors/WireframeEditor/WireframeViewer';
+import { MockupPickerMenuHost } from './components/MockupPickerMenu';
 import './WorkspaceWelcome.css';
 
 logger.ui.info('App.tsx loading');
@@ -79,6 +81,7 @@ if (!pluginsRegistered) {
   registerAIChatPlugin();
   registerDiffApprovalBarPlugin(); // Diff approval bar in fixed tab header
   registerSearchReplacePlugin(); // Search/replace bar in fixed tab header
+  registerMockupPlugin(); // Mockup/wireframe embedding support
   pluginsRegistered = true;
 }
 
@@ -1518,6 +1521,7 @@ export default function App() {
         onNeverAsk={handleOnboardingNeverAsk}
       />
       <ErrorToastContainer />
+      <MockupPickerMenuHost />
     </div>
   );
 }

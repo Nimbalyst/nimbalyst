@@ -100,4 +100,5 @@ export function registerBuiltinPlugins(): void {
     enabledByDefault: true,
   };
   pluginRegistry.register(mermaidPlugin);
+
 }

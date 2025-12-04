@@ -8,7 +8,7 @@
 
 import type { Klass, LexicalNode } from 'lexical';
 import type { Transformer } from '@lexical/markdown';
-import type { PluginPackage, UserCommand } from '../types/PluginTypes';
+import type { PluginPackage, UserCommand, DynamicMenuOption } from '../types/PluginTypes';
 
 class PluginRegistryImpl {
   private plugins = new Map<string, PluginPackage>();
@@ -82,6 +82,28 @@ class PluginRegistryImpl {
     }
 
     return commands;
+  }
+
+  /**
+   * Get dynamic menu options from all plugins that provide them.
+   * @param queryString - The current search query
+   * @returns Promise that resolves to array of dynamic options from all plugins
+   */
+  async getDynamicOptions(queryString: string): Promise<DynamicMenuOption[]> {
+    const allOptions: DynamicMenuOption[] = [];
+
+    for (const plugin of this.plugins.values()) {
+      if (plugin.getDynamicOptions) {
+        try {
+          const options = await plugin.getDynamicOptions(queryString);
+          allOptions.push(...options);
+        } catch (error) {
+          console.error(`[PluginRegistry] Error getting dynamic options from ${plugin.name}:`, error);
+        }
+      }
+    }
+
+    return allOptions;
   }
 }
 
