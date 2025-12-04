@@ -483,18 +483,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
               return tab;
             }
 
-            const previousThinking = [...tab.sessionData.messages]
-              .reverse()
-              .find(message => message.isThinking);
-
-            let messages = [...sessionData.messages];
-
-            if (previousThinking && sendingSessionsRef.current.has(sessionId)) {
-              const hasExistingThinking = messages.some(message => message.isThinking);
-              if (!hasExistingThinking) {
-                messages = [...messages, previousThinking];
-              }
-            }
+            const messages = [...sessionData.messages];
 
             // Preserve read state from ref (most recent), then tab state, then database
             const refReadState = readStateRef.current.get(sessionId);
@@ -1652,16 +1641,12 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     const currentTab = sessionTabs.filter(tab => tab != null).find(tab => tab.id === sessionId);
     const sessionType = currentTab?.sessionData?.sessionType || (mode === 'agent' ? 'coding' : 'chat');
 
-    // Add user message and thinking indicator immediately
-    // For queued prompts from mobile, the tab might have just been opened
+    // Add user message immediately
     setSessionTabs(prev => {
       const existingTab = prev.find(tab => tab?.id === sessionId);
-      const isQueuedPrompt = !!queuedPromptId;
-
-      console.log('[AgenticPanel] Adding thinking message - tab exists:', !!existingTab, 'sessionId:', sessionId, 'isQueuedPrompt:', isQueuedPrompt);
 
       if (!existingTab) {
-        console.warn('[AgenticPanel] Tab not found in state when trying to add thinking message. This should not happen.');
+        console.warn('[AgenticPanel] Tab not found in state when trying to add user message. This should not happen.');
         return prev;
       }
 
@@ -1671,14 +1656,6 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         timestamp: Date.now(),
         attachments: attachments.length > 0 ? attachments : undefined
       };
-      const thinkingMessage = {
-        role: 'assistant' as const,
-        content: '',
-        timestamp: Date.now(),
-        isThinking: true
-      };
-
-      console.log('[AgenticPanel] Added thinking message for session:', sessionId, 'current message count:', existingTab.sessionData.messages.length);
 
       return prev.filter(tab => tab != null).map(tab => {
         if (tab.id === sessionId) {
@@ -1686,7 +1663,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             ...tab,
             sessionData: {
               ...tab.sessionData,
-              messages: [...tab.sessionData.messages, userMessage, thinkingMessage]
+              messages: [...tab.sessionData.messages, userMessage]
             }
           };
         }
@@ -1751,19 +1728,6 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         return next;
       });
 
-      // Remove thinking message on error
-      setSessionTabs(prev => prev.filter(tab => tab != null).map(tab => {
-        if (tab.id === sessionId) {
-          return {
-            ...tab,
-            sessionData: {
-              ...tab.sessionData,
-              messages: tab.sessionData.messages.filter(m => !m.isThinking)
-            }
-          };
-        }
-        return tab;
-      }));
     }
   }, [workspacePath, mode, documentContext, sessionTabs]);
 
@@ -1779,19 +1743,6 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           return next;
         });
 
-        // Remove thinking message
-        setSessionTabs(prev => prev.filter(tab => tab != null).map(tab => {
-          if (tab.id === sessionId) {
-            return {
-              ...tab,
-              sessionData: {
-                ...tab.sessionData,
-                messages: tab.sessionData.messages.filter(m => !m.isThinking)
-              }
-            };
-          }
-          return tab;
-        }));
       }
     } catch (err) {
       console.error('[AgenticPanel] Failed to cancel request:', err);
@@ -2106,10 +2057,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     // Get the last message
     const lastMessage = messages[messages.length - 1];
 
-    // Only consider it unread if:
-    // 1. Last message is from assistant
-    // 2. It's not a thinking message
-    if (lastMessage.role !== 'assistant' || lastMessage.isThinking) {
+    // Only consider it unread if last message is from assistant
+    if (lastMessage.role !== 'assistant') {
       return false;
     }
 

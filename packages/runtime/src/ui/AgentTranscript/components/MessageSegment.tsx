@@ -46,58 +46,6 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [enlargedImage]);
 
-  // Render thinking indicator
-  const renderThinking = () => {
-    if (!message.isThinking) return null;
-
-    return (
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '0.5rem',
-        color: 'var(--text-secondary)',
-        fontStyle: 'italic'
-      }}>
-        <div style={{
-          display: 'flex',
-          gap: '0.25rem'
-        }}>
-          <div style={{
-            width: '0.5rem',
-            height: '0.5rem',
-            borderRadius: '50%',
-            backgroundColor: 'var(--accent-primary)',
-            animation: 'pulse 1.4s ease-in-out infinite',
-            animationDelay: '0s'
-          }} />
-          <div style={{
-            width: '0.5rem',
-            height: '0.5rem',
-            borderRadius: '50%',
-            backgroundColor: 'var(--accent-primary)',
-            animation: 'pulse 1.4s ease-in-out infinite',
-            animationDelay: '0.2s'
-          }} />
-          <div style={{
-            width: '0.5rem',
-            height: '0.5rem',
-            borderRadius: '50%',
-            backgroundColor: 'var(--accent-primary)',
-            animation: 'pulse 1.4s ease-in-out infinite',
-            animationDelay: '0.4s'
-          }} />
-        </div>
-        <span>Thinking...</span>
-        <style>{`
-          @keyframes pulse {
-            0%, 100% { opacity: 0.4; transform: scale(0.9); }
-            50% { opacity: 1; transform: scale(1.1); }
-          }
-        `}</style>
-      </div>
-    );
-  };
-
   // Helper function to check if content indicates login is required
   const isLoginRequiredError = (text: string): boolean => {
     const lowerText = text.toLowerCase();
@@ -136,7 +84,6 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
 
   // Render text content
   const renderTextContent = () => {
-    if (message.isThinking) return renderThinking();
     if (!message.content.trim()) return null;
 
     // Check if this is a login-required error in the message content

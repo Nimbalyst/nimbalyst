@@ -49,7 +49,6 @@ export interface Message {
   };
   isError?: boolean;
   errorMessage?: string;
-  isThinking?: boolean;
   isSystem?: boolean; // For system messages like slash command output
   isStreamingStatus?: boolean;
   streamingData?: {

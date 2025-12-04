@@ -1116,7 +1116,12 @@ export const RichTranscriptView = React.forwardRef<
 
               {isWaitingForResponse && (
                 <div className="rich-transcript-waiting">
-                  <div className="rich-transcript-waiting-text">Thinking...</div>
+                  <div className="rich-transcript-waiting-dots">
+                    <div className="rich-transcript-waiting-dot" />
+                    <div className="rich-transcript-waiting-dot" />
+                    <div className="rich-transcript-waiting-dot" />
+                  </div>
+                  <span className="rich-transcript-waiting-text">Thinking...</span>
                 </div>
               )}
               <div ref={messagesEndRef} />
