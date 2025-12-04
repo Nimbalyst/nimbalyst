@@ -678,31 +678,40 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
       // Initial size
       updateCanvasSize();
 
+      // Also update when drawing mode is toggled (with a small delay to ensure iframe is ready)
+      // This fixes the issue where canvas has zero dimensions when first entering draw mode
+      let drawModeTimeoutId: ReturnType<typeof setTimeout> | null = null;
+      if (isDrawingMode) {
+        drawModeTimeoutId = setTimeout(updateCanvasSize, 100);
+      }
+
       // Track iframe scroll and update scroll offset
       const iframeDoc = iframe.contentDocument;
-      if (iframeDoc) {
-        const handleScroll = () => {
+      const handleScroll = () => {
+        if (iframeDoc) {
           const scrollX = iframeDoc.documentElement.scrollLeft || iframeDoc.body.scrollLeft;
           const scrollY = iframeDoc.documentElement.scrollTop || iframeDoc.body.scrollTop;
           setScrollOffset({ x: scrollX, y: scrollY });
-        };
+        }
+      };
 
+      if (iframeDoc) {
         iframeDoc.addEventListener('scroll', handleScroll);
-        // Clean up scroll listener
-        return () => {
-          iframeDoc.removeEventListener('scroll', handleScroll);
-        };
-      }
-
-      // Also update when drawing mode is toggled (with a small delay to ensure iframe is ready)
-      if (isDrawingMode) {
-        const timeoutId = setTimeout(updateCanvasSize, 100);
-        return () => clearTimeout(timeoutId);
       }
 
       // Update on window resize
       window.addEventListener('resize', updateCanvasSize);
-      return () => window.removeEventListener('resize', updateCanvasSize);
+
+      // Cleanup all listeners
+      return () => {
+        if (drawModeTimeoutId) {
+          clearTimeout(drawModeTimeoutId);
+        }
+        if (iframeDoc) {
+          iframeDoc.removeEventListener('scroll', handleScroll);
+        }
+        window.removeEventListener('resize', updateCanvasSize);
+      };
     }
   }, [viewMode, isDrawingMode, redrawCanvas]);
 
@@ -722,9 +731,9 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
     try {
       logger.ui.info('[WireframeViewer] Creating composite screenshot for AI');
 
-      // Use shared utility to capture screenshot
-      const drawingCanvas = drawingDataUrl ? drawingCanvasRef.current : null;
-      const base64Data = await captureWireframeComposite(iframeRef.current, drawingCanvas);
+      // Use shared utility to capture screenshot with drawing paths (absolute coordinates)
+      const paths = drawingPathsRef.current.length > 0 ? drawingPathsRef.current : undefined;
+      const base64Data = await captureWireframeComposite(iframeRef.current, null, paths);
 
       // Convert to blob
       const blob = base64ToBlob(base64Data);
@@ -784,9 +793,9 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
           throw new Error('Iframe not ready');
         }
 
-        // Use shared utility to capture screenshot
-        const drawingCanvas = drawingDataUrl ? drawingCanvasRef.current : null;
-        const base64Data = await captureWireframeComposite(iframeRef.current, drawingCanvas);
+        // Use shared utility to capture screenshot with drawing paths (absolute coordinates)
+        const paths = drawingPathsRef.current.length > 0 ? drawingPathsRef.current : undefined;
+        const base64Data = await captureWireframeComposite(iframeRef.current, null, paths);
 
         logger.ui.info('[WireframeViewer] MCP screenshot captured successfully');
 

@@ -7,11 +7,13 @@
  *
  * @param iframe - The iframe element containing the wireframe
  * @param drawingCanvas - Optional canvas element with drawing annotations
+ * @param drawingPaths - Optional array of drawing paths with absolute coordinates
  * @returns Base64-encoded PNG image data (without data URL prefix)
  */
 export async function captureWireframeComposite(
   iframe: HTMLIFrameElement,
-  drawingCanvas?: HTMLCanvasElement | null
+  drawingCanvas?: HTMLCanvasElement | null,
+  drawingPaths?: Array<{ points: { x: number; y: number }[]; color: string }>
 ): Promise<string> {
   const iframeWindow = iframe.contentWindow;
   const iframeDoc = iframe.contentDocument || iframeWindow?.document;
@@ -74,9 +76,31 @@ export async function captureWireframeComposite(
   // Draw wireframe
   ctx.drawImage(wireframeCanvas, 0, 0);
 
-  // Draw the drawing overlay if it exists
-  if (drawingCanvas) {
-    // Scale the drawing to match the wireframe canvas size
+  // Draw the drawing paths if provided (preferred - uses absolute coordinates)
+  if (drawingPaths && drawingPaths.length > 0) {
+    // Calculate scale factor (html2canvas uses scale: 2)
+    const scale = wireframeCanvas.width / elemWidth;
+
+    drawingPaths.forEach(path => {
+      if (path.points.length < 2) return;
+
+      ctx.strokeStyle = path.color;
+      ctx.lineWidth = 3 * scale;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      ctx.beginPath();
+      const firstPoint = path.points[0];
+      ctx.moveTo(firstPoint.x * scale, firstPoint.y * scale);
+
+      for (let i = 1; i < path.points.length; i++) {
+        const point = path.points[i];
+        ctx.lineTo(point.x * scale, point.y * scale);
+      }
+      ctx.stroke();
+    });
+  } else if (drawingCanvas) {
+    // Fallback: draw canvas overlay (legacy behavior, doesn't handle scroll correctly)
     const scaleX = wireframeCanvas.width / drawingCanvas.width;
     const scaleY = wireframeCanvas.height / drawingCanvas.height;
     ctx.scale(scaleX, scaleY);
