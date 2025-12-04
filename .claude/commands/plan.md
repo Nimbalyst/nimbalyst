@@ -1,150 +1,108 @@
-# plan
-Create a new plan document in the nimbalyst-local/plans/ directory following these guidelines:
+---
+packageVersion: 1.0.0
+packageId: core
+---
 
-## File Naming and Location
-- Location: nimbalyst-local/plans/[descriptive-name].md
-- Use kebab-case for filenames (e.g., user-authentication-system.md)
-- Name should be descriptive of the feature or task
+# /plan Command
 
-## Plan Document Structure
+Create a new plan document for tracking work.
 
-Every plan MUST include YAML frontmatter with the following fields:
+## Overview
+
+Plans are structured markdown documents with YAML frontmatter that track features, initiatives, projects, and other work.
+
+## File Location and Naming
+
+**Location**: `nimbalyst-local/plans/[descriptive-name].md`
+
+**Naming conventions**:
+- Use kebab-case: `user-authentication-system.md`, `marketing-campaign-q4.md`
+- Be descriptive: The filename should clearly indicate what the plan is about
+
+## Required YAML Frontmatter
 
 ```yaml
 ---
 planStatus:
-  planId: plan-[unique-identifier]  # Use kebab-case, e.g., plan-user-auth
-  title: [Plan Title]                # Human-readable title
-  status: [status]                   # See status values below
-  planType: [type]                   # See plan types below
-  priority: [priority]               # low | medium | high | critical
-  owner: [username]                  # Primary owner/assignee
-  stakeholders:                      # List of stakeholders
-    - [stakeholder1]
-    - [stakeholder2]
-  tags:                              # Relevant tags for categorization
-    - [tag1]
-    - [tag2]
-  created: "YYYY-MM-DD"             # Creation date (use today's date)
-  updated: "YYYY-MM-DDTHH:MM:SS.sssZ"  # Last update timestamp (use current time via new Date().toISOString())
-  progress: [0-100]                  # Completion percentage
-  dueDate: "YYYY-MM-DD"              # Due date (optional)
-  startDate: "YYYY-MM-DD"            # Start date (optional)
+  planId: plan-[unique-identifier]
+  title: [Plan Title]
+  status: draft
+  planType: feature
+  priority: medium
+  owner: [your-name]
+  stakeholders: []
+  tags: []
+  created: "YYYY-MM-DD"
+  updated: "YYYY-MM-DDTHH:MM:SS.sssZ"
+  progress: 0
 ---
 ```
 
 ## Status Values
-- draft: Initial planning phase
-- ready-for-development: Approved and ready for implementation
-- in-development: Currently being worked on
-- in-review: Implementation complete, pending review
-- completed: Successfully completed
-- rejected: Plan has been rejected or cancelled
-- blocked: Progress blocked by dependencies
+
+- `draft`: Initial planning phase
+- `ready-for-development`: Approved and ready to start
+- `in-development`: Currently being worked on
+- `in-review`: Implementation complete, pending review
+- `completed`: Successfully completed
+- `rejected`: Plan has been rejected or cancelled
+- `blocked`: Progress blocked by dependencies
 
 ## Plan Types
-- feature: New feature development
-- bug-fix: Bug fix or issue resolution
-- refactor: Code refactoring/improvement
-- system-design: Architecture/design work
-- research: Research/investigation task
 
-## Document Structure
+Common plan types:
+- `feature`: New feature development
+- `bug-fix`: Bug fix or issue resolution
+- `refactor`: Code refactoring/improvement
+- `system-design`: Architecture/design work
+- `research`: Research/investigation task
+- `initiative`: Large multi-feature effort
+- `improvement`: Enhancement to existing feature
 
-After the frontmatter, include:
+## Usage
 
-1. Title followed by plan status comment:
-```markdown
-# Plan Title
-```
+When the user types `/plan [description]`:
 
-2. Goals section outlining objectives
-3. System Overview or problem description
-4. High-level approach (what, not how)
-5. Key components or phases
-6. Acceptance criteria when applicable
+1. Extract key information from the description
+2. Generate unique `planId` from description (kebab-case)
+3. Choose appropriate `planType` based on description
+4. Set `created` to today's date, `updated` to current timestamp
+5. Create file in `nimbalyst-local/plans/` with proper frontmatter
+6. Include relevant sections based on plan type
 
-## MockupLM - Visual Planning
+## Visual Mockups
 
-For plans that involve UI mockups or visual design, create a `.mockup.html` file alongside your plan document. This allows you to iterate on visual designs with the user before implementation.
+When a plan involves UI components, screens, or visual design, use the `/mockup` command in a sub-agent to create mockups. This keeps visual design work separate from planning.
 
-**When to use MockupLM:**
+**When to create a mockup:**
 - Planning new UI components or screens
 - Designing layout and structure
-- Mockups that need visual feedback
+- Changes that need visual feedback before implementation
 
-**Workflow:**
-1. Create mockup file (e.g., `nimbalyst-local/plans/feature.mockup.html`) with HTML and inline CSS
-2. Use Task tool to spawn a sub-agent that will iteratively verify and fix the mockup:
-   - Capture screenshot with `mcp__nimbalyst-mcp__capture_mockup_screenshot`
-   - Analyze for layout/visual issues AND user annotations
-   - Fix with Edit tool
-   - Re-capture and repeat until correct
+**When NOT to create a mockup:**
+- Backend-only changes
+- Refactoring that doesn't change UI
+- Bug fixes with obvious solutions
+- Infrastructure or configuration changes
+- Minor and well-described UI changes where there are no remaining design choices
 
-**Important:** The user may draw annotations on the mockup (circles, arrows, highlights). You can ONLY see these annotations by using the `mcp__nimbalyst-mcp__capture_mockup_screenshot` tool - they are not in the HTML source.
+If a visual mockup would help communicate the plan, tell the user you'll use `/mockup` to create one, and do so after completing the plan document.
+Make sure the plan document references and links the mockup file using the mockup image syntax, and use your Capture Mockup Screenshot tool to view it once the sub-agent completes and verify that it conforms to the plan.
 
-## CRITICAL: What NOT to Include
-
-Plans are for PLANNING, not implementation. DO NOT include:
-
-- Code blocks with implementation details
-- Detailed TypeScript interfaces or function signatures
-- CSS styling code
-- Line-by-line implementation instructions
-- Example code snippets (unless demonstrating a concept)
-- Overly detailed step-by-step procedures
-
-Plans should answer WHAT and WHY, not HOW. Keep it high-level and focused on:
-- What needs to be built
-- Why it's being built this way
-- What the major components are
-- What files will be affected (list them, don't show code)
-- What the acceptance criteria are
-
-The person implementing will figure out the details. The plan is for understanding scope and approach.
-
-## Example
-
+**Mockup image syntax:**
 ```markdown
----
-planStatus:
-  planId: plan-user-authentication
-  title: User Authentication System
-  status: draft
-  planType: feature
-  priority: high
-  owner: developer
-  stakeholders:
-    - developer
-    - product-team
-  tags:
-    - authentication
-    - security
-    - user-management
-  created: "2025-10-16"
-  updated: "2025-10-16T10:00:00.000Z"
-  progress: 0
----
-
-# User Authentication System
-
-
-## Goals
-- Implement secure user authentication
-- Support multiple authentication providers
-- Ensure session management
-
-## Implementation Details
-[Your implementation details here]
+![Description](screenshot.png){mockup:path/to/mockup.mockup.html}
 ```
 
-## CRITICAL: Timestamp Requirements
+With optional size:
+```markdown
+![Description](screenshot.png){mockup:path/to/mockup.mockup.html}{800x600}
+``` 
 
-When creating a plan:
-1. Set `created` to today's date in YYYY-MM-DD format
-2. Set `updated` to the CURRENT timestamp using new Date().toISOString() format
-3. NEVER use midnight timestamps (00:00:00.000Z) - always use the actual current time
+## Best Practices
 
-The `updated` field is used to display "last updated" times in the tracker table. Using midnight timestamps will show incorrect "Xh ago" values.
-
-When creating a plan, extract the key information from the user's request and populate all required frontmatter fields appropriately.
+- Keep plans focused on a single objective
+- Update progress regularly as work proceeds
+- Use tags to categorize related plans
+- Add stakeholders who need visibility
+- Set realistic due dates when applicable
