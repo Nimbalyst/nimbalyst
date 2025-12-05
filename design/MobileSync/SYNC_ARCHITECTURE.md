@@ -224,16 +224,12 @@ interface EncryptedMessage {
   direction: 'input' | 'output'; // Direction (unencrypted)
   encrypted_content: string;     // Base64 AES-GCM ciphertext
   iv: string;                    // Base64 initialization vector
-  metadata: {
-    tool_name?: string;          // Tool name if tool message (unencrypted)
-    has_attachments?: boolean;   // Flag only, not content (unencrypted)
-    content_length: number;      // Encrypted content size (unencrypted)
-  };
+  metadata: {};                  // Empty - all sensitive data in encrypted_content
 }
 ```
 
-**What's encrypted**: Message content, full metadata, hidden flag
-**What's NOT encrypted**: Timestamps, message direction, tool names (for server indexing)
+**What's encrypted**: Message content, tool names, attachments, hidden flag - all message data
+**What's NOT encrypted**: Timestamps, message source/direction (structural metadata only)
 
 ### Sync ID Generation
 

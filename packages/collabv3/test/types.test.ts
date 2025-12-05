@@ -56,9 +56,7 @@ describe('Message protocol', () => {
       direction: 'input',
       encrypted_content: 'base64encodedcontent==',
       iv: 'base64encodediv==',
-      metadata: {
-        content_length: 100,
-      },
+      metadata: {},
     };
 
     const msg: ClientMessage = {
@@ -142,7 +140,7 @@ describe('Encrypted message format', () => {
     expect(['input', 'output']).toContain(msg.direction);
   });
 
-  it('should support optional metadata fields', () => {
+  it('should have empty metadata (all sensitive data is encrypted)', () => {
     const msg: EncryptedMessage = {
       id: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
       sequence: 1,
@@ -151,15 +149,9 @@ describe('Encrypted message format', () => {
       direction: 'output',
       encrypted_content: 'encrypted',
       iv: 'iv',
-      metadata: {
-        tool_name: 'bash',
-        has_attachments: true,
-        content_length: 5000,
-      },
+      metadata: {},
     };
 
-    expect(msg.metadata.tool_name).toBe('bash');
-    expect(msg.metadata.has_attachments).toBe(true);
-    expect(msg.metadata.content_length).toBe(5000);
+    expect(msg.metadata).toEqual({});
   });
 });

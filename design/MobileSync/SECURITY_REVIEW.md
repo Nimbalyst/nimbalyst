@@ -249,9 +249,9 @@ const encrypted = await crypto.subtle.encrypt(
   - TODO: Consider adding random salt component
 - [ ] **No forward secrecy**: Compromise of encryptionKeySeed decrypts all messages
   - TODO: Consider implementing message-level key rotation
-- [ ] **Metadata leakage**: Timestamps, message direction, tool names are unencrypted
-  - Design decision: Needed for server-side indexing
-  - TODO: Document what metadata is visible to server
+- [x] **Metadata leakage**: ~~Tool names, attachments, content length were unencrypted~~
+  - RESOLVED: All message content now encrypted; only timestamps and source/direction remain plaintext
+  - These structural fields have no privacy implications
 
 ---
 

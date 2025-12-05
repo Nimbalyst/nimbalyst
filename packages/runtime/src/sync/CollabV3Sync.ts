@@ -401,11 +401,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       direction: message.direction as EncryptedMessage['direction'],
       encrypted_content: encrypted,
       iv,
-      metadata: {
-        tool_name: message.metadata?.['toolName'] as string | undefined,
-        has_attachments: !!message.metadata?.['attachments'],
-        content_length: content.length,
-      },
+      metadata: {},
     };
   }
 

@@ -216,18 +216,8 @@ export interface EncryptedMessage {
   encrypted_content: string;
   /** Base64 encoded IV for decryption */
   iv: string;
-  /** Plaintext metadata for indexing (no sensitive data) */
-  metadata: MessageMetadata;
-}
-
-/** Plaintext metadata attached to encrypted messages */
-export interface MessageMetadata {
-  /** Tool name if this is a tool message */
-  tool_name?: string;
-  /** Whether message has attachments */
-  has_attachments?: boolean;
-  /** Approximate content length (for UI hints) */
-  content_length?: number;
+  /** Empty metadata object (all sensitive data is in encrypted_content) */
+  metadata: Record<string, never>;
 }
 
 /** Session metadata (stored alongside messages in SessionRoom) */
