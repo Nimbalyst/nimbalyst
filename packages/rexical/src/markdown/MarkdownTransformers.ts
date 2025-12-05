@@ -482,10 +482,13 @@ export const LINK: TextMatchTransformer = {
 
     return linkContent;
   },
+  // Note: These regexes must NOT match:
+  // 1. Images like ![alt](src) - handled by negative lookbehind (?<!!)
+  // 2. Linked images like [![alt](src)](url) - handled by negative lookahead (?!!\[)
   importRegExp:
-    /(?:\[([^[]+)\])(?:\(([^\s]+)(?:\s+"([^"]*)")?\))/,
+    /(?<!!)(?:\[(?!!\[)([^\]]+)\])(?:\(([^\s\)]+)(?:\s+"([^"]*)")?\))/,
   regExp:
-    /(?:\[([^[]+)\])(?:\(([^\s]+)(?:\s+"([^"]*)")?\))$/,
+    /(?<!!)(?:\[(?!!\[)([^\]]+)\])(?:\(([^\s\)]+)(?:\s+"([^"]*)")?\))$/,
   replace: (textNode, match) => {
     const [, linkText, linkUrl, linkTitle] = match;
     const linkNode = $createLinkNode(linkUrl, {title: linkTitle});

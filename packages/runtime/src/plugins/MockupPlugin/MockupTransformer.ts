@@ -1,11 +1,11 @@
 /**
  * MockupTransformer - Markdown transformer for mockup nodes.
  *
- * Uses extended image syntax to maintain compatibility with other markdown editors.
- * Format: ![alt](screenshot.png){mockup:feature.mockup.html}{width}x{height}
+ * Uses standard markdown linked image syntax for compatibility with other editors.
+ * Format: [![alt](screenshot.png)](feature.mockup.html){width}x{height}
  *
- * The screenshot path is primary for compatibility, the {mockup:...} extension
- * stores the mockup source path.
+ * This renders as a clickable image in standard markdown viewers, with the
+ * screenshot displayed and linking to the mockup source file.
  */
 
 import { TextMatchTransformer } from '@lexical/markdown';
@@ -14,12 +14,12 @@ import { $createMockupNode, $isMockupNode, MockupNode } from './MockupNode';
 
 /**
  * Regex for importing mockup from markdown.
- * Matches: ![alt](screenshot.png){mockup:feature.mockup.html}{widthxheight}
+ * Matches: [![alt](screenshot.png)](feature.mockup.html){widthxheight}
  *
  * Groups:
  * 1. alt text
  * 2. screenshot path (can be empty)
- * 3. mockup path
+ * 3. mockup path (must end in .mockup.html)
  * 4. width (optional)
  * 5. height (optional)
  *
@@ -27,13 +27,13 @@ import { $createMockupNode, $isMockupNode, MockupNode } from './MockupNode';
  * Size syntax is `{widthxheight}` matching the image format.
  */
 const MOCKUP_IMPORT_REGEX =
-  /!(?:\[([^[]*)\])(?:\(([^)]*)\))(?:\{mockup:([^}]+)\})(?:\{(\d+)x(\d+)\})?/;
+  /\[!\[([^\]]*)\]\(([^)]*)\)\]\(([^)]*\.mockup\.html)\)(?:\{(\d+)x(\d+)\})?/;
 
 /**
- * Regex for detecting mockup while typing (triggers on closing brace).
+ * Regex for detecting mockup while typing (triggers on closing paren or brace).
  */
 const MOCKUP_TYPING_REGEX =
-  /!(?:\[([^[]*)\])(?:\(([^)]*)\))(?:\{mockup:([^}]+)\})(?:\{(\d+)x(\d+)\})?$/;
+  /\[!\[([^\]]*)\]\(([^)]*)\)\]\(([^)]*\.mockup\.html)\)(?:\{(\d+)x(\d+)\})?$/;
 
 export const MOCKUP_TRANSFORMER: TextMatchTransformer = {
   dependencies: [MockupNode],
@@ -49,8 +49,8 @@ export const MOCKUP_TRANSFORMER: TextMatchTransformer = {
     const width = node.__width;
     const height = node.__height;
 
-    // Build the markdown string
-    let markdown = `![${altText}](${screenshotPath}){mockup:${mockupPath}}`;
+    // Build the linked image markdown: [![alt](screenshot)](mockup.html)
+    let markdown = `[![${altText}](${screenshotPath})](${mockupPath})`;
 
     // Add size if both width and height are set (format: {widthxheight})
     if (width !== 'inherit' && height !== 'inherit') {
@@ -77,6 +77,6 @@ export const MOCKUP_TRANSFORMER: TextMatchTransformer = {
     textNode.replace(mockupNode);
   },
 
-  trigger: '}',
+  trigger: ')',
   type: 'text-match',
 };
