@@ -147,6 +147,8 @@ export default defineConfig({
           'abort-controller',
           'agentkeepalive',
           'web-streams-polyfill',
+          // Native modules - must be external, cannot be bundled
+          'node-pty',
           // Renderer-only packages
           '@excalidraw/excalidraw',
           '@excalidraw/excalidraw/index.css'
