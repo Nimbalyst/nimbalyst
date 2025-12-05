@@ -1390,6 +1390,15 @@ export class AIService {
       let autoContextPromise: Promise<void> | null = null;
       await stateManager.startSession({ sessionId: session.id });
 
+      // Mark session as executing for mobile sync (shows "Running" indicator)
+      const syncProvider = getSyncProvider();
+      if (syncProvider) {
+        syncProvider.pushChange(session.id, {
+          type: 'metadata_updated',
+          metadata: { isExecuting: true } as any,
+        });
+      }
+
       try {
         let fullResponse = '';
         const toolCalls: any[] = [];
@@ -1946,6 +1955,14 @@ export class AIService {
 
         await stateManager.endSession(session.id);
 
+        // Clear executing flag for mobile sync
+        if (syncProvider) {
+          syncProvider.pushChange(session.id, {
+            type: 'metadata_updated',
+            metadata: { isExecuting: false } as any,
+          });
+        }
+
         // Queue processing is handled by the renderer (AgenticPanel) to keep SDK instantiation in one place
 
         // Clean up queued prompt tracking
@@ -1996,6 +2013,14 @@ export class AIService {
             sessionId: session.id,
             status: 'error'
           });
+
+          // Clear executing flag for mobile sync on error
+          if (syncProvider) {
+            syncProvider.pushChange(session.id, {
+              type: 'metadata_updated',
+              metadata: { isExecuting: false } as any,
+            });
+          }
         }
 
         // Send error metrics
