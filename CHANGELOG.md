@@ -19,6 +19,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.46.6] - 2025-12-05
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+- Reverted node-pty for Windows Claude login due to stability issues
+
+### Fixed
+<!-- Bug fixes go here -->
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.46.5] - 2025-12-05
 
 
