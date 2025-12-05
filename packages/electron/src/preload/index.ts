@@ -562,6 +562,29 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getLocalIP: () => ipcRenderer.invoke('network:get-local-ip'),
   },
 
+  // Stytch Authentication (for account-based sync)
+  stytch: {
+    getAuthState: () => ipcRenderer.invoke('stytch:get-auth-state'),
+    isAuthenticated: () => ipcRenderer.invoke('stytch:is-authenticated'),
+    signInWithGoogle: () => ipcRenderer.invoke('stytch:sign-in-google'),
+    sendMagicLink: (email: string) =>
+      ipcRenderer.invoke('stytch:send-magic-link', email),
+    signOut: () => ipcRenderer.invoke('stytch:sign-out'),
+    getSessionJwt: () => ipcRenderer.invoke('stytch:get-session-jwt'),
+    refreshSession: () => ipcRenderer.invoke('stytch:refresh-session'),
+    issueDeviceToken: (deviceName: string, deviceType?: 'mobile' | 'tablet') =>
+      ipcRenderer.invoke('stytch:issue-device-token', deviceName, deviceType),
+    getDeviceTokens: () => ipcRenderer.invoke('stytch:get-device-tokens'),
+    revokeDeviceToken: (deviceId: string) =>
+      ipcRenderer.invoke('stytch:revoke-device-token', deviceId),
+    subscribeAuthState: () => ipcRenderer.invoke('stytch:subscribe-auth-state'),
+    onAuthStateChange: (callback: (state: any) => void) => {
+      const handler = (_event: any, state: any) => callback(state);
+      ipcRenderer.on('stytch:auth-state-changed', handler);
+      return () => ipcRenderer.removeListener('stytch:auth-state-changed', handler);
+    },
+  },
+
   // Generic IPC methods for services that need them
   invoke: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args),
   send: (channel: string, ...args: any[]) => ipcRenderer.send(channel, ...args),

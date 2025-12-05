@@ -285,4 +285,8 @@ export interface Env {
   INDEX_ROOM: DurableObjectNamespace;
   DB: D1Database;
   ENVIRONMENT: string;
+  // Stytch auth
+  STYTCH_PROJECT_ID?: string;
+  STYTCH_PUBLIC_TOKEN?: string;
+  STYTCH_SECRET_KEY?: string;
 }

@@ -39,6 +39,7 @@ interface SettingsSidebarProps {
   totalPackageCount?: number;
   isProduction?: boolean;
   scope?: SettingsScope;
+  releaseChannel?: 'stable' | 'alpha';
 }
 
 export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
@@ -49,6 +50,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
   totalPackageCount = 0,
   isProduction = import.meta.env.PROD,
   scope = 'user',
+  releaseChannel = 'stable',
 }) => {
   const getStatusDot = (providerId: string): 'success' | 'warning' | 'error' | undefined => {
     const status = providerStatus[providerId];
@@ -59,6 +61,27 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
   };
 
   const categoryGroups: CategoryGroup[] = [
+    {
+      title: 'Application',
+      items: [
+        {
+          id: 'sync',
+          name: 'Account & Sync',
+          icon: <MaterialSymbol icon="account_circle" size={16} />,
+          hidden: releaseChannel !== 'alpha', // Only visible to alpha users
+        },
+        {
+          id: 'notifications',
+          name: 'Notifications',
+          icon: <MaterialSymbol icon="notifications" size={16} />,
+        },
+        {
+          id: 'advanced',
+          name: 'Advanced',
+          icon: <MaterialSymbol icon="settings" size={16} />,
+        },
+      ],
+    },
     {
       title: 'AI Providers',
       items: [
@@ -108,26 +131,6 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
           id: 'mcp-servers',
           name: 'MCP Servers',
           icon: <MaterialSymbol icon="dns" size={16} />,
-        },
-      ],
-    },
-    {
-      title: 'Application',
-      items: [
-        {
-          id: 'notifications',
-          name: 'Notifications',
-          icon: <MaterialSymbol icon="notifications" size={16} />,
-        },
-        {
-          id: 'sync',
-          name: 'Sync',
-          icon: <MaterialSymbol icon="sync" size={16} />,
-        },
-        {
-          id: 'advanced',
-          name: 'Advanced',
-          icon: <MaterialSymbol icon="settings" size={16} />,
         },
       ],
     },

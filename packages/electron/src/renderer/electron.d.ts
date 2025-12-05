@@ -158,6 +158,70 @@ interface ElectronAPI {
     optIn: () => Promise<void>;
     optOut: () => Promise<void>;
     setSessionId: (sessionId: string) => void;
+  };
+
+  // Credentials (for sync and mobile pairing)
+  credentials: {
+    getUserId: () => Promise<string>;
+    get: () => Promise<{ userId: string; createdAt: number; isSecure: boolean }>;
+    reset: () => Promise<{ userId: string; createdAt: number; isSecure: boolean }>;
+    generateQRPayload: (serverUrl: string, expiresInMinutes?: number) => Promise<{
+      version: number;
+      serverUrl: string;
+      userId: string;
+      authToken: string;
+      encryptionKeySeed: string;
+      expiresAt: number;
+    }>;
+    isSecure: () => Promise<boolean>;
+  };
+
+  // Network utilities
+  network: {
+    getLocalIP: () => Promise<string | null>;
+  };
+
+  // Stytch Authentication (for account-based sync)
+  stytch: {
+    getAuthState: () => Promise<{
+      isAuthenticated: boolean;
+      user: {
+        user_id: string;
+        emails: Array<{ email_id: string; email: string; verified: boolean }>;
+        name?: { first_name?: string; last_name?: string };
+        created_at: string;
+        status: 'active' | 'pending';
+      } | null;
+      sessionToken: string | null;
+      sessionJwt: string | null;
+    }>;
+    isAuthenticated: () => Promise<boolean>;
+    signInWithGoogle: () => Promise<{ success: boolean; error?: string }>;
+    sendMagicLink: (email: string) => Promise<{ success: boolean; error?: string }>;
+    signOut: () => Promise<{ success: boolean }>;
+    getSessionJwt: () => Promise<string | null>;
+    refreshSession: () => Promise<boolean>;
+    issueDeviceToken: (deviceName: string, deviceType?: 'mobile' | 'tablet') => Promise<{
+      token: string;
+      deviceId: string;
+      userId: string;
+      createdAt: number;
+      lastUsedAt: number;
+      deviceName?: string;
+      deviceType: 'mobile' | 'tablet' | 'desktop';
+    } | null>;
+    getDeviceTokens: () => Promise<Array<{
+      token: string;
+      deviceId: string;
+      userId: string;
+      createdAt: number;
+      lastUsedAt: number;
+      deviceName?: string;
+      deviceType: 'mobile' | 'tablet' | 'desktop';
+    }>>;
+    revokeDeviceToken: (deviceId: string) => Promise<boolean>;
+    subscribeAuthState: () => Promise<any>;
+    onAuthStateChange: (callback: (state: any) => void) => () => void;
   }
 
   // Document Service

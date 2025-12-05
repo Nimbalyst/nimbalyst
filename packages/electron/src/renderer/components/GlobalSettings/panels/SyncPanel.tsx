@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { QRPairingModal } from './QRPairingModal';
 
 /** Format a timestamp as relative time (e.g., "5 minutes ago") */
@@ -50,12 +50,181 @@ interface DeviceInfo {
   last_active_at: number;
 }
 
+interface DeviceToken {
+  token: string;
+  deviceId: string;
+  userId: string;
+  createdAt: number;
+  lastUsedAt: number;
+  deviceName?: string;
+  deviceType: 'mobile' | 'tablet' | 'desktop';
+}
+
 interface SyncPanelProps {
   config: SyncConfig;
   onConfigChange: (config: SyncConfig) => void;
   onTestConnection: () => void;
   testStatus: 'idle' | 'testing' | 'success' | 'error';
   testMessage?: string;
+}
+
+interface StytchAuthState {
+  isAuthenticated: boolean;
+  user: {
+    user_id: string;
+    emails: Array<{ email: string }>;
+    name?: { first_name?: string; last_name?: string };
+  } | null;
+}
+
+// Project Picker Popup Component
+function ProjectPickerPopup({
+  isOpen,
+  onClose,
+  projects,
+  enabledProjects,
+  onToggle,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  projects: Project[];
+  enabledProjects: string[];
+  onToggle: (path: string, enabled: boolean) => void;
+}) {
+  if (!isOpen) return null;
+
+  const enabledCount = projects.filter(p => enabledProjects.includes(p.path)).length;
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'rgba(0, 0, 0, 0.5)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000,
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          background: 'var(--surface-primary)',
+          borderRadius: '12px',
+          width: '400px',
+          maxHeight: '500px',
+          overflow: 'hidden',
+          boxShadow: '0 20px 40px rgba(0, 0, 0, 0.3)',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{
+          padding: '16px 20px',
+          borderBottom: '1px solid var(--border-primary)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>
+              Projects to Sync
+            </h3>
+            <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--text-tertiary)' }}>
+              {enabledCount} of {projects.length} projects enabled
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: '4px',
+              color: 'var(--text-tertiary)',
+            }}
+          >
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M15 5L5 15M5 5l10 10" />
+            </svg>
+          </button>
+        </div>
+
+        <div style={{
+          padding: '12px 20px',
+          maxHeight: '350px',
+          overflowY: 'auto',
+        }}>
+          {projects.length === 0 ? (
+            <p style={{ color: 'var(--text-tertiary)', fontSize: '13px', textAlign: 'center', padding: '20px 0' }}>
+              No projects found. Open a workspace to see projects here.
+            </p>
+          ) : (
+            projects.map((project) => (
+              <label
+                key={project.path}
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '12px',
+                  padding: '10px 0',
+                  cursor: 'pointer',
+                  borderBottom: '1px solid var(--border-primary)',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={enabledProjects.includes(project.path)}
+                  onChange={(e) => onToggle(project.path, e.target.checked)}
+                  style={{ marginTop: '2px' }}
+                />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
+                    {project.name}
+                  </div>
+                  <div style={{
+                    fontSize: '11px',
+                    color: 'var(--text-tertiary)',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}>
+                    {project.path}
+                  </div>
+                </div>
+              </label>
+            ))
+          )}
+        </div>
+
+        <div style={{
+          padding: '12px 20px',
+          borderTop: '1px solid var(--border-primary)',
+          display: 'flex',
+          justifyContent: 'flex-end',
+        }}>
+          <button
+            onClick={onClose}
+            style={{
+              padding: '8px 16px',
+              background: 'var(--primary-color)',
+              border: 'none',
+              borderRadius: '6px',
+              color: 'white',
+              fontSize: '13px',
+              fontWeight: 500,
+              cursor: 'pointer',
+            }}
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function SyncPanel({
@@ -70,12 +239,27 @@ export function SyncPanel({
   const [userId, setUserId] = useState<string>('');
   const [isSecureStorage, setIsSecureStorage] = useState<boolean>(false);
   const [showQRModal, setShowQRModal] = useState(false);
+  const [showProjectPicker, setShowProjectPicker] = useState(false);
   const [copiedUserId, setCopiedUserId] = useState(false);
   const [connectedDevices, setConnectedDevices] = useState<DeviceInfo[]>([]);
   const [devicesLoading, setDevicesLoading] = useState(false);
   const [devicesError, setDevicesError] = useState<string | null>(null);
+  const [stytchAuth, setStytchAuth] = useState<StytchAuthState>({
+    isAuthenticated: false,
+    user: null,
+  });
+  const [deviceTokens, setDeviceTokens] = useState<DeviceToken[]>([]);
 
-  // Load credentials info on mount
+  // Auth UI state
+  const [showAuthForm, setShowAuthForm] = useState(false);
+  const [email, setEmail] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [magicLinkSent, setMagicLinkSent] = useState(false);
+
+  const isStytchAvailable = !!window.electronAPI?.stytch;
+
+  // Load credentials info and Stytch auth state on mount
   useEffect(() => {
     async function loadCredentials() {
       try {
@@ -86,7 +270,53 @@ export function SyncPanel({
         console.error('Failed to load credentials:', error);
       }
     }
+
+    async function loadStytchAuth() {
+      if (!window.electronAPI?.stytch) return;
+      try {
+        const state = await window.electronAPI.stytch.getAuthState();
+        setStytchAuth({
+          isAuthenticated: state.isAuthenticated,
+          user: state.user,
+        });
+        if (state.isAuthenticated) {
+          loadDeviceTokens();
+        }
+      } catch (error) {
+        console.error('Failed to load Stytch auth state:', error);
+      }
+    }
+
     loadCredentials();
+    loadStytchAuth();
+
+    if (!window.electronAPI?.stytch) return;
+
+    // Subscribe to auth state changes in main process (registers the IPC broadcast listener)
+    window.electronAPI.stytch.subscribeAuthState();
+
+    // Listen for auth state change IPC events
+    const unsubscribe = window.electronAPI.stytch.onAuthStateChange((state: StytchAuthState) => {
+      setStytchAuth({
+        isAuthenticated: state.isAuthenticated,
+        user: state.user,
+      });
+      if (state.isAuthenticated) {
+        loadDeviceTokens();
+      }
+    });
+
+    return unsubscribe;
+  }, []);
+
+  const loadDeviceTokens = useCallback(async () => {
+    if (!window.electronAPI?.stytch) return;
+    try {
+      const tokens = await window.electronAPI.stytch.getDeviceTokens();
+      setDeviceTokens(tokens || []);
+    } catch (err) {
+      console.error('Failed to load device tokens:', err);
+    }
   }, []);
 
   // Load projects from workspace store
@@ -131,11 +361,9 @@ export function SyncPanel({
     }
   };
 
-  // Load devices on mount and when sync becomes enabled
   useEffect(() => {
     if (config.enabled && config.serverUrl) {
       loadDevices();
-      // Refresh devices every 30 seconds
       const interval = setInterval(loadDevices, 30000);
       return () => clearInterval(interval);
     } else {
@@ -149,18 +377,11 @@ export function SyncPanel({
   };
 
   const handleProjectToggle = (projectPath: string, enabled: boolean) => {
-    const enabledProjects = config.enabledProjects || [];
+    const enabledProjects = config.enabledProjects || projects.map(p => p.path);
     const updated = enabled
       ? [...enabledProjects, projectPath]
       : enabledProjects.filter(p => p !== projectPath);
-
     onConfigChange({ ...config, enabledProjects: updated });
-  };
-
-  const isProjectEnabled = (projectPath: string): boolean => {
-    // If enabledProjects is not set, default to all enabled
-    if (!config.enabledProjects) return true;
-    return config.enabledProjects.includes(projectPath);
   };
 
   const handleCopyUserId = async () => {
@@ -173,37 +394,380 @@ export function SyncPanel({
     }
   };
 
+  // Auth handlers
+  const handleGoogleSignIn = async () => {
+    if (!window.electronAPI?.stytch) return;
+    setAuthLoading(true);
+    setAuthError(null);
+    try {
+      const result = await window.electronAPI.stytch.signInWithGoogle();
+      if (!result.success && result.error) {
+        setAuthError(result.error);
+      } else {
+        setShowAuthForm(false);
+      }
+    } catch (err) {
+      setAuthError(String(err));
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleSendMagicLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!window.electronAPI?.stytch) return;
+    if (!email) {
+      setAuthError('Email is required');
+      return;
+    }
+
+    setAuthLoading(true);
+    setAuthError(null);
+    try {
+      const result = await window.electronAPI.stytch.sendMagicLink(email);
+
+      if (!result.success && result.error) {
+        setAuthError(result.error);
+      } else {
+        setMagicLinkSent(true);
+      }
+    } catch (err) {
+      setAuthError(String(err));
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    if (!window.electronAPI?.stytch) return;
+    try {
+      await window.electronAPI.stytch.signOut();
+    } catch (err) {
+      console.error('Sign out error:', err);
+    }
+  };
+
+  const handleRevokeDevice = async (deviceId: string) => {
+    if (!window.electronAPI?.stytch) return;
+    try {
+      await window.electronAPI.stytch.revokeDeviceToken(deviceId);
+      await loadDeviceTokens();
+    } catch (err) {
+      console.error('Revoke device error:', err);
+    }
+  };
+
+  const enabledProjectCount = config.enabledProjects
+    ? config.enabledProjects.length
+    : projects.length;
+
   return (
     <div className="provider-panel">
       <div className="provider-panel-header">
-        <h3 className="provider-panel-title">Session Sync</h3>
+        <h3 className="provider-panel-title">Account & Sync</h3>
         <p className="provider-panel-description">
-          Sync AI sessions across devices with end-to-end encryption.
-          Pair your mobile device using a QR code to access sessions on the go.
+          Sign in to sync AI sessions across devices with end-to-end encryption.
         </p>
       </div>
 
-      {/* Device Identity Section */}
+      {/* Account Section */}
       <div className="provider-panel-section">
-        <h4 className="provider-panel-section-title">Device Identity</h4>
-        <p className="provider-panel-hint" style={{ marginBottom: '12px' }}>
-          Your unique device ID is auto-generated and stored securely{isSecureStorage ? ' in your system keychain' : ''}.
-        </p>
+        <h4 className="provider-panel-section-title">Account</h4>
 
-        <div className="user-id-display">
-          <span className="user-id-value">{userId || 'Loading...'}</span>
-          <button
-            className="user-id-copy-button"
-            onClick={handleCopyUserId}
-            disabled={!userId}
-          >
-            {copiedUserId ? 'Copied!' : 'Copy'}
-          </button>
+        {stytchAuth.isAuthenticated && stytchAuth.user ? (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            padding: '12px',
+            background: 'var(--surface-secondary)',
+            borderRadius: '8px',
+          }}>
+            <div style={{
+              width: '40px',
+              height: '40px',
+              borderRadius: '50%',
+              background: 'var(--primary-color)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'white',
+              fontWeight: 600,
+              fontSize: '16px',
+            }}>
+              {(stytchAuth.user.name?.first_name?.[0] || stytchAuth.user.emails[0]?.email[0] || '?').toUpperCase()}
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 500, color: 'var(--text-primary)', fontSize: '13px' }}>
+                {stytchAuth.user.name?.first_name
+                  ? `${stytchAuth.user.name.first_name} ${stytchAuth.user.name.last_name || ''}`.trim()
+                  : stytchAuth.user.emails[0]?.email}
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
+                {stytchAuth.user.emails[0]?.email}
+              </div>
+            </div>
+            <button
+              onClick={handleSignOut}
+              style={{
+                padding: '6px 12px',
+                fontSize: '12px',
+                background: 'transparent',
+                border: '1px solid var(--border-primary)',
+                borderRadius: '4px',
+                color: 'var(--text-secondary)',
+                cursor: 'pointer',
+              }}
+            >
+              Sign Out
+            </button>
+          </div>
+        ) : showAuthForm ? (
+          <div style={{
+            padding: '16px',
+            background: 'var(--surface-secondary)',
+            borderRadius: '8px',
+          }}>
+            {magicLinkSent ? (
+              // Magic link sent confirmation
+              <div style={{ textAlign: 'center' }}>
+                <div style={{
+                  width: '48px',
+                  height: '48px',
+                  margin: '0 auto 12px',
+                  background: 'var(--primary-color)',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                    <path d="M22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6z" />
+                    <path d="M22 6l-10 7L2 6" />
+                  </svg>
+                </div>
+                <h4 style={{ margin: '0 0 8px', color: 'var(--text-primary)', fontSize: '15px' }}>
+                  Check your email
+                </h4>
+                <p style={{ margin: '0 0 16px', color: 'var(--text-secondary)', fontSize: '13px' }}>
+                  We sent a sign-in link to <strong>{email}</strong>
+                </p>
+                <button
+                  onClick={() => {
+                    setMagicLinkSent(false);
+                    setEmail('');
+                    setShowAuthForm(false);
+                  }}
+                  style={{
+                    padding: '8px 16px',
+                    background: 'transparent',
+                    border: '1px solid var(--border-primary)',
+                    borderRadius: '6px',
+                    color: 'var(--text-secondary)',
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Done
+                </button>
+              </div>
+            ) : (
+              <>
+                {/* Google Sign In */}
+                <button
+                  onClick={handleGoogleSignIn}
+                  disabled={authLoading || !isStytchAvailable}
+                  style={{
+                    width: '100%',
+                    padding: '10px 16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '10px',
+                    background: 'white',
+                    border: '1px solid var(--border-primary)',
+                    borderRadius: '6px',
+                    cursor: authLoading ? 'wait' : 'pointer',
+                    opacity: authLoading ? 0.7 : 1,
+                    color: '#333',
+                    fontWeight: 500,
+                    fontSize: '13px',
+                  }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                  </svg>
+                  Continue with Google
+                </button>
+
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  margin: '16px 0',
+                  color: 'var(--text-tertiary)',
+                  fontSize: '12px',
+                }}>
+                  <div style={{ flex: 1, height: '1px', background: 'var(--border-primary)' }} />
+                  or
+                  <div style={{ flex: 1, height: '1px', background: 'var(--border-primary)' }} />
+                </div>
+
+                {/* Email Magic Link Form */}
+                <form onSubmit={handleSendMagicLink}>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="Enter your email"
+                    disabled={!isStytchAvailable || authLoading}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      marginBottom: '12px',
+                      border: '1px solid var(--border-primary)',
+                      borderRadius: '6px',
+                      background: 'var(--surface-primary)',
+                      color: 'var(--text-primary)',
+                      fontSize: '13px',
+                    }}
+                  />
+                  <button
+                    type="submit"
+                    disabled={authLoading || !isStytchAvailable || !email}
+                    style={{
+                      width: '100%',
+                      padding: '10px 16px',
+                      background: 'var(--primary-color)',
+                      border: 'none',
+                      borderRadius: '6px',
+                      color: 'white',
+                      fontWeight: 500,
+                      fontSize: '13px',
+                      cursor: authLoading ? 'wait' : 'pointer',
+                      opacity: (authLoading || !email) ? 0.7 : 1,
+                    }}
+                  >
+                    {authLoading ? 'Sending...' : 'Send Sign-In Link'}
+                  </button>
+                </form>
+
+                {authError && (
+                  <p style={{ color: 'var(--error-color, #ef4444)', fontSize: '12px', marginTop: '8px', marginBottom: 0 }}>
+                    {authError}
+                  </p>
+                )}
+
+                <button
+                  onClick={() => {
+                    setShowAuthForm(false);
+                    setAuthError(null);
+                    setEmail('');
+                  }}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    marginTop: '12px',
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--text-tertiary)',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                  }}
+                >
+                  Cancel
+                </button>
+              </>
+            )}
+          </div>
+        ) : (
+          <div style={{
+            padding: '16px',
+            background: 'var(--surface-secondary)',
+            borderRadius: '8px',
+            textAlign: 'center',
+          }}>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 12px' }}>
+              Sign in to sync sessions across all your devices.
+            </p>
+            <button
+              onClick={() => setShowAuthForm(true)}
+              disabled={!isStytchAvailable}
+              style={{
+                padding: '8px 20px',
+                background: 'var(--primary-color)',
+                border: 'none',
+                borderRadius: '6px',
+                color: 'white',
+                fontWeight: 500,
+                fontSize: '13px',
+                cursor: isStytchAvailable ? 'pointer' : 'not-allowed',
+                opacity: isStytchAvailable ? 1 : 0.5,
+              }}
+            >
+              Sign In or Create Account
+            </button>
+            {!isStytchAvailable && (
+              <p style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '8px', marginBottom: 0 }}>
+                Restart the app to enable authentication.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Paired Devices Section (when authenticated) */}
+      {stytchAuth.isAuthenticated && deviceTokens.length > 0 && (
+        <div className="provider-panel-section">
+          <h4 className="provider-panel-section-title">Paired Mobile Devices</h4>
+          <div style={{ marginTop: '8px' }}>
+            {deviceTokens.map((token) => (
+              <div
+                key={token.deviceId}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '8px 12px',
+                  background: 'var(--surface-secondary)',
+                  borderRadius: '6px',
+                  marginBottom: '6px',
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
+                    {token.deviceName || 'Mobile Device'}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
+                    Paired {formatRelativeTime(token.createdAt)}
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleRevokeDevice(token.deviceId)}
+                  style={{
+                    padding: '4px 10px',
+                    fontSize: '11px',
+                    background: 'transparent',
+                    border: '1px solid var(--border-primary)',
+                    borderRadius: '4px',
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Revoke
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
+      {/* Sync Settings */}
       <div className="provider-panel-section">
-        <h4 className="provider-panel-section-title">Enable Sync</h4>
+        <h4 className="provider-panel-section-title">Sync Settings</h4>
 
         <div className="setting-item">
           <label className="setting-label">
@@ -216,8 +780,7 @@ export function SyncPanel({
             <div className="setting-text">
               <span className="setting-name">Enable Session Sync</span>
               <span className="setting-description">
-                When enabled, AI sessions will sync to other devices connected to the same server.
-                Requires a running sync server.
+                Sync AI sessions to other devices connected to the same server.
               </span>
             </div>
           </label>
@@ -226,41 +789,89 @@ export function SyncPanel({
 
       {config.enabled && (
         <>
+          {/* Server URL */}
           <div className="provider-panel-section">
-            <h4 className="provider-panel-section-title">Server Configuration</h4>
-            <p className="provider-panel-hint">
-              Configure the sync server connection. For local development, use ws://localhost:8790
-            </p>
-
+            <h4 className="provider-panel-section-title">Server</h4>
             <div className="api-key-section">
-              <label className="api-key-label">Server URL</label>
               <input
                 type="text"
                 className="api-key-input"
                 value={config.serverUrl}
                 onChange={(e) => handleFieldChange('serverUrl', e.target.value)}
-                placeholder="ws://localhost:8790"
+                placeholder="wss://sync.nimbalyst.com"
               />
-              <span className="api-key-hint">
-                WebSocket URL of the sync server (e.g., ws://localhost:8790 or wss://sync.example.com)
-              </span>
             </div>
+
+            <div style={{ marginTop: '12px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <button
+                className={`test-connection-button ${testStatus}`}
+                onClick={onTestConnection}
+                disabled={testStatus === 'testing' || !config.serverUrl}
+                style={{ padding: '6px 12px', fontSize: '12px' }}
+              >
+                {testStatus === 'testing' ? 'Testing...' : 'Test'}
+              </button>
+              {testStatus === 'success' && (
+                <span style={{ fontSize: '12px', color: '#22c55e' }}>Connected</span>
+              )}
+              {testStatus === 'error' && (
+                <span style={{ fontSize: '12px', color: '#ef4444' }}>{testMessage || 'Failed'}</span>
+              )}
+            </div>
+
+            {isDevelopment && (
+              <button
+                onClick={() => handleFieldChange('serverUrl', 'ws://localhost:8790')}
+                style={{
+                  marginTop: '8px',
+                  padding: '4px 8px',
+                  fontSize: '11px',
+                  background: 'var(--surface-secondary)',
+                  border: '1px solid var(--border-primary)',
+                  borderRadius: '4px',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                }}
+              >
+                Use localhost:8790
+              </button>
+            )}
           </div>
 
-          {/* Mobile Pairing Section */}
+          {/* Projects */}
           <div className="provider-panel-section">
-            <h4 className="provider-panel-section-title">Mobile Device Pairing</h4>
-            <p className="provider-panel-hint" style={{ marginBottom: '16px' }}>
-              Scan the QR code with the Nimbalyst mobile app to sync sessions to your phone or tablet.
-              The QR code contains your encrypted credentials.
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h4 className="provider-panel-section-title" style={{ margin: 0 }}>Projects</h4>
+              <button
+                onClick={() => setShowProjectPicker(true)}
+                style={{
+                  padding: '4px 10px',
+                  fontSize: '12px',
+                  background: 'var(--surface-secondary)',
+                  border: '1px solid var(--border-primary)',
+                  borderRadius: '4px',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                }}
+              >
+                {enabledProjectCount} of {projects.length} enabled
+              </button>
+            </div>
+            <p className="provider-panel-hint" style={{ marginTop: '4px' }}>
+              Choose which projects sync their AI sessions.
             </p>
+          </div>
 
+          {/* Mobile Pairing */}
+          <div className="provider-panel-section">
+            <h4 className="provider-panel-section-title">Mobile Device</h4>
             <button
               className="pair-device-button"
               onClick={() => setShowQRModal(true)}
               disabled={!config.serverUrl}
+              style={{ width: '100%' }}
             >
-              <svg className="pair-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg style={{ width: '18px', height: '18px', marginRight: '8px' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <rect x="3" y="3" width="7" height="7" rx="1" />
                 <rect x="14" y="3" width="7" height="7" rx="1" />
                 <rect x="3" y="14" width="7" height="7" rx="1" />
@@ -271,234 +882,104 @@ export function SyncPanel({
               </svg>
               Pair Mobile Device
             </button>
-
-            {!config.serverUrl && (
-              <p className="provider-panel-hint" style={{ marginTop: '8px', color: 'var(--text-tertiary)' }}>
-                Enter a server URL above to enable mobile pairing.
-              </p>
-            )}
           </div>
 
-          <div className="provider-panel-section">
-            <h4 className="provider-panel-section-title">Connection Status</h4>
-
-            <div className="test-connection-section">
-              <button
-                className={`test-connection-button ${testStatus}`}
-                onClick={onTestConnection}
-                disabled={testStatus === 'testing' || !config.serverUrl}
-              >
-                {testStatus === 'testing' ? 'Testing...' : 'Test Connection'}
-              </button>
-
-              {testStatus === 'success' && (
-                <span className="test-status success">Connected successfully</span>
-              )}
-              {testStatus === 'error' && (
-                <span className="test-status error">{testMessage || 'Connection failed'}</span>
-              )}
-            </div>
-          </div>
-
-          {/* Connected Devices Section */}
-          <div className="provider-panel-section">
-            <h4 className="provider-panel-section-title">
-              Connected Devices
-              <button
-                className="refresh-devices-button"
-                onClick={loadDevices}
-                disabled={devicesLoading}
-                style={{
-                  marginLeft: '8px',
-                  padding: '2px 8px',
-                  fontSize: '11px',
-                  background: 'var(--surface-secondary)',
-                  border: '1px solid var(--border-primary)',
-                  borderRadius: '4px',
-                  cursor: devicesLoading ? 'wait' : 'pointer',
-                  color: 'var(--text-secondary)',
-                }}
-              >
-                {devicesLoading ? 'Loading...' : 'Refresh'}
-              </button>
-            </h4>
-            <p className="provider-panel-hint">
-              Devices currently connected to your sync server.
-            </p>
-
-            {devicesError && (
-              <p className="test-status error" style={{ marginTop: '8px' }}>
-                {devicesError}
-              </p>
-            )}
-
-            {!devicesError && connectedDevices.length === 0 && !devicesLoading && (
-              <p className="provider-panel-hint" style={{ fontStyle: 'italic', marginTop: '12px' }}>
-                No devices connected. This device will appear after saving settings.
-              </p>
-            )}
-
-            {connectedDevices.length > 0 && (
-              <div style={{ marginTop: '12px' }}>
+          {/* Connected Devices */}
+          {connectedDevices.length > 0 && (
+            <div className="provider-panel-section">
+              <h4 className="provider-panel-section-title">
+                Online Devices
+                <button
+                  onClick={loadDevices}
+                  disabled={devicesLoading}
+                  style={{
+                    marginLeft: '8px',
+                    padding: '2px 6px',
+                    fontSize: '10px',
+                    background: 'var(--surface-secondary)',
+                    border: '1px solid var(--border-primary)',
+                    borderRadius: '3px',
+                    cursor: devicesLoading ? 'wait' : 'pointer',
+                    color: 'var(--text-tertiary)',
+                  }}
+                >
+                  Refresh
+                </button>
+              </h4>
+              <div style={{ marginTop: '8px' }}>
                 {connectedDevices.map((device) => (
                   <div
                     key={device.device_id}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '12px',
-                      padding: '10px 12px',
+                      gap: '10px',
+                      padding: '8px 10px',
                       background: 'var(--surface-secondary)',
                       borderRadius: '6px',
-                      marginBottom: '8px',
+                      marginBottom: '6px',
                     }}
                   >
-                    {/* Device Icon */}
-                    <div style={{
-                      width: '32px',
-                      height: '32px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      background: 'var(--surface-tertiary)',
-                      borderRadius: '6px',
-                      color: 'var(--text-secondary)',
-                    }}>
-                      {device.type === 'desktop' && (
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <rect x="2" y="3" width="20" height="14" rx="2" />
-                          <line x1="8" y1="21" x2="16" y2="21" />
-                          <line x1="12" y1="17" x2="12" y2="21" />
-                        </svg>
-                      )}
-                      {device.type === 'mobile' && (
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <rect x="5" y="2" width="14" height="20" rx="2" />
-                          <line x1="12" y1="18" x2="12" y2="18" strokeWidth="3" strokeLinecap="round" />
-                        </svg>
-                      )}
-                      {device.type === 'tablet' && (
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <rect x="4" y="2" width="16" height="20" rx="2" />
-                          <line x1="12" y1="18" x2="12" y2="18" strokeWidth="3" strokeLinecap="round" />
-                        </svg>
-                      )}
-                      {device.type === 'unknown' && (
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <circle cx="12" cy="12" r="10" />
-                          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-                          <line x1="12" y1="17" x2="12" y2="17" strokeWidth="3" strokeLinecap="round" />
-                        </svg>
-                      )}
-                    </div>
-
-                    {/* Device Info */}
-                    <div style={{ flex: 1 }}>
-                      <div style={{
-                        fontWeight: 500,
-                        color: 'var(--text-primary)',
-                        fontSize: '13px',
-                      }}>
-                        {device.name}
-                      </div>
-                      <div style={{
-                        fontSize: '11px',
-                        color: 'var(--text-tertiary)',
-                        marginTop: '2px',
-                      }}>
-                        {device.platform}
-                        {device.app_version && ` • v${device.app_version}`}
-                        {' • '}
-                        Connected {formatRelativeTime(device.connected_at)}
-                      </div>
-                    </div>
-
-                    {/* Online indicator */}
                     <div style={{
                       width: '8px',
                       height: '8px',
                       borderRadius: '50%',
                       background: '#22c55e',
-                    }} title="Online" />
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="provider-panel-section">
-            <h4 className="provider-panel-section-title">Projects to Sync</h4>
-            <p className="provider-panel-hint">
-              Select which projects should sync their AI sessions to other devices.
-            </p>
-
-            {projects.length === 0 ? (
-              <p className="provider-panel-hint" style={{ fontStyle: 'italic', marginTop: '12px' }}>
-                No projects found. Open a workspace to see projects here.
-              </p>
-            ) : (
-              <div style={{ marginTop: '12px' }}>
-                {projects.map((project) => (
-                  <div key={project.path} className="setting-item">
-                    <label className="setting-label">
-                      <input
-                        type="checkbox"
-                        checked={isProjectEnabled(project.path)}
-                        onChange={(e) => handleProjectToggle(project.path, e.target.checked)}
-                        className="setting-checkbox"
-                      />
-                      <div className="setting-text">
-                        <span className="setting-name">{project.name}</span>
-                        <span className="setting-description" style={{ fontSize: '11px', opacity: 0.6 }}>
-                          {project.path}
-                        </span>
+                    }} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
+                        {device.name}
                       </div>
-                    </label>
+                      <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
+                        {device.platform} - {formatRelativeTime(device.connected_at)}
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
-            )}
-          </div>
-
-          {isDevelopment && (
-            <div className="provider-panel-section">
-              <h4 className="provider-panel-section-title">Quick Setup (Development)</h4>
-              <p className="provider-panel-hint">
-                To start a local sync server:
-              </p>
-              <pre style={{
-                background: 'var(--surface-secondary)',
-                padding: '12px',
-                borderRadius: '6px',
-                fontSize: '12px',
-                overflow: 'auto',
-                margin: '8px 0'
-              }}>
-{`cd packages/collabv3
-npm run dev`}
-              </pre>
-              <button
-                className="test-connection-button"
-                onClick={() => {
-                  onConfigChange({
-                    ...config,
-                    serverUrl: 'ws://localhost:8790',
-                  });
-                }}
-                style={{ marginTop: '8px' }}
-              >
-                Use Local Dev Server
-              </button>
             </div>
           )}
         </>
       )}
 
-      {/* QR Pairing Modal */}
+      {/* Device Identity (collapsed) */}
+      <div className="provider-panel-section">
+        <details>
+          <summary style={{ cursor: 'pointer', fontSize: '13px', color: 'var(--text-secondary)' }}>
+            Device Identity
+          </summary>
+          <div style={{ marginTop: '8px' }}>
+            <p className="provider-panel-hint" style={{ marginBottom: '8px' }}>
+              Unique device ID stored{isSecureStorage ? ' in system keychain' : ' locally'}.
+            </p>
+            <div className="user-id-display">
+              <span className="user-id-value" style={{ fontSize: '11px' }}>{userId || 'Loading...'}</span>
+              <button
+                className="user-id-copy-button"
+                onClick={handleCopyUserId}
+                disabled={!userId}
+                style={{ fontSize: '11px', padding: '2px 8px' }}
+              >
+                {copiedUserId ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
+          </div>
+        </details>
+      </div>
+
+      {/* Modals */}
       <QRPairingModal
         isOpen={showQRModal}
         onClose={() => setShowQRModal(false)}
         serverUrl={config.serverUrl}
+      />
+
+      <ProjectPickerPopup
+        isOpen={showProjectPicker}
+        onClose={() => setShowProjectPicker(false)}
+        projects={projects}
+        enabledProjects={config.enabledProjects || projects.map(p => p.path)}
+        onToggle={handleProjectToggle}
       />
     </div>
   );

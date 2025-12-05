@@ -94,3 +94,5 @@ export {
   hasMockupPlatformService,
 } from './plugins/MockupPlugin/MockupPlatformService';
 export { default as MockupPlugin } from './plugins/MockupPlugin';
+// Config
+export { STYTCH_CONFIG, getStytchConfig } from './config/stytch';

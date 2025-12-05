@@ -7,6 +7,7 @@ import { autoUpdaterService } from '../services/autoUpdater';
 import type { OnboardingState } from '../utils/store';
 import { getCredentials, getUserId, resetCredentials, generateQRPairingPayload, isUsingSecureStorage } from '../services/CredentialService';
 import { onSyncStatusChange } from '../services/SyncManager';
+import * as StytchAuth from '../services/StytchAuthService';
 
 // Track if we've subscribed to sync status changes
 let syncStatusListenerSetup = false;
@@ -418,5 +419,88 @@ export function registerSettingsHandlers() {
     // Get local network IP for mobile pairing with local dev server
     ipcMain.handle('network:get-local-ip', () => {
         return getLocalNetworkIP();
+    });
+
+    // ============================================================
+    // Stytch Authentication (for account-based sync)
+    // ============================================================
+
+    // Get current Stytch auth state
+    ipcMain.handle('stytch:get-auth-state', () => {
+        return StytchAuth.getAuthState();
+    });
+
+    // Check if user is authenticated with Stytch
+    ipcMain.handle('stytch:is-authenticated', () => {
+        return StytchAuth.isAuthenticated();
+    });
+
+    // Sign in with Google OAuth
+    ipcMain.handle('stytch:sign-in-google', async () => {
+        // Get the sync server URL from settings (for local dev, this could be http://localhost:8790)
+        const syncConfig = getSessionSyncConfig();
+        // Convert WebSocket URLs to HTTP: wss:// -> https://, ws:// -> http://
+        const serverUrl = syncConfig?.serverUrl?.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:');
+        return StytchAuth.signInWithGoogle(serverUrl);
+    });
+
+    // Send magic link for passwordless authentication
+    ipcMain.handle('stytch:send-magic-link', async (_event, email: string) => {
+        if (!email) {
+            return { success: false, error: 'Email is required' };
+        }
+        // Get the sync server URL from settings (for local dev, this could be http://localhost:8790)
+        const syncConfig = getSessionSyncConfig();
+        // Convert WebSocket URLs to HTTP: wss:// -> https://, ws:// -> http://
+        const serverUrl = syncConfig?.serverUrl?.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:');
+        return StytchAuth.sendMagicLink(email, serverUrl);
+    });
+
+    // Sign out
+    ipcMain.handle('stytch:sign-out', async () => {
+        await StytchAuth.signOut();
+        return { success: true };
+    });
+
+    // Get session JWT for server authentication
+    ipcMain.handle('stytch:get-session-jwt', () => {
+        return StytchAuth.getSessionJwt();
+    });
+
+    // Validate and refresh the current session
+    ipcMain.handle('stytch:refresh-session', async () => {
+        return StytchAuth.validateAndRefreshSession();
+    });
+
+    // Issue a device token for mobile pairing
+    ipcMain.handle('stytch:issue-device-token', (_event, deviceName: string, deviceType?: 'mobile' | 'tablet') => {
+        if (!deviceName) {
+            return null;
+        }
+        return StytchAuth.issueDeviceToken(deviceName, deviceType || 'mobile');
+    });
+
+    // Get all device tokens for current user
+    ipcMain.handle('stytch:get-device-tokens', () => {
+        return StytchAuth.getDeviceTokens();
+    });
+
+    // Revoke a device token
+    ipcMain.handle('stytch:revoke-device-token', (_event, deviceId: string) => {
+        if (!deviceId) {
+            return false;
+        }
+        return StytchAuth.revokeDeviceToken(deviceId);
+    });
+
+    // Subscribe to auth state changes
+    ipcMain.handle('stytch:subscribe-auth-state', () => {
+        // Set up listener to broadcast auth state changes to all windows
+        StytchAuth.onAuthStateChange((state) => {
+            for (const window of BrowserWindow.getAllWindows()) {
+                window.webContents.send('stytch:auth-state-changed', state);
+            }
+        });
+        return StytchAuth.getAuthState();
     });
 }

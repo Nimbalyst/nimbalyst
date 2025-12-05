@@ -52,6 +52,14 @@ interface AppStoreSchema {
     // For CollabV3 E2E encryption
     encryptionPassphrase?: string; // User-provided passphrase for key derivation
     enabledProjects?: string[]; // List of workspace paths enabled for sync
+    // Stytch authentication (optional)
+    authMethod?: 'local' | 'stytch';
+    stytchUserId?: string;
+  };
+  // Stytch Auth Configuration (project ID and public token only - secret stored in keychain)
+  stytchAuth?: {
+    projectId: string;
+    publicToken: string;
   };
 }
 
@@ -798,6 +806,16 @@ export interface SessionSyncConfig {
   authToken: string;
   encryptionPassphrase?: string;
   enabledProjects?: string[];
+  // Stytch authentication (optional - if set, uses Stytch JWT instead of simple auth token)
+  authMethod?: 'local' | 'stytch';
+  stytchUserId?: string;
+}
+
+// Stytch Auth Configuration (stored separately from session sync)
+export interface StytchAuthConfig {
+  projectId: string;
+  publicToken: string;
+  // Secret key is stored in secure storage, not in this config
 }
 
 export function getSessionSyncConfig(): SessionSyncConfig | undefined {
@@ -814,5 +832,18 @@ export function setSessionSyncConfig(config: SessionSyncConfig | undefined): voi
     appStore.set('sessionSync', config);
   } else {
     appStore.delete('sessionSync');
+  }
+}
+
+// Stytch Auth Configuration
+export function getStytchAuthConfig(): StytchAuthConfig | undefined {
+  return appStore.get('stytchAuth');
+}
+
+export function setStytchAuthConfig(config: StytchAuthConfig | undefined): void {
+  if (config) {
+    appStore.set('stytchAuth', config);
+  } else {
+    appStore.delete('stytchAuth');
   }
 }

@@ -454,10 +454,146 @@ packages/
     └── CollabV3SyncContext.tsx  # Mobile sync context
 ```
 
+## User Authentication (Stytch)
+
+User authentication is handled via [Stytch Consumer](https://stytch.com/docs/guides/dashboard/api-keys), a B2C authentication platform. This is separate from the sync credentials (which are device-specific).
+
+### Architecture
+
+```
+┌─────────────────┐         ┌─────────────────┐         ┌─────────────────┐
+│   Desktop App   │────────►│  CollabV3       │────────►│  Stytch API     │
+│   (Electron)    │  HTTPS  │  (Cloudflare)   │  HTTPS  │                 │
+└─────────────────┘         └─────────────────┘         └─────────────────┘
+        │                           │
+        │                           │ Has secret key
+        │                           ▼
+        │                   ┌─────────────────┐
+        │                   │  Token          │
+        │                   │  Validation     │
+        │                   └────────┬────────┘
+        │                            │
+        │◄───────────────────────────┘
+        │     nimbalyst://auth/callback
+        ▼
+┌─────────────────┐
+│  Session Token  │
+│  (safeStorage)  │
+└─────────────────┘
+```
+
+**Key principle**: The desktop app NEVER has access to the Stytch secret key. All secret key operations happen on the CollabV3 Cloudflare Worker.
+
+### Authentication Methods
+
+| Method | Flow |
+| --- | --- |
+| Google OAuth | Browser -> collabv3/auth/login/google -> Stytch -> collabv3/auth/callback -> nimbalyst:// deep link |
+| Magic Link | collabv3/api/auth/magic-link (sends email) -> user clicks link -> collabv3/auth/callback -> nimbalyst:// deep link |
+
+### Server Endpoints (CollabV3)
+
+| Endpoint | Method | Purpose |
+| --- | --- | --- |
+| `/auth/login/google` | GET | Initiates Google OAuth flow, redirects to Stytch |
+| `/auth/callback` | GET | Validates OAuth/magic link tokens, redirects to `nimbalyst://auth/callback` |
+| `/api/auth/magic-link` | POST | Sends magic link email (requires secret key) |
+
+### Deep Link Format
+
+After successful authentication, the server redirects to:
+
+```
+nimbalyst://auth/callback?session_token=...&session_jwt=...&user_id=...&email=...&expires_at=...
+```
+
+The Electron app handles this via the `open-url` event and stores the session token securely.
+
+### Configuration
+
+Stytch public tokens are stored in `packages/runtime/src/config/stytch.ts`:
+
+```typescript
+// Public tokens - safe to commit (designed for client-side use)
+export const STYTCH_CONFIG = {
+  test: {
+    projectId: 'project-test-...',
+    publicToken: 'public-token-test-...',
+    apiBase: 'https://test.stytch.com/v1',
+  },
+  live: {
+    projectId: 'project-live-...',
+    publicToken: 'public-token-live-...',
+    apiBase: 'https://api.stytch.com/v1',
+  },
+};
+```
+
+The secret key is stored as a Cloudflare secret on the CollabV3 worker:
+- `STYTCH_PROJECT_ID`
+- `STYTCH_PUBLIC_TOKEN`
+- `STYTCH_SECRET_KEY`
+
+### Session Management
+
+| Item | Storage | Purpose |
+| --- | --- | --- |
+| Session Token | Electron safeStorage | Authenticates API requests |
+| Session JWT | Electron safeStorage | Contains user claims |
+| User ID | Electron safeStorage | Identifies the user |
+| Expiration | Electron safeStorage | Token validity check |
+
+Sessions are validated and refreshed automatically. On sign-out, all credentials are cleared.
+
+### Key Files
+
+| File | Purpose |
+| --- | --- |
+| `packages/runtime/src/config/stytch.ts` | Public token configuration |
+| `packages/electron/src/main/services/StytchAuthService.ts` | Desktop auth service (deep link handling, session storage) |
+| `packages/collabv3/src/index.ts` | Server auth routes (`/auth/*`, `/api/auth/*`) |
+
+## Local Development Setup
+
+For testing auth and sync locally with wrangler:
+
+### 1. Create `.dev.vars` for local secrets
+
+```bash
+# packages/collabv3/.dev.vars
+STYTCH_PROJECT_ID=project-test-...
+STYTCH_PUBLIC_TOKEN=public-token-test-...
+STYTCH_SECRET_KEY=<from-stytch-dashboard>
+```
+
+### 2. Configure Stytch Redirect URLs
+
+In [Stytch Dashboard > Redirect URLs](https://stytch.com/dashboard/redirect-urls), add:
+
+| URL | Types |
+| --- | --- |
+| `http://localhost:8790/auth/callback` | Login, Signup |
+
+### 3. Start local collabv3 server
+
+```bash
+cd packages/collabv3
+npx wrangler dev
+```
+
+Runs on `http://localhost:8790`.
+
+### 4. Configure desktop app
+
+In Settings > Account & Sync, set server URL to `ws://localhost:8790`.
+
+The auth handlers automatically convert `ws://` to `http://` for auth endpoints.
+
 ## Security Considerations
 
-1. **End-to-end encryption**: Server never sees plaintext
+1. **End-to-end encryption**: Server never sees plaintext message content
 2. **Key derivation**: Strong PBKDF2 with 100k iterations
 3. **Unique IVs**: Fresh random IV per message
 4. **Credential storage**: System keychain, not localStorage
 5. **Token auth**: Short-lived tokens, refreshed periodically
+6. **Secret key isolation**: Stytch secret key only exists on server (CollabV3), never in client apps

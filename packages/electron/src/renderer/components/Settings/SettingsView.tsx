@@ -133,6 +133,10 @@ export function SettingsView({ workspacePath, workspaceName, onClose }: Settings
       // Load release channel setting
       const channel = await window.electronAPI.invoke('release-channel:get');
       setReleaseChannel(channel);
+      // Set default category based on release channel
+      if (channel === 'alpha') {
+        setSelectedCategory('sync');
+      }
 
       // Load analytics setting
       const analyticsEnabledSetting = await window.electronAPI.invoke('analytics:is-enabled');
@@ -539,6 +543,7 @@ export function SettingsView({ workspacePath, workspaceName, onClose }: Settings
           installedPackageCount={installedPackageCount}
           totalPackageCount={totalPackageCount}
           scope={scope}
+          releaseChannel={releaseChannel}
         />
 
         <main className="settings-view-main">

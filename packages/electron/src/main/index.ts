@@ -56,6 +56,8 @@ import { autoUpdaterService, AutoUpdaterService } from './services/autoUpdater';
 import { initializeDatabase } from './database/initialize';
 import { AnalyticsService } from "./services/analytics/AnalyticsService.ts";
 import { registerAnalyticsHandlers } from "./ipc/AnalyticsHandlers.ts";
+import { initializeStytchAuth, shutdownStytchAuth, handleAuthCallback } from './services/StytchAuthService';
+import { getStytchConfig } from '@nimbalyst/runtime';
 
 // CRITICAL: Hide dock icon when running as background Node process
 // This prevents Terminal icon from appearing when Claude Code spawns child processes
@@ -131,6 +133,65 @@ function initializeLogging() {
     });
 
     logger.main.info(`Debug logs will be written to: ${debugLogPath}`);
+}
+
+// Register custom URL protocol handler (nimbalyst://)
+// Must be done before app is ready on macOS
+if (process.defaultApp) {
+    if (process.argv.length >= 2) {
+        app.setAsDefaultProtocolClient('nimbalyst', process.execPath, [path.resolve(process.argv[1])]);
+    }
+} else {
+    app.setAsDefaultProtocolClient('nimbalyst');
+}
+
+// Track pending deep link URL
+let pendingDeepLinkUrl: string | null = null;
+
+// Handle deep link URLs (nimbalyst://...)
+app.on('open-url', (event, url) => {
+    event.preventDefault();
+    logger.main.info(`open-url event received: ${url}`);
+
+    if (app.isReady()) {
+        handleDeepLink(url);
+    } else {
+        // Store the URL to handle after app is ready
+        pendingDeepLinkUrl = url;
+    }
+});
+
+// Handle deep link URL
+async function handleDeepLink(url: string): Promise<void> {
+    try {
+        const parsed = new URL(url);
+
+        // Handle auth callback: nimbalyst://auth/callback?session_token=...
+        if (parsed.host === 'auth' && parsed.pathname === '/callback') {
+            const sessionToken = parsed.searchParams.get('session_token');
+            const sessionJwt = parsed.searchParams.get('session_jwt');
+            const userId = parsed.searchParams.get('user_id');
+            const email = parsed.searchParams.get('email');
+            const expiresAt = parsed.searchParams.get('expires_at');
+
+            if (sessionToken) {
+                await handleAuthCallback({
+                    sessionToken,
+                    sessionJwt: sessionJwt || undefined,
+                    userId: userId || undefined,
+                    email: email || undefined,
+                    expiresAt: expiresAt || undefined,
+                });
+                logger.main.info('[DeepLink] Auth callback handled successfully');
+            } else {
+                logger.main.error('[DeepLink] Auth callback missing session_token');
+            }
+        } else {
+            logger.main.warn(`[DeepLink] Unknown deep link: ${url}`);
+        }
+    } catch (error) {
+        logger.main.error('[DeepLink] Failed to handle deep link:', error);
+    }
 }
 
 // Handle file open from OS (macOS)
@@ -318,6 +379,26 @@ app.whenReady().then(async () => {
     // Initialize Agent service
     // agentService = new AgentService(aiService);
 
+    // Initialize Stytch Auth service
+    // Uses public tokens from config/stytch.ts (safe to commit - these are public)
+    // Environment variables can override for testing
+    const stytchConfig = getStytchConfig();
+    if (stytchConfig.projectId && stytchConfig.publicToken &&
+        !stytchConfig.projectId.includes('XXXX')) {
+        try {
+            initializeStytchAuth({
+                projectId: stytchConfig.projectId,
+                publicToken: stytchConfig.publicToken,
+                apiBase: stytchConfig.apiBase,
+            });
+            logger.main.info('[StytchAuth] Initialized with project:', stytchConfig.projectId, 'apiBase:', stytchConfig.apiBase);
+        } catch (error) {
+            logger.main.error('[StytchAuth] Failed to initialize:', error);
+        }
+    } else {
+        logger.main.info('[StytchAuth] Not configured (placeholder tokens) - skipping initialization');
+    }
+
     // Start MCP SSE server
     try {
         const result = await startMcpHttpServer(3456);
@@ -467,6 +548,13 @@ app.whenReady().then(async () => {
         const fileToOpen = pendingFilePath;
         pendingFilePath = null;
         await openFileWithWorkspaceDetection(fileToOpen);
+    }
+
+    // Handle pending deep link URL (e.g., auth callback)
+    if (pendingDeepLinkUrl) {
+        const urlToHandle = pendingDeepLinkUrl;
+        pendingDeepLinkUrl = null;
+        await handleDeepLink(urlToHandle);
     }
 
     // Check if we should show Discord invitation after windows are fully loaded
@@ -636,6 +724,13 @@ app.on('before-quit', async (event) => {
 
     // stop analytics
     await analytics.destroy();
+
+    // Shutdown Stytch auth service
+    try {
+        shutdownStytchAuth();
+    } catch (error) {
+        console.error('[QUIT] Error shutting down Stytch auth:', error);
+    }
 
     // Check if we can write to userData directory
     try {

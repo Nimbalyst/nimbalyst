@@ -33,6 +33,12 @@ function replaceLocalhostWithIP(url: string, ip: string): string {
   }
 }
 
+interface DeviceToken {
+  token: string;
+  deviceId: string;
+  deviceName?: string;
+}
+
 export function QRPairingModal({ isOpen, onClose, serverUrl }: QRPairingModalProps) {
   const [qrDataUrl, setQRDataUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -46,8 +52,19 @@ export function QRPairingModal({ isOpen, onClose, serverUrl }: QRPairingModalPro
   const [useLocalIP, setUseLocalIP] = useState(true); // Default to using LAN IP for local servers
   const [effectiveUrl, setEffectiveUrl] = useState(serverUrl);
 
+  // Stytch auth state for device token generation
+  const [isStytchAuthenticated, setIsStytchAuthenticated] = useState(false);
+  const [deviceToken, setDeviceToken] = useState<DeviceToken | null>(null);
+
   const isLocalServer = isLocalDevServer(serverUrl);
   const isDev = import.meta.env.DEV;
+
+  // Check Stytch auth state when modal opens
+  useEffect(() => {
+    if (isOpen && window.electronAPI?.stytch) {
+      window.electronAPI.stytch.isAuthenticated().then(setIsStytchAuthenticated);
+    }
+  }, [isOpen]);
 
   // Fetch local IP when modal opens
   useEffect(() => {
@@ -75,12 +92,43 @@ export function QRPairingModal({ isOpen, onClose, serverUrl }: QRPairingModalPro
 
     try {
       // Get QR payload from main process (with effective URL)
-      const payload = await window.electronAPI.credentials.generateQRPayload(effectiveUrl, 5);
-      setExpiresAt(payload.expiresAt);
-      setQRPayload(payload);
+      const basePayload = await window.electronAPI.credentials.generateQRPayload(effectiveUrl, 5);
+
+      // If user is authenticated with Stytch, add a device token to the payload
+      let enhancedPayload: any = { ...basePayload };
+
+      if (isStytchAuthenticated && window.electronAPI?.stytch) {
+        try {
+          // Issue a new device token for this pairing
+          const deviceName = `Mobile Device (paired ${new Date().toLocaleDateString()})`;
+          const newDeviceToken = await window.electronAPI.stytch.issueDeviceToken(deviceName, 'mobile');
+
+          if (newDeviceToken) {
+            setDeviceToken({
+              token: newDeviceToken.token,
+              deviceId: newDeviceToken.deviceId,
+              deviceName: newDeviceToken.deviceName,
+            });
+
+            // Add device token to payload for JWT-based auth
+            enhancedPayload = {
+              ...basePayload,
+              version: 2, // Version 2 includes device token
+              deviceToken: newDeviceToken.token,
+              deviceId: newDeviceToken.deviceId,
+            };
+          }
+        } catch (err) {
+          console.warn('[QRPairingModal] Failed to generate device token, using legacy auth:', err);
+          // Continue with legacy auth if device token fails
+        }
+      }
+
+      setExpiresAt(enhancedPayload.expiresAt);
+      setQRPayload(enhancedPayload);
 
       // Generate QR code data URL
-      const dataUrl = await QRCode.toDataURL(JSON.stringify(payload), {
+      const dataUrl = await QRCode.toDataURL(JSON.stringify(enhancedPayload), {
         width: 280,
         margin: 2,
         color: {
@@ -97,7 +145,7 @@ export function QRPairingModal({ isOpen, onClose, serverUrl }: QRPairingModalPro
       console.error('[QRPairingModal] Failed to generate QR:', err);
       setError(err instanceof Error ? err.message : 'Failed to generate QR code');
     }
-  }, [effectiveUrl]);
+  }, [effectiveUrl, isStytchAuthenticated]);
 
   const handleCopyPayload = async () => {
     if (!qrPayload) return;
@@ -123,6 +171,7 @@ export function QRPairingModal({ isOpen, onClose, serverUrl }: QRPairingModalPro
       setQRDataUrl(null);
       setError(null);
       setExpiresAt(null);
+      setDeviceToken(null);
     }
   }, [isOpen]);
 
