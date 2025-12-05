@@ -19,6 +19,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.46.5] - 2025-12-05
+
+
+### Added
+- Virtualized AI transcript for smoother scrolling in long sessions
+- Standup changes summary generator (`/mychanges` command) for recent git commits
+- Mobile sync testing capability in desktop browser
+- Prompts navigation menu for mobile app
+
+### Changed
+- Renamed "wireframe" to "mockup" throughout codebase for consistency
+- Improved mockup annotations styling
+- Removed "Send to AI" button from UI
+- Updated `/plan` command to use `/mockup`
+- Use cross-env for build script environment variables (Windows compatibility)
+- Use node-pty for Windows Claude login
+
+### Fixed
+- AI transcript rendering performance improved
+- Duplicate thinking indicators no longer appear in AI transcript
+- Stale data now cleared when switching sessions on mobile
+- npm security vulnerabilities patched
+
 ## [0.46.4] - 2025-12-04
 
 
