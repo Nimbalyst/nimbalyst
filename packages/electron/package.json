@@ -76,6 +76,7 @@
     "react-dom": "^18.2.0",
     "recharts": "^3.5.0",
     "rexical": "*",
+    "simple-git": "^3.30.0",
     "ulid": "^3.0.1",
     "uuid": "^11.1.0",
     "web-streams-polyfill": "^4.2.0",
