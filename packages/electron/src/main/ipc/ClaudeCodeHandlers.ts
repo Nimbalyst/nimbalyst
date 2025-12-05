@@ -6,7 +6,6 @@ import { claudeCodeDetector } from '../services/ClaudeCodeDetector';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { logger } from '../utils/logger';
 import { setupClaudeCodeEnvironment, getClaudeCodeExecutableOptions } from '@nimbalyst/runtime/electron/claudeCodeEnvironment';
-import pty from 'node-pty'
 
 // Use IPC component logger for this file
 const log = logger.ipc;
@@ -132,28 +131,15 @@ end tell`;
           message: 'Terminal window opened. Please complete the authentication in your browser, then click "Refresh Status" to verify.'
         };
       } else if (platform === 'win32') {
-        // Windows: node-pty is required for a pseudo-terminal with proper TTY support for Claude's Ink-based CLI
+        // Windows: Use start command to open a new cmd window
         const nodePath = process.execPath;
-        const command = `"set ELECTRON_RUN_AS_NODE=1 && "${nodePath}" "${cliPath}" setup-token"`;
-        logger.main.info(`[ClaudeCodeHandlers] attempting to spawn: ${command}`);
-        const ptyProcess = pty.spawn(nodePath, [cliPath, 'setup-token'], {
-          name: 'Claude Code Authentication',
-          cols: 80,
-          rows: 24,
-          cwd: process.cwd(),
-          env: {
-            ...process.env,
-            ELECTRON_RUN_AS_NODE: '1'
-          },
-        });
-
-        ptyProcess.onData((data) => {
-          process.stdout.write(data);
-        });
-
-        ptyProcess.onExit(({exitCode, signal}) => {
-          logger.main.info(`[ClaudeCodeHandlers] Claude Code authentication process exited with code ${exitCode} and signal ${signal}`);
-        });
+        // TODO: On windows only, assume we have access to a working claude installation because I could not figure out
+        //  how to use the weird Windows shell to run the command with ELECTRON_RUN_AS_NODE=1 properly.
+        spawn('cmd', ['/c', 'start', 'cmd', '/k', `claude setup-token`], {
+          detached: true,
+          stdio: 'ignore',
+          shell: true
+        }).unref();
 
         return {
           success: true,
