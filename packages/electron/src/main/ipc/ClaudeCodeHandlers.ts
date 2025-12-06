@@ -6,9 +6,11 @@ import { claudeCodeDetector } from '../services/ClaudeCodeDetector';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { logger } from '../utils/logger';
 import { setupClaudeCodeEnvironment, getClaudeCodeExecutableOptions } from '@nimbalyst/runtime/electron/claudeCodeEnvironment';
+import {AnalyticsService} from "../services/analytics/AnalyticsService.ts";
 
 // Use IPC component logger for this file
 const log = logger.ipc;
+const analytics = AnalyticsService.getInstance();
 
 /**
  * Register Claude Code related IPC handlers
@@ -62,6 +64,7 @@ export function registerClaudeCodeHandlers() {
 
       // If we got account info, user is logged in
       if (accountInfo && accountInfo.email) {
+        analytics.sendEvent('check_claude_login_status', { isLoggedIn: true });
         return {
           isLoggedIn: true,
           hasOAuthToken: true,
@@ -75,6 +78,7 @@ export function registerClaudeCodeHandlers() {
       }
 
       // No account info means not logged in
+      analytics.sendEvent('check_claude_login_status', { isLoggedIn: false });
       return {
         isLoggedIn: false,
         hasOAuthToken: false,
@@ -82,6 +86,7 @@ export function registerClaudeCodeHandlers() {
       };
     } catch (error: any) {
       log.error('[ClaudeCodeHandlers] Login check failed:', error.message);
+      analytics.sendEvent('check_claude_login_error');
 
       return {
         isLoggedIn: false,
@@ -100,6 +105,8 @@ export function registerClaudeCodeHandlers() {
   ipcMain.handle('claude-code:login', async () => {
     try {
       // Use the bundled CLI - no need for global installation
+      const platform = process.platform;
+      analytics.sendEvent('do_claude_code_login', {platform: platform});
       const cliPath = findBundledCli();
       if (!cliPath) {
         throw new Error('Claude Agent SDK CLI not found in bundled installation. This is a build configuration issue.');
@@ -107,8 +114,6 @@ export function registerClaudeCodeHandlers() {
 
       // Open a Terminal window with the claude setup-token command
       // This provides a proper TTY environment for the interactive OAuth flow
-      const platform = process.platform;
-
       if (platform === 'darwin') {
         // macOS: Use AppleScript to open Terminal with the command
 
@@ -183,6 +188,8 @@ end tell`;
   // Handle claude logout command
   ipcMain.handle('claude-code:logout', async () => {
     try {
+      const platform = process.platform;
+      analytics.sendEvent('do_claude_code_logout', {platform: platform});
       // Use the bundled CLI - same as login
       const cliPath = findBundledCli();
       if (!cliPath) {
@@ -191,8 +198,6 @@ end tell`;
 
       // Open an interactive Terminal session where the user can type /logout
       // This avoids the stdin raw mode issues when piping commands
-      const platform = process.platform;
-
       if (platform === 'darwin') {
         // macOS: Use AppleScript to open Terminal with an interactive session
 
