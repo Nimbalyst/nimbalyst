@@ -44,7 +44,7 @@ All events include `$session_id` property automatically. Dev users are marked wi
 | Event Name | File(s) | Trigger | Properties |
 | --- | --- | --- | --- |
 | `create_ai_session` | `AIService.ts:455` | User creates new AI chat session | `provider` |
-| `ai_message_sent` | `AIService.ts:730` | User sends message in AI chat | `provider`<br/>`hasDocumentContext`<br/>`hasAttachments` |
+| `ai_message_sent` | `AIService.ts:1436` | User sends message in AI chat | `provider`<br/>`hasDocumentContext`<br/>`hasAttachments`<br/>`usedSlashCommand` (optional)<br/>`slashCommandName` (optional)<br/>`slashCommandPackageId` (optional) |
 | `ai_response_received` | `AIService.ts:1092, 1326` | AI provider returns response | `provider`<br/>`responseType` (text/tool_use/error)<br/>`toolsUsed` |
 | `ai_response_streamed` | `AIService.ts:1100` | AI response finishes streaming | `provider`<br/>`chunkCount` (0-9, 10-49, 50-99, 100+)<br/>`totalLength` (0-99, 100-499, 500-999, 1000+) |
 | `ai_stream_interrupted` | `AIService.ts:1024, 1483` | AI streaming stops prematurely | `provider`<br/>`chunksReceived`<br/>`reason` (error/user_cancel) |

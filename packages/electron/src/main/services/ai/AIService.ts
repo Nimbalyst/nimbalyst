@@ -28,8 +28,9 @@ import { windowStates, findWindowByWorkspace } from '../../window/WindowManager'
 import { sessionFileTracker } from '../SessionFileTracker';
 import {AnalyticsService} from "../analytics/AnalyticsService.ts";
 import { historyManager } from '../../HistoryManager';
-import { getAIProviderOverrides, saveAIProviderOverrides, clearAIProviderOverrides } from '../../utils/store';
+import { getAIProviderOverrides, saveAIProviderOverrides, clearAIProviderOverrides, getWorkspaceState } from '../../utils/store';
 import { mergeAISettings } from '../../utils/aiSettingsMerge';
+import { ALL_PACKAGES } from '../../../shared/toolPackages';
 import { getMessageSyncHandler, getSyncProvider } from '../SyncManager';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -86,6 +87,61 @@ function bucketAgeInDays(timestampMs: number): string {
   if (ageDays < 30) return '1-4-weeks';
   if (ageDays < 90) return '1-3-months';
   return '3-months-plus';
+}
+
+/**
+ * Detect if a message starts with a Nimbalyst package slash command.
+ * Returns command info if found, null otherwise.
+ */
+function detectNimbalystSlashCommand(
+  message: string,
+  workspacePath: string | undefined
+): { commandName: string; packageId: string } | null {
+  // Message must start with a slash command
+  const trimmedMessage = message.trim();
+  if (!trimmedMessage.startsWith('/')) {
+    return null;
+  }
+
+  // Extract the command name (everything after / until whitespace or end)
+  const commandMatch = trimmedMessage.match(/^\/([^\s]+)/);
+  if (!commandMatch) {
+    return null;
+  }
+  const commandName = commandMatch[1];
+
+  // Get installed packages for this workspace
+  let installedPackageIds: string[] = [];
+  if (workspacePath) {
+    try {
+      const workspaceState = getWorkspaceState(workspacePath);
+      installedPackageIds = (workspaceState.installedPackages || [])
+        .filter(pkg => pkg.enabled !== false)
+        .map(pkg => pkg.packageId);
+    } catch (error) {
+      // Workspace state not available, check all packages
+      installedPackageIds = ALL_PACKAGES.map(pkg => pkg.id);
+    }
+  } else {
+    // No workspace, check all packages
+    installedPackageIds = ALL_PACKAGES.map(pkg => pkg.id);
+  }
+
+  // Find the package that contains this command
+  for (const pkg of ALL_PACKAGES) {
+    // Only check installed packages
+    if (!installedPackageIds.includes(pkg.id)) {
+      continue;
+    }
+
+    for (const cmd of pkg.customCommands) {
+      if (cmd.name === commandName) {
+        return { commandName, packageId: pkg.id };
+      }
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -1377,12 +1433,19 @@ export class AIService {
       }
 
       // Track ai_message_sent analytics event
+      const slashCommandInfo = detectNimbalystSlashCommand(message, workspacePath);
       this.analytics.sendEvent('ai_message_sent', {
         provider: session.provider,
         hasDocumentContext: !!documentContext,
         hasAttachments: !!(attachments && attachments.length > 0),
         attachmentCount: attachments?.length || 0,
-        messageLength: bucketMessageLength(message.length)
+        messageLength: bucketMessageLength(message.length),
+        // Slash command tracking - only included if a Nimbalyst package command was used
+        ...(slashCommandInfo && {
+          usedSlashCommand: true,
+          slashCommandName: slashCommandInfo.commandName,
+          slashCommandPackageId: slashCommandInfo.packageId,
+        }),
       });
 
       // Mark session as running/active
