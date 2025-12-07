@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme } from 'electron';
 import type { SessionStore } from '@nimbalyst/runtime';
+import * as os from 'os';
 import * as path from 'path';
 import { join } from 'path';
 import * as fs from 'fs';
@@ -31,7 +32,9 @@ import {
     type AppTheme,
     dismissDiscordInvitation,
     getTheme,
+    hasCheckedClaudeCodeInstallation,
     incrementLaunchCount,
+    markClaudeCodeInstallationChecked,
     setTheme,
     shouldShowDiscordInvitation,
     updateWorkspaceState
@@ -90,6 +93,36 @@ const appStartTime = Date.now();
 // Single instance lock removed - allow multiple instances to run
 
 const analytics = AnalyticsService.getInstance();
+
+/**
+ * Check if Claude Code is installed on first app launch.
+ * This only runs once ever - on the very first launch of the app.
+ * We check for the ~/.claude/ directory which is created when Claude CLI is installed.
+ */
+function checkClaudeCodeInstallationOnFirstLaunch(): void {
+    // Only run this check once ever
+    if (hasCheckedClaudeCodeInstallation()) {
+        return;
+    }
+
+    try {
+        // Check for Claude settings directory (~/.claude/)
+        const claudeSettingsDir = path.join(os.homedir(), '.claude');
+        const hasClaudeInstalled = existsSync(claudeSettingsDir);
+
+        logger.main.info(`First launch Claude Code check: hasClaudeInstalled=${hasClaudeInstalled}`);
+
+        // Send analytics event
+        analytics.sendEvent('first_launch_claude_check', {
+            hasClaudeInstalled,
+        });
+    } catch (error) {
+        logger.main.error('Error checking Claude Code installation:', error);
+    } finally {
+        // Mark the check as done regardless of outcome
+        markClaudeCodeInstallationChecked();
+    }
+}
 
 // AI service instance
 let aiService: AIService | null = null;
@@ -304,6 +337,9 @@ app.whenReady().then(async () => {
     // Track app launch for Discord invitation
     const launchCount = incrementLaunchCount();
     logger.main.info(`App launch count: ${launchCount}`);
+
+    // Check if Claude Code is installed (only on very first launch)
+    checkClaudeCodeInstallationOnFirstLaunch();
 
     // Parse command line arguments
     parseCommandLineArgs();

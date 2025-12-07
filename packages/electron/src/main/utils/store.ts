@@ -42,6 +42,8 @@ interface AppStoreSchema {
   onboardingNextPrompt?: number; // Timestamp for when to show onboarding again (if deferred)
   // Custom Editors
   mockupLMEnabled?: boolean; // Enable MockupLM custom editor
+  // First launch Claude Code installation detection (only checked once ever)
+  claudeCodeInstallationChecked?: boolean;
   // Session Sync (optional device sync)
   sessionSync?: {
     enabled: boolean;
@@ -795,6 +797,16 @@ export function isMockupLMEnabled(): boolean {
 
 export function setMockupLMEnabled(enabled: boolean): void {
   appStore.set('mockupLMEnabled', enabled);
+}
+
+// First Launch Claude Code Installation Check
+// This flag ensures we only check once ever, on the very first app launch
+export function hasCheckedClaudeCodeInstallation(): boolean {
+  return appStore.get('claudeCodeInstallationChecked', false);
+}
+
+export function markClaudeCodeInstallationChecked(): void {
+  appStore.set('claudeCodeInstallationChecked', true);
 }
 
 // Session Sync Settings

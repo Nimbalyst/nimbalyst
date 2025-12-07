@@ -120,16 +120,17 @@ All events include `$session_id` property automatically. Dev users are marked wi
 | --- | --- | --- | --- |
 | `nimbalyst_session_start` | `AnalyticsService.ts:135` | Application starts (sent even for opted-out users) | `$session_id`<br/>`nimbalyst_version`<br/>`$set_once: is_dev_user`<br/>`$set_once: is_dev_install` |
 | `analytics_opt_out` | `AnalyticsService.ts:89` | User opts out of analytics in settings | None |
+| `first_launch_claude_check` | `index.ts:114` | Very first app launch only - checks if Claude Code is installed | `hasClaudeInstalled` (boolean) |
 
 ## Event Summary Statistics
 
-- **Total Events**: 46 unique event names
-- **Main Process Events**: 36 (via AnalyticsService)
+- **Total Events**: 47 unique event names
+- **Main Process Events**: 37 (via AnalyticsService)
 - **Renderer Process Events**: 10 (via usePostHog hook)
 - **File Operations**: 7 events
 - **Workspace Operations**: 4 events
 - **AI-Related**: 20 events
-- **System/Infrastructure**: 8 events
+- **System/Infrastructure**: 9 events
 
 ## Privacy Requirements
 
