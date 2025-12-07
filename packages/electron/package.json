@@ -22,7 +22,7 @@
     "build:mac:notarized": "npm run build && node -r dotenv/config build/configure-build.js && REQUIRE_NOTARIZE=true node build/build-with-env.js --mac",
     "build:mac:local": "SKIP_NOTARIZE=true npm run build && SKIP_NOTARIZE=true node -r dotenv/config build/configure-build.js && SKIP_NOTARIZE=true node build/build-with-env.js --mac --publish never",
     "build:mac:release": "npm run build && node -r dotenv/config build/configure-build.js && REQUIRE_NOTARIZE=true node build/build-with-env.js --mac --publish always",
-    "build:win": "npm run build && electron-builder --win",
+    "build:win": "npm run build && electron-builder --win --x64",
     "build:win:arm64": "npm run build && electron-builder --win --arm64",
     "build:linux": "npm run build && electron-builder --linux",
     "test": "vitest",
@@ -241,10 +241,7 @@
     "win": {
       "target": [
         {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
+          "target": "nsis"
         }
       ],
       "artifactName": "${productName}-Windows.${ext}"
