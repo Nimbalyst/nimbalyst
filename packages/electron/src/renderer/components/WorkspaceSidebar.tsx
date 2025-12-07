@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { FileTree } from './FileTree';
+import { FileTree, FileGitStatus } from './FileTree';
 import { InputModal } from './InputModal';
 import { PlansPanel } from './PlansPanel/PlansPanel';
 import { FileTreeFilterMenu, FileTreeFilter } from './FileTreeFilterMenu';
@@ -124,6 +124,7 @@ export function WorkspaceSidebar({
   const [isGitRepo, setIsGitRepo] = useState(false);
   const [gitWorktreeModifiedFiles, setGitWorktreeModifiedFiles] = useState<string[]>([]);
   const [isGitWorktree, setIsGitWorktree] = useState(false);
+  const [gitFileStatuses, setGitFileStatuses] = useState<Map<string, FileGitStatus>>(new Map());
   const filterButtonRef = useRef<HTMLButtonElement>(null);
   const newFileButtonRef = useRef<HTMLButtonElement>(null);
   const hasLoadedSettingsRef = useRef(false);
@@ -561,6 +562,61 @@ export function WorkspaceSidebar({
     return () => clearTimeout(timeoutId);
   }, [fileTree, fileTreeFilter, isGitWorktree, loadGitWorktreeModifiedFiles]);
 
+  // Load git file statuses for file tree icons
+  const loadGitFileStatuses = useCallback(async () => {
+    if (!workspacePath || !window.electronAPI?.invoke) {
+      setGitFileStatuses(new Map());
+      return;
+    }
+
+    try {
+      const result = await window.electronAPI.invoke('git:get-all-file-statuses', workspacePath);
+
+      if (result?.success && result.statuses) {
+        // Convert object to Map, filtering out unchanged and deleted statuses
+        const statusMap = new Map<string, FileGitStatus>();
+        for (const [filePath, fileStatus] of Object.entries(result.statuses)) {
+          const status = (fileStatus as { status: string }).status;
+          // Only include modified, staged, and untracked (not unchanged or deleted)
+          if (status === 'modified' || status === 'staged' || status === 'untracked') {
+            statusMap.set(filePath, status as FileGitStatus);
+          }
+        }
+        setGitFileStatuses(statusMap);
+      } else {
+        setGitFileStatuses(new Map());
+      }
+    } catch (error) {
+      console.error('Failed to load git file statuses:', error);
+      setGitFileStatuses(new Map());
+    }
+  }, [workspacePath]);
+
+  // Load git file statuses when workspace is a git repo
+  useEffect(() => {
+    if (isGitRepo) {
+      loadGitFileStatuses();
+    } else {
+      setGitFileStatuses(new Map());
+    }
+  }, [isGitRepo, loadGitFileStatuses]);
+
+  // Refresh git file statuses when file tree changes (files added/modified/deleted)
+  // The file watcher triggers file tree updates when files change on disk.
+  // We debounce to avoid excessive git status calls during rapid changes.
+  // The service has its own cache (TTL-based), so this is just a cache refresh trigger.
+  useEffect(() => {
+    if (!isGitRepo) {
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      loadGitFileStatuses();
+    }, 500); // 500ms debounce - git status is cached, this just invalidates/refreshes
+
+    return () => clearTimeout(timeoutId);
+  }, [fileTree, isGitRepo, loadGitFileStatuses]);
+
   const aiReadPathSet = useMemo(() => new Set(sessionFileFilters.read), [sessionFileFilters.read]);
   const aiWrittenPathSet = useMemo(() => new Set(sessionFileFilters.written), [sessionFileFilters.written]);
   const gitUncommittedPathSet = useMemo(() => new Set(gitUncommittedFiles), [gitUncommittedFiles]);
@@ -960,6 +1016,7 @@ export function WorkspaceSidebar({
                 onViewHistory={onViewHistory}
                 selectedFolder={selectedFolder}
                 onFolderSelect={handleSelectedFolderChange}
+                gitStatusMap={gitFileStatuses}
               />
             )}
             {isDragOverRoot && (

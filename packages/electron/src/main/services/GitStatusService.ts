@@ -499,6 +499,61 @@ export class GitStatusService {
   }
 
   /**
+   * Get all changed files with their git status.
+   * Returns a map of absolute file paths to their status (modified, staged, untracked, deleted).
+   * Does NOT include unchanged files or gitignored files.
+   *
+   * @param workspacePath The workspace/repository path
+   * @returns Map of absolute file paths to their git status
+   */
+  async getAllFileStatuses(workspacePath: string): Promise<GitStatusResult> {
+    if (!workspacePath) {
+      return {};
+    }
+
+    // Check if this is a git repository
+    if (!this.isGitRepository(workspacePath)) {
+      return {};
+    }
+
+    // Check cache (use null byte separator to avoid path collisions with colons on Windows)
+    const cacheKey = `${workspacePath}\0all-statuses`;
+    const cached = this.cache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < this.CACHE_TTL_MS) {
+      return cached.status;
+    }
+
+    try {
+      // Get git status for the entire repository using porcelain format
+      const statusOutput = this.executeGitStatus(workspacePath);
+
+      // Parse status output
+      const statusMap = this.parseGitStatus(statusOutput);
+
+      // Build result with absolute paths
+      const result: GitStatusResult = {};
+      for (const [relativePath, fileStatus] of statusMap.entries()) {
+        // Only include changed files (not unchanged)
+        if (fileStatus.status !== 'unchanged') {
+          const absolutePath = resolve(workspacePath, relativePath);
+          result[absolutePath] = {
+            ...fileStatus,
+            filePath: absolutePath
+          };
+        }
+      }
+
+      // Cache the result
+      this.cache.set(cacheKey, { status: result, timestamp: Date.now() });
+
+      return result;
+    } catch (error) {
+      console.error('[GitStatusService] Error getting all file statuses:', error);
+      return {};
+    }
+  }
+
+  /**
    * Clear the cache for a specific workspace or all workspaces
    */
   clearCache(workspacePath?: string): void {

@@ -317,6 +317,44 @@
   line-height: 1;
 }
 
+/* Git Status Badge in File Tree */
+.file-tree-git-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  border-radius: 2px;
+  flex-shrink: 0;
+  color: white;
+  margin-left: auto;
+  margin-right: 4px;
+}
+
+.file-tree-git-status--modified {
+  background-color: var(--warning-color);
+}
+
+.file-tree-git-status--staged {
+  background-color: var(--success-color);
+}
+
+.file-tree-git-status--untracked {
+  background-color: var(--text-tertiary);
+  color: var(--surface-primary);
+}
+
+.file-tree-git-status--deleted {
+  background-color: var(--error-color);
+}
+
+/* Inherited status (folder contains modified files) - medium alpha */
+.file-tree-git-status--inherited {
+  opacity: 0.5;
+}
+
 /* Drag and drop styles */
 .file-tree-directory.drag-over {
   background-color: #93c5fd !important;

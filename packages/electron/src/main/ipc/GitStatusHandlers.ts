@@ -107,6 +107,27 @@ export function registerGitStatusHandlers(): void {
   });
 
   /**
+   * Get all files with changed git status in the workspace
+   * Returns a map of absolute file paths to their git status (modified, staged, untracked, deleted)
+   *
+   * @param workspacePath The workspace/repository path
+   * @returns Map of file paths to git status
+   */
+  ipcMain.handle('git:get-all-file-statuses', async (_event, workspacePath: string) => {
+    try {
+      const statuses = await gitStatusService.getAllFileStatuses(workspacePath);
+      return { success: true, statuses };
+    } catch (error) {
+      console.error('[GitStatusHandlers] Failed to get all file statuses:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get all file statuses',
+        statuses: {}
+      };
+    }
+  });
+
+  /**
    * Clear the git status cache for a workspace
    *
    * @param workspacePath Optional workspace path (clears all if not specified)

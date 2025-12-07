@@ -9,6 +9,8 @@ interface FileTreeItem {
   children?: FileTreeItem[];
 }
 
+export type FileGitStatus = 'modified' | 'staged' | 'untracked' | 'deleted';
+
 interface FileTreeProps {
   items: FileTreeItem[];
   currentFilePath: string | null;
@@ -21,6 +23,7 @@ interface FileTreeProps {
   onViewHistory?: (filePath: string) => void;
   selectedFolder?: string | null;
   onFolderSelect?: (folderPath: string) => void;
+  gitStatusMap?: Map<string, FileGitStatus>;
   sharedDragState?: {
     draggedItem: FileTreeItem | null;
     setDraggedItem: (item: FileTreeItem | null) => void;
@@ -42,7 +45,37 @@ function isSpecialDirectory(name: string): boolean {
   return SPECIAL_DIRECTORIES.includes(name);
 }
 
-export function FileTree({ items, currentFilePath, onFileSelect, level, showIcons = true, onNewFile, onNewFolder, onRefreshFileTree, onViewHistory, selectedFolder, onFolderSelect, sharedDragState, sharedExpandedDirs }: FileTreeProps) {
+// Check if a directory contains any files with git status changes
+function getDirectoryGitStatus(
+  dirPath: string,
+  gitStatusMap: Map<string, FileGitStatus> | undefined
+): FileGitStatus | null {
+  if (!gitStatusMap || gitStatusMap.size === 0) {
+    return null;
+  }
+
+  // Check if any file in the status map starts with this directory path
+  const dirPrefix = dirPath + '/';
+  let hasModified = false;
+  let hasStaged = false;
+  let hasUntracked = false;
+
+  for (const [filePath, status] of gitStatusMap.entries()) {
+    if (filePath.startsWith(dirPrefix)) {
+      if (status === 'modified') hasModified = true;
+      else if (status === 'staged') hasStaged = true;
+      else if (status === 'untracked') hasUntracked = true;
+    }
+  }
+
+  // Priority: modified > staged > untracked
+  if (hasModified) return 'modified';
+  if (hasStaged) return 'staged';
+  if (hasUntracked) return 'untracked';
+  return null;
+}
+
+export function FileTree({ items, currentFilePath, onFileSelect, level, showIcons = true, onNewFile, onNewFolder, onRefreshFileTree, onViewHistory, selectedFolder, onFolderSelect, gitStatusMap, sharedDragState, sharedExpandedDirs }: FileTreeProps) {
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -408,6 +441,24 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
                     {item.name}
                     {isDragOver && isDragCopy && <span style={{ marginLeft: '4px', fontSize: '10px', opacity: 0.7 }}>(copy)</span>}
                   </span>
+                  {(() => {
+                    const dirStatus = getDirectoryGitStatus(item.path, gitStatusMap);
+                    if (!dirStatus) return null;
+                    return (
+                      <span
+                        className={`file-tree-git-status file-tree-git-status--${dirStatus} file-tree-git-status--inherited`}
+                        title={
+                          dirStatus === 'modified' ? 'Contains modified files' :
+                          dirStatus === 'staged' ? 'Contains staged files' :
+                          dirStatus === 'untracked' ? 'Contains untracked files' : ''
+                        }
+                      >
+                        {dirStatus === 'modified' ? 'M' :
+                         dirStatus === 'staged' ? 'S' :
+                         dirStatus === 'untracked' ? '?' : ''}
+                      </span>
+                    );
+                  })()}
                 </div>
                 {isExpanded && item.children && (
                   <FileTree
@@ -422,6 +473,7 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
                     onViewHistory={onViewHistory}
                     selectedFolder={selectedFolder}
                     onFolderSelect={onFolderSelect}
+                    gitStatusMap={gitStatusMap}
                     sharedDragState={{
                       draggedItem,
                       setDraggedItem,
@@ -464,6 +516,22 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
                 <span className="file-tree-name">
                   {item.name}
                 </span>
+                {gitStatusMap?.has(item.path) && (
+                  <span
+                    className={`file-tree-git-status file-tree-git-status--${gitStatusMap.get(item.path)}`}
+                    title={
+                      gitStatusMap.get(item.path) === 'modified' ? 'Modified - Changes not staged for commit' :
+                      gitStatusMap.get(item.path) === 'staged' ? 'Staged - Changes ready to commit' :
+                      gitStatusMap.get(item.path) === 'untracked' ? 'Untracked - New file not yet added to git' :
+                      gitStatusMap.get(item.path) === 'deleted' ? 'Deleted - File removed' : ''
+                    }
+                  >
+                    {gitStatusMap.get(item.path) === 'modified' ? 'M' :
+                     gitStatusMap.get(item.path) === 'staged' ? 'S' :
+                     gitStatusMap.get(item.path) === 'untracked' ? '?' :
+                     gitStatusMap.get(item.path) === 'deleted' ? 'D' : ''}
+                  </span>
+                )}
               </div>
             )}
           </li>
