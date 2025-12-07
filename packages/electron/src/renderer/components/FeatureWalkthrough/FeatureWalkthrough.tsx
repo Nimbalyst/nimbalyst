@@ -16,17 +16,17 @@ interface WalkthroughSlide {
 
 const WALKTHROUGH_SLIDES: WalkthroughSlide[] = [
   {
-    image: '/onboarding/onboarding-editor.png',
+    image: './onboarding/onboarding-editor.png',
     title: 'AI-Powered WYSIWYG Markdown Editor',
     description: 'Write, edit, diagrams, tables, and iterate with AI - all in one powerful environment. Visual diff and approval system lets you review AI changes before accepting them.',
   },
   {
-    image: '/onboarding/onboarding-agent.jpeg',
+    image: './onboarding/onboarding-agent.jpeg',
     title: 'Claude Code Sessions Integrated with Your Files',
     description: 'Search, resume, and run Claude Code sessions integrated with your files. Manage parallel sessions, search through them, and see which files the agent has touched.',
   },
   {
-    image: '/onboarding/onboarding-mockup.jpeg',
+    image: './onboarding/onboarding-mockup.jpeg',
     title: 'AI-Powered HTML Mockups',
     description: 'Use AI to create and edit HTML mockups based on your files and code. Annotate mockups directly for the AI or edit the HTML source for precise control.',
   },
