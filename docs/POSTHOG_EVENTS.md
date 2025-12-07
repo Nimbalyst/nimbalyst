@@ -114,6 +114,15 @@ All events include `$session_id` property automatically. Dev users are marked wi
 | `database_corruption_restore_result` | `PGLiteDatabaseWorker.ts:165, 185, 232, 253` | Result of attempting to restore from backup | `success`<br/>`source` (current/previous)<br/>`errorType` (verification_failed/restore_failed)<br/>`trigger` (cancel_start_fresh) |
 | `feature_first_use` | `AIService.ts:406`<br/>`WindowManager.ts:230`<br/>`AnalyticsHandlers.ts:45` | User uses a feature for the first time | `feature`<br/>`daysSinceInstall` |
 
+### Onboarding & Walkthrough
+
+| Event Name | File(s) | Trigger | Properties |
+| --- | --- | --- | --- |
+| `feature_walkthrough_completed` | `FeatureWalkthrough.tsx:76, 102` | User completes or skips the feature walkthrough | `total_time_ms`<br/>`slide_times` (object with editor/agent/mockup keys)<br/>`skipped` (boolean)<br/>`skipped_at_slide` (editor/agent/mockup, only if skipped) |
+| `onboarding_completed` | `App.tsx:312` | User completes the role/email onboarding dialog | `user_role`<br/>`custom_role_provided`<br/>`custom_role_text`<br/>`email_provided` |
+| `onboarding_deferred` | `App.tsx:330` | User clicks "Ask me later" on onboarding dialog | None |
+| `onboarding_skipped` | `App.tsx:341` | User clicks "Never ask again" on onboarding dialog | None |
+
 ### Special System Events
 
 | Event Name | File(s) | Trigger | Properties |
@@ -124,12 +133,13 @@ All events include `$session_id` property automatically. Dev users are marked wi
 
 ## Event Summary Statistics
 
-- **Total Events**: 47 unique event names
+- **Total Events**: 51 unique event names
 - **Main Process Events**: 37 (via AnalyticsService)
-- **Renderer Process Events**: 10 (via usePostHog hook)
+- **Renderer Process Events**: 14 (via usePostHog hook)
 - **File Operations**: 7 events
 - **Workspace Operations**: 4 events
 - **AI-Related**: 20 events
+- **Onboarding**: 4 events
 - **System/Infrastructure**: 9 events
 
 ## Privacy Requirements

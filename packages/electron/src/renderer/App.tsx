@@ -27,6 +27,7 @@ import { ErrorToastContainer } from './components/ErrorToast/ErrorToast';
 import { ApiKeyDialog } from './components/ApiKeyDialog';
 import { ProjectSelectionDialog } from './components/ProjectSelectionDialog/ProjectSelectionDialog';
 import { OnboardingDialog } from './components/OnboardingDialog/OnboardingDialog';
+import { FeatureWalkthrough } from './components/FeatureWalkthrough/FeatureWalkthrough';
 import { WorkspaceManager } from './components/WorkspaceManager/WorkspaceManager.tsx';
 import { AIUsageReport } from './components/AIUsageReport';
 import { DatabaseBrowser } from './components/DatabaseBrowser/DatabaseBrowser';
@@ -205,6 +206,9 @@ export default function App() {
   // Onboarding dialog state
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
 
+  // Feature walkthrough state (shown on first launch)
+  const [isFeatureWalkthroughOpen, setIsFeatureWalkthroughOpen] = useState(false);
+
   // Navigation gutter state
   const [sidebarView, setSidebarView] = useState<SidebarView>('files');
 
@@ -337,6 +341,48 @@ export default function App() {
 
     setIsOnboardingOpen(false);
   }, [posthog]);
+
+  // Check for feature walkthrough on first launch
+  useEffect(() => {
+    // Only check after initialization is complete
+    if (isInitializing) return;
+
+    // Skip in Playwright tests
+    if ((window as any).PLAYWRIGHT) {
+      return;
+    }
+
+    // Only show in workspace mode windows
+    if (!workspaceMode) {
+      return;
+    }
+
+    const checkFeatureWalkthrough = async () => {
+      // Check if walkthrough has been completed
+      const isCompleted = await window.electronAPI.invoke('feature-walkthrough:is-completed');
+      if (!isCompleted) {
+        setIsFeatureWalkthroughOpen(true);
+      }
+    };
+
+    checkFeatureWalkthrough();
+  }, [isInitializing, workspaceMode]);
+
+  // Handle feature walkthrough completion
+  const handleFeatureWalkthroughComplete = useCallback(async () => {
+    // Mark as completed in settings
+    // PostHog event is sent from the FeatureWalkthrough component with timing data
+    await window.electronAPI.invoke('feature-walkthrough:set-completed', true);
+    setIsFeatureWalkthroughOpen(false);
+  }, []);
+
+  // Handle feature walkthrough skip
+  const handleFeatureWalkthroughSkip = useCallback(async () => {
+    // Mark as completed even when skipped (so it doesn't show again)
+    // PostHog event is sent from the FeatureWalkthrough component with timing data
+    await window.electronAPI.invoke('feature-walkthrough:set-completed', true);
+    setIsFeatureWalkthroughOpen(false);
+  }, []);
 
   // Load custom trackers when workspace is available
   useEffect(() => {
@@ -1519,6 +1565,11 @@ export default function App() {
         onComplete={handleOnboardingComplete}
         onAskLater={handleOnboardingAskLater}
         onNeverAsk={handleOnboardingNeverAsk}
+      />
+      <FeatureWalkthrough
+        isOpen={isFeatureWalkthroughOpen}
+        onComplete={handleFeatureWalkthroughComplete}
+        onSkip={handleFeatureWalkthroughSkip}
       />
       <ErrorToastContainer />
       <MockupPickerMenuHost />

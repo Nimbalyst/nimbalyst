@@ -204,6 +204,7 @@ export default defineConfig({
         const icon = resolve(__dirname, 'icon.png');
         const logo = resolve(__dirname, 'nimbalyst-logo.png');
         const about = resolve(__dirname, 'about.html');
+        const onboardingDir = resolve(__dirname, 'resources/onboarding');
 
         if (fs.existsSync(icon)) {
           targets.push({ src: toPosix(icon), dest: '', overwrite: true });
@@ -213,6 +214,10 @@ export default defineConfig({
         }
         if (fs.existsSync(about)) {
           targets.push({ src: toPosix(about), dest: '', overwrite: true });
+        }
+        // Copy onboarding images for feature walkthrough
+        if (fs.existsSync(onboardingDir)) {
+          targets.push({ src: toPosix(resolve(onboardingDir, '*')), dest: 'onboarding', overwrite: true });
         }
         return viteStaticCopy({ targets });
       })()

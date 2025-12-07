@@ -44,6 +44,8 @@ interface AppStoreSchema {
   mockupLMEnabled?: boolean; // Enable MockupLM custom editor
   // First launch Claude Code installation detection (only checked once ever)
   claudeCodeInstallationChecked?: boolean;
+  // Feature walkthrough shown on first launch
+  featureWalkthroughCompleted?: boolean;
   // Session Sync (optional device sync)
   sessionSync?: {
     enabled: boolean;
@@ -858,4 +860,13 @@ export function setStytchAuthConfig(config: StytchAuthConfig | undefined): void 
   } else {
     appStore.delete('stytchAuth');
   }
+}
+
+// Feature Walkthrough Settings
+export function isFeatureWalkthroughCompleted(): boolean {
+  return appStore.get('featureWalkthroughCompleted', false);
+}
+
+export function setFeatureWalkthroughCompleted(completed: boolean): void {
+  appStore.set('featureWalkthroughCompleted', completed);
 }

@@ -120,6 +120,17 @@ export function registerSettingsHandlers() {
         updateOnboardingState(state);
     });
 
+    // Feature walkthrough state (shown on first launch)
+    ipcMain.handle('feature-walkthrough:is-completed', async () => {
+        const { isFeatureWalkthroughCompleted } = await import('../utils/store');
+        return isFeatureWalkthroughCompleted();
+    });
+
+    ipcMain.handle('feature-walkthrough:set-completed', async (_event, completed: boolean) => {
+        const { setFeatureWalkthroughCompleted } = await import('../utils/store');
+        setFeatureWalkthroughCompleted(completed);
+    });
+
     // Default AI model settings
     ipcMain.handle('settings:get-default-ai-model', () => {
         return getDefaultAIModel();
