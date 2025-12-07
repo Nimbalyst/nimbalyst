@@ -19,6 +19,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.46.7] - 2025-12-07
+
+
+### Added
+- Git status icons in file tree showing modified/untracked files
+- Toggle control to show/hide git status icons in file tree
+- Feature walkthrough with onboarding images for new users
+- Stytch authentication with Google OAuth and magic link email support
+- Server-side token validation for authentication via CollabV3
+- Session persistence across app restarts via encrypted safeStorage
+- Account & Sync panel (visible to alpha users only)
+- PostHog event tracking for Claude Code login/logout
+- PostHog tracking for AI messages using built-in Nimbalyst slash commands
+- First-launch detection for Claude Code installation status
+- simple-git dependency to electron module
+
+### Changed
+- Mockup nodes now use standard linked image markdown syntax `[![alt](screenshot.png)](file.mockup.html)` instead of custom syntax
+- Updated LINK and IMAGE transformer regexes to not match linked images
+
+### Fixed
+- Mobile app now shows "Running" indicator for desktop-initiated AI prompts
+- Encrypted tool names and message metadata in sync system (previously exposed as plaintext)
+
+### Security
+- Added security review documentation for upcoming audit
+- Tool names, attachments metadata, and content length now encrypted in synced messages
+
 ## [0.46.6] - 2025-12-05
 
 
