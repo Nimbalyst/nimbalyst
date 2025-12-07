@@ -9,8 +9,10 @@ interface FileTreeFilterMenuProps {
   y: number;
   currentFilter: FileTreeFilter;
   showIcons: boolean;
+  showGitStatus: boolean;
   onFilterChange: (filter: FileTreeFilter) => void;
   onShowIconsChange: (showIcons: boolean) => void;
+  onShowGitStatusChange: (showGitStatus: boolean) => void;
   hasActiveClaudeSession: boolean;
   claudeSessionFileCounts: { read: number; written: number };
   isGitRepo: boolean;
@@ -25,8 +27,10 @@ export function FileTreeFilterMenu({
   y,
   currentFilter,
   showIcons,
+  showGitStatus,
   onFilterChange,
   onShowIconsChange,
+  onShowGitStatusChange,
   hasActiveClaudeSession,
   claudeSessionFileCounts,
   isGitRepo,
@@ -214,6 +218,14 @@ export function FileTreeFilterMenu({
       >
         <MaterialSymbol icon={showIcons ? 'check_box' : 'check_box_outline_blank'} size={18} />
         <span>Show Icons</span>
+      </div>
+
+      <div
+        className="filter-menu-item"
+        onClick={() => onShowGitStatusChange(!showGitStatus)}
+      >
+        <MaterialSymbol icon={showGitStatus ? 'check_box' : 'check_box_outline_blank'} size={18} />
+        <span>Show Git Status</span>
       </div>
     </div>
   );
