@@ -1,10 +1,10 @@
 import Store from "electron-store";
 import {PostHog} from "posthog-node";
 import {ulid} from "ulid";
-import {logger} from "../../utils/logger.ts";
-import {beforePosthogSendNodeJS} from "./analytics-utils.ts";
+import {logger} from "../../utils/logger";
+import {beforePosthogSendNodeJS} from "./analytics-utils";
 import {app} from "electron";
-import {isAnalyticsEnabled, setAnalyticsEnabled} from "../../utils/store.ts";
+import {isAnalyticsEnabled, setAnalyticsEnabled} from "../../utils/store";
 
 const POSTHOG_PROJECT_PUBLIC_ID = 'phc_s3lQIILexwlGHvxrMBqti355xUgkRocjMXW4LjV0ATw';
 

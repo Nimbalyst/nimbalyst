@@ -12,7 +12,6 @@ import { formatToolArguments } from '../utils/pathResolver';
 import { EditToolResultCard } from './EditToolResultCard';
 import { TranscriptSearchBar } from './TranscriptSearchBar';
 import { formatToolDisplayName } from '../utils/toolNameFormatter';
-import { useVirtualizedMessages } from '../hooks/useVirtualizedMessages';
 import { getCustomToolWidget } from './CustomToolWidgets';
 import './RichTranscriptView.css';
 

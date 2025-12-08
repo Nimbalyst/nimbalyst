@@ -427,6 +427,7 @@ export class HistoryManager {
         id: tagId,
         filePath,
         content,
+        type: row.metadata.type || 'pre-edit',
         status: row.metadata.status,
         sessionId: row.metadata.sessionId,
         toolUseId: row.metadata.toolUseId,

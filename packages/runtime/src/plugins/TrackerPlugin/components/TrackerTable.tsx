@@ -212,9 +212,7 @@ export function TrackerTable({
           let actualDate: Date | null = null;
 
           if (dateSource) {
-            if (typeof dateSource === 'object' && dateSource !== null && dateSource instanceof Date) {
-              actualDate = dateSource;
-            } else if (typeof dateSource === 'number') {
+            if (typeof dateSource === 'number') {
               actualDate = new Date(dateSource);
             } else if (typeof dateSource === 'string') {
               const parsed = new Date(dateSource);

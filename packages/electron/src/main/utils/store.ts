@@ -6,7 +6,7 @@ import type { OnboardingConfig } from '../../shared/types/workspace';
 import { DEFAULT_ONBOARDING_CONFIG } from '../../shared/types/workspace';
 import type { InstalledPackage } from '../../shared/toolPackages';
 
-export type AppTheme = 'dark' | 'light' | 'system' | 'crystal-dark';
+export type AppTheme = 'dark' | 'light' | 'system' | 'auto' | 'crystal-dark';
 export type { SessionState, SessionWindow } from '../types';
 
 export type CompletionSoundType = 'chime' | 'bell' | 'pop' | 'none';

@@ -4,7 +4,7 @@
 
 import OpenAI from 'openai';
 import { BaseAIProvider } from '../AIProvider';
-import fs from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import {
@@ -124,10 +124,18 @@ export class OpenAIProvider extends BaseAIProvider {
             text: msg.content
           });
 
-          apiMessages.push({
-            role: msg.role === 'user' ? 'user' : 'assistant',
-            content
-          });
+          if (msg.role === 'user') {
+            apiMessages.push({
+              role: 'user' as const,
+              content
+            });
+          } else {
+            // For assistant messages with images, we need to convert to text-only
+            apiMessages.push({
+              role: 'assistant' as const,
+              content: msg.content
+            });
+          }
         } else {
           // No attachments, use simple text content
           apiMessages.push({

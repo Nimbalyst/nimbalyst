@@ -9,6 +9,7 @@ export default defineConfig(({ mode }) => ({
     dts({
       insertTypesEntry: true,
       include: ['src'],
+      exclude: ['src/ai/server/providers/mcp-stdio-server.ts'],
       logDiagnostics: false
     })
   ],

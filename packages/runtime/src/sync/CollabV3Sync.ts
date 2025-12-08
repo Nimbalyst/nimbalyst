@@ -69,6 +69,8 @@ interface SessionMetadata {
   encrypted_title?: string;
   /** IV for title decryption (base64) */
   title_iv?: string;
+  /** Plaintext title (for local cache / pre-encryption) */
+  title?: string;
   provider: string;
   model?: string;
   mode?: 'agent' | 'planning';
@@ -92,6 +94,8 @@ interface SessionIndexEntry {
   encrypted_title?: string;
   /** IV for title decryption (base64) */
   title_iv?: string;
+  /** Plaintext title (for local cache / pre-encryption) */
+  title?: string;
   provider: string;
   model?: string;
   mode?: 'agent' | 'planning';
@@ -113,8 +117,9 @@ interface SessionIndexEntry {
 }
 
 /** Decrypted session index entry with required title - used for return values */
-type DecryptedSessionIndexEntry = Omit<SessionIndexEntry, 'title' | 'encrypted_title' | 'title_iv'> & {
+type DecryptedSessionIndexEntry = Omit<SessionIndexEntry, 'title' | 'encrypted_title' | 'title_iv' | 'encryptedQueuedPrompts'> & {
   title: string;  // Required after decryption
+  queuedPrompts?: QueuedPrompt[];  // Decrypted queued prompts
 };
 
 type ClientMessage =
