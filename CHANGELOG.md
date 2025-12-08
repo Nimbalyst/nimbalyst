@@ -19,6 +19,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.46.10] - 2025-12-08
+
+
+### Added
+- Added dirty filter indicator to file tree to show unsaved changes
+
+### Changed
+- Improved onboarding images for better display on different screen sizes
+- General UI polish and refinements to onboarding experience
+
+### Fixed
+<!-- Bug fixes go here -->
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.46.8] - 2025-12-07
 
 
