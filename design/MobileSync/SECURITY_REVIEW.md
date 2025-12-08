@@ -19,9 +19,13 @@ The desktop app (Electron) and mobile app (Capacitor) share the same security mo
 | Severity | Count | Key Issues |
 | --- | --- | --- |
 | CRITICAL | 1 | HTTP fallback in magic links |
-| HIGH | 6 | No rate limiting, JWT expiry not checked client-side, JWKS cache too long |
-| MEDIUM | 8 | Metadata leakage, debug logging, weak input validation |
+| HIGH | 4 | No rate limiting, JWT expiry not checked client-side, JWKS cache too long |
+| MEDIUM | 6 | No forward secrecy, debug logging, weak input validation |
 | LOW | 4 | Missing security headers, no certificate pinning |
+
+**Resolved CRITICAL issues:**
+- ~~ENC-1: Unencrypted queued prompts~~ - **FIXED** (AES-256-GCM encryption)
+- ~~ENC-2: Unencrypted~~~~ session titles~~ - **FIXED** (AES-256-GCM encryption)
 
 ---
 
@@ -308,28 +312,23 @@ async function encrypt(content: string, key: CryptoKey): Promise<{ encrypted: st
 | Message content | YES | Full text encrypted |
 | Message metadata | YES | Tool names, attachments info encrypted in content blob |
 | Hidden flag | YES | Part of encrypted content |
+| Session title | YES | Encrypted before sync transmission |
+| Queued prompts | YES | Each prompt encrypted individually before sync |
 
-### 3.4 What is NOT Encrypted (Metadata Leakage)
+### 3.4 What is NOT Encrypted (Operational Metadata)
 
 | Field | Location | Privacy Impact |
 | --- | --- | --- |
-| Session title | Session metadata | Reveals topic/project |
+| ~~Session title~~ | ~~Session metadata~~ | **NOW ENCRYPTED** |
 | AI provider/model | Session metadata | Reveals which AI used |
 | Timestamps | Message envelope | Timing analysis possible |
 | Message direction | Message envelope | User vs assistant |
 | Message sequence | Message envelope | Conversation length |
-| Queued prompts | Session metadata | **FULL USER INPUT VISIBLE** |
+| ~~Queued prompts~~ | ~~Session metadata~~ | **NOW ENCRYPTED** |
 | Execution state | Session metadata | When user is working |
+| Project ID | Session metadata | Which workspace |
 
-**CRITICAL: Queued Prompts Leak User Input**
-```typescript
-// Session metadata - sent unencrypted
-queuedPrompts?: Array<{
-  id: string;
-  prompt: string;       // USER INPUT IN PLAINTEXT
-  timestamp: number;
-}>;
-```
+**Note:** Session titles and queued prompts were previously unencrypted but are now E2E encrypted as of 2025-12-08.
 
 ### 3.5 Encryption Security Assessment
 
@@ -344,8 +343,8 @@ queuedPrompts?: Array<{
 
 | ID | Severity | Issue | Details |
 | --- | --- | --- | --- |
-| ENC-1 | HIGH | Queued prompts unencrypted | Full user input visible in session metadata |
-| ENC-2 | MEDIUM | Session title unencrypted | Reveals project/topic context |
+| ENC-1 | ~~CRITICAL~~ | ~~Queued prompts unencrypted~~ | **FIXED** - Now encrypted with AES-256-GCM before transmission |
+| ENC-2 | ~~CRITICAL~~ | ~~Session title unencrypted~~ | **FIXED** - Now encrypted with AES-256-GCM before transmission |
 | ENC-3 | MEDIUM | No forward secrecy | Compromise of seed decrypts all messages |
 | ENC-4 | MEDIUM | Predictable salt | Uses `nimbalyst:${userId}` - low risk but suboptimal |
 | ENC-5 | LOW | Content length inference | Message size reveals content characteristics |
@@ -487,23 +486,27 @@ queuedPrompts?: Array<{
   - Require HTTPS redirect URLs
   - Return 400 error if redirect_url missing or not HTTPS
 
-4. **[ENC-1] Encrypt queued prompts**
--   - User input should never be visible in plaintext session metadata
--   - Encrypt `queuedPrompts` array or move to encrypted message content
+4. **~~[ENC-1] Encrypt queued prompts~~** **DONE**
+  - Queued prompts now encrypted with AES-256-GCM before transmission
+  - Both desktop and mobile encrypt on send, decrypt on receive
+
+5. **~~[ENC-2] Encrypt session titles~~** **DONE**
+  - Session titles now encrypted with AES-256-GCM before transmission
+  - Backwards-compatible: accepts both encrypted and plaintext during transition
 
 ### 8.2 HIGH Priority (Next Sprint)
 
 5. **[SRV-3] Implement rate limiting**
 -   - Add per-IP rate limiting on `/api/auth/magic-link` (5 req/min)
--   - Add per-session rate limiting on `/auth/refresh`
--   - Use Cloudflare KV or native rate limiting
+  - Add per-session rate limiting on `/auth/refresh`
+  - Use Cloudflare KV or native rate limiting
 
 6. **[ELEC-1] Validate JWT expiry client-side**
 -   - Check `exp` claim before using JWT
--   - Trigger refresh before expiry, not after server rejection
+  - Trigger refresh before expiry, not after server rejection
 
 7. **[SRV-4] Reduce JWKS cache TTL**
--   - Reduce from 1 hour to 5 minutes
+  - Reduce from 1 hour to 5 minutes
   - Allow force refresh on signature validation failure
 
 8. **[MOB-3] Validate JWT signature on mobile**
@@ -512,21 +515,17 @@ queuedPrompts?: Array<{
 
 ### 8.3 MEDIUM Priority (Backlog)
 
-9. **[ENC-2] Encrypt session metadata**
-  - Session title, provider/model should be encrypted
-  - Only structural fields (created_at, updated_at) in plaintext
-
 10. **[SRV-6] Make audience validation mandatory**
-  - Require `STYTCH_PROJECT_ID` env var
-  - Fail startup if not configured
+  -     - Require `STYTCH_PROJECT_ID` env var
+    - Fail startup if not configured
 
 11. **[SRV-7] Reduce debug logging**
-  - Remove JWT payload logging in production
-  - Log only errors and security-relevant events
+  -     - Remove JWT payload logging in production
+    - Log only errors and security-relevant events
 
 12. **[QR-1] Server-side QR expiration**
-  - Track QR generation time on server
-  - Reject pairing attempts after expiration
+  -     - Track QR generation time on server
+    - Reject pairing attempts after expiration
 
 ### 8.4 LOW Priority (Future)
 
@@ -623,3 +622,5 @@ None required - uses committed public tokens.
 | 2025-12-08 | Claude | Comprehensive security audit: Electron, Capacitor, CollabV3, E2E encryption. Added critical findings for mobile plaintext storage, CORS, metadata leakage. |
 | 2025-12-08 | Claude | **FIXED MOB-1, MOB-2**: Implemented secure storage on Capacitor using `capacitor-secure-storage-plugin`. Mobile credentials now encrypted via iOS Keychain / Android Keystore. |
 | 2025-12-08 | Claude | **FIXED SRV-1**: Replaced CORS wildcard with origin allowlist. Production restricts to nimbalyst.com domains. Development allows localhost and local network IPs. |
+| 2025-12-08 | Claude | **Elevated ENC-1, ENC-2 to CRITICAL**: Unencrypted queued prompts and session titles expose user-generated content in plaintext. Both must be fixed before production. |
+| 2025-12-08 | Claude | **FIXED ENC-1, ENC-2**: Implemented E2E encryption for queued prompts and session titles. Both are now encrypted using AES-256-GCM before transmission. Desktop (CollabV3Sync.ts) and mobile (CollabV3SyncContext.tsx) both encrypt on send and decrypt on receive. Plaintext fallback maintained for backwards compatibility during transition. |

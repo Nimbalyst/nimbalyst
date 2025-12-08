@@ -86,10 +86,32 @@ interface SyncContextValue {
 // Protocol Types (match server)
 // ============================================================================
 
+/** Encrypted queued prompt for wire protocol */
+interface EncryptedQueuedPrompt {
+  id: string;
+  /** Encrypted prompt text (base64) */
+  encrypted_prompt: string;
+  /** IV for prompt decryption (base64) */
+  iv: string;
+  timestamp: number;
+}
+
+/** Plaintext queued prompt (after decryption) */
+interface PlaintextQueuedPrompt {
+  id: string;
+  prompt: string;
+  timestamp: number;
+}
+
 interface ServerSessionEntry {
   session_id: string;
   project_id: string;
-  title: string;
+  /** Plaintext title (legacy, may be empty if encrypted) */
+  title?: string;
+  /** Encrypted title (base64) - used when E2E encryption is enabled */
+  encrypted_title?: string;
+  /** IV for title decryption (base64) */
+  title_iv?: string;
   provider: string;
   model?: string;
   mode?: 'agent' | 'planning';
@@ -105,8 +127,10 @@ interface ServerSessionEntry {
   isExecuting?: boolean;
   /** Number of prompts queued from mobile, waiting for desktop to process */
   queuedPromptCount?: number;
-  /** Full queue of prompts (sent with index_update for desktop to process) */
-  queuedPrompts?: Array<{ id: string; prompt: string; timestamp: number }>;
+  /** Full queue of plaintext prompts (legacy, will be deprecated) */
+  queuedPrompts?: PlaintextQueuedPrompt[];
+  /** Encrypted queued prompts - used when E2E encryption is enabled */
+  encryptedQueuedPrompts?: EncryptedQueuedPrompt[];
 }
 
 interface ServerProjectEntry {
@@ -150,6 +174,173 @@ type ServerMessage =
       from_connection_id?: string;
     }
   | { type: 'error'; code: string; message: string };
+
+// ============================================================================
+// Encryption Utilities
+// ============================================================================
+
+/**
+ * Convert Uint8Array to base64 string.
+ */
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  if (bytes.length < 1024) {
+    return btoa(String.fromCharCode(...bytes));
+  }
+  const CHUNK_SIZE = 8192;
+  let result = '';
+  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+    const chunk = bytes.subarray(i, Math.min(i + CHUNK_SIZE, bytes.length));
+    result += String.fromCharCode(...chunk);
+  }
+  return btoa(result);
+}
+
+/**
+ * Convert base64 string to Uint8Array backed by ArrayBuffer (not SharedArrayBuffer).
+ */
+function base64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
+  const binary = atob(base64);
+  const buffer = new ArrayBuffer(binary.length);
+  const bytes = new Uint8Array(buffer);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+/**
+ * Derive an encryption key from a passphrase and salt using PBKDF2.
+ */
+async function deriveEncryptionKey(passphrase: string, salt: string): Promise<CryptoKey> {
+  const encoder = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(passphrase),
+    'PBKDF2',
+    false,
+    ['deriveKey']
+  );
+
+  return crypto.subtle.deriveKey(
+    {
+      name: 'PBKDF2',
+      salt: encoder.encode(salt),
+      iterations: 100000,
+      hash: 'SHA-256',
+    },
+    keyMaterial,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+
+/**
+ * Encrypt a string using AES-GCM.
+ */
+async function encrypt(
+  content: string,
+  key: CryptoKey
+): Promise<{ encrypted: string; iv: string }> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encoder = new TextEncoder();
+  const data = encoder.encode(content);
+
+  const encrypted = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    data
+  );
+
+  return {
+    encrypted: uint8ArrayToBase64(new Uint8Array(encrypted)),
+    iv: uint8ArrayToBase64(iv),
+  };
+}
+
+/**
+ * Decrypt a string using AES-GCM.
+ */
+async function decrypt(
+  encrypted: string,
+  iv: string,
+  key: CryptoKey
+): Promise<string> {
+  const encryptedBytes = base64ToUint8Array(encrypted);
+  const ivBytes = base64ToUint8Array(iv);
+
+  const decrypted = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: ivBytes },
+    key,
+    encryptedBytes
+  );
+
+  return new TextDecoder().decode(decrypted);
+}
+
+/**
+ * Encrypt queued prompts for wire transmission.
+ */
+async function encryptQueuedPrompts(
+  prompts: PlaintextQueuedPrompt[],
+  key: CryptoKey
+): Promise<EncryptedQueuedPrompt[]> {
+  return Promise.all(
+    prompts.map(async (prompt) => {
+      const { encrypted, iv } = await encrypt(prompt.prompt, key);
+      return {
+        id: prompt.id,
+        encrypted_prompt: encrypted,
+        iv,
+        timestamp: prompt.timestamp,
+      };
+    })
+  );
+}
+
+/**
+ * Decrypt queued prompts received from wire.
+ */
+async function decryptQueuedPrompts(
+  prompts: EncryptedQueuedPrompt[],
+  key: CryptoKey
+): Promise<PlaintextQueuedPrompt[]> {
+  return Promise.all(
+    prompts.map(async (prompt) => {
+      const decryptedPrompt = await decrypt(prompt.encrypted_prompt, prompt.iv, key);
+      return {
+        id: prompt.id,
+        prompt: decryptedPrompt,
+        timestamp: prompt.timestamp,
+      };
+    })
+  );
+}
+
+/**
+ * Encrypt a session title for wire transmission.
+ */
+async function encryptTitle(
+  title: string,
+  key: CryptoKey
+): Promise<{ encrypted_title: string; title_iv: string }> {
+  const { encrypted, iv } = await encrypt(title, key);
+  return {
+    encrypted_title: encrypted,
+    title_iv: iv,
+  };
+}
+
+/**
+ * Decrypt a session title received from wire.
+ */
+async function decryptTitle(
+  encrypted_title: string,
+  title_iv: string,
+  key: CryptoKey
+): Promise<string> {
+  return decrypt(encrypted_title, title_iv, key);
+}
 
 // ============================================================================
 // JWT Utilities
@@ -310,6 +501,8 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const deviceAnnounceIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // Encryption key derived from credentials
+  const encryptionKeyRef = useRef<CryptoKey | null>(null);
 
   // Check auth and pairing status on mount
   useEffect(() => {
@@ -348,10 +541,23 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
   }, []);
 
   // Convert server session to client format
-  const convertSession = useCallback((server: ServerSessionEntry): SessionIndexEntry => {
+  const convertSession = useCallback(async (server: ServerSessionEntry): Promise<SessionIndexEntry> => {
+    // Decrypt title if encrypted
+    let title: string;
+    if (server.encrypted_title && server.title_iv && encryptionKeyRef.current) {
+      try {
+        title = await decryptTitle(server.encrypted_title, server.title_iv, encryptionKeyRef.current);
+      } catch (err) {
+        console.error('[CollabV3] Failed to decrypt session title:', err);
+        title = server.title ?? '[Decryption Failed]';
+      }
+    } else {
+      title = server.title ?? '';
+    }
+
     return {
       id: server.session_id,
-      title: server.title,
+      title,
       provider: server.provider,
       model: server.model,
       mode: server.mode,
@@ -382,14 +588,15 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
 
   // Handle incoming messages
   const handleMessage = useCallback(
-    (data: string) => {
+    async (data: string) => {
       try {
         const message: ServerMessage = JSON.parse(data);
 
         switch (message.type) {
           case 'index_sync_response': {
             console.log('[CollabV3] Received index_sync_response with', message.sessions.length, 'sessions and', message.projects.length, 'projects');
-            const convertedSessions = message.sessions.map(convertSession);
+            // Convert sessions with decryption (async)
+            const convertedSessions = await Promise.all(message.sessions.map(convertSession));
             const convertedProjects = message.projects.map(convertProject);
 
             // Sort sessions by updated_at to match desktop sort order
@@ -417,7 +624,7 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
           }
 
           case 'index_broadcast': {
-            const updatedSession = convertSession(message.session);
+            const updatedSession = await convertSession(message.session);
             setAllSessions((prev) => {
               const existing = prev.findIndex((s) => s.id === updatedSession.id);
               if (existing >= 0) {
@@ -470,7 +677,7 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
 
   // Send an index update to notify other devices
   const sendIndexUpdate = useCallback(
-    (sessionId: string, update: {
+    async (sessionId: string, update: {
       pendingExecution?: { messageId: string; sentAt: number; sentBy: 'mobile' | 'desktop' };
       queuedPrompts?: Array<{ id: string; prompt: string; timestamp: number }>;
     }) => {
@@ -486,26 +693,52 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
         return;
       }
 
-      const msg: ClientMessage = {
-        type: 'index_update',
-        session: {
-          session_id: sessionId,
-          project_id: session.workspaceId || 'default',
-          title: session.title,
-          provider: session.provider,
-          model: session.model,
-          mode: session.mode,
-          message_count: session.messageCount,
-          last_message_at: session.lastMessageAt,
-          created_at: session.createdAt,
-          updated_at: Date.now(),
-          pendingExecution: update.pendingExecution,
-          queuedPromptCount: update.queuedPrompts?.length ?? 0,
-          queuedPrompts: update.queuedPrompts,
-        },
+      const serverSession: ServerSessionEntry = {
+        session_id: sessionId,
+        project_id: session.workspaceId || 'default',
+        provider: session.provider,
+        model: session.model,
+        mode: session.mode,
+        message_count: session.messageCount,
+        last_message_at: session.lastMessageAt,
+        created_at: session.createdAt,
+        updated_at: Date.now(),
+        pendingExecution: update.pendingExecution,
+        queuedPromptCount: update.queuedPrompts?.length ?? 0,
       };
 
-      // console.log('[CollabV3] Sending index_update for session:', sessionId, 'queuedPrompts:', update.queuedPrompts?.length ?? 0);
+      // Encrypt title if we have encryption key
+      if (session.title && encryptionKeyRef.current) {
+        try {
+          const { encrypted_title, title_iv } = await encryptTitle(session.title, encryptionKeyRef.current);
+          serverSession.encrypted_title = encrypted_title;
+          serverSession.title_iv = title_iv;
+        } catch (err) {
+          console.error('[CollabV3] Failed to encrypt title:', err);
+          serverSession.title = session.title; // Fallback to plaintext
+        }
+      } else {
+        serverSession.title = session.title;
+      }
+
+      // Encrypt queued prompts if we have encryption key
+      if (update.queuedPrompts && update.queuedPrompts.length > 0 && encryptionKeyRef.current) {
+        try {
+          serverSession.encryptedQueuedPrompts = await encryptQueuedPrompts(update.queuedPrompts, encryptionKeyRef.current);
+        } catch (err) {
+          console.error('[CollabV3] Failed to encrypt queued prompts:', err);
+          serverSession.queuedPrompts = update.queuedPrompts; // Fallback to plaintext
+        }
+      } else if (update.queuedPrompts) {
+        serverSession.queuedPrompts = update.queuedPrompts;
+      }
+
+      const msg: ClientMessage = {
+        type: 'index_update',
+        session: serverSession,
+      };
+
+      // console.log('[CollabV3] Sending index_update for session:', sessionId, 'queuedPrompts:', update.queuedPrompts?.length ?? 0, 'encrypted:', !!encryptionKeyRef.current);
       wsRef.current.send(JSON.stringify(msg));
     },
     [allSessions]
@@ -587,6 +820,17 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
       authToken: jwt,
       encryptionPassphrase: creds.encryptionKeySeed,
     });
+
+    // Derive encryption key for metadata encryption
+    try {
+      const key = await deriveEncryptionKey(creds.encryptionKeySeed, `nimbalyst:${userId}`);
+      encryptionKeyRef.current = key;
+      console.log('[CollabV3] Derived encryption key for metadata');
+    } catch (err) {
+      console.error('[CollabV3] Failed to derive encryption key:', err);
+      // Continue without encryption - will use plaintext fallback
+      encryptionKeyRef.current = null;
+    }
 
     // Build WebSocket URL
     const baseUrl = serverUrl.replace(/\/$/, '');

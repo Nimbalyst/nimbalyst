@@ -38,9 +38,11 @@ function getAllowedOrigins(env: Env): string[] {
     return [
       'http://localhost:5173',      // Vite dev server
       'http://localhost:5174',      // Vite dev server (alt port)
+      'http://localhost:4102',      // Capacitor web dev server
       'http://localhost:8787',      // Wrangler dev server
       'http://127.0.0.1:5173',
       'http://127.0.0.1:5174',
+      'http://127.0.0.1:4102',
       'http://127.0.0.1:8787',
       'capacitor://localhost',      // Capacitor iOS/Android
       'http://localhost',           // Generic localhost

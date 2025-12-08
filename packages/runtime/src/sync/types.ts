@@ -151,10 +151,12 @@ export interface SyncProvider {
     [key: string]: unknown;
   } | undefined;
 
-  /** Get cached index entry for a session (populated from index_sync_response and index_broadcast) */
+  /** Get cached index entry for a session (populated from index_sync_response and index_broadcast)
+   * Note: Returns decrypted values - title is always present after decryption */
   getCachedIndexEntry?(sessionId: string): {
     session_id: string;
     project_id: string;
+    /** Decrypted title (always present in cache) */
     title: string;
     provider: string;
     model?: string;
@@ -169,6 +171,7 @@ export interface SyncProvider {
       sentBy: 'mobile' | 'desktop';
     };
     isExecuting?: boolean;
+    /** Decrypted queued prompts */
     queuedPrompts?: Array<{ id: string; prompt: string; timestamp: number }>;
   } | undefined;
 }
