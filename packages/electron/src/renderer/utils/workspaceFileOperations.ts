@@ -39,8 +39,11 @@ export async function handleWorkspaceFileSelect(options: FileSelectOptions): Pro
     if (existingTab) {
       if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] File already active, ensuring tab focus');
       tabs.switchTab(existingTab.id);
+      return;
     }
-    return;
+    // If activeFilePath matches but no tab exists, there's a state inconsistency.
+    // Fall through to open the file normally instead of returning silently.
+    console.warn('[WORKSPACE_FILE_SELECT] activeFilePath matches but no tab found, proceeding to open file:', filePath);
   }
 
   // NOTE: No need to manually save here - EditorContainer handles save-on-tab-switch
@@ -57,66 +60,69 @@ export async function handleWorkspaceFileSelect(options: FileSelectOptions): Pro
 
   try {
     const result = await window.electronAPI.switchWorkspaceFile(filePath);
-    if (result) {
-      if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] File loaded successfully');
+    if (!result) {
+      console.error('[WORKSPACE_FILE_SELECT] switchWorkspaceFile returned null for:', filePath);
+      console.error('[WORKSPACE_FILE_SELECT] This could mean the file does not exist or failed to load');
+      return;
+    }
+    if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] File loaded successfully');
 
-      // Add a new tab - onTabChange will handle all state updates
-      console.log('[TABS] Adding tab for file:', result.filePath);
-      const tabId = tabs.addTab(result.filePath, result.content);
-      if (!tabId) {
-        console.error('[TABS] Failed to add tab for file:', result.filePath);
-        console.error('[TABS] This should not happen - tabs should be unlimited');
-        // Could show a dialog here
-      } else {
-        console.log('[TABS] Added tab with ID:', tabId);
-        // State updates (contentRef, currentFilePath, etc.) will be handled by onTabChange callback
-      }
+    // Add a new tab - onTabChange will handle all state updates
+    console.log('[TABS] Adding tab for file:', result.filePath);
+    const tabId = tabs.addTab(result.filePath, result.content);
+    if (!tabId) {
+      console.error('[TABS] Failed to add tab for file:', result.filePath);
+      console.error('[TABS] This should not happen - tabs should be unlimited');
+      // Could show a dialog here
+    } else {
+      console.log('[TABS] Added tab with ID:', tabId);
+      // State updates (contentRef, currentFilePath, etc.) will be handled by onTabChange callback
+    }
 
-      // Add to recent files
-      if (window.electronAPI?.addToWorkspaceRecentFiles) {
-        window.electronAPI.addToWorkspaceRecentFiles(filePath);
-      }
+    // Add to recent files
+    if (window.electronAPI?.addToWorkspaceRecentFiles) {
+      window.electronAPI.addToWorkspaceRecentFiles(filePath);
+    }
 
-      // Update current file in main process for window title and session restore
-      if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] Updating active file in backend');
-      const syncResult = window.electronAPI.setCurrentFile(filePath);
-      if (syncResult && typeof syncResult.then === 'function') {
-        await syncResult;
-      }
+    // Update current file in main process for window title and session restore
+    if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] Updating active file in backend');
+    const syncResult = window.electronAPI.setCurrentFile(filePath);
+    if (syncResult && typeof syncResult.then === 'function') {
+      await syncResult;
+    }
 
-      // Create automatic snapshot when switching to file
-      if (window.electronAPI.history) {
-        try {
-          // Check if we have previous snapshots
-          const snapshots = await window.electronAPI.history.listSnapshots(result.filePath);
-          if (snapshots.length === 0) {
-            // First time opening this file, create initial snapshot
+    // Create automatic snapshot when switching to file
+    if (window.electronAPI.history) {
+      try {
+        // Check if we have previous snapshots
+        const snapshots = await window.electronAPI.history.listSnapshots(result.filePath);
+        if (snapshots.length === 0) {
+          // First time opening this file, create initial snapshot
+          await window.electronAPI.history.createSnapshot(
+            result.filePath,
+            result.content,
+            'auto',
+            'Initial file open'
+          );
+        } else {
+          // Check if content changed since last snapshot
+          const latestSnapshot = snapshots[0]; // Assuming sorted by timestamp desc
+          const lastContent = await window.electronAPI.history.loadSnapshot(
+            result.filePath,
+            latestSnapshot.timestamp
+          );
+          if (lastContent !== result.content) {
+            // Content actually changed, create snapshot
             await window.electronAPI.history.createSnapshot(
               result.filePath,
               result.content,
               'auto',
-              'Initial file open'
+              'File changed externally'
             );
-          } else {
-            // Check if content changed since last snapshot
-            const latestSnapshot = snapshots[0]; // Assuming sorted by timestamp desc
-            const lastContent = await window.electronAPI.history.loadSnapshot(
-              result.filePath,
-              latestSnapshot.timestamp
-            );
-            if (lastContent !== result.content) {
-              // Content actually changed, create snapshot
-              await window.electronAPI.history.createSnapshot(
-                result.filePath,
-                result.content,
-                'auto',
-                'File changed externally'
-              );
-            }
           }
-        } catch (error) {
-          console.error('Failed to create automatic snapshot:', error);
         }
+      } catch (error) {
+        console.error('Failed to create automatic snapshot:', error);
       }
     }
   } catch (error) {

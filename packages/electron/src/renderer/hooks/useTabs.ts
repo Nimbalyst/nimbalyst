@@ -1,5 +1,4 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { editorRegistry } from '@nimbalyst/runtime/ai/EditorRegistry';
 import { getFileName } from '../utils/pathUtils';
 
 export interface TabData {
@@ -515,10 +514,13 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
       onTabChangeRef.current(currentActiveTab);
     }
 
-    // Update EditorRegistry with the active file path (only for markdown files)
-    if (currentActiveTab && currentActiveTab.filePath.endsWith('.md')) {
-      editorRegistry.setActive(currentActiveTab.filePath);
-    }
+    // NOTE: EditorRegistry.setActive is handled by AIChatIntegrationPlugin when the editor
+    // component mounts and when it receives focus/click events. We removed the call from here
+    // because it caused a race condition - setActive was called before the editor registered,
+    // resulting in "[EditorRegistry] Attempted to set active editor for unregistered file" warnings.
+    // The AIChatIntegrationPlugin sets the active editor when:
+    // 1. The editor registers (if data-active="true" on the container)
+    // 2. The editor receives focus or click events
   }, [activeTabId]);
 
 
