@@ -91,7 +91,8 @@ describe('Message protocol', () => {
     const session: SessionIndexEntry = {
       session_id: 'sess-123',
       project_id: 'proj-456',
-      title: 'Test Session',
+      encrypted_title: 'base64-encrypted-title',
+      title_iv: 'base64-iv',
       provider: 'claude',
       message_count: 10,
       last_message_at: Date.now(),

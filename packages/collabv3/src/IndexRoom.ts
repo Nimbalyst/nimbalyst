@@ -86,6 +86,8 @@ export class IndexRoom implements DurableObject {
         session_id TEXT PRIMARY KEY,
         project_id TEXT NOT NULL,
         title TEXT,
+        encrypted_title TEXT,
+        title_iv TEXT,
         provider TEXT,
         model TEXT,
         mode TEXT,
@@ -98,6 +100,18 @@ export class IndexRoom implements DurableObject {
       CREATE INDEX IF NOT EXISTS idx_session_project ON session_index(project_id, updated_at DESC);
       CREATE INDEX IF NOT EXISTS idx_session_updated ON session_index(updated_at DESC);
     `);
+
+    // Migration: Add encrypted title columns if they don't exist (for existing databases)
+    try {
+      sql.exec(`ALTER TABLE session_index ADD COLUMN encrypted_title TEXT`);
+    } catch {
+      // Column already exists
+    }
+    try {
+      sql.exec(`ALTER TABLE session_index ADD COLUMN title_iv TEXT`);
+    } catch {
+      // Column already exists
+    }
 
     // Project index table
     sql.exec(`
@@ -281,14 +295,15 @@ export class IndexRoom implements DurableObject {
   ): Promise<void> {
     const sql = this.state.storage.sql;
 
-    // Upsert session
+    // Upsert session - titles are always encrypted
     sql.exec(
       `INSERT OR REPLACE INTO session_index
-       (session_id, project_id, title, provider, model, mode, message_count, last_message_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (session_id, project_id, encrypted_title, title_iv, provider, model, mode, message_count, last_message_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       session.session_id,
       session.project_id,
-      session.title,
+      session.encrypted_title ?? null,
+      session.title_iv ?? null,
       session.provider,
       session.model ?? null,
       session.mode ?? null,
@@ -329,11 +344,12 @@ export class IndexRoom implements DurableObject {
       for (const session of sessions) {
         sql.exec(
           `INSERT OR REPLACE INTO session_index
-           (session_id, project_id, title, provider, model, mode, message_count, last_message_at, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (session_id, project_id, encrypted_title, title_iv, provider, model, mode, message_count, last_message_at, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           session.session_id,
           session.project_id,
-          session.title,
+          session.encrypted_title ?? null,
+          session.title_iv ?? null,
           session.provider,
           session.model ?? null,
           session.mode ?? null,
@@ -513,11 +529,12 @@ export class IndexRoom implements DurableObject {
       for (const session of sessions) {
         sql.exec(
           `INSERT OR REPLACE INTO session_index
-           (session_id, project_id, title, provider, model, mode, message_count, last_message_at, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (session_id, project_id, encrypted_title, title_iv, provider, model, mode, message_count, last_message_at, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           session.session_id,
           session.project_id,
-          session.title,
+          session.encrypted_title ?? null,
+          session.title_iv ?? null,
           session.provider,
           session.model ?? null,
           session.mode ?? null,
@@ -651,6 +668,8 @@ type SessionIndexRow = {
   session_id: string;
   project_id: string;
   title: string | null;
+  encrypted_title: string | null;
+  title_iv: string | null;
   provider: string | null;
   model: string | null;
   mode: string | null;
@@ -674,7 +693,9 @@ function rowToSessionEntry(row: SessionIndexRow): SessionIndexEntry {
   return {
     session_id: row.session_id,
     project_id: row.project_id,
-    title: row.title ?? 'Untitled',
+    // Pass through encrypted title - clients decrypt as needed
+    encrypted_title: row.encrypted_title ?? undefined,
+    title_iv: row.title_iv ?? undefined,
     provider: row.provider ?? 'unknown',
     model: row.model ?? undefined,
     mode: (row.mode as SessionIndexEntry['mode']) ?? undefined,

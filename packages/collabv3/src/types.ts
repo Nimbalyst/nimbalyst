@@ -235,7 +235,10 @@ export interface SessionMetadata {
 export interface SessionIndexEntry {
   session_id: string;
   project_id: string;
-  title: string;
+  /** Encrypted title (base64) */
+  encrypted_title?: string;
+  /** IV for title decryption (base64) */
+  title_iv?: string;
   provider: string;
   model?: string;
   mode?: 'agent' | 'planning';

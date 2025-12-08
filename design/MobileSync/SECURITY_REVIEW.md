@@ -25,7 +25,7 @@ The desktop app (Electron) and mobile app (Capacitor) share the same security mo
 
 **Resolved CRITICAL issues:**
 - ~~ENC-1: Unencrypted queued prompts~~ - **FIXED** (AES-256-GCM encryption)
-- ~~ENC-2: Unencrypted~~~~ session titles~~ - **FIXED** (AES-256-GCM encryption)
+- ~~ENC-2: Unencrypted session titles~~ - **FIXED** (AES-256-GCM encryption)
 
 ---
 

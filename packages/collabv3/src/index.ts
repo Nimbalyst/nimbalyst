@@ -367,7 +367,7 @@ async function handleMagicLinkRequest(
       }),
     });
 
-    const stytchData = await stytchResponse.json();
+    const stytchData = await stytchResponse.json() as { error_message?: string; email_id?: string };
 
     if (!stytchResponse.ok) {
       return new Response(

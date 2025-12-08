@@ -65,9 +65,7 @@ interface PlaintextQueuedPrompt {
 }
 
 interface SessionMetadata {
-  /** Plaintext title (legacy, will be deprecated) */
-  title?: string;
-  /** Encrypted title (base64) - used when E2E encryption is enabled */
+  /** Encrypted title (base64) */
   encrypted_title?: string;
   /** IV for title decryption (base64) */
   title_iv?: string;
@@ -83,18 +81,14 @@ interface SessionMetadata {
     sentBy: 'mobile' | 'desktop';
   };
   isExecuting?: boolean;
-  /** Plaintext queued prompts (legacy, will be deprecated) */
-  queuedPrompts?: PlaintextQueuedPrompt[];
-  /** Encrypted queued prompts - used when E2E encryption is enabled */
+  /** Encrypted queued prompts */
   encryptedQueuedPrompts?: EncryptedQueuedPrompt[];
 }
 
 interface SessionIndexEntry {
   session_id: string;
   project_id: string;
-  /** Plaintext title (legacy, will be deprecated) */
-  title?: string;
-  /** Encrypted title (base64) - used when E2E encryption is enabled */
+  /** Encrypted title (base64) */
   encrypted_title?: string;
   /** IV for title decryption (base64) */
   title_iv?: string;
@@ -114,9 +108,7 @@ interface SessionIndexEntry {
   isExecuting?: boolean;
   /** Number of prompts queued from mobile, waiting for desktop to process */
   queuedPromptCount?: number;
-  /** Full queue of plaintext prompts (legacy, will be deprecated) */
-  queuedPrompts?: PlaintextQueuedPrompt[];
-  /** Encrypted queued prompts - used when E2E encryption is enabled */
+  /** Encrypted queued prompts */
   encryptedQueuedPrompts?: EncryptedQueuedPrompt[];
 }
 
@@ -739,31 +731,30 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       isExecuting: broadcast.metadata.isExecuting,
     };
 
-    // Decrypt title if encrypted, otherwise use plaintext (legacy)
+    // Decrypt title - encrypted titles are required
     if (broadcast.metadata.encrypted_title && broadcast.metadata.title_iv && session.encryptionKey) {
       try {
         metadata.title = await decryptTitle(broadcast.metadata.encrypted_title, broadcast.metadata.title_iv, session.encryptionKey);
       } catch (err) {
         console.error('[CollabV3] Failed to decrypt title:', err);
-        // Fall back to plaintext if decryption fails
-        metadata.title = broadcast.metadata.title;
+        metadata.title = 'Untitled';
       }
-    } else {
-      metadata.title = broadcast.metadata.title;
+    } else if (broadcast.metadata.encrypted_title) {
+      // Encrypted title present but no key - show as untitled
+      metadata.title = 'Untitled';
     }
+    // If no encrypted_title field at all, don't update the title
 
-    // Decrypt queued prompts if encrypted, otherwise use plaintext (legacy)
+    // Decrypt queued prompts - encrypted prompts are required
     if (broadcast.metadata.encryptedQueuedPrompts && broadcast.metadata.encryptedQueuedPrompts.length > 0 && session.encryptionKey) {
       try {
         metadata.queuedPrompts = await decryptQueuedPrompts(broadcast.metadata.encryptedQueuedPrompts, session.encryptionKey);
       } catch (err) {
         console.error('[CollabV3] Failed to decrypt queued prompts:', err);
-        // Fall back to plaintext if decryption fails
-        metadata.queuedPrompts = broadcast.metadata.queuedPrompts;
+        // Can't decrypt - don't update queued prompts
       }
-    } else {
-      metadata.queuedPrompts = broadcast.metadata.queuedPrompts;
     }
+    // If no encryptedQueuedPrompts field, don't update queued prompts
 
     // console.log('[CollabV3] Notifying', session.changeListeners.size, 'change listeners with queuedPrompts:', metadata.queuedPrompts?.length ?? 0);
 
@@ -855,27 +846,27 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                 message.sessions.map(async (entry): Promise<DecryptedSessionIndexEntry> => {
                   // Start with base fields that don't need transformation
                   let title: string;
-                  let queuedPrompts = entry.queuedPrompts;
+                  let queuedPrompts: Array<{ id: string; prompt: string; timestamp: number }> | undefined;
 
-                  // Decrypt title if encrypted
+                  // Decrypt title - encrypted titles are required
                   if (entry.encrypted_title && entry.title_iv && config.encryptionKey) {
                     try {
                       title = await decryptTitle(entry.encrypted_title, entry.title_iv, config.encryptionKey);
                     } catch (err) {
                       console.error('[CollabV3] Failed to decrypt session title:', err);
-                      title = entry.title ?? '[Decryption Failed]';
+                      title = 'Untitled';
                     }
                   } else {
-                    title = entry.title ?? '';
+                    // No encrypted title - show as untitled until resynced
+                    title = 'Untitled';
                   }
 
-                  // Decrypt queued prompts if encrypted
+                  // Decrypt queued prompts - encrypted prompts are required
                   if (entry.encryptedQueuedPrompts && entry.encryptedQueuedPrompts.length > 0 && config.encryptionKey) {
                     try {
                       queuedPrompts = await decryptQueuedPrompts(entry.encryptedQueuedPrompts, config.encryptionKey);
                     } catch (err) {
                       console.error('[CollabV3] Failed to decrypt queued prompts:', err);
-                      queuedPrompts = entry.queuedPrompts;
                     }
                   }
 
@@ -933,7 +924,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
             const decryptedEntry: CachedSessionIndex = {
               session_id: entry.session_id,
               project_id: entry.project_id,
-              title: entry.title ?? '', // Will be overwritten if encrypted
+              title: 'Untitled', // Will be overwritten if encrypted title present
               provider: entry.provider,
               model: entry.model,
               mode: entry.mode,
@@ -945,29 +936,26 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               isExecuting: entry.isExecuting,
             };
 
-            // Decrypt title if encrypted
+            // Decrypt title - encrypted titles are required
             if (entry.encrypted_title && entry.title_iv && config.encryptionKey) {
               try {
                 decryptedEntry.title = await decryptTitle(entry.encrypted_title, entry.title_iv, config.encryptionKey);
               } catch (err) {
                 console.error('[CollabV3] Failed to decrypt index entry title:', err);
-                decryptedEntry.title = entry.title ?? '[Decryption Failed]';
+                decryptedEntry.title = 'Untitled';
               }
-            } else {
-              decryptedEntry.title = entry.title ?? '';
             }
+            // If no encrypted title, keep as 'Untitled'
 
-            // Decrypt queued prompts if encrypted
+            // Decrypt queued prompts - encrypted prompts are required
             if (entry.encryptedQueuedPrompts && entry.encryptedQueuedPrompts.length > 0 && config.encryptionKey) {
               try {
                 decryptedEntry.queuedPrompts = await decryptQueuedPrompts(entry.encryptedQueuedPrompts, config.encryptionKey);
               } catch (err) {
                 console.error('[CollabV3] Failed to decrypt index entry queued prompts:', err);
-                decryptedEntry.queuedPrompts = entry.queuedPrompts;
               }
-            } else {
-              decryptedEntry.queuedPrompts = entry.queuedPrompts;
             }
+            // If no encrypted prompts, queuedPrompts stays undefined
 
             // Cache the decrypted entry
             sessionIndexCache.set(entry.session_id, decryptedEntry);
@@ -1174,13 +1162,15 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         updated_at: session.updatedAt,
       };
 
-      // Encrypt title if we have encryption key
-      if (session.title && config.encryptionKey) {
-        const { encrypted_title, title_iv } = await encryptTitle(session.title, config.encryptionKey);
-        entry.encrypted_title = encrypted_title;
-        entry.title_iv = title_iv;
-      } else {
-        entry.title = session.title;
+      // Encrypt title - encryption is required
+      if (session.title) {
+        if (!config.encryptionKey) {
+          console.error('[CollabV3] Cannot send session title: no encryption key');
+        } else {
+          const { encrypted_title, title_iv } = await encryptTitle(session.title, config.encryptionKey);
+          entry.encrypted_title = encrypted_title;
+          entry.title_iv = title_iv;
+        }
       }
 
       // Cache the entry with DECRYPTED title for local use
@@ -1384,16 +1374,14 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         case 'metadata_updated': {
           const metadata: Partial<SessionMetadata> = {};
 
-          // Encrypt title if we have an encryption key, otherwise send plaintext (legacy)
+          // Encrypt title - encryption is required
           if (change.metadata.title) {
-            if (session.encryptionKey) {
+            if (!session.encryptionKey) {
+              console.error('[CollabV3] Cannot send session title: no encryption key');
+            } else {
               const { encrypted_title, title_iv } = await encryptTitle(change.metadata.title, session.encryptionKey);
               metadata.encrypted_title = encrypted_title;
               metadata.title_iv = title_iv;
-              // Don't send plaintext title when encrypted
-            } else {
-              // Legacy fallback - no encryption key available
-              metadata.title = change.metadata.title;
             }
           }
 
@@ -1408,17 +1396,16 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
           if ('isExecuting' in change.metadata) {
             metadata.isExecuting = change.metadata.isExecuting;
           }
-          // Encrypt queued prompts if we have an encryption key
+          // Encrypt queued prompts - encryption is required
           if ('queuedPrompts' in change.metadata) {
-            if (change.metadata.queuedPrompts && change.metadata.queuedPrompts.length > 0 && session.encryptionKey) {
-              metadata.encryptedQueuedPrompts = await encryptQueuedPrompts(change.metadata.queuedPrompts, session.encryptionKey);
-              // Don't send plaintext prompts when encrypted
-            } else if (change.metadata.queuedPrompts) {
-              // Legacy fallback or empty array - no encryption key available
-              metadata.queuedPrompts = change.metadata.queuedPrompts;
+            if (change.metadata.queuedPrompts && change.metadata.queuedPrompts.length > 0) {
+              if (!session.encryptionKey) {
+                console.error('[CollabV3] Cannot send queued prompts: no encryption key');
+              } else {
+                metadata.encryptedQueuedPrompts = await encryptQueuedPrompts(change.metadata.queuedPrompts, session.encryptionKey);
+              }
             } else {
-              // Explicitly cleared (undefined or null)
-              metadata.queuedPrompts = undefined;
+              // Explicitly cleared (undefined, null, or empty array)
               metadata.encryptedQueuedPrompts = undefined;
             }
           }
@@ -1470,14 +1457,15 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               isExecuting: baseEntry.isExecuting,
             };
 
-            // Encrypt title for wire if we have encryption key
-            if (baseEntry.title && session.encryptionKey) {
-              const { encrypted_title, title_iv } = await encryptTitle(baseEntry.title, session.encryptionKey);
-              indexEntry.encrypted_title = encrypted_title;
-              indexEntry.title_iv = title_iv;
-            } else {
-              // Legacy fallback
-              indexEntry.title = baseEntry.title;
+            // Encrypt title for wire - encryption is required
+            if (baseEntry.title) {
+              if (!session.encryptionKey) {
+                console.error('[CollabV3] Cannot send session title: no encryption key');
+              } else {
+                const { encrypted_title, title_iv } = await encryptTitle(baseEntry.title, session.encryptionKey);
+                indexEntry.encrypted_title = encrypted_title;
+                indexEntry.title_iv = title_iv;
+              }
             }
 
             // Update local cache with decrypted values

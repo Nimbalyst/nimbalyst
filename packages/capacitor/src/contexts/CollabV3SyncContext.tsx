@@ -106,9 +106,7 @@ interface PlaintextQueuedPrompt {
 interface ServerSessionEntry {
   session_id: string;
   project_id: string;
-  /** Plaintext title (legacy, may be empty if encrypted) */
-  title?: string;
-  /** Encrypted title (base64) - used when E2E encryption is enabled */
+  /** Encrypted title (base64) */
   encrypted_title?: string;
   /** IV for title decryption (base64) */
   title_iv?: string;
@@ -127,9 +125,7 @@ interface ServerSessionEntry {
   isExecuting?: boolean;
   /** Number of prompts queued from mobile, waiting for desktop to process */
   queuedPromptCount?: number;
-  /** Full queue of plaintext prompts (legacy, will be deprecated) */
-  queuedPrompts?: PlaintextQueuedPrompt[];
-  /** Encrypted queued prompts - used when E2E encryption is enabled */
+  /** Encrypted queued prompts */
   encryptedQueuedPrompts?: EncryptedQueuedPrompt[];
 }
 
@@ -542,17 +538,18 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
 
   // Convert server session to client format
   const convertSession = useCallback(async (server: ServerSessionEntry): Promise<SessionIndexEntry> => {
-    // Decrypt title if encrypted
+    // Decrypt title - encrypted titles are required
     let title: string;
     if (server.encrypted_title && server.title_iv && encryptionKeyRef.current) {
       try {
         title = await decryptTitle(server.encrypted_title, server.title_iv, encryptionKeyRef.current);
       } catch (err) {
         console.error('[CollabV3] Failed to decrypt session title:', err);
-        title = server.title ?? '[Decryption Failed]';
+        title = 'Untitled';
       }
     } else {
-      title = server.title ?? '';
+      // No encrypted title - show as untitled until desktop resyncs
+      title = 'Untitled';
     }
 
     return {
@@ -707,30 +704,32 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
         queuedPromptCount: update.queuedPrompts?.length ?? 0,
       };
 
-      // Encrypt title if we have encryption key
-      if (session.title && encryptionKeyRef.current) {
-        try {
-          const { encrypted_title, title_iv } = await encryptTitle(session.title, encryptionKeyRef.current);
-          serverSession.encrypted_title = encrypted_title;
-          serverSession.title_iv = title_iv;
-        } catch (err) {
-          console.error('[CollabV3] Failed to encrypt title:', err);
-          serverSession.title = session.title; // Fallback to plaintext
+      // Encrypt title - encryption is required
+      if (session.title) {
+        if (!encryptionKeyRef.current) {
+          console.error('[CollabV3] Cannot send title: no encryption key');
+        } else {
+          try {
+            const { encrypted_title, title_iv } = await encryptTitle(session.title, encryptionKeyRef.current);
+            serverSession.encrypted_title = encrypted_title;
+            serverSession.title_iv = title_iv;
+          } catch (err) {
+            console.error('[CollabV3] Failed to encrypt title:', err);
+          }
         }
-      } else {
-        serverSession.title = session.title;
       }
 
-      // Encrypt queued prompts if we have encryption key
-      if (update.queuedPrompts && update.queuedPrompts.length > 0 && encryptionKeyRef.current) {
-        try {
-          serverSession.encryptedQueuedPrompts = await encryptQueuedPrompts(update.queuedPrompts, encryptionKeyRef.current);
-        } catch (err) {
-          console.error('[CollabV3] Failed to encrypt queued prompts:', err);
-          serverSession.queuedPrompts = update.queuedPrompts; // Fallback to plaintext
+      // Encrypt queued prompts - encryption is required
+      if (update.queuedPrompts && update.queuedPrompts.length > 0) {
+        if (!encryptionKeyRef.current) {
+          console.error('[CollabV3] Cannot send queued prompts: no encryption key');
+        } else {
+          try {
+            serverSession.encryptedQueuedPrompts = await encryptQueuedPrompts(update.queuedPrompts, encryptionKeyRef.current);
+          } catch (err) {
+            console.error('[CollabV3] Failed to encrypt queued prompts:', err);
+          }
         }
-      } else if (update.queuedPrompts) {
-        serverSession.queuedPrompts = update.queuedPrompts;
       }
 
       const msg: ClientMessage = {
