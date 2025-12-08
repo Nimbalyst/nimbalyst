@@ -1,6 +1,6 @@
 # Nimbalyst - UI for Claude Code
 
-Nimbalyst is a WYSIWIG markdown editor with visual diffs powered by Claude Code and a parallel session manager
+![Nimbalyst](https://nimbalyst.com) is a WYSIWIG markdown editor with visual diffs powered by Claude Code and a parallel session manager
 
 ![Version](https://img.shields.io/github/v/release/nimbalyst/nimbalyst)
 ![Downloads](https://img.shields.io/github/downloads/nimbalyst/nimbalyst/total)
