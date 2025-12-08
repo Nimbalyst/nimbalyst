@@ -22,7 +22,7 @@ interface FileTreeProps {
   onRefreshFileTree?: () => void;
   onViewHistory?: (filePath: string) => void;
   selectedFolder?: string | null;
-  onFolderSelect?: (folderPath: string) => void;
+  onFolderSelect?: (folderPath: string | null) => void;
   gitStatusMap?: Map<string, FileGitStatus>;
   sharedDragState?: {
     draggedItem: FileTreeItem | null;

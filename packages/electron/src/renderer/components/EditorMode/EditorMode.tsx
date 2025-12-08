@@ -299,7 +299,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     selectFile: handleWorkspaceFileSelect,
     openHistoryDialog: () => setIsHistoryDialogOpen(true),
     tabs: {
-      addTab: tabs.addTab,
+      addTab: (filePath: string, content?: string) => tabs.addTab(filePath, content) ?? undefined,
       removeTab: handleTabClose,
       switchTab: tabs.switchTab,
       findTabByPath: tabs.findTabByPath,
@@ -723,7 +723,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
           onClose={() => setIsHistoryDialogOpen(false)}
           filePath={currentFilePath}
           onRestore={handleRestoreFromHistory}
-          theme={theme}
+          theme={theme === 'auto' ? 'dark' : theme}
         />
       )}
     </>

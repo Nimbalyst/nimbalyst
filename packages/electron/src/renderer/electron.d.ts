@@ -157,8 +157,17 @@ interface ElectronAPI {
   };
 
   // AI operations
-  aiGetModels: () => Promise<any[]>;
+  aiGetSettings: () => Promise<any>;
+  aiGetModels: () => Promise<{ success: boolean; models: any[]; grouped: Record<string, any[]> }>;
   onAIPerformanceMetrics: (callback: (data: any) => void) => () => void;
+
+  // CLI operations
+  cliCheckNpmAvailable: () => Promise<{ available: boolean; version?: string }>;
+  cliCheckInstallation: (tool: string) => Promise<{ installed: boolean; version?: string; path?: string }>;
+  cliInstall: (tool: string, options?: any) => Promise<{ success: boolean; error?: string }>;
+  cliUninstall: (tool: string) => Promise<{ success: boolean; error?: string }>;
+  cliUpgrade: (tool: string) => Promise<{ success: boolean; error?: string }>;
+  cliInstallNodeJs: () => Promise<{ success: boolean; error?: string }>;
 
   // analytics
   analytics?: {

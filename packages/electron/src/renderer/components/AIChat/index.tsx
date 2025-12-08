@@ -1,1 +1,1 @@
-export { AIChat } from './AIChat';
+export { AIChat, type AIChatRef } from './AIChat';

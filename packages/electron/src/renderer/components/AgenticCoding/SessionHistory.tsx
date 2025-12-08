@@ -139,7 +139,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
           }
 
           // Create a map of incoming sessions by ID
-          const incomingMap = new Map(incomingSessions.map(s => [s.id, s]));
+          const incomingMap = new Map(incomingSessions.map((s: SessionItem) => [s.id, s]));
 
           // Update existing sessions and add new ones
           const merged = prev.map(existing => {
@@ -168,7 +168,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
             return incomingSessions;
           }
 
-          const incomingMap = new Map(incomingSessions.map(s => [s.id, s]));
+          const incomingMap = new Map(incomingSessions.map((s: SessionItem) => [s.id, s]));
           const merged = prev.map(existing => {
             const incoming = incomingMap.get(existing.id);
             if (incoming) {
@@ -252,7 +252,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
     // Filter sessions by title in memory (case-insensitive)
     const query = searchQuery.toLowerCase();
     const filtered = allSessions.filter(session =>
-      session.title.toLowerCase().includes(query)
+      (session.title ?? '').toLowerCase().includes(query)
     );
     setSessions(filtered);
   }, [searchQuery, allSessions]);

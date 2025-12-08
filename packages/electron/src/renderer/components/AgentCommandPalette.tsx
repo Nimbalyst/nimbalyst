@@ -123,9 +123,13 @@ export const AgentCommandPalette: React.FC<AgentCommandPaletteProps> = ({
 
       // Send the message to the AI chat using ref values
       if (data.sessionId && data.message) {
+        // Only pass documentContext if content is defined
+        const docContext = documentContextRef.current?.content
+          ? documentContextRef.current as { content: string; filePath?: string }
+          : undefined;
         await aiApi.sendMessage(
           data.message,
-          documentContextRef.current,
+          docContext,
           data.sessionId,
           workspacePathRef.current
         );
@@ -222,7 +226,7 @@ export const AgentCommandPalette: React.FC<AgentCommandPaletteProps> = ({
 
       if (!currentSession) {
         // Create a new session if none exists
-        await aiApi.createNewSession(workspacePathRef.current);
+        await aiApi.createSession(workspacePathRef.current);
         const updatedSessions = await aiApi.getSessions(workspacePathRef.current);
         currentSession = updatedSessions?.[0];
       }

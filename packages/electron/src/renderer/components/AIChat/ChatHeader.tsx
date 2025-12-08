@@ -100,7 +100,7 @@ export function ChatHeader({
                 currentSessionId={currentSessionId}
                 sessions={sessions.map(s => ({
                     id: s.id,
-                    timestamp: s.timestamp,
+                    createdAt: s.createdAt,
                     name: s.name,
                     title: s.title,
                     messageCount: s.messages?.length || 0,
