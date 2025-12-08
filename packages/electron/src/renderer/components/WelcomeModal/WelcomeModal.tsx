@@ -157,7 +157,7 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({
           <h2>
             {currentStep === 'welcome' && 'Welcome to Nimbalyst'}
             {currentStep === 'plans-location' && 'Configure Plans Location'}
-            {currentStep === 'claude-code' && 'Configure Claude Code Integration'}
+            {currentStep === 'claude-code' && 'Configure Claude Agent Integration'}
             {currentStep === 'first-plan' && 'Create Your First Plan'}
             {currentStep === 'plan-view' && 'Explore the Plan View'}
             {currentStep === 'complete' && 'All Set!'}
@@ -189,7 +189,7 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({
                 </div>
                 <div className="welcome-feature">
                   <strong>AI Integration</strong>
-                  <p>Work with Claude Code and other AI assistants for enhanced productivity</p>
+                  <p>Work with Claude Agent and other AI assistants for enhanced productivity</p>
                 </div>
                 <div className="welcome-feature">
                   <strong>Progress Tracking</strong>
@@ -292,7 +292,7 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({
           {currentStep === 'claude-code' && (
             <div className="claude-code-step">
               <p className="step-description">
-                Configure Claude Code to understand Nimbalyst's extended markdown features for
+                Configure Claude Agent to understand Nimbalyst's extended markdown features for
                 plans and tracking.
               </p>
 
@@ -303,7 +303,7 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({
                     checked={enableClaudeCode}
                     onChange={(e) => setEnableClaudeCode(e.target.checked)}
                   />
-                  <span>Enable Claude Code integration</span>
+                  <span>Enable Claude Agent integration</span>
                 </label>
               </div>
 
@@ -397,7 +397,7 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({
 
               {!enableClaudeCode && (
                 <div className="skip-info">
-                  <p>You can enable Claude Code integration later from project settings.</p>
+                  <p>You can enable Claude Agent integration later from project settings.</p>
                 </div>
               )}
             </div>
@@ -420,7 +420,7 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({
                 {enableClaudeCode && (
                   <div className="plan-option-button" onClick={() => {}}>
                     <div className="plan-option-content">
-                      <strong>Use Claude Code</strong>
+                      <strong>Use Claude Agent</strong>
                       <p>
                         Type <code>/plan [your idea]</code> in the AI chat to create a custom plan
                       </p>

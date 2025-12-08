@@ -518,7 +518,7 @@ export function MCPServersPanel({ defaultScope = 'user', workspacePath: propWork
       <div className="provider-panel-header">
         <h3 className="provider-panel-title">MCP Servers</h3>
         <p className="provider-panel-description">
-          Configure Model Context Protocol (MCP) servers for Claude Code.
+          Configure Model Context Protocol (MCP) servers for Claude Agent.
         </p>
       </div>
 

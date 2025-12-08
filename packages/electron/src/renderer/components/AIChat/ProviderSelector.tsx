@@ -31,7 +31,7 @@ export function ProviderSelector({
   const providers = [
     {
       id: 'claude-code' as const,
-      name: 'Claude Code',
+      name: 'Claude Agent',
       description: 'With MCP tools',
       icon: 'code'
     },

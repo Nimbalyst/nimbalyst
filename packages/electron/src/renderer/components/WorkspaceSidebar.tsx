@@ -759,10 +759,10 @@ export function WorkspaceSidebar({
       : 0;
   const shouldShowFilterHint = isAISessionFilter && (!hasActiveClaudeSession || activeClaudeFilterCount === 0);
   const aiFilterHintText = !hasActiveClaudeSession
-    ? 'Open a Claude Code session to see which files the agent reads or writes.'
+    ? 'Open a Claude Agent session to see which files the agent reads or writes.'
     : fileTreeFilter === 'ai-read'
-      ? 'No files have been read by this Claude Code session yet.'
-      : 'No files have been written by this Claude Code session yet.';
+      ? 'No files have been read by this Claude Agent session yet.'
+      : 'No files have been written by this Claude Agent session yet.';
 
   // Check if filtered tree is empty
   const isFilteredTreeEmpty = filteredFileTree.length === 0;
@@ -798,15 +798,15 @@ export function WorkspaceSidebar({
         return {
           title: 'No Files Read',
           description: hasActiveClaudeSession
-            ? 'No files have been read by this Claude Code session yet.'
-            : 'Open a Claude Code session to see which files the agent reads.'
+            ? 'No files have been read by this Claude Agent session yet.'
+            : 'Open a Claude Agent session to see which files the agent reads.'
         };
       case 'ai-written':
         return {
           title: 'No Files Written',
           description: hasActiveClaudeSession
-            ? 'No files have been written by this Claude Code session yet.'
-            : 'Open a Claude Code session to see which files the agent writes.'
+            ? 'No files have been written by this Claude Agent session yet.'
+            : 'Open a Claude Agent session to see which files the agent writes.'
         };
       default:
         return {

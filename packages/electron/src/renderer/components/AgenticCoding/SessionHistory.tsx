@@ -483,7 +483,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
                 className="session-history-import-button"
                 data-testid="import-sessions-button"
                 onClick={onImportSessions}
-                title="Import Claude Code sessions"
+                title="Import Claude Agent sessions"
                 aria-label="Import sessions"
               >
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -653,7 +653,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
               className="session-history-import-button"
               data-testid="import-sessions-button"
               onClick={onImportSessions}
-              title="Import Claude Code sessions"
+              title="Import Claude Agent sessions"
               aria-label="Import sessions"
             >
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">

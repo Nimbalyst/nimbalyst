@@ -32,7 +32,7 @@ export const LoginRequiredWidget: React.FC = () => {
 
       if (status.isLoggedIn) {
         setLoginStatus({
-          message: 'Login successful! You can now use Claude Code.',
+          message: 'Login successful! You can now use Claude Agent.',
           success: true,
           accountInfo: {
             email: status.email,
@@ -116,7 +116,7 @@ export const LoginRequiredWidget: React.FC = () => {
             You are logged in and can continue your conversation
           </>
         ) : (
-          'An Anthropic account is required to use Claude Code. Please login or create an account.'
+          'An Anthropic account is required to use Claude Agent. Please login or create an account.'
         )}
       </div>
 

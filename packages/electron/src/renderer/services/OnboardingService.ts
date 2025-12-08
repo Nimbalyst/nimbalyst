@@ -1128,7 +1128,7 @@ Plans in Nimbalyst are markdown documents with YAML frontmatter that track featu
 
 When creating your own plans:
 
-1. **Use the /plan command**: Type \`/plan [your feature description]\` in the AI chat to create a new plan with Claude Code
+1. **Use the /plan command**: Type \`/plan [your feature description]\` in the AI chat to create a new plan with Claude Agent
 2. **Choose descriptive filenames**: Use kebab-case names that clearly describe the plan
 3. **Keep frontmatter updated**: Update status, progress, and updated timestamp as work progresses
 4. **Write clear goals**: Start with clear, measurable objectives
@@ -1238,7 +1238,7 @@ ${config.description}
 ---
 
 **About this tracker:**
-- Use \`/track [description]\` in Claude Code to create new ${type}
+- Use \`/track [description]\` in Claude Agent to create new ${type}
 - Or use \`#${type}\` syntax in any document
 - Items use YAML frontmatter for metadata
 - Status values: open, in-progress, blocked, resolved, closed, wont-fix

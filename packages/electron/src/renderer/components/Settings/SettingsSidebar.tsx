@@ -87,7 +87,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
       items: [
         {
           id: 'claude-code',
-          name: 'Claude Code',
+          name: 'Claude Agent',
           icon: getProviderIcon('claude-code', { size: 16 }),
           statusDot: getStatusDot('claude-code'),
         },

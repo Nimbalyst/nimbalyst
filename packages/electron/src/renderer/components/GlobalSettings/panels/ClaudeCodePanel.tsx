@@ -192,7 +192,7 @@ export function ClaudeCodePanel({
   return (
     <div className="provider-panel">
       <div className="provider-panel-header">
-        <h3 className="provider-panel-title">Claude Code (MCP)</h3>
+        <h3 className="provider-panel-title">Claude Agent</h3>
         <p className="provider-panel-description">
           CLI-based Claude with Model Context Protocol (MCP) support for advanced code editing.
           Provides tool use, file editing, and session resumption capabilities.
@@ -200,7 +200,7 @@ export function ClaudeCodePanel({
       </div>
 
       <div className="provider-enable" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span className="provider-enable-label">Enable Claude Code</span>
+        <span className="provider-enable-label">Enable Claude Agent</span>
         <label className="provider-toggle">
           <input
             type="checkbox"
@@ -552,7 +552,7 @@ export function ClaudeCodePanel({
               <div className="provider-panel-section">
                 <h4 className="provider-panel-section-title">Allowed Tools</h4>
                 <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-                  Select which tools Claude Code can use. Deselecting tools can improve safety but may limit functionality.
+                  Select which tools Claude Agent can use. Deselecting tools can improve safety but may limit functionality.
                 </p>
 
                 <div className="tools-selection">

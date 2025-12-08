@@ -28,7 +28,7 @@ const WALKTHROUGH_SLIDES: WalkthroughSlide[] = [
   {
     image: './onboarding/onboarding-3.png',
     title: 'Agent-First Environment Linked to Your Files',
-    description: 'Search, resume, and run Claude Code sessions integrated with your files. Manage parallel sessions, search through them, and see which files the agent has touched.',
+    description: 'Search, resume, and run Claude Agent sessions integrated with your files. Manage parallel sessions, search through them, and see which files the agent has touched.',
   },
 ];
 

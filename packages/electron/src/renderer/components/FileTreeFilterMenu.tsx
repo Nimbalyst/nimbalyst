@@ -174,7 +174,7 @@ export function FileTreeFilterMenu({
         </div>
       )}
 
-      <div className="filter-menu-section-label">Claude Code Session</div>
+      <div className="filter-menu-section-label">Claude Agent Session</div>
 
       <div
         className={`filter-menu-item ${currentFilter === 'ai-read' ? 'active' : ''} ${!hasActiveClaudeSession ? 'disabled' : ''}`}
@@ -206,7 +206,7 @@ export function FileTreeFilterMenu({
 
       {!hasActiveClaudeSession && (
         <div className="filter-menu-hint">
-          Open a Claude Code session to enable these filters.
+          Open a Claude Agent session to enable these filters.
         </div>
       )}
 

@@ -184,7 +184,7 @@ export const SessionImportDialog: React.FC<SessionImportDialogProps> = ({
     <div className="session-import-dialog-overlay" onClick={onClose}>
       <div className="session-import-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="session-import-dialog-header">
-          <h2>Import Claude Code Sessions</h2>
+          <h2>Import Claude Agent Sessions</h2>
           <button
             className="session-import-dialog-close"
             onClick={onClose}
@@ -248,7 +248,7 @@ export const SessionImportDialog: React.FC<SessionImportDialogProps> = ({
             <div className="session-import-dialog-content">
               {workspacePaths.length === 0 ? (
                 <div className="session-import-empty">
-                  <p>No Claude Code sessions found</p>
+                  <p>No Claude Agent sessions found</p>
                   <p className="session-import-empty-hint">
                     Sessions from the CLI will appear here
                   </p>

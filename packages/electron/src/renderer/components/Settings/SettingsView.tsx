@@ -397,7 +397,7 @@ export function SettingsView({ workspacePath, workspaceName, onClose }: Settings
       case 'claude':
         return wrapWithOverride('claude', 'Claude', <ClaudePanel {...commonProps} />);
       case 'claude-code':
-        return wrapWithOverride('claude-code', 'Claude Code', <ClaudeCodePanel {...commonProps} />);
+        return wrapWithOverride('claude-code', 'Claude Agent', <ClaudeCodePanel {...commonProps} />);
       case 'openai':
         return wrapWithOverride('openai', 'OpenAI', <OpenAIPanel {...commonProps} />);
       case 'openai-codex':

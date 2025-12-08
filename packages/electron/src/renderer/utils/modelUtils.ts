@@ -42,9 +42,9 @@ function formatVariantLabel(variant: ClaudeCodeVariant): string {
 export function getClaudeCodeModelLabel(modelId?: string): string {
   const variant = extractClaudeCodeVariant(modelId);
   // If no variant detected (shouldn't happen with legacy handling), default to Sonnet
-  if (!variant) return 'Claude Code (Sonnet 4.5)';
+  if (!variant) return 'Claude Agent (Sonnet 4.5)';
   const version = CLAUDE_CODE_VARIANT_VERSIONS[variant];
-  return `Claude Code (${formatVariantLabel(variant)} ${version})`;
+  return `Claude Agent (${formatVariantLabel(variant)} ${version})`;
 }
 
 export function getClaudeCodeModelShortLabel(modelId?: string): string {
@@ -66,7 +66,7 @@ export function parseModelInfo(modelId?: string): ModelInfo | null {
     const modelName = getClaudeCodeModelShortLabel(modelId);
     return {
       providerId: 'claude-code',
-      providerName: 'Claude Code',
+      providerName: 'Claude Agent',
       modelName,
       shortModelName: modelName
     };
@@ -97,7 +97,7 @@ export function parseModelInfo(modelId?: string): ModelInfo | null {
 export function getProviderDisplayName(provider: string): string {
   switch (provider) {
     case 'claude': return 'Claude';
-    case 'claude-code': return 'Claude Code';
+    case 'claude-code': return 'Claude Agent';
     case 'openai': return 'OpenAI';
     case 'lmstudio': return 'LMStudio';
     default: return provider;

@@ -84,7 +84,7 @@ export function ModelSelector({ currentModel, onModelChange }: ModelSelectorProp
   const getProviderLabel = (provider: string) => {
     switch (provider) {
       case 'claude': return 'Claude SDK';
-      case 'claude-code': return 'Claude Code (MCP)';
+      case 'claude-code': return 'Claude Agent';
       case 'openai': return 'OpenAI';
       case 'openai-codex': return 'OpenAI Codex';
       case 'lmstudio': return 'LMStudio';

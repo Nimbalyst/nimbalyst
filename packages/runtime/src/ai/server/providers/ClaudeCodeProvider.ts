@@ -1129,8 +1129,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
               // Always yield summaries to the UI with context
               const displayMessage = summary ?
-                `[Claude Code]: ${summary}` :
-                `[Claude Code]: ${JSON.stringify(chunk)}`;
+                `[Claude Agent]: ${summary}` :
+                `[Claude Agent]: ${JSON.stringify(chunk)}`;
 
               yield {
                 type: 'text',
@@ -2005,7 +2005,7 @@ Do NOT call this tool more than once per session. It should be called early, typ
     // console.log('[ClaudeCodeProvider.getModels] Building models from CLAUDE_CODE_VARIANTS:', CLAUDE_CODE_VARIANTS);
     const models = CLAUDE_CODE_VARIANTS.map(variant => ({
       id: `claude-code:${variant}`,
-      name: `Claude Code · ${CLAUDE_CODE_MODEL_LABELS[variant]} ${CLAUDE_CODE_VARIANT_VERSIONS[variant]}`,
+      name: `Claude Agent · ${CLAUDE_CODE_MODEL_LABELS[variant]} ${CLAUDE_CODE_VARIANT_VERSIONS[variant]}`,
       provider: 'claude-code' as const,
       maxTokens: 8192,
       contextWindow: 200000
