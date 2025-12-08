@@ -282,6 +282,36 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
     prevIsLoadingRef.current = isLoading;
   }, [isLoading, loadQueuedPrompts]);
 
+  // Listen for queued prompts from mobile sync and refresh the queue display
+  useEffect(() => {
+    const handleQueuedPromptsReceived = (data: { sessionId: string }) => {
+      // Only refresh if this is for our session
+      if (data.sessionId === sessionId) {
+        loadQueuedPrompts();
+      }
+    };
+
+    const cleanup = window.electronAPI.on('ai:queuedPromptsReceived', handleQueuedPromptsReceived);
+    return () => {
+      cleanup?.();
+    };
+  }, [sessionId, loadQueuedPrompts]);
+
+  // Listen for prompt claimed events and remove from local queue display immediately
+  useEffect(() => {
+    const handlePromptClaimed = (event: CustomEvent<{ sessionId: string; promptId: string }>) => {
+      if (event.detail.sessionId === sessionId) {
+        console.log(`[AISessionView] Prompt ${event.detail.promptId} claimed, removing from queue display`);
+        setQueuedPrompts(prev => prev.filter(p => p.id !== event.detail.promptId));
+      }
+    };
+
+    window.addEventListener('ai:promptClaimed', handlePromptClaimed as EventListener);
+    return () => {
+      window.removeEventListener('ai:promptClaimed', handlePromptClaimed as EventListener);
+    };
+  }, [sessionId]);
+
   // Extract todos from session metadata when sessionData changes
   useEffect(() => {
     if (sessionData.metadata?.currentTodos) {
@@ -375,13 +405,17 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
   const handleSend = useCallback(() => {
     if (!draftInput.trim()) return;
 
+    console.log('[AISessionView] handleSend called', { sessionId, isLoading, draftInputLength: draftInput.length });
+
     // If already loading, queue the prompt instead
     if (isLoading) {
+      console.log('[AISessionView] Session is loading, queueing prompt instead of sending');
       handleQueue(draftInput.trim());
       return;
     }
 
     if (onSendMessage) {
+      console.log('[AISessionView] Calling onSendMessage with sessionId:', sessionId);
       onSendMessage(sessionId, draftInput.trim(), draftAttachments);
     }
 

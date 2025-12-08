@@ -62,8 +62,13 @@ type SessionListItem = Pick<SessionData, 'id' | 'createdAt' | 'name' | 'title' |
 
 const SESSION_HISTORY_REFRESH_EVENT = 'agentic:session-history-refresh';
 
-// NOTE: Queue deduplication is now handled atomically in the database via ai:claimQueuedPrompt
-// The old globalProcessingPromptIds Set has been removed - database is the single source of truth
+// NOTE: Individual prompt deduplication is handled atomically in the database via ai:claimQueuedPrompt
+// However, we still need module-level tracking to prevent multiple AgenticPanel instances
+// from simultaneously trying to process the same session's queue
+const globalProcessingSessionQueues = new Set<string>();
+
+// Track which sessions are currently sending messages (module-level for cross-panel coordination)
+const globalSendingSessions = new Set<string>();
 
 interface SessionHistoryRefreshDetail {
   workspacePath?: string;
@@ -1190,7 +1195,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     // console.log(`[AgenticPanel] Setting up queue listener (effectId: ${effectId})`);
 
     const handleQueuedPromptsReceived = async (data: { sessionId: string; promptCount?: number; workspacePath?: string }) => {
-      console.log(`[AgenticPanel] Handler invoked (effectId: ${effectId})`);
+      console.log(`[AgenticPanel] Handler invoked (effectId: ${effectId}, panelId: ${panelInstanceIdRef.current})`);
       if (!data || !data.sessionId) return;
 
       // Only process if this panel's workspace matches the session's workspace
@@ -1200,21 +1205,20 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         return;
       }
 
-      console.log('[AgenticPanel] Received queue notification for session:', data.sessionId, 'promptCount:', data.promptCount, 'workspace:', workspacePathRef.current);
-
-      // Check if this session tab is already open
+      // Check if this session tab is already open in THIS panel
       const existingTab = sessionTabsRef.current.find(t => t?.id === data.sessionId);
 
+      // CRITICAL: Only process if this panel actually has the session open
+      // This prevents a second AgenticPanel instance (e.g., chat sidebar) from
+      // processing prompts for a session it doesn't own
       if (!existingTab) {
-        // Session not open - open it (which will load the session and process the queue)
-        console.log('[AgenticPanel] Session not open, opening it:', data.sessionId);
-        if (openSessionInTabRef.current) {
-          await openSessionInTabRef.current(data.sessionId);
-        }
+        console.log('[AgenticPanel] Session not in this panel, ignoring:', data.sessionId, 'panelId:', panelInstanceIdRef.current);
         return;
       }
 
-      // Tab exists - process the queue immediately
+      console.log('[AgenticPanel] Received queue notification for session:', data.sessionId, 'promptCount:', data.promptCount, 'workspace:', workspacePathRef.current);
+
+      // Tab exists - process the queue
       // The processQueuedPrompts function fetches pending prompts from the database
       console.log('[AgenticPanel] Session tab exists, processing queue:', data.sessionId);
 
@@ -1263,6 +1267,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           autoContextSessionsRef.current.add(data.sessionId);
         } else {
           sendingSessionsRef.current.delete(data.sessionId);
+          globalSendingSessions.delete(data.sessionId);
           setSendingSessions(prev => {
             const next = new Set(prev);
             next.delete(data.sessionId);
@@ -1338,8 +1343,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       if (typeof error?.sessionId === 'string') {
         const sessionId = error.sessionId;
 
-        // Clear sending state immediately
+        // Clear sending state immediately (both local and global)
         sendingSessionsRef.current.delete(sessionId);
+        globalSendingSessions.delete(sessionId);
         setSendingSessions(prev => {
           const next = new Set(prev);
           next.delete(sessionId);
@@ -1410,6 +1416,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       // console.log('[AgenticPanel] Auto-context ended, clearing state and checking queue:', data.sessionId);
       autoContextSessionsRef.current.delete(data.sessionId);
       sendingSessionsRef.current.delete(data.sessionId);
+      globalSendingSessions.delete(data.sessionId);
       setSendingSessions(prev => {
         const next = new Set(prev);
         next.delete(data.sessionId);
@@ -1647,6 +1654,13 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // Handle send message
   // queuedPromptId is optional - only passed when processing queued prompts from mobile sync
   const handleSendMessage = useCallback(async (sessionId: string, message: string, attachments: ChatAttachment[], queuedPromptId?: string) => {
+    console.log('[AgenticPanel] handleSendMessage called', {
+      sessionId,
+      activeTabId,
+      messagePreview: message.substring(0, 50),
+      queuedPromptId,
+      currentTabIds: sessionTabs.map(t => t?.id)
+    });
     if (!message.trim() || !sessionId) return;
 
     // Reset history navigation state when sending a message
@@ -1671,7 +1685,10 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       console.error('[AgenticPanel] Failed to clear draft input:', err);
     }
 
+    // Add to BOTH local and global tracking
+    // Global is used for cross-panel coordination (agent mode + files mode)
     sendingSessionsRef.current.add(sessionId);
+    globalSendingSessions.add(sessionId);
     setSendingSessions(prev => new Set(prev).add(sessionId));
 
     // Get the session to determine sessionType
@@ -1759,6 +1776,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       console.error('[AgenticPanel] Failed to send message:', err);
       setError(String(err));
       sendingSessionsRef.current.delete(sessionId);
+      globalSendingSessions.delete(sessionId);
       setSendingSessions(prev => {
         const next = new Set(prev);
         next.delete(sessionId);
@@ -1774,6 +1792,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       const result = await window.electronAPI.aiCancelRequest(sessionId);
       if (result.success) {
         sendingSessionsRef.current.delete(sessionId);
+        globalSendingSessions.delete(sessionId);
         setSendingSessions(prev => {
           const next = new Set(prev);
           next.delete(sessionId);
@@ -1807,14 +1826,41 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // Process queued prompts for a session (from mobile sync or local queue)
   // Uses the new queued_prompts table with atomic claim
   const processQueuedPrompts = useCallback(async (sessionId: string, _tab: SessionTab) => {
-    // Prevent duplicate processing if another call is already handling this session
-    if (processingQueueRef.current.has(sessionId)) {
-      console.log(`[AgenticPanel] Already processing queue for session ${sessionId}, skipping duplicate call`);
+    console.log(`[AgenticPanel] processQueuedPrompts called`, {
+      sessionId,
+      panelId: panelInstanceIdRef.current,
+      globalSendingHasId: globalSendingSessions.has(sessionId),
+      globalProcessingQueueHasId: globalProcessingSessionQueues.has(sessionId),
+      localProcessingQueueHasId: processingQueueRef.current.has(sessionId)
+    });
+
+    // Use GLOBAL set to prevent duplicate processing across AgenticPanel instances
+    // This is critical when both agent mode and files mode have the same session open
+    if (globalProcessingSessionQueues.has(sessionId)) {
+      console.log(`[AgenticPanel] Another panel is already processing queue for session ${sessionId}, skipping`);
       return;
     }
+    globalProcessingSessionQueues.add(sessionId);
     processingQueueRef.current.add(sessionId);
 
     try {
+    // CRITICAL: Wait for any current turn to complete before processing queued prompts
+    // Use GLOBAL sending state to coordinate across panels
+    if (globalSendingSessions.has(sessionId)) {
+      console.log(`[AgenticPanel] Session ${sessionId} has active turn (global), waiting for completion before processing queue`);
+      await new Promise<void>(resolve => {
+        const checkDone = () => {
+          if (!globalSendingSessions.has(sessionId)) {
+            console.log(`[AgenticPanel] Session ${sessionId} turn completed (global), now processing queue`);
+            resolve();
+          } else {
+            setTimeout(checkDone, 500);
+          }
+        };
+        setTimeout(checkDone, 100);
+      });
+    }
+
     // Fetch pending prompts from the new queued_prompts table
     const pendingPrompts = await window.electronAPI.invoke('ai:listPendingPrompts', sessionId) as Array<{
       id: string;
@@ -1851,6 +1897,12 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       }
 
       console.log(`[AgenticPanel] Successfully claimed prompt: ${claimedPrompt.id}`);
+
+      // Notify the AISessionView to refresh its queue display
+      // The prompt was claimed and will be executed, so remove it from the visible queue
+      window.dispatchEvent(new CustomEvent('ai:promptClaimed', {
+        detail: { sessionId, promptId: claimedPrompt.id }
+      }));
 
       // Log current session tabs state before sending
       console.log('[AgenticPanel] Current session tabs before handleSendMessage:', sessionTabsRef.current.map(t => t?.id));
@@ -1893,6 +1945,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     console.log(`[AgenticPanel] Finished processing queued prompts for session ${sessionId}`);
     } finally {
       processingQueueRef.current.delete(sessionId);
+      globalProcessingSessionQueues.delete(sessionId);
     }
   }, [handleSendMessage]);
 

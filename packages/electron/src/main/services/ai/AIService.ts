@@ -539,6 +539,13 @@ export class AIService {
 
                 let newPromptsCount = 0;
                 for (const prompt of entry.queuedPrompts) {
+                  // Skip prompts that were created locally (echoed back via Y.js sync)
+                  // Local prompts have IDs starting with 'local-'
+                  if (prompt.id.startsWith('local-')) {
+                    logger.main.info(`[AIService] Prompt ${prompt.id} is a local prompt echoed via sync, skipping`);
+                    continue;
+                  }
+
                   // Check if prompt already exists
                   const existing = await queueStore.get(prompt.id);
                   if (existing) {
@@ -2274,8 +2281,9 @@ export class AIService {
       const { getQueuedPromptsStore } = await import('../RepositoryManager');
       const queueStore = getQueuedPromptsStore();
 
-      // Generate a unique ID
-      const promptId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      // Generate a unique ID with 'local-' prefix to identify locally-created prompts
+      // This prevents the mobile sync handler from re-broadcasting these prompts
+      const promptId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
       const created = await queueStore.create({
         id: promptId,
