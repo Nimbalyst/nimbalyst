@@ -838,9 +838,9 @@ export class CLIManager {
 
       // Try to get npm prefix if npm exists somewhere
       try {
-          const npmPrefix = execSync('npm config get prefix 2>/dev/null', {
+        const npmPrefix = execSync('npm config get prefix 2>/dev/null', {
           encoding: 'utf8',
-          shell: true,
+          shell: '/bin/sh',
           timeout: 2000
         }).trim();
         if (npmPrefix && npmPrefix !== 'undefined') {

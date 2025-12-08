@@ -1,7 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
-import { MCPConfig, MCPServerConfig } from '@nimbalyst/runtime/types/MCPServerConfig';
+import { MCPConfig, MCPServerConfig, MCPServerEnv } from '@nimbalyst/runtime/types/MCPServerConfig';
 import { logger } from '../utils/logger';
 
 /**
@@ -321,8 +321,8 @@ export class MCPConfigService {
           }
         }
 
-        // Spawn the process
-        const child = spawn(config.command, config.args || [], {
+        // Spawn the process (command is validated above)
+        const child = spawn(config.command!, config.args || [], {
           env,
           stdio: ['pipe', 'pipe', 'pipe']
         });
@@ -388,7 +388,7 @@ export class MCPConfigService {
       // Expand environment variables from the config
       const processEnv: Record<string, string | undefined> = { ...process.env };
 
-      for (const [key, value] of Object.entries(env)) {
+      for (const [key, value] of Object.entries(env) as [string, string][]) {
         const expandedValue = this.expandEnvVar(value, processEnv);
 
         // Send API keys as Authorization Bearer tokens

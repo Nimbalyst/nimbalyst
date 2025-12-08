@@ -92,8 +92,8 @@ export class AttachmentService {
         sessionId
       });
 
-      // Determine attachment type
-      const type = this.getAttachmentType(mimeType);
+      // Determine attachment type (validated above, so always non-null)
+      const type = this.getAttachmentType(mimeType)!;
 
       // Create attachment object
       const attachment: ChatAttachment = {

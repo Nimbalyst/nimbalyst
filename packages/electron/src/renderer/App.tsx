@@ -61,6 +61,7 @@ logger.ui.info('StravuEditor imported');
 const LOG_CONFIG = {
   AUTOSAVE: false,  // Set to true to enable autosave logging
   FILE_SYNC: false,  // File sync operations
+  FILE_WATCH: false,  // File watcher events
   WORKSPACE_FILE_SELECT: false,  // Workspace file selection
   HMR: false,  // Hot Module Replacement
   AUTO_SNAPSHOT: false,  // Automatic snapshots
@@ -845,14 +846,14 @@ export default function App() {
 
   // Keyboard shortcuts
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
+    const handleKeyDown = (e: KeyboardEvent): void => {
       // Cmd+E for Files mode
       if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
         setActiveMode('files');
-        return false;
+        return;
       }
       // Cmd+K for Agent mode
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -860,7 +861,7 @@ export default function App() {
         e.stopPropagation();
         e.stopImmediatePropagation();
         setActiveMode('agent');
-        return false;
+        return;
       }
       // Cmd+L for Plans mode
       if ((e.metaKey || e.ctrlKey) && e.key === 'l') {
@@ -868,18 +869,8 @@ export default function App() {
         e.stopPropagation();
         e.stopImmediatePropagation();
         setActiveMode('plan');
-        return false;
+        return;
       }
-      // Cmd+K (Mac) or Ctrl+K (Windows/Linux) for Agent Command Palette - COMMENTED OUT
-      // if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-      //   e.preventDefault();
-      //   e.stopPropagation();
-      //   e.stopImmediatePropagation();
-      //   if (workspaceMode) {
-      //     setIsAgentPaletteVisible(true);
-      //   }
-      //   return false;
-      // }
       // Cmd+O (Mac) or Ctrl+O (Windows/Linux) for Quick Open
       if ((e.metaKey || e.ctrlKey) && e.key === 'o') {
         e.preventDefault();
@@ -888,7 +879,7 @@ export default function App() {
         if (workspaceMode) {
           setIsQuickOpenVisible(true);
         }
-        return false;
+        return;
       }
       // Cmd+Shift+A (Mac) or Ctrl+Shift+A (Windows/Linux) for AI Chat
       if (workspaceMode && (e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'a') {
@@ -992,15 +983,8 @@ export default function App() {
   useEffect(() => {
     if (window.electronAPI && currentFilePath !== null) {
       if (LOG_CONFIG.FILE_SYNC) console.log('[FILE_SYNC] Syncing current file path to backend:', currentFilePath);
-      const result = window.electronAPI.setCurrentFile(currentFilePath);
-      // Handle both promise and non-promise returns
-      if (result && typeof result.then === 'function') {
-        result.then(() => {
-          if (LOG_CONFIG.FILE_SYNC) console.log('[FILE_SYNC] ✓ File path synced successfully');
-        }).catch((error) => {
-          if (LOG_CONFIG.FILE_SYNC) console.error('[FILE_SYNC] ✗ Failed to sync file path:', error);
-        });
-      }
+      window.electronAPI.setCurrentFile(currentFilePath);
+      if (LOG_CONFIG.FILE_SYNC) console.log('[FILE_SYNC] ✓ File path synced');
     } else if (window.electronAPI && currentFilePath === null) {
       if (LOG_CONFIG.FILE_SYNC) console.log('[FILE_SYNC] Clearing file path in backend');
       window.electronAPI.setCurrentFile(null);
@@ -1025,8 +1009,8 @@ export default function App() {
           if (initialState && initialState.mode === 'workspace') {
             // Set workspace state immediately
             setWorkspaceMode(true);
-            setWorkspacePath(initialState.workspacePath);
-            setWorkspaceName(initialState.workspaceName);
+            setWorkspacePath(initialState.workspacePath ?? null);
+            setWorkspaceName(initialState.workspaceName ?? null);
             // NOTE: fileTree loading moved to EditorMode
           }
         }

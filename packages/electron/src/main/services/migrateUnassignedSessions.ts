@@ -6,10 +6,12 @@
  * workspace tracking was implemented.
  */
 
-import type { PGlite } from '@electric-sql/pglite';
+type PGliteLike = {
+  query: <T = any>(sql: string, params?: any[]) => Promise<{ rows: T[] }>;
+};
 
 export async function migrateUnassignedSessions(
-  db: PGlite,
+  db: PGliteLike,
   targetWorkspacePath: string
 ): Promise<{ migrated: number }> {
   // Update all sessions with NULL or 'default' workspace_id to the target workspace
@@ -27,7 +29,7 @@ export async function migrateUnassignedSessions(
 /**
  * Get count of unassigned sessions
  */
-export async function countUnassignedSessions(db: PGlite): Promise<number> {
+export async function countUnassignedSessions(db: PGliteLike): Promise<number> {
   const result = await db.query<{ count: string }>(
     `SELECT COUNT(*) as count
      FROM ai_sessions

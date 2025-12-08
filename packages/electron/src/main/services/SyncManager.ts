@@ -139,7 +139,7 @@ function getDeviceId(userId: string): string {
     .substring(0, 16);
 
   cachedDeviceId = hash;
-  return cachedDeviceId;
+  return hash;
 }
 
 /**

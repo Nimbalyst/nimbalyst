@@ -295,8 +295,6 @@ export async function syncSession(
         providerConfig: {
           imported: true,
           importedAt: Date.now(),
-        },
-        metadata: {
           tokenUsage: metadata.tokenUsage,
         },
         createdAt: metadata.createdAt,

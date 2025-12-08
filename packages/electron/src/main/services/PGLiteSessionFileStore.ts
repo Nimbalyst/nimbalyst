@@ -7,7 +7,6 @@ import type { SessionFileStore, FileLink, FileLinkType } from '@nimbalyst/runtim
 
 type PGliteLike = {
   query<T = any>(sql: string, params?: any[]): Promise<{ rows: T[] }>;
-  exec(sql: string): Promise<void>;
 };
 
 type EnsureReadyFn = () => Promise<void>;

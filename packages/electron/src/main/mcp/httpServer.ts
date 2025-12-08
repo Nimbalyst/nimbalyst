@@ -406,8 +406,9 @@ async function tryCreateServer(port: number): Promise<any> {
 
         switch (toolName) {
           case 'applyDiff': {
+            const typedArgs = args as { filePath?: string; replacements?: any[] } | undefined;
             // Use explicit filePath from args, or fall back to current document state
-            let targetFilePath = args?.filePath;
+            let targetFilePath: string | undefined = typedArgs?.filePath;
 
             if (!targetFilePath) {
               // Get the current document state for file path
@@ -477,7 +478,7 @@ async function tryCreateServer(port: number): Promise<any> {
                 // Send the request with the result channel and target file path
                 // console.log('[MCP Server] Sending applyDiff to window', targetWindow.id);
                 targetWindow.webContents.send('mcp:applyDiff', {
-                  replacements: args?.replacements,
+                  replacements: typedArgs?.replacements,
                   resultChannel,
                   targetFilePath: targetFilePath
                 });
@@ -495,8 +496,9 @@ async function tryCreateServer(port: number): Promise<any> {
           }
 
           case 'streamContent': {
+            const typedArgs = args as { filePath?: string; content?: string; position?: string; insertAfter?: string } | undefined;
             // Use explicit filePath from args, or fall back to current document state
-            let targetFilePath = args?.filePath;
+            let targetFilePath: string | undefined = typedArgs?.filePath;
 
             if (!targetFilePath) {
               // Get the current document state for file path
@@ -559,16 +561,16 @@ async function tryCreateServer(port: number): Promise<any> {
                 // console.log('[MCP Server] Target window ID:', targetWindow.id);
                 // console.log('[MCP Server] streamId:', streamId);
                 // console.log('[MCP Server] targetFilePath:', targetFilePath);
-                // console.log('[MCP Server] position:', args?.position || 'end');
-                // console.log('[MCP Server] content length:', args?.content?.length);
-                // console.log('[MCP Server] content preview:', args?.content?.substring(0, 100));
+                // console.log('[MCP Server] position:', typedArgs?.position || 'end');
+                // console.log('[MCP Server] content length:', typedArgs?.content?.length);
+                // console.log('[MCP Server] content preview:', typedArgs?.content?.substring(0, 100));
                 // console.log('[MCP Server] ==========================================');
 
                 targetWindow.webContents.send('mcp:streamContent', {
                   streamId,
-                  content: args?.content,
-                  position: args?.position || 'end',
-                  insertAfter: args?.insertAfter,
+                  content: typedArgs?.content,
+                  position: typedArgs?.position || 'end',
+                  insertAfter: typedArgs?.insertAfter,
                   targetFilePath: targetFilePath,
                   resultChannel
                 });

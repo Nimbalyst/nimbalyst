@@ -198,8 +198,8 @@ function setupSyncSubscription(stateManager: ReturnType<typeof getSessionStateMa
 
     const unsubscribe = stateManager.subscribe((event: SessionStateEvent) => {
       // Sync execution state changes to mobile
-      if (event.type === 'started' || event.type === 'ended' || event.type === 'interrupted') {
-        const isExecuting = event.type === 'started';
+      if (event.type === 'session:started' || event.type === 'session:completed' || event.type === 'session:interrupted') {
+        const isExecuting = event.type === 'session:started';
         const sessionId = event.sessionId;
 
         console.log('[SessionStateHandlers] Syncing execution state:', { sessionId, isExecuting });

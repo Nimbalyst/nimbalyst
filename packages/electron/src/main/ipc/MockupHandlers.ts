@@ -143,7 +143,7 @@ export function registerMockupHandlers(): void {
               if (!entry.name.startsWith('.') && entry.name !== 'node_modules') {
                 await scanDirectory(fullPath);
               }
-            } else if (entry.name.endsWith('.mockup.html')) {
+            } else if (entry.name.endsWith('.mockup.html') && workspacePath) {
               mockups.push({
                 absolutePath: fullPath,
                 relativePath: path.relative(workspacePath, fullPath),

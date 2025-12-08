@@ -37,6 +37,7 @@ export interface ClaudeCodeEntry {
   timestamp: string;
   type: 'user' | 'assistant' | 'summary' | 'system' | 'file-history-snapshot';
   message?: {
+    id?: string;
     role?: string;
     content?: any;
     usage?: {
