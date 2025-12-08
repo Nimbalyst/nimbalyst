@@ -122,8 +122,10 @@ import {
   $convertFromEnhancedMarkdownString,
   $convertToEnhancedMarkdownString,
 } from '../../../markdown';
-import type {ElementNode, LexicalEditor, SerializedLexicalNode} from 'lexical';
+import type {LexicalEditor, SerializedLexicalNode} from 'lexical';
 import {
+  type ElementNode,
+  type LexicalNode,
   $getNodeByKey,
   $getRoot,
   $isDecoratorNode,
@@ -152,6 +154,7 @@ import {
   DiffError,
 } from './DiffError';
 import {createWindowedTreeMatcher, NodeDiff} from './TreeMatcher';
+import type {CanonicalTreeNode} from './canonicalTree';
 import { applyFrontmatterUpdateIfNeeded } from './diffFrontmatter';
 
 // Initialize a simple registry (in future this could be external)
@@ -1040,6 +1043,10 @@ export function $applyNodeDiff(
 
     case 'add': {
       // Create a new node from the target serialized node
+      if (!diff.targetNode) {
+        console.warn('Cannot add node without target serialized node');
+        return;
+      }
       const newNode = createNodeFromSerialized(diff.targetNode);
 
       if (
@@ -1184,6 +1191,12 @@ export function $applyNodeDiff(
         // Initialize handlers if not already done
         initializeHandlers();
 
+        // For 'update' diffs, both sourceNode and targetNode must be non-null
+        if (!diff.sourceNode || !diff.targetNode) {
+          console.warn('Update diff missing source or target node');
+          break;
+        }
+
         // Create handler context
         const context: DiffHandlerContext = {
           liveNode: liveNode,
@@ -1269,14 +1282,14 @@ export function $applySubTreeDiff(
       if (!key) return null;
       return treeMatcher.getSourceNodeData(key);
     })
-    .filter(Boolean);
+    .filter((node): node is CanonicalTreeNode => node != null);
   const targetCanonicalChildren = targetChildren
     .map((child: any) => {
       const key = child?.__key ?? child?.key;
       if (!key) return null;
       return treeMatcher.getTargetNodeData(key);
     })
-    .filter(Boolean);
+    .filter((node): node is CanonicalTreeNode => node != null);
 
   // console.log(
   //   '[SubTreeDiff] source child keys',
@@ -1369,6 +1382,10 @@ export function $applyChildNodeDiff(
 
     case 'add': {
       // Create a new child node from the target serialized node
+      if (!diff.targetNode) {
+        console.warn('Cannot add child node without target serialized node');
+        return;
+      }
       const newNode = createNodeFromSerialized(diff.targetNode);
 
       // Mark the node as added using DiffState
@@ -1431,6 +1448,12 @@ export function $applyChildNodeDiff(
       // Initialize handlers if not already done
       initializeHandlers();
 
+      // For 'update' diffs, both sourceNode and targetNode must be non-null
+      if (!diff.sourceNode || !diff.targetNode) {
+        console.warn('Update diff missing source or target node for child');
+        break;
+      }
+
       // Create handler context for the child node
       const context: DiffHandlerContext = {
         liveNode: liveNode,
@@ -1451,7 +1474,7 @@ export function $applyChildNodeDiff(
         const result = handler.handleUpdate(context);
 
         // If the handler says not to skip children, we need to recurse
-        if (result.handled && result.skipChildren === false && sourceEditor && targetEditor) {
+        if (result.handled && result.skipChildren === false && sourceEditor && targetEditor && $isElementNode(liveNode)) {
           // console.log(`Handler for ${liveNode.getType()} requests recursion into children`);
           // Recursively apply sub-tree diff to handle nested structures
           $applySubTreeDiff(

@@ -275,7 +275,7 @@ export default function FloatingDocumentActionsPlugin({
 
         // Trigger save if available
         if (config?.onContentChange) {
-          config.onContentChange();
+          config.onContentChange(updatedMarkdown);
         }
       } catch (error) {
         console.error('Failed to apply tracker type:', error);
@@ -297,7 +297,7 @@ export default function FloatingDocumentActionsPlugin({
 
         // Trigger save if available
         if (config?.onContentChange) {
-          config.onContentChange();
+          config.onContentChange(updatedMarkdown);
         }
       } catch (error) {
         console.error('Failed to remove tracker type:', error);

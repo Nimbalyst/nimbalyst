@@ -131,7 +131,7 @@ export function groupDiffChanges(editor: LexicalEditor): DiffChangeGroup[] {
 
       if (grandParent1 && grandParent1.getKey() === grandParent2?.getKey()) {
         const parentNextSibling = parent1.getNextSibling();
-        return parentNextSibling && parentNextSibling.getKey() === parent2.getKey();
+        return parentNextSibling !== null && parentNextSibling.getKey() === parent2.getKey();
       }
 
       return false;
