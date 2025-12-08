@@ -17,7 +17,7 @@ import { registerSettingsHandlers } from './ipc/SettingsHandlers';
 import { registerWindowHandlers } from './ipc/WindowHandlers';
 import { registerHistoryHandlers } from './ipc/HistoryHandlers';
 import { registerSessionHandlers } from './ipc/SessionHandlers';
-import { registerSessionStateHandlers, shutdownSessionStateHandlers } from './ipc/SessionStateHandlers';
+import { registerSessionStateHandlers, shutdownSessionStateHandlers, hasActiveStreamingSessions } from './ipc/SessionStateHandlers';
 import { registerAttachmentHandlers } from './ipc/AttachmentHandlers';
 import { registerWorkspaceWatcherHandlers } from './file/WorkspaceWatcher';
 import { setupSessionFileHandlers } from './ipc/SessionFileHandlers';
@@ -754,6 +754,46 @@ app.on('before-quit', async (event) => {
     // If we're already quitting, don't prevent default to avoid infinite loop
     if (isAppQuitting) {
         console.log('[QUIT] Already quitting, allowing default behavior');
+        return;
+    }
+
+    // Check for active AI sessions before proceeding
+    if (hasActiveStreamingSessions()) {
+        event.preventDefault();
+
+        analytics.sendEvent('quit_confirmation_shown', {
+            reason: 'active_ai_session'
+        });
+
+        const response = await dialog.showMessageBox({
+            type: 'warning',
+            title: 'AI Session in Progress',
+            message: 'An AI session is currently running.',
+            detail: 'If you quit now, the current AI response will be lost. Are you sure you want to quit?',
+            buttons: ['Quit Anyway', 'Cancel'],
+            defaultId: 1,
+            cancelId: 1
+        });
+
+        if (response.response === 0) {
+            // User clicked "Quit Anyway" - proceed with quit
+            console.log('[QUIT] User confirmed quit with active AI session');
+            analytics.sendEvent('quit_confirmation_result', {
+                result: 'quit_anyway'
+            });
+            // Set isAppQuitting before calling app.quit() to prevent re-showing dialog
+            isAppQuitting = true;
+            app.quit();
+        } else {
+            // User cancelled
+            console.log('[QUIT] User cancelled quit due to active AI session');
+            analytics.sendEvent('quit_confirmation_result', {
+                result: 'cancelled'
+            });
+            return;
+        }
+        // If user confirmed quit, app.quit() was called above and before-quit will fire again
+        // with isAppQuitting=true, so we return here to avoid duplicate cleanup
         return;
     }
 

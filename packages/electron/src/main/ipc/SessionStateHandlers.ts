@@ -222,6 +222,23 @@ function setupSyncSubscription(stateManager: ReturnType<typeof getSessionStateMa
 }
 
 /**
+ * Check if any AI sessions are currently running or streaming.
+ * Used by the quit handler to show a confirmation dialog.
+ */
+export function hasActiveStreamingSessions(): boolean {
+  const stateManager = getSessionStateManager();
+  const activeIds = stateManager.getActiveSessionIds();
+
+  for (const sessionId of activeIds) {
+    const state = stateManager.getSessionState(sessionId);
+    if (state && (state.status === 'running' || state.isStreaming)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Shutdown handler - called when app is closing
  */
 export async function shutdownSessionStateHandlers() {

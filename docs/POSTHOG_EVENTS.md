@@ -131,11 +131,13 @@ All events include `$session_id` property automatically. Dev users are marked wi
 | `nimbalyst_session_start` | `AnalyticsService.ts:135` | Application starts (sent even for opted-out users) | `$session_id`<br/>`nimbalyst_version`<br/>`$set_once: is_dev_user`<br/>`$set_once: is_dev_install` |
 | `analytics_opt_out` | `AnalyticsService.ts:89` | User opts out of analytics in settings | None |
 | `first_launch_claude_check` | `index.ts:114` | Very first app launch only - checks if Claude Code is installed | `hasClaudeInstalled` (boolean) |
+| `quit_confirmation_shown` | `index.ts:757` | User attempts quit with active AI session | `reason` (active_ai_session) |
+| `quit_confirmation_result` | `index.ts:774, 783` | User responds to quit confirmation dialog | `result` (quit_anyway/cancelled) |
 
 ## Event Summary Statistics
 
-- **Total Events**: 52 unique event names
-- **Main Process Events**: 37 (via AnalyticsService)
+- **Total Events**: 54 unique event names
+- **Main Process Events**: 39 (via AnalyticsService)
 - **Renderer Process Events**: 15 (via usePostHog hook)
 - **File Operations**: 7 events
 - **Workspace Operations**: 4 events
