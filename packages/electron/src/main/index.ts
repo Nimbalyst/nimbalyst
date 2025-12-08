@@ -31,6 +31,7 @@ import { registerUsageAnalyticsHandlers } from './ipc/UsageAnalyticsHandlers';
 import {
     type AppTheme,
     dismissDiscordInvitation,
+    getSessionSyncConfig,
     getTheme,
     hasCheckedClaudeCodeInstallation,
     incrementLaunchCount,
@@ -347,23 +348,29 @@ app.whenReady().then(async () => {
     // Initialize logging
     initializeLogging();
 
-    // Initialize Stytch Auth service BEFORE database
+    // Initialize Stytch Auth service BEFORE database (only if sync is enabled)
+    // This avoids keychain access prompts when sync is disabled
     // (Database init creates SyncManager which checks isAuthenticated)
-    const stytchConfig = getStytchConfig();
-    if (stytchConfig.projectId && stytchConfig.publicToken &&
-        !stytchConfig.projectId.includes('XXXX')) {
-        try {
-            initializeStytchAuth({
-                projectId: stytchConfig.projectId,
-                publicToken: stytchConfig.publicToken,
-                apiBase: stytchConfig.apiBase,
-            });
-            logger.main.info('[StytchAuth] Initialized with project:', stytchConfig.projectId, 'apiBase:', stytchConfig.apiBase);
-        } catch (error) {
-            logger.main.error('[StytchAuth] Failed to initialize:', error);
+    const syncConfig = getSessionSyncConfig();
+    if (syncConfig?.enabled) {
+        const stytchConfig = getStytchConfig();
+        if (stytchConfig.projectId && stytchConfig.publicToken &&
+            !stytchConfig.projectId.includes('XXXX')) {
+            try {
+                initializeStytchAuth({
+                    projectId: stytchConfig.projectId,
+                    publicToken: stytchConfig.publicToken,
+                    apiBase: stytchConfig.apiBase,
+                });
+                logger.main.info('[StytchAuth] Initialized with project:', stytchConfig.projectId, 'apiBase:', stytchConfig.apiBase);
+            } catch (error) {
+                logger.main.error('[StytchAuth] Failed to initialize:', error);
+            }
+        } else {
+            logger.main.info('[StytchAuth] Not configured (placeholder tokens) - skipping initialization');
         }
     } else {
-        logger.main.info('[StytchAuth] Not configured (placeholder tokens) - skipping initialization');
+        logger.main.info('[StytchAuth] Skipping initialization - sync is disabled');
     }
 
     // Initialize PGLite database
@@ -453,7 +460,7 @@ app.whenReady().then(async () => {
     try {
         const sessionNamingService = SessionNamingService.getInstance();
         await sessionNamingService.start();
-        logger.mcp.info('Session naming MCP server started');
+        // logger.mcp.info('Session naming MCP server started');
     } catch (error) {
         logger.mcp.error('Failed to start session naming MCP server:', error);
     }
