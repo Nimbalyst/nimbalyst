@@ -1180,10 +1180,10 @@ export default function App() {
       }
     };
 
-    window.addEventListener('aiToolRequest:createDocument', handleCreateDocument as EventListener);
+    window.addEventListener('aiToolRequest:createDocument', handleCreateDocument as unknown as EventListener);
 
     return () => {
-      window.removeEventListener('aiToolRequest:createDocument', handleCreateDocument as EventListener);
+      window.removeEventListener('aiToolRequest:createDocument', handleCreateDocument as unknown as EventListener);
     };
   }, [handleWorkspaceFileSelect]);
 
@@ -1336,7 +1336,7 @@ export default function App() {
         onTogglePlansPanel={() => {
           setBottomPanel(prev => prev === 'plan' ? null : 'plan');
         }}
-        bottomPanel={bottomPanel}
+        bottomPanel={bottomPanel as any}
         onToggleBugsPanel={() => {
           setBottomPanel(prev => prev === 'bug' ? null : 'bug');
         }}
@@ -1385,7 +1385,7 @@ export default function App() {
                   workspaceName={workspaceName}
                   theme={theme}
                   isActive={activeMode === 'files' || activeMode === 'plan'}
-                  onModeChange={setActiveMode}
+                  onModeChange={setActiveMode as (mode: string) => void}
                   onCurrentFileChange={(filePath, fileName, isDirty) => {
                     setCurrentFilePath(filePath);
                     setCurrentFileName(fileName);
@@ -1438,7 +1438,7 @@ export default function App() {
                   workspacePath={workspacePath}
                   documentContext={documentContext}
                   planDocumentPath={agentPlanReference || undefined}
-                  onContentModeChange={setActiveMode}
+                  onContentModeChange={setActiveMode as (mode: string) => void}
                   onSessionChange={setActiveSessionId}
                   onFileOpen={handleWorkspaceFileSelect}
                   isActive={activeMode === 'agent'}
