@@ -46,7 +46,7 @@ Found a bug or have a feature request? Please [create an issue](https://github.c
 ## Community
 - [Documentation](https://docs.nimbalyst.com/) - Watch video and read documentation
 - [Discord](https://discord.gg/FgD9S2MCYB) - Join the discussion on Discord
-- [Website](https://nimbalyst.com)
+- [Website](https://nimbalyst.com) - Learn more about Nimbalyst on our website
 
 ## License
 
