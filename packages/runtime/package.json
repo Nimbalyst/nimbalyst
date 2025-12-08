@@ -79,6 +79,38 @@
     "./ui": {
       "import": "./dist/ui/index.js",
       "types": "./dist/ui/index.d.ts"
+    },
+    "./ai/server/SessionManager": {
+      "import": "./dist/ai/server/SessionManager.js",
+      "types": "./dist/ai/server/SessionManager.d.ts"
+    },
+    "./ai/server/SessionStateManager": {
+      "import": "./dist/ai/server/SessionStateManager.js",
+      "types": "./dist/ai/server/SessionStateManager.d.ts"
+    },
+    "./ai/server/types/SessionState": {
+      "import": "./dist/ai/server/types/SessionState.js",
+      "types": "./dist/ai/server/types/SessionState.d.ts"
+    },
+    "./ai/server/utils/contextUsage": {
+      "import": "./dist/ai/server/utils/contextUsage.js",
+      "types": "./dist/ai/server/utils/contextUsage.d.ts"
+    },
+    "./storage/repositories/AISessionsRepository": {
+      "import": "./dist/storage/repositories/AISessionsRepository.js",
+      "types": "./dist/storage/repositories/AISessionsRepository.d.ts"
+    },
+    "./types/MCPServerConfig": {
+      "import": "./dist/types/MCPServerConfig.js",
+      "types": "./dist/types/MCPServerConfig.d.ts"
+    },
+    "./electron/claudeCodeEnvironment": {
+      "import": "./dist/electron/claudeCodeEnvironment.js",
+      "types": "./dist/electron/claudeCodeEnvironment.d.ts"
+    },
+    "./plugins/TrackerPlugin/models": {
+      "import": "./dist/plugins/TrackerPlugin/models/index.js",
+      "types": "./dist/plugins/TrackerPlugin/models/index.d.ts"
     }
   },
   "files": [

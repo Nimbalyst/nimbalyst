@@ -27,8 +27,9 @@ export async function readFrontmatterOnly(filePath: string, maxBytes: number = 4
       }
     };
 
-    stream.on('data', (chunk: string) => {
-      content += chunk;
+    stream.on('data', (chunk: string | Buffer) => {
+      const chunkStr = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+      content += chunkStr;
 
       // Check if we have the complete frontmatter
       if (content.startsWith('---\n') || content.startsWith('---\r\n')) {

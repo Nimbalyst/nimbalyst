@@ -19,7 +19,12 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
-    "types": []
+    "types": [],
+    "baseUrl": ".",
+    "paths": {
+      "@nimbalyst/runtime": ["../runtime/src/index.ts"],
+      "@nimbalyst/runtime/*": ["../runtime/src/*"]
+    }
   },
   "include": ["src", "src/renderer/electron.d.ts"],
   "exclude": ["node_modules", "dist", "out", "e2e"]

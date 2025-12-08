@@ -40,7 +40,7 @@ export class OptimizedWorkspaceWatcher {
 
             const timer = setTimeout(() => {
                 logger.workspaceWatcher.debug('Updating file tree');
-                console.log(`[WorkspaceWatcher] Triggering file tree update for window ${windowId}`);
+                // console.log(`[WorkspaceWatcher] Triggering file tree update for window ${windowId}`);
                 const fileTree = getFolderContents(workspacePath);
 
                 if (!window || window.isDestroyed()) {
@@ -121,7 +121,7 @@ export class OptimizedWorkspaceWatcher {
                     triggerUpdate();
                 })
                 .on('change', (path) => {
-                    console.log(`[WorkspaceWatcher] File changed: ${path}`);
+                    // console.log(`[WorkspaceWatcher] File changed: ${path}`);
                     // Send file-changed-on-disk event to renderer for editor updates
                     if (!window.isDestroyed()) {
                         window.webContents.send('file-changed-on-disk', { path });

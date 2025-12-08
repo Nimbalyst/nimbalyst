@@ -44,6 +44,7 @@ export type {
   LexicalNode,
   ElementNode,
   TextNode,
+  LexicalCommand,
 } from 'lexical';
 
 export type {

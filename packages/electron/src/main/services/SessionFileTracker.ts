@@ -4,7 +4,7 @@
  */
 
 import { SessionFilesRepository } from '@nimbalyst/runtime';
-import type { FileLinkType, EditedFileMetadata, ReadFileMetadata, ReferencedFileMetadata } from '@nimbalyst/runtime';
+import type { FileLinkType, EditedFileMetadata, ReadFileMetadata, ReferencedFileMetadata } from '@nimbalyst/runtime/ai/server/types';
 import { logger } from '../utils/logger';
 
 /**

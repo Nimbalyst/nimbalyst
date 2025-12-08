@@ -123,19 +123,19 @@ export function getUpdateWindow(): BrowserWindow | null {
 if (process.env.NODE_ENV === 'test' || process.env.PLAYWRIGHT === '1') {
   const { ipcMain } = require('electron');
 
-  ipcMain.handle('test:trigger-update-available', (_event, updateInfo: UpdateInfo) => {
+  ipcMain.handle('test:trigger-update-available', (_event: Electron.IpcMainInvokeEvent, updateInfo: UpdateInfo) => {
     showUpdateAvailable(updateInfo);
   });
 
-  ipcMain.handle('test:trigger-download-progress', (_event, progress: DownloadProgress) => {
+  ipcMain.handle('test:trigger-download-progress', (_event: Electron.IpcMainInvokeEvent, progress: DownloadProgress) => {
     showDownloadProgress(progress);
   });
 
-  ipcMain.handle('test:trigger-update-ready', (_event, updateInfo: UpdateInfo) => {
+  ipcMain.handle('test:trigger-update-ready', (_event: Electron.IpcMainInvokeEvent, updateInfo: UpdateInfo) => {
     showUpdateReady(updateInfo);
   });
 
-  ipcMain.handle('test:trigger-update-error', (_event, errorMessage: string) => {
+  ipcMain.handle('test:trigger-update-error', (_event: Electron.IpcMainInvokeEvent, errorMessage: string) => {
     showUpdateError(errorMessage);
   });
 

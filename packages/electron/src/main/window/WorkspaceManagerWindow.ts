@@ -273,7 +273,7 @@ export function setupWorkspaceManagerHandlers() {
         return { success: true, path: result.filePath };
       } catch (error) {
         console.error('Failed to create workspace:', error);
-        return { success: false, error: error.message };
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
       }
     }
 
@@ -391,7 +391,7 @@ function getWorkspaceFiles(
         }
       } catch (error) {
         // Skip files/folders we can't access
-        console.debug(`[WorkspaceManager] Cannot access ${fullItemPath}:`, error.message);
+        console.debug(`[WorkspaceManager] Cannot access ${fullItemPath}:`, error instanceof Error ? error.message : String(error));
       }
     }
   } catch (error) {

@@ -80,8 +80,8 @@ export async function getAllSessionsForSync(includeMessages = false): Promise<Ar
   messages?: SyncedMessage[];
 }>> {
   // Log stack trace to identify callers
-  const stack = new Error().stack?.split('\n').slice(1, 5).join('\n') || 'no stack';
-  console.log('[PGLiteSessionStore] getAllSessionsForSync called from:\n' + stack);
+  // const stack = new Error().stack?.split('\n').slice(1, 5).join('\n') || 'no stack';
+  // console.log('[PGLiteSessionStore] getAllSessionsForSync called from:\n' + stack);
 
   const startTime = performance.now();
   if (!moduleDb) {

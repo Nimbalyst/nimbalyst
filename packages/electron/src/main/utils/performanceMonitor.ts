@@ -19,8 +19,8 @@ export function startPerformanceMonitoring() {
             console.log('[PERF] High CPU usage:', JSON.stringify({
                 cpu: `${cpuPercent.toFixed(1)}%`,
                 memory: `${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB`,
-                handles: process._getActiveHandles?.()?.length || 'N/A',
-                requests: process._getActiveRequests?.()?.length || 'N/A'
+                handles: (process as NodeJS.Process & { _getActiveHandles?: () => unknown[] })._getActiveHandles?.()?.length ?? 'N/A',
+                requests: (process as NodeJS.Process & { _getActiveRequests?: () => unknown[] })._getActiveRequests?.()?.length ?? 'N/A'
             }));
 
             // Log what timers are active

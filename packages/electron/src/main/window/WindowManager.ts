@@ -311,7 +311,7 @@ export function createWindow(
                 saveWorkspaceWindowState(state.workspacePath, {
                     mode: 'workspace',
                     workspacePath: state.workspacePath,
-                    filePath: state.filePath,
+                    filePath: state.filePath ?? undefined,
                     bounds,
                     focusOrder,
                     devToolsOpen

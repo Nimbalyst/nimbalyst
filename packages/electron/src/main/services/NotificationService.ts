@@ -68,7 +68,8 @@ class NotificationService {
         const status = systemPreferences.getMediaAccessStatus('screen');
         logger.main.info('[NotificationService] macOS notification support:', {
           platform: process.platform,
-          doNotDisturbEnabled: systemPreferences.doNotDisturb,
+          // doNotDisturb property may not exist in all Electron versions
+          doNotDisturbEnabled: (systemPreferences as typeof systemPreferences & { doNotDisturb?: boolean }).doNotDisturb ?? false,
         });
 
         // Try to show a test notification to trigger permission request
