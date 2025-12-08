@@ -309,7 +309,7 @@ async function importJWK(
 function getImportAlgorithm(
   alg: string,
   jwk: JsonWebKey
-): AlgorithmIdentifier | RsaHashedImportParams | EcKeyImportParams | null {
+): { name: string; hash?: string; namedCurve?: string } | null {
   switch (alg) {
     case 'RS256':
       return { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' };
@@ -334,7 +334,7 @@ function getImportAlgorithm(
  */
 function getVerifyAlgorithm(
   alg: string
-): AlgorithmIdentifier | RsaPssParams | EcdsaParams {
+): { name: string; hash?: string } {
   switch (alg) {
     case 'RS256':
     case 'RS384':
