@@ -86,6 +86,21 @@ Generate a bug report in this format:
 ### Potential Code Locations
 [Based on your analysis, suggest which files/components might be involved]
 - `path/to/component.tsx:123` - [why this might be relevant]
+
+### Human Sourced
+[This section contains all text provided by the human verbatim, preserving their exact words]
+
+**Initial report:**
+> [Copy the user's original bug description exactly as written]
+
+**Clarifications:**
+> [AI] When does this happen?
+> [Human] [Their exact response]
+>
+> [AI] Which mode were you in?
+> [Human] [Their exact response]
+
+[Include all Q&A exchanges. Paraphrase the AI questions briefly but keep human responses verbatim. Mark AI parts with [AI] and human parts with [Human].]
 ```
 
 ## Example Interaction
