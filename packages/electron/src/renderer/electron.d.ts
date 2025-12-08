@@ -66,8 +66,10 @@ interface ElectronAPI {
 
   // Workspace operations
   getFolderContents: (dirPath: string) => Promise<FileTreeItem[]>;
+  refreshFolderContents: (folderPath: string) => Promise<FileTreeItem[]>;
   switchWorkspaceFile: (filePath: string) => Promise<{ filePath: string; content: string } | null>;
   readFileContent: (filePath: string) => Promise<{ content: string } | null>;
+  createFile: (filePath: string, content: string) => Promise<{ success: boolean; filePath?: string; error?: string }>;
 
   // File context menu operations
   renameFile: (oldPath: string, newName: string) => Promise<{ success: boolean; newPath?: string; error?: string }>;
@@ -150,6 +152,10 @@ interface ElectronAPI {
     openWorkspace: (workspacePath: string) => Promise<{ success: boolean }>;
     removeRecent: (workspacePath: string) => Promise<{ success: boolean }>;
   };
+
+  // AI operations
+  aiGetModels: () => Promise<any[]>;
+  onAIPerformanceMetrics: (callback: (data: any) => void) => () => void;
 
   // analytics
   analytics?: {
