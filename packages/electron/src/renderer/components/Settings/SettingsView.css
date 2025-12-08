@@ -1270,10 +1270,13 @@
 .qr-modal-content {
   width: 400px;
   max-width: 90vw;
+  max-height: 90vh;
   background: var(--surface-primary);
   border-radius: 12px;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .qr-modal-header {
@@ -1315,6 +1318,9 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
 }
 
 /* Local dev server notice */
