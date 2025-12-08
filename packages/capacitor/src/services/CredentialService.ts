@@ -1,19 +1,18 @@
 /**
  * CredentialService for Capacitor (Mobile)
  *
- * Stores sync credentials securely using Capacitor Preferences.
- * On iOS, Preferences data is stored in UserDefaults which is sandboxed
- * and encrypted at rest when device is locked.
+ * Stores sync credentials securely using iOS Keychain / Android Keystore
+ * via capacitor-secure-storage-plugin.
  *
  * Authentication is handled separately by StytchAuthService.
- * This service only stores the encryption key seed from QR pairing.
+ * This service stores the encryption key seed from QR pairing.
  *
- * Note: For enhanced security in production, consider using:
- * - @capacitor-community/secure-storage (iOS Keychain, Android Keystore)
- * - @capacitor/ios Keychain access directly
+ * Security: The encryptionKeySeed is the E2E encryption secret - it MUST be
+ * stored securely. This is now handled by the secure storage plugin which
+ * uses platform-native secure storage (Keychain/Keystore).
  */
 
-import { Preferences } from '@capacitor/preferences';
+import { SecureStoragePlugin } from 'capacitor-secure-storage-plugin';
 
 export interface SyncCredentials {
   encryptionKeySeed: string; // Base64 encoded 32 bytes - the E2E encryption secret
@@ -26,21 +25,21 @@ const CREDENTIALS_KEY = 'nimbalyst_sync_credentials_v2';
 let cachedCredentials: SyncCredentials | null = null;
 
 /**
- * Save credentials from QR code scan.
+ * Save credentials from QR code scan to secure storage.
  */
 export async function saveCredentials(credentials: SyncCredentials): Promise<void> {
-  await Preferences.set({
+  await SecureStoragePlugin.set({
     key: CREDENTIALS_KEY,
     value: JSON.stringify(credentials),
   });
   cachedCredentials = credentials;
-  console.log('[CredentialService] Credentials saved', {
+  console.log('[CredentialService] Credentials saved securely', {
     serverUrl: credentials.serverUrl,
   });
 }
 
 /**
- * Load credentials from storage.
+ * Load credentials from secure storage.
  */
 export async function loadCredentials(): Promise<SyncCredentials | null> {
   // Return cached if available
@@ -49,16 +48,20 @@ export async function loadCredentials(): Promise<SyncCredentials | null> {
   }
 
   try {
-    const { value } = await Preferences.get({ key: CREDENTIALS_KEY });
+    const { value } = await SecureStoragePlugin.get({ key: CREDENTIALS_KEY });
     if (value) {
       cachedCredentials = JSON.parse(value);
-      console.log('[CredentialService] Credentials loaded', {
+      console.log('[CredentialService] Credentials loaded from secure storage', {
         serverUrl: cachedCredentials?.serverUrl,
       });
       return cachedCredentials;
     }
   } catch (error) {
-    console.error('[CredentialService] Failed to load credentials:', error);
+    // SecureStoragePlugin throws an error if the key doesn't exist
+    // This is expected on first launch before QR pairing
+    if (error instanceof Error && !error.message.includes('does not exist')) {
+      console.error('[CredentialService] Failed to load credentials:', error);
+    }
   }
   return null;
 }
@@ -70,15 +73,27 @@ export async function hasCredentials(): Promise<boolean> {
   if (cachedCredentials) {
     return true;
   }
-  const { value } = await Preferences.get({ key: CREDENTIALS_KEY });
-  return value !== null;
+  try {
+    await SecureStoragePlugin.get({ key: CREDENTIALS_KEY });
+    return true;
+  } catch {
+    // Key doesn't exist
+    return false;
+  }
 }
 
 /**
  * Clear credentials (disconnect from sync).
  */
 export async function clearCredentials(): Promise<void> {
-  await Preferences.remove({ key: CREDENTIALS_KEY });
+  try {
+    await SecureStoragePlugin.remove({ key: CREDENTIALS_KEY });
+  } catch (error) {
+    // Key may not exist if credentials were never saved
+    if (error instanceof Error && !error.message.includes('does not exist')) {
+      console.error('[CredentialService] Failed to clear credentials:', error);
+    }
+  }
   cachedCredentials = null;
   console.log('[CredentialService] Credentials cleared');
 }

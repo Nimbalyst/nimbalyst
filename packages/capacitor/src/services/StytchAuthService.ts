@@ -11,9 +11,12 @@
  * 4. Server exchanges token and redirects to nimbalyst:// deep link with session data
  * 5. Mobile receives deep link and stores session tokens
  * 6. Mobile uses JWT for sync server authentication
+ *
+ * Security: Session credentials are stored encrypted using iOS Keychain / Android Keystore
+ * via capacitor-secure-storage-plugin.
  */
 
-import { Preferences } from '@capacitor/preferences';
+import { SecureStoragePlugin } from 'capacitor-secure-storage-plugin';
 import { Browser } from '@capacitor/browser';
 import { App as CapacitorApp } from '@capacitor/app';
 
@@ -32,19 +35,19 @@ let cachedSession: StytchSession | null = null;
 let refreshPromise: Promise<boolean> | null = null;
 
 /**
- * Save Stytch session to storage.
+ * Save Stytch session to secure storage (iOS Keychain / Android Keystore).
  */
 export async function saveSession(session: StytchSession): Promise<void> {
-  await Preferences.set({
+  await SecureStoragePlugin.set({
     key: STYTCH_SESSION_KEY,
     value: JSON.stringify(session),
   });
   cachedSession = session;
-  console.log('[StytchAuth] Session saved for user:', session.email);
+  console.log('[StytchAuth] Session saved securely for user:', session.email);
 }
 
 /**
- * Load Stytch session from storage.
+ * Load Stytch session from secure storage.
  */
 export async function loadSession(): Promise<StytchSession | null> {
   if (cachedSession) {
@@ -52,13 +55,17 @@ export async function loadSession(): Promise<StytchSession | null> {
   }
 
   try {
-    const { value } = await Preferences.get({ key: STYTCH_SESSION_KEY });
+    const { value } = await SecureStoragePlugin.get({ key: STYTCH_SESSION_KEY });
     if (value) {
       cachedSession = JSON.parse(value);
       return cachedSession;
     }
   } catch (error) {
-    console.error('[StytchAuth] Failed to load session:', error);
+    // SecureStoragePlugin throws an error if the key doesn't exist
+    // This is expected on first launch, so only log if it's an unexpected error
+    if (error instanceof Error && !error.message.includes('does not exist')) {
+      console.error('[StytchAuth] Failed to load session:', error);
+    }
   }
   return null;
 }
@@ -67,7 +74,14 @@ export async function loadSession(): Promise<StytchSession | null> {
  * Clear Stytch session (logout).
  */
 export async function clearSession(): Promise<void> {
-  await Preferences.remove({ key: STYTCH_SESSION_KEY });
+  try {
+    await SecureStoragePlugin.remove({ key: STYTCH_SESSION_KEY });
+  } catch (error) {
+    // Key may not exist if user was never logged in
+    if (error instanceof Error && !error.message.includes('does not exist')) {
+      console.error('[StytchAuth] Failed to clear session:', error);
+    }
+  }
   cachedSession = null;
   console.log('[StytchAuth] Session cleared');
 }
