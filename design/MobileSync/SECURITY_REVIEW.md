@@ -18,7 +18,7 @@ The desktop app (Electron) and mobile app (Capacitor) share the same security mo
 
 | Severity | Count | Key Issues |
 | --- | --- | --- |
-| CRITICAL | 1 | HTTP fallback in magic links |
+| CRITICAL | 0 | ~~HTTP fallback in magic links~~ **FIXED** |
 | HIGH | 4 | No rate limiting, JWT expiry not checked client-side, JWKS cache too long |
 | MEDIUM | 6 | No forward secrecy, debug logging, weak input validation |
 | LOW | 4 | Missing security headers, no certificate pinning |
@@ -220,7 +220,7 @@ export async function parseAuth(request: Request, config: AuthConfig): Promise<A
 | ID | Severity | Issue | Details | Location |
 | --- | --- | --- | --- | --- |
 | SRV-1 | ~~CRITICAL~~ | ~~CORS wildcard~~ | **FIXED** - Now validates origin against allowlist. Production: `app.nimbalyst.com`, `capacitor://localhost`. Dev: localhost + local IPs | index.ts |
-| SRV-2 | CRITICAL | HTTP fallback | Magic link defaults to `http://localhost:8787` if no redirect_url | index.ts:244-245 |
+| SRV-2 | ~~CRITICAL~~ | ~~HTTP fallback~~ | **FIXED** - Production now requires `redirect_url` and validates HTTPS. Dev mode allows localhost HTTP fallback. | index.ts:332-354 |
 | SRV-3 | HIGH | No rate limiting | `/api/auth/magic-link` and `/auth/refresh` have no rate limits | index.ts:149,208 |
 | SRV-4 | HIGH | JWKS cache 1 hour | Revoked keys continue working for up to 1 hour | auth.ts:13 |
 | SRV-5 | HIGH | Weak DO auth | Durable Objects use simple string parsing, not JWT validation | SessionRoom.ts:154-172 |
@@ -482,9 +482,10 @@ async function encrypt(content: string, key: CryptoKey): Promise<{ encrypted: st
   - Development: localhost ports + local network IPs (192.168.x.x, 10.x.x.x)
   - Configurable via `ALLOWED_ORIGINS` environment variable
 
-3. **[SRV-2] Remove HTTP fallback**
-  - Require HTTPS redirect URLs
-  - Return 400 error if redirect_url missing or not HTTPS
+3. **~~[SRV-2] Remove HTTP fallback~~** **FIXED**
+  - Production now requires `redirect_url` parameter
+  - Production validates `redirect_url` starts with `https://`
+  - Development mode (`ENVIRONMENT=development|local`) allows HTTP localhost fallback
 
 4. **~~[ENC-1] Encrypt queued prompts~~** **DONE**
   - Queued prompts now encrypted with AES-256-GCM before transmission
@@ -498,12 +499,12 @@ async function encrypt(content: string, key: CryptoKey): Promise<{ encrypted: st
 
 5. **[SRV-3] Implement rate limiting**
 -   - Add per-IP rate limiting on `/api/auth/magic-link` (5 req/min)
-  - Add per-session rate limiting on `/auth/refresh`
-  - Use Cloudflare KV or native rate limiting
+-   - Add per-session rate limiting on `/auth/refresh`
+-   - Use Cloudflare KV or native rate limiting
 
 6. **[ELEC-1] Validate JWT expiry client-side**
 -   - Check `exp` claim before using JWT
-  - Trigger refresh before expiry, not after server rejection
+-   - Trigger refresh before expiry, not after server rejection
 
 7. **[SRV-4] Reduce JWKS cache TTL**
   - Reduce from 1 hour to 5 minutes
@@ -517,15 +518,15 @@ async function encrypt(content: string, key: CryptoKey): Promise<{ encrypted: st
 
 10. **[SRV-6] Make audience validation mandatory**
   -     - Require `STYTCH_PROJECT_ID` env var
-    - Fail startup if not configured
+  -     - Fail startup if not configured
 
 11. **[SRV-7] Reduce debug logging**
   -     - Remove JWT payload logging in production
-    - Log only errors and security-relevant events
+  -     - Log only errors and security-relevant events
 
 12. **[QR-1] Server-side QR expiration**
   -     - Track QR generation time on server
-    - Reject pairing attempts after expiration
+  -     - Reject pairing attempts after expiration
 
 ### 8.4 LOW Priority (Future)
 
@@ -624,3 +625,4 @@ None required - uses committed public tokens.
 | 2025-12-08 | Claude | **FIXED SRV-1**: Replaced CORS wildcard with origin allowlist. Production restricts to nimbalyst.com domains. Development allows localhost and local network IPs. |
 | 2025-12-08 | Claude | **Elevated ENC-1, ENC-2 to CRITICAL**: Unencrypted queued prompts and session titles expose user-generated content in plaintext. Both must be fixed before production. |
 | 2025-12-08 | Claude | **FIXED ENC-1, ENC-2**: Implemented E2E encryption for queued prompts and session titles. Both are now encrypted using AES-256-GCM before transmission. Desktop (CollabV3Sync.ts) and mobile (CollabV3SyncContext.tsx) both encrypt on send and decrypt on receive. Plaintext fallback maintained for backwards compatibility during transition. |
+| 2025-12-08 | Claude | **FIXED SRV-2**: Removed HTTP fallback in magic links for production. Production now requires `redirect_url` parameter and validates HTTPS. Dev mode (`ENVIRONMENT=development\ | local`) retains localhost HTTP fallback for local testing. |

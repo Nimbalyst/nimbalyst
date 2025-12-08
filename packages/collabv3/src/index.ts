@@ -329,6 +329,30 @@ async function handleMagicLinkRequest(
     const isTestProject = env.STYTCH_PROJECT_ID.startsWith('project-test-');
     const apiBase = isTestProject ? 'https://test.stytch.com/v1' : 'https://api.stytch.com/v1';
 
+    // Determine magic link redirect URL
+    let magicLinkUrl: string;
+    const isDev = env.ENVIRONMENT === 'development' || env.ENVIRONMENT === 'local';
+
+    if (body.redirect_url) {
+      // Validate redirect URL is HTTPS in production
+      if (!isDev && !body.redirect_url.startsWith('https://')) {
+        return new Response(
+          JSON.stringify({ error: 'redirect_url must use HTTPS' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      magicLinkUrl = body.redirect_url;
+    } else if (isDev) {
+      // Only allow HTTP fallback in development mode
+      magicLinkUrl = 'http://localhost:8787/oauth/callback';
+    } else {
+      // Production requires explicit redirect_url
+      return new Response(
+        JSON.stringify({ error: 'redirect_url is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Call Stytch API with secret key
     const stytchResponse = await fetch(`${apiBase}/magic_links/email/login_or_create`, {
       method: 'POST',
@@ -338,8 +362,8 @@ async function handleMagicLinkRequest(
       },
       body: JSON.stringify({
         email: body.email,
-        login_magic_link_url: body.redirect_url || 'http://localhost:8787/oauth/callback',
-        signup_magic_link_url: body.redirect_url || 'http://localhost:8787/oauth/callback',
+        login_magic_link_url: magicLinkUrl,
+        signup_magic_link_url: magicLinkUrl,
       }),
     });
 
