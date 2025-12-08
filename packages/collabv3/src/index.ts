@@ -17,6 +17,105 @@ import { parseAuth as parseAuthJWT, type AuthConfig, type AuthResult } from './a
 // Re-export Durable Object classes
 export { SessionRoom, IndexRoom };
 
+// ============================================================================
+// CORS Configuration
+// ============================================================================
+
+/**
+ * Get allowed origins based on environment.
+ *
+ * Production: Uses ALLOWED_ORIGINS env var or defaults to secure origins
+ * Development: Includes localhost and local IP addresses for testing
+ */
+function getAllowedOrigins(env: Env): string[] {
+  // If ALLOWED_ORIGINS is set, use it
+  if (env.ALLOWED_ORIGINS) {
+    return env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean);
+  }
+
+  // Development mode: allow localhost and common local IPs
+  if (env.ENVIRONMENT === 'development' || env.ENVIRONMENT === 'local') {
+    return [
+      'http://localhost:5173',      // Vite dev server
+      'http://localhost:5174',      // Vite dev server (alt port)
+      'http://localhost:8787',      // Wrangler dev server
+      'http://127.0.0.1:5173',
+      'http://127.0.0.1:5174',
+      'http://127.0.0.1:8787',
+      'capacitor://localhost',      // Capacitor iOS/Android
+      'http://localhost',           // Generic localhost
+      // Common local network IPs (192.168.x.x)
+      // These are dynamically checked in getCorsHeaders
+    ];
+  }
+
+  // Production defaults
+  return [
+    'https://app.nimbalyst.com',
+    'https://nimbalyst.com',
+    'capacitor://localhost',
+  ];
+}
+
+/**
+ * Check if origin is allowed.
+ * In development, also allows local network IPs (192.168.x.x, 10.x.x.x).
+ */
+function isOriginAllowed(origin: string | null, env: Env): boolean {
+  if (!origin) return false;
+
+  const allowedOrigins = getAllowedOrigins(env);
+
+  // Direct match
+  if (allowedOrigins.includes(origin)) {
+    return true;
+  }
+
+  // In development, allow local network IPs
+  if (env.ENVIRONMENT === 'development' || env.ENVIRONMENT === 'local') {
+    try {
+      const url = new URL(origin);
+      const host = url.hostname;
+      // Allow 192.168.x.x, 10.x.x.x, 172.16-31.x.x (private networks)
+      if (
+        host.startsWith('192.168.') ||
+        host.startsWith('10.') ||
+        /^172\.(1[6-9]|2[0-9]|3[01])\./.test(host)
+      ) {
+        return true;
+      }
+    } catch {
+      // Invalid URL, not allowed
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Get CORS headers for a request.
+ * Returns appropriate Access-Control-Allow-Origin based on request origin.
+ */
+function getCorsHeaders(request: Request, env: Env): Record<string, string> {
+  const origin = request.headers.get('Origin');
+
+  if (isOriginAllowed(origin, env)) {
+    return {
+      'Access-Control-Allow-Origin': origin!,
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Credentials': 'true',
+    };
+  }
+
+  // Origin not allowed - return empty CORS headers (browser will block)
+  // We still include the methods/headers for preflight, but no Allow-Origin
+  return {
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  };
+}
+
 // Room ID parsing
 interface ParsedRoomId {
   type: 'session' | 'index' | 'projects';
@@ -133,12 +232,8 @@ async function handleApiRequest(
   env: Env,
   url: URL
 ): Promise<Response> {
-  // CORS headers for all responses
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  };
+  // Get CORS headers based on request origin
+  const corsHeaders = getCorsHeaders(request, env);
 
   // Handle CORS preflight
   if (request.method === 'OPTIONS') {
@@ -275,12 +370,8 @@ async function handleAuthRoutes(
   env: Env,
   url: URL
 ): Promise<Response> {
-  // CORS headers for auth routes
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  };
+  // Get CORS headers based on request origin
+  const corsHeaders = getCorsHeaders(request, env);
 
   // Handle CORS preflight
   if (request.method === 'OPTIONS') {

@@ -279,4 +279,8 @@ export interface Env {
   STYTCH_PROJECT_ID?: string;
   STYTCH_PUBLIC_TOKEN?: string;
   STYTCH_SECRET_KEY?: string;
+  // CORS configuration
+  // Comma-separated list of allowed origins (e.g., "https://app.nimbalyst.com,capacitor://localhost")
+  // If not set in production, defaults to secure origins
+  ALLOWED_ORIGINS?: string;
 }

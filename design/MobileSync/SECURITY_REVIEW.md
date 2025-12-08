@@ -18,7 +18,7 @@ The desktop app (Electron) and mobile app (Capacitor) share the same security mo
 
 | Severity | Count | Key Issues |
 | --- | --- | --- |
-| CRITICAL | 2 | CORS wildcard, HTTP fallback in magic links |
+| CRITICAL | 1 | HTTP fallback in magic links |
 | HIGH | 6 | No rate limiting, JWT expiry not checked client-side, JWKS cache too long |
 | MEDIUM | 8 | Metadata leakage, debug logging, weak input validation |
 | LOW | 4 | Missing security headers, no certificate pinning |
@@ -215,7 +215,7 @@ export async function parseAuth(request: Request, config: AuthConfig): Promise<A
 
 | ID | Severity | Issue | Details | Location |
 | --- | --- | --- | --- | --- |
-| SRV-1 | CRITICAL | CORS wildcard | `Access-Control-Allow-Origin: *` allows any site to make requests | index.ts:138,280 |
+| SRV-1 | ~~CRITICAL~~ | ~~CORS wildcard~~ | **FIXED** - Now validates origin against allowlist. Production: `app.nimbalyst.com`, `capacitor://localhost`. Dev: localhost + local IPs | index.ts |
 | SRV-2 | CRITICAL | HTTP fallback | Magic link defaults to `http://localhost:8787` if no redirect_url | index.ts:244-245 |
 | SRV-3 | HIGH | No rate limiting | `/api/auth/magic-link` and `/auth/refresh` have no rate limits | index.ts:149,208 |
 | SRV-4 | HIGH | JWKS cache 1 hour | Revoked keys continue working for up to 1 hour | auth.ts:13 |
@@ -477,9 +477,11 @@ queuedPrompts?: Array<{
 -   - Now uses `capacitor-secure-storage-plugin` for iOS Keychain and Android Keystore
   - All credentials and encryption keys are encrypted at rest
 
-2. **[SRV-1] Restrict CORS origins**
--   - Replace `Access-Control-Allow-Origin: *` with specific allowed origins
--   - At minimum: `https://app.nimbalyst.com` and `capacitor://localhost`
+2. **~~[SRV-1] Restrict CORS origins~~** **FIXED**
+  - Now validates origin against allowlist using `getCorsHeaders()`
+  - Production: `https://app.nimbalyst.com`, `https://nimbalyst.com`, `capacitor://localhost`
+  - Development: localhost ports + local network IPs (192.168.x.x, 10.x.x.x)
+  - Configurable via `ALLOWED_ORIGINS` environment variable
 
 3. **[SRV-2] Remove HTTP fallback**
   - Require HTTPS redirect URLs
@@ -620,3 +622,4 @@ None required - uses committed public tokens.
 | 2025-12-05 | Claude | Initial security review document |
 | 2025-12-08 | Claude | Comprehensive security audit: Electron, Capacitor, CollabV3, E2E encryption. Added critical findings for mobile plaintext storage, CORS, metadata leakage. |
 | 2025-12-08 | Claude | **FIXED MOB-1, MOB-2**: Implemented secure storage on Capacitor using `capacitor-secure-storage-plugin`. Mobile credentials now encrypted via iOS Keychain / Android Keystore. |
+| 2025-12-08 | Claude | **FIXED SRV-1**: Replaced CORS wildcard with origin allowlist. Production restricts to nimbalyst.com domains. Development allows localhost and local network IPs. |
