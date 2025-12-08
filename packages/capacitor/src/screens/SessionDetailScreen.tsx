@@ -192,7 +192,8 @@ async function decrypt(encrypted: string, iv: string, key: ForgeKey): Promise<st
     throw new Error('Decryption failed - authentication tag mismatch');
   }
 
-  return decipher.output.toString('utf8');
+  // Cast to any because forge types don't expose the encoding parameter
+  return (decipher.output as { toString(encoding: string): string }).toString('utf8');
 }
 
 interface SessionDetailScreenProps {
@@ -203,8 +204,6 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
   const navigate = useNavigate();
   const { sessionId } = useParams<{ sessionId: string }>();
   const { config, sendIndexUpdate } = useSync();
-
-  console.log('[SessionDetail] Render - sessionId:', sessionId, 'config:', config ? 'present' : 'null');
 
   const [messages, setMessages] = useState<SyncedMessage[]>([]);
   const [metadata, setMetadata] = useState<Partial<WireSessionMetadata>>({});
@@ -220,12 +219,21 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
   const encryptionKeyRef = useRef<ForgeKey | null>(null);
   const lastSequenceRef = useRef<number>(0);
 
+  // Track if initial sync is complete to avoid re-renders during sync
+  const isSyncingRef = useRef(false);
+  // Buffer for batching paginated sync responses
+  const pendingMessagesRef = useRef<SyncedMessage[]>([]);
+  // Ref to hold latest handleServerMessage so WebSocket handler doesn't need it as dep
+  const handleServerMessageRef = useRef<((data: string) => Promise<void>) | null>(null);
+
   // Reset state when sessionId changes
   useEffect(() => {
     setMessages([]);
     setMetadata({});
     setError(null);
     lastSequenceRef.current = 0;
+    pendingMessagesRef.current = [];
+    isSyncingRef.current = false;
   }, [sessionId]);
 
   // Decrypt a message
@@ -279,27 +287,42 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
               }
             }
 
-            setMessages((prev) => {
-              // Merge with existing (avoid duplicates)
-              const existing = new Set(prev.map((m) => m.id));
-              const newMsgs = decrypted.filter((m) => !existing.has(m.id));
-              return [...prev, ...newMsgs].sort((a, b) => a.createdAt - b.createdAt);
-            });
+            // Buffer messages during paginated sync
+            if (message.has_more) {
+              // More pages coming - buffer these messages
+              isSyncingRef.current = true;
+              pendingMessagesRef.current = [...pendingMessagesRef.current, ...decrypted];
 
-            if (message.metadata) {
-              setMetadata(message.metadata);
+              // Store metadata for later
+              if (message.metadata) {
+                setMetadata(message.metadata);
+              }
+
+              // Request next page
+              if (message.cursor && wsRef.current) {
+                const nextRequest: ClientMessage = {
+                  type: 'sync_request',
+                  since_seq: parseInt(message.cursor, 10),
+                };
+                wsRef.current.send(JSON.stringify(nextRequest));
+              }
+            } else {
+              // Final page - commit all buffered messages at once
+              isSyncingRef.current = false;
+              const allDecrypted = [...pendingMessagesRef.current, ...decrypted];
+              pendingMessagesRef.current = [];
+
+              setMessages((prev) => {
+                // Merge with existing (avoid duplicates)
+                const existing = new Set(prev.map((m) => m.id));
+                const newMsgs = allDecrypted.filter((m) => !existing.has(m.id));
+                return [...prev, ...newMsgs].sort((a, b) => a.createdAt - b.createdAt);
+              });
+
+              if (message.metadata) {
+                setMetadata(message.metadata);
+              }
             }
-
-            // Request more if needed
-            if (message.has_more && message.cursor && wsRef.current) {
-              const nextRequest: ClientMessage = {
-                type: 'sync_request',
-                since_seq: parseInt(message.cursor, 10),
-              };
-              wsRef.current.send(JSON.stringify(nextRequest));
-            }
-
-            console.log('[SessionDetail] Synced', decrypted.length, 'messages');
             break;
           }
 
@@ -339,20 +362,22 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
     [decryptMessage]
   );
 
+  // Keep ref updated with latest handler (avoids reconnecting when handler changes)
+  useEffect(() => {
+    handleServerMessageRef.current = handleServerMessage;
+  }, [handleServerMessage]);
+
   // Connect to SessionRoom
   useEffect(() => {
-    console.log('[SessionDetail] useEffect running - config:', !!config, 'sessionId:', sessionId);
-
     if (!config || !sessionId) {
-      console.log('[SessionDetail] Missing config or sessionId, setting error');
       setError('Missing configuration or session ID');
       return;
     }
 
     let ws: WebSocket | null = null;
+    let cancelled = false;
 
     const connect = async () => {
-      console.log('[SessionDetail] connect() called');
       // Derive encryption key
       const passphrase = config.encryptionPassphrase || config.userId;
       encryptionKeyRef.current = await deriveEncryptionKey(
@@ -360,19 +385,19 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
         `nimbalyst:${config.userId}`
       );
 
+      if (cancelled) return;
+
       // Build WebSocket URL
       const baseUrl = config.serverUrl.replace(/\/$/, '');
       const wsBase = baseUrl.replace(/^http/, 'ws');
       const roomId = `user:${config.userId}:session:${sessionId}`;
       const wsUrl = `${wsBase}/sync/${roomId}?user_id=${config.userId}&token=${config.authToken}`;
 
-      console.log('[SessionDetail] Connecting to:', roomId);
-
       ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
-        console.log('[SessionDetail] Connected');
+        if (cancelled) return;
         setConnected(true);
         setError(null);
 
@@ -382,34 +407,37 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
       };
 
       ws.onclose = () => {
-        console.log('[SessionDetail] Disconnected');
+        if (cancelled) return;
         setConnected(false);
         wsRef.current = null;
       };
 
-      ws.onerror = (event) => {
-        console.error('[SessionDetail] WebSocket error:', event);
+      ws.onerror = () => {
+        if (cancelled) return;
         setError('Connection error');
         setConnected(false);
       };
 
       ws.onmessage = (event) => {
-        handleServerMessage(event.data);
+        // Use ref to get latest handler without causing reconnects
+        handleServerMessageRef.current?.(event.data);
       };
     };
 
     connect().catch(err => {
-      console.error('[SessionDetail] Connect error:', err);
-      setError(`Connection failed: ${err.message || err}`);
+      if (!cancelled) {
+        setError(`Connection failed: ${err.message || err}`);
+      }
     });
 
     return () => {
+      cancelled = true;
       if (ws) {
         ws.close();
       }
       wsRef.current = null;
     };
-  }, [config, sessionId, handleServerMessage]);
+  }, [config, sessionId]);
 
   // Convert synced messages to SessionData format
   const sessionData = useMemo((): SessionData => {

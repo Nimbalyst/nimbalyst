@@ -11,6 +11,9 @@ PODS:
     - GoogleMLKit/BarcodeScanning (= 7.0.0)
   - CapacitorPreferences (7.0.2):
     - Capacitor
+  - CapacitorSecureStoragePlugin (0.12.0):
+    - Capacitor
+    - SwiftKeychainWrapper
   - GoogleDataTransport (10.1.0):
     - nanopb (~> 3.30910.0)
     - PromisesObjC (~> 2.4)
@@ -57,6 +60,7 @@ PODS:
   - nanopb/decode (3.30910.0)
   - nanopb/encode (3.30910.0)
   - PromisesObjC (2.4.0)
+  - SwiftKeychainWrapper (4.0.1)
 
 DEPENDENCIES:
   - "Capacitor (from `../../node_modules/@capacitor/ios`)"
@@ -65,6 +69,7 @@ DEPENDENCIES:
   - "CapacitorCordova (from `../../node_modules/@capacitor/ios`)"
   - "CapacitorMlkitBarcodeScanning (from `../../node_modules/@capacitor-mlkit/barcode-scanning`)"
   - "CapacitorPreferences (from `../../node_modules/@capacitor/preferences`)"
+  - CapacitorSecureStoragePlugin (from `../../node_modules/capacitor-secure-storage-plugin`)
 
 SPEC REPOS:
   trunk:
@@ -79,6 +84,7 @@ SPEC REPOS:
     - MLKitVision
     - nanopb
     - PromisesObjC
+    - SwiftKeychainWrapper
 
 EXTERNAL SOURCES:
   Capacitor:
@@ -93,6 +99,8 @@ EXTERNAL SOURCES:
     :path: "../../node_modules/@capacitor-mlkit/barcode-scanning"
   CapacitorPreferences:
     :path: "../../node_modules/@capacitor/preferences"
+  CapacitorSecureStoragePlugin:
+    :path: "../../node_modules/capacitor-secure-storage-plugin"
 
 SPEC CHECKSUMS:
   Capacitor: 358dd1c3fdd71d969547b17e159fd8a7736cb45f
@@ -101,6 +109,7 @@ SPEC CHECKSUMS:
   CapacitorCordova: bf648a636f3c153f652d312ae145fb508b6ffced
   CapacitorMlkitBarcodeScanning: 2d4d1420f3989d6c3a3c21dac796ebb5cad499de
   CapacitorPreferences: 65107ed7437d96ee72583df5763985e3c0ff2bc2
+  CapacitorSecureStoragePlugin: 50de0808ad398aa401e00f9e58adf88c77cb3c25
   GoogleDataTransport: aae35b7ea0c09004c3797d53c8c41f66f219d6a7
   GoogleMLKit: eff9e23ec1d90ea4157a1ee2e32a4f610c5b3318
   GoogleToolboxForMac: d1a2cbf009c453f4d6ded37c105e2f67a32206d8
@@ -112,7 +121,8 @@ SPEC CHECKSUMS:
   MLKitVision: 45e79d68845a2de77e2dd4d7f07947f0ed157b0e
   nanopb: fad817b59e0457d11a5dfbde799381cd727c1275
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
+  SwiftKeychainWrapper: 807ba1d63c33a7d0613288512399cd1eda1e470c
 
-PODFILE CHECKSUM: 60fe7357093fada56bc6d25f9058df7e9fc59121
+PODFILE CHECKSUM: 3e69839269aa3bf6079e2d46e9315b9f6748eaea
 
 COCOAPODS: 1.16.2

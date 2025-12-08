@@ -7,6 +7,7 @@ import {
   type StytchSession,
 } from '../services/StytchAuthService';
 import { loadCredentials } from '../services/CredentialService';
+import forge from 'node-forge';
 
 /**
  * CollabV3 Sync Context for Mobile
@@ -172,106 +173,79 @@ type ServerMessage =
   | { type: 'error'; code: string; message: string };
 
 // ============================================================================
-// Encryption Utilities
+// Encryption Utilities (using node-forge for mobile compatibility)
 // ============================================================================
 
+// Key type for forge-based encryption
+type ForgeKey = string; // Raw key bytes as binary string
+
 /**
- * Convert Uint8Array to base64 string.
+ * Derive encryption key from passphrase using PBKDF2.
+ * Returns raw key bytes as a binary string (compatible with forge).
  */
-function uint8ArrayToBase64(bytes: Uint8Array): string {
-  if (bytes.length < 1024) {
-    return btoa(String.fromCharCode(...bytes));
-  }
-  const CHUNK_SIZE = 8192;
-  let result = '';
-  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
-    const chunk = bytes.subarray(i, Math.min(i + CHUNK_SIZE, bytes.length));
-    result += String.fromCharCode(...chunk);
-  }
-  return btoa(result);
+async function deriveEncryptionKey(passphrase: string, salt: string): Promise<ForgeKey> {
+  // Use forge's PBKDF2 - returns binary string
+  const key = forge.pkcs5.pbkdf2(passphrase, salt, 100000, 32, 'sha256');
+  return key;
 }
 
 /**
- * Convert base64 string to Uint8Array backed by ArrayBuffer (not SharedArrayBuffer).
- */
-function base64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
-  const binary = atob(base64);
-  const buffer = new ArrayBuffer(binary.length);
-  const bytes = new Uint8Array(buffer);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
-
-/**
- * Derive an encryption key from a passphrase and salt using PBKDF2.
- */
-async function deriveEncryptionKey(passphrase: string, salt: string): Promise<CryptoKey> {
-  const encoder = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey(
-    'raw',
-    encoder.encode(passphrase),
-    'PBKDF2',
-    false,
-    ['deriveKey']
-  );
-
-  return crypto.subtle.deriveKey(
-    {
-      name: 'PBKDF2',
-      salt: encoder.encode(salt),
-      iterations: 100000,
-      hash: 'SHA-256',
-    },
-    keyMaterial,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt']
-  );
-}
-
-/**
- * Encrypt a string using AES-GCM.
+ * Encrypt content using AES-GCM.
  */
 async function encrypt(
   content: string,
-  key: CryptoKey
+  key: ForgeKey
 ): Promise<{ encrypted: string; iv: string }> {
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const encoder = new TextEncoder();
-  const data = encoder.encode(content);
+  // Generate random IV (12 bytes for GCM)
+  const iv = forge.random.getBytesSync(12);
 
-  const encrypted = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
-    key,
-    data
-  );
+  // Create cipher
+  const cipher = forge.cipher.createCipher('AES-GCM', key);
+  cipher.start({ iv, tagLength: 128 });
+  cipher.update(forge.util.createBuffer(content, 'utf8'));
+  cipher.finish();
+
+  // Get encrypted data and auth tag
+  const encrypted = cipher.output.getBytes();
+  const tag = cipher.mode.tag.getBytes();
+
+  // Combine encrypted + tag (this is how Web Crypto API returns it)
+  const combined = encrypted + tag;
 
   return {
-    encrypted: uint8ArrayToBase64(new Uint8Array(encrypted)),
-    iv: uint8ArrayToBase64(iv),
+    encrypted: forge.util.encode64(combined),
+    iv: forge.util.encode64(iv),
   };
 }
 
 /**
- * Decrypt a string using AES-GCM.
+ * Decrypt content using AES-GCM.
  */
-async function decrypt(
-  encrypted: string,
-  iv: string,
-  key: CryptoKey
-): Promise<string> {
-  const encryptedBytes = base64ToUint8Array(encrypted);
-  const ivBytes = base64ToUint8Array(iv);
+async function decrypt(encrypted: string, iv: string, key: ForgeKey): Promise<string> {
+  const encryptedBytes = forge.util.decode64(encrypted);
+  const ivBytes = forge.util.decode64(iv);
 
-  const decrypted = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: ivBytes },
-    key,
-    encryptedBytes
-  );
+  // Split encrypted data and tag (tag is last 16 bytes)
+  const tagLength = 16;
+  const ciphertext = encryptedBytes.slice(0, -tagLength);
+  const tag = encryptedBytes.slice(-tagLength);
 
-  return new TextDecoder().decode(decrypted);
+  // Create decipher
+  const decipher = forge.cipher.createDecipher('AES-GCM', key);
+  decipher.start({
+    iv: ivBytes,
+    tagLength: 128,
+    tag: forge.util.createBuffer(tag),
+  });
+  decipher.update(forge.util.createBuffer(ciphertext));
+
+  const success = decipher.finish();
+  if (!success) {
+    throw new Error('Decryption failed - authentication tag mismatch');
+  }
+
+  // Cast to any because forge types don't expose the encoding parameter
+  return (decipher.output as { toString(encoding: string): string }).toString('utf8');
 }
 
 /**
@@ -279,7 +253,7 @@ async function decrypt(
  */
 async function encryptQueuedPrompts(
   prompts: PlaintextQueuedPrompt[],
-  key: CryptoKey
+  key: ForgeKey
 ): Promise<EncryptedQueuedPrompt[]> {
   return Promise.all(
     prompts.map(async (prompt) => {
@@ -299,7 +273,7 @@ async function encryptQueuedPrompts(
  */
 async function decryptQueuedPrompts(
   prompts: EncryptedQueuedPrompt[],
-  key: CryptoKey
+  key: ForgeKey
 ): Promise<PlaintextQueuedPrompt[]> {
   return Promise.all(
     prompts.map(async (prompt) => {
@@ -318,7 +292,7 @@ async function decryptQueuedPrompts(
  */
 async function encryptTitle(
   title: string,
-  key: CryptoKey
+  key: ForgeKey
 ): Promise<{ encrypted_title: string; title_iv: string }> {
   const { encrypted, iv } = await encrypt(title, key);
   return {
@@ -333,7 +307,7 @@ async function encryptTitle(
 async function decryptTitle(
   encrypted_title: string,
   title_iv: string,
-  key: CryptoKey
+  key: ForgeKey
 ): Promise<string> {
   return decrypt(encrypted_title, title_iv, key);
 }
@@ -498,7 +472,7 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const deviceAnnounceIntervalRef = useRef<NodeJS.Timeout | null>(null);
   // Encryption key derived from credentials
-  const encryptionKeyRef = useRef<CryptoKey | null>(null);
+  const encryptionKeyRef = useRef<ForgeKey | null>(null);
 
   // Check auth and pairing status on mount
   useEffect(() => {
@@ -540,15 +514,22 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
   const convertSession = useCallback(async (server: ServerSessionEntry): Promise<SessionIndexEntry> => {
     // Decrypt title - encrypted titles are required
     let title: string;
-    if (server.encrypted_title && server.title_iv && encryptionKeyRef.current) {
-      try {
-        title = await decryptTitle(server.encrypted_title, server.title_iv, encryptionKeyRef.current);
-      } catch (err) {
-        console.error('[CollabV3] Failed to decrypt session title:', err);
-        title = 'Untitled';
+    if (server.encrypted_title && server.title_iv) {
+      if (!encryptionKeyRef.current) {
+        console.error('[CollabV3] Cannot decrypt title - no encryption key available for session:', server.session_id);
+        title = 'Untitled (no key)';
+      } else {
+        try {
+          title = await decryptTitle(server.encrypted_title, server.title_iv, encryptionKeyRef.current);
+        } catch (err) {
+          console.error('[CollabV3] Failed to decrypt session title for', server.session_id, ':', err);
+          title = 'Untitled (decrypt failed)';
+        }
       }
     } else {
-      // No encrypted title - show as untitled until desktop resyncs
+      // No encrypted title from server - desktop hasn't synced title yet
+      console.warn('[CollabV3] No encrypted title from server for session:', server.session_id,
+        'encrypted_title:', !!server.encrypted_title, 'title_iv:', !!server.title_iv);
       title = 'Untitled';
     }
 
