@@ -1,11 +1,23 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import type { SessionIndexEntry as RuntimeSessionIndexEntry } from '@nimbalyst/runtime/sync';
+import {
+  getSessionJwt,
+  isAuthenticated,
+  loadSession,
+  type StytchSession,
+} from '../services/StytchAuthService';
+import { loadCredentials } from '../services/CredentialService';
 
 /**
  * CollabV3 Sync Context for Mobile
  *
  * Connects to the CollabV3 sync server to fetch session list and sync messages.
  * Uses simple WebSocket protocol instead of Y.js CRDTs.
+ *
+ * Authentication:
+ * - Uses Stytch JWT for server authentication (obtained via Google OAuth on mobile)
+ * - User ID is extracted from the JWT 'sub' claim
+ * - Encryption key seed is obtained via QR code pairing with desktop
  */
 
 // ============================================================================
@@ -22,13 +34,6 @@ export interface Project {
   sessionCount: number;
 }
 
-export interface SyncConfig {
-  serverUrl: string;
-  userId: string;
-  authToken: string;
-  encryptionPassphrase?: string;
-}
-
 export interface SyncStatus {
   connected: boolean;
   syncing: boolean;
@@ -36,9 +41,25 @@ export interface SyncStatus {
   error: string | null;
 }
 
+/** Configuration needed for session room connections */
+export interface SyncConnectionConfig {
+  serverUrl: string;
+  userId: string;
+  authToken: string;
+  encryptionPassphrase: string;
+}
+
 interface SyncContextValue {
-  config: SyncConfig | null;
-  setConfig: (config: SyncConfig | null) => void;
+  /** Whether user is authenticated with Stytch */
+  isAuthenticated: boolean;
+  /** Whether QR pairing is complete (has encryption key) */
+  isPaired: boolean;
+  /** Whether both authenticated and paired (ready to sync) */
+  isConfigured: boolean;
+  /** Server URL from QR pairing */
+  serverUrl: string | null;
+  /** Connection config for session rooms (null if not connected) */
+  config: SyncConnectionConfig | null;
   status: SyncStatus;
   allSessions: SessionIndexEntry[];
   sessions: SessionIndexEntry[];
@@ -46,7 +67,6 @@ interface SyncContextValue {
   selectedProject: Project | null;
   selectProject: (project: Project | null) => void;
   refresh: () => void;
-  isConfigured: boolean;
   /** Whether we've received the initial data from the server (true even if sessions array is empty) */
   hasReceivedInitialData: boolean;
   /**
@@ -58,6 +78,8 @@ interface SyncContextValue {
     pendingExecution?: { messageId: string; sentAt: number; sentBy: 'mobile' | 'desktop' };
     queuedPrompts?: Array<{ id: string; prompt: string; timestamp: number }>;
   }) => void;
+  /** Trigger a reconnection (e.g., after login) */
+  reconnect: () => void;
 }
 
 // ============================================================================
@@ -130,10 +152,42 @@ type ServerMessage =
   | { type: 'error'; code: string; message: string };
 
 // ============================================================================
+// JWT Utilities
+// ============================================================================
+
+/**
+ * Extract user ID from a JWT's 'sub' claim.
+ * The JWT is a base64url encoded string in the format: header.payload.signature
+ */
+function extractUserIdFromJwt(jwt: string): string {
+  try {
+    const parts = jwt.split('.');
+    if (parts.length !== 3) {
+      throw new Error('Invalid JWT format');
+    }
+
+    // Decode the payload (second part)
+    const payload = parts[1];
+    // Add padding if needed for base64 decoding
+    const padded = payload + '='.repeat((4 - (payload.length % 4)) % 4);
+    const decoded = atob(padded.replace(/-/g, '+').replace(/_/g, '/'));
+    const parsed = JSON.parse(decoded);
+
+    if (!parsed.sub) {
+      throw new Error('JWT missing sub claim');
+    }
+
+    return parsed.sub;
+  } catch (error) {
+    console.error('[CollabV3] Failed to extract user ID from JWT:', error);
+    throw new Error('Invalid JWT: cannot extract user ID');
+  }
+}
+
+// ============================================================================
 // Storage
 // ============================================================================
 
-const STORAGE_KEY = 'nimbalyst_sync_config_v3';
 const SELECTED_PROJECT_KEY = 'nimbalyst_selected_project';
 const DEVICE_ID_KEY = 'nimbalyst_device_id';
 
@@ -211,34 +265,6 @@ function getDeviceInfo(): DeviceInfo {
   };
 }
 
-function loadConfig(): SyncConfig | null {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      return JSON.parse(stored);
-    }
-    // Try legacy key
-    const legacy = localStorage.getItem('nimbalyst_sync_config');
-    if (legacy) {
-      const legacyConfig = JSON.parse(legacy);
-      // Migrate to v3 key
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(legacyConfig));
-      return legacyConfig;
-    }
-  } catch {
-    // Ignore parse errors
-  }
-  return null;
-}
-
-function saveConfig(config: SyncConfig | null) {
-  if (config) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
-  } else {
-    localStorage.removeItem(STORAGE_KEY);
-  }
-}
-
 function loadSelectedProject(): string | null {
   try {
     return localStorage.getItem(SELECTED_PROJECT_KEY);
@@ -262,7 +288,9 @@ function saveSelectedProject(projectId: string | null) {
 const SyncContext = createContext<SyncContextValue | null>(null);
 
 export function CollabV3SyncProvider({ children }: { children: React.ReactNode }) {
-  const [config, setConfigState] = useState<SyncConfig | null>(() => loadConfig());
+  const [authenticated, setAuthenticated] = useState(false);
+  const [paired, setPaired] = useState(false);
+  const [serverUrl, setServerUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<SyncStatus>({
     connected: false,
     syncing: false,
@@ -276,14 +304,24 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
   );
   // Track whether we've received initial data from the server
   const [hasReceivedInitialData, setHasReceivedInitialData] = useState(false);
+  // Connection config for session rooms (set when connected)
+  const [connectionConfig, setConnectionConfig] = useState<SyncConnectionConfig | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const deviceAnnounceIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const setConfig = useCallback((newConfig: SyncConfig | null) => {
-    setConfigState(newConfig);
-    saveConfig(newConfig);
+  // Check auth and pairing status on mount
+  useEffect(() => {
+    async function checkStatus() {
+      const authed = await isAuthenticated();
+      setAuthenticated(authed);
+
+      const creds = await loadCredentials();
+      setPaired(creds !== null);
+      setServerUrl(creds?.serverUrl ?? null);
+    }
+    checkStatus();
   }, []);
 
   // Filter sessions by selected project
@@ -350,6 +388,7 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
 
         switch (message.type) {
           case 'index_sync_response': {
+            console.log('[CollabV3] Received index_sync_response with', message.sessions.length, 'sessions and', message.projects.length, 'projects');
             const convertedSessions = message.sessions.map(convertSession);
             const convertedProjects = message.projects.map(convertProject);
 
@@ -367,13 +406,13 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
               lastSyncedAt: Date.now(),
             }));
 
-            // console.log(
-            //   '[CollabV3] Synced',
-            //   convertedSessions.length,
-            //   'sessions and',
-            //   convertedProjects.length,
-            //   'projects'
-            // );
+            console.log(
+              '[CollabV3] Synced',
+              convertedSessions.length,
+              'sessions and',
+              convertedProjects.length,
+              'projects'
+            );
             break;
           }
 
@@ -473,8 +512,12 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
   );
 
   // Connect to IndexRoom
-  const connect = useCallback(() => {
-    if (!config) return;
+  const connect = useCallback(async () => {
+    // Need both auth and pairing
+    if (!authenticated || !serverUrl) {
+      console.log('[CollabV3] Cannot connect - not authenticated or not paired');
+      return;
+    }
 
     // Clear any pending reconnect
     if (reconnectTimeoutRef.current) {
@@ -488,13 +531,71 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
       wsRef.current = null;
     }
 
-    // Build WebSocket URL
-    const baseUrl = config.serverUrl.replace(/\/$/, '');
-    const wsBase = baseUrl.replace(/^http/, 'ws');
-    const roomId = `user:${config.userId}:index`;
-    const wsUrl = `${wsBase}/sync/${roomId}?user_id=${config.userId}&token=${config.authToken}`;
+    // Get credentials for encryption key
+    const creds = await loadCredentials();
+    if (!creds) {
+      console.error('[CollabV3] No credentials available, cannot connect');
+      setConnectionConfig(null);
+      return;
+    }
 
-    // console.log('[CollabV3] Connecting to:', wsUrl);
+    // Get fresh JWT
+    let jwt: string;
+    try {
+      const freshJwt = await getSessionJwt(serverUrl);
+      if (!freshJwt) {
+        console.error('[CollabV3] No JWT available, cannot connect');
+        setStatus((prev) => ({
+          ...prev,
+          connected: false,
+          error: 'Not authenticated',
+        }));
+        setConnectionConfig(null);
+        return;
+      }
+      jwt = freshJwt;
+    } catch (error) {
+      console.error('[CollabV3] Failed to get JWT:', error);
+      setStatus((prev) => ({
+        ...prev,
+        connected: false,
+        error: 'Authentication error',
+      }));
+      setConnectionConfig(null);
+      return;
+    }
+
+    // Extract user ID from JWT
+    let userId: string;
+    try {
+      userId = extractUserIdFromJwt(jwt);
+    } catch (error) {
+      console.error('[CollabV3] Invalid JWT, cannot connect:', error);
+      setStatus((prev) => ({
+        ...prev,
+        connected: false,
+        error: 'Invalid authentication token',
+      }));
+      setConnectionConfig(null);
+      return;
+    }
+
+    // Set connection config for session rooms
+    setConnectionConfig({
+      serverUrl,
+      userId,
+      authToken: jwt,
+      encryptionPassphrase: creds.encryptionKeySeed,
+    });
+
+    // Build WebSocket URL
+    const baseUrl = serverUrl.replace(/\/$/, '');
+    const wsBase = baseUrl.replace(/^http/, 'ws');
+    const roomId = `user:${userId}:index`;
+    // Pass JWT via query parameter (WebSocket doesn't support custom headers in browsers)
+    const wsUrl = `${wsBase}/sync/${roomId}?token=${encodeURIComponent(jwt)}`;
+
+    console.log('[CollabV3] Connecting to room:', roomId, 'userId:', userId);
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
@@ -549,7 +650,7 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
 
       // Attempt reconnect after 5 seconds
       reconnectTimeoutRef.current = setTimeout(() => {
-        if (config) {
+        if (authenticated && serverUrl) {
           // console.log('[CollabV3] Attempting reconnect...');
           connect();
         }
@@ -568,7 +669,7 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
     ws.onmessage = (event) => {
       handleMessage(event.data);
     };
-  }, [config, handleMessage, requestSync]);
+  }, [authenticated, serverUrl, handleMessage, requestSync]);
 
   // Disconnect
   const disconnect = useCallback(() => {
@@ -584,6 +685,7 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
       wsRef.current.close();
       wsRef.current = null;
     }
+    setConnectionConfig(null);
   }, []);
 
   // Refresh
@@ -591,10 +693,33 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
     requestSync();
   }, [requestSync]);
 
-  // Connect when config changes
+  // Reconnect (e.g., after login)
+  const reconnect = useCallback(async () => {
+    // Refresh auth/pairing status
+    const authed = await isAuthenticated();
+    setAuthenticated(authed);
+
+    const creds = await loadCredentials();
+    setPaired(creds !== null);
+    setServerUrl(creds?.serverUrl ?? null);
+
+    // Reset state
+    setHasReceivedInitialData(false);
+
+    // Disconnect and reconnect
+    disconnect();
+    if (authed && creds?.serverUrl) {
+      // Small delay to ensure disconnect completes
+      setTimeout(() => {
+        connect();
+      }, 100);
+    }
+  }, [connect, disconnect]);
+
+  // Connect when both authenticated and paired
   useEffect(() => {
-    if (config) {
-      // Reset initial data flag when reconnecting with new config
+    if (authenticated && paired && serverUrl) {
+      // Reset initial data flag when reconnecting
       setHasReceivedInitialData(false);
       connect();
     } else {
@@ -613,12 +738,12 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
     return () => {
       disconnect();
     };
-  }, [config, connect, disconnect]);
+  }, [authenticated, paired, serverUrl, connect, disconnect]);
 
   // Handle app visibility changes (reconnect when app comes to foreground)
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && config && !wsRef.current) {
+      if (document.visibilityState === 'visible' && authenticated && paired && serverUrl && !wsRef.current) {
         // console.log('[CollabV3] App became visible, reconnecting...');
         connect();
       }
@@ -628,11 +753,14 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [config, connect]);
+  }, [authenticated, paired, serverUrl, connect]);
 
   const value: SyncContextValue = {
-    config,
-    setConfig,
+    isAuthenticated: authenticated,
+    isPaired: paired,
+    isConfigured: authenticated && paired,
+    serverUrl,
+    config: connectionConfig,
     status,
     allSessions,
     sessions,
@@ -640,9 +768,9 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
     selectedProject,
     selectProject,
     refresh,
-    isConfigured: config !== null,
     hasReceivedInitialData,
     sendIndexUpdate,
+    reconnect,
   };
 
   return <SyncContext.Provider value={value}>{children}</SyncContext.Provider>;

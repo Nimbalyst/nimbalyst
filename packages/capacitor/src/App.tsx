@@ -1,13 +1,34 @@
-import React from 'react';
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { CollabV3SyncProvider } from './contexts/CollabV3SyncContext';
+import React, { useEffect, useCallback } from 'react';
+import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { CollabV3SyncProvider, useSync } from './contexts/CollabV3SyncContext';
 import { SessionListScreen } from './screens/SessionListScreen';
 import { SessionDetailScreen } from './screens/SessionDetailScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { SplitView, useIsSplitView } from './components/SplitView';
+import { setupDeepLinkListener, type StytchSession } from './services/StytchAuthService';
 
 function AppContent() {
   const isSplitView = useIsSplitView();
+  const navigate = useNavigate();
+  const { reconnect } = useSync();
+
+  // Set up deep link listener for auth callbacks
+  useEffect(() => {
+    const handleAuthSuccess = async (session: StytchSession) => {
+      console.log('[App] Auth success, reconnecting sync...');
+      await reconnect();
+      // Navigate to home after successful auth
+      navigate('/');
+    };
+
+    const handleAuthError = (error: string) => {
+      console.error('[App] Auth error:', error);
+      // Stay on current page, error will be shown
+    };
+
+    const cleanup = setupDeepLinkListener(handleAuthSuccess, handleAuthError);
+    return cleanup;
+  }, [reconnect, navigate]);
 
   // On iPad, the session list is in the sidebar
   // So the main area shows either session detail, settings, or an empty state

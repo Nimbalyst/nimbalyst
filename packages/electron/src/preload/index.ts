@@ -549,11 +549,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Credentials (for sync and mobile pairing)
   credentials: {
-    getUserId: () => ipcRenderer.invoke('credentials:get-user-id'),
     get: () => ipcRenderer.invoke('credentials:get'),
     reset: () => ipcRenderer.invoke('credentials:reset'),
-    generateQRPayload: (serverUrl: string, expiresInMinutes?: number) =>
-      ipcRenderer.invoke('credentials:generate-qr-payload', serverUrl, expiresInMinutes),
+    generateQRPayload: (serverUrl: string) =>
+      ipcRenderer.invoke('credentials:generate-qr-payload', serverUrl),
     isSecure: () => ipcRenderer.invoke('credentials:is-secure'),
   },
 
@@ -572,11 +571,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     signOut: () => ipcRenderer.invoke('stytch:sign-out'),
     getSessionJwt: () => ipcRenderer.invoke('stytch:get-session-jwt'),
     refreshSession: () => ipcRenderer.invoke('stytch:refresh-session'),
-    issueDeviceToken: (deviceName: string, deviceType?: 'mobile' | 'tablet') =>
-      ipcRenderer.invoke('stytch:issue-device-token', deviceName, deviceType),
-    getDeviceTokens: () => ipcRenderer.invoke('stytch:get-device-tokens'),
-    revokeDeviceToken: (deviceId: string) =>
-      ipcRenderer.invoke('stytch:revoke-device-token', deviceId),
     subscribeAuthState: () => ipcRenderer.invoke('stytch:subscribe-auth-state'),
     onAuthStateChange: (callback: (state: any) => void) => {
       const handler = (_event: any, state: any) => callback(state);

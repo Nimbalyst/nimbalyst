@@ -4,8 +4,7 @@
  * This service handles:
  * - Google OAuth sign-in/sign-up (via browser redirect to collabv3 server)
  * - Email magic link authentication (via collabv3 server)
- * - Session token management
- * - Device token issuance for mobile pairing
+ * - Session token/JWT management
  *
  * Security architecture:
  * - All authentication flows go through the collabv3 Cloudflare Worker
@@ -13,15 +12,15 @@
  * - OAuth flow: opens browser -> collabv3/auth/login/google -> Stytch -> collabv3/auth/callback -> nimbalyst:// deep link
  * - Magic links: collabv3 sends email (has secret key), callback to collabv3, then deep link to app
  * - Session tokens received via deep link are stored securely using Electron's safeStorage
+ * - JWT is used for sync server authentication
  *
- * Deep link format: nimbalyst://auth/callback?session_token=...&user_id=...&email=...
+ * Deep link format: nimbalyst://auth/callback?session_token=...&session_jwt=...&user_id=...&email=...
  */
 
 import { safeStorage, shell, net } from 'electron';
 import { app } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as crypto from 'crypto';
 import { logger } from '../utils/logger';
 
 // Stytch types
@@ -69,15 +68,6 @@ interface StoredStytchCredentials {
   expiresAt: number;
 }
 
-interface DeviceToken {
-  token: string;
-  deviceId: string;
-  userId: string;
-  createdAt: number;
-  lastUsedAt: number;
-  deviceName?: string;
-  deviceType: 'mobile' | 'tablet' | 'desktop';
-}
 
 // Stytch configuration - PUBLIC TOKEN ONLY, no secret key!
 interface StytchConfig {
@@ -88,7 +78,6 @@ interface StytchConfig {
 
 // File names for persistent storage
 const STYTCH_CREDENTIALS_FILE = 'stytch-credentials.enc';
-const DEVICE_TOKENS_FILE = 'device-tokens.enc';
 
 // Singleton state
 let authState: StytchAuthState = {
@@ -100,7 +89,6 @@ let authState: StytchAuthState = {
 };
 
 let stytchConfig: StytchConfig | null = null;
-let deviceTokens: Map<string, DeviceToken> = new Map();
 
 // Event listeners for auth state changes
 type AuthStateListener = (state: StytchAuthState) => void;
@@ -114,13 +102,6 @@ function getCredentialsPath(): string {
   return path.join(userDataPath, STYTCH_CREDENTIALS_FILE);
 }
 
-/**
- * Get the path to the device tokens file.
- */
-function getDeviceTokensPath(): string {
-  const userDataPath = app.getPath('userData');
-  return path.join(userDataPath, DEVICE_TOKENS_FILE);
-}
 
 /**
  * Check if safeStorage is available for encryption.
@@ -187,49 +168,6 @@ function clearStytchCredentials(): void {
   }
 }
 
-/**
- * Save device tokens securely.
- */
-function saveDeviceTokens(): void {
-  const tokensPath = getDeviceTokensPath();
-  const jsonData = JSON.stringify(Array.from(deviceTokens.entries()));
-
-  if (isSafeStorageAvailable()) {
-    const encrypted = safeStorage.encryptString(jsonData);
-    fs.writeFileSync(tokensPath, encrypted);
-  } else {
-    fs.writeFileSync(tokensPath, jsonData, 'utf8');
-  }
-}
-
-/**
- * Load device tokens from secure storage.
- */
-function loadDeviceTokens(): void {
-  const tokensPath = getDeviceTokensPath();
-
-  if (!fs.existsSync(tokensPath)) {
-    return;
-  }
-
-  try {
-    const fileData = fs.readFileSync(tokensPath);
-    let jsonData: string;
-
-    if (isSafeStorageAvailable()) {
-      jsonData = safeStorage.decryptString(fileData);
-    } else {
-      jsonData = fileData.toString('utf8');
-    }
-
-    const entries: [string, DeviceToken][] = JSON.parse(jsonData);
-    deviceTokens = new Map(entries);
-    logger.main.info('[StytchAuthService] Loaded', deviceTokens.size, 'device tokens');
-  } catch (error) {
-    logger.main.error('[StytchAuthService] Failed to load device tokens:', error);
-    deviceTokens = new Map();
-  }
-}
 
 /**
  * Notify all listeners of auth state change.
@@ -253,19 +191,6 @@ function updateAuthState(update: Partial<StytchAuthState>): void {
   notifyAuthStateChange();
 }
 
-/**
- * Generate a secure random device token.
- */
-function generateDeviceToken(): string {
-  return crypto.randomBytes(32).toString('base64url');
-}
-
-/**
- * Generate a device ID for mobile pairing.
- */
-function generateDeviceId(): string {
-  return crypto.randomUUID();
-}
 
 // ============================================================================
 // Public API
@@ -279,13 +204,15 @@ function generateDeviceId(): string {
  */
 export function initializeStytchAuth(config: StytchConfig): void {
   stytchConfig = config;
-  loadDeviceTokens();
 
   logger.main.info('[StytchAuthService] Initialized with project:', config.projectId);
 
   // Try to restore session from saved credentials
   const savedCredentials = loadStytchCredentials();
   if (savedCredentials && savedCredentials.expiresAt > Date.now()) {
+    // Validate JWT format (must be 3 parts separated by dots)
+    const hasValidJwt = savedCredentials.sessionJwt && savedCredentials.sessionJwt.split('.').length === 3;
+
     authState = {
       isAuthenticated: true,
       user: savedCredentials.userId ? {
@@ -296,9 +223,25 @@ export function initializeStytchAuth(config: StytchConfig): void {
       } : null,
       session: null,
       sessionToken: savedCredentials.sessionToken,
-      sessionJwt: savedCredentials.sessionJwt,
+      sessionJwt: hasValidJwt ? savedCredentials.sessionJwt : null,
     };
-    logger.main.info('[StytchAuthService] Restored session for user:', savedCredentials.userId, savedCredentials.email);
+    logger.main.info('[StytchAuthService] Restored session for user:', savedCredentials.userId, savedCredentials.email, {
+      hasValidJwt,
+    });
+
+    // If JWT is missing or invalid, try to refresh the session
+    if (!hasValidJwt) {
+      logger.main.info('[StytchAuthService] Stored session has no valid JWT - will attempt refresh');
+      // Schedule refresh after initialization completes (don't block startup)
+      setImmediate(async () => {
+        const refreshed = await refreshSession();
+        if (refreshed) {
+          logger.main.info('[StytchAuthService] Session refreshed on startup - JWT now available');
+        } else {
+          logger.main.warn('[StytchAuthService] Session refresh failed - user may need to re-authenticate');
+        }
+      });
+    }
   } else if (savedCredentials) {
     logger.main.info('[StytchAuthService] Saved session has expired, clearing');
     clearStytchCredentials();
@@ -328,6 +271,12 @@ export async function handleAuthCallback(params: {
     }
   }
 
+  // Validate JWT format (must be 3 parts separated by dots)
+  const validatedJwt = sessionJwt && sessionJwt.split('.').length === 3 ? sessionJwt : null;
+  if (sessionJwt && !validatedJwt) {
+    logger.main.warn('[StytchAuthService] Auth callback received invalid JWT format');
+  }
+
   // Update auth state
   updateAuthState({
     isAuthenticated: true,
@@ -339,13 +288,13 @@ export async function handleAuthCallback(params: {
     } : null,
     session: null,
     sessionToken,
-    sessionJwt: sessionJwt || null,
+    sessionJwt: validatedJwt,
   });
 
   // Save credentials for persistence
   saveStytchCredentials({
     sessionToken,
-    sessionJwt: sessionJwt || '',
+    sessionJwt: validatedJwt || '',
     userId: userId || '',
     email: email || '',
     expiresAt: expiresAtMs,
@@ -388,6 +337,13 @@ export function isAuthenticated(): boolean {
  */
 export function getStytchUserId(): string | null {
   return authState.user?.user_id || null;
+}
+
+/**
+ * Get the current user's email address.
+ */
+export function getUserEmail(): string | null {
+  return authState.user?.emails?.[0]?.email || null;
 }
 
 /**
@@ -525,16 +481,137 @@ export async function signOut(): Promise<void> {
 }
 
 /**
- * Validate and refresh the current session.
- * Note: This requires the session_token from a previous auth.
+ * Refresh the current session to get a fresh JWT.
+ * Calls the collabv3 server's /auth/refresh endpoint.
+ *
+ * @param serverUrl - The sync server URL (e.g., 'https://sync.nimbalyst.com')
+ * @returns true if refresh succeeded, false if session expired or failed
+ */
+export async function refreshSession(serverUrl?: string): Promise<boolean> {
+  const creds = loadStytchCredentials();
+  if (!creds?.sessionToken) {
+    logger.main.warn('[StytchAuthService] Cannot refresh - no session token');
+    return false;
+  }
+
+  // Determine server URL
+  const syncServerUrl = serverUrl || getSyncServerUrl();
+  if (!syncServerUrl) {
+    logger.main.warn('[StytchAuthService] Cannot refresh - no server URL configured');
+    return false;
+  }
+
+  // Convert ws:// to http:// for API calls
+  const httpUrl = syncServerUrl
+    .replace(/^ws:/, 'http:')
+    .replace(/^wss:/, 'https:')
+    .replace(/\/$/, '');
+
+  try {
+    logger.main.info('[StytchAuthService] Refreshing session...');
+
+    const response = await net.fetch(`${httpUrl}/auth/refresh`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        session_token: creds.sessionToken,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({})) as { expired?: boolean; error?: string };
+      logger.main.warn('[StytchAuthService] Session refresh failed:', errorData.error || response.status);
+
+      // If session is expired, sign out
+      if (errorData.expired || response.status === 401) {
+        await signOut();
+      }
+      return false;
+    }
+
+    const data = await response.json() as {
+      session_token: string;
+      session_jwt: string;
+      user_id: string;
+      email?: string;
+      expires_at: string;
+    };
+
+    // Validate the new JWT
+    if (!data.session_jwt || data.session_jwt.split('.').length !== 3) {
+      logger.main.error('[StytchAuthService] Refresh returned invalid JWT');
+      return false;
+    }
+
+    // Calculate expiry time
+    let expiresAtMs = Date.now() + (7 * 24 * 60 * 60 * 1000); // Default: 1 week
+    if (data.expires_at) {
+      try {
+        expiresAtMs = new Date(data.expires_at).getTime();
+      } catch {
+        // Use default
+      }
+    }
+
+    // Update auth state with new JWT
+    updateAuthState({
+      isAuthenticated: true,
+      user: data.user_id ? {
+        user_id: data.user_id,
+        emails: data.email ? [{ email_id: '', email: data.email, verified: true }] : [],
+        created_at: new Date().toISOString(),
+        status: 'active',
+      } : authState.user,
+      sessionToken: data.session_token,
+      sessionJwt: data.session_jwt,
+    });
+
+    // Save updated credentials
+    saveStytchCredentials({
+      sessionToken: data.session_token,
+      sessionJwt: data.session_jwt,
+      userId: data.user_id || creds.userId,
+      email: data.email || creds.email,
+      expiresAt: expiresAtMs,
+    });
+
+    logger.main.info('[StytchAuthService] Session refreshed successfully');
+    return true;
+  } catch (error) {
+    logger.main.error('[StytchAuthService] Session refresh error:', error);
+    return false;
+  }
+}
+
+/**
+ * Get the sync server URL from settings.
+ */
+function getSyncServerUrl(): string | null {
+  try {
+    // Import dynamically to avoid circular dependency
+    const { getSessionSyncConfig } = require('../utils/store');
+    const config = getSessionSyncConfig();
+    return config?.serverUrl || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Validate and refresh the current session if needed.
+ * @deprecated Use refreshSession() instead for getting a fresh JWT
  */
 export async function validateAndRefreshSession(): Promise<boolean> {
-  // With public token only, we can't validate sessions server-side
-  // The session tokens we store are already validated
-  // We just check if they're expired
   const creds = loadStytchCredentials();
   if (creds && creds.expiresAt > Date.now()) {
-    return true;
+    // Check if we have a valid JWT
+    if (authState.sessionJwt && authState.sessionJwt.split('.').length === 3) {
+      return true;
+    }
+    // We have a valid session but no JWT - try to refresh
+    return refreshSession();
   }
   // Session expired
   await signOut();
@@ -542,91 +619,10 @@ export async function validateAndRefreshSession(): Promise<boolean> {
 }
 
 /**
- * Issue a device token for mobile pairing.
- * This token allows the mobile device to authenticate to the server.
- */
-export function issueDeviceToken(
-  deviceName: string,
-  deviceType: 'mobile' | 'tablet' = 'mobile'
-): DeviceToken | null {
-  if (!authState.isAuthenticated) {
-    logger.main.warn('[StytchAuthService] Cannot issue device token - not authenticated');
-    return null;
-  }
-
-  // Get user ID from stored credentials if not in auth state
-  const creds = loadStytchCredentials();
-  const userId = authState.user?.user_id || creds?.userId;
-
-  if (!userId) {
-    logger.main.warn('[StytchAuthService] Cannot issue device token - no user ID');
-    return null;
-  }
-
-  const token: DeviceToken = {
-    token: generateDeviceToken(),
-    deviceId: generateDeviceId(),
-    userId,
-    createdAt: Date.now(),
-    lastUsedAt: Date.now(),
-    deviceName,
-    deviceType,
-  };
-
-  deviceTokens.set(token.deviceId, token);
-  saveDeviceTokens();
-
-  logger.main.info('[StytchAuthService] Issued device token for:', deviceName);
-  return token;
-}
-
-/**
- * Validate a device token.
- * Returns the user ID if valid, null otherwise.
- */
-export function validateDeviceToken(token: string): { userId: string; deviceId: string } | null {
-  for (const [deviceId, deviceToken] of deviceTokens) {
-    if (deviceToken.token === token) {
-      // Update last used time
-      deviceToken.lastUsedAt = Date.now();
-      saveDeviceTokens();
-      return { userId: deviceToken.userId, deviceId };
-    }
-  }
-  return null;
-}
-
-/**
- * Revoke a device token.
- */
-export function revokeDeviceToken(deviceId: string): boolean {
-  const deleted = deviceTokens.delete(deviceId);
-  if (deleted) {
-    saveDeviceTokens();
-    logger.main.info('[StytchAuthService] Revoked device token:', deviceId);
-  }
-  return deleted;
-}
-
-/**
- * Get all device tokens for the current user.
- */
-export function getDeviceTokens(): DeviceToken[] {
-  const creds = loadStytchCredentials();
-  const userId = authState.user?.user_id || creds?.userId;
-  if (!userId) {
-    return [];
-  }
-  return Array.from(deviceTokens.values()).filter(
-    (token) => token.userId === userId
-  );
-}
-
-/**
  * Shutdown the auth service.
  * Call this when the app is closing.
  */
 export function shutdownStytchAuth(): void {
-  saveDeviceTokens();
+  // Nothing to clean up - device tokens removed, auth state managed by Stytch
 }
 

@@ -497,9 +497,9 @@ export class AIService {
   }
 
   private async initializeMobileSyncHandler() {
-    // NOTE: We don't process prompts from the backend anymore (causes child process issues).
-    // Instead, we just listen for index changes and store queuedPrompts in local session metadata.
-    // The renderer will process them when the user opens the session.
+    // Listen for index changes from mobile sync and insert queuedPrompts into the database.
+    // The renderer's processQueuedPrompts function handles execution from the database queue.
+    // Both local queuing (via ai:createQueuedPrompt) and mobile sync use the same database queue.
 
     const maxRetries = 5;
     const retryDelayMs = 1000;
@@ -2294,6 +2294,18 @@ export class AIService {
         attachments: created.attachments,
         documentContext: created.documentContext,
       };
+    });
+
+    // Delete a queued prompt (for user cancellation)
+    ipcMain.handle('ai:deleteQueuedPrompt', async (
+      event,
+      promptId: string
+    ) => {
+      const { getQueuedPromptsStore } = await import('../RepositoryManager');
+      const queueStore = getQueuedPromptsStore();
+      await queueStore.delete(promptId);
+      logger.main.info(`[AIService] deleteQueuedPrompt: deleted ${promptId}`);
+      return { success: true };
     });
 
     // Save draft input

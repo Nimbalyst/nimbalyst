@@ -33,17 +33,16 @@ function replaceLocalhostWithIP(url: string, ip: string): string {
   }
 }
 
-interface DeviceToken {
-  token: string;
-  deviceId: string;
-  deviceName?: string;
-}
-
+/**
+ * QR Pairing Modal
+ *
+ * Shows a QR code containing the encryption key seed for pairing with mobile devices.
+ * Mobile devices authenticate independently via Stytch OAuth - the QR code only shares
+ * the encryption key needed for E2E encrypted sync.
+ */
 export function QRPairingModal({ isOpen, onClose, serverUrl }: QRPairingModalProps) {
   const [qrDataUrl, setQRDataUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [expiresAt, setExpiresAt] = useState<number | null>(null);
-  const [timeRemaining, setTimeRemaining] = useState<number>(0);
   const [qrPayload, setQRPayload] = useState<object | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -52,19 +51,8 @@ export function QRPairingModal({ isOpen, onClose, serverUrl }: QRPairingModalPro
   const [useLocalIP, setUseLocalIP] = useState(true); // Default to using LAN IP for local servers
   const [effectiveUrl, setEffectiveUrl] = useState(serverUrl);
 
-  // Stytch auth state for device token generation
-  const [isStytchAuthenticated, setIsStytchAuthenticated] = useState(false);
-  const [deviceToken, setDeviceToken] = useState<DeviceToken | null>(null);
-
   const isLocalServer = isLocalDevServer(serverUrl);
   const isDev = import.meta.env.DEV;
-
-  // Check Stytch auth state when modal opens
-  useEffect(() => {
-    if (isOpen && window.electronAPI?.stytch) {
-      window.electronAPI.stytch.isAuthenticated().then(setIsStytchAuthenticated);
-    }
-  }, [isOpen]);
 
   // Fetch local IP when modal opens
   useEffect(() => {
@@ -92,43 +80,13 @@ export function QRPairingModal({ isOpen, onClose, serverUrl }: QRPairingModalPro
 
     try {
       // Get QR payload from main process (with effective URL)
-      const basePayload = await window.electronAPI.credentials.generateQRPayload(effectiveUrl, 5);
-
-      // If user is authenticated with Stytch, add a device token to the payload
-      let enhancedPayload: any = { ...basePayload };
-
-      if (isStytchAuthenticated && window.electronAPI?.stytch) {
-        try {
-          // Issue a new device token for this pairing
-          const deviceName = `Mobile Device (paired ${new Date().toLocaleDateString()})`;
-          const newDeviceToken = await window.electronAPI.stytch.issueDeviceToken(deviceName, 'mobile');
-
-          if (newDeviceToken) {
-            setDeviceToken({
-              token: newDeviceToken.token,
-              deviceId: newDeviceToken.deviceId,
-              deviceName: newDeviceToken.deviceName,
-            });
-
-            // Add device token to payload for JWT-based auth
-            enhancedPayload = {
-              ...basePayload,
-              version: 2, // Version 2 includes device token
-              deviceToken: newDeviceToken.token,
-              deviceId: newDeviceToken.deviceId,
-            };
-          }
-        } catch (err) {
-          console.warn('[QRPairingModal] Failed to generate device token, using legacy auth:', err);
-          // Continue with legacy auth if device token fails
-        }
-      }
-
-      setExpiresAt(enhancedPayload.expiresAt);
-      setQRPayload(enhancedPayload);
+      // The payload contains only serverUrl and encryptionKeySeed
+      // Mobile devices authenticate independently via Stytch OAuth
+      const payload = await window.electronAPI.credentials.generateQRPayload(effectiveUrl);
+      setQRPayload(payload);
 
       // Generate QR code data URL
-      const dataUrl = await QRCode.toDataURL(JSON.stringify(enhancedPayload), {
+      const dataUrl = await QRCode.toDataURL(JSON.stringify(payload), {
         width: 280,
         margin: 2,
         color: {
@@ -145,12 +103,14 @@ export function QRPairingModal({ isOpen, onClose, serverUrl }: QRPairingModalPro
       console.error('[QRPairingModal] Failed to generate QR:', err);
       setError(err instanceof Error ? err.message : 'Failed to generate QR code');
     }
-  }, [effectiveUrl, isStytchAuthenticated]);
+  }, [effectiveUrl]);
 
   const handleCopyPayload = async () => {
     if (!qrPayload) return;
     try {
-      await navigator.clipboard.writeText(JSON.stringify(qrPayload, null, 2));
+      const jsonString = JSON.stringify(qrPayload, null, 2);
+      console.log('[QRPairingModal] Copying payload:', jsonString);
+      await navigator.clipboard.writeText(jsonString);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
@@ -170,37 +130,11 @@ export function QRPairingModal({ isOpen, onClose, serverUrl }: QRPairingModalPro
     if (!isOpen) {
       setQRDataUrl(null);
       setError(null);
-      setExpiresAt(null);
-      setDeviceToken(null);
+      setQRPayload(null);
     }
   }, [isOpen]);
 
-  // Countdown timer
-  useEffect(() => {
-    if (!expiresAt) return;
-
-    const updateTimer = () => {
-      const remaining = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
-      setTimeRemaining(remaining);
-
-      // Auto-regenerate when expired
-      if (remaining === 0) {
-        generateQR();
-      }
-    };
-
-    updateTimer();
-    const interval = setInterval(updateTimer, 1000);
-    return () => clearInterval(interval);
-  }, [expiresAt, generateQR]);
-
   if (!isOpen) return null;
-
-  const formatTime = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
 
   return (
     <div className="qr-modal-overlay" onClick={onClose}>
@@ -258,21 +192,30 @@ export function QRPairingModal({ isOpen, onClose, serverUrl }: QRPairingModalPro
 
               <div className="qr-instructions">
                 <p className="qr-step">1. Open Nimbalyst on your mobile device</p>
-                <p className="qr-step">2. Go to Settings</p>
-                <p className="qr-step">3. Tap "Scan QR Code"</p>
+                <p className="qr-step">2. Sign in with Google (same account as desktop)</p>
+                <p className="qr-step">3. Go to Settings and tap "Scan QR Code"</p>
                 <p className="qr-step">4. Point your camera at this QR code</p>
               </div>
 
-              <div className="qr-expiry">
-                <span className="qr-expiry-label">Expires in:</span>
-                <span className="qr-expiry-time">{formatTime(timeRemaining)}</span>
+              <div className="qr-info" style={{
+                marginTop: '12px',
+                padding: '12px',
+                backgroundColor: 'var(--surface-secondary)',
+                borderRadius: '8px',
+                fontSize: '13px',
+                color: 'var(--text-secondary)',
+              }}>
+                <p style={{ margin: 0 }}>
+                  This QR code shares your encryption key for E2E encrypted sync.
+                  Your mobile device will authenticate separately with Google Sign-In.
+                </p>
               </div>
 
               <div className="qr-warning">
                 <svg className="qr-warning-icon" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M8 1a7 7 0 100 14A7 7 0 008 1zM7 5a1 1 0 112 0v3a1 1 0 11-2 0V5zm1 7a1 1 0 100-2 1 1 0 000 2z" />
                 </svg>
-                <span>Only scan with your own device. This grants full access to your sessions.</span>
+                <span>Only scan with your own device. This shares your encryption key.</span>
               </div>
 
               <button className="qr-regenerate-button" onClick={generateQR}>

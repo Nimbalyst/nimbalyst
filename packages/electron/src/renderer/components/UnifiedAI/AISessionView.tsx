@@ -248,14 +248,39 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
     }
   }, []);
 
-  // Extract queue from session metadata when sessionData changes
-  useEffect(() => {
-    if (sessionData.metadata?.queuedPrompts) {
-      setQueuedPrompts(sessionData.metadata.queuedPrompts as any[]);
-    } else {
+  // Load pending queued prompts from database
+  // This uses the same queue that mobile sync uses (queued_prompts table)
+  const loadQueuedPrompts = useCallback(async () => {
+    try {
+      const pending = await window.electronAPI.invoke('ai:listPendingPrompts', sessionId) as Array<{
+        id: string;
+        prompt: string;
+        timestamp: number;
+        documentContext?: any;
+        attachments?: any[];
+      }>;
+      setQueuedPrompts(pending || []);
+    } catch (error) {
+      console.error('[AISessionView] Failed to load queued prompts:', error);
       setQueuedPrompts([]);
     }
-  }, [sessionData.metadata?.queuedPrompts]);
+  }, [sessionId]);
+
+  // Load queued prompts on session change
+  useEffect(() => {
+    loadQueuedPrompts();
+  }, [loadQueuedPrompts]);
+
+  // Track previous loading state to detect transition from loading to not loading
+  const prevIsLoadingRef = useRef(isLoading);
+  useEffect(() => {
+    // When loading transitions from true to false, refresh the queue
+    // This ensures the UI updates after a queued prompt is processed
+    if (prevIsLoadingRef.current && !isLoading) {
+      loadQueuedPrompts();
+    }
+    prevIsLoadingRef.current = isLoading;
+  }, [isLoading, loadQueuedPrompts]);
 
   // Extract todos from session metadata when sessionData changes
   useEffect(() => {
@@ -298,13 +323,13 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
   }, [sessionId, draftAttachments, onDraftAttachmentsChange]);
 
   // Handle queue message (must be before handleSend which uses it)
+  // Uses the database queue (queued_prompts table) which is processed by processQueuedPrompts in AgenticPanel
   const handleQueue = useCallback(async (message: string) => {
     if (!message.trim()) {
       return;
     }
 
     try {
-      // Generate unique ID for queued prompt
       // Only store serializable parts of documentContext
       const serializableContext = documentContext ? {
         filePath: documentContext.filePath,
@@ -312,25 +337,27 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
         fileType: documentContext.fileType
       } : undefined;
 
+      // Create the queued prompt in the database (same queue used by mobile sync)
+      // This will be processed by processQueuedPrompts after the current AI response completes
+      const result = await window.electronAPI.invoke(
+        'ai:createQueuedPrompt',
+        sessionId,
+        message.trim(),
+        draftAttachments,
+        serializableContext
+      ) as { id: string; prompt: string; timestamp: number };
+
+      console.log('[AISessionView] Created queued prompt:', result.id);
+
+      // Add to local state for immediate UI update
       const queuedPrompt = {
-        id: `queued-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        id: result.id,
         prompt: message.trim(),
-        timestamp: Date.now(),
+        timestamp: result.timestamp,
         documentContext: serializableContext,
         attachments: draftAttachments
       };
-
-      // Add to queue array
-      const updatedQueue = [...queuedPrompts, queuedPrompt];
-
-      // Update session metadata via IPC
-      await window.electronAPI.invoke('ai:updateSessionMetadata', sessionId, {
-        ...sessionData.metadata,
-        queuedPrompts: updatedQueue
-      }, workspacePath);
-
-      // Update local state immediately
-      setQueuedPrompts(updatedQueue);
+      setQueuedPrompts(prev => [...prev, queuedPrompt]);
 
       // Clear draft
       if (onDraftInputChange) {
@@ -342,7 +369,7 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
     } catch (error) {
       console.error('[AISessionView] Failed to queue prompt:', error);
     }
-  }, [sessionId, documentContext, draftAttachments, queuedPrompts, sessionData.metadata, workspacePath, onDraftInputChange, onDraftAttachmentsChange]);
+  }, [sessionId, documentContext, draftAttachments, onDraftInputChange, onDraftAttachmentsChange]);
 
   // Handle send message
   const handleSend = useCallback(() => {
@@ -395,21 +422,20 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
     }
   }, [sessionId, onNavigateHistory]);
 
-  // Handle cancel queued prompt
+  // Handle cancel queued prompt (delete from database queue)
   const handleCancelQueuedPrompt = useCallback(async (id: string) => {
     try {
-      const updatedQueue = queuedPrompts.filter(p => p.id !== id);
+      // Delete from database
+      await window.electronAPI.invoke('ai:deleteQueuedPrompt', id);
 
-      await window.electronAPI.invoke('ai:updateSessionMetadata', sessionId, {
-        ...sessionData.metadata,
-        queuedPrompts: updatedQueue
-      }, workspacePath);
+      // Update local state
+      setQueuedPrompts(prev => prev.filter(p => p.id !== id));
 
-      setQueuedPrompts(updatedQueue);
+      console.log('[AISessionView] Cancelled queued prompt:', id);
     } catch (error) {
       console.error('[AISessionView] Failed to cancel queued prompt:', error);
     }
-  }, [sessionId, queuedPrompts, sessionData.metadata, workspacePath]);
+  }, []);
 
   // Handle slash command suggestion selection
   const handleCommandSelect = useCallback((command: string) => {
@@ -550,13 +576,13 @@ export const AISessionView = React.memo(AISessionViewComponent, (prevProps, next
   }
 
   // Compare key properties of sessionData
+  // Note: queuedPrompts are now loaded from database, not from session metadata
   if (
     prevData.id !== nextData.id ||
     prevData.provider !== nextData.provider ||
     prevData.model !== nextData.model ||
     prevData.messages.length !== nextData.messages.length ||
-    prevData.metadata?.currentTodos !== nextData.metadata?.currentTodos ||
-    prevData.metadata?.queuedPrompts !== nextData.metadata?.queuedPrompts
+    prevData.metadata?.currentTodos !== nextData.metadata?.currentTodos
   ) {
     return false; // Content changed, should re-render
   }

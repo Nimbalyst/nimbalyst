@@ -30,8 +30,6 @@ function formatRelativeTime(timestamp: number): string {
 export interface SyncConfig {
   enabled: boolean;
   serverUrl: string;
-  userId: string;
-  authToken: string;
   enabledProjects?: string[]; // workspace paths that are enabled for sync
 }
 
@@ -48,16 +46,6 @@ interface DeviceInfo {
   app_version?: string;
   connected_at: number;
   last_active_at: number;
-}
-
-interface DeviceToken {
-  token: string;
-  deviceId: string;
-  userId: string;
-  createdAt: number;
-  lastUsedAt: number;
-  deviceName?: string;
-  deviceType: 'mobile' | 'tablet' | 'desktop';
 }
 
 interface SyncPanelProps {
@@ -236,11 +224,8 @@ export function SyncPanel({
 }: SyncPanelProps) {
   const isDevelopment = import.meta.env.DEV;
   const [projects, setProjects] = useState<Project[]>([]);
-  const [userId, setUserId] = useState<string>('');
-  const [isSecureStorage, setIsSecureStorage] = useState<boolean>(false);
   const [showQRModal, setShowQRModal] = useState(false);
   const [showProjectPicker, setShowProjectPicker] = useState(false);
-  const [copiedUserId, setCopiedUserId] = useState(false);
   const [connectedDevices, setConnectedDevices] = useState<DeviceInfo[]>([]);
   const [devicesLoading, setDevicesLoading] = useState(false);
   const [devicesError, setDevicesError] = useState<string | null>(null);
@@ -248,7 +233,6 @@ export function SyncPanel({
     isAuthenticated: false,
     user: null,
   });
-  const [deviceTokens, setDeviceTokens] = useState<DeviceToken[]>([]);
 
   // Auth UI state
   const [showAuthForm, setShowAuthForm] = useState(false);
@@ -259,18 +243,8 @@ export function SyncPanel({
 
   const isStytchAvailable = !!window.electronAPI?.stytch;
 
-  // Load credentials info and Stytch auth state on mount
+  // Load Stytch auth state on mount
   useEffect(() => {
-    async function loadCredentials() {
-      try {
-        const creds = await window.electronAPI.credentials.get();
-        setUserId(creds.userId);
-        setIsSecureStorage(creds.isSecure);
-      } catch (error) {
-        console.error('Failed to load credentials:', error);
-      }
-    }
-
     async function loadStytchAuth() {
       if (!window.electronAPI?.stytch) return;
       try {
@@ -279,15 +253,11 @@ export function SyncPanel({
           isAuthenticated: state.isAuthenticated,
           user: state.user,
         });
-        if (state.isAuthenticated) {
-          loadDeviceTokens();
-        }
       } catch (error) {
         console.error('Failed to load Stytch auth state:', error);
       }
     }
 
-    loadCredentials();
     loadStytchAuth();
 
     if (!window.electronAPI?.stytch) return;
@@ -301,22 +271,9 @@ export function SyncPanel({
         isAuthenticated: state.isAuthenticated,
         user: state.user,
       });
-      if (state.isAuthenticated) {
-        loadDeviceTokens();
-      }
     });
 
     return unsubscribe;
-  }, []);
-
-  const loadDeviceTokens = useCallback(async () => {
-    if (!window.electronAPI?.stytch) return;
-    try {
-      const tokens = await window.electronAPI.stytch.getDeviceTokens();
-      setDeviceTokens(tokens || []);
-    } catch (err) {
-      console.error('Failed to load device tokens:', err);
-    }
   }, []);
 
   // Load projects from workspace store
@@ -384,16 +341,6 @@ export function SyncPanel({
     onConfigChange({ ...config, enabledProjects: updated });
   };
 
-  const handleCopyUserId = async () => {
-    try {
-      await navigator.clipboard.writeText(userId);
-      setCopiedUserId(true);
-      setTimeout(() => setCopiedUserId(false), 2000);
-    } catch (error) {
-      console.error('Failed to copy user ID:', error);
-    }
-  };
-
   // Auth handlers
   const handleGoogleSignIn = async () => {
     if (!window.electronAPI?.stytch) return;
@@ -444,16 +391,6 @@ export function SyncPanel({
       await window.electronAPI.stytch.signOut();
     } catch (err) {
       console.error('Sign out error:', err);
-    }
-  };
-
-  const handleRevokeDevice = async (deviceId: string) => {
-    if (!window.electronAPI?.stytch) return;
-    try {
-      await window.electronAPI.stytch.revokeDeviceToken(deviceId);
-      await loadDeviceTokens();
-    } catch (err) {
-      console.error('Revoke device error:', err);
     }
   };
 
@@ -719,52 +656,6 @@ export function SyncPanel({
         )}
       </div>
 
-      {/* Paired Devices Section (when authenticated) */}
-      {stytchAuth.isAuthenticated && deviceTokens.length > 0 && (
-        <div className="provider-panel-section">
-          <h4 className="provider-panel-section-title">Paired Mobile Devices</h4>
-          <div style={{ marginTop: '8px' }}>
-            {deviceTokens.map((token) => (
-              <div
-                key={token.deviceId}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '8px 12px',
-                  background: 'var(--surface-secondary)',
-                  borderRadius: '6px',
-                  marginBottom: '6px',
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
-                    {token.deviceName || 'Mobile Device'}
-                  </div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
-                    Paired {formatRelativeTime(token.createdAt)}
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleRevokeDevice(token.deviceId)}
-                  style={{
-                    padding: '4px 10px',
-                    fontSize: '11px',
-                    background: 'transparent',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '4px',
-                    color: 'var(--text-secondary)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Revoke
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Sync Settings */}
       <div className="provider-panel-section">
         <h4 className="provider-panel-section-title">Sync Settings</h4>
@@ -941,31 +832,6 @@ export function SyncPanel({
           )}
         </>
       )}
-
-      {/* Device Identity (collapsed) */}
-      <div className="provider-panel-section">
-        <details>
-          <summary style={{ cursor: 'pointer', fontSize: '13px', color: 'var(--text-secondary)' }}>
-            Device Identity
-          </summary>
-          <div style={{ marginTop: '8px' }}>
-            <p className="provider-panel-hint" style={{ marginBottom: '8px' }}>
-              Unique device ID stored{isSecureStorage ? ' in system keychain' : ' locally'}.
-            </p>
-            <div className="user-id-display">
-              <span className="user-id-value" style={{ fontSize: '11px' }}>{userId || 'Loading...'}</span>
-              <button
-                className="user-id-copy-button"
-                onClick={handleCopyUserId}
-                disabled={!userId}
-                style={{ fontSize: '11px', padding: '2px 8px' }}
-              >
-                {copiedUserId ? 'Copied!' : 'Copy'}
-              </button>
-            </div>
-          </div>
-        </details>
-      </div>
 
       {/* Modals */}
       <QRPairingModal

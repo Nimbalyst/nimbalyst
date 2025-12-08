@@ -5,9 +5,8 @@
  * On iOS, Preferences data is stored in UserDefaults which is sandboxed
  * and encrypted at rest when device is locked.
  *
- * Credentials come from QR code scanning - the desktop app generates them
- * and transfers via QR. The encryption key seed is the critical secret
- * that enables E2E encryption.
+ * Authentication is handled separately by StytchAuthService.
+ * This service only stores the encryption key seed from QR pairing.
  *
  * Note: For enhanced security in production, consider using:
  * - @capacitor-community/secure-storage (iOS Keychain, Android Keystore)
@@ -17,15 +16,12 @@
 import { Preferences } from '@capacitor/preferences';
 
 export interface SyncCredentials {
-  userId: string;
-  authToken: string;
   encryptionKeySeed: string; // Base64 encoded 32 bytes - the E2E encryption secret
   serverUrl: string;
-  createdAt: number;
   pairedAt: number; // When the QR was scanned
 }
 
-const CREDENTIALS_KEY = 'nimbalyst_sync_credentials';
+const CREDENTIALS_KEY = 'nimbalyst_sync_credentials_v2';
 
 let cachedCredentials: SyncCredentials | null = null;
 
@@ -39,7 +35,6 @@ export async function saveCredentials(credentials: SyncCredentials): Promise<voi
   });
   cachedCredentials = credentials;
   console.log('[CredentialService] Credentials saved', {
-    userId: credentials.userId,
     serverUrl: credentials.serverUrl,
   });
 }
@@ -58,7 +53,6 @@ export async function loadCredentials(): Promise<SyncCredentials | null> {
     if (value) {
       cachedCredentials = JSON.parse(value);
       console.log('[CredentialService] Credentials loaded', {
-        userId: cachedCredentials?.userId,
         serverUrl: cachedCredentials?.serverUrl,
       });
       return cachedCredentials;
@@ -90,14 +84,6 @@ export async function clearCredentials(): Promise<void> {
 }
 
 /**
- * Get the user ID only.
- */
-export async function getUserId(): Promise<string | null> {
-  const creds = await loadCredentials();
-  return creds?.userId ?? null;
-}
-
-/**
  * Get the server URL.
  */
 export async function getServerUrl(): Promise<string | null> {
@@ -116,51 +102,61 @@ export async function getEncryptionKeySeed(): Promise<string | null> {
 /**
  * Parse QR code payload and create credentials.
  *
- * QR payload format:
+ * New QR payload format (v2 - Stytch auth):
  * {
- *   version: 1,
+ *   version: 2,
  *   serverUrl: "wss://...",
- *   userId: "uuid",
- *   authToken: "base64-token",
  *   encryptionKeySeed: "base64-key-seed",
  *   expiresAt: timestamp
  * }
+ *
+ * Note: Auth credentials (userId, authToken) are no longer in QR.
+ * Mobile authenticates via Stytch OAuth separately.
  */
 export interface QRPayload {
   version: number;
   serverUrl: string;
-  userId: string;
-  authToken: string;
   encryptionKeySeed: string;
   expiresAt: number;
+  // Legacy fields (v1) - ignored but accepted for backwards compat
+  userId?: string;
+  authToken?: string;
 }
 
 export function parseQRPayload(data: string): QRPayload | null {
   try {
-    const payload = JSON.parse(data);
+    // Trim whitespace that might be in the copied text
+    const trimmedData = data.trim();
+
+    const payload = JSON.parse(trimmedData);
 
     // Validate required fields
-    if (
-      typeof payload.version !== 'number' ||
-      typeof payload.serverUrl !== 'string' ||
-      typeof payload.userId !== 'string' ||
-      typeof payload.authToken !== 'string' ||
-      typeof payload.encryptionKeySeed !== 'string' ||
-      typeof payload.expiresAt !== 'number'
-    ) {
-      console.error('[CredentialService] Invalid QR payload: missing required fields');
+    if (typeof payload.version !== 'number') {
+      console.error('[CredentialService] Invalid QR payload: missing or invalid version field');
+      return null;
+    }
+    if (typeof payload.serverUrl !== 'string') {
+      console.error('[CredentialService] Invalid QR payload: missing or invalid serverUrl field');
+      return null;
+    }
+    if (typeof payload.encryptionKeySeed !== 'string') {
+      console.error('[CredentialService] Invalid QR payload: missing or invalid encryptionKeySeed field');
+      return null;
+    }
+    if (typeof payload.expiresAt !== 'number') {
+      console.error('[CredentialService] Invalid QR payload: missing or invalid expiresAt field');
       return null;
     }
 
     // Check expiry
     if (payload.expiresAt < Date.now()) {
-      console.error('[CredentialService] QR code has expired');
+      console.error('[CredentialService] QR code has expired. expiresAt:', payload.expiresAt, 'now:', Date.now());
       return null;
     }
 
     return payload as QRPayload;
   } catch (error) {
-    console.error('[CredentialService] Failed to parse QR payload:', error);
+    console.error('[CredentialService] Failed to parse QR payload:', error, 'data:', data.substring(0, 100));
     return null;
   }
 }
@@ -170,37 +166,11 @@ export function parseQRPayload(data: string): QRPayload | null {
  */
 export async function saveFromQRPayload(payload: QRPayload): Promise<SyncCredentials> {
   const credentials: SyncCredentials = {
-    userId: payload.userId,
-    authToken: payload.authToken,
     encryptionKeySeed: payload.encryptionKeySeed,
     serverUrl: payload.serverUrl,
-    createdAt: Date.now(),
     pairedAt: Date.now(),
   };
 
   await saveCredentials(credentials);
   return credentials;
-}
-
-/**
- * Convert credentials to the SyncConfig format used by CollabV3SyncContext.
- */
-export async function toSyncConfig(): Promise<{
-  serverUrl: string;
-  userId: string;
-  authToken: string;
-  encryptionPassphrase?: string;
-} | null> {
-  const creds = await loadCredentials();
-  if (!creds) {
-    return null;
-  }
-
-  return {
-    serverUrl: creds.serverUrl,
-    userId: creds.userId,
-    authToken: creds.authToken,
-    // Use the encryption key seed as the passphrase for key derivation
-    encryptionPassphrase: creds.encryptionKeySeed,
-  };
 }

@@ -219,7 +219,13 @@ export class IndexRoom implements DurableObject {
           this.sendError(ws, 'unknown_message_type', `Unknown message type`);
       }
     } catch (err) {
-      console.error('Error handling message:', err);
+      console.error('[IndexRoom] Error handling message:', err);
+      console.error('[IndexRoom] Data type:', typeof data, 'length:', typeof data === 'string' ? data.length : (data as ArrayBuffer).byteLength);
+      if (typeof data === 'string' && data.length < 500) {
+        console.error('[IndexRoom] Data:', data);
+      } else if (typeof data === 'string') {
+        console.error('[IndexRoom] Data (first 500 chars):', data.substring(0, 500));
+      }
       this.sendError(ws, 'parse_error', 'Failed to parse message');
     }
   }
@@ -314,14 +320,12 @@ export class IndexRoom implements DurableObject {
     connState: ConnectionState,
     sessions: SessionIndexEntry[]
   ): Promise<void> {
+    console.log('[IndexRoom] handleIndexBatchUpdate called with', sessions.length, 'sessions');
     const sql = this.state.storage.sql;
     const affectedProjects = new Set<string>();
 
-    // console.log('[IndexRoom] Processing batch update of', sessions.length, 'sessions');
-
-    // Use transaction for atomic batch update
-    sql.exec('BEGIN TRANSACTION');
-    try {
+    // Use Durable Objects transaction API for atomic batch update
+    this.state.storage.transactionSync(() => {
       for (const session of sessions) {
         sql.exec(
           `INSERT OR REPLACE INTO session_index
@@ -340,11 +344,8 @@ export class IndexRoom implements DurableObject {
         );
         affectedProjects.add(session.project_id);
       }
-      sql.exec('COMMIT');
-    } catch (err) {
-      sql.exec('ROLLBACK');
-      throw err;
-    }
+    });
+    console.log('[IndexRoom] Batch update committed successfully');
 
     // Update project stats for all affected projects
     for (const projectId of affectedProjects) {

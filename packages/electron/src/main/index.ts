@@ -347,6 +347,25 @@ app.whenReady().then(async () => {
     // Initialize logging
     initializeLogging();
 
+    // Initialize Stytch Auth service BEFORE database
+    // (Database init creates SyncManager which checks isAuthenticated)
+    const stytchConfig = getStytchConfig();
+    if (stytchConfig.projectId && stytchConfig.publicToken &&
+        !stytchConfig.projectId.includes('XXXX')) {
+        try {
+            initializeStytchAuth({
+                projectId: stytchConfig.projectId,
+                publicToken: stytchConfig.publicToken,
+                apiBase: stytchConfig.apiBase,
+            });
+            logger.main.info('[StytchAuth] Initialized with project:', stytchConfig.projectId, 'apiBase:', stytchConfig.apiBase);
+        } catch (error) {
+            logger.main.error('[StytchAuth] Failed to initialize:', error);
+        }
+    } else {
+        logger.main.info('[StytchAuth] Not configured (placeholder tokens) - skipping initialization');
+    }
+
     // Initialize PGLite database
     try {
         runtimeSessionStore = await initializeDatabase();
@@ -414,26 +433,6 @@ app.whenReady().then(async () => {
 
     // Initialize Agent service
     // agentService = new AgentService(aiService);
-
-    // Initialize Stytch Auth service
-    // Uses public tokens from config/stytch.ts (safe to commit - these are public)
-    // Environment variables can override for testing
-    const stytchConfig = getStytchConfig();
-    if (stytchConfig.projectId && stytchConfig.publicToken &&
-        !stytchConfig.projectId.includes('XXXX')) {
-        try {
-            initializeStytchAuth({
-                projectId: stytchConfig.projectId,
-                publicToken: stytchConfig.publicToken,
-                apiBase: stytchConfig.apiBase,
-            });
-            logger.main.info('[StytchAuth] Initialized with project:', stytchConfig.projectId, 'apiBase:', stytchConfig.apiBase);
-        } catch (error) {
-            logger.main.error('[StytchAuth] Failed to initialize:', error);
-        }
-    } else {
-        logger.main.info('[StytchAuth] Not configured (placeholder tokens) - skipping initialization');
-    }
 
     // Start MCP SSE server
     try {

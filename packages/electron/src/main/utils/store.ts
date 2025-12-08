@@ -49,16 +49,8 @@ interface AppStoreSchema {
   // Session Sync (optional device sync)
   sessionSync?: {
     enabled: boolean;
-    backend: 'collabv3' | 'yjs'; // 'collabv3' is recommended, 'yjs' is legacy
     serverUrl: string; // e.g., 'ws://localhost:8790' or 'wss://sync.nimbalyst.com'
-    userId: string;
-    authToken: string;
-    // For CollabV3 E2E encryption
-    encryptionPassphrase?: string; // User-provided passphrase for key derivation
     enabledProjects?: string[]; // List of workspace paths enabled for sync
-    // Stytch authentication (optional)
-    authMethod?: 'local' | 'stytch';
-    stytchUserId?: string;
   };
   // Stytch Auth Configuration (project ID and public token only - secret stored in keychain)
   stytchAuth?: {
@@ -812,17 +804,11 @@ export function markClaudeCodeInstallationChecked(): void {
 }
 
 // Session Sync Settings
+// Authentication is handled by StytchAuthService (JWT), encryption key by CredentialService
 export interface SessionSyncConfig {
   enabled: boolean;
-  backend: 'collabv3' | 'yjs';
   serverUrl: string;
-  userId: string;
-  authToken: string;
-  encryptionPassphrase?: string;
   enabledProjects?: string[];
-  // Stytch authentication (optional - if set, uses Stytch JWT instead of simple auth token)
-  authMethod?: 'local' | 'stytch';
-  stytchUserId?: string;
 }
 
 // Stytch Auth Configuration (stored separately from session sync)
@@ -833,12 +819,7 @@ export interface StytchAuthConfig {
 }
 
 export function getSessionSyncConfig(): SessionSyncConfig | undefined {
-  const config = appStore.get('sessionSync');
-  if (config && !config.backend) {
-    // Default to collabv3 for new configs, yjs for existing
-    return { ...config, backend: 'collabv3' };
-  }
-  return config;
+  return appStore.get('sessionSync');
 }
 
 export function setSessionSyncConfig(config: SessionSyncConfig | undefined): void {

@@ -4,6 +4,11 @@
  * Provides real-time sync of AI sessions using the CollabV3 protocol.
  * Uses WebSocket connections to Durable Objects with DO SQLite storage.
  *
+ * Authentication:
+ * - Uses Stytch session JWTs for all WebSocket connections
+ * - User ID is extracted from the JWT 'sub' claim
+ * - JWT is sent in the Authorization header (with protocol workaround for WebSocket)
+ *
  * Key differences from Y.js sync (CollabV2):
  * - Simple append-only message protocol (no CRDTs)
  * - Cursor-based pagination instead of state vectors
@@ -108,6 +113,39 @@ type ServerMessage =
   | { type: 'device_joined'; device: DeviceInfo }
   | { type: 'device_left'; device_id: string }
   | { type: 'error'; code: string; message: string };
+
+// ============================================================================
+// JWT Utilities
+// ============================================================================
+
+/**
+ * Extract user ID from a JWT's 'sub' claim.
+ * The JWT is a base64url encoded string in the format: header.payload.signature
+ */
+function extractUserIdFromJwt(jwt: string): string {
+  try {
+    const parts = jwt.split('.');
+    if (parts.length !== 3) {
+      throw new Error('Invalid JWT format');
+    }
+
+    // Decode the payload (second part)
+    const payload = parts[1];
+    // Add padding if needed for base64 decoding
+    const padded = payload + '='.repeat((4 - (payload.length % 4)) % 4);
+    const decoded = atob(padded.replace(/-/g, '+').replace(/_/g, '/'));
+    const parsed = JSON.parse(decoded);
+
+    if (!parsed.sub) {
+      throw new Error('JWT missing sub claim');
+    }
+
+    return parsed.sub;
+  } catch (error) {
+    console.error('[CollabV3] Failed to extract user ID from JWT:', error);
+    throw new Error('Invalid JWT: cannot extract user ID');
+  }
+}
 
 // ============================================================================
 // Base64 Utilities (handles large byte arrays)
@@ -230,6 +268,28 @@ interface CachedSessionIndex {
 // ============================================================================
 
 export function createCollabV3Sync(config: SyncConfig): SyncProvider {
+  // We need to get the initial JWT synchronously for setup, but will refresh before each connection
+  // The getJwt function is called before each WebSocket connection to ensure fresh JWT
+  let currentJwt: string | null = null;
+  let currentUserId: string | null = null;
+
+  // Helper to get fresh JWT and extract user ID
+  async function ensureFreshJwt(): Promise<{ jwt: string; userId: string }> {
+    const jwt = await config.getJwt();
+    const userId = extractUserIdFromJwt(jwt);
+    currentJwt = jwt;
+    currentUserId = userId;
+    return { jwt, userId };
+  }
+
+  // Get user ID synchronously if we have a cached JWT, otherwise throw
+  function getUserId(): string {
+    if (!currentUserId) {
+      throw new Error('JWT not initialized - call ensureFreshJwt first');
+    }
+    return currentUserId;
+  }
+
   const sessions = new Map<string, SessionConnection>();
   const sessionIndexCache = new Map<string, CachedSessionIndex>();
   let indexWs: WebSocket | null = null;
@@ -328,11 +388,11 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
   }
 
   function getRoomId(sessionId: string): string {
-    return `user:${config.userId}:session:${sessionId}`;
+    return `user:${getUserId()}:session:${sessionId}`;
   }
 
   function getIndexRoomId(): string {
-    return `user:${config.userId}:index`;
+    return `user:${getUserId()}:index`;
   }
 
   function getWebSocketUrl(roomId: string): string {
@@ -583,7 +643,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
   }
 
   // Connect to index for session list updates
-  function connectToIndex(): void {
+  async function connectToIndex(): Promise<void> {
     if (indexWs) {
       // console.log('[CollabV3] connectToIndex() - already connected');
       return;
@@ -591,8 +651,12 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
     // console.log('[CollabV3] connectToIndex() - CREATING INDEX WebSocket');
 
+    // Get fresh JWT before connecting
+    const { jwt } = await ensureFreshJwt();
+
     const url = getWebSocketUrl(getIndexRoomId());
-    const wsUrl = `${url}?user_id=${config.userId}&token=${config.authToken}`;
+    // Pass JWT via query parameter (WebSocket doesn't support custom headers in browsers)
+    const wsUrl = `${url}?token=${encodeURIComponent(jwt)}`;
 
     indexWs = new WebSocket(wsUrl);
 
@@ -619,7 +683,8 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
     };
 
     indexWs.onerror = (event) => {
-      const errorInfo = event instanceof ErrorEvent
+      // Note: ErrorEvent only exists in browser environments, not Node.js
+      const errorInfo = typeof ErrorEvent !== 'undefined' && event instanceof ErrorEvent
         ? { message: event.message, error: event.error }
         : { type: event.type };
       console.error('[CollabV3] Index WebSocket error:', errorInfo, 'URL:', wsUrl);
@@ -713,10 +778,14 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
     // console.log('[CollabV3] syncSessionMessages() - CREATING TEMP WebSocket for session', sessionId, 'with', messages.length, 'messages');
 
+    // Get fresh JWT before connecting
+    const { jwt } = await ensureFreshJwt();
+
     // Connect to session room
     const roomId = getRoomId(sessionId);
     const url = getWebSocketUrl(roomId);
-    const wsUrl = `${url}?user_id=${config.userId}&token=${config.authToken}`;
+    // Pass JWT via query parameter (WebSocket doesn't support custom headers in browsers)
+    const wsUrl = `${url}?token=${encodeURIComponent(jwt)}`;
 
     return new Promise((resolve, reject) => {
       const ws = new WebSocket(wsUrl);
@@ -854,8 +923,9 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
     // Use batch API if we have multiple sessions, otherwise single update
     if (entries.length > 1) {
       const msg: ClientMessage = { type: 'index_batch_update', sessions: entries };
-      indexWs.send(JSON.stringify(msg));
-      // console.log('[CollabV3] Sent batch index update for', entries.length, 'sessions');
+      const msgStr = JSON.stringify(msg);
+      console.log('[CollabV3] Sending batch index update:', entries.length, 'sessions, message length:', msgStr.length);
+      indexWs.send(msgStr);
     } else if (entries.length === 1) {
       const msg: ClientMessage = { type: 'index_update', session: entries[0] };
       indexWs.send(JSON.stringify(msg));
@@ -889,9 +959,13 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       // const stack = new Error().stack?.split('\n').slice(2, 6).join('\n') || '';
       // console.log(`[CollabV3] connect() - CREATING NEW WebSocket for session ${sessionId} (${sessions.size + 1}/${MAX_SESSION_CONNECTIONS})\n${stack}`);
 
+      // Get fresh JWT before connecting
+      const { jwt } = await ensureFreshJwt();
+
       const roomId = getRoomId(sessionId);
       const url = getWebSocketUrl(roomId);
-      const wsUrl = `${url}?user_id=${config.userId}&token=${config.authToken}`;
+      // Pass JWT via query parameter (WebSocket doesn't support custom headers in browsers)
+      const wsUrl = `${url}?token=${encodeURIComponent(jwt)}`;
 
       return new Promise((resolve, reject) => {
         const ws = new WebSocket(wsUrl);
@@ -931,7 +1005,8 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
         ws.onerror = (event) => {
           // Extract useful error info from the event
-          const errorInfo = event instanceof ErrorEvent
+          // Note: ErrorEvent only exists in browser environments, not Node.js
+          const errorInfo = typeof ErrorEvent !== 'undefined' && event instanceof ErrorEvent
             ? { message: event.message, error: event.error }
             : { type: event.type, target: (event.target as WebSocket)?.url };
           console.error(`[CollabV3] WebSocket error for ${sessionId}:`, errorInfo, 'URL:', wsUrl);

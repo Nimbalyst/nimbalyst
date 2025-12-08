@@ -1,12 +1,8 @@
 /**
  * Authentication module for CollabV3 server.
  *
- * Supports two authentication methods:
- * 1. Simple auth: Legacy format "Bearer {userId}:{token}" or query params
- * 2. JWT auth: Stytch session JWTs validated using JWKS
- *
- * The server supports both methods simultaneously for backward compatibility
- * during migration to Stytch authentication.
+ * All authentication is done via Stytch session JWTs validated using JWKS.
+ * The JWT 'sub' claim contains the user ID used for room authorization.
  */
 
 import type { AuthContext } from './types';
@@ -40,7 +36,7 @@ interface JWTHeader {
 
 interface StytchJWTPayload {
   sub: string; // User ID
-  aud: string; // Project ID
+  aud: string | string[]; // Project ID (can be array)
   iss: string; // Issuer
   iat: number; // Issued at
   exp: number; // Expiration
@@ -49,10 +45,9 @@ interface StytchJWTPayload {
 }
 
 /**
- * Authentication result with method indicator
+ * Authentication result
  */
 export interface AuthResult extends AuthContext {
-  method: 'simple' | 'jwt';
   session_id?: string;
 }
 
@@ -60,17 +55,17 @@ export interface AuthResult extends AuthContext {
  * Configuration for authentication
  */
 export interface AuthConfig {
-  /** Stytch project ID for JWT validation (required for JWT auth) */
+  /** Stytch project ID for JWT validation (required) */
   stytchProjectId?: string;
   /** Stytch JWKS URL (defaults to Stytch's standard endpoint) */
   stytchJwksUrl?: string;
-  /** Allow simple auth (default: true for backward compatibility) */
-  allowSimpleAuth?: boolean;
 }
 
 /**
  * Parse authentication from a request.
- * Supports both simple auth (legacy) and JWT auth (Stytch).
+ * Accepts Stytch JWT from:
+ * 1. Authorization header: "Bearer {jwt}"
+ * 2. Query parameter: ?token={jwt} (for WebSocket connections which can't set headers)
  *
  * @param request - The incoming request
  * @param config - Authentication configuration
@@ -80,49 +75,32 @@ export async function parseAuth(
   request: Request,
   config: AuthConfig = {}
 ): Promise<AuthResult | null> {
-  const { allowSimpleAuth = true } = config;
+  let token: string | null = null;
 
-  // Check for JWT first (Authorization: Bearer {jwt})
+  // Try Authorization header first: "Bearer {jwt}"
   const authHeader = request.headers.get('Authorization');
   if (authHeader?.startsWith('Bearer ')) {
-    const token = authHeader.slice(7);
-
-    // Check if it looks like a JWT (3 base64url parts separated by dots)
-    if (token.includes('.') && token.split('.').length === 3) {
-      // Try to validate as JWT
-      const jwtResult = await validateJWT(token, config);
-      if (jwtResult) {
-        return jwtResult;
-      }
-      // If JWT validation fails, fall through to simple auth if allowed
-    }
-
-    // Try simple auth format: {userId}:{token}
-    if (allowSimpleAuth) {
-      const parts = token.split(':');
-      if (parts.length >= 2) {
-        return {
-          user_id: parts[0],
-          method: 'simple',
-        };
-      }
-    }
+    token = authHeader.slice(7);
   }
 
-  // Try query params (simple auth only)
-  if (allowSimpleAuth) {
+  // Fall back to query parameter for WebSocket connections
+  if (!token) {
     const url = new URL(request.url);
-    const userId = url.searchParams.get('user_id');
-    const token = url.searchParams.get('token');
-    if (userId && token) {
-      return {
-        user_id: userId,
-        method: 'simple',
-      };
-    }
+    token = url.searchParams.get('token');
   }
 
-  return null;
+  if (!token) {
+    console.log('[auth] No JWT found in header or query params');
+    return null;
+  }
+
+  // Validate as JWT (must be 3 base64url parts separated by dots)
+  if (!token.includes('.') || token.split('.').length !== 3) {
+    console.log('[auth] Invalid JWT format');
+    return null;
+  }
+
+  return validateJWT(token, config);
 }
 
 /**
@@ -137,17 +115,24 @@ async function validateJWT(
   config: AuthConfig
 ): Promise<AuthResult | null> {
   try {
+    console.log('[auth] Validating JWT, token length:', token.length);
+
     // Decode header and payload (without verification first)
     const parts = token.split('.');
     if (parts.length !== 3) {
+      console.log('[auth] Invalid JWT structure, parts:', parts.length);
       return null;
     }
 
     const header: JWTHeader = JSON.parse(base64UrlDecode(parts[0]));
     const payload: StytchJWTPayload = JSON.parse(base64UrlDecode(parts[1]));
 
+    console.log('[auth] JWT header:', JSON.stringify(header));
+    console.log('[auth] JWT sub:', payload.sub, 'exp:', payload.exp, 'aud:', payload.aud);
+
     // Basic validation
     const now = Math.floor(Date.now() / 1000);
+    console.log('[auth] Current time:', now, 'JWT exp:', payload.exp, 'diff:', payload.exp - now, 's');
 
     // Check expiration
     if (payload.exp && payload.exp < now) {
@@ -168,9 +153,13 @@ async function validateJWT(
     }
 
     // Validate audience if config has project ID
-    if (config.stytchProjectId && payload.aud !== config.stytchProjectId) {
-      console.log('[auth] JWT audience mismatch');
-      return null;
+    // Note: Stytch JWT 'aud' can be a string or array of strings
+    if (config.stytchProjectId) {
+      const audiences = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+      if (!audiences.includes(config.stytchProjectId)) {
+        console.log('[auth] JWT audience mismatch. Expected:', config.stytchProjectId, 'Got:', payload.aud);
+        return null;
+      }
     }
 
     // Verify signature using JWKS
@@ -183,7 +172,6 @@ async function validateJWT(
     // Extract user ID from 'sub' claim
     return {
       user_id: payload.sub,
-      method: 'jwt',
       session_id: payload.session_id,
     };
   } catch (error) {
@@ -207,13 +195,15 @@ async function verifyJWTSignature(
       console.log('[auth] Failed to fetch JWKS');
       return false;
     }
+    console.log('[auth] JWKS fetched, keys:', jwks.keys.length);
 
     // Find the key by kid
     const key = jwks.keys.find((k) => k.kid === header.kid);
     if (!key) {
-      console.log('[auth] Key not found in JWKS:', header.kid);
+      console.log('[auth] Key not found in JWKS. Looking for kid:', header.kid, 'Available kids:', jwks.keys.map(k => k.kid));
       return false;
     }
+    console.log('[auth] Found key with kid:', key.kid);
 
     // Import the public key
     const cryptoKey = await importJWK(key, header.alg);
@@ -221,6 +211,7 @@ async function verifyJWTSignature(
       console.log('[auth] Failed to import JWK');
       return false;
     }
+    console.log('[auth] JWK imported successfully');
 
     // Verify signature
     const parts = token.split('.');
@@ -228,6 +219,7 @@ async function verifyJWTSignature(
     const signature = base64UrlToArrayBuffer(parts[2]);
 
     const algorithm = getVerifyAlgorithm(header.alg);
+    console.log('[auth] Verifying signature with algorithm:', algorithm);
     const isValid = await crypto.subtle.verify(
       algorithm,
       cryptoKey,
@@ -235,6 +227,7 @@ async function verifyJWTSignature(
       signedData
     );
 
+    console.log('[auth] Signature verification result:', isValid);
     return isValid;
   } catch (error) {
     console.error('[auth] Signature verification error:', error);
@@ -252,18 +245,23 @@ async function fetchJWKS(config: AuthConfig): Promise<JsonWebKeySet | null> {
   }
 
   try {
-    // Stytch JWKS URL format: https://stytch.com/v1/sessions/jwks/{project_id}
-    const jwksUrl =
-      config.stytchJwksUrl ||
-      (config.stytchProjectId
-        ? `https://stytch.com/v1/sessions/jwks/${config.stytchProjectId}`
-        : null);
+    // Stytch JWKS URL format depends on test vs live project
+    // Test: https://test.stytch.com/v1/sessions/jwks/{project_id}
+    // Live: https://api.stytch.com/v1/sessions/jwks/{project_id}
+    let jwksUrl = config.stytchJwksUrl;
+
+    if (!jwksUrl && config.stytchProjectId) {
+      const isTestProject = config.stytchProjectId.startsWith('project-test-');
+      const apiBase = isTestProject ? 'https://test.stytch.com' : 'https://api.stytch.com';
+      jwksUrl = `${apiBase}/v1/sessions/jwks/${config.stytchProjectId}`;
+    }
 
     if (!jwksUrl) {
       console.log('[auth] No JWKS URL configured');
       return null;
     }
 
+    console.log('[auth] Fetching JWKS from:', jwksUrl);
     const response = await fetch(jwksUrl);
     if (!response.ok) {
       console.error('[auth] JWKS fetch failed:', response.status);
@@ -380,29 +378,3 @@ function base64UrlToArrayBuffer(str: string): ArrayBuffer {
   return bytes.buffer;
 }
 
-/**
- * Validate a device token.
- * Device tokens are used by mobile devices that don't have direct Stytch auth.
- *
- * Note: This is a placeholder. Actual device token validation requires
- * a database lookup to verify the token is valid and not revoked.
- *
- * @param token - The device token
- * @param env - Environment with database access
- * @returns User ID if valid, null if invalid
- */
-export async function validateDeviceToken(
-  token: string,
-  _env: unknown
-): Promise<{ userId: string; deviceId: string } | null> {
-  // TODO: Implement device token validation against database
-  // For now, device tokens are managed client-side
-  // This function would:
-  // 1. Look up token in D1 database
-  // 2. Check if token is not revoked
-  // 3. Check if associated user account is still active
-  // 4. Return user ID if valid
-
-  console.log('[auth] Device token validation not yet implemented');
-  return null;
-}

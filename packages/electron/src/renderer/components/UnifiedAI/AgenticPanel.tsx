@@ -1240,9 +1240,16 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // - Final completion triggers database reload for consistency
   useEffect(() => {
     const handleStreamResponse = async (data: any) => {
+      console.log('[AgenticPanel] handleStreamResponse called:', {
+        hasData: !!data,
+        sessionId: data?.sessionId,
+        isComplete: data?.isComplete,
+        autoContextPending: data?.autoContextPending
+      });
       if (!data || !data.sessionId) return;
       // Check if this session is relevant to this panel (any open tab)
       const isRelevantSession = sessionTabsRef.current.some(tab => tab.id === data.sessionId);
+      console.log('[AgenticPanel] isRelevantSession:', isRelevantSession, 'tabs:', sessionTabsRef.current.map(t => t?.id));
       if (!isRelevantSession) {
         return;
       }
@@ -1261,6 +1268,22 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             next.delete(data.sessionId);
             return next;
           });
+
+          // Process any queued prompts after stream completion
+          // This handles prompts queued while the AI was processing (from local or mobile)
+          console.log('[AgenticPanel] Stream complete, checking for queued prompts:', data.sessionId);
+          setTimeout(() => {
+            const tab = sessionTabsRef.current.find(t => t.id === data.sessionId);
+            console.log('[AgenticPanel] Processing queue check:', {
+              sessionId: data.sessionId,
+              tabFound: !!tab,
+              processQueuedPromptsRefSet: !!processQueuedPromptsRef.current,
+              tabsCount: sessionTabsRef.current.length
+            });
+            if (tab && processQueuedPromptsRef.current) {
+              processQueuedPromptsRef.current(data.sessionId, tab);
+            }
+          }, 100);
         }
         // Schedule reload to get the latest message from database
         scheduleSessionReload(data.sessionId, { immediate: true, reason });
@@ -1384,6 +1407,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         return;
       }
 
+      console.log('[AgenticPanel] Auto-context ended, clearing state and checking queue:', data.sessionId);
       autoContextSessionsRef.current.delete(data.sessionId);
       sendingSessionsRef.current.delete(data.sessionId);
       setSendingSessions(prev => {
@@ -1391,6 +1415,19 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         next.delete(data.sessionId);
         return next;
       });
+
+      // Process any queued prompts after auto-context completes
+      setTimeout(() => {
+        const tab = sessionTabsRef.current.find(t => t.id === data.sessionId);
+        console.log('[AgenticPanel] Auto-context end queue check:', {
+          sessionId: data.sessionId,
+          tabFound: !!tab,
+          processQueuedPromptsRefSet: !!processQueuedPromptsRef.current
+        });
+        if (tab && processQueuedPromptsRef.current) {
+          processQueuedPromptsRef.current(data.sessionId, tab);
+        }
+      }, 100);
     };
 
     const cleanup = window.electronAPI.on('ai:auto-context-end', handleAutoContextEnd);

@@ -11,13 +11,15 @@ export interface SyncConfig {
   /** WebSocket server URL (e.g., ws://localhost:8787 or wss://sync.nimbalyst.com) */
   serverUrl: string;
 
-  /** User ID for authentication and routing */
-  userId: string;
+  /**
+   * Function to get a fresh JWT for authentication.
+   * Called before each WebSocket connection to ensure the JWT isn't expired.
+   * JWTs typically expire in ~5 minutes, so this must return a fresh one.
+   * The user ID is extracted from the JWT 'sub' claim.
+   */
+  getJwt: () => Promise<string>;
 
-  /** Auth token for server authentication */
-  authToken: string;
-
-  /** Optional encryption key for E2E encryption (Phase 2) */
+  /** Optional encryption key for E2E encryption */
   encryptionKey?: CryptoKey;
 
   /** Device info for presence awareness */

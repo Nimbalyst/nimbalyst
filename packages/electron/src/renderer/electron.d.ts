@@ -160,18 +160,14 @@ interface ElectronAPI {
     setSessionId: (sessionId: string) => void;
   };
 
-  // Credentials (for sync and mobile pairing)
+  // Credentials (for E2E encryption key management)
   credentials: {
-    getUserId: () => Promise<string>;
-    get: () => Promise<{ userId: string; createdAt: number; isSecure: boolean }>;
-    reset: () => Promise<{ userId: string; createdAt: number; isSecure: boolean }>;
-    generateQRPayload: (serverUrl: string, expiresInMinutes?: number) => Promise<{
+    get: () => Promise<{ encryptionKeySeed: string; createdAt: number; isSecure: boolean }>;
+    reset: () => Promise<{ encryptionKeySeed: string; createdAt: number; isSecure: boolean }>;
+    generateQRPayload: (serverUrl: string) => Promise<{
       version: number;
       serverUrl: string;
-      userId: string;
-      authToken: string;
       encryptionKeySeed: string;
-      expiresAt: number;
     }>;
     isSecure: () => Promise<boolean>;
   };
@@ -201,25 +197,6 @@ interface ElectronAPI {
     signOut: () => Promise<{ success: boolean }>;
     getSessionJwt: () => Promise<string | null>;
     refreshSession: () => Promise<boolean>;
-    issueDeviceToken: (deviceName: string, deviceType?: 'mobile' | 'tablet') => Promise<{
-      token: string;
-      deviceId: string;
-      userId: string;
-      createdAt: number;
-      lastUsedAt: number;
-      deviceName?: string;
-      deviceType: 'mobile' | 'tablet' | 'desktop';
-    } | null>;
-    getDeviceTokens: () => Promise<Array<{
-      token: string;
-      deviceId: string;
-      userId: string;
-      createdAt: number;
-      lastUsedAt: number;
-      deviceName?: string;
-      deviceType: 'mobile' | 'tablet' | 'desktop';
-    }>>;
-    revokeDeviceToken: (deviceId: string) => Promise<boolean>;
     subscribeAuthState: () => Promise<any>;
     onAuthStateChange: (callback: (state: any) => void) => () => void;
   }

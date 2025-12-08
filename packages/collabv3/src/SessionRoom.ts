@@ -344,8 +344,7 @@ export class SessionRoom implements DurableObject {
     ).toArray();
 
     if (existing.length > 0) {
-      // Message already exists - skip insert, don't broadcast
-      console.warn('[SessionRoom] Skipping duplicate message:', message.id);
+      // Message already exists - skip insert, don't broadcast (expected during initial sync)
       return;
     }
 

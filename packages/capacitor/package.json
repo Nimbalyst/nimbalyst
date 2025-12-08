@@ -15,7 +15,9 @@
     "ios:build": "npm run build && npx cap sync ios"
   },
   "dependencies": {
-    "@capacitor-mlkit/barcode-scanning": "^6.1.0",
+    "@capacitor-mlkit/barcode-scanning": "^7.0.0",
+    "@capacitor/app": "^7.0.1",
+    "@capacitor/browser": "^7.0.1",
     "@capacitor/core": "^7.4.4",
     "@capacitor/preferences": "^7.0.2",
     "@nimbalyst/runtime": "file:../runtime",

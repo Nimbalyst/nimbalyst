@@ -5,7 +5,7 @@ import { logger } from '../utils/logger';
 import { SoundNotificationService } from '../services/SoundNotificationService';
 import { autoUpdaterService } from '../services/autoUpdater';
 import type { OnboardingState } from '../utils/store';
-import { getCredentials, getUserId, resetCredentials, generateQRPairingPayload, isUsingSecureStorage } from '../services/CredentialService';
+import { getCredentials, resetCredentials, generateQRPairingPayload, isUsingSecureStorage } from '../services/CredentialService';
 import { onSyncStatusChange } from '../services/SyncManager';
 import * as StytchAuth from '../services/StytchAuthService';
 
@@ -183,6 +183,12 @@ export function registerSettingsHandlers() {
             return { success: false, error: 'Server URL is required' };
         }
 
+        // Require Stytch authentication
+        const jwt = StytchAuth.getSessionJwt();
+        if (!jwt) {
+            return { success: false, error: 'Not authenticated. Please sign in first.' };
+        }
+
         try {
             // Convert ws:// to http:// for health check
             const httpUrl = config.serverUrl
@@ -193,13 +199,13 @@ export function registerSettingsHandlers() {
             const response = await fetch(`${httpUrl}/health`, {
                 method: 'GET',
                 headers: {
-                    'Authorization': `Bearer ${config.userId}:${config.authToken}`,
+                    'Authorization': `Bearer ${jwt}`,
                 },
                 signal: AbortSignal.timeout(5000),
             });
 
             if (response.ok) {
-                // CollabV3 returns plain text "OK", collabv2 returns JSON
+                // CollabV3 returns plain text "OK"
                 const text = await response.text();
                 try {
                     const data = JSON.parse(text);
@@ -225,11 +231,13 @@ export function registerSettingsHandlers() {
             return { success: false, devices: [], error: 'Sync not configured' };
         }
 
-        try {
-            // Get credentials
-            const { getCredentials } = await import('../services/CredentialService');
-            const credentials = getCredentials();
+        // Require Stytch authentication
+        const jwt = StytchAuth.getSessionJwt();
+        if (!jwt) {
+            return { success: false, devices: [], error: 'Not authenticated' };
+        }
 
+        try {
             // Fetch via the /api/sessions endpoint which forwards to IndexRoom status
             const httpUrl = config.serverUrl
                 .replace(/^ws:/, 'http:')
@@ -239,7 +247,7 @@ export function registerSettingsHandlers() {
             const response = await fetch(`${httpUrl}/api/sessions`, {
                 method: 'GET',
                 headers: {
-                    'Authorization': `Bearer ${credentials.userId}:${credentials.authToken}`,
+                    'Authorization': `Bearer ${jwt}`,
                 },
                 signal: AbortSignal.timeout(5000),
             });
@@ -265,8 +273,8 @@ export function registerSettingsHandlers() {
     ipcMain.handle('sync:get-status', async (_event, workspacePath?: string) => {
         const config = getSessionSyncConfig();
 
-        // Not configured at all
-        if (!config?.enabled || !config.serverUrl || !config.userId || !config.authToken) {
+        // Not configured - check for enabled, serverUrl, and Stytch auth
+        if (!config?.enabled || !config.serverUrl || !StytchAuth.isAuthenticated()) {
             return {
                 appConfigured: false,
                 projectEnabled: false,
@@ -330,6 +338,7 @@ export function registerSettingsHandlers() {
                 sessionCount,
                 lastSyncedAt,
             },
+            userEmail: StytchAuth.getUserEmail(),
         };
     });
 
@@ -386,40 +395,35 @@ export function registerSettingsHandlers() {
     });
 
     // ============================================================
-    // Credential Management (for sync and mobile pairing)
+    // Credential Management (for E2E encryption key)
     // ============================================================
 
-    // Get user ID (read-only, for display in settings)
-    ipcMain.handle('credentials:get-user-id', () => {
-        return getUserId();
-    });
-
-    // Get full credentials (for internal use, not exposed to UI except user ID)
+    // Get encryption key info (for sync pairing)
     ipcMain.handle('credentials:get', () => {
         const creds = getCredentials();
         return {
-            userId: creds.userId,
+            encryptionKeySeed: creds.encryptionKeySeed,
             createdAt: creds.createdAt,
             isSecure: isUsingSecureStorage(),
         };
     });
 
-    // Reset credentials (generates new ones - invalidates paired devices)
+    // Reset encryption key (generates new one - invalidates paired devices)
     ipcMain.handle('credentials:reset', () => {
         const creds = resetCredentials();
         return {
-            userId: creds.userId,
+            encryptionKeySeed: creds.encryptionKeySeed,
             createdAt: creds.createdAt,
             isSecure: isUsingSecureStorage(),
         };
     });
 
     // Generate QR pairing payload for mobile device
-    ipcMain.handle('credentials:generate-qr-payload', (_event, serverUrl: string, expiresInMinutes?: number) => {
+    ipcMain.handle('credentials:generate-qr-payload', (_event, serverUrl: string) => {
         if (!serverUrl) {
             throw new Error('serverUrl is required for QR pairing');
         }
-        return generateQRPairingPayload(serverUrl, expiresInMinutes);
+        return generateQRPairingPayload(serverUrl);
     });
 
     // Check if secure storage (keychain) is available
@@ -481,27 +485,6 @@ export function registerSettingsHandlers() {
     // Validate and refresh the current session
     ipcMain.handle('stytch:refresh-session', async () => {
         return StytchAuth.validateAndRefreshSession();
-    });
-
-    // Issue a device token for mobile pairing
-    ipcMain.handle('stytch:issue-device-token', (_event, deviceName: string, deviceType?: 'mobile' | 'tablet') => {
-        if (!deviceName) {
-            return null;
-        }
-        return StytchAuth.issueDeviceToken(deviceName, deviceType || 'mobile');
-    });
-
-    // Get all device tokens for current user
-    ipcMain.handle('stytch:get-device-tokens', () => {
-        return StytchAuth.getDeviceTokens();
-    });
-
-    // Revoke a device token
-    ipcMain.handle('stytch:revoke-device-token', (_event, deviceId: string) => {
-        if (!deviceId) {
-            return false;
-        }
-        return StytchAuth.revokeDeviceToken(deviceId);
     });
 
     // Subscribe to auth state changes

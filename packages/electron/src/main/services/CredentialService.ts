@@ -1,16 +1,15 @@
 /**
- * CredentialService - Manages user identity and secure credential storage.
+ * CredentialService - Manages encryption key for E2E encrypted sync.
  *
  * This service handles:
- * - Auto-generating globally unique user ID on first launch
- * - Auto-generating secure auth token and encryption key seed
- * - Storing credentials securely using Electron's safeStorage API (OS keychain)
- * - Providing credentials for session sync and mobile device pairing
+ * - Auto-generating secure encryption key seed on first launch
+ * - Storing the key seed securely using Electron's safeStorage API (OS keychain)
+ * - Providing the encryption key seed for session sync and mobile device pairing
  *
  * Security notes:
  * - Encryption key seed is generated locally and NEVER sent to the server
- * - All credentials are encrypted at rest using OS keychain
- * - User ID is a UUIDv4 to avoid collisions across users
+ * - The key seed is only shared via QR code for mobile pairing
+ * - Authentication is handled separately by StytchAuthService
  */
 
 import { safeStorage } from 'electron';
@@ -20,9 +19,11 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import { logger } from '../utils/logger';
 
+/**
+ * Encryption credentials for E2E encrypted sync.
+ * Authentication is handled by StytchAuthService.
+ */
 export interface SyncCredentials {
-  userId: string;
-  authToken: string;
   encryptionKeySeed: string; // Base64 encoded 32 bytes - never sent to server
   createdAt: number;
 }
@@ -47,13 +48,6 @@ function generateSecureToken(bytes: number = 32): string {
 }
 
 /**
- * Generate a UUIDv4 for the user ID.
- */
-function generateUserId(): string {
-  return crypto.randomUUID();
-}
-
-/**
  * Check if safeStorage is available for encryption.
  */
 function isSafeStorageAvailable(): boolean {
@@ -65,12 +59,10 @@ function isSafeStorageAvailable(): boolean {
 }
 
 /**
- * Create new credentials with auto-generated values.
+ * Create new credentials with auto-generated encryption key seed.
  */
 function createCredentials(): SyncCredentials {
   return {
-    userId: generateUserId(),
-    authToken: generateSecureToken(32),
     encryptionKeySeed: generateSecureToken(32),
     createdAt: Date.now(),
   };
@@ -126,7 +118,7 @@ function loadCredentials(): SyncCredentials | null {
 /**
  * Get or create sync credentials.
  *
- * On first launch, generates new credentials and saves them securely.
+ * On first launch, generates new encryption key seed and saves it securely.
  * On subsequent launches, loads existing credentials from disk.
  */
 export function getCredentials(): SyncCredentials {
@@ -140,16 +132,14 @@ export function getCredentials(): SyncCredentials {
 
   if (!credentials) {
     // First launch - generate new credentials
-    logger.main.info('[CredentialService] First launch - generating new credentials');
+    logger.main.info('[CredentialService] First launch - generating new encryption key seed');
     credentials = createCredentials();
     saveCredentials(credentials);
-    logger.main.info('[CredentialService] New credentials generated', {
-      userId: credentials.userId,
+    logger.main.info('[CredentialService] New encryption key seed generated', {
       createdAt: new Date(credentials.createdAt).toISOString(),
     });
   } else {
     logger.main.info('[CredentialService] Loaded existing credentials', {
-      userId: credentials.userId,
       createdAt: new Date(credentials.createdAt).toISOString(),
     });
   }
@@ -167,20 +157,19 @@ export function hasCredentials(): boolean {
 }
 
 /**
- * Reset credentials - generates new ones.
+ * Reset encryption key seed - generates a new one.
  *
  * WARNING: This will invalidate any paired mobile devices.
  * They will need to re-scan the QR code.
  */
 export function resetCredentials(): SyncCredentials {
-  logger.main.info('[CredentialService] Resetting credentials...');
+  logger.main.info('[CredentialService] Resetting encryption key seed...');
 
   const credentials = createCredentials();
   saveCredentials(credentials);
   cachedCredentials = credentials;
 
-  logger.main.info('[CredentialService] New credentials generated', {
-    userId: credentials.userId,
+  logger.main.info('[CredentialService] New encryption key seed generated', {
     createdAt: new Date(credentials.createdAt).toISOString(),
   });
 
@@ -188,10 +177,10 @@ export function resetCredentials(): SyncCredentials {
 }
 
 /**
- * Get the user ID only (for display in settings).
+ * Get the encryption key seed (for deriving encryption key).
  */
-export function getUserId(): string {
-  return getCredentials().userId;
+export function getEncryptionKeySeed(): string {
+  return getCredentials().encryptionKeySeed;
 }
 
 /**
@@ -204,28 +193,28 @@ export function isUsingSecureStorage(): boolean {
 /**
  * Generate QR pairing payload for mobile device.
  *
+ * The QR code only contains the encryption key seed and server URL.
+ * Mobile devices authenticate independently via Stytch OAuth.
+ *
  * @param serverUrl - The sync server URL
- * @param expiresInMinutes - How long the QR code is valid (default 5 minutes)
  */
 export function generateQRPairingPayload(
-  serverUrl: string,
-  expiresInMinutes: number = 5
+  serverUrl: string
 ): {
   version: number;
   serverUrl: string;
-  userId: string;
-  authToken: string;
   encryptionKeySeed: string;
   expiresAt: number;
 } {
   const credentials = getCredentials();
 
+  // QR code expires in 15 minutes for security
+  const expiresAt = Date.now() + 15 * 60 * 1000;
+
   return {
-    version: 1,
+    version: 2, // Version 2 = encryption key only, no auth credentials
     serverUrl,
-    userId: credentials.userId,
-    authToken: credentials.authToken,
     encryptionKeySeed: credentials.encryptionKeySeed,
-    expiresAt: Date.now() + expiresInMinutes * 60 * 1000,
+    expiresAt,
   };
 }

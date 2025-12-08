@@ -22,6 +22,7 @@ export interface SyncStatus {
   syncing: boolean;             // Is a sync in progress?
   error: string | null;
   stats: SyncStats;
+  userEmail?: string | null;    // Logged in user's email
 }
 
 interface SyncStatusButtonProps {
@@ -213,6 +214,13 @@ export const SyncStatusButton: React.FC<SyncStatusButtonProps> = ({ workspacePat
               {status.projectEnabled ? (status.connected ? 'Connected' : 'Disconnected') : 'Disabled'}
             </span>
           </div>
+
+          {status.userEmail && (
+            <div className="sync-menu-user">
+              <MaterialSymbol icon="account_circle" size={16} />
+              <span>{status.userEmail}</span>
+            </div>
+          )}
 
           {status.error && (
             <div className="sync-menu-error">

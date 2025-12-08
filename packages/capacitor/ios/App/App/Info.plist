@@ -47,5 +47,16 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Camera is used to scan QR codes for device pairing</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.nimbalyst.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>nimbalyst</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

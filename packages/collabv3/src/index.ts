@@ -5,9 +5,8 @@
  * Room ID format: user:{userId}:session:{sessionId} or user:{userId}:index
  *
  * Authentication:
- * - Supports both legacy simple auth (Bearer {userId}:{token}) and JWT auth (Stytch)
- * - JWT auth extracts user ID from the 'sub' claim
- * - Both methods can be used simultaneously for backward compatibility
+ * - All authentication is done via Stytch session JWTs
+ * - JWT 'sub' claim contains the user ID used for room authorization
  */
 
 import type { Env } from './types';
@@ -50,10 +49,8 @@ function parseRoomId(roomId: string): ParsedRoomId | null {
 // Get auth configuration from environment
 function getAuthConfig(env: Env): AuthConfig {
   return {
-    // Read Stytch project ID from environment if available
+    // Read Stytch project ID from environment
     stytchProjectId: (env as any).STYTCH_PROJECT_ID,
-    // Allow simple auth for backward compatibility
-    allowSimpleAuth: true,
   };
 }
 
@@ -83,9 +80,12 @@ export default {
       // Validate auth matches room user (supports both simple and JWT auth)
       const authConfig = getAuthConfig(env);
       const auth = await parseAuthJWT(request, authConfig);
+      console.log('[sync] Auth result:', auth, 'Room userId:', parsed.userId);
       if (!auth || auth.user_id !== parsed.userId) {
+        console.log('[sync] Auth failed. auth:', auth, 'parsed.userId:', parsed.userId);
         return new Response('Unauthorized', { status: 401 });
       }
+      console.log('[sync] Auth passed, forwarding to DO');
 
       // Route to appropriate DO
       let stub: DurableObjectStub;
@@ -102,8 +102,12 @@ export default {
         return new Response('Invalid room type', { status: 400 });
       }
 
-      // Forward request to DO
-      return stub.fetch(request);
+      // Forward request to DO with user_id added to URL
+      // (DOs use simpler auth parsing that expects user_id in query params)
+      const forwardUrl = new URL(request.url);
+      forwardUrl.searchParams.set('user_id', auth.user_id);
+      const forwardRequest = new Request(forwardUrl.toString(), request);
+      return stub.fetch(forwardRequest);
     }
 
     // REST API routes
@@ -120,29 +124,6 @@ export default {
   },
 };
 
-/**
- * Parse auth from request
- */
-function parseAuth(request: Request): { userId: string; token: string } | null {
-  // Try Authorization header: "Bearer {userId}:{token}"
-  const authHeader = request.headers.get('Authorization');
-  if (authHeader?.startsWith('Bearer ')) {
-    const parts = authHeader.slice(7).split(':');
-    if (parts.length >= 2) {
-      return { userId: parts[0], token: parts.slice(1).join(':') };
-    }
-  }
-
-  // Try query params
-  const url = new URL(request.url);
-  const userId = url.searchParams.get('user_id');
-  const token = url.searchParams.get('token');
-  if (userId && token) {
-    return { userId, token };
-  }
-
-  return null;
-}
 
 /**
  * Handle REST API requests
@@ -294,9 +275,21 @@ async function handleAuthRoutes(
   env: Env,
   url: URL
 ): Promise<Response> {
+  // CORS headers for auth routes
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  };
+
+  // Handle CORS preflight
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
+
   // Check for required environment variables
   if (!env.STYTCH_PROJECT_ID || !env.STYTCH_SECRET_KEY) {
-    return new Response('Stytch not configured', { status: 500 });
+    return new Response('Stytch not configured', { status: 500, headers: corsHeaders });
   }
 
   const isTestProject = env.STYTCH_PROJECT_ID.startsWith('project-test-');
@@ -357,18 +350,26 @@ async function handleAuthRoutes(
       }
 
       // Build deep link URL with session data
-      const deepLinkParams = new URLSearchParams({
-        session_token: stytchData.session_token,
-        session_jwt: stytchData.session_jwt || '',
-        user_id: stytchData.user?.user_id || '',
+      const sessionData = {
+        sessionToken: stytchData.session_token,
+        sessionJwt: stytchData.session_jwt || '',
+        userId: stytchData.user?.user_id || '',
         email: stytchData.user?.emails?.[0]?.email || '',
-        expires_at: stytchData.session?.expires_at || '',
+        expiresAt: stytchData.session?.expires_at || '',
+      };
+
+      const deepLinkParams = new URLSearchParams({
+        session_token: sessionData.sessionToken,
+        session_jwt: sessionData.sessionJwt,
+        user_id: sessionData.userId,
+        email: sessionData.email,
+        expires_at: sessionData.expiresAt,
       });
 
       const deepLinkUrl = `nimbalyst://auth/callback?${deepLinkParams.toString()}`;
 
       // Return a page that redirects to the deep link
-      return new Response(renderSuccessPage(deepLinkUrl), {
+      return new Response(renderSuccessPage(deepLinkUrl, sessionData), {
         status: 200,
         headers: { 'Content-Type': 'text/html' },
       });
@@ -376,6 +377,69 @@ async function handleAuthRoutes(
       return new Response(renderErrorPage(`Server error: ${err}`), {
         status: 500,
         headers: { 'Content-Type': 'text/html' },
+      });
+    }
+  }
+
+  // POST /auth/refresh - Refresh session and get new JWT
+  // Desktop app calls this when JWT is missing or expired
+  if (url.pathname === '/auth/refresh' && request.method === 'POST') {
+    try {
+      const body = await request.json() as { session_token: string };
+      const sessionToken = body.session_token;
+
+      if (!sessionToken) {
+        return new Response(JSON.stringify({ error: 'session_token required' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Authenticate the session token to get a fresh JWT
+      const stytchResponse = await fetch(`${apiBase}/sessions/authenticate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Basic ${btoa(`${env.STYTCH_PROJECT_ID}:${env.STYTCH_SECRET_KEY}`)}`,
+        },
+        body: JSON.stringify({
+          session_token: sessionToken,
+          session_duration_minutes: 60 * 24 * 7, // 1 week
+        }),
+      });
+
+      const stytchData = await stytchResponse.json() as {
+        user?: { user_id: string; emails?: Array<{ email: string }> };
+        session?: { expires_at: string };
+        session_token?: string;
+        session_jwt?: string;
+        error_message?: string;
+      };
+
+      if (!stytchResponse.ok || !stytchData.session_token) {
+        return new Response(JSON.stringify({
+          error: stytchData.error_message || 'Session refresh failed',
+          expired: stytchResponse.status === 401,
+        }), {
+          status: stytchResponse.status,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      return new Response(JSON.stringify({
+        session_token: stytchData.session_token,
+        session_jwt: stytchData.session_jwt,
+        user_id: stytchData.user?.user_id,
+        email: stytchData.user?.emails?.[0]?.email,
+        expires_at: stytchData.session?.expires_at,
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    } catch (err) {
+      return new Response(JSON.stringify({ error: `Server error: ${err}` }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
   }
@@ -402,8 +466,23 @@ async function handleAuthRoutes(
 
 /**
  * Render success page that redirects to deep link
+ * Also shows tokens for dev mode browser testing
  */
-function renderSuccessPage(deepLinkUrl: string): string {
+function renderSuccessPage(deepLinkUrl: string, sessionData: {
+  sessionToken: string;
+  sessionJwt: string;
+  userId: string;
+  email: string;
+  expiresAt: string;
+}): string {
+  const devJson = JSON.stringify({
+    sessionToken: sessionData.sessionToken,
+    sessionJwt: sessionData.sessionJwt,
+    userId: sessionData.userId,
+    email: sessionData.email,
+    expiresAt: sessionData.expiresAt,
+  }, null, 2);
+
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -416,10 +495,12 @@ function renderSuccessPage(deepLinkUrl: string): string {
       display: flex;
       justify-content: center;
       align-items: center;
-      height: 100vh;
+      min-height: 100vh;
       margin: 0;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
+      padding: 20px;
+      box-sizing: border-box;
     }
     .container {
       text-align: center;
@@ -427,7 +508,8 @@ function renderSuccessPage(deepLinkUrl: string): string {
       background: rgba(255,255,255,0.1);
       border-radius: 16px;
       backdrop-filter: blur(10px);
-      max-width: 400px;
+      max-width: 500px;
+      width: 100%;
     }
     h1 { margin-bottom: 16px; font-size: 24px; }
     p { opacity: 0.9; margin-bottom: 24px; }
@@ -440,9 +522,44 @@ function renderSuccessPage(deepLinkUrl: string): string {
       border-radius: 8px;
       font-weight: 600;
       transition: transform 0.2s;
+      cursor: pointer;
+      border: none;
+      font-size: 16px;
     }
     .button:hover { transform: scale(1.05); }
     .auto-redirect { font-size: 12px; opacity: 0.7; margin-top: 16px; }
+    .dev-section {
+      margin-top: 32px;
+      padding-top: 24px;
+      border-top: 1px solid rgba(255,255,255,0.2);
+    }
+    .dev-section h2 {
+      font-size: 14px;
+      opacity: 0.8;
+      margin-bottom: 12px;
+    }
+    .token-box {
+      background: rgba(0,0,0,0.3);
+      border-radius: 8px;
+      padding: 12px;
+      font-family: monospace;
+      font-size: 11px;
+      text-align: left;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 200px;
+      overflow-y: auto;
+      margin-bottom: 12px;
+    }
+    .copy-btn {
+      background: rgba(255,255,255,0.2);
+      color: white;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+    .copy-btn:hover { background: rgba(255,255,255,0.3); }
+    .copied { background: #22c55e !important; }
   </style>
 </head>
 <body>
@@ -451,12 +568,31 @@ function renderSuccessPage(deepLinkUrl: string): string {
     <p>Click the button below to return to Nimbalyst, or it will open automatically.</p>
     <a href="${deepLinkUrl}" class="button">Open Nimbalyst</a>
     <p class="auto-redirect">Redirecting automatically...</p>
+
+    <div class="dev-section">
+      <h2>Dev Mode: Copy Session Tokens</h2>
+      <div class="token-box" id="tokenBox">${devJson}</div>
+      <button class="button copy-btn" onclick="copyTokens()">Copy Session JSON</button>
+    </div>
   </div>
   <script>
     // Try to open the deep link automatically
     setTimeout(() => {
       window.location.href = "${deepLinkUrl}";
-    }, 1000);
+    }, 1500);
+
+    function copyTokens() {
+      const tokenBox = document.getElementById('tokenBox');
+      navigator.clipboard.writeText(tokenBox.textContent).then(() => {
+        const btn = document.querySelector('.copy-btn');
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => {
+          btn.textContent = 'Copy Session JSON';
+          btn.classList.remove('copied');
+        }, 2000);
+      });
+    }
   </script>
 </body>
 </html>`;

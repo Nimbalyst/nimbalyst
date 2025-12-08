@@ -18,6 +18,7 @@ import type { DeviceInfo } from '@nimbalyst/runtime/sync';
 import { getSessionSyncConfig, type SessionSyncConfig } from '../utils/store';
 import { logger } from '../utils/logger';
 import { getCredentials } from './CredentialService';
+import { getStytchUserId, isAuthenticated } from './StytchAuthService';
 import { app } from 'electron';
 import * as os from 'os';
 
@@ -174,71 +175,88 @@ function getDeviceInfo(userId: string): DeviceInfo {
  * Returns a wrapped session store if sync is enabled, or the original store if not.
  */
 export async function initializeSync(baseStore: SessionStore): Promise<SessionStore> {
-  // TEMPORARY: Hard disable sync to debug performance issue
-  const FORCE_DISABLE_SYNC = false;
-  if (FORCE_DISABLE_SYNC) {
-    logger.main.info('[SyncManager] Session sync FORCE DISABLED for debugging');
-    return baseStore;
-  }
+  console.log('[SyncManager] initializeSync called');
 
   const config = getSessionSyncConfig();
+  console.log('[SyncManager] config:', JSON.stringify(config));
 
   if (!config?.enabled) {
-    logger.main.info('[SyncManager] Session sync not enabled');
+    console.log('[SyncManager] Session sync not enabled');
     return baseStore;
   }
 
   if (!config.serverUrl) {
-    logger.main.warn('[SyncManager] Session sync enabled but missing server URL');
+    console.log('[SyncManager] Session sync enabled but missing server URL');
     return baseStore;
   }
 
-  // Get credentials from CredentialService (auto-generated)
+  // Require Stytch authentication for sync
+  const authenticated = isAuthenticated();
+  console.log('[SyncManager] isAuthenticated:', authenticated);
+  if (!authenticated) {
+    console.log('[SyncManager] Session sync enabled but user not authenticated with Stytch');
+    return baseStore;
+  }
+
+  // Get user ID from Stytch (for encryption key derivation and device info)
+  // Note: JWT refresh happens on-demand before each WebSocket connection via getJwt callback
+  const stytchUserId = getStytchUserId();
+  console.log('[SyncManager] stytchUserId:', stytchUserId);
+  if (!stytchUserId) {
+    console.log('[SyncManager] Session sync enabled but no Stytch user ID available');
+    return baseStore;
+  }
+
+  // Get encryption key seed from CredentialService (for E2E encryption)
   const credentials = getCredentials();
 
   try {
-    const backend = config.backend ?? 'collabv3';
     logger.main.info('[SyncManager] Initializing session sync...', {
-      backend,
       serverUrl: config.serverUrl,
-      userId: credentials.userId,
+      userId: stytchUserId,
     });
 
     const {
-      createYjsSessionSync,
       createCollabV3Sync,
       createSyncedSessionStore,
       createMessageSyncHandler,
     } = await loadSyncModule();
 
-    // Create sync provider based on backend
-    let provider: import('@nimbalyst/runtime/sync').SyncProvider;
+    // CollabV3 uses the encryption key seed from CredentialService for E2E encryption
+    // Note: We use stytchUserId for salt to ensure same encryption key across devices
+    const encryptionKey = await deriveEncryptionKey(credentials.encryptionKeySeed, `nimbalyst:${stytchUserId}`);
 
-    if (backend === 'collabv3') {
-      // CollabV3 uses the encryption key seed from CredentialService for E2E encryption
-      const encryptionKey = await deriveEncryptionKey(credentials.encryptionKeySeed, `nimbalyst:${credentials.userId}`);
+    // Get device info for presence awareness
+    const deviceInfo = getDeviceInfo(stytchUserId);
+    logger.main.info('[SyncManager] Generated device info:', JSON.stringify(deviceInfo));
 
-      // Get device info for presence awareness
-      const deviceInfo = getDeviceInfo(credentials.userId);
-      logger.main.info('[SyncManager] Generated device info:', JSON.stringify(deviceInfo));
+    // Cache JWT refresh to prevent spamming Stytch during batch sync
+    // JWTs expire in ~5 minutes, so refresh at most once per minute
+    let lastRefreshTime = 0;
+    const MIN_REFRESH_INTERVAL = 60000; // 1 minute
 
-      provider = createCollabV3Sync({
-        serverUrl: config.serverUrl,
-        userId: credentials.userId,
-        authToken: credentials.authToken,
-        encryptionKey,
-        deviceInfo,
-      });
-      logger.main.info('[SyncManager] Created CollabV3 sync provider with device:', deviceInfo.name);
-    } else {
-      // Legacy Y.js backend
-      provider = createYjsSessionSync({
-        serverUrl: config.serverUrl,
-        userId: credentials.userId,
-        authToken: credentials.authToken,
-      });
-      logger.main.info('[SyncManager] Created Y.js sync provider (legacy)');
-    }
+    const provider = createCollabV3Sync({
+      serverUrl: config.serverUrl,
+      getJwt: async () => {
+        const { refreshSession: doRefresh, getSessionJwt: getJwt } = await import('./StytchAuthService');
+
+        // Only refresh if enough time has passed since last refresh
+        const now = Date.now();
+        if (now - lastRefreshTime > MIN_REFRESH_INTERVAL) {
+          await doRefresh(config.serverUrl);
+          lastRefreshTime = now;
+        }
+
+        const freshJwt = getJwt();
+        if (!freshJwt || freshJwt.split('.').length !== 3) {
+          throw new Error('Failed to get valid JWT after refresh');
+        }
+        return freshJwt;
+      },
+      encryptionKey,
+      deviceInfo,
+    });
+    logger.main.info('[SyncManager] Created CollabV3 sync provider with device:', deviceInfo.name);
 
     // Create message sync handler
     const messageSyncHandler = createMessageSyncHandler(provider);
@@ -290,52 +308,29 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
         const localTime = performance.now() - localStart;
         logger.main.info(`[SyncManager] Local has ${allLocalSessions.length} sessions (query took ${localTime.toFixed(1)}ms)`);
 
-        // Step 3: Build project list from workspaces
-        const { getRecentItems, store } = await import('../utils/store');
-        const recentWorkspaces = getRecentItems('workspaces');
+        // Get enabled projects filter (if configured)
+        const { store } = await import('../utils/store');
         const syncSettings = store.get('sessionSync');
         const enabledProjects = syncSettings?.enabledProjects;
 
-        const sessionCounts = new Map<string, number>();
-        const lastActivity = new Map<string, number>();
-
-        for (const session of allLocalSessions) {
-          const workspaceId = session.workspaceId || 'default';
-          sessionCounts.set(workspaceId, (sessionCounts.get(workspaceId) || 0) + 1);
-          lastActivity.set(workspaceId, Math.max(lastActivity.get(workspaceId) || 0, session.updatedAt));
-        }
-
-        const projects = recentWorkspaces.map(ws => ({
-          id: ws.path,
-          name: ws.name,
-          path: ws.path,
-          sessionCount: sessionCounts.get(ws.path) || 0,
-          lastActivityAt: lastActivity.get(ws.path) || Date.now(),
-          enabled: !enabledProjects || enabledProjects.includes(ws.path),
-        }));
-
-        if (sessionCounts.has('default')) {
-          projects.push({
-            id: 'default',
-            name: 'Default Project',
-            path: 'default',
-            sessionCount: sessionCounts.get('default') || 0,
-            lastActivityAt: lastActivity.get('default') || Date.now(),
-            enabled: !enabledProjects || enabledProjects.includes('default'),
-          });
-        }
-
-        const enabledProjectIds = new Set(projects.filter(p => p.enabled).map(p => p.id));
+        // Build enabled projects set - if enabledProjects is set, use it; otherwise sync all
+        const enabledProjectIds = enabledProjects
+          ? new Set(enabledProjects)
+          : null; // null means all projects enabled
 
         // Step 4: Find sessions that need syncing
         const sessionsNeedingIndexUpdate: typeof allLocalSessions = [];
         const sessionsNeedingMessageSync: string[] = [];
 
         for (const localSession of allLocalSessions) {
-          const workspaceId = localSession.workspaceId || 'default';
+          // Skip sessions without a workspace - they shouldn't exist but just in case
+          if (!localSession.workspaceId) {
+            logger.main.warn(`[SyncManager] Skipping session ${localSession.id.slice(0, 8)} - no workspaceId`);
+            continue;
+          }
 
-          // Skip sessions from disabled projects
-          if (!enabledProjectIds.has(workspaceId)) {
+          // Skip sessions from disabled projects (if project filtering is enabled)
+          if (enabledProjectIds && !enabledProjectIds.has(localSession.workspaceId)) {
             continue;
           }
 
@@ -369,12 +364,7 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
           needingMessageSync: sessionsNeedingMessageSync.length,
         });
 
-        // Step 5: Sync projects (still do this every time, it's cheap)
-        if (provider.syncProjectsToIndex) {
-          provider.syncProjectsToIndex(projects);
-        }
-
-        // Step 6: Sync only the sessions that need it
+        // Sync sessions that need it
         if (sessionsNeedingIndexUpdate.length === 0 && sessionsNeedingMessageSync.length === 0) {
           logger.main.info('[SyncManager] All sessions up to date, no sync needed');
         } else {

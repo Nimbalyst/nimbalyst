@@ -130,6 +130,20 @@
   color: var(--text-tertiary);
 }
 
+.sync-menu-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-primary);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.sync-menu-user span:first-child {
+  color: var(--text-tertiary);
+}
+
 .sync-menu-error {
   display: flex;
   align-items: center;

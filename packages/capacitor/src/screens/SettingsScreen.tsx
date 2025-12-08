@@ -8,54 +8,64 @@ import {
   clearCredentials,
   parseQRPayload,
   saveFromQRPayload,
-  toSyncConfig,
   type SyncCredentials,
 } from '../services/CredentialService';
+import {
+  startGoogleLogin,
+  sendMagicLink,
+  loadSession,
+  clearSession,
+  saveSession,
+  type StytchSession,
+} from '../services/StytchAuthService';
 
 export function SettingsScreen() {
   const navigate = useNavigate();
-  const { config, setConfig, status, isConfigured } = useSync();
+  const { isAuthenticated, isPaired, serverUrl, status, reconnect } = useSync();
 
   const [credentials, setCredentials] = useState<SyncCredentials | null>(null);
+  const [stytchSession, setStytchSession] = useState<StytchSession | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
-  const [showManualEntry, setShowManualEntry] = useState(false);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  // Manual entry form state (fallback)
-  const [serverUrl, setServerUrl] = useState(config?.serverUrl ?? 'ws://localhost:8790');
-  const [userId, setUserId] = useState(config?.userId ?? '');
-  const [authToken, setAuthToken] = useState(config?.authToken ?? '');
-  const [encryptionKey, setEncryptionKey] = useState('');
+  // Email login state
+  const [email, setEmail] = useState('');
+  const [magicLinkSent, setMagicLinkSent] = useState(false);
 
   // Dev mode setup
   const [showDevSetup, setShowDevSetup] = useState(false);
   const [devJsonInput, setDevJsonInput] = useState('');
   const [devJsonError, setDevJsonError] = useState<string | null>(null);
+  const [devSessionInput, setDevSessionInput] = useState('');
+  const [devSessionError, setDevSessionError] = useState<string | null>(null);
 
-  // Load credentials on mount
+  // Load credentials and session on mount
   useEffect(() => {
     async function load() {
       const creds = await loadCredentials();
       setCredentials(creds);
-      if (creds) {
-        // Also load into sync context
-        const syncConfig = await toSyncConfig();
-        if (syncConfig) {
-          setConfig(syncConfig);
-        }
-      }
+
+      const session = await loadSession();
+      setStytchSession(session);
     }
     load();
-  }, [setConfig]);
+  }, []);
 
-  // Update form when config changes
+  // Refresh stytch session after potential auth callback
   useEffect(() => {
-    if (config) {
-      setServerUrl(config.serverUrl);
-      setUserId(config.userId);
-      setAuthToken(config.authToken);
+    async function refreshSession() {
+      const session = await loadSession();
+      setStytchSession(session);
+      if (session && isLoggingIn) {
+        setIsLoggingIn(false);
+      }
     }
-  }, [config]);
+
+    // Check periodically in case auth completed in background
+    const interval = setInterval(refreshSession, 1000);
+    return () => clearInterval(interval);
+  }, [isLoggingIn]);
 
   const handleScanQR = async () => {
     setScanError(null);
@@ -112,46 +122,88 @@ export function SettingsScreen() {
       // Save credentials from QR payload
       const creds = await saveFromQRPayload(payload);
       setCredentials(creds);
-
-      // Update sync config
-      const syncConfig = await toSyncConfig();
-      if (syncConfig) {
-        setConfig(syncConfig);
-      }
-
       setScanError(null);
-      // Navigate back to session list
-      navigate('/');
+
+      // Trigger reconnect to use new credentials
+      await reconnect();
+
+      // If already authenticated, go back to session list
+      if (isAuthenticated) {
+        navigate('/');
+      }
     } catch (error) {
       console.error('[SettingsScreen] Failed to save credentials:', error);
       setScanError('Failed to save credentials');
     }
   };
 
-  const handleDisconnect = async () => {
-    await clearCredentials();
-    setCredentials(null);
-    setConfig(null);
-    setServerUrl('ws://localhost:8790');
-    setUserId('');
-    setAuthToken('');
-    setEncryptionKey('');
-  };
+  const handleGoogleLogin = async () => {
+    if (!serverUrl) {
+      setScanError('Please scan QR code first to get server URL');
+      return;
+    }
 
-  // Manual entry save
-  const handleManualSave = () => {
-    if (serverUrl && userId && authToken) {
-      setConfig({
-        serverUrl: serverUrl.trim(),
-        userId: userId.trim(),
-        authToken: authToken.trim(),
-        encryptionPassphrase: encryptionKey.trim() || undefined,
-      });
-      setShowManualEntry(false);
+    setIsLoggingIn(true);
+    setScanError(null);
+
+    try {
+      await startGoogleLogin(serverUrl);
+      // Browser will open, user will authenticate, then deep link will bring them back
+    } catch (error) {
+      console.error('[SettingsScreen] Login error:', error);
+      setScanError('Failed to start login');
+      setIsLoggingIn(false);
     }
   };
 
-  const isManualValid = serverUrl.trim() !== '' && userId.trim() !== '' && authToken.trim() !== '';
+  const handleDisconnect = async () => {
+    await clearCredentials();
+    await clearSession();
+    setCredentials(null);
+    setStytchSession(null);
+    await reconnect();
+  };
+
+  const handleLogout = async () => {
+    await clearSession();
+    setStytchSession(null);
+    await reconnect();
+  };
+
+  const handleSendMagicLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!serverUrl) {
+      setScanError('Please scan QR code first to get server URL');
+      return;
+    }
+    if (!email) {
+      setScanError('Please enter your email address');
+      return;
+    }
+
+    setIsLoggingIn(true);
+    setScanError(null);
+
+    try {
+      const result = await sendMagicLink(email, serverUrl);
+
+      if (!result.success && result.error) {
+        setScanError(result.error);
+      } else {
+        setMagicLinkSent(true);
+      }
+    } catch (error) {
+      console.error('[SettingsScreen] Magic link error:', error);
+      setScanError('Failed to send magic link');
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  // Determine what state we're in
+  const needsPairing = !isPaired;
+  const needsLogin = isPaired && !isAuthenticated;
+  const isConnected = isPaired && isAuthenticated;
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -176,23 +228,35 @@ export function SettingsScreen() {
             <span className="text-sm font-medium text-[var(--text-secondary)]">Sync Status</span>
             <SyncStatusBadge />
           </div>
-          {isConfigured && credentials && (
+          {isConnected && stytchSession && (
             <div className="text-xs text-[var(--text-tertiary)]">
-              Connected as {credentials.userId.slice(0, 8)}...
+              Signed in as {stytchSession.email}
             </div>
           )}
-          {!isConfigured && (
+          {needsLogin && (
+            <div className="text-xs text-[var(--text-tertiary)]">
+              QR paired - please sign in with Google
+            </div>
+          )}
+          {needsPairing && (
             <div className="text-xs text-[var(--text-tertiary)]">
               Scan QR code from desktop app to connect
             </div>
           )}
         </div>
 
-        {/* QR Code Scanning Section */}
-        {!isConfigured && !showManualEntry && (
+        {/* Error display */}
+        {scanError && (
+          <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-500 text-sm">
+            {scanError}
+          </div>
+        )}
+
+        {/* Step 1: QR Code Scanning (if not paired) */}
+        {needsPairing && (
           <div className="mb-6">
             <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">
-              Pair with Desktop
+              Step 1: Pair with Desktop
             </h2>
 
             <div className="p-6 rounded-lg bg-[var(--surface-secondary)] border border-[var(--border-primary)] text-center">
@@ -209,181 +273,191 @@ export function SettingsScreen() {
               </div>
 
               <p className="text-sm text-[var(--text-secondary)] mb-4">
-                Scan the QR code from Nimbalyst desktop app to sync your sessions securely.
+                Open Settings on the desktop app and show the pairing QR code.
               </p>
 
               <button
                 onClick={handleScanQR}
                 disabled={isScanning}
-                className="w-full py-3 px-4 rounded-lg font-medium text-white bg-[var(--primary-color)] hover:opacity-90 disabled:opacity-50 transition-opacity"
+                className="w-full py-3 px-4 rounded-lg bg-[var(--primary-color)] text-white font-medium disabled:opacity-50"
               >
-                {isScanning ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
-                    Scanning...
-                  </span>
-                ) : (
-                  <span className="flex items-center justify-center gap-2">
-                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
-                    </svg>
-                    Scan QR Code
-                  </span>
-                )}
-              </button>
-
-              {scanError && (
-                <div className="mt-3 p-3 rounded-lg bg-[rgba(239,68,68,0.1)] border border-[rgba(239,68,68,0.3)]">
-                  <p className="text-sm text-[var(--error-color)]">{scanError}</p>
-                </div>
-              )}
-
-              <button
-                onClick={() => setShowManualEntry(true)}
-                className="mt-4 text-sm text-[var(--text-tertiary)] underline"
-              >
-                Enter manually instead
+                {isScanning ? 'Scanning...' : 'Scan QR Code'}
               </button>
             </div>
           </div>
         )}
 
-        {/* Manual Entry Section */}
-        {showManualEntry && !isConfigured && (
+        {/* Step 2: Login (if paired but not logged in) */}
+        {needsLogin && (
           <div className="mb-6">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wide">
-                Manual Configuration
-              </h2>
-              <button
-                onClick={() => setShowManualEntry(false)}
-                className="text-sm text-[var(--primary-color)]"
-              >
-                Back to QR
-              </button>
-            </div>
+            <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">
+              Step 2: Sign In
+            </h2>
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">
-                  Server URL
-                </label>
-                <input
-                  type="text"
-                  value={serverUrl}
-                  onChange={(e) => setServerUrl(e.target.value)}
-                  placeholder="ws://localhost:8790"
-                  className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--surface-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary-color)]"
-                />
-              </div>
+            <div className="p-6 rounded-lg bg-[var(--surface-secondary)] border border-[var(--border-primary)]">
+              {magicLinkSent ? (
+                // Magic link sent confirmation
+                <div className="text-center">
+                  <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-green-500/20 flex items-center justify-center">
+                    <svg className="w-6 h-6 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                      <polyline points="22 4 12 14.01 9 11.01" />
+                    </svg>
+                  </div>
+                  <p className="text-sm text-[var(--text-primary)] font-medium mb-2">
+                    Check your email
+                  </p>
+                  <p className="text-xs text-[var(--text-secondary)] mb-4">
+                    We sent a login link to {email}
+                  </p>
+                  <button
+                    onClick={() => {
+                      setMagicLinkSent(false);
+                      setEmail('');
+                    }}
+                    className="text-xs text-[var(--primary-color)]"
+                  >
+                    Use a different email
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="text-center mb-4">
+                    <svg className="w-12 h-12 mx-auto text-[var(--text-tertiary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                      <circle cx="12" cy="7" r="4" />
+                    </svg>
+                  </div>
 
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">
-                  User ID
-                </label>
-                <input
-                  type="text"
-                  value={userId}
-                  onChange={(e) => setUserId(e.target.value)}
-                  placeholder="your-user-id"
-                  className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--surface-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary-color)]"
-                />
-              </div>
+                  <p className="text-sm text-[var(--text-secondary)] mb-4 text-center">
+                    Sign in to sync your AI sessions.
+                  </p>
 
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">
-                  Auth Token
-                </label>
-                <input
-                  type="password"
-                  value={authToken}
-                  onChange={(e) => setAuthToken(e.target.value)}
-                  placeholder="your-auth-token"
-                  className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--surface-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary-color)]"
-                />
-              </div>
+                  {/* Google Sign In */}
+                  <button
+                    onClick={handleGoogleLogin}
+                    disabled={isLoggingIn}
+                    className="w-full py-3 px-4 rounded-lg bg-white text-gray-800 font-medium border border-gray-300 flex items-center justify-center gap-3 disabled:opacity-50 mb-4"
+                  >
+                    <svg className="w-5 h-5" viewBox="0 0 24 24">
+                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                    </svg>
+                    {isLoggingIn ? 'Signing in...' : 'Sign in with Google'}
+                  </button>
 
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">
-                  Encryption Key (Optional)
-                </label>
-                <input
-                  type="password"
-                  value={encryptionKey}
-                  onChange={(e) => setEncryptionKey(e.target.value)}
-                  placeholder="encryption-key-from-qr"
-                  className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--surface-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary-color)]"
-                />
-                <p className="mt-1 text-xs text-[var(--text-tertiary)]">
-                  Required for end-to-end encryption. Get this from the QR code.
-                </p>
-              </div>
+                  {/* Divider */}
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="flex-1 h-px bg-[var(--border-primary)]" />
+                    <span className="text-xs text-[var(--text-tertiary)]">or</span>
+                    <div className="flex-1 h-px bg-[var(--border-primary)]" />
+                  </div>
 
-              <button
-                onClick={handleManualSave}
-                disabled={!isManualValid}
-                className="w-full py-3 px-4 rounded-lg font-medium text-white bg-[var(--primary-color)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
-              >
-                Connect
-              </button>
+                  {/* Email Magic Link */}
+                  <form onSubmit={handleSendMagicLink}>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="Enter your email"
+                      className="w-full px-4 py-3 rounded-lg border border-[var(--border-primary)] bg-[var(--surface-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] mb-3"
+                      disabled={isLoggingIn}
+                    />
+                    <button
+                      type="submit"
+                      disabled={isLoggingIn || !email}
+                      className="w-full py-3 px-4 rounded-lg bg-[var(--primary-color)] text-white font-medium disabled:opacity-50"
+                    >
+                      {isLoggingIn ? 'Sending...' : 'Send login link'}
+                    </button>
+                  </form>
+                </>
+              )}
             </div>
           </div>
         )}
 
         {/* Connected State */}
-        {isConfigured && credentials && (
-          <div className="mb-6">
-            <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">
-              Connection Details
-            </h2>
+        {isConnected && (
+          <>
+            {/* Account Info */}
+            <div className="mb-6">
+              <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">
+                Account
+              </h2>
 
-            <div className="p-4 rounded-lg bg-[var(--surface-secondary)] border border-[var(--border-primary)] space-y-3">
-              <div>
-                <span className="text-xs text-[var(--text-tertiary)]">Server</span>
-                <p className="text-sm text-[var(--text-primary)] font-mono truncate">
-                  {credentials.serverUrl}
-                </p>
+              <div className="p-4 rounded-lg bg-[var(--surface-secondary)] border border-[var(--border-primary)]">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-full bg-[var(--primary-color)] flex items-center justify-center text-white font-medium">
+                    {stytchSession?.email?.charAt(0).toUpperCase() || '?'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate">{stytchSession?.email || 'Unknown'}</div>
+                    <div className="text-xs text-[var(--text-tertiary)]">Google Account</div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleLogout}
+                  className="w-full py-2 px-4 rounded-lg border border-[var(--border-primary)] text-[var(--text-secondary)] text-sm"
+                >
+                  Sign Out
+                </button>
               </div>
+            </div>
 
-              <div>
-                <span className="text-xs text-[var(--text-tertiary)]">User ID</span>
-                <p className="text-sm text-[var(--text-primary)] font-mono truncate">
-                  {credentials.userId}
-                </p>
-              </div>
+            {/* Pairing Info */}
+            <div className="mb-6">
+              <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">
+                Pairing
+              </h2>
 
-              <div>
-                <span className="text-xs text-[var(--text-tertiary)]">Paired</span>
-                <p className="text-sm text-[var(--text-primary)]">
-                  {new Date(credentials.pairedAt).toLocaleDateString()}
-                </p>
-              </div>
+              <div className="p-4 rounded-lg bg-[var(--surface-secondary)] border border-[var(--border-primary)]">
+                <div className="text-sm text-[var(--text-secondary)] mb-1">Server</div>
+                <div className="text-xs text-[var(--text-tertiary)] font-mono truncate mb-3">
+                  {serverUrl || 'Not configured'}
+                </div>
 
-              <div>
-                <span className="text-xs text-[var(--text-tertiary)]">Encryption</span>
-                <p className="text-sm text-[var(--success-color)] flex items-center gap-1">
+                {credentials?.pairedAt && (
+                  <>
+                    <div className="text-sm text-[var(--text-secondary)] mb-1">Paired</div>
+                    <div className="text-xs text-[var(--text-tertiary)] mb-3">
+                      {new Date(credentials.pairedAt).toLocaleDateString()}
+                    </div>
+                  </>
+                )}
+
+                <div className="text-sm text-[var(--text-secondary)] mb-1">Encryption</div>
+                <div className="text-xs text-green-500 flex items-center gap-1 mb-3">
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                     <path d="M7 11V7a5 5 0 0110 0v4" />
                   </svg>
                   End-to-end encrypted
-                </p>
+                </div>
+
+                <button
+                  onClick={handleDisconnect}
+                  className="w-full py-2 px-4 rounded-lg border border-red-500/30 text-red-500 text-sm"
+                >
+                  Disconnect & Unpair
+                </button>
               </div>
             </div>
-          </div>
+          </>
         )}
 
-        {/* Action Buttons */}
-        {isConfigured && (
-          <div className="space-y-3">
+        {/* Re-pair option when already paired but want to change */}
+        {isPaired && (
+          <div className="mb-6">
             <button
-              onClick={handleDisconnect}
-              className="w-full py-3 px-4 rounded-lg font-medium text-[var(--error-color)] bg-transparent border border-[var(--error-color)] hover:bg-[var(--error-color)] hover:text-white transition-colors"
+              onClick={handleScanQR}
+              disabled={isScanning}
+              className="w-full py-2 px-4 rounded-lg border border-[var(--border-primary)] text-[var(--text-secondary)] text-sm"
             >
-              Disconnect
+              {isScanning ? 'Scanning...' : 'Scan New QR Code'}
             </button>
           </div>
         )}
@@ -396,9 +470,9 @@ export function SettingsScreen() {
           <ol className="text-xs text-[var(--text-secondary)] space-y-2 list-decimal list-inside">
             <li>Open Nimbalyst on your desktop</li>
             <li>Go to Settings &gt; Session Sync</li>
-            <li>Enable sync and configure the server</li>
-            <li>Click "Pair Mobile Device"</li>
+            <li>Click "Pair Mobile Device" to show QR code</li>
             <li>Scan the QR code with this app</li>
+            <li>Sign in with your Google account</li>
           </ol>
         </div>
 
@@ -448,7 +522,7 @@ export function SettingsScreen() {
                         setDevJsonInput(e.target.value);
                         setDevJsonError(null);
                       }}
-                      placeholder='{"version":1,"serverUrl":"ws://...","userId":"...","authToken":"...","encryptionKeySeed":"...","expiresAt":...}'
+                      placeholder='{"version":2,"serverUrl":"wss://...","encryptionKeySeed":"...","expiresAt":...}'
                       className="w-full px-3 py-2 rounded-lg border border-orange-500/50 bg-[var(--surface-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono text-xs"
                       rows={4}
                     />
@@ -463,9 +537,31 @@ export function SettingsScreen() {
                   <button
                     onClick={async () => {
                       try {
+                        // First try to parse as JSON to give better error
+                        let parsed;
+                        try {
+                          parsed = JSON.parse(devJsonInput.trim());
+                        } catch (jsonError) {
+                          setDevJsonError(`JSON parse error: ${jsonError instanceof Error ? jsonError.message : 'Invalid JSON'}`);
+                          return;
+                        }
+
                         const payload = parseQRPayload(devJsonInput);
                         if (!payload) {
-                          setDevJsonError('Invalid JSON format. Make sure to copy the full payload from the desktop app.');
+                          // Provide specific error based on what's missing
+                          const missing = [];
+                          if (typeof parsed.version !== 'number') missing.push('version');
+                          if (typeof parsed.serverUrl !== 'string') missing.push('serverUrl');
+                          if (typeof parsed.encryptionKeySeed !== 'string') missing.push('encryptionKeySeed');
+                          if (typeof parsed.expiresAt !== 'number') missing.push('expiresAt');
+
+                          if (missing.length > 0) {
+                            setDevJsonError(`Missing or invalid fields: ${missing.join(', ')}`);
+                          } else if (parsed.expiresAt < Date.now()) {
+                            setDevJsonError('QR code has expired. Generate a new one from the desktop app.');
+                          } else {
+                            setDevJsonError('Invalid payload format.');
+                          }
                           return;
                         }
 
@@ -473,15 +569,16 @@ export function SettingsScreen() {
                         const creds = await saveFromQRPayload(payload);
                         setCredentials(creds);
 
-                        // Update sync config
-                        const syncConfig = await toSyncConfig();
-                        if (syncConfig) {
-                          setConfig(syncConfig);
-                        }
+                        // Trigger reconnect
+                        await reconnect();
 
                         setDevJsonInput('');
                         setShowDevSetup(false);
-                        navigate('/');
+
+                        // If already authenticated, navigate home
+                        if (isAuthenticated) {
+                          navigate('/');
+                        }
                       } catch (error) {
                         console.error('[SettingsScreen] Dev setup error:', error);
                         setDevJsonError(error instanceof Error ? error.message : 'Failed to parse JSON');
@@ -493,6 +590,76 @@ export function SettingsScreen() {
                     Connect with JSON
                   </button>
                 </div>
+
+                {/* Session Token Import - for browser testing */}
+                {isPaired && !isAuthenticated && (
+                  <div className="mt-6 pt-6 border-t-2 border-orange-500/30">
+                    <h4 className="text-sm font-semibold text-orange-500 mb-2">
+                      Import Session Tokens (Browser Testing)
+                    </h4>
+                    <p className="text-xs text-[var(--text-secondary)] mb-3">
+                      After logging in via email in a browser, copy the session JSON from the success page and paste it here.
+                    </p>
+
+                    {devSessionError && (
+                      <div className="mb-3 p-2 rounded-lg bg-[rgba(239,68,68,0.1)] border border-[rgba(239,68,68,0.3)]">
+                        <p className="text-xs text-[var(--error-color)]">{devSessionError}</p>
+                      </div>
+                    )}
+
+                    <textarea
+                      value={devSessionInput}
+                      onChange={(e) => {
+                        setDevSessionInput(e.target.value);
+                        setDevSessionError(null);
+                      }}
+                      placeholder='{"sessionToken": "...", "sessionJwt": "...", ...}'
+                      className="w-full h-24 p-3 rounded-lg border-2 border-orange-500/50 bg-[var(--surface-primary)] text-[var(--text-primary)] text-xs font-mono placeholder:text-[var(--text-tertiary)] resize-none"
+                    />
+
+                    <button
+                      onClick={async () => {
+                        try {
+                          setDevSessionError(null);
+                          const parsed = JSON.parse(devSessionInput.trim());
+
+                          if (!parsed.sessionToken || !parsed.sessionJwt || !parsed.userId) {
+                            const missing = [];
+                            if (!parsed.sessionToken) missing.push('sessionToken');
+                            if (!parsed.sessionJwt) missing.push('sessionJwt');
+                            if (!parsed.userId) missing.push('userId');
+                            setDevSessionError(`Missing required fields: ${missing.join(', ')}`);
+                            return;
+                          }
+
+                          const session: StytchSession = {
+                            sessionToken: parsed.sessionToken,
+                            sessionJwt: parsed.sessionJwt,
+                            userId: parsed.userId,
+                            email: parsed.email || '',
+                            expiresAt: parsed.expiresAt || '',
+                            refreshedAt: Date.now(),
+                          };
+
+                          await saveSession(session);
+                          setStytchSession(session);
+                          setDevSessionInput('');
+
+                          // Trigger reconnect
+                          await reconnect();
+                          navigate('/');
+                        } catch (error) {
+                          console.error('[SettingsScreen] Dev session import error:', error);
+                          setDevSessionError(error instanceof Error ? error.message : 'Invalid JSON');
+                        }
+                      }}
+                      disabled={!devSessionInput.trim()}
+                      className="mt-3 w-full py-2 px-4 rounded-lg font-medium text-white bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Import Session
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
