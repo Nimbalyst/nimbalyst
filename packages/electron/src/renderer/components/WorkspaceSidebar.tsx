@@ -953,6 +953,9 @@ export function WorkspaceSidebar({
                 <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
                   filter_alt
                 </span>
+                {fileTreeFilter !== 'all' && (
+                  <span className="filter-active-indicator" title="Filter active">•</span>
+                )}
               </button>
             </>
           )}

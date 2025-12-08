@@ -87,11 +87,23 @@
   align-items: center;
   justify-content: center;
   transition: all 0.2s;
+  position: relative;
 }
 
 .workspace-action-button:hover {
   background-color: var(--surface-hover);
   color: var(--text-primary);
+}
+
+/* Filter active indicator - shows when a filter other than 'all' is active */
+.filter-active-indicator {
+  color: var(--primary-color, #3b82f6);
+  font-weight: bold;
+  font-size: 16px;
+  line-height: 1;
+  position: absolute;
+  top: 2px;
+  right: 2px;
 }
 
 /* Legacy class for backward compatibility */

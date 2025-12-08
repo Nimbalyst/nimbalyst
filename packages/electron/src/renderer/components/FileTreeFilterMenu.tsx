@@ -104,6 +104,17 @@ export function FileTreeFilterMenu({
       <div className="filter-menu-section-label">Show Files</div>
 
       <div
+        className={`filter-menu-item ${currentFilter === 'all' ? 'active' : ''}`}
+        onClick={() => handleFilterSelect('all')}
+      >
+        <MaterialSymbol icon="folder_open" size={18} />
+        <span>All Files</span>
+        {currentFilter === 'all' && (
+          <MaterialSymbol icon="check" size={16} className="filter-menu-check" />
+        )}
+      </div>
+
+      <div
         className={`filter-menu-item ${currentFilter === 'markdown' ? 'active' : ''}`}
         onClick={() => handleFilterSelect('markdown')}
       >
@@ -122,17 +133,6 @@ export function FileTreeFilterMenu({
         <span>Known Files</span>
         {currentFilter === 'known' && (
           <MaterialSymbol icon="check" size={16} className="filter-menu-check" />
-        )}
-      </div>
-
-      <div
-          className={`filter-menu-item ${currentFilter === 'all' ? 'active' : ''}`}
-          onClick={() => handleFilterSelect('all')}
-      >
-        <MaterialSymbol icon="folder_open" size={18} />
-        <span>All Files</span>
-        {currentFilter === 'all' && (
-            <MaterialSymbol icon="check" size={16} className="filter-menu-check" />
         )}
       </div>
 
