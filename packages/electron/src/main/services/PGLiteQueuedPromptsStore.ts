@@ -238,7 +238,7 @@ export function createPGLiteQueuedPromptsStore(
         [id]
       );
 
-      console.log(`[QueuedPromptsStore] Marked prompt ${id} as completed`);
+      // console.log(`[QueuedPromptsStore] Marked prompt ${id} as completed`);
     },
 
     async fail(id: string, errorMessage: string): Promise<void> {

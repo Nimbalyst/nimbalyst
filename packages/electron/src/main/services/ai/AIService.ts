@@ -2851,7 +2851,7 @@ export class AIService {
 
   private createToolHandler(webContents: Electron.WebContents, documentContext?: DocumentContext, sessionId?: string, workspaceId?: string): ToolHandler {
     const executor = new ToolExecutor(webContents, sessionId, workspaceId);
-    console.log(`[AIService] createToolHandler called with documentContext.filePath:`, documentContext?.filePath);
+    // console.log(`[AIService] createToolHandler called with documentContext.filePath:`, documentContext?.filePath);
 
     // Capture targetFilePath from documentContext at message-send time
     // This prevents race conditions if user switches tabs while waiting for AI response

@@ -180,7 +180,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     if ((activeTab.sessionData as any)?._needsLoad) {
       const loadActiveSession = async () => {
         try {
-          console.log('[AgenticPanel] Lazy loading session data for:', activeTabId);
+          // console.log('[AgenticPanel] Lazy loading session data for:', activeTabId);
           const sessionData = await window.electronAPI.aiLoadSession(activeTabId, workspacePath);
           if (sessionData) {
             setSessionTabs(prev => prev.map(tab =>
@@ -1187,7 +1187,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // The actual prompts are fetched from the database, not from the IPC payload
   useEffect(() => {
     const effectId = Math.random().toString(36).slice(2, 8);
-    console.log(`[AgenticPanel] Setting up queue listener (effectId: ${effectId})`);
+    // console.log(`[AgenticPanel] Setting up queue listener (effectId: ${effectId})`);
 
     const handleQueuedPromptsReceived = async (data: { sessionId: string; promptCount?: number; workspacePath?: string }) => {
       console.log(`[AgenticPanel] Handler invoked (effectId: ${effectId})`);
@@ -1228,7 +1228,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     const cleanup = window.electronAPI.on('ai:queuedPromptsReceived', handleQueuedPromptsReceived);
 
     return () => {
-      console.log(`[AgenticPanel] Cleaning up queue listener (effectId: ${effectId})`);
+      // console.log(`[AgenticPanel] Cleaning up queue listener (effectId: ${effectId})`);
       cleanup?.();
     };
   }, []);
@@ -1249,7 +1249,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       if (!data || !data.sessionId) return;
       // Check if this session is relevant to this panel (any open tab)
       const isRelevantSession = sessionTabsRef.current.some(tab => tab.id === data.sessionId);
-      console.log('[AgenticPanel] isRelevantSession:', isRelevantSession, 'tabs:', sessionTabsRef.current.map(t => t?.id));
+      // console.log('[AgenticPanel] isRelevantSession:', isRelevantSession, 'tabs:', sessionTabsRef.current.map(t => t?.id));
       if (!isRelevantSession) {
         return;
       }
@@ -1407,7 +1407,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         return;
       }
 
-      console.log('[AgenticPanel] Auto-context ended, clearing state and checking queue:', data.sessionId);
+      // console.log('[AgenticPanel] Auto-context ended, clearing state and checking queue:', data.sessionId);
       autoContextSessionsRef.current.delete(data.sessionId);
       sendingSessionsRef.current.delete(data.sessionId);
       setSendingSessions(prev => {
@@ -1419,11 +1419,11 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       // Process any queued prompts after auto-context completes
       setTimeout(() => {
         const tab = sessionTabsRef.current.find(t => t.id === data.sessionId);
-        console.log('[AgenticPanel] Auto-context end queue check:', {
-          sessionId: data.sessionId,
-          tabFound: !!tab,
-          processQueuedPromptsRefSet: !!processQueuedPromptsRef.current
-        });
+        // console.log('[AgenticPanel] Auto-context end queue check:', {
+        //   sessionId: data.sessionId,
+        //   tabFound: !!tab,
+        //   processQueuedPromptsRefSet: !!processQueuedPromptsRef.current
+        // });
         if (tab && processQueuedPromptsRef.current) {
           processQueuedPromptsRef.current(data.sessionId, tab);
         }
@@ -1880,7 +1880,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
         // Mark the prompt as completed
         await window.electronAPI.invoke('ai:completeQueuedPrompt', claimedPrompt.id);
-        console.log(`[AgenticPanel] Marked prompt ${claimedPrompt.id} as completed`);
+        // console.log(`[AgenticPanel] Marked prompt ${claimedPrompt.id} as completed`);
 
       } catch (err) {
         console.error(`[AgenticPanel] Error processing claimed prompt ${claimedPrompt.id}:`, err);

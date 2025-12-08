@@ -374,7 +374,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       );
       const queryTime = performance.now() - queryStart;
       const totalTime = performance.now() - startTime;
-      console.log(`[PGLiteSessionStore] list() - ensureReady: ${ensureTime.toFixed(1)}ms, query: ${queryTime.toFixed(1)}ms, total: ${totalTime.toFixed(1)}ms, rows: ${rows.length}`);
+      // console.log(`[PGLiteSessionStore] list() - ensureReady: ${ensureTime.toFixed(1)}ms, query: ${queryTime.toFixed(1)}ms, total: ${totalTime.toFixed(1)}ms, rows: ${rows.length}`);
       return rows.map(row => {
         const createdAt = toMillis(row.created_at);
         const updatedAt = toMillis(row.updated_at);

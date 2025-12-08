@@ -305,7 +305,7 @@ async function tryCreateServer(port: number): Promise<any> {
 
       // Extract workspace path from query parameter (used by capture_mockup_screenshot)
       const workspacePath = parsedUrl.query.workspacePath as string | undefined;
-      console.log('[MCP Server] Connection established with workspacePath:', workspacePath);
+      // console.log('[MCP Server] Connection established with workspacePath:', workspacePath);
 
       // Create a new MCP server instance for this connection
       const server = new Server(

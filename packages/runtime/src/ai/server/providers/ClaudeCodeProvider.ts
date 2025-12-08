@@ -1455,7 +1455,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         transport: 'sse',
         url: `http://127.0.0.1:${ClaudeCodeProvider.mcpServerPort}/mcp?workspacePath=${encodeURIComponent(workspacePath)}`
       };
-      console.log('[CLAUDE-CODE] Shared MCP server configured on port', ClaudeCodeProvider.mcpServerPort, 'for workspace', workspacePath);
+      // console.log('[CLAUDE-CODE] Shared MCP server configured on port', ClaudeCodeProvider.mcpServerPort, 'for workspace', workspacePath);
     }
 
     // Include session naming MCP server if it's started
