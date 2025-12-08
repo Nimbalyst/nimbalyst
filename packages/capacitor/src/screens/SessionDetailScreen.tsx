@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useSync } from '../contexts/CollabV3SyncContext';
+import { getSessionJwt } from '../services/StytchAuthService';
 import { AgentTranscriptPanel, transformAgentMessagesToUI, PromptsMenuButton } from '@nimbalyst/runtime';
 import { AIInput } from '@nimbalyst/runtime/ui';
 import type { SessionData, ChatAttachment, PromptMarker } from '@nimbalyst/runtime';
@@ -387,11 +388,20 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
 
       if (cancelled) return;
 
+      // Get a fresh JWT (auto-refreshes if stale) instead of using potentially expired config.authToken
+      const freshToken = await getSessionJwt(config.serverUrl);
+      if (!freshToken) {
+        setError('Failed to get authentication token');
+        return;
+      }
+
+      if (cancelled) return;
+
       // Build WebSocket URL
       const baseUrl = config.serverUrl.replace(/\/$/, '');
       const wsBase = baseUrl.replace(/^http/, 'ws');
       const roomId = `user:${config.userId}:session:${sessionId}`;
-      const wsUrl = `${wsBase}/sync/${roomId}?user_id=${config.userId}&token=${config.authToken}`;
+      const wsUrl = `${wsBase}/sync/${roomId}?user_id=${config.userId}&token=${freshToken}`;
 
       ws = new WebSocket(wsUrl);
       wsRef.current = ws;
