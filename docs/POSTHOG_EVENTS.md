@@ -108,6 +108,7 @@ All events include `$session_id` property automatically. Dev users are marked wi
 
 | Event Name | File(s) | Trigger | Properties |
 | --- | --- | --- | --- |
+| `uncaught_error` | `ErrorNotificationService.ts:210, 242` | Uncaught exception or unhandled promise rejection in renderer | `errorType` (exception/unhandled_rejection)<br/>`errorCategory` (TypeError/ReferenceError/Error/etc) |
 | `database_error` | `PGLiteDatabaseWorker.ts:255, 275` | Database operation fails | `operation` (read/write)<br/>`errorType`<br/>`tableName` |
 | `database_corruption_detected` | `PGLiteDatabaseWorker.ts:131` | Database corruption detected during initialization | `hasBackups` |
 | `database_corruption_recovery_choice` | `PGLiteDatabaseWorker.ts:153, 215, 222, 272` | User makes a choice in database corruption recovery dialog | `choice` (restore_from_backup/start_fresh/auto_fresh)<br/>`confirmed` (for start_fresh)<br/>`reason` (for auto_fresh) |
@@ -133,14 +134,14 @@ All events include `$session_id` property automatically. Dev users are marked wi
 
 ## Event Summary Statistics
 
-- **Total Events**: 51 unique event names
+- **Total Events**: 52 unique event names
 - **Main Process Events**: 37 (via AnalyticsService)
-- **Renderer Process Events**: 14 (via usePostHog hook)
+- **Renderer Process Events**: 15 (via usePostHog hook)
 - **File Operations**: 7 events
 - **Workspace Operations**: 4 events
 - **AI-Related**: 20 events
 - **Onboarding**: 4 events
-- **System/Infrastructure**: 9 events
+- **System/Infrastructure**: 10 events
 
 ## Privacy Requirements
 

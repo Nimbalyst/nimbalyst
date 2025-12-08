@@ -4,6 +4,8 @@
  * Provides a centralized way to show errors to users instead of silent console.log failures
  */
 
+import posthog from 'posthog-js';
+
 export type ErrorSeverity = 'error' | 'warning' | 'info';
 
 export interface ErrorNotification {
@@ -172,6 +174,27 @@ class ErrorNotificationService {
 // Singleton instance
 export const errorNotificationService = new ErrorNotificationService();
 
+/**
+ * Categorize an error by its constructor name.
+ * Returns a safe category that doesn't include PII.
+ */
+function categorizeError(error: unknown): string {
+  if (error instanceof Error) {
+    // Use the error constructor name (TypeError, ReferenceError, etc.)
+    return error.constructor.name || 'Error';
+  }
+  if (typeof error === 'string') {
+    return 'StringError';
+  }
+  if (error === null) {
+    return 'NullError';
+  }
+  if (error === undefined) {
+    return 'UndefinedError';
+  }
+  return 'UnknownError';
+}
+
 // Global error handler
 if (typeof window !== 'undefined') {
   window.addEventListener('error', (event) => {
@@ -182,6 +205,12 @@ if (typeof window !== 'undefined') {
     if (message === 'ResizeObserver loop completed with undelivered notifications.') {
       return;
     }
+
+    // Track in PostHog - DO NOT include the message as it may contain PII
+    posthog.capture('uncaught_error', {
+      errorType: 'exception',
+      errorCategory: categorizeError(event.error),
+    });
 
     errorNotificationService.showError(
       'Uncaught Error',
@@ -208,6 +237,12 @@ if (typeof window !== 'undefined') {
       console.debug('[ErrorNotificationService] Ignoring Monaco cancellation:', message);
       return;
     }
+
+    // Track in PostHog - DO NOT include the message as it may contain PII
+    posthog.capture('uncaught_error', {
+      errorType: 'unhandled_rejection',
+      errorCategory: categorizeError(reason),
+    });
 
     errorNotificationService.showError(
       'Unhandled Promise Rejection',
