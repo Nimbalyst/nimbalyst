@@ -16,19 +16,19 @@ interface WalkthroughSlide {
 
 const WALKTHROUGH_SLIDES: WalkthroughSlide[] = [
   {
-    image: './onboarding/onboarding-editor.png',
-    title: 'AI-Powered WYSIWYG Markdown Editor',
+    image: './onboarding/onboarding-1.png',
+    title: 'View and Approve AI Changes in WYSIWYG Markdown Editor',
     description: 'Write, edit, diagrams, tables, and iterate with AI - all in one powerful environment. Visual diff and approval system lets you review AI changes before accepting them.',
   },
   {
-    image: './onboarding/onboarding-agent.jpeg',
-    title: 'Claude Code Sessions Integrated with Your Files',
-    description: 'Search, resume, and run Claude Code sessions integrated with your files. Manage parallel sessions, search through them, and see which files the agent has touched.',
-  },
-  {
-    image: './onboarding/onboarding-mockup.jpeg',
+    image: './onboarding/onboarding-2.png',
     title: 'AI-Powered HTML Mockups',
     description: 'Use AI to create and edit HTML mockups based on your files and code. Annotate mockups directly for the AI or edit the HTML source for precise control.',
+  },
+  {
+    image: './onboarding/onboarding-3.png',
+    title: 'Agent-First Environment Linked to Your Files',
+    description: 'Search, resume, and run Claude Code sessions integrated with your files. Manage parallel sessions, search through them, and see which files the agent has touched.',
   },
 ];
 
@@ -44,11 +44,24 @@ export const FeatureWalkthrough: React.FC<FeatureWalkthroughProps> = ({
   const [currentSlide, setCurrentSlide] = useState(0);
   const [imagesLoaded, setImagesLoaded] = useState(false);
   const [maxImageDimensions, setMaxImageDimensions] = useState<{ width: number; height: number } | null>(null);
+  const [windowSize, setWindowSize] = useState({ width: window.innerWidth, height: window.innerHeight });
 
   // Track time spent on each slide
   const slideStartTimeRef = useRef<number>(Date.now());
   const slideTimesRef = useRef<Record<string, number>>({});
   const walkthroughStartTimeRef = useRef<number>(Date.now());
+
+  // Listen for window resize to update dimensions
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleResize = () => {
+      setWindowSize({ width: window.innerWidth, height: window.innerHeight });
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [isOpen]);
 
   // Preload all images and calculate max dimensions
   useEffect(() => {
@@ -146,10 +159,36 @@ export const FeatureWalkthrough: React.FC<FeatureWalkthroughProps> = ({
   const slide = WALKTHROUGH_SLIDES[currentSlide];
   const isLastSlide = currentSlide === WALKTHROUGH_SLIDES.length - 1;
 
-  // Calculate the display dimensions with a max constraint
-  const maxDisplayWidth = Math.min(maxImageDimensions.width, 850);
-  const aspectRatio = maxImageDimensions.height / maxImageDimensions.width;
-  const displayHeight = maxDisplayWidth * aspectRatio;
+  // Calculate display dimensions:
+  // - Use native resolution when screen is large enough
+  // - Scale down proportionally when screen is smaller
+  // - Ensure entire dialog (image + title + dots + buttons) fits on screen
+  const dialogHorizontalPadding = 48; // 24px padding on each side of image container
+  // Vertical chrome breakdown:
+  // - Image container padding: 48px (24 top + 24 bottom)
+  // - Content/title area: ~86px (24 top + 32 bottom padding + ~30px title)
+  // - Dots: ~26px (16px bottom padding + 10px height)
+  // - Footer: ~84px (16 top + 24 bottom padding + ~44px button)
+  // Total: ~244px, add buffer for borders/rounding = 260px
+  const dialogVerticalChrome = 260;
+  const screenMargin = 40; // Minimum margin from screen edges
+
+  const maxAvailableWidth = windowSize.width - (screenMargin * 2) - dialogHorizontalPadding;
+  const maxAvailableHeight = windowSize.height - (screenMargin * 2) - dialogVerticalChrome;
+
+  const nativeWidth = maxImageDimensions.width;
+  const nativeHeight = maxImageDimensions.height;
+  const aspectRatio = nativeWidth / nativeHeight;
+
+  // Start with native dimensions, then constrain to fit
+  let displayWidth = Math.min(nativeWidth, maxAvailableWidth);
+  let displayHeight = displayWidth / aspectRatio;
+
+  // If height still doesn't fit, constrain by height instead
+  if (displayHeight > maxAvailableHeight) {
+    displayHeight = maxAvailableHeight;
+    displayWidth = displayHeight * aspectRatio;
+  }
 
   return (
     <div className="feature-walkthrough-overlay">
@@ -158,9 +197,9 @@ export const FeatureWalkthrough: React.FC<FeatureWalkthroughProps> = ({
         <div
           className="feature-walkthrough-image-container"
           style={{
-            width: maxDisplayWidth,
+            width: displayWidth,
             height: displayHeight,
-            minWidth: maxDisplayWidth,
+            minWidth: displayWidth,
             minHeight: displayHeight,
           }}
         >

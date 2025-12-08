@@ -343,6 +343,9 @@ export default function App() {
   }, [posthog]);
 
   // Check for feature walkthrough on first launch
+  // Set to true to force the walkthrough to display (for development/testing)
+  const FORCE_FEATURE_WALKTHROUGH = false;
+
   useEffect(() => {
     // Only check after initialization is complete
     if (isInitializing) return;
@@ -358,6 +361,12 @@ export default function App() {
     }
 
     const checkFeatureWalkthrough = async () => {
+      // Force display if flag is set (for development/testing)
+      if (FORCE_FEATURE_WALKTHROUGH) {
+        setIsFeatureWalkthroughOpen(true);
+        return;
+      }
+
       // Check if walkthrough has been completed
       const isCompleted = await window.electronAPI.invoke('feature-walkthrough:is-completed');
       if (!isCompleted) {
@@ -785,6 +794,21 @@ export default function App() {
     return () => {
       // console.log('[App] Removing Discord invitation listener');
       window.electronAPI.off?.('show-discord-invitation', handleShowDiscordInvitation);
+    };
+  }, []);
+
+  // Listen for show-feature-walkthrough IPC event (from Developer menu)
+  useEffect(() => {
+    if (!window.electronAPI?.on) return;
+
+    const handleShowFeatureWalkthrough = () => {
+      setIsFeatureWalkthroughOpen(true);
+    };
+
+    window.electronAPI.on('show-feature-walkthrough', handleShowFeatureWalkthrough);
+
+    return () => {
+      window.electronAPI.off?.('show-feature-walkthrough', handleShowFeatureWalkthrough);
     };
   }, []);
 

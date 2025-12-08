@@ -1191,6 +1191,16 @@ export async function createApplicationMenu() {
                     }
                 },
                 { type: 'separator' },
+                {
+                    label: 'Show Onboarding',
+                    click: async () => {
+                        const focused = getFocusedWindow();
+                        if (focused) {
+                            focused.webContents.send('show-feature-walkthrough');
+                        }
+                    }
+                },
+                { type: 'separator' },
                 // Database menu items - only show in development mode
                 ...(isDev ? [
                     { type: 'separator' },
