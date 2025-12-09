@@ -5,8 +5,26 @@ import {logger} from "../../utils/logger";
 import {beforePosthogSendNodeJS} from "./analytics-utils";
 import {app} from "electron";
 import {isAnalyticsEnabled, setAnalyticsEnabled} from "../../utils/store";
+import {execSync} from "child_process";
 
 const POSTHOG_PROJECT_PUBLIC_ID = 'phc_s3lQIILexwlGHvxrMBqti355xUgkRocjMXW4LjV0ATw';
+
+/**
+ * Check if git is installed on the system.
+ * Uses execSync with suppressed stdio to avoid triggering macOS "install developer tools" dialog.
+ */
+function isGitInstalled(): boolean {
+  try {
+    execSync('git --version', {
+      encoding: 'utf8',
+      timeout: 2000,
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 type AnalyticsSettings = {
   analyticsEnabled: boolean;
@@ -111,6 +129,7 @@ export class AnalyticsService {
 
     const eventProperties: Record<string | number, any> = {
       '$session_id': this.sessionId,
+      'has_git_installed': isGitInstalled(),
       $set: {
         'nimbalyst_version': app.getVersion(),
       }

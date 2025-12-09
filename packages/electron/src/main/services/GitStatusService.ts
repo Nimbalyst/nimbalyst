@@ -21,6 +21,31 @@ export interface GitStatusResult {
 export class GitStatusService {
   private cache: Map<string, { status: GitStatusResult; timestamp: number }> = new Map();
   private readonly CACHE_TTL_MS = 5000; // 5 seconds cache
+  private gitAvailable: boolean | null = null; // Cached result of git availability check
+
+  /**
+   * Check if the git command is available on this system.
+   * This prevents triggering the macOS "install developer tools" dialog.
+   */
+  private isGitAvailable(): boolean {
+    if (this.gitAvailable !== null) {
+      return this.gitAvailable;
+    }
+
+    try {
+      // Use --version as a simple check - if git isn't installed, this will throw
+      execSync('git --version', {
+        encoding: 'utf8',
+        timeout: 2000,
+        stdio: ['pipe', 'pipe', 'pipe'] // Suppress all output
+      });
+      this.gitAvailable = true;
+    } catch {
+      this.gitAvailable = false;
+    }
+
+    return this.gitAvailable;
+  }
 
   /**
    * Get git status for a list of files in a workspace.
@@ -32,6 +57,11 @@ export class GitStatusService {
   async getFileStatus(workspacePath: string, filePaths: string[]): Promise<GitStatusResult> {
     if (!workspacePath || filePaths.length === 0) {
       return {};
+    }
+
+    // Check if git is available on the system
+    if (!this.isGitAvailable()) {
+      return this.createEmptyResult(filePaths);
     }
 
     // Check if this is a git repository
@@ -214,6 +244,11 @@ export class GitStatusService {
       return [];
     }
 
+    // Check if git is available on the system
+    if (!this.isGitAvailable()) {
+      return [];
+    }
+
     // Check if this is a git repository
     if (!this.isGitRepository(workspacePath)) {
       return [];
@@ -301,6 +336,11 @@ export class GitStatusService {
       const stats = fs.statSync(gitPath);
       if (stats.isFile()) {
         return true; // .git is a file = worktree
+      }
+
+      // Check if git is available before running git commands
+      if (!this.isGitAvailable()) {
+        return false;
       }
 
       // Also check via git command as a fallback
@@ -508,6 +548,11 @@ export class GitStatusService {
    */
   async getAllFileStatuses(workspacePath: string): Promise<GitStatusResult> {
     if (!workspacePath) {
+      return {};
+    }
+
+    // Check if git is available on the system
+    if (!this.isGitAvailable()) {
       return {};
     }
 
