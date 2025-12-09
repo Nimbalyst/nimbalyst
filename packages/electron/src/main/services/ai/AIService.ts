@@ -508,7 +508,13 @@ export class AIService {
    */
   private isProviderEnabledForWorkspace(provider: string, workspacePath?: string): boolean {
     const providerSettings = this.getSettingsStore().get('providerSettings', {}) as any;
-    const globalEnabled = providerSettings[provider]?.enabled ?? false;
+
+    // Claude Code is enabled by default (undefined means enabled).
+    // This matches the logic in ai:getModels which uses `claudeCodeSettings.enabled !== false`.
+    // Other providers require explicit enabling (undefined means disabled).
+    const globalEnabled = provider === 'claude-code'
+      ? providerSettings[provider]?.enabled !== false
+      : providerSettings[provider]?.enabled ?? false;
 
     // Check for project-level override
     if (workspacePath) {
