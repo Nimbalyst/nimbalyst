@@ -1437,7 +1437,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               fileName={fileName}
             />
           ) : isMarkdown && markdownViewMode === 'lexical' ? (
-              <div className="tab-editor-scrollable" style={{ flex: 1, overflow: 'auto' }}>
+              <div className="tab-editor-wrapper" style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
 
               <StravuEditor
               key={`${filePath}-lexical-v${viewModeVersion}`}

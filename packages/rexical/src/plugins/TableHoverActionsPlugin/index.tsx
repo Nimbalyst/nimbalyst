@@ -136,8 +136,13 @@ function TableHoverActionsContainer({
           tableHasScroll =
             parentElement.scrollWidth > parentElement.clientWidth;
         }
-        const {y: editorElemY, left: editorElemLeft} =
-          anchorElem.getBoundingClientRect();
+        // POSITIONING: The buttons are portaled into anchorElem (editor-scroller) which has
+        // position: relative and overflow: auto. To position correctly:
+        // 1. Use getBoundingClientRect() to get viewport-relative coordinates
+        // 2. Subtract anchorRect to get position relative to anchorElem
+        // 3. Add anchorElem.scrollTop/Left to account for scroll offset within anchorElem
+        // This ensures the buttons scroll with content and appear at the correct position.
+        const anchorRect = anchorElem.getBoundingClientRect();
 
         if (hoveredRowNode) {
           setShownColumn(false);
@@ -147,8 +152,8 @@ function TableHoverActionsContainer({
             left:
               tableHasScroll && parentElement
                 ? parentElement.offsetLeft
-                : tableElemLeft - editorElemLeft,
-            top: tableElemBottom - editorElemY + 5,
+                : tableElemLeft - anchorRect.left + anchorElem.scrollLeft,
+            top: tableElemBottom - anchorRect.top + anchorElem.scrollTop + 5,
             width:
               tableHasScroll && parentElement
                 ? parentElement.offsetWidth
@@ -159,8 +164,8 @@ function TableHoverActionsContainer({
           setShownRow(false);
           setPosition({
             height: tableElemHeight,
-            left: tableElemRight - editorElemLeft + 5,
-            top: tableElemY - editorElemY,
+            left: tableElemRight - anchorRect.left + anchorElem.scrollLeft + 5,
+            top: tableElemY - anchorRect.top + anchorElem.scrollTop,
             width: BUTTON_WIDTH_PX,
           });
         }
@@ -317,6 +322,11 @@ export default function TableHoverActionsPlugin({
 }): React.ReactPortal | null {
   const isEditable = useLexicalEditable();
 
+  // PORTAL TARGET: Use anchorElem (editor-scroller) as the portal container.
+  // This element has position: relative and overflow: auto, making it the
+  // correct target for absolutely positioned floating elements that should
+  // scroll with the editor content. Position calculations in the container
+  // account for anchorElem's scroll offset.
   return isEditable
     ? createPortal(
         <TableHoverActionsContainer anchorElem={anchorElem} />,

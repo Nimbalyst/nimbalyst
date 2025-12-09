@@ -185,7 +185,7 @@ function TableActionMenu({
       dropDownElement.style.opacity = '1';
       const dropDownElementRect = dropDownElement.getBoundingClientRect();
       const margin = 5;
-      
+
       // Calculate position relative to anchorElem
       let leftPosition = menuButtonRect.right - anchorRect.left + margin;
       if (
@@ -840,8 +840,16 @@ function TableCellActionMenuContainer({
     if (enabled) {
       const tableCellRect = tableCellParentNodeDOM.getBoundingClientRect();
       const anchorRect = anchorElem.getBoundingClientRect();
-      const top = tableCellRect.top - anchorRect.top;
-      const left = tableCellRect.right - anchorRect.left;
+
+      // POSITIONING: The menu is portaled into anchorElem (editor-scroller) which has
+      // position: relative and overflow: auto. To position correctly:
+      // 1. Use getBoundingClientRect() to get viewport-relative coordinates
+      // 2. Subtract anchorRect to get position relative to anchorElem
+      // 3. Add anchorElem.scrollTop/Left to account for scroll offset within anchorElem
+      // This ensures the menu scrolls with content and appears at the correct position.
+      const top = tableCellRect.top - anchorRect.top + anchorElem.scrollTop;
+      const left = tableCellRect.right - anchorRect.left + anchorElem.scrollLeft;
+
       menu.style.transform = `translate(${left}px, ${top}px)`;
     }
   }, [editor, anchorElem, checkTableCellOverflow]);
@@ -860,6 +868,7 @@ function TableCellActionMenuContainer({
       }
       return false;
     };
+
     return mergeRegister(
       editor.registerUpdateListener(delayedCallback),
       editor.registerCommand(
@@ -879,6 +888,7 @@ function TableCellActionMenuContainer({
       () => clearTimeout(timeoutId),
     );
   });
+
 
   const prevTableCellDOM = useRef(tableCellNode);
 
@@ -930,6 +940,12 @@ export default function TableActionMenuPlugin({
   cellMerge?: boolean;
 }): null | ReactPortal {
   const isEditable = useLexicalEditable();
+
+  // PORTAL TARGET: Use anchorElem (editor-scroller) as the portal container.
+  // This element has position: relative and overflow: auto, making it the
+  // correct target for absolutely positioned floating elements that should
+  // scroll with the editor content. Position calculations in $moveMenu
+  // account for anchorElem's scroll offset.
   return createPortal(
     isEditable ? (
       <TableCellActionMenuContainer
