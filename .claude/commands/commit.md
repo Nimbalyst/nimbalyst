@@ -25,6 +25,10 @@ Create a git commit following these steps:
 - GOOD: "fix: prevent crash when user input is empty"
 - The body can explain HOW if it's non-obvious, but title = IMPACT
 
+**Issue Linking (for auto-close):**
+- If fixing a Linear issue, include `Fixes NIM-XXX` on its own line after the title
+- For GitHub issues, use `Fixes #XXX` or `Closes #XXX`
+
 **Important:**
 - Do NOT add "Co-Authored-By" or any attribution lines
 - Do NOT add marketing taglines or links
