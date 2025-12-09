@@ -123,6 +123,8 @@ export interface SessionData {
     totalTokens: number;      // Total tokens (input + output)
     contextWindow?: number;   // Max context window size for the model
     categories?: TokenUsageCategory[]; // Breakdown parsed from /context output
+    costUSD?: number;         // Total cost in USD (from SDK modelUsage)
+    webSearchRequests?: number; // Number of web searches performed (from SDK modelUsage)
   };
 
   // Additional metadata
@@ -194,6 +196,16 @@ export interface StreamChunk {
     cache_read_input_tokens?: number;
     cache_creation_input_tokens?: number;
   };
+  // Per-model usage breakdown from SDK (available on 'complete' chunks from claude-code)
+  modelUsage?: Record<string, {
+    inputTokens?: number;
+    outputTokens?: number;
+    cacheReadInputTokens?: number;
+    cacheCreationInputTokens?: number;
+    costUSD?: number;
+    contextWindow?: number;
+    webSearchRequests?: number;
+  }>;
 }
 
 export interface DiffArgs {

@@ -456,7 +456,22 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // Track tool calls by ID so we can update them with results
       const toolCallsById: Map<string, any> = new Map();
       // Track usage data from the SDK
-      let usageData: { input_tokens?: number; output_tokens?: number } | undefined;
+      let usageData: {
+        input_tokens?: number;
+        output_tokens?: number;
+        cache_read_input_tokens?: number;
+        cache_creation_input_tokens?: number;
+      } | undefined;
+      // Track per-model usage from SDK result (contains inputTokens, outputTokens, costUSD, etc.)
+      let modelUsageData: Record<string, {
+        inputTokens?: number;
+        outputTokens?: number;
+        cacheReadInputTokens?: number;
+        cacheCreationInputTokens?: number;
+        costUSD?: number;
+        contextWindow?: number;
+        webSearchRequests?: number;
+      }> | undefined;
 
       // console.log('[CLAUDE-CODE] Starting to iterate over query response...');
 
@@ -839,6 +854,11 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             // The result chunk often has the most complete usage data
             if (chunk.usage) {
               usageData = chunk.usage;
+            }
+
+            // Capture modelUsage which has per-model breakdown with inputTokens, outputTokens, costUSD, etc.
+            if (chunk.modelUsage) {
+              modelUsageData = chunk.modelUsage;
             }
 
             if (chunk.is_error) {
@@ -1236,20 +1256,39 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       }
       // console.log(`[CLAUDE-CODE] ========== TURN END COMPLETE ==========`);
 
+      // Calculate total input/output tokens from modelUsage if available (more accurate than usageData)
+      let totalInputTokens = usageData?.input_tokens || 0;
+      let totalOutputTokens = usageData?.output_tokens || 0;
+      let totalCostUSD = 0;
+
+      if (modelUsageData) {
+        // Sum up tokens from all models (in case multiple models were used)
+        totalInputTokens = 0;
+        totalOutputTokens = 0;
+        for (const modelName of Object.keys(modelUsageData)) {
+          const modelStats = modelUsageData[modelName];
+          totalInputTokens += modelStats.inputTokens || 0;
+          totalOutputTokens += modelStats.outputTokens || 0;
+          totalCostUSD += modelStats.costUSD || 0;
+        }
+      }
+
       yield {
         type: 'complete',
         // Don't send content here - it's already been sent in chunks
         // The AIService accumulates the chunks itself
         isComplete: true,
-        ...(usageData ? {
+        ...(usageData || modelUsageData ? {
           usage: {
-            input_tokens: usageData.input_tokens || 0,
-            output_tokens: usageData.output_tokens || 0,
-            cache_read_input_tokens: usageData.cache_read_input_tokens || 0,
-            cache_creation_input_tokens: usageData.cache_creation_input_tokens || 0,
-            total_tokens: (usageData.input_tokens || 0) + (usageData.output_tokens || 0)
+            input_tokens: totalInputTokens,
+            output_tokens: totalOutputTokens,
+            cache_read_input_tokens: usageData?.cache_read_input_tokens || 0,
+            cache_creation_input_tokens: usageData?.cache_creation_input_tokens || 0,
+            total_tokens: totalInputTokens + totalOutputTokens
           }
-        } : {})
+        } : {}),
+        // Include modelUsage for detailed per-model breakdown and cost tracking
+        ...(modelUsageData ? { modelUsage: modelUsageData } : {})
       };
 
       // console.log('[CLAUDE-CODE] Complete event yielded');

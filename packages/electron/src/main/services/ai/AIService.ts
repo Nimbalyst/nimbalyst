@@ -1634,10 +1634,15 @@ export class AIService {
 
               // Capture token usage if available
               const tokenUsage = chunk.usage;
+              // Capture modelUsage for claude-code provider (provides per-model breakdown with input/output tokens)
+              const modelUsage = chunk.modelUsage;
 
               // console.log('[AIService] Stream complete - Performance metrics:', perfLog);
               // if (tokenUsage) {
               //   console.log('[AIService] Token usage:', tokenUsage);
+              // }
+              // if (modelUsage) {
+              //   console.log('[AIService] modelUsage from claude-code:', JSON.stringify(modelUsage));
               // }
               if (fullResponse) {
                 logger.ai.info('[AIService] Assistant final response', {
@@ -1689,10 +1694,46 @@ export class AIService {
                 totalLength: bucketContentLength(fullResponse.length)
               });
 
-              // Update session token usage if available (for non-claude-code providers)
-              // Claude Code token usage is handled via /context command in runAutoContextCommand
-              if (tokenUsage && session.provider !== 'claude-code') {
-                // Calculate cumulative usage
+              // Update session token usage if available
+              // For claude-code: use modelUsage (from SDK) which has accurate input/output breakdown
+              // For other providers: use tokenUsage from chunk.usage
+              if (session.provider === 'claude-code' && modelUsage) {
+                // Calculate totals from modelUsage (sum across all models)
+                let newInputTokens = 0;
+                let newOutputTokens = 0;
+                let totalCostUSD = 0;
+                let totalWebSearchRequests = 0;
+
+                for (const modelName of Object.keys(modelUsage)) {
+                  const stats = modelUsage[modelName];
+                  newInputTokens += stats.inputTokens || 0;
+                  newOutputTokens += stats.outputTokens || 0;
+                  totalCostUSD += stats.costUSD || 0;
+                  totalWebSearchRequests += stats.webSearchRequests || 0;
+                }
+
+                const currentUsage = session.tokenUsage ?? {
+                  inputTokens: 0,
+                  outputTokens: 0,
+                  totalTokens: 0
+                };
+
+                const updatedUsage = {
+                  inputTokens: currentUsage.inputTokens + newInputTokens,
+                  outputTokens: currentUsage.outputTokens + newOutputTokens,
+                  totalTokens: currentUsage.totalTokens + newInputTokens + newOutputTokens,
+                  contextWindow: currentUsage.contextWindow,
+                  costUSD: (currentUsage.costUSD || 0) + totalCostUSD,
+                  webSearchRequests: (currentUsage.webSearchRequests || 0) + totalWebSearchRequests
+                };
+
+                // console.log('[AIService] Updating claude-code session token usage from modelUsage:', JSON.stringify(updatedUsage));
+                await this.sessionManager.updateSessionTokenUsage(session.id, updatedUsage);
+
+                // Update local session reference for next iteration
+                session.tokenUsage = updatedUsage;
+              } else if (tokenUsage && session.provider !== 'claude-code') {
+                // For non-claude-code providers, use tokenUsage from chunk
                 const currentUsage = session.tokenUsage ?? {
                   inputTokens: 0,
                   outputTokens: 0,
