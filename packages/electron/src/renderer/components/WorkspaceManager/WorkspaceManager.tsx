@@ -103,15 +103,41 @@ export const WorkspaceManager: React.FC = () => {
     }
   }, [searchQuery]);
 
-  // Filter workspaces based on search query
-  const filteredWorkspaces = workspaces.filter(workspace => {
-    if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
-    return (
-      workspace.name.toLowerCase().includes(query) ||
-      workspace.path.toLowerCase().includes(query)
-    );
-  });
+  // Score and filter workspaces based on search query
+  // Higher score = better match, prioritizing name matches over path matches
+  const scoreWorkspace = (workspace: WorkspaceInfo, query: string): number => {
+    const name = workspace.name.toLowerCase();
+    const path = workspace.path.toLowerCase();
+    const q = query.toLowerCase();
+
+    // Exact name match (highest priority)
+    if (name === q) return 100;
+
+    // Name starts with query (prefix match)
+    if (name.startsWith(q)) return 80;
+
+    // Name contains query at word boundary (e.g., "My-JSVault" matches "js")
+    const wordBoundaryRegex = new RegExp(`(?:^|[\\s_-])${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i');
+    if (wordBoundaryRegex.test(name)) return 60;
+
+    // Name contains query anywhere
+    if (name.includes(q)) return 40;
+
+    // Path contains query
+    if (path.includes(q)) return 20;
+
+    // No match
+    return 0;
+  };
+
+  const filteredWorkspaces = workspaces
+    .map(workspace => ({
+      workspace,
+      score: searchQuery ? scoreWorkspace(workspace, searchQuery) : 1
+    }))
+    .filter(({ score }) => score > 0)
+    .sort((a, b) => b.score - a.score)
+    .map(({ workspace }) => workspace);
 
   const loadWorkspaces = async () => {
     try {
