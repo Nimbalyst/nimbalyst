@@ -26,6 +26,7 @@ interface WorkspaceSidebarProps {
   onOpenQuickSearch?: () => void;
   onRefreshFileTree?: () => void;
   onViewHistory?: (filePath: string) => void;
+  onViewWorkspaceHistory?: (folderPath: string) => void;
   onNewPlan?: () => void;
   onOpenPlansTable?: () => void;
   onSelectedFolderChange?: (folderPath: string | null) => void;
@@ -105,6 +106,7 @@ export function WorkspaceSidebar({
   onOpenQuickSearch,
   onRefreshFileTree,
   onViewHistory,
+  onViewWorkspaceHistory,
   onNewPlan,
   onOpenPlansTable,
   onSelectedFolderChange,
@@ -1024,6 +1026,7 @@ export function WorkspaceSidebar({
                 onNewFolder={handleNewFolderInFolder}
                 onRefreshFileTree={onRefreshFileTree}
                 onViewHistory={onViewHistory}
+                onViewWorkspaceHistory={onViewWorkspaceHistory}
                 selectedFolder={selectedFolder}
                 onFolderSelect={handleSelectedFolderChange}
                 gitStatusMap={showGitStatus ? gitFileStatuses : undefined}

@@ -21,6 +21,7 @@ interface FileTreeProps {
   onNewFolder?: (folderPath: string) => void;
   onRefreshFileTree?: () => void;
   onViewHistory?: (filePath: string) => void;
+  onViewWorkspaceHistory?: (folderPath: string) => void;
   selectedFolder?: string | null;
   onFolderSelect?: (folderPath: string | null) => void;
   gitStatusMap?: Map<string, FileGitStatus>;
@@ -86,7 +87,7 @@ function getDirectoryGitStatus(
   return null;
 }
 
-export function FileTree({ items, currentFilePath, onFileSelect, level, showIcons = true, onNewFile, onNewFolder, onRefreshFileTree, onViewHistory, selectedFolder, onFolderSelect, gitStatusMap, sharedDragState, sharedExpandedDirs, selectedPaths: selectedPathsProp, onSelectionChange, sharedSelectionState, rootItems: rootItemsProp }: FileTreeProps) {
+export function FileTree({ items, currentFilePath, onFileSelect, level, showIcons = true, onNewFile, onNewFolder, onRefreshFileTree, onViewHistory, onViewWorkspaceHistory, selectedFolder, onFolderSelect, gitStatusMap, sharedDragState, sharedExpandedDirs, selectedPaths: selectedPathsProp, onSelectionChange, sharedSelectionState, rootItems: rootItemsProp }: FileTreeProps) {
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -610,6 +611,7 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
                     onNewFolder={onNewFolder}
                     onRefreshFileTree={onRefreshFileTree}
                     onViewHistory={onViewHistory}
+                    onViewWorkspaceHistory={onViewWorkspaceHistory}
                     selectedFolder={selectedFolder}
                     onFolderSelect={onFolderSelect}
                     gitStatusMap={gitStatusMap}
@@ -695,6 +697,7 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
           onNewFile={onNewFile}
           onNewFolder={onNewFolder}
           onViewHistory={onViewHistory}
+          onViewWorkspaceHistory={onViewWorkspaceHistory}
           selectedPaths={selectedPaths}
         />
       )}

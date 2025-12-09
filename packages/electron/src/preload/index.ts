@@ -139,6 +139,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('view-history', callback);
     return () => ipcRenderer.removeListener('view-history', callback);
   },
+  onViewWorkspaceHistory: (callback: () => void) => {
+    ipcRenderer.on('view-workspace-history', callback);
+    return () => ipcRenderer.removeListener('view-workspace-history', callback);
+  },
 
   onNextTab: (callback: () => void) => {
     ipcRenderer.on('next-tab', callback);

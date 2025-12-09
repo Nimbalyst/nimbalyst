@@ -35,6 +35,7 @@ interface ElectronAPI {
   onThemeChange: (callback: (theme: string) => void) => () => void;
   onShowAbout: (callback: () => void) => () => void;
   onViewHistory?: (callback: () => void) => () => void;
+  onViewWorkspaceHistory?: (callback: () => void) => () => void;
   onShowPreferences?: (callback: () => void) => () => void;
   onApproveAction?: (callback: () => void) => () => void;
   onRejectAction?: (callback: () => void) => () => void;

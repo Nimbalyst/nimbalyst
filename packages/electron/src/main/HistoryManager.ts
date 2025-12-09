@@ -292,6 +292,44 @@ export class HistoryManager {
   }
 
   /**
+   * List all files with history in a workspace
+   * Returns file paths with their latest snapshot timestamp and count
+   */
+  async listWorkspaceFiles(workspacePath: string): Promise<{
+    path: string;
+    latestTimestamp: number;
+    snapshotCount: number;
+  }[]> {
+    try {
+      if (!database.isInitialized()) {
+        await database.initialize();
+      }
+
+      // Query files that are in this workspace or in subdirectories of it
+      const result = await database.query<{
+        file_path: string;
+        latest: number;
+        count: string;
+      }>(`
+        SELECT file_path, MAX(timestamp) as latest, COUNT(*) as count
+        FROM document_history
+        WHERE file_path LIKE $1
+        GROUP BY file_path
+        ORDER BY latest DESC
+      `, [workspacePath + '/%']);
+
+      return result.rows.map(row => ({
+        path: row.file_path,
+        latestTimestamp: Number(row.latest),
+        snapshotCount: Number(row.count)
+      }));
+    } catch (error) {
+      logger.main.error('[HistoryManager] Failed to list workspace files:', error);
+      return [];
+    }
+  }
+
+  /**
    * Delete all history for a workspace
    */
   async deleteWorkspaceHistory(workspacePath: string): Promise<void> {

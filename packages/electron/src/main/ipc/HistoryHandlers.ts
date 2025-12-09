@@ -1,4 +1,6 @@
 import { ipcMain } from 'electron';
+import * as fs from 'fs/promises';
+import * as path from 'path';
 import { HistoryManager } from '../HistoryManager';
 
 // Initialize history manager
@@ -109,6 +111,79 @@ export async function registerHistoryHandlers() {
               AND metadata->>'type' = 'incremental-approval'
               AND metadata->>'sessionId' = $3
         `, [now, filePath, sessionId]);
+    });
+
+    // List all files with history in a workspace
+    ipcMain.handle('history:list-workspace-files', async (event, workspacePath: string) => {
+        return await historyManager.listWorkspaceFiles(workspacePath);
+    });
+
+    // Check which files exist on disk
+    ipcMain.handle('history:check-files-exist', async (event, filePaths: string[]) => {
+        const results: Record<string, boolean> = {};
+        await Promise.all(filePaths.map(async (filePath) => {
+            try {
+                await fs.access(filePath);
+                results[filePath] = true;
+            } catch {
+                results[filePath] = false;
+            }
+        }));
+        return results;
+    });
+
+    // Restore a deleted file from history
+    ipcMain.handle('history:restore-deleted-file', async (event, filePath: string, timestamp: string) => {
+        try {
+            // Load the snapshot content
+            const content = await historyManager.loadSnapshot(filePath, timestamp);
+
+            // Ensure parent directory exists
+            const dirPath = path.dirname(filePath);
+            await fs.mkdir(dirPath, { recursive: true });
+
+            // Write the file
+            await fs.writeFile(filePath, content, 'utf-8');
+
+            return { success: true };
+        } catch (error: any) {
+            console.error('[HistoryHandlers] Failed to restore deleted file:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    // Batch restore multiple deleted files to their most recent versions
+    ipcMain.handle('history:batch-restore-deleted-files', async (event, filePaths: string[]) => {
+        const results: { path: string; success: boolean; error?: string }[] = [];
+
+        for (const filePath of filePaths) {
+            try {
+                // Get the most recent snapshot for this file
+                const snapshots = await historyManager.listSnapshots(filePath);
+                if (snapshots.length === 0) {
+                    results.push({ path: filePath, success: false, error: 'No snapshots found' });
+                    continue;
+                }
+
+                // Load the most recent snapshot (first in list, sorted by timestamp DESC)
+                const latestSnapshot = snapshots[0];
+                const content = await historyManager.loadSnapshot(filePath, latestSnapshot.timestamp);
+
+                // Ensure parent directory exists
+                const dirPath = path.dirname(filePath);
+                await fs.mkdir(dirPath, { recursive: true });
+
+                // Write the file
+                await fs.writeFile(filePath, content, 'utf-8');
+
+                results.push({ path: filePath, success: true });
+            } catch (error: any) {
+                console.error('[HistoryHandlers] Failed to restore file:', filePath, error);
+                results.push({ path: filePath, success: false, error: error.message });
+            }
+        }
+
+        return results;
     });
 }
 

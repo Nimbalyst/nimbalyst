@@ -716,6 +716,16 @@ export async function createApplicationMenu() {
                         }
                     }
                 },
+                {
+                    label: 'View Folder History...',
+                    accelerator: 'CmdOrCtrl+Shift+H',
+                    click: async () => {
+                        const focused = getFocusedWindow();
+                        if (focused) {
+                            focused.webContents.send('view-workspace-history');
+                        }
+                    }
+                },
                 { type: 'separator' },
                 {
                     label: 'Approve Current Action',

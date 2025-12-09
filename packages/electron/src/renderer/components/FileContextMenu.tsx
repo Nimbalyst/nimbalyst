@@ -17,6 +17,7 @@ interface FileContextMenuProps {
   onNewFile?: (folderPath: string) => void;
   onNewFolder?: (folderPath: string) => void;
   onViewHistory?: (filePath: string) => void;
+  onViewWorkspaceHistory?: (folderPath: string) => void;
   selectedPaths?: Set<string>;
 }
 
@@ -35,6 +36,7 @@ export function FileContextMenu({
   onNewFile,
   onNewFolder,
   onViewHistory,
+  onViewWorkspaceHistory,
   selectedPaths
 }: FileContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -235,6 +237,12 @@ export function FileContextMenu({
             </div>
           )}
           {(onNewFile || onNewFolder) && <div className="context-menu-separator" />}
+          {onViewWorkspaceHistory && (
+            <div className="context-menu-item" onClick={() => { onViewWorkspaceHistory(filePath); onClose(); }}>
+              <MaterialSymbol icon="history" size={18} />
+              <span>View Folder History...</span>
+            </div>
+          )}
         </>
       )}
 

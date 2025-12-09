@@ -15,6 +15,7 @@ import { TabContent } from '../TabContent/TabContent';
 import { AIChat, type AIChatRef } from '../AIChat';
 import { NewFileDialog } from '../NewFileDialog';
 import { HistoryDialog } from '../HistoryDialog';
+import { WorkspaceHistoryDialog } from '../WorkspaceHistoryDialog';
 
 export interface EditorModeRef {
   closeActiveTab: () => void;
@@ -78,6 +79,8 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   const [isNewFileDialogOpen, setIsNewFileDialogOpen] = useState(false);
   const [newFileDirectory, setNewFileDirectory] = useState<string | null>(null);
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
+  const [isWorkspaceHistoryDialogOpen, setIsWorkspaceHistoryDialogOpen] = useState(false);
+  const [workspaceHistoryPath, setWorkspaceHistoryPath] = useState<string | null>(null);
 
   // AI Chat panel state
   const [isAIChatCollapsed, setIsAIChatCollapsed] = useState(false);
@@ -463,6 +466,33 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     return cleanup;
   }, [selectedFolderPath]);
 
+  // Listen for view-history IPC event from menu (Cmd+Y)
+  useEffect(() => {
+    if (!window.electronAPI?.onViewHistory) return undefined;
+
+    const cleanup = window.electronAPI.onViewHistory(() => {
+      // Open history dialog for the current file
+      if (currentFilePath) {
+        setIsHistoryDialogOpen(true);
+      }
+    });
+
+    return cleanup;
+  }, [currentFilePath]);
+
+  // Listen for view-workspace-history IPC event from menu (Cmd+Shift+H)
+  useEffect(() => {
+    if (!window.electronAPI?.onViewWorkspaceHistory) return undefined;
+
+    const cleanup = window.electronAPI.onViewWorkspaceHistory(() => {
+      // Open workspace history dialog for the entire workspace
+      setWorkspaceHistoryPath(workspacePath);
+      setIsWorkspaceHistoryDialogOpen(true);
+    });
+
+    return cleanup;
+  }, [workspacePath]);
+
   // Listen for file-new-mockup IPC event from menu
   useEffect(() => {
     const handleNewMockup = async () => {
@@ -598,6 +628,10 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
             onRefreshFileTree={handleRefreshFileTree}
             onViewHistory={(filePath) => {
               setIsHistoryDialogOpen(true);
+            }}
+            onViewWorkspaceHistory={(folderPath) => {
+              setWorkspaceHistoryPath(folderPath);
+              setIsWorkspaceHistoryDialogOpen(true);
             }}
             onSelectedFolderChange={setSelectedFolderPath}
             currentAISessionId={currentAISessionId}
@@ -754,6 +788,19 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
           onClose={() => setIsHistoryDialogOpen(false)}
           filePath={currentFilePath}
           onRestore={handleRestoreFromHistory}
+          theme={theme === 'auto' ? 'dark' : theme}
+        />
+      )}
+
+      {isWorkspaceHistoryDialogOpen && workspaceHistoryPath && (
+        <WorkspaceHistoryDialog
+          isOpen={isWorkspaceHistoryDialogOpen}
+          onClose={() => {
+            setIsWorkspaceHistoryDialogOpen(false);
+            setWorkspaceHistoryPath(null);
+          }}
+          workspacePath={workspaceHistoryPath}
+          onFileRestored={handleRefreshFileTree}
           theme={theme === 'auto' ? 'dark' : theme}
         />
       )}
