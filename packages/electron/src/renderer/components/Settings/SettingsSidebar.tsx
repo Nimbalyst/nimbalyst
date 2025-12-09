@@ -147,10 +147,13 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
   ];
 
   // Filter groups based on scope
-  // Project scope: Show Project group + AI Providers (for overrides)
+  // Project scope: Show Project group first, then AI Providers (for overrides)
   // User scope: Show AI Providers, Application, Extensions (not Project)
   const filteredGroups = scope === 'project'
-    ? categoryGroups.filter(g => g.title === 'Project' || g.title === 'AI Providers')
+    ? [
+        categoryGroups.find(g => g.title === 'Project')!,
+        categoryGroups.find(g => g.title === 'AI Providers')!,
+      ].filter(Boolean)
     : categoryGroups.filter(g => g.title !== 'Project');
 
   return (

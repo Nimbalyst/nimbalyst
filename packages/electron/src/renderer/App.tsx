@@ -44,11 +44,14 @@ import { registerDiffApprovalBarPlugin } from './plugins/registerDiffApprovalBar
 import { registerSearchReplacePlugin } from './plugins/registerSearchReplacePlugin';
 import { registerMockupPlugin } from './plugins/registerMockupPlugin';
 import ProjectSettingsScreen from './components/ProjectSettingsScreen/ProjectSettingsScreen.tsx';
-import { SettingsView } from './components/Settings/SettingsView';
+import { SettingsView, type SettingsScope } from './components/Settings/SettingsView';
+import type { SettingsCategory } from './components/Settings/SettingsSidebar';
 import { loadCustomTrackers } from './services/CustomTrackerLoader';
 import { customEditorRegistry } from './components/CustomEditors';
 import { MockupViewer } from './components/CustomEditors/MockupEditor/MockupViewer';
 import { MockupPickerMenuHost } from './components/MockupPickerMenu';
+import { ClaudeCommandsToast } from './components/ClaudeCommandsToast';
+import OnboardingService from './services/OnboardingService';
 import './WorkspaceWelcome.css';
 
 logger.ui.info('App.tsx loading');
@@ -208,6 +211,15 @@ export default function App() {
 
   // Feature walkthrough state (shown on first launch)
   const [isFeatureWalkthroughOpen, setIsFeatureWalkthroughOpen] = useState(false);
+
+  // Claude commands install toast state
+  const [showCommandsToast, setShowCommandsToast] = useState(false);
+  const hasCheckedCommandsRef = useRef(false);
+
+  // Settings deep link state (for navigating directly to a specific settings section)
+  const [settingsInitialCategory, setSettingsInitialCategory] = useState<SettingsCategory | undefined>(undefined);
+  const [settingsInitialScope, setSettingsInitialScope] = useState<SettingsScope | undefined>(undefined);
+  const [settingsKey, setSettingsKey] = useState(0); // Force remount when deep linking
 
   // Navigation gutter state
   const [sidebarView, setSidebarView] = useState<SidebarView>('files');
@@ -862,6 +874,40 @@ export default function App() {
     };
   }, []);
 
+  // Check if Claude commands need to be installed (show toast)
+  useEffect(() => {
+    const checkCommands = async () => {
+      if (!workspacePath || !workspaceMode) return;
+      if (hasCheckedCommandsRef.current) return;
+
+      // Skip in Playwright tests
+      if ((window as any).PLAYWRIGHT) return;
+
+      // Wait for other dialogs to close first
+      if (isFeatureWalkthroughOpen || isOnboardingOpen || isWindowsClaudeCodeWarningOpen) return;
+
+      try {
+        const needsInstall = await OnboardingService.needsCommandInstallation(workspacePath);
+        if (needsInstall) {
+          hasCheckedCommandsRef.current = true;
+          setShowCommandsToast(true);
+        }
+      } catch (error) {
+        console.error('[App] Error checking command installation:', error);
+      }
+    };
+
+    // Small delay to ensure smooth transition after other dialogs
+    const timeout = setTimeout(checkCommands, 500);
+    return () => clearTimeout(timeout);
+  }, [workspacePath, workspaceMode, isFeatureWalkthroughOpen, isOnboardingOpen, isWindowsClaudeCodeWarningOpen]);
+
+  // Reset commands check when workspace changes
+  useEffect(() => {
+    hasCheckedCommandsRef.current = false;
+    setShowCommandsToast(false);
+  }, [workspacePath]);
+
   // Update window title and dirty state
   useEffect(() => {
     if (!window.electronAPI) return;
@@ -1470,10 +1516,16 @@ export default function App() {
             {activeMode === 'settings' && (
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
                 <SettingsView
+                  key={settingsKey}
                   workspacePath={workspacePath}
                   workspaceName={workspaceName}
+                  initialCategory={settingsInitialCategory}
+                  initialScope={settingsInitialScope}
                   onClose={() => {
                     setActiveMode('files');
+                    // Clear initial settings state so next open uses defaults
+                    setSettingsInitialCategory(undefined);
+                    setSettingsInitialScope(undefined);
                   }}
                 />
               </div>
@@ -1595,6 +1647,35 @@ export default function App() {
         onComplete={handleFeatureWalkthroughComplete}
         onSkip={handleFeatureWalkthroughSkip}
       />
+      {showCommandsToast && workspacePath && (
+        <ClaudeCommandsToast
+          onInstallAll={async () => {
+            try {
+              await OnboardingService.installAllCommands(workspacePath);
+              setShowCommandsToast(false);
+            } catch (error) {
+              console.error('[App] Failed to install commands:', error);
+            }
+          }}
+          onOpenSettings={() => {
+            setShowCommandsToast(false);
+            // Use setTimeout to ensure state updates are flushed before switching modes
+            setSettingsInitialCategory('tool-packages');
+            setSettingsInitialScope('project');
+            setSettingsKey(k => k + 1); // Force SettingsView remount
+            // Defer mode change to next tick so initial values are set first
+            setTimeout(() => setActiveMode('settings'), 0);
+          }}
+          onSkip={async () => {
+            try {
+              await OnboardingService.dismissCommandInstallToast(workspacePath);
+              setShowCommandsToast(false);
+            } catch (error) {
+              console.error('[App] Failed to dismiss toast:', error);
+            }
+          }}
+        />
+      )}
       <ErrorToastContainer />
       <MockupPickerMenuHost />
     </div>

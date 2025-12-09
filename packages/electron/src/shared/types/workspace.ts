@@ -9,10 +9,12 @@ export interface OnboardingConfig {
   plansLocation: 'nimbalyst-local/plans' | 'plans' | string;
   checkInPlans: boolean;
   commandsLocation: 'project' | 'global'; // .claude/ vs ~/.claude/
+  commandInstallToastDismissed?: boolean; // User clicked Skip on the commands install toast
   claudeCodeIntegration: {
     enabled: boolean;
     planCommandInstalled: boolean;
     trackCommandInstalled: boolean;
+    mockupCommandInstalled?: boolean;
     claudeMdConfigured: boolean;
   };
   features: {

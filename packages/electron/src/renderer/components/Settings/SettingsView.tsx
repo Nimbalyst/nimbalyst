@@ -40,19 +40,21 @@ export interface Model {
   provider: string;
 }
 
+export type SettingsScope = 'user' | 'project';
+
 interface SettingsViewProps {
   workspacePath?: string | null;
   workspaceName?: string | null;
   onClose: () => void;
+  initialCategory?: SettingsCategory;
+  initialScope?: SettingsScope;
 }
 
-export type SettingsScope = 'user' | 'project';
-
-export function SettingsView({ workspacePath, workspaceName, onClose }: SettingsViewProps) {
+export function SettingsView({ workspacePath, workspaceName, onClose, initialCategory, initialScope }: SettingsViewProps) {
   const posthog = usePostHog();
 
-  const [selectedCategory, setSelectedCategory] = useState<SettingsCategory>('claude-code');
-  const [scope, setScope] = useState<SettingsScope>('user');
+  const [selectedCategory, setSelectedCategory] = useState<SettingsCategory>(initialCategory || 'claude-code');
+  const [scope, setScope] = useState<SettingsScope>(initialScope || 'user');
   const [searchQuery, setSearchQuery] = useState('');
   const [providers, setProviders] = useState<Record<string, ProviderConfig>>({
     claude: { enabled: false, testStatus: 'idle' },
@@ -90,6 +92,29 @@ export function SettingsView({ workspacePath, workspaceName, onClose }: Settings
   // Package counts for sidebar badge
   const [installedPackageCount, setInstalledPackageCount] = useState(0);
   const [totalPackageCount, setTotalPackageCount] = useState(0);
+
+  // Valid categories for each scope
+  const projectCategories: SettingsCategory[] = ['tool-packages', 'mcp-servers', 'claude-code', 'claude', 'openai', 'openai-codex', 'lmstudio'];
+  const userCategories: SettingsCategory[] = ['claude-code', 'claude', 'openai', 'openai-codex', 'lmstudio', 'sync', 'notifications', 'advanced', 'mcp-servers'];
+
+  // When initialCategory/initialScope props change, update state (for deep linking)
+  useEffect(() => {
+    if (initialCategory) {
+      setSelectedCategory(initialCategory);
+    }
+    if (initialScope) {
+      setScope(initialScope);
+    }
+  }, [initialCategory, initialScope]);
+
+  // When scope changes, ensure selected category is valid for that scope
+  useEffect(() => {
+    const validCategories = scope === 'project' ? projectCategories : userCategories;
+    if (!validCategories.includes(selectedCategory)) {
+      // Default to first valid category for the scope
+      setSelectedCategory(scope === 'project' ? 'tool-packages' : 'claude-code');
+    }
+  }, [scope]);
 
   // Load settings on mount
   useEffect(() => {
@@ -133,8 +158,8 @@ export function SettingsView({ workspacePath, workspaceName, onClose }: Settings
       // Load release channel setting
       const channel = await window.electronAPI.invoke('release-channel:get');
       setReleaseChannel(channel);
-      // Set default category based on release channel
-      if (channel === 'alpha') {
+      // Set default category based on release channel (only if no initial category was provided)
+      if (channel === 'alpha' && !initialCategory) {
         setSelectedCategory('sync');
       }
 
