@@ -14,7 +14,6 @@ import { useConfirmDialog } from './hooks/useConfirmDialog';
 import { handleWorkspaceFileSelect as handleWorkspaceFileSelectUtil } from './utils/workspaceFileOperations';
 import { createInitialFileContent } from './utils/fileUtils';
 import { aiToolService } from './services/AIToolService';
-import OnboardingService from './services/OnboardingService';
 import { editorRegistry } from '@nimbalyst/runtime/ai/EditorRegistry';
 import { WorkspaceWelcome } from './components/WorkspaceWelcome.tsx';
 import { QuickOpen } from './components/QuickOpen';
@@ -171,8 +170,6 @@ export default function App() {
   // NOTE: contentVersion removed - EditorContainer doesn't need version bumping for remounts
   const tabStatesRef = useRef<Map<string, { isDirty: boolean }>>(new Map());  // Track tab dirty states without re-renders
   const tabsRef = useRef<any>(null);  // Reference to current tabs object for use in intervals only
-  const hasShownOnboardingRef = useRef(false);  // Track if onboarding was shown in this session
-  const [isFirstTimeSetup, setIsFirstTimeSetup] = useState(false);  // Track if showing first-time setup
   const [isInitializing, setIsInitializing] = useState(true);
   const [workspaceMode, setWorkspaceMode] = useState(false);
   const [workspacePath, setWorkspacePath] = useState<string | null>(null);
@@ -1058,39 +1055,6 @@ export default function App() {
     loadInitialState();
   }, []);
 
-  // Check for first-time setup when workspace changes
-  useEffect(() => {
-    const checkFirstTimeSetup = async () => {
-      if (!workspacePath || !workspaceMode) return;
-
-      // Only check once per session for this workspace
-      if (hasShownOnboardingRef.current) return;
-
-      try {
-        const needsSetup = await OnboardingService.needsOnboarding(workspacePath);
-        // console.log('[SETTINGS] Needs first-time setup:', needsSetup);
-        if (needsSetup) {
-          hasShownOnboardingRef.current = true;
-          setIsFirstTimeSetup(true);
-          setActiveMode('settings');  // Use activeMode for full-width display
-
-          // Mark onboarding as shown to prevent it from appearing again
-          // even if the user dismisses without completing setup
-          await OnboardingService.markOnboardingShown(workspacePath);
-        }
-      } catch (error) {
-        console.error('[SETTINGS] Failed to check setup status:', error);
-      }
-    };
-
-    checkFirstTimeSetup();
-  }, [workspacePath, workspaceMode]);
-
-  // Reset onboarding flag when workspace changes
-  useEffect(() => {
-    hasShownOnboardingRef.current = false;
-    setIsFirstTimeSetup(false);
-  }, [workspacePath]);
 
   // Mode-aware tab navigation handlers
   const handleNextTab = () => {
@@ -1494,17 +1458,7 @@ export default function App() {
                 <SettingsView
                   workspacePath={workspacePath}
                   workspaceName={workspaceName}
-                  onClose={async () => {
-                    // Mark onboarding as complete when closing first-time setup
-                    if (isFirstTimeSetup && workspacePath) {
-                      try {
-                        await OnboardingService.completeOnboarding(workspacePath);
-                        console.log('[SETTINGS] Onboarding marked as complete');
-                      } catch (error) {
-                        console.error('[SETTINGS] Failed to mark onboarding complete:', error);
-                      }
-                      setIsFirstTimeSetup(false);
-                    }
+                  onClose={() => {
                     setActiveMode('files');
                   }}
                 />
