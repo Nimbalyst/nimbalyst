@@ -118,12 +118,39 @@ export function AgenticInput({
     return 'code';
   };
 
-  // Filter slash commands based on query
-  const filterSlashCommands = useCallback((query: string) => {
+  // Score a command name against a query for relevance ranking
+  // Higher score = better match
+  const scoreCommand = (name: string, query: string): number => {
+    const lowerName = name.toLowerCase();
     const lowerQuery = query.toLowerCase();
+
+    // Exact match
+    if (lowerName === lowerQuery) return 100;
+
+    // Name starts with query (prefix match)
+    if (lowerName.startsWith(lowerQuery)) return 80;
+
+    // Name contains query at word boundary (e.g., "prepare-commit" matches at "-commit")
+    const wordBoundaryRegex = new RegExp(`(?:^|[\\s_-])${lowerQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i');
+    if (wordBoundaryRegex.test(lowerName)) return 60;
+
+    // Name contains query anywhere
+    if (lowerName.includes(lowerQuery)) return 40;
+
+    // No match
+    return 0;
+  };
+
+  // Filter and sort slash commands based on query
+  const filterSlashCommands = useCallback((query: string) => {
     const filtered = allSlashCommands
-      .filter(cmd => cmd.name.toLowerCase().includes(lowerQuery))
-      .map(cmd => {
+      .map(cmd => ({
+        cmd,
+        score: scoreCommand(cmd.name, query)
+      }))
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score)
+      .map(({ cmd }) => {
         // Build label with argument hint if available (e.g., "/fix-issue [issue-number]")
         const label = cmd.argumentHint
           ? `/${cmd.name} ${cmd.argumentHint}`
