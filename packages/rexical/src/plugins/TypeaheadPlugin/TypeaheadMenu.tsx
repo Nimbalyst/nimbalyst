@@ -38,6 +38,8 @@ import {
     id: string;
     label: string;
     description?: string;
+    /** Secondary text shown on the right side of the option (e.g., truncated path) */
+    secondaryText?: string;
     shortcut?: string;
     icon?: ReactNode;
     preview?: ReactNode;
@@ -48,6 +50,8 @@ import {
     section?: string; // New: automatically groups options by section
     hidden?: boolean; // Hide this option from the menu
     flag?: 'beta' | 'new' | 'experimental' | 'developer'; // Add visual flags to menu items
+    /** Optional tooltip text shown on hover */
+    tooltip?: string;
   }
 
   export interface TypeaheadMenuMatch {
@@ -375,6 +379,9 @@ import {
       );
     }
 
+    // Use single-line layout when secondaryText is provided (no description shown)
+    const useSingleLineLayout = !!option.secondaryText;
+
     return (
       <div
         ref={ref}
@@ -383,6 +390,7 @@ import {
         onMouseEnter={onMouseEnter}
         role="option"
         aria-selected={isSelected}
+        title={option.tooltip}
         style={{
           padding: '6px 10px',
           cursor: 'pointer',
@@ -396,15 +404,41 @@ import {
           margin: '2px 4px',
           fontSize: '0.9rem',
           color: 'var(--text-primary, #111)',
+          gap: '8px',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          flex: 1,
+          minWidth: 0, // Allow truncation
+          overflow: 'hidden',
+        }}>
           {option.icon && (
-            <span style={{ marginRight: '8px' }}>{option.icon}</span>
+            <span style={{ marginRight: '8px', flexShrink: 0 }}>{option.icon}</span>
           )}
-          <div>
-            <div style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: '6px', lineHeight: 1.2 }}>
-              {option.label}
+          <div style={{
+            flex: 1,
+            minWidth: 0, // Allow truncation
+            overflow: 'hidden',
+          }}>
+            <div style={{
+              fontWeight: 500,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              lineHeight: 1.2,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}>
+              <span style={{
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}>
+                {option.label}
+              </span>
               {option.flag && (
                 <span style={{
                   fontSize: '0.6rem',
@@ -415,19 +449,35 @@ import {
                   borderRadius: '2px',
                   textTransform: 'uppercase',
                   letterSpacing: '0.3px',
-                  border: `1px solid ${option.flag === 'beta' ? '#ff6b35' : option.flag === 'new' ? '#00c851' : option.flag === 'developer' ? '#6f42c1' : '#ff4444'}`
+                  border: `1px solid ${option.flag === 'beta' ? '#ff6b35' : option.flag === 'new' ? '#00c851' : option.flag === 'developer' ? '#6f42c1' : '#ff4444'}`,
+                  flexShrink: 0,
                 }}>
                   {option.flag}
                 </span>
               )}
             </div>
-            {option.description && (
+            {!useSingleLineLayout && option.description && (
               <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary, #666)', marginTop: '2px' }}>
                 {option.description}
               </div>
             )}
           </div>
         </div>
+        {/* Secondary text (e.g., truncated path) shown on the right */}
+        {option.secondaryText && (
+          <span style={{
+            fontSize: '0.8rem',
+            color: 'var(--text-tertiary, #71717a)',
+            flexShrink: 1,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            maxWidth: '50%',
+            textAlign: 'right',
+          }}>
+            {option.secondaryText}
+          </span>
+        )}
         {option.shortcut && (
           <span style={{
             fontSize: '0.75rem',
@@ -435,7 +485,8 @@ import {
             backgroundColor: 'var(--surface-tertiary, #f5f5f5)',
             padding: '2px 6px',
             borderRadius: '3px',
-            fontFamily: 'monospace'
+            fontFamily: 'monospace',
+            flexShrink: 0,
           }}>
             {option.shortcut}
           </span>

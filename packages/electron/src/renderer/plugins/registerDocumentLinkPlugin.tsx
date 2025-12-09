@@ -7,7 +7,8 @@ import { pluginRegistry, type PluginPackage } from 'rexical';
 import {
   DocumentLinkPlugin,
   DocumentReferenceNode,
-  DocumentReferenceTransformer
+  DocumentReferenceTransformer,
+  LegacyDocumentReferenceTransformer
 } from '@nimbalyst/runtime';
 import { ElectronRendererDocumentService } from '../services/ElectronDocumentService';
 import { TypeaheadMenuPlugin, useAnchorElem } from 'rexical';
@@ -72,7 +73,8 @@ const documentLinkPluginPackage: PluginPackage = {
   name: 'DocumentLinkPlugin',
   Component: DocumentLinkPluginWrapper,
   nodes: [DocumentReferenceNode],
-  transformers: [DocumentReferenceTransformer],
+  // Include both main transformer (exports as markdown links) and legacy transformer (imports old format)
+  transformers: [DocumentReferenceTransformer, LegacyDocumentReferenceTransformer],
   enabledByDefault: true
 };
 

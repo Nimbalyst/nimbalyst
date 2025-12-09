@@ -176,24 +176,68 @@ export function $isDocumentReferenceNode(
     return node instanceof DocumentReferenceNode;
 }
 
+/**
+ * Main transformer for document references.
+ * Exports as standard markdown links: [filename](./path/to/file)
+ * Imports local relative paths as document references.
+ *
+ * The regex only matches paths that:
+ * - Don't contain :// (excludes http://, https://, etc.)
+ * - Don't start with special schemes (mailto:, tel:, #, etc.)
+ * - End with a file extension (.md, .txt, .tsx, etc.)
+ */
 export const DocumentReferenceTransformer: TextMatchTransformer = {
     dependencies: [DocumentReferenceNode],
     export: (node) => {
         if (!$isDocumentReferenceNode(node)) {
             return null;
         }
-        const { __documentId, __name, __path, __workspace } = node;
-        // Export as a more AI-friendly format that preserves the reference
-        // This format is easier for AI to understand and less likely to be stripped
-        return `[[document:${__name}|${__documentId}]]`;
+        const { __name, __path } = node;
+        // Export as standard markdown link with relative path
+        // Prefix with ./ for explicit relative link syntax
+        const relativePath = __path.startsWith('./') ? __path : `./${__path}`;
+        return `[${__name}](${relativePath})`;
     },
+    // Match markdown links with local file paths only:
+    // - Path must end with a file extension (.\w+)
+    // - Path must not contain :// (excludes URLs)
+    // - Path must not start with # (excludes anchors)
+    // The negative lookahead (?![^)]*://) ensures no :// anywhere in the path
+    importRegExp: /\[([^\]]+)\]\((?!#)(?![^)]*:\/\/)([^)]+\.\w+)\)/,
+    regExp: /(\[[^\]]+\]\((?!#)(?![^)]*:\/\/)[^)]+\.\w+\))$/,
+    replace: (textNode, match) => {
+        const [, name, path] = match;
+
+        // Normalize the path (remove leading ./ if present)
+        const normalizedPath = path.startsWith('./') ? path.slice(2) : path;
+        // Extract filename from path
+        const fileName = normalizedPath.split('/').pop() || name;
+        // Use path as document ID
+        const documentId = normalizedPath;
+        const documentReferenceNode = $createDocumentReferenceNode(documentId, fileName, normalizedPath, undefined);
+        textNode.replace(documentReferenceNode);
+    },
+    trigger: ')',
+    type: 'text-match',
+};
+
+/**
+ * Legacy transformer for backward compatibility.
+ * Imports old format: [[document:name|id]]
+ * This transformer only imports - it never exports in this format.
+ *
+ * The old format stored an MD5 hash as the document ID, which we discard
+ * since it's meaningless. We use the filename for everything.
+ */
+export const LegacyDocumentReferenceTransformer: TextMatchTransformer = {
+    dependencies: [DocumentReferenceNode],
+    export: () => null, // Never export in legacy format
     importRegExp: /\[\[document:([^|]+)\|([^\]]+)\]\]/,
     regExp: /(\[\[document:[^|]+\|[^\]]+\]\])$/,
     replace: (textNode, match) => {
-        const [, name, documentId] = match;
-        // For now, we'll use empty path and no workspace for imports
-        // These could be enhanced later if needed
-        const documentReferenceNode = $createDocumentReferenceNode(documentId, name, '', undefined);
+        const [, name] = match;
+        // Discard the MD5 hash (match[2]), use filename for id and path
+        const documentReferenceNode = $createDocumentReferenceNode(name, name, name, undefined);
         textNode.replace(documentReferenceNode);
     },
     trigger: ']',

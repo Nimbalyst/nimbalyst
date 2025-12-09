@@ -11,8 +11,40 @@ import { $createDocumentReferenceNode } from './DocumentLinkNode';
 import { DocumentService } from '../../core/DocumentService';
 import documentLinkStyles from './DocumentLinkPlugin.css?inline';
 import { TypeaheadMenuOption } from "rexical";
+import { fuzzyFilterDocuments } from '../../utils/fuzzyMatch';
 
 const DOCUMENT_REFERENCE_STYLE_ID = 'document-reference-styles';
+
+/**
+ * Truncate a path for display, keeping the most relevant parts visible.
+ * Preserves the filename and shows abbreviated parent directories.
+ * Example: "packages/electron/src/renderer/components" -> "...renderer/components"
+ */
+function truncatePath(path: string, maxLength: number = 40): string {
+  if (!path || path.length <= maxLength) return path;
+
+  const parts = path.split('/');
+  if (parts.length <= 2) return path;
+
+  // Always keep the last 2-3 parts (closest to the file)
+  const keepParts = parts.slice(-3);
+  const truncated = '...' + keepParts.join('/');
+
+  if (truncated.length <= maxLength) return truncated;
+
+  // If still too long, keep fewer parts
+  const fewerParts = parts.slice(-2);
+  return '...' + fewerParts.join('/');
+}
+
+/**
+ * Get the directory path (without filename) from a full path
+ */
+function getDirectoryPath(fullPath: string): string {
+  const parts = fullPath.split('/');
+  if (parts.length <= 1) return '';
+  return parts.slice(0, -1).join('/');
+}
 
 function ensureDocumentReferenceStyles(): void {
   if (typeof document === 'undefined') return;
@@ -145,31 +177,32 @@ export function DocumentLinkPlugin({
   // triggerFn is provided by the host; ensure stable reference via useMemo
   const resolvedTriggerFn = useMemo(() => triggerFn, [triggerFn]);
 
-  // Generate document options based on search query
+  // Generate document options based on search query with fuzzy matching
   const options = useMemo(() => {
-    const searchPromise = queryString
-      ? documentService.searchDocuments(queryString)
-      : Promise.resolve(documents);
+    // Use fuzzy filtering with ranking
+    const filtered = fuzzyFilterDocuments(documents, queryString, 50);
 
-    // Since TypeaheadMenuPlugin expects synchronous options, we need to handle this differently
-    // For now, we'll use the cached documents and filter them locally
-    const filteredDocs = queryString
-      ? documents.filter(doc =>
-          doc.name.toLowerCase().includes(queryString.toLowerCase()) ||
-          doc.path.toLowerCase().includes(queryString.toLowerCase())
-        )
-      : documents;
+    return filtered.map(({ item: doc, match }) => {
+      const dirPath = getDirectoryPath(doc.path);
+      const truncatedPath = truncatePath(dirPath);
 
-    return filteredDocs.map(doc => ({
-      id: `doc-${doc.id}`,
-      label: doc.name,
-      // Only show workspace-relative folder path (no filename) if available
-      description: doc.workspace || undefined,
-      icon: '📄',
-      section: doc.workspace || 'Documents',
-      keywords: [doc.name, doc.workspace, doc.path].filter(Boolean) as string[]
-    }));
-  }, [queryString, documents, documentService]);
+      return {
+        id: `doc-${doc.id}`,
+        label: doc.name,
+        // Use secondaryText for single-line layout with path on the right
+        secondaryText: truncatedPath || undefined,
+        // Full path in tooltip for hover
+        tooltip: doc.path,
+        icon: '📄',
+        // Don't use sections - removes the heavy uppercase headers
+        // section: doc.workspace || 'Documents',
+        keywords: [doc.name, doc.workspace, doc.path].filter(Boolean) as string[],
+        // Pass match info for potential highlighting
+        matchedIndices: match.matchedIndices,
+        score: match.score,
+      };
+    });
+  }, [queryString, documents]);
 
   const handleQueryChange = useCallback((query: string | null) => {
     setQueryString(query || '');
@@ -215,6 +248,9 @@ export function DocumentLinkPlugin({
       onQueryChange={handleQueryChange}
       onSelectOption={handleSelectOption}
       anchorElem={anchorElem}
+      minWidth={350}
+      maxWidth={500}
+      maxHeight={400}
       onOpen={() => {
         menuOpenRef.current = true;
         loadDocuments();

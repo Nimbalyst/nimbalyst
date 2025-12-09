@@ -23,7 +23,7 @@ export type { EditorInstance } from './ai/EditorRegistry';
 export * from './agents';
 // Plugins
 export { DocumentLinkPlugin } from './plugins/DocumentLinkPlugin';
-export { DocumentReferenceNode, DocumentReferenceTransformer, $createDocumentReferenceNode, $isDocumentReferenceNode } from './plugins/DocumentLinkPlugin/DocumentLinkNode';
+export { DocumentReferenceNode, DocumentReferenceTransformer, LegacyDocumentReferenceTransformer, $createDocumentReferenceNode, $isDocumentReferenceNode } from './plugins/DocumentLinkPlugin/DocumentLinkNode';
 export { DiffApprovalBarPlugin, DiffApprovalBar } from './plugins/DiffApprovalBar';
 export { SearchReplacePlugin, SearchReplaceBar, SearchReplaceStateManager } from './plugins/SearchReplace';
 export type { SearchReplaceState } from './plugins/SearchReplace';
@@ -68,6 +68,7 @@ export * from './ui/icons/MaterialSymbol';
 export * from './ui/icons/fileIcons';
 // Utils
 export * from './utils/dateUtils';
+export * from './utils/fuzzyMatch';
 // Mockup Plugin - Node exported separately to avoid circular dependency
 export {
   MockupNode,
