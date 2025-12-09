@@ -724,12 +724,23 @@ export class AIService {
           const parsedUsage = parseContextUsageMessage(contextResponse);
 
           if (parsedUsage) {
+            // Get current session to preserve inputTokens/outputTokens from modelUsage
+            // The /context command only gives us totalTokens (context window usage),
+            // not the actual input/output breakdown which comes from modelUsage
+            const currentSession = await this.sessionManager.loadSession(session.id, workspacePath);
+            const currentUsage = currentSession?.tokenUsage;
+
             const tokenUsage = {
-              inputTokens: 0,
-              outputTokens: 0,
+              // Preserve input/output tokens from modelUsage (set earlier in the response)
+              inputTokens: currentUsage?.inputTokens ?? 0,
+              outputTokens: currentUsage?.outputTokens ?? 0,
+              // Use totalTokens from /context (represents current context window usage)
               totalTokens: parsedUsage.totalTokens,
               contextWindow: parsedUsage.contextWindow,
-              categories: parsedUsage.categories
+              categories: parsedUsage.categories,
+              // Preserve cost and web search data from modelUsage
+              costUSD: currentUsage?.costUSD,
+              webSearchRequests: currentUsage?.webSearchRequests
             };
 
             // Persist token usage to session metadata
@@ -1727,7 +1738,6 @@ export class AIService {
                   webSearchRequests: (currentUsage.webSearchRequests || 0) + totalWebSearchRequests
                 };
 
-                // console.log('[AIService] Updating claude-code session token usage from modelUsage:', JSON.stringify(updatedUsage));
                 await this.sessionManager.updateSessionTokenUsage(session.id, updatedUsage);
 
                 // Update local session reference for next iteration
