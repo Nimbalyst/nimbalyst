@@ -5,6 +5,8 @@ import * as fsSync from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { promisify } from 'util';
+import { simpleGit } from 'simple-git';
+import {AnalyticsService} from "./analytics/AnalyticsService.ts";
 
 const execAsync = promisify(exec);
 
@@ -15,6 +17,12 @@ interface InstallationStatus {
   path?: string;
   latestVersion?: string;
   claudeDesktopVersion?: string; // Version installed by Claude Desktop (if any)
+}
+
+export interface ClaudeForWindowsInstallation {
+  isPlatformWindows: boolean;
+  gitVersion?: string;
+  claudeCodeVersion?: string;
 }
 
 interface NodeInstallProgress {
@@ -71,6 +79,10 @@ export class CLIManager {
 
     ipcMain.handle('cli:installNodeJs', async () => {
       return this.installNodeJs();
+    });
+
+    ipcMain.handle('cli:checkClaudeCodeWindowsInstallation', async (): Promise<ClaudeForWindowsInstallation> => {
+      return this.checkClaudeCodeWindowsInstallation();
     });
   }
 
@@ -184,6 +196,42 @@ export class CLIManager {
         error: 'npm is not installed. Please install Node.js from nodejs.org to use this feature.'
       };
     }
+  }
+
+  async checkGitInstallation(): Promise<{ gitInstalled: boolean; gitVersion?: string }> {
+    try {
+      const gitVersion = await simpleGit().version();
+      if (!gitVersion.installed) {
+        return { gitInstalled: false };
+      }
+      return { gitInstalled: true, gitVersion: String(gitVersion) };
+    } catch (e) {
+      return { gitInstalled: false };
+    }
+  }
+
+  async checkClaudeCodeWindowsInstallation(): Promise<ClaudeForWindowsInstallation> {
+    console.log('[CLIManager] Checking Claude for Windows installation...');
+    if (process.platform !== 'win32') {
+      return { isPlatformWindows: false };
+    }
+    const {gitVersion} = await this.checkGitInstallation();
+    const claudeSearchPaths = [
+      path.join(os.homedir(), '.local', 'bin', 'claude.exe'), // native installer places it here
+      'claude.exe' // an older installation may be on the path
+    ]
+
+    for (const claudePath of claudeSearchPaths) {
+      try {
+        await fs.access(claudePath, fsSync.constants.X_OK);
+        // Found it, get version
+        const claudeCodeVersion = execSync(`"${claudePath}" --version`, { encoding: 'utf8' }).trim();
+        return { isPlatformWindows:true, gitVersion, claudeCodeVersion }
+      } catch (e) {
+        // continue searching
+      }
+    }
+    return { isPlatformWindows: true, gitVersion };
   }
 
   async checkInstallation(tool: CLITool): Promise<InstallationStatus> {

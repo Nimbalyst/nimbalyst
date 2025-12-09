@@ -21,6 +21,7 @@ import { QuickOpen } from './components/QuickOpen';
 import { AgentCommandPalette } from './components/AgentCommandPalette';
 import { ConfirmDialog } from './components/ConfirmDialog/ConfirmDialog';
 import { DiscordInvitation } from './components/DiscordInvitation/DiscordInvitation';
+import { WindowsClaudeCodeWarning } from './components/WindowsClaudeCodeWarning/WindowsClaudeCodeWarning';
 import { KeyboardShortcutsDialog } from './components/KeyboardShortcutsDialog/KeyboardShortcutsDialog';
 import { ErrorDialog } from './components/ErrorDialog/ErrorDialog';
 import { ErrorToastContainer } from './components/ErrorToast/ErrorToast';
@@ -185,6 +186,7 @@ export default function App() {
   const [aiChatWidth, setAIChatWidth] = useState<number>(350);
   const [isKeyboardShortcutsDialogOpen, setIsKeyboardShortcutsDialogOpen] = useState(false);
   const [isDiscordInvitationOpen, setIsDiscordInvitationOpen] = useState(false);
+  const [isWindowsClaudeCodeWarningOpen, setIsWindowsClaudeCodeWarningOpen] = useState(false);
   const [isAIChatStateLoaded, setIsAIChatStateLoaded] = useState(false);
   // Planning mode for AI sidebar (Claude Code safety). Default ON
   const [aiPlanningModeEnabled, setAIPlanningModeEnabled] = useState<boolean>(true);
@@ -797,6 +799,46 @@ export default function App() {
       window.electronAPI.off?.('show-discord-invitation', handleShowDiscordInvitation);
     };
   }, []);
+
+  // Check for Windows Claude Code warning after other dialogs close
+  // This shows after feature walkthrough and onboarding are dismissed
+  useEffect(() => {
+    // Only check after initialization is complete
+    if (isInitializing) return;
+
+    // Skip in Playwright tests
+    if ((window as any).PLAYWRIGHT) return;
+
+    // Only show in workspace mode windows
+    if (!workspaceMode) return;
+
+    // Wait for feature walkthrough and onboarding to be closed first
+    if (isFeatureWalkthroughOpen || isOnboardingOpen) return;
+
+    const checkWindowsWarning = async () => {
+      try {
+        // Check if we should show the warning (Windows only, not dismissed)
+        const shouldShow = await window.electronAPI.invoke('claude-code:should-show-windows-warning');
+        if (!shouldShow) return;
+
+        // Check if Claude Code is installed
+        const installation = await window.electronAPI.cliCheckClaudeCodeWindowsInstallation();
+        if (installation.claudeCodeVersion) {
+          // Claude Code is installed, no warning needed
+          return;
+        }
+
+        // Show the warning
+        setIsWindowsClaudeCodeWarningOpen(true);
+      } catch (error) {
+        console.error('[App] Error checking Windows Claude Code warning:', error);
+      }
+    };
+
+    // Small delay to ensure smooth transition after other dialogs
+    const timeout = setTimeout(checkWindowsWarning, 500);
+    return () => clearTimeout(timeout);
+  }, [isInitializing, workspaceMode, isFeatureWalkthroughOpen, isOnboardingOpen]);
 
   // Listen for show-feature-walkthrough IPC event (from Developer menu)
   useEffect(() => {
@@ -1567,6 +1609,22 @@ export default function App() {
         isOpen={isDiscordInvitationOpen}
         onClose={() => setIsDiscordInvitationOpen(false)}
         onDismiss={() => setIsDiscordInvitationOpen(false)}
+      />
+      <WindowsClaudeCodeWarning
+        isOpen={isWindowsClaudeCodeWarningOpen}
+        onClose={() => {
+          posthog.capture('windows_claude_code_warning_closed');
+          setIsWindowsClaudeCodeWarningOpen(false);
+        }}
+        onDismiss={() => {
+          posthog.capture('windows_claude_code_warning_dismissed_forever');
+          setIsWindowsClaudeCodeWarningOpen(false)
+        }}
+        onOpenSettings={() => {
+          posthog.capture('windows_claude_code_warning_shown');
+          setIsWindowsClaudeCodeWarningOpen(false);
+          setActiveMode('settings');
+        }}
       />
       <OnboardingDialog
         isOpen={isOnboardingOpen}

@@ -119,6 +119,9 @@ interface ElectronAPI {
     createCheckpoint: (sessionId: string, state: string) => Promise<void>;
   };
 
+  // CLI management
+  cliCheckClaudeCodeWindowsInstallation: () => Promise<ClaudeForWindowsInstallation>;
+
   // AI operations
   aiSendMessage?: (message: string, documentContext?: any, sessionId?: string, workspacePath?: string) => Promise<any>;
   aiGetSessions?: (workspacePath?: string) => Promise<any>;

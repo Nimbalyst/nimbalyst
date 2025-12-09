@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import {ClaudeForWindowsInstallation} from "../main/services/CLIManager.ts";
 
 // Expose PLAYWRIGHT flag to renderer for test detection
 if (process.env.PLAYWRIGHT === '1') {
@@ -364,6 +365,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   cliUpgrade: (tool: string) => ipcRenderer.invoke('cli:upgrade', tool),
   cliCheckNpmAvailable: () => ipcRenderer.invoke('cli:checkNpmAvailable'),
   cliInstallNodeJs: () => ipcRenderer.invoke('cli:installNodeJs'),
+  cliCheckClaudeCodeWindowsInstallation: (): Promise<ClaudeForWindowsInstallation> => ipcRenderer.invoke('cli:checkClaudeCodeWindowsInstallation'),
 
   // AI event listeners (new)
   onAIStreamResponse: (callback: (data: any) => void) => {

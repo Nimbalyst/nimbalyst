@@ -30,6 +30,7 @@ import { registerProjectSelectionHandlers } from './ipc/ProjectSelectionHandlers
 import { registerUsageAnalyticsHandlers } from './ipc/UsageAnalyticsHandlers';
 import {
     type AppTheme,
+    dismissClaudeCodeWindowsWarning,
     dismissDiscordInvitation,
     getSessionSyncConfig,
     getTheme,
@@ -497,6 +498,12 @@ app.whenReady().then(async () => {
     ipcMain.on('dismiss-discord-invitation', (event) => {
         logger.main.info('User dismissed Discord invitation permanently');
         dismissDiscordInvitation();
+    });
+
+    // Set up IPC handler for Windows Claude Code warning dismissal
+    ipcMain.on('dismiss-claude-code-windows-warning', (event) => {
+        logger.main.info('User dismissed Windows Claude Code warning permanently');
+        dismissClaudeCodeWindowsWarning();
     });
 
     // Skip session restoration if opening a specific workspace from CLI

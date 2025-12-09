@@ -1,8 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { ProviderConfig, Model } from '../../Settings/SettingsView';
-// Commented out for now - using built-in SDK only
-// import { InstallationProgress } from './InstallationProgress';
-// import { CLIInstaller } from '../services/CLIInstaller';
 import {
   CLAUDE_CODE_TOOLS,
   TOOL_CATEGORIES,
@@ -13,6 +10,8 @@ import {
 // Import the actual SDK package.json to get the exact installed version
 // @ts-ignore - importing json
 import sdkPackageJson from '@anthropic-ai/claude-agent-sdk/package.json';
+import {ClaudeForWindowsInstallation} from "../../../../main/services/CLIManager.ts";
+import {usePostHog} from "posthog-js/react";
 
 // Built-in SDK version (dynamically from the SDK's package.json)
 const BUNDLED_SDK_VERSION = sdkPackageJson.version || 'unknown';
@@ -29,9 +28,6 @@ interface ClaudeCodePanelProps {
   onTestConnection: () => Promise<void>;
   onConfigChange: (updates: Partial<ProviderConfig>) => void;
 }
-
-// Commented out - using built-in SDK only
-// const cliInstaller = new CLIInstaller();
 
 type AuthMethod = 'login' | 'api-key';
 
@@ -63,8 +59,12 @@ export function ClaudeCodePanel({
   const [selectedAuthMethod, setSelectedAuthMethod] = useState<AuthMethod>(
     config.authMethod as AuthMethod || 'login'
   );
+  const [isCheckingClaudeWindowsStatus, setIsCheckingClaudeWindowsStatus] = useState(true);
+  const [claudeCodeWindowsStatus, setClaudeCodeWindowsStatus] = useState<ClaudeForWindowsInstallation | null>({isPlatformWindows: true});
+  const posthog = usePostHog();
 
   useEffect(() => {
+    checkClaudeCodeWindowsInstallation();
     checkLoginStatus();
   }, []);
 
@@ -77,6 +77,34 @@ export function ClaudeCodePanel({
       setLoginStatus({ isLoggedIn: false, hasOAuthToken: false, isExpired: true });
     }
   };
+
+  const checkClaudeCodeWindowsInstallation = async () => {
+    try {
+      setIsCheckingClaudeWindowsStatus(true);
+      console.log('[ClaudeCodePanel] Checking Claude Code Installation Status on Windows...');
+      const installation = await window.electronAPI.cliCheckClaudeCodeWindowsInstallation();
+      console.log('[ClaudeCodePanel] Claude Code installation status:', JSON.stringify(installation));
+      setClaudeCodeWindowsStatus(installation);
+      if (installation.isPlatformWindows) {
+        posthog.capture('check_claude_code_windows_installation', installation)
+      }
+    } catch (error) {
+      // ignore
+    } finally {
+      setIsCheckingClaudeWindowsStatus(false);
+    }
+  };
+
+  function isClaudeCodeWindowsReady(): boolean {
+    if (claudeCodeWindowsStatus?.isPlatformWindows) {
+      return Boolean(claudeCodeWindowsStatus.claudeCodeVersion);
+    }
+    return true;
+  }
+
+  function isWindowsPlatform(): boolean {
+    return claudeCodeWindowsStatus?.isPlatformWindows || false;
+  }
 
   const handleLogin = async () => {
     setIsLoggingIn(true);
@@ -103,92 +131,6 @@ export function ClaudeCodePanel({
     }
   };
 
-  // Commented out - no longer checking local installation
-  // const [isChecking, setIsChecking] = useState(false);
-  // const [npmAvailable, setNpmAvailable] = useState<{
-  //   available: boolean;
-  //   version?: string;
-  //   error?: string;
-  //   checked: boolean;
-  // }>({
-  //   available: false,
-  //   checked: false
-  // });
-  // const [localInstallStatus, setLocalInstallStatus] = useState<{
-  //   installed: boolean;
-  //   version?: string;
-  //   updateAvailable?: boolean;
-  //   path?: string;
-  //   latestVersion?: string;
-  //   claudeDesktopVersion?: string;
-  // }>({
-  //   installed: false
-  // });
-  // const [installationProgress, setInstallationProgress] = useState<{
-  //   isOpen: boolean;
-  //   status: string;
-  //   progress: number;
-  //   logs: string[];
-  //   isNodeJs?: boolean;
-  // }>({
-  //   isOpen: false,
-  //   status: '',
-  //   progress: 0,
-  //   logs: [],
-  //   isNodeJs: false
-  // });
-
-  // useEffect(() => {
-  //   checkNpmAndInstallation();
-  // }, []);
-
-  // Commented out - no longer managing installation
-  // const checkNpmAndInstallation = async () => {
-  //   console.log('[ClaudeCodePanel] Checking npm and installation...');
-  //   const npmCheck = await cliInstaller.checkNpmAvailable();
-  //   console.log('[ClaudeCodePanel] npm check result:', npmCheck);
-  //   setNpmAvailable({ ...npmCheck, checked: true });
-  //   if (npmCheck.available) {
-  //     console.log('[ClaudeCodePanel] npm is available, checking claude-code installation...');
-  //     checkInstallation();
-  //   } else {
-  //     console.log('[ClaudeCodePanel] npm is NOT available');
-  //     if (npmCheck.error) {
-  //       console.error('[ClaudeCodePanel] npm error:', npmCheck.error);
-  //     }
-  //   }
-  // };
-
-  // const checkInstallation = async () => {
-  //   setIsChecking(true);
-  //   try {
-  //     console.log('[ClaudeCodePanel] Checking installation...');
-  //     const status = await cliInstaller.checkInstallation('claude-code');
-  //     console.log('[ClaudeCodePanel] Installation status:', status);
-  //     setLocalInstallStatus(status);
-  //     onConfigChange({
-  //       installed: status.installed,
-  //       version: status.version,
-  //       updateAvailable: status.updateAvailable,
-  //       installStatus: status.installed ? 'installed' : 'not-installed'
-  //     });
-  //   } catch (error) {
-  //     console.error('Failed to check Claude Code installation:', error);
-  //     setLocalInstallStatus({ installed: false });
-  //     onConfigChange({
-  //       installStatus: 'not-installed'
-  //     });
-  //   } finally {
-  //     setIsChecking(false);
-  //   }
-  // };
-
-  // const handleInstall = async () => { ... };
-  // const handleUpdate = async () => { ... };
-  // const handleUninstall = async () => { ... };
-  // const handleInstallNodeJs = async () => { ... };
-  // const getInstallationStatusClass = () => { ... };
-
   return (
     <div className="provider-panel">
       <div className="provider-panel-header">
@@ -214,24 +156,76 @@ export function ClaudeCodePanel({
         </label>
       </div>
 
-      <div className="provider-panel-section">
-        <h4 className="provider-panel-section-title">Claude Agent SDK</h4>
-        <div className="installation-status installed">
-          <div className="installation-status-row">
-            <span className="installation-status-label">Version:</span>
-            <span className="installation-status-value">{BUNDLED_SDK_VERSION}</span>
+      { isWindowsPlatform() && isCheckingClaudeWindowsStatus && (
+        <>
+          <div className="installation-status installing">
+            <div className="installation-status-row">
+              <span className="installation-status-label">Checking Claude Code Installation...</span>
+            </div>
           </div>
-          <div className="installation-status-row">
-            <span className="installation-status-label">Source:</span>
-            <span className="installation-status-value">Built-in (bundled with app)</span>
+        </>
+      )}
+      { !isCheckingClaudeWindowsStatus && (
+        <>
+          <div className="provider-panel-section">
+            { isWindowsPlatform() ? (
+              <>
+                <h4 className="provider-panel-section-title">Claude Code for Windows Installation</h4>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '12px', lineHeight: '1.4' }}>
+                  Nimbalyst requires Claude Code for Windows to be installed to use the Claude Code provider.
+                </p>
+                { Boolean(claudeCodeWindowsStatus?.claudeCodeVersion) ? (
+                  <>
+                    <div className="installation-status installed">
+                      <div className="installation-status-row">
+                        <span className="installation-status-label">Claude Code Version:</span>
+                        <span className="installation-status-value">{claudeCodeWindowsStatus?.claudeCodeVersion}</span>
+                      </div>
+                    </div>
+                  </>
+                ): (
+                  <>
+                    <div className="installation-status not-installed">
+                      <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '12px', lineHeight: '1.4' }}>
+                        <div>Install Claude Code for Windows by following the instructions beloew:</div>
+                        <div>
+                          <ol>
+                            <li>Install <a href={'https://git-scm.com/install/windows'}>Git for Windows</a>. This is a prerequisite for installing Claude Code</li>
+                            <li>Install <a href={'https://code.claude.com/docs/en/overview#windows'}>Claude Code for Windows</a>.</li>
+                            <li>When finished, click the button below to recheck / verify the installation.</li>
+                          </ol>
+                        </div>
+                        <div>
+                          <button className={"button-update"} onClick={checkClaudeCodeWindowsInstallation}>Re-verify Claude Code Installation</button>
+                        </div>
+                      </p>
+                    </div>
+                  </>
+                )}
+              </>
+            ): (
+              <>
+                <h4 className="provider-panel-section-title">Claude Agent SDK</h4>
+                <div className="installation-status installed">
+                  <div className="installation-status-row">
+                    <span className="installation-status-label">Version:</span>
+                    <span className="installation-status-value">{BUNDLED_SDK_VERSION}</span>
+                  </div>
+                  <div className="installation-status-row">
+                    <span className="installation-status-label">Source:</span>
+                    <span className="installation-status-value">Built-in (bundled with app)</span>
+                  </div>
+                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '12px', lineHeight: '1.4' }}>
+                    Nimbalyst includes the Claude Agent SDK. No additional installation required.
+                  </p>
+                </div>
+              </>
+            )}
           </div>
-          <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '12px', lineHeight: '1.4' }}>
-            Nimbalyst includes the Claude Agent SDK. No additional installation required.
-          </p>
-        </div>
-      </div>
+        </>
+      )}
 
-      {config.enabled && (
+      {config.enabled && isClaudeCodeWindowsReady() && (
         <>
               <div className="provider-panel-section">
                 <h4 className="provider-panel-section-title">Authentication</h4>
@@ -658,17 +652,6 @@ export function ClaudeCodePanel({
               </div>
         </>
       )}
-
-      {/* Commented out - no longer managing installation */}
-      {/* {installationProgress.isOpen && (
-        <InstallationProgress
-          title={installationProgress.isNodeJs ? "Installing Node.js" : "Installing Claude Code"}
-          status={installationProgress.status}
-          progress={installationProgress.progress}
-          logs={installationProgress.logs}
-          onClose={() => setInstallationProgress(prev => ({ ...prev, isOpen: false }))}
-        />
-      )} */}
     </div>
   );
 }

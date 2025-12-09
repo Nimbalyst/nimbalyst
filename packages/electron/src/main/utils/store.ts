@@ -690,6 +690,20 @@ export function getLaunchCount(): number {
   return appStore.get('launchCount', 0);
 }
 
+export function isClaudeCodeWindowsWarningDismissed(): boolean {
+  return appStore.get('claudeCodeWindowsWarningDismissed', false);
+}
+
+export function dismissClaudeCodeWindowsWarning(): void {
+  appStore.set('claudeCodeWindowsWarningDismissed', true);
+}
+
+export function shouldShowClaudeCodeWindowsWarning(): boolean {
+  const isWindows = process.platform === 'win32';
+  const dismissed = isClaudeCodeWindowsWarningDismissed();
+  return isWindows && !dismissed;
+}
+
 export function isDiscordInvitationDismissed(): boolean {
   return appStore.get('discordInvitationDismissed', false);
 }
