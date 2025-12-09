@@ -214,6 +214,12 @@ export default function App() {
 
   // Content mode management - simple state, no manager needed
   const [activeMode, setActiveModeRaw] = useState<ContentMode>('files');
+  // Keep a ref to activeMode for use in callbacks that might have stale closures
+  const activeModeStateRef = useRef<ContentMode>(activeMode);
+  useEffect(() => {
+    activeModeStateRef.current = activeMode;
+  }, [activeMode]);
+
   const setActiveMode = (mode: ContentMode) => {
     // console.log('[App] setActiveMode called with:', mode, 'current:', activeMode);
     setActiveModeRaw(mode);
@@ -650,17 +656,29 @@ export default function App() {
   }, []);
 
   // Wrapper for workspace file selection - delegates to EditorMode
+  // CRITICAL: Use activeModeStateRef.current to avoid stale closure bugs
+  // This function is passed to AgenticPanel and stored in callbacks that may have stale references
   const handleWorkspaceFileSelect = useCallback(async (filePath: string) => {
+    const currentMode = activeModeStateRef.current;
+
+    // CRITICAL: If workspacePath is null, something is very wrong
+    if (!workspacePath) {
+      console.error('[App.handleWorkspaceFileSelect] ERROR: workspacePath is null/undefined! Cannot open file.');
+      return;
+    }
+
     // Switch to files mode if needed
-    if (activeMode !== 'files' && activeMode !== 'plan') {
+    if (currentMode !== 'files' && currentMode !== 'plan') {
       setActiveMode('files');
     }
 
     // Delegate to EditorMode
     if (editorModeRef.current) {
       await editorModeRef.current.selectFile(filePath);
+    } else {
+      console.error('[App.handleWorkspaceFileSelect] editorModeRef.current is null! This should never happen if workspacePath is set.');
     }
-  }, [activeMode]);
+  }, [workspacePath]); // Only workspacePath - activeMode is read from ref
 
   // Configure aiToolService with handleWorkspaceFileSelect
   useEffect(() => {
@@ -1237,20 +1255,16 @@ export default function App() {
   }, [confirmDialog]);
 
   // Handle close-active-tab from menu - route to active panel
-  const activeModeRef = useRef(activeMode);
-
-  useEffect(() => {
-    activeModeRef.current = activeMode;
-  });
+  // NOTE: Uses activeModeStateRef defined earlier near activeMode state
 
   useEffect(() => {
     const handleCloseActiveTab = () => {
-      // console.log('[App] handleCloseActiveTab called, activeMode:', activeModeRef.current);
-      if (activeModeRef.current === 'agent') {
-        // console.log('[App] Calling agenticPanelRef.current?.closeActiveTab()');
+      console.log('[App] handleCloseActiveTab IPC received, activeMode:', activeModeStateRef.current);
+      if (activeModeStateRef.current === 'agent') {
+        console.log('[App] Routing to agenticPanelRef.closeActiveTab()');
         agenticPanelRef.current?.closeActiveTab();
-      } else if (activeModeRef.current === 'files' || activeModeRef.current === 'plan') {
-        // console.log('[App] Calling editorModeRef.current?.closeActiveTab(), ref exists:', !!editorModeRef.current);
+      } else if (activeModeStateRef.current === 'files' || activeModeStateRef.current === 'plan') {
+        console.log('[App] Routing to editorModeRef.closeActiveTab()');
         editorModeRef.current?.closeActiveTab();
       }
     };
@@ -1265,11 +1279,11 @@ export default function App() {
   // Handle reopen-last-closed-tab from menu - route to active panel
   useEffect(() => {
     const handleReopenLastClosedTab = () => {
-      // console.log('[App] handleReopenLastClosedTab called, activeMode:', activeModeRef.current);
-      if (activeModeRef.current === 'agent') {
+      // console.log('[App] handleReopenLastClosedTab called, activeMode:', activeModeStateRef.current);
+      if (activeModeStateRef.current === 'agent') {
         // console.log('[App] Calling agenticPanelRef.current?.reopenLastClosedSession()');
         agenticPanelRef.current?.reopenLastClosedSession?.();
-      } else if (activeModeRef.current === 'files' || activeModeRef.current === 'plan') {
+      } else if (activeModeStateRef.current === 'files' || activeModeStateRef.current === 'plan') {
         // console.log('[App] Calling editorModeRef.current?.reopenLastClosedTab()');
         editorModeRef.current?.reopenLastClosedTab?.();
       }

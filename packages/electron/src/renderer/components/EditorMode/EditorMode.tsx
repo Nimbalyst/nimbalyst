@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
 import type { ConfigTheme } from 'rexical';
-import { useTabs } from '../../hooks/useTabs';
+import { useTabs, type TabData } from '../../hooks/useTabs';
 import { useTabNavigation } from '../../hooks/useTabNavigation';
 import { useDocumentContext } from '../../hooks/useDocumentContext';
 import { handleWorkspaceFileSelect as handleWorkspaceFileSelectUtil } from '../../utils/workspaceFileOperations';
@@ -126,14 +126,20 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   }, [tabs]);
 
   // Handle tab close with save for dirty tabs
+  // CRITICAL: Use tabsRef.current to avoid stale closure bug
   const handleTabClose = useCallback(async (tabId: string) => {
-    const tab = tabs.getTabState(tabId);
+    const currentTabs = tabsRef.current;
+    if (!currentTabs) {
+      console.error('[EditorMode.handleTabClose] tabsRef.current is null!');
+      return;
+    }
+    const tab = currentTabs.getTabState(tabId);
     // Save dirty tabs before closing to prevent data loss
     if (tab?.isDirty && saveTabByIdRef.current) {
       await saveTabByIdRef.current(tabId);
     }
-    tabs.removeTab(tabId);
-  }, [tabs]);
+    currentTabs.removeTab(tabId);
+  }, []); // No dependencies - uses refs for all mutable state
 
   // Derive current file info from active tab - this is the SINGLE SOURCE OF TRUTH
   // This prevents the state desynchronization bug where currentFilePath was out of sync
@@ -246,14 +252,24 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   }, [tabs, onCurrentFileChange]);
 
   // Handle workspace file selection
+  // CRITICAL: Use tabsRef.current to avoid stale closure bug
+  // The tabs object changes on every render, so capturing it in a useCallback
+  // leads to stale data when the callback is invoked from refs or async contexts
   const handleWorkspaceFileSelect = useCallback(async (filePath: string) => {
+    const currentTabs = tabsRef.current;
+    if (!currentTabs) {
+      console.error('[EditorMode.handleWorkspaceFileSelect] tabsRef.current is null!');
+      return;
+    }
+    // Use currentFilePath from tabs to also avoid stale closure
+    const activeFilePath = currentTabs.activeTab?.filePath || null;
     await handleWorkspaceFileSelectUtil({
       filePath,
-      currentFilePath,
-      tabs,
+      currentFilePath: activeFilePath,
+      tabs: currentTabs,
       isInitializedRef
     });
-  }, [currentFilePath, tabs]);
+  }, []); // No dependencies - uses refs for all mutable state
 
   // Handle opening session in AI Chat panel
   const handleOpenSessionInChat = useCallback(async (sessionId: string) => {
@@ -280,59 +296,74 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   }, [isAIChatCollapsed]);
 
   // Expose methods to parent via ref
+  // CRITICAL: Use tabsRef.current inside closures to avoid stale closure bugs
+  // The useImperativeHandle re-runs when tabs changes, but the methods it creates
+  // can still be called with stale data if tabs changes between creation and invocation
   useImperativeHandle(ref, () => ({
     closeActiveTab: () => {
-      console.log('[EditorMode] closeActiveTab called, activeTabId:', tabs.activeTabId);
-      if (tabs.activeTabId) {
-        console.log('[EditorMode] Calling handleTabClose with id:', tabs.activeTabId);
-        handleTabClose(tabs.activeTabId);
-      } else {
-        console.log('[EditorMode] No active tab to close');
+      const currentTabs = tabsRef.current;
+      if (currentTabs?.activeTabId) {
+        handleTabClose(currentTabs.activeTabId);
       }
     },
     reopenLastClosedTab: async () => {
-      // console.log('[EditorMode] reopenLastClosedTab called');
-      await tabs.reopenLastClosedTab(handleWorkspaceFileSelect);
+      const currentTabs = tabsRef.current;
+      if (currentTabs) {
+        await currentTabs.reopenLastClosedTab(handleWorkspaceFileSelect);
+      }
     },
     handleOpen,
     handleSaveAs,
     selectFile: handleWorkspaceFileSelect,
     openHistoryDialog: () => setIsHistoryDialogOpen(true),
     tabs: {
-      addTab: (filePath: string, content?: string) => tabs.addTab(filePath, content) ?? undefined,
+      addTab: (filePath: string, content?: string) => {
+        const currentTabs = tabsRef.current;
+        return currentTabs?.addTab(filePath, content) ?? undefined;
+      },
       removeTab: handleTabClose,
-      switchTab: tabs.switchTab,
-      findTabByPath: tabs.findTabByPath,
+      switchTab: (tabId: string) => {
+        const currentTabs = tabsRef.current;
+        currentTabs?.switchTab(tabId);
+      },
+      findTabByPath: (filePath: string) => {
+        const currentTabs = tabsRef.current;
+        return currentTabs?.findTabByPath(filePath);
+      },
       nextTab: () => {
-        if (tabs.tabs.length > 1) {
-          const currentIndex = tabs.tabs.findIndex(tab => tab.id === tabs.activeTabId);
+        const currentTabs = tabsRef.current;
+        if (currentTabs && currentTabs.tabs.length > 1) {
+          const currentIndex = currentTabs.tabs.findIndex((tab: TabData) => tab.id === currentTabs.activeTabId);
           // Don't wrap - if we're at the end, stay there
-          if (currentIndex < tabs.tabs.length - 1) {
+          if (currentIndex < currentTabs.tabs.length - 1) {
             const nextIndex = currentIndex + 1;
-            const nextTab = tabs.tabs[nextIndex];
+            const nextTab = currentTabs.tabs[nextIndex];
             if (nextTab) {
-              tabs.switchTab(nextTab.id);
+              currentTabs.switchTab(nextTab.id);
             }
           }
         }
       },
       previousTab: () => {
-        if (tabs.tabs.length > 1) {
-          const currentIndex = tabs.tabs.findIndex(tab => tab.id === tabs.activeTabId);
+        const currentTabs = tabsRef.current;
+        if (currentTabs && currentTabs.tabs.length > 1) {
+          const currentIndex = currentTabs.tabs.findIndex((tab: TabData) => tab.id === currentTabs.activeTabId);
           // Don't wrap - if we're at the beginning, stay there
           if (currentIndex > 0) {
             const prevIndex = currentIndex - 1;
-            const prevTab = tabs.tabs[prevIndex];
+            const prevTab = currentTabs.tabs[prevIndex];
             if (prevTab) {
-              tabs.switchTab(prevTab.id);
+              currentTabs.switchTab(prevTab.id);
             }
           }
         }
       },
-      tabs: tabs.tabs,
-      activeTabId: tabs.activeTabId,
+      // These getters will be stale, but they're used for snapshot reads which is acceptable
+      // The methods above that perform actions MUST use tabsRef.current
+      get tabs() { return tabsRef.current?.tabs ?? []; },
+      get activeTabId() { return tabsRef.current?.activeTabId ?? null; },
     }
-  }), [tabs, handleOpen, handleSaveAs, handleWorkspaceFileSelect, handleTabClose]);
+  }), [handleOpen, handleSaveAs, handleWorkspaceFileSelect, handleTabClose]);
 
   // Handle sidebar resize
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
