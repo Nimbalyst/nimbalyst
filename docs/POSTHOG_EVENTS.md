@@ -123,6 +123,10 @@ All events include `$session_id` property automatically. Dev users are marked wi
 | `onboarding_completed` | `App.tsx:312` | User completes the role/email onboarding dialog | `user_role`<br/>`custom_role_provided`<br/>`custom_role_text`<br/>`email_provided` |
 | `onboarding_deferred` | `App.tsx:330` | User clicks "Ask me later" on onboarding dialog | None |
 | `onboarding_skipped` | `App.tsx:341` | User clicks "Never ask again" on onboarding dialog | None |
+| `claude_commands_toast_shown` | `App.tsx:894` | Claude commands install toast is displayed | None |
+| `claude_commands_toast_install_all` | `App.tsx:1654` | User clicks "Install All" on commands toast | None |
+| `claude_commands_toast_settings` | `App.tsx:1663` | User clicks "Settings" on commands toast | None |
+| `claude_commands_toast_skip` | `App.tsx:1673` | User clicks "Skip" on commands toast | None |
 
 ### Special System Events
 
@@ -136,13 +140,13 @@ All events include `$session_id` property automatically. Dev users are marked wi
 
 ## Event Summary Statistics
 
-- **Total Events**: 54 unique event names
+- **Total Events**: 58 unique event names
 - **Main Process Events**: 39 (via AnalyticsService)
-- **Renderer Process Events**: 15 (via usePostHog hook)
+- **Renderer Process Events**: 19 (via usePostHog hook)
 - **File Operations**: 7 events
 - **Workspace Operations**: 4 events
 - **AI-Related**: 20 events
-- **Onboarding**: 4 events
+- **Onboarding**: 8 events
 - **System/Infrastructure**: 10 events
 
 ## Privacy Requirements

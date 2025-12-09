@@ -891,6 +891,7 @@ export default function App() {
         if (needsInstall) {
           hasCheckedCommandsRef.current = true;
           setShowCommandsToast(true);
+          posthog?.capture('claude_commands_toast_shown');
         }
       } catch (error) {
         console.error('[App] Error checking command installation:', error);
@@ -1650,6 +1651,7 @@ export default function App() {
       {showCommandsToast && workspacePath && (
         <ClaudeCommandsToast
           onInstallAll={async () => {
+            posthog?.capture('claude_commands_toast_install_all');
             try {
               await OnboardingService.installAllCommands(workspacePath);
               setShowCommandsToast(false);
@@ -1658,6 +1660,7 @@ export default function App() {
             }
           }}
           onOpenSettings={() => {
+            posthog?.capture('claude_commands_toast_settings');
             setShowCommandsToast(false);
             // Use setTimeout to ensure state updates are flushed before switching modes
             setSettingsInitialCategory('tool-packages');
@@ -1667,6 +1670,7 @@ export default function App() {
             setTimeout(() => setActiveMode('settings'), 0);
           }}
           onSkip={async () => {
+            posthog?.capture('claude_commands_toast_skip');
             try {
               await OnboardingService.dismissCommandInstallToast(workspacePath);
               setShowCommandsToast(false);
