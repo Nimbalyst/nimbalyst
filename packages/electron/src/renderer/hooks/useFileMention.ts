@@ -1,16 +1,38 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import { getDocumentService } from '../services/RendererDocumentService';
 import type { Document } from '@nimbalyst/runtime';
-import { getFileIcon } from '@nimbalyst/runtime';
+import { getFileIcon, fuzzyFilterDocuments } from '@nimbalyst/runtime';
 import type { TypeaheadOption } from '../components/Typeahead/GenericTypeahead';
 
+/**
+ * Truncate a path for display, keeping the most relevant parts visible.
+ * Example: "packages/electron/src/renderer/components" -> "...renderer/components"
+ */
+function truncatePath(path: string, maxLength: number = 40): string {
+  if (!path || path.length <= maxLength) return path;
 
-const shortenPath = (fullPath: string, maxLength = 80): string => {
-  if (!fullPath) return '';
-  if (fullPath.length <= maxLength) return fullPath;
-  const keep = Math.floor((maxLength - 3) / 2);
-  return `${fullPath.slice(0, keep)}...${fullPath.slice(fullPath.length - keep)}`;
-};
+  const parts = path.split('/');
+  if (parts.length <= 2) return path;
+
+  // Always keep the last 2-3 parts (closest to the file)
+  const keepParts = parts.slice(-3);
+  const truncated = '...' + keepParts.join('/');
+
+  if (truncated.length <= maxLength) return truncated;
+
+  // If still too long, keep fewer parts
+  const fewerParts = parts.slice(-2);
+  return '...' + fewerParts.join('/');
+}
+
+/**
+ * Get the directory path (without filename) from a full path
+ */
+function getDirectoryPath(fullPath: string): string {
+  const parts = fullPath.split('/');
+  if (parts.length <= 1) return '';
+  return parts.slice(0, -1).join('/');
+}
 
 export interface FileMentionReference {
   documentId: string;
@@ -34,7 +56,7 @@ interface UseFileMentionReturn {
 export function useFileMention({
   onInsertReference
 }: UseFileMentionOptions): UseFileMentionReturn {
-  const [documents, setDocuments] = useState<Document[]>([]);
+  const [allDocuments, setAllDocuments] = useState<Document[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const lastFetchTimeRef = useRef<number>(0);
@@ -42,88 +64,58 @@ export function useFileMention({
 
   const documentService = useMemo(() => getDocumentService(), []);
 
-  // Load documents with cache
+  // Load all documents with cache
   const loadDocuments = useCallback(async () => {
     const now = Date.now();
     const timeSinceLastFetch = now - lastFetchTimeRef.current;
 
     // Skip fetch if cache is still valid
-    if (timeSinceLastFetch < CACHE_DURATION_MS && documents.length > 0) {
-      // Debug logging - comment out for production
-      // console.log('[useFileMention] Using cached documents:', documents.length);
-      return documents;
+    if (timeSinceLastFetch < CACHE_DURATION_MS && allDocuments.length > 0) {
+      return allDocuments;
     }
 
     try {
       setIsLoading(true);
-      // Debug logging - comment out for production
-      // console.log('[useFileMention] Loading documents from service...');
       const docs = await documentService.listDocuments();
-      // console.log('[useFileMention] Loaded documents:', docs.length);
-      // if (docs.length > 0 && docs.length <= 20) {
-      //   console.log('[useFileMention] Document list:', docs.map(d => `${d.name} (${d.type})`));
-      // }
-      setDocuments(docs);
+      setAllDocuments(docs);
       lastFetchTimeRef.current = now;
       return docs;
     } catch (err) {
       console.error('[useFileMention] Failed to load documents:', err);
-      return documents;
+      return allDocuments;
     } finally {
       setIsLoading(false);
     }
-  }, [documentService, documents]);
+  }, [documentService, allDocuments]);
 
-  // Handle search query changes
+  // Handle search query changes - just update query, fuzzy filtering happens in options memo
   const handleSearch = useCallback(async (query: string) => {
-    // Debug logging - comment out for production
-    // console.log('[useFileMention] handleSearch called with query:', query);
     setSearchQuery(query);
+    // Ensure documents are loaded
+    await loadDocuments();
+  }, [loadDocuments]);
 
-    if (!query.trim()) {
-      // Empty query - load all documents (with cache)
-      // Debug logging - comment out for production
-      // console.log('[useFileMention] Empty query, loading all documents');
-      await loadDocuments();
-      // console.log('[useFileMention] After loadDocuments, documents.length:', documents.length);
-      return;
-    }
-
-    try {
-      // Search documents by query
-      // Debug logging - comment out for production
-      // console.log('[useFileMention] Searching documents with query:', query);
-      const results = await documentService.searchDocuments(query);
-      // console.log('[useFileMention] Search results:', results.length);
-      setDocuments(results);
-    } catch (err) {
-      console.error('[useFileMention] Search failed:', err);
-    }
-  }, [documentService, loadDocuments, documents.length]);
-
-
-  // Convert documents to typeahead options
+  // Convert documents to typeahead options with fuzzy filtering
   const options = useMemo<TypeaheadOption[]>(() => {
-    // Debug logging - comment out for production
-    // console.log('[useFileMention] Converting documents to options, documents.length:', documents.length);
-    const opts = documents.map(doc => {
-      const fullPath = doc.path || doc.name;
-      // Use shortenPath with 80 character max to show beginning and end
-      const displayLabel = shortenPath(fullPath, 80);
+    // Use fuzzy filtering with CamelCase support
+    const filtered = fuzzyFilterDocuments(allDocuments, searchQuery, 50);
+
+    return filtered.map(({ item: doc }) => {
+      const dirPath = getDirectoryPath(doc.path);
+      const truncatedPath = truncatePath(dirPath);
+      // Show filename with truncated path in description
+      const displayLabel = doc.name;
+      const description = truncatedPath || undefined;
 
       return {
         id: doc.id,
         label: displayLabel,
+        description,
         icon: getFileIcon(doc.name, 18),
         data: doc
       };
     });
-    // console.log('[useFileMention] Generated options:', opts.length);
-    // if (opts.length > 0 && opts.length <= 10) {
-    //   console.log('[useFileMention] Sample options:', opts.slice(0, 5).map(o => o.label));
-    // }
-    return opts;
-  }, [documents]);
+  }, [allDocuments, searchQuery]);
 
   // Handle option selection
   const handleSelect = useCallback((option: TypeaheadOption) => {
