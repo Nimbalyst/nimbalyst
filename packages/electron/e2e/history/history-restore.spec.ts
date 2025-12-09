@@ -82,9 +82,9 @@ test.describe('History restore functionality', () => {
       // Select the second snapshot (first edit) - snapshots are ordered newest first
       await selectHistoryItem(page, 1);
 
-      // Verify preview shows the first edit content
+      // Verify preview shows the first edit content (works for both diff and non-diff modes)
       const previewContent = page.locator(PLAYWRIGHT_TEST_SELECTORS.historyPreviewContent);
-      await expect(previewContent).toContainText('First Edit');
+      await expect(previewContent).toContainText('First Edit', { timeout: 5000 });
 
       // Restore the snapshot
       await restoreFromHistory(page);

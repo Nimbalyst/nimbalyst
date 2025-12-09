@@ -97,7 +97,8 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   // History dialog
   historyDialog: '.history-dialog',
   historyItem: '.history-item',
-  historyPreviewContent: '.history-preview-content pre',
+  historyPreviewContent: '.history-preview-content',
+  historyPreviewPre: '.history-preview-content pre',
   historyRestoreButton: '.history-restore-button',
 
   // Search/Replace bar
