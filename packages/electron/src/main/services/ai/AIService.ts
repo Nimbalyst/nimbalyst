@@ -413,7 +413,32 @@ export class AIService {
           },
           providerSettings: {
             type: 'object',
-            default: {}
+            default: {
+              claude: {
+                enabled: false,
+                testStatus: "idle",
+              },
+              'claude-code': {
+                enabled: true,
+                testStatus: "idle",
+                installStatus: "not-installed",
+                models: ["claude-code:opus", "claude-code:sonnet", "claude-code:haiku"]
+              },
+              openai: {
+                enabled: false,
+                testStatus: "idle",
+              },
+              'openai-codex': {
+                enabled: false,
+                testStatus: "idle",
+                installStatus: "not-installed",
+              },
+              lmstudio: {
+                enabled: false,
+                testStatus: "idle",
+                baseUrl: "http://127.0.0.1:8234"
+              }
+            }
           },
           showToolCalls: {
             type: 'boolean',
