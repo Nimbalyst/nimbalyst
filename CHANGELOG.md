@@ -19,6 +19,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.46.11] - 2025-12-09
+
+
+### Added
+- Warning dialog before quitting with active AI session
+- Windows users now see a warning that they need Claude Code installed
+
+### Changed
+- Rebranded "Claude Code" to "Claude Agent" in UI
+
+### Fixed
+- AI input stays focused when switching modes or tabs
+- Slash command menu now shows best matches first
+- Project search now shows best matches first
+- Mermaid diagram edit mode now displays correctly in dark mode
+- Mermaid diagrams no longer intermittently show "[object Object]" error
+- @ typeahead menu now positions correctly when scrolled
+- Table action menu and dropdown now display correctly in dark mode
+- Table context menu and hover buttons now position correctly when scrolled
+- Mobile session view no longer requires refresh after JWT expires
+- Queued AI messages no longer fire immediately while AI is responding
+- QR pairing modal no longer overflows screen in dev mode
+- iOS mobile app now decrypts session titles and saves credentials
+- Session titles now display correctly on mobile
+- Magic link now requires HTTPS redirect URL in production
+- Session titles and queued prompts now encrypted end-to-end
+- No keychain access prompt when sync is disabled
+- Sync server now restricts CORS to allowed origins only
+- Mobile credentials now encrypted via iOS Keychain / Android Keystore
+- Speculative fix for NIM-118: cannot-open-file-editorregistry-error-prevents-tab-creation
+
 ## [0.46.10] - 2025-12-08
 
 
