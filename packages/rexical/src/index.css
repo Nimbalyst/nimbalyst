@@ -801,7 +801,7 @@ i.page-break,
     inset 0 0 0 1px rgba(255, 255, 255, 0.5);
   border-radius: 8px;
   min-height: 40px;
-  background-color: #fff;
+  background-color: var(--surface-primary);
 }
 
 .stravu-editor .dropdown.table-cell-action-menu-dropdown {
@@ -811,7 +811,7 @@ i.page-break,
 .stravu-editor .dropdown .item {
   margin: 0 8px 0 8px;
   padding: 8px;
-  color: #050505;
+  color: var(--text-primary);
   cursor: pointer;
   line-height: 16px;
   font-size: 15px;
@@ -820,7 +820,7 @@ i.page-break,
   flex-direction: row;
   flex-shrink: 0;
   justify-content: space-between;
-  background-color: #fff;
+  background-color: var(--surface-primary);
   border-radius: 8px;
   border: 0;
   max-width: 264px;
@@ -841,7 +841,7 @@ i.page-break,
 }
 
 .stravu-editor .dropdown .item .shortcut {
-  color: #939393;
+  color: var(--text-tertiary);
   align-self: flex-end;
 }
 
@@ -861,7 +861,7 @@ i.page-break,
 }
 
 .stravu-editor .dropdown .item:hover {
-  background-color: #eee;
+  background-color: var(--surface-hover);
 }
 
 .stravu-editor .dropdown .item .text {
@@ -885,7 +885,7 @@ i.page-break,
 
 .stravu-editor .dropdown .divider {
   width: auto;
-  background-color: #eee;
+  background-color: var(--border-primary);
   margin: 4px 8px;
   height: 1px;
 }
@@ -1412,9 +1412,15 @@ i.page-break,
   top: 10px;
   right: 10px;
   border-radius: 15px;
-  color: #222;
+  background-color: var(--surface-secondary);
+  color: var(--text-primary);
+  padding: 4px;
   display: inline-block;
   cursor: pointer;
+}
+
+.table-cell-action-button:hover {
+  background-color: var(--surface-hover);
 }
 
 i.file-text,
@@ -1437,20 +1443,20 @@ i.chevron-down {
 }
 
 .action-button {
-  background-color: #eee;
+  background-color: var(--surface-tertiary);
   border: 0;
   padding: 8px 12px;
   position: relative;
   margin-left: 5px;
   border-radius: 15px;
-  color: #222;
+  color: var(--text-primary);
   display: inline-block;
   cursor: pointer;
 }
 
 .action-button:hover {
-  background-color: #ddd;
-  color: #000;
+  background-color: var(--surface-hover);
+  color: var(--text-primary);
 }
 
 .action-button-mic.active {
@@ -1459,7 +1465,7 @@ i.chevron-down {
 
 button.action-button:disabled {
   opacity: 0.6;
-  background: #eee;
+  background: var(--surface-tertiary);
   cursor: not-allowed;
 }
 
