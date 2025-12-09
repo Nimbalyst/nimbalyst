@@ -202,9 +202,12 @@ export const DocumentReferenceTransformer: TextMatchTransformer = {
     // - Path must end with a file extension (.\w+)
     // - Path must not contain :// (excludes URLs)
     // - Path must not start with # (excludes anchors)
-    // The negative lookahead (?![^)]*://) ensures no :// anywhere in the path
-    importRegExp: /\[([^\]]+)\]\((?!#)(?![^)]*:\/\/)([^)]+\.\w+)\)/,
-    regExp: /(\[[^\]]+\]\((?!#)(?![^)]*:\/\/)[^)]+\.\w+\))$/,
+    // - Must not match images or linked images (like [![alt](img)](link))
+    // The (?<!!) lookbehind ensures [ is not preceded by ! (excludes inner image links)
+    // The (?!!\[) lookahead ensures [ is not followed by ![ (excludes outer linked image wrapper)
+    // The (?![^)]*://) ensures no :// anywhere in the path
+    importRegExp: /(?<!!)\[(?!!\[)([^\]]+)\]\((?!#)(?![^)]*:\/\/)([^)]+\.\w+)\)/,
+    regExp: /(?<!!)\[(?!!\[)([^\]]+)\]\((?!#)(?![^)]*:\/\/)([^)]+\.\w+)\)$/,
     replace: (textNode, match) => {
         const [, name, path] = match;
 
