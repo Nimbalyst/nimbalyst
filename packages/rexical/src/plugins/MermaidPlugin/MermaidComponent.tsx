@@ -17,33 +17,42 @@ interface MermaidComponentProps {
 }
 
 // Dynamic import to avoid bundling mermaid when not needed
-let mermaidInstance: any = null;
+// Uses singleton promise pattern to prevent race conditions during concurrent loads
+let mermaidPromise: Promise<any> | null = null;
 let currentTheme: string | null = null;
 
-async function loadMermaid(isDarkTheme: boolean) {
+async function loadMermaid(isDarkTheme: boolean): Promise<any> {
   const theme = isDarkTheme ? 'dark' : 'default';
 
-  // Re-initialize if theme changed or not yet loaded
-  if (!mermaidInstance || currentTheme !== theme) {
-    const module = await import('mermaid');
-    // In mermaid v11+, use the named export or default
-    mermaidInstance = module.default || (module as any).mermaid || module;
-
-    // Check if we got a valid mermaid instance
-    if (typeof mermaidInstance.initialize !== 'function') {
-      console.error('Invalid mermaid instance:', mermaidInstance);
-      throw new Error('Failed to load mermaid module');
-    }
-
-    mermaidInstance.initialize({
-      startOnLoad: false,
-      theme: theme,
-      securityLevel: 'antiscript',
-      fontFamily: 'monospace',
-    });
-    currentTheme = theme;
+  // If theme changed, force re-initialization
+  if (currentTheme !== null && currentTheme !== theme) {
+    mermaidPromise = null;
   }
-  return mermaidInstance;
+
+  if (!mermaidPromise) {
+    currentTheme = theme;
+    mermaidPromise = (async () => {
+      const module = await import('mermaid');
+      // In mermaid v11+, use the named export or default
+      const mermaid = module.default || (module as any).mermaid || module;
+
+      // Check if we got a valid mermaid instance
+      if (typeof mermaid.initialize !== 'function') {
+        console.error('Invalid mermaid instance:', mermaid);
+        throw new Error('Failed to load mermaid module');
+      }
+
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: theme,
+        securityLevel: 'antiscript',
+        fontFamily: 'monospace',
+      });
+      return mermaid;
+    })();
+  }
+
+  return mermaidPromise;
 }
 
 function MermaidDiagram({ content, id }: { content: string; id: string }) {
@@ -89,10 +98,16 @@ function MermaidDiagram({ content, id }: { content: string; id: string }) {
 
           setError(null);
         }
-      } catch (err) {
+      } catch (err: any) {
         if (mounted) {
           console.error('Mermaid render error:', err);
-          setError(err?.toString() || 'Failed to render diagram');
+          // Extract error message properly - err.message for Error objects,
+          // toString() as fallback, but avoid "[object Object]"
+          const errorMessage = err?.message ||
+            (typeof err?.toString === 'function' && err.toString() !== '[object Object]'
+              ? err.toString()
+              : 'Failed to render diagram');
+          setError(errorMessage);
         }
       } finally {
         if (mounted) {
