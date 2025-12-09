@@ -4,8 +4,6 @@ import './OnboardingDialog.css';
 export interface OnboardingDialogProps {
   isOpen: boolean;
   onComplete: (role: string, customRole: string | null, email: string | null) => void;
-  onAskLater: () => void;
-  onNeverAsk: () => void;
 }
 
 const ROLE_OPTIONS = [
@@ -14,7 +12,12 @@ const ROLE_OPTIONS = [
   { value: 'other', label: 'Other', icon: 'interests' },
 ];
 
-export const OnboardingDialog: React.FC<OnboardingDialogProps> = ({ isOpen, onComplete, onAskLater, onNeverAsk }) => {
+const isValidEmail = (email: string): boolean => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+};
+
+export const OnboardingDialog: React.FC<OnboardingDialogProps> = ({ isOpen, onComplete }) => {
   const [selectedRole, setSelectedRole] = useState<string>('');
   const [customRole, setCustomRole] = useState<string>('');
   const [email, setEmail] = useState<string>('');
@@ -22,15 +25,9 @@ export const OnboardingDialog: React.FC<OnboardingDialogProps> = ({ isOpen, onCo
 
   if (!isOpen) return null;
 
-  const validateEmail = (email: string): boolean => {
-    if (!email) return true; // Empty is valid (optional field)
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
-
   const handleEmailChange = (value: string) => {
     setEmail(value);
-    if (value && !validateEmail(value)) {
+    if (value && !isValidEmail(value)) {
       setEmailError('Please enter a valid email address');
     } else {
       setEmailError('');
@@ -48,12 +45,6 @@ export const OnboardingDialog: React.FC<OnboardingDialogProps> = ({ isOpen, onCo
       return;
     }
 
-    // Validate email if provided
-    if (email && !validateEmail(email)) {
-      setEmailError('Please enter a valid email address');
-      return;
-    }
-
     // Call onComplete with the collected data
     onComplete(
       selectedRole,
@@ -65,7 +56,8 @@ export const OnboardingDialog: React.FC<OnboardingDialogProps> = ({ isOpen, onCo
   const isSubmitDisabled =
     !selectedRole ||
     (selectedRole === 'other' && !customRole.trim()) ||
-    (email && !validateEmail(email));
+    !email.trim() ||
+    !isValidEmail(email.trim());
 
   return (
     <div className="onboarding-overlay">
@@ -121,7 +113,7 @@ export const OnboardingDialog: React.FC<OnboardingDialogProps> = ({ isOpen, onCo
 
           <div className="onboarding-section">
             <label className="onboarding-label" htmlFor="email-input">
-              Email address (optional)
+              Email address <span className="required">*</span>
             </label>
             <p className="onboarding-help-text">
               Receive occasional product updates and tips
@@ -145,20 +137,6 @@ export const OnboardingDialog: React.FC<OnboardingDialogProps> = ({ isOpen, onCo
         </div>
 
         <div className="onboarding-footer">
-          <div className="onboarding-footer-left">
-            <button
-              className="onboarding-secondary-button"
-              onClick={onNeverAsk}
-            >
-              Never ask again
-            </button>
-            <button
-              className="onboarding-secondary-button"
-              onClick={onAskLater}
-            >
-              Ask me later
-            </button>
-          </div>
           <button
             className="onboarding-submit"
             onClick={handleSubmit}

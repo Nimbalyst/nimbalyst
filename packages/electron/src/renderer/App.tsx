@@ -322,29 +322,6 @@ export default function App() {
     setIsOnboardingOpen(false);
   }, [posthog]);
 
-  // Handle "Ask me later" - set a timestamp for 2 days from now
-  const handleOnboardingAskLater = useCallback(async () => {
-    const nextPromptTime = Date.now() + (2 * 24 * 60 * 60 * 1000); // 2 days in milliseconds
-    await window.electronAPI.invoke('onboarding:update', { onboardingNextPrompt: nextPromptTime });
-
-    if (posthog) {
-      posthog.capture('onboarding_deferred');
-    }
-
-    setIsOnboardingOpen(false);
-  }, [posthog]);
-
-  // Handle "Never ask again" - permanently dismiss
-  const handleOnboardingNeverAsk = useCallback(async () => {
-    await window.electronAPI.invoke('onboarding:update', { userRole: 'skipped' });
-
-    if (posthog) {
-      posthog.capture('onboarding_skipped');
-    }
-
-    setIsOnboardingOpen(false);
-  }, [posthog]);
-
   // Check for feature walkthrough on first launch
   // Set to true to force the walkthrough to display (for development/testing)
   const FORCE_FEATURE_WALKTHROUGH = false;
@@ -852,6 +829,21 @@ export default function App() {
 
     return () => {
       window.electronAPI.off?.('show-feature-walkthrough', handleShowFeatureWalkthrough);
+    };
+  }, []);
+
+  // Listen for show-onboarding-dialog IPC event (from Developer menu)
+  useEffect(() => {
+    if (!window.electronAPI?.on) return;
+
+    const handleShowOnboardingDialog = () => {
+      setIsOnboardingOpen(true);
+    };
+
+    window.electronAPI.on('show-onboarding-dialog', handleShowOnboardingDialog);
+
+    return () => {
+      window.electronAPI.off?.('show-onboarding-dialog', handleShowOnboardingDialog);
     };
   }, []);
 
@@ -1629,8 +1621,6 @@ export default function App() {
       <OnboardingDialog
         isOpen={isOnboardingOpen}
         onComplete={handleOnboardingComplete}
-        onAskLater={handleOnboardingAskLater}
-        onNeverAsk={handleOnboardingNeverAsk}
       />
       <FeatureWalkthrough
         isOpen={isFeatureWalkthroughOpen}
