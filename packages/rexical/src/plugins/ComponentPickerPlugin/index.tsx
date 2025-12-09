@@ -378,7 +378,11 @@ function getBaseOptions(editor: LexicalEditor, showModal: ShowModal): TypeaheadM
 // MAIN PLUGIN
 // ============================================================================
 
-export default function ComponentPickerMenuPlugin(): JSX.Element {
+export default function ComponentPickerMenuPlugin({
+  anchorElem,
+}: {
+  anchorElem?: HTMLElement;
+}): JSX.Element {
   const [editor] = useLexicalComposerContext();
   const [modal, showModal] = useModal();
   const [queryString, setQueryString] = useState<string | null>(null);
@@ -479,6 +483,7 @@ export default function ComponentPickerMenuPlugin(): JSX.Element {
         maxHeight={400}
         minWidth={300}
         maxWidth={400}
+        anchorElem={anchorElem}
       />
     </>
   );

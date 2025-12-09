@@ -126,31 +126,6 @@ export interface TypeaheadMenuProps {
       onOpen?.(newResolution);
     }, [onOpen, options]);
 
-    // Prevent parent scrolling when menu is open
-    useEffect(() => {
-      if (!resolution) return;
-
-      // Find the editor scrollable container
-      const editorElement = editor._rootElement;
-      if (!editorElement) return;
-
-      const scrollContainer = anchorElem || document.body;
-
-      // Store original overflow style
-      const originalOverflow = scrollContainer.style.overflow;
-      const originalOverflowY = scrollContainer.style.overflowY;
-
-      // Prevent scrolling
-      scrollContainer.style.overflow = 'hidden';
-      scrollContainer.style.overflowY = 'hidden';
-
-      return () => {
-        // Restore original overflow
-        scrollContainer.style.overflow = originalOverflow;
-        scrollContainer.style.overflowY = originalOverflowY;
-      };
-    }, [resolution, editor]);
-
     // Select option handler
     const handleSelectOption = useCallback((option: TypeaheadMenuOption) => {
       if (option.disabled) return;

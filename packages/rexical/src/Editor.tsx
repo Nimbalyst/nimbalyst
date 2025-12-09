@@ -243,7 +243,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
         <DragDropPaste />
         {selectionAlwaysOnDisplay && <SelectionAlwaysOnDisplay />}
         <ClearEditorPlugin />
-        <ComponentPickerPlugin />
+        {floatingAnchorElem && <ComponentPickerPlugin anchorElem={floatingAnchorElem} />}
         <EmojiPickerPlugin />
         <AutoEmbedPlugin />
         {/*<EmojisPlugin />*/}

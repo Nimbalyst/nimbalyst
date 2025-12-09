@@ -318,7 +318,36 @@ import {
 
     useEffect(() => {
       if (isSelected && ref.current) {
-        ref.current.scrollIntoView({ block: 'nearest' });
+        // Find the scrollable container WITHIN the typeahead menu only
+        // Stop at .typeahead-menu to avoid scrolling the document
+        let scrollContainer: HTMLElement | null = ref.current.parentElement;
+        while (scrollContainer) {
+          // Stop if we've reached the menu boundary
+          if (scrollContainer.classList.contains('typeahead-menu')) {
+            scrollContainer = null;
+            break;
+          }
+          const style = getComputedStyle(scrollContainer);
+          if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
+            break;
+          }
+          scrollContainer = scrollContainer.parentElement;
+        }
+
+        // Manually scroll the container instead of using scrollIntoView
+        // scrollIntoView scrolls ALL ancestors, which can scroll the editor
+        if (scrollContainer && scrollContainer.scrollHeight > scrollContainer.clientHeight) {
+          const optionRect = ref.current.getBoundingClientRect();
+          const containerRect = scrollContainer.getBoundingClientRect();
+
+          if (optionRect.bottom > containerRect.bottom) {
+            // Option is below visible area - scroll down
+            scrollContainer.scrollTop += optionRect.bottom - containerRect.bottom;
+          } else if (optionRect.top < containerRect.top) {
+            // Option is above visible area - scroll up
+            scrollContainer.scrollTop -= containerRect.top - optionRect.top;
+          }
+        }
       }
     }, [isSelected]);
 
@@ -549,9 +578,15 @@ import {
               maxHeight
             );
             if (anchorElem && anchorElem !== document.body) {
+              // POSITIONING: The menu is portaled into anchorElem (editor-scroller) which has
+              // position: relative and overflow: auto. To position correctly:
+              // 1. Use viewport coordinates from calculateOptimalPosition
+              // 2. Subtract containerRect to get position relative to anchorElem
+              // 3. Add anchorElem.scrollTop/Left to account for scroll offset within anchorElem
+              // This ensures the menu scrolls with content and appears at the correct position.
               const containerRect = anchorElem.getBoundingClientRect();
-              const anchoredTop = Math.max(0, newPosition.top - window.pageYOffset - containerRect.top);
-              const anchoredLeft = Math.max(0, newPosition.left - window.pageXOffset - containerRect.left);
+              const anchoredTop = Math.max(0, newPosition.top - window.pageYOffset - containerRect.top + anchorElem.scrollTop);
+              const anchoredLeft = Math.max(0, newPosition.left - window.pageXOffset - containerRect.left + anchorElem.scrollLeft);
               const anchoredMaxHeight = Math.max(120, Math.min(newPosition.maxHeight, containerRect.height - 16));
               setPosition({
                 ...newPosition,

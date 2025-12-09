@@ -56,6 +56,25 @@ The tests are organized by functionality (CopyAndPaste, Headings, etc.) and incl
 ### Plugin Architecture
 The editor uses a comprehensive plugin system where each feature is implemented as a separate plugin in `src/plugins/`. Plugins handle everything from basic functionality (AutoLink, CodeHighlight) to complex features (Tables, Collaboration, DragDrop).
 
+### Floating Element Positioning (CRITICAL)
+
+When creating floating UI elements (menus, dropdowns, toolbars) that need to appear near editor content:
+
+1. **Portal Target**: Use `floatingAnchorElem` (editor-scroller) as the portal container. This element has `position: relative` and `overflow: auto`.
+
+2. **Position Calculation**: ALWAYS account for scroll offset:
+   ```typescript
+   const anchorRect = anchorElem.getBoundingClientRect();
+   const top = targetRect.top - anchorRect.top + anchorElem.scrollTop;
+   const left = targetRect.left - anchorRect.left + anchorElem.scrollLeft;
+   ```
+
+3. **Why This Matters**: The editor content scrolls inside `editor-scroller`. Using viewport coordinates without scroll offset will position elements incorrectly when scrolled.
+
+4. **Never use `scrollIntoView()`**: It scrolls ALL ancestors, including the editor. Instead, manually adjust `scrollTop` on the specific container.
+
+See `TableActionMenuPlugin`, `TableHoverActionsPlugin`, and `TypeaheadMenuPlugin` for reference implementations.
+
 ### Node System
 Custom nodes extend Lexical's base functionality:
 - ImageNode/InlineImageNode for image handling
