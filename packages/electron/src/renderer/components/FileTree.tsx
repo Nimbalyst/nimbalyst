@@ -36,6 +36,17 @@ interface FileTreeProps {
     expandedDirs: Set<string>;
     setExpandedDirs: React.Dispatch<React.SetStateAction<Set<string>>>;
   };
+  // Multi-select support
+  selectedPaths?: Set<string>;
+  onSelectionChange?: (paths: Set<string>) => void;
+  sharedSelectionState?: {
+    selectedPaths: Set<string>;
+    setSelectedPaths: React.Dispatch<React.SetStateAction<Set<string>>>;
+    lastSelectedPath: string | null;
+    setLastSelectedPath: React.Dispatch<React.SetStateAction<string | null>>;
+  };
+  // Root items for range selection (only set at root level)
+  rootItems?: FileTreeItem[];
 }
 
 // Special directories that should always appear first with distinct styling
@@ -75,7 +86,7 @@ function getDirectoryGitStatus(
   return null;
 }
 
-export function FileTree({ items, currentFilePath, onFileSelect, level, showIcons = true, onNewFile, onNewFolder, onRefreshFileTree, onViewHistory, selectedFolder, onFolderSelect, gitStatusMap, sharedDragState, sharedExpandedDirs }: FileTreeProps) {
+export function FileTree({ items, currentFilePath, onFileSelect, level, showIcons = true, onNewFile, onNewFolder, onRefreshFileTree, onViewHistory, selectedFolder, onFolderSelect, gitStatusMap, sharedDragState, sharedExpandedDirs, selectedPaths: selectedPathsProp, onSelectionChange, sharedSelectionState, rootItems: rootItemsProp }: FileTreeProps) {
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -97,6 +108,16 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
   const isDragCopy = sharedDragState?.isDragCopy ?? localIsDragCopy;
   const setIsDragCopy = sharedDragState?.setIsDragCopy ?? setLocalIsDragCopy;
 
+  // Create local selection state for root level, or use shared state for nested levels
+  const [localSelectedPaths, setLocalSelectedPaths] = useState<Set<string>>(new Set());
+  const [localLastSelectedPath, setLocalLastSelectedPath] = useState<string | null>(null);
+
+  // Use shared state if provided (nested), otherwise use local state (root)
+  const selectedPaths = sharedSelectionState?.selectedPaths ?? selectedPathsProp ?? localSelectedPaths;
+  const setSelectedPaths = sharedSelectionState?.setSelectedPaths ?? setLocalSelectedPaths;
+  const lastSelectedPath = sharedSelectionState?.lastSelectedPath ?? localLastSelectedPath;
+  const setLastSelectedPath = sharedSelectionState?.setLastSelectedPath ?? setLocalLastSelectedPath;
+
   // Helper function to find parent directories of a file
   const findParentDirs = useCallback((items: FileTreeItem[], targetPath: string, parents: string[] = []): string[] | null => {
     for (const item of items) {
@@ -108,6 +129,18 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
       }
     }
     return null;
+  }, []);
+
+  // Helper function to flatten all visible items for range selection
+  const flattenVisibleItems = useCallback((treeItems: FileTreeItem[], expanded: Set<string>): FileTreeItem[] => {
+    const result: FileTreeItem[] = [];
+    for (const item of treeItems) {
+      result.push(item);
+      if (item.type === 'directory' && item.children && expanded.has(item.path)) {
+        result.push(...flattenVisibleItems(item.children, expanded));
+      }
+    }
+    return result;
   }, []);
 
   // Create local expanded state for root level, or use shared state for nested levels
@@ -149,9 +182,13 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
           return hasChanges ? newSet : prev;
         });
       }
+    }
+  }, [currentFilePath, items, level, findParentDirs, setExpandedDirs]);
 
-      // ONLY scroll if the file path actually changed (user switched files)
-      // Don't scroll when user is just browsing/clicking folders in the tree
+  // Scroll to active file only when currentFilePath actually changes
+  // Separate effect to avoid scrolling when items change (e.g., file deletion)
+  useEffect(() => {
+    if (currentFilePath && level === 0) {
       const filePathChanged = prevFilePathRef.current !== currentFilePath;
       if (filePathChanged) {
         prevFilePathRef.current = currentFilePath;
@@ -165,7 +202,20 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
         }, 100);
       }
     }
-  }, [currentFilePath, items, level, findParentDirs, setExpandedDirs]);
+  }, [currentFilePath, level]);
+
+  // Clear multi-selection when a file is opened from outside the tree (e.g., keyboard shortcut)
+  useEffect(() => {
+    if (currentFilePath && level === 0) {
+      // If current file is not in the selection, clear the selection
+      // This handles the case where user opens a file via shortcut/other means
+      if (selectedPaths.size > 0 && !selectedPaths.has(currentFilePath)) {
+        setSelectedPaths(new Set<string>([currentFilePath]));
+        setLastSelectedPath(currentFilePath);
+        onSelectionChange?.(new Set<string>([currentFilePath]));
+      }
+    }
+  }, [currentFilePath, level, selectedPaths, setSelectedPaths, setLastSelectedPath, onSelectionChange]);
 
   const toggleDirectory = useCallback(async (path: string) => {
     setExpandedDirs(prev => {
@@ -212,9 +262,75 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
     }
   }, [onFolderSelect, toggleDirectory]);
 
+  // Handle item selection with support for shift and ctrl/cmd modifiers
+  const handleItemSelect = useCallback((e: React.MouseEvent, item: FileTreeItem) => {
+    const isMetaKey = e.metaKey || e.ctrlKey;
+    const isShiftKey = e.shiftKey;
+
+    // Get root level items for range selection (we need the full tree)
+    // Use rootItemsProp if provided (from parent), otherwise use items if we're at root
+    const rootItems = rootItemsProp ?? (level === 0 ? items : items);
+
+    if (isShiftKey && lastSelectedPath) {
+      // Range selection: select all items between lastSelectedPath and current item
+      const flatItems = flattenVisibleItems(rootItems, expandedDirs);
+      const lastIndex = flatItems.findIndex(i => i.path === lastSelectedPath);
+      const currentIndex = flatItems.findIndex(i => i.path === item.path);
+
+      if (lastIndex !== -1 && currentIndex !== -1) {
+        const start = Math.min(lastIndex, currentIndex);
+        const end = Math.max(lastIndex, currentIndex);
+        const rangeItems = flatItems.slice(start, end + 1);
+
+        const newSelection = new Set(selectedPaths);
+        rangeItems.forEach(i => newSelection.add(i.path));
+
+        setSelectedPaths(newSelection);
+        onSelectionChange?.(newSelection);
+      }
+    } else if (isMetaKey) {
+      // Toggle selection: add or remove from selection
+      const newSelection = new Set(selectedPaths);
+      if (newSelection.has(item.path)) {
+        newSelection.delete(item.path);
+      } else {
+        newSelection.add(item.path);
+      }
+
+      setSelectedPaths(newSelection);
+      setLastSelectedPath(item.path);
+      onSelectionChange?.(newSelection);
+    } else {
+      // Normal click: clear selection and select only this item
+      const newSelection = new Set<string>([item.path]);
+      setSelectedPaths(newSelection);
+      setLastSelectedPath(item.path);
+      onSelectionChange?.(newSelection);
+
+      // For files, also open them
+      if (item.type === 'file') {
+        // Clear folder selection when clicking a file
+        if (onFolderSelect) {
+          onFolderSelect(null);
+        }
+        onFileSelect(item.path);
+      }
+    }
+  }, [items, level, rootItemsProp, lastSelectedPath, expandedDirs, selectedPaths, setSelectedPaths, setLastSelectedPath, onSelectionChange, flattenVisibleItems, onFolderSelect, onFileSelect]);
+
   const handleContextMenu = useCallback((e: React.MouseEvent, item: FileTreeItem) => {
     e.preventDefault();
     e.stopPropagation();
+
+    // If right-clicking on an item that's not in the current selection,
+    // clear selection and select only that item
+    if (!selectedPaths.has(item.path)) {
+      const newSelection = new Set<string>([item.path]);
+      setSelectedPaths(newSelection);
+      setLastSelectedPath(item.path);
+      onSelectionChange?.(newSelection);
+    }
+
     setContextMenu({
       x: e.clientX,
       y: e.clientY,
@@ -222,7 +338,7 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
       fileName: item.name,
       fileType: item.type
     });
-  }, []);
+  }, [selectedPaths, setSelectedPaths, setLastSelectedPath, onSelectionChange]);
 
   const handleRename = useCallback(async (filePath: string, newName: string) => {
     const result = await window.electronAPI.renameFile(filePath, newName);
@@ -237,6 +353,19 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
       console.error('Failed to delete file:', result.error);
     }
   }, []);
+
+  // Handle deleting multiple selected files
+  const handleDeleteMultiple = useCallback(async (filePaths: string[]) => {
+    for (const path of filePaths) {
+      const result = await window.electronAPI.deleteFile(path);
+      if (!result.success) {
+        console.error('Failed to delete file:', path, result.error);
+      }
+    }
+    // Clear selection after delete
+    setSelectedPaths(new Set());
+    onSelectionChange?.(new Set());
+  }, [setSelectedPaths, onSelectionChange]);
 
   const handleOpenInNewWindow = useCallback(async (filePath: string) => {
     const result = await window.electronAPI.openFileInNewWindow(filePath);
@@ -398,7 +527,8 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
       {items.map((item) => {
         const isExpanded = expandedDirs.has(item.path);
         const isDragOver = dragOverItem === item.path;
-        const isSelected = selectedFolder === item.path;
+        const isFolderSelected = selectedFolder === item.path;
+        const isMultiSelected = selectedPaths.has(item.path);
 
         return (
           <li
@@ -413,8 +543,17 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
             {item.type === 'directory' ? (
               <>
                 <div
-                  className={`file-tree-directory ${isDragOver ? 'drag-over' : ''} ${isSelected ? 'selected' : ''} ${isSpecialDirectory(item.name) ? 'special-directory' : ''}`}
-                  onClick={(e) => handleFolderClick(e, item.path)}
+                  className={`file-tree-directory ${isDragOver ? 'drag-over' : ''} ${isFolderSelected ? 'selected' : ''} ${isMultiSelected ? 'multi-selected' : ''} ${isSpecialDirectory(item.name) ? 'special-directory' : ''}`}
+                  onClick={(e) => {
+                    // If shift or meta/ctrl key is pressed, handle selection
+                    if (e.shiftKey || e.metaKey || e.ctrlKey) {
+                      handleItemSelect(e, item);
+                    } else {
+                      handleFolderClick(e, item.path);
+                      // Also update selection for consistency
+                      handleItemSelect(e, item);
+                    }
+                  }}
                   onContextMenu={(e) => handleContextMenu(e, item)}
                   draggable
                   onDragStart={(e) => handleDragStart(e, item)}
@@ -474,6 +613,8 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
                     selectedFolder={selectedFolder}
                     onFolderSelect={onFolderSelect}
                     gitStatusMap={gitStatusMap}
+                    onSelectionChange={onSelectionChange}
+                    rootItems={rootItemsProp ?? (level === 0 ? items : undefined)}
                     sharedDragState={{
                       draggedItem,
                       setDraggedItem,
@@ -486,19 +627,19 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
                       expandedDirs,
                       setExpandedDirs
                     }}
+                    sharedSelectionState={{
+                      selectedPaths,
+                      setSelectedPaths,
+                      lastSelectedPath,
+                      setLastSelectedPath
+                    }}
                   />
                 )}
               </>
             ) : (
               <div
-                className={`file-tree-file ${currentFilePath === item.path ? 'active' : ''}`}
-                onClick={() => {
-                  // Clear folder selection when clicking a file
-                  if (onFolderSelect) {
-                    onFolderSelect(null);
-                  }
-                  onFileSelect(item.path);
-                }}
+                className={`file-tree-file ${currentFilePath === item.path ? 'active' : ''} ${isMultiSelected ? 'multi-selected' : ''}`}
+                onClick={(e) => handleItemSelect(e, item)}
                 onContextMenu={(e) => handleContextMenu(e, item)}
                 draggable
                 onDragStart={(e) => handleDragStart(e, item)}
@@ -548,11 +689,13 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
           onClose={() => setContextMenu(null)}
           onRename={handleRename}
           onDelete={handleDelete}
+          onDeleteMultiple={handleDeleteMultiple}
           onOpenInNewWindow={handleOpenInNewWindow}
           onShowInFinder={handleShowInFinder}
           onNewFile={onNewFile}
           onNewFolder={onNewFolder}
           onViewHistory={onViewHistory}
+          selectedPaths={selectedPaths}
         />
       )}
     </>

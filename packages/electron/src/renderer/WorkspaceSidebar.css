@@ -280,6 +280,19 @@
   color: #1e40af;
 }
 
+/* Multi-selection styles */
+.file-tree-file.multi-selected,
+.file-tree-directory.multi-selected {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+.file-tree-file.multi-selected .file-tree-icon,
+.file-tree-directory.multi-selected .file-tree-icon,
+.file-tree-directory.multi-selected .file-tree-chevron {
+  color: #1e40af;
+}
+
 .file-tree-chevron {
   display: flex;
   align-items: center;
@@ -495,6 +508,18 @@
   color: #ffffff;
 }
 
+.dark-theme .file-tree-file.multi-selected,
+.dark-theme .file-tree-directory.multi-selected {
+  background-color: #4a5568;
+  color: #ffffff;
+}
+
+.dark-theme .file-tree-file.multi-selected .file-tree-icon,
+.dark-theme .file-tree-directory.multi-selected .file-tree-icon,
+.dark-theme .file-tree-directory.multi-selected .file-tree-chevron {
+  color: #ffffff;
+}
+
 .dark-theme .file-tree-chevron {
   color: #b3b3b3;
 }
@@ -591,6 +616,18 @@
 
   html:not(.light-theme):not(.dark-theme) .file-tree-directory.selected {
     background-color: #1e3a8a;
+    color: #dbeafe;
+  }
+
+  html:not(.light-theme):not(.dark-theme) .file-tree-file.multi-selected,
+  html:not(.light-theme):not(.dark-theme) .file-tree-directory.multi-selected {
+    background-color: #1e3a8a;
+    color: #dbeafe;
+  }
+
+  html:not(.light-theme):not(.dark-theme) .file-tree-file.multi-selected .file-tree-icon,
+  html:not(.light-theme):not(.dark-theme) .file-tree-directory.multi-selected .file-tree-icon,
+  html:not(.light-theme):not(.dark-theme) .file-tree-directory.multi-selected .file-tree-chevron {
     color: #dbeafe;
   }
 
@@ -703,6 +740,18 @@
 
 .crystal-dark-theme .file-tree-directory.selected {
   background-color: #2563EB;
+  color: #F3F4F6;
+}
+
+.crystal-dark-theme .file-tree-file.multi-selected,
+.crystal-dark-theme .file-tree-directory.multi-selected {
+  background-color: #2563EB;
+  color: #F3F4F6;
+}
+
+.crystal-dark-theme .file-tree-file.multi-selected .file-tree-icon,
+.crystal-dark-theme .file-tree-directory.multi-selected .file-tree-icon,
+.crystal-dark-theme .file-tree-directory.multi-selected .file-tree-chevron {
   color: #F3F4F6;
 }
 

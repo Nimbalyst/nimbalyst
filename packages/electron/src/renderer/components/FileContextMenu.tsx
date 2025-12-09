@@ -11,11 +11,13 @@ interface FileContextMenuProps {
   onClose: () => void;
   onRename: (filePath: string, newName: string) => void;
   onDelete: (filePath: string) => void;
+  onDeleteMultiple?: (filePaths: string[]) => void;
   onOpenInNewWindow: (filePath: string) => void;
   onShowInFinder: (filePath: string) => void;
   onNewFile?: (folderPath: string) => void;
   onNewFolder?: (folderPath: string) => void;
   onViewHistory?: (filePath: string) => void;
+  selectedPaths?: Set<string>;
 }
 
 export function FileContextMenu({
@@ -27,11 +29,13 @@ export function FileContextMenu({
   onClose,
   onRename,
   onDelete,
+  onDeleteMultiple,
   onOpenInNewWindow,
   onShowInFinder,
   onNewFile,
   onNewFolder,
-  onViewHistory
+  onViewHistory,
+  selectedPaths
 }: FileContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [isRenaming, setIsRenaming] = useState(false);
@@ -147,15 +151,30 @@ export function FileContextMenu({
   };
 
   const handleDelete = () => {
-    const confirmMessage = fileType === 'directory'
-      ? `Are you sure you want to delete the folder "${fileName}" and all its contents?`
-      : `Are you sure you want to delete "${fileName}"?`;
+    // Check if we have multiple items selected
+    const hasMultipleSelected = selectedPaths && selectedPaths.size > 1;
 
-    if (window.confirm(confirmMessage)) {
-      onDelete(filePath);
-      onClose();
+    if (hasMultipleSelected && onDeleteMultiple) {
+      const selectedArray = Array.from(selectedPaths);
+      const confirmMessage = `Are you sure you want to delete ${selectedArray.length} items?`;
+
+      if (window.confirm(confirmMessage)) {
+        onDeleteMultiple(selectedArray);
+        onClose();
+      }
+    } else {
+      const confirmMessage = fileType === 'directory'
+        ? `Are you sure you want to delete the folder "${fileName}" and all its contents?`
+        : `Are you sure you want to delete "${fileName}"?`;
+
+      if (window.confirm(confirmMessage)) {
+        onDelete(filePath);
+        onClose();
+      }
     }
   };
+
+  const hasMultipleSelected = selectedPaths && selectedPaths.size > 1;
 
   if (isRenaming) {
     return (
@@ -174,6 +193,22 @@ export function FileContextMenu({
             onBlur={handleRenameSubmit}
             className="rename-input"
           />
+        </div>
+      </div>
+    );
+  }
+
+  // When multiple items are selected, show only batch-compatible options
+  if (hasMultipleSelected) {
+    return (
+      <div
+        ref={menuRef}
+        className="file-context-menu"
+        style={{ left: adjustedPosition.x, top: adjustedPosition.y }}
+      >
+        <div className="context-menu-item context-menu-item-danger" onClick={handleDelete}>
+          <MaterialSymbol icon="delete" size={18} />
+          <span>Delete {selectedPaths.size} Items</span>
         </div>
       </div>
     );
@@ -202,7 +237,7 @@ export function FileContextMenu({
           {(onNewFile || onNewFolder) && <div className="context-menu-separator" />}
         </>
       )}
-      
+
       {fileType === 'file' && (
         <>
           <div className="context-menu-item" onClick={handleOpenInNewWindow}>
@@ -222,9 +257,9 @@ export function FileContextMenu({
         <MaterialSymbol icon="edit" size={18} />
         <span>Rename</span>
       </div>
-      
+
       <div className="context-menu-separator" />
-      
+
       <div className="context-menu-item" onClick={handleShowInFinder}>
         <MaterialSymbol icon="folder_open" size={18} />
         <span>Show in Finder</span>
