@@ -19,6 +19,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.47.0] - 2025-12-09
+
+
+### Added
+- Toast notification prompting users to install Claude commands in their workspace
+- Folder History dialog to browse and restore deleted files
+- AI chat @mention now supports CamelCase search for file matching
+- Document links now export as standard markdown and support fuzzy search
+- Session list shows relative dates (e.g., "2 hours ago") instead of absolute timestamps
+- AI Usage Report now shows token counts for Claude Code sessions
+- Multi-select files in file tree
+
+### Changed
+- Updated data collection form
+
+### Fixed
+- Mockup images now load correctly when reopening documents
+- Mockup image syntax now matches actual transformer format
+- AI Usage Report no longer resets token counts after each message
+- Clicking files in agent mode now properly switches to files mode
+- Session list now shows correct user message count
+- Claude Code sessions now work in new/existing projects
+- New projects no longer auto-open settings screen
+- History restore tests now work with diff preview mode
+- Git install popup no longer shown if git is not installed
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.46.11] - 2025-12-09
 
 
