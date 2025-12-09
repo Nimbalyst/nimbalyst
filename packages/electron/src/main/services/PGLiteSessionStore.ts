@@ -97,7 +97,7 @@ export async function getAllSessionsForSync(includeMessages = false): Promise<Ar
     `SELECT s.id, s.provider, s.model, s.mode, s.title, s.workspace_id, s.draft_input,
             s.created_at, s.updated_at, COUNT(m.id) as message_count
      FROM ai_sessions s
-     LEFT JOIN ai_agent_messages m ON s.id = m.session_id AND m.direction = 'input'
+     LEFT JOIN ai_agent_messages m ON s.id = m.session_id AND m.direction = 'input' AND (m.hidden = FALSE OR m.hidden IS NULL)
      WHERE (s.is_archived = FALSE OR s.is_archived IS NULL)
      GROUP BY s.id, s.provider, s.model, s.mode, s.title, s.workspace_id, s.draft_input, s.created_at, s.updated_at
      ORDER BY s.updated_at DESC`
@@ -365,7 +365,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
         `SELECT s.id, s.provider, s.model, s.session_type, s.mode, s.title, s.workspace_id,
                 s.created_at, s.updated_at, s.is_archived, COUNT(m.id) as message_count
          FROM ai_sessions s
-         LEFT JOIN ai_agent_messages m ON s.id = m.session_id AND m.direction = 'input'
+         LEFT JOIN ai_agent_messages m ON s.id = m.session_id AND m.direction = 'input' AND (m.hidden = FALSE OR m.hidden IS NULL)
          WHERE s.workspace_id=$1 ${archiveFilter}
          GROUP BY s.id, s.provider, s.model, s.session_type, s.mode, s.title, s.workspace_id,
                   s.created_at, s.updated_at, s.is_archived
@@ -466,7 +466,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           MAX(sm.rank) as max_rank,
           COUNT(m.id) as message_count
         FROM session_matches sm
-        LEFT JOIN ai_agent_messages m ON sm.id = m.session_id AND m.direction = 'input'
+        LEFT JOIN ai_agent_messages m ON sm.id = m.session_id AND m.direction = 'input' AND (m.hidden = FALSE OR m.hidden IS NULL)
         GROUP BY sm.id, sm.provider, sm.model, sm.session_type, sm.mode, sm.title, sm.workspace_id,
                  sm.created_at, sm.updated_at, sm.is_archived
         ORDER BY max_rank DESC, sm.updated_at DESC`,

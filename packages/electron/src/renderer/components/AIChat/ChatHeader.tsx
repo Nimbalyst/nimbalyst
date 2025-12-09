@@ -103,7 +103,7 @@ export function ChatHeader({
                     createdAt: s.createdAt,
                     name: s.name,
                     title: s.title,
-                    messageCount: s.messages?.length || 0,
+                    messageCount: s.messages?.filter(m => m.role === 'user').length || 0,
                     provider: s.provider,
                     model: s.model
                 }))}
