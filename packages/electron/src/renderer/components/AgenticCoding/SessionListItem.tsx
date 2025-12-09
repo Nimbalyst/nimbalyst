@@ -162,7 +162,7 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
       <div className="session-list-item-content">
         <div className="session-list-item-title">{truncatedTitle}</div>
         <div className="session-list-item-meta">
-          <span className="session-list-item-datetime">{fullDateTime}</span>
+          <span className="session-list-item-datetime" title={fullDateTime}>{relativeTime}</span>
           {displayModel && <span className="session-list-item-model">{displayModel}</span>}
         </div>
       </div>
