@@ -171,6 +171,27 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     workspacePathRef.current = workspacePath;
   }, [workspacePath]);
 
+  // Focus input when panel becomes active (e.g., Cmd+K to switch to agent mode)
+  // or when switching between session tabs
+  const prevIsActiveRef = useRef(isActive);
+  const prevActiveTabIdRef = useRef(activeTabId);
+  useEffect(() => {
+    const panelBecameActive = isActive && !prevIsActiveRef.current;
+    const tabChanged = activeTabId !== prevActiveTabIdRef.current && activeTabId !== null;
+
+    // Focus when panel becomes active OR when switching tabs (while panel is active)
+    if ((panelBecameActive || (isActive && tabChanged)) && activeTabId) {
+      const ref = sessionViewRefsRef.current.get(activeTabId);
+      // Small delay to ensure DOM is ready after display transition
+      setTimeout(() => {
+        ref?.current?.focusInput();
+      }, 50);
+    }
+
+    prevIsActiveRef.current = isActive;
+    prevActiveTabIdRef.current = activeTabId;
+  }, [isActive, activeTabId]);
+
   // Constants
   const MAX_CLOSED_SESSION_HISTORY = 10;
 
