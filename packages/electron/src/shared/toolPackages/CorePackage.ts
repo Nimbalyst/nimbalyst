@@ -112,12 +112,12 @@ Make sure the plan document references and links the mockup file using the mocku
 
 **Mockup image syntax:**
 \`\`\`markdown
-![Description](screenshot.png){mockup:path/to/mockup.mockup.html}
+[![Description](assets/mockup-name.mockup.png)](mockup-name.mockup.html)
 \`\`\`
 
 With optional size:
 \`\`\`markdown
-![Description](screenshot.png){mockup:path/to/mockup.mockup.html}{800x600}
+[![Description](assets/mockup-name.mockup.png)](mockup-name.mockup.html){800x600}
 \`\`\` 
 
 ## Best Practices
