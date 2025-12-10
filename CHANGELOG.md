@@ -19,6 +19,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.47.2] - 2025-12-10
+
+
+### Added
+- Universal Windows installer supporting both x64 and arm64 architectures
+
+### Changed
+- Role field now marked as required in data collection form
+
+### Fixed
+- Fixed Claude Code logout process on Windows
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.47.1] - 2025-12-09
 
 
