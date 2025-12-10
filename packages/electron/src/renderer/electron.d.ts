@@ -126,7 +126,7 @@ interface ElectronAPI {
   // AI operations
   aiSendMessage?: (message: string, documentContext?: any, sessionId?: string, workspacePath?: string) => Promise<any>;
   aiGetSessions?: (workspacePath?: string) => Promise<any>;
-  aiLoadSession?: (sessionId: string, workspacePath?: string) => Promise<any>;
+  aiLoadSession?: (sessionId: string, workspacePath?: string, trackAsResume?: boolean) => Promise<any>;
   aiClearSession?: () => Promise<any>;
   aiUpdateSessionMessages?: (sessionId: string, messages: any[], workspacePath?: string) => Promise<{ success: boolean; error?: string }>;
   aiSaveDraftInput?: (sessionId: string, draftInput: string, workspacePath?: string) => Promise<{ success: boolean; error?: string }>;

@@ -342,7 +342,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   aiSendMessage: (message: string, documentContext?: any, sessionId?: string, workspacePath?: string) =>
     ipcRenderer.invoke('ai:sendMessage', message, documentContext, sessionId, workspacePath),
   aiGetSessions: (workspacePath?: string) => ipcRenderer.invoke('ai:getSessions', workspacePath),
-  aiLoadSession: (sessionId: string, workspacePath?: string) => ipcRenderer.invoke('ai:loadSession', sessionId, workspacePath),
+  aiLoadSession: (sessionId: string, workspacePath?: string, trackAsResume?: boolean) => ipcRenderer.invoke('ai:loadSession', sessionId, workspacePath, trackAsResume),
   aiClearSession: () => ipcRenderer.invoke('ai:clearSession'),
   aiUpdateSessionMessages: (sessionId: string, messages: any[], workspacePath?: string) =>
     ipcRenderer.invoke('ai:updateSessionMessages', sessionId, messages, workspacePath),
@@ -491,7 +491,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     sendMessage: (message: string, documentContext?: any, sessionId?: string, workspacePath?: string) =>
       ipcRenderer.invoke('ai:sendMessage', message, documentContext, sessionId, workspacePath),
     getSessions: (workspacePath?: string) => ipcRenderer.invoke('ai:getSessions', workspacePath),
-    loadSession: (sessionId: string, workspacePath?: string) => ipcRenderer.invoke('ai:loadSession', sessionId, workspacePath),
+    loadSession: (sessionId: string, workspacePath?: string, trackAsResume?: boolean) => ipcRenderer.invoke('ai:loadSession', sessionId, workspacePath, trackAsResume),
     clearSession: () => ipcRenderer.invoke('ai:clearSession'),
     updateSessionMessages: (sessionId: string, messages: any[], workspacePath?: string) =>
       ipcRenderer.invoke('ai:updateSessionMessages', sessionId, messages, workspacePath),

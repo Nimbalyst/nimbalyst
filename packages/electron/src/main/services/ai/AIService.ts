@@ -1999,7 +1999,9 @@ export class AIService {
     });
 
     // Load a session
-    ipcMain.handle('ai:loadSession', async (event, sessionId: string, workspacePath?: string) => {
+    // trackAsResume: only pass true when user intentionally opens a session from history
+    // (not for tab restoration, lazy loading, or session reloading)
+    ipcMain.handle('ai:loadSession', async (event, sessionId: string, workspacePath?: string, trackAsResume?: boolean) => {
       const loadStart = performance.now();
       const session = await this.sessionManager.loadSession(sessionId, workspacePath);
       const loadTime = performance.now() - loadStart;
@@ -2009,8 +2011,9 @@ export class AIService {
         return null;
       }
 
-      // Track ai_session_resumed if session has previous messages
-      if (session.messages && session.messages.length > 0) {
+      // Track ai_session_resumed only when user intentionally opens a session from history
+      // Skip for: app startup tab restoration, tab switching (lazy load), session reloading
+      if (trackAsResume && session.messages && session.messages.length > 0) {
         const messageCount = session.messages.length;
         const createdAt = session.createdAt || Date.now();
 

@@ -599,10 +599,11 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     }
 
     // Chat mode or new session: always load fresh data
+    // Pass trackAsResume: true because user intentionally opened this session from history
 
     // console.log('[AgenticPanel] Loading session from database...');
     try {
-      const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspacePath);
+      const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspacePath, true);
       // console.log('[AgenticPanel] Session data loaded:', sessionData);
       if (sessionData) {
         const planPath = sessionData.metadata?.planDocumentPath as string | undefined;
