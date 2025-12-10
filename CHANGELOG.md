@@ -19,6 +19,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.47.1] - 2025-12-09
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+- Improved git availability detection with more comprehensive checking
+- Updated Claude Agent SDK to version 0.1.62
+
+### Fixed
+<!-- Bug fixes go here -->
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.47.0] - 2025-12-09
 
 
