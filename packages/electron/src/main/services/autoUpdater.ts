@@ -208,7 +208,9 @@ export class AutoUpdaterService {
         log.info('Update window: Starting download...');
         // In test mode, skip the actual download (tests will manually trigger progress)
         if (process.env.NODE_ENV !== 'test' && process.env.PLAYWRIGHT !== '1') {
-          await autoUpdater.downloadUpdate();
+          // Re-check for the latest version before downloading in case a newer update
+          // was released while the update window was sitting idle
+          await this.checkAndDownloadLatest();
         } else {
           log.info('Test mode: Skipping actual download');
         }
