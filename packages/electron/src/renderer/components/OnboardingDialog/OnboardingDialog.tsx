@@ -99,9 +99,13 @@ export const OnboardingDialog: React.FC<OnboardingDialogProps> = ({ isOpen, onCo
 
             {selectedRole === 'other' && (
               <div className="custom-role-input">
+                <label className="onboarding-label" htmlFor="custom-role-input">
+                  Your role <span className="required">*</span>
+                </label>
                 <input
+                  id="custom-role-input"
                   type="text"
-                  placeholder="Please specify your role"
+                  placeholder="e.g. Designer, Writer, Student"
                   value={customRole}
                   onChange={(e) => setCustomRole(e.target.value)}
                   className="onboarding-input"
