@@ -24,6 +24,7 @@
     "build:mac:release": "npm run build && node -r dotenv/config build/configure-build.js && REQUIRE_NOTARIZE=true node build/build-with-env.js --mac --publish always",
     "build:win": "npm run build && electron-builder --win --x64",
     "build:win:arm64": "npm run build && electron-builder --win --arm64",
+    "build:win:universal": "npm run build && electron-builder --win --x64 --arm64",
     "build:linux": "npm run build && electron-builder --linux",
     "test": "vitest",
     "test:ui": "vitest --ui",
