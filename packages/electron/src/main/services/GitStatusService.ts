@@ -1,6 +1,7 @@
 import { execSync } from 'child_process';
 import { existsSync } from 'fs';
 import { join, resolve } from 'path';
+import { isGitAvailable } from '../utils/gitUtils';
 
 export interface FileGitStatus {
   filePath: string;
@@ -21,31 +22,6 @@ export interface GitStatusResult {
 export class GitStatusService {
   private cache: Map<string, { status: GitStatusResult; timestamp: number }> = new Map();
   private readonly CACHE_TTL_MS = 5000; // 5 seconds cache
-  private gitAvailable: boolean | null = null; // Cached result of git availability check
-
-  /**
-   * Check if the git command is available on this system.
-   * This prevents triggering the macOS "install developer tools" dialog.
-   */
-  private isGitAvailable(): boolean {
-    if (this.gitAvailable !== null) {
-      return this.gitAvailable;
-    }
-
-    try {
-      // Use --version as a simple check - if git isn't installed, this will throw
-      execSync('git --version', {
-        encoding: 'utf8',
-        timeout: 2000,
-        stdio: ['pipe', 'pipe', 'pipe'] // Suppress all output
-      });
-      this.gitAvailable = true;
-    } catch {
-      this.gitAvailable = false;
-    }
-
-    return this.gitAvailable;
-  }
 
   /**
    * Get git status for a list of files in a workspace.
@@ -60,7 +36,7 @@ export class GitStatusService {
     }
 
     // Check if git is available on the system
-    if (!this.isGitAvailable()) {
+    if (!isGitAvailable()) {
       return this.createEmptyResult(filePaths);
     }
 
@@ -245,7 +221,7 @@ export class GitStatusService {
     }
 
     // Check if git is available on the system
-    if (!this.isGitAvailable()) {
+    if (!isGitAvailable()) {
       return [];
     }
 
@@ -339,7 +315,7 @@ export class GitStatusService {
       }
 
       // Check if git is available before running git commands
-      if (!this.isGitAvailable()) {
+      if (!isGitAvailable()) {
         return false;
       }
 
@@ -552,7 +528,7 @@ export class GitStatusService {
     }
 
     // Check if git is available on the system
-    if (!this.isGitAvailable()) {
+    if (!isGitAvailable()) {
       return {};
     }
 
