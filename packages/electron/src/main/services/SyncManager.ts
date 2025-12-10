@@ -185,10 +185,9 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
     return baseStore;
   }
 
-  if (!config.serverUrl) {
-    console.log('[SyncManager] Session sync enabled but missing server URL');
-    return baseStore;
-  }
+  // Use production server URL by default, allow override in dev mode
+  const PRODUCTION_SYNC_URL = 'wss://sync.nimbalyst.com';
+  const serverUrl = config.serverUrl || PRODUCTION_SYNC_URL;
 
   // Require Stytch authentication for sync
   const authenticated = isAuthenticated();
@@ -212,7 +211,7 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
 
   try {
     logger.main.info('[SyncManager] Initializing session sync...', {
-      serverUrl: config.serverUrl,
+      serverUrl,
       userId: stytchUserId,
     });
 
@@ -236,14 +235,14 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
     const MIN_REFRESH_INTERVAL = 60000; // 1 minute
 
     const provider = createCollabV3Sync({
-      serverUrl: config.serverUrl,
+      serverUrl,
       getJwt: async () => {
         const { refreshSession: doRefresh, getSessionJwt: getJwt } = await import('./StytchAuthService');
 
         // Only refresh if enough time has passed since last refresh
         const now = Date.now();
         if (now - lastRefreshTime > MIN_REFRESH_INTERVAL) {
-          await doRefresh(config.serverUrl);
+          await doRefresh(serverUrl);
           lastRefreshTime = now;
         }
 

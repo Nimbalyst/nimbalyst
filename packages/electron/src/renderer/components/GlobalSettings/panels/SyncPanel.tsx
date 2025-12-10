@@ -680,54 +680,69 @@ export function SyncPanel({
 
       {config.enabled && (
         <>
-          {/* Server URL */}
-          <div className="provider-panel-section">
-            <h4 className="provider-panel-section-title">Server</h4>
-            <div className="api-key-section">
-              <input
-                type="text"
-                className="api-key-input"
-                value={config.serverUrl}
-                onChange={(e) => handleFieldChange('serverUrl', e.target.value)}
-                placeholder="wss://sync.nimbalyst.com"
-              />
-            </div>
+          {/* Server URL - only editable in dev mode */}
+          {isDevelopment && (
+            <div className="provider-panel-section">
+              <h4 className="provider-panel-section-title">Server (Dev Only)</h4>
+              <div className="api-key-section">
+                <input
+                  type="text"
+                  className="api-key-input"
+                  value={config.serverUrl}
+                  onChange={(e) => handleFieldChange('serverUrl', e.target.value)}
+                  placeholder="wss://sync.nimbalyst.com"
+                />
+              </div>
 
-            <div style={{ marginTop: '12px', display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <button
-                className={`test-connection-button ${testStatus}`}
-                onClick={onTestConnection}
-                disabled={testStatus === 'testing' || !config.serverUrl}
-                style={{ padding: '6px 12px', fontSize: '12px' }}
-              >
-                {testStatus === 'testing' ? 'Testing...' : 'Test'}
-              </button>
-              {testStatus === 'success' && (
-                <span style={{ fontSize: '12px', color: '#22c55e' }}>Connected</span>
-              )}
-              {testStatus === 'error' && (
-                <span style={{ fontSize: '12px', color: '#ef4444' }}>{testMessage || 'Failed'}</span>
-              )}
-            </div>
+              <div style={{ marginTop: '12px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <button
+                  className={`test-connection-button ${testStatus}`}
+                  onClick={onTestConnection}
+                  disabled={testStatus === 'testing' || !config.serverUrl}
+                  style={{ padding: '6px 12px', fontSize: '12px' }}
+                >
+                  {testStatus === 'testing' ? 'Testing...' : 'Test'}
+                </button>
+                {testStatus === 'success' && (
+                  <span style={{ fontSize: '12px', color: '#22c55e' }}>Connected</span>
+                )}
+                {testStatus === 'error' && (
+                  <span style={{ fontSize: '12px', color: '#ef4444' }}>{testMessage || 'Failed'}</span>
+                )}
+              </div>
 
-            {isDevelopment && (
-              <button
-                onClick={() => handleFieldChange('serverUrl', 'ws://localhost:8790')}
-                style={{
-                  marginTop: '8px',
-                  padding: '4px 8px',
-                  fontSize: '11px',
-                  background: 'var(--surface-secondary)',
-                  border: '1px solid var(--border-primary)',
-                  borderRadius: '4px',
-                  color: 'var(--text-secondary)',
-                  cursor: 'pointer',
-                }}
-              >
-                Use localhost:8790
-              </button>
-            )}
-          </div>
+              <div style={{ marginTop: '8px', display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={() => handleFieldChange('serverUrl', 'ws://localhost:8790')}
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: '11px',
+                    background: 'var(--surface-secondary)',
+                    border: '1px solid var(--border-primary)',
+                    borderRadius: '4px',
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  localhost:8790
+                </button>
+                <button
+                  onClick={() => handleFieldChange('serverUrl', 'wss://sync.nimbalyst.com')}
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: '11px',
+                    background: 'var(--surface-secondary)',
+                    border: '1px solid var(--border-primary)',
+                    borderRadius: '4px',
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Production
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Projects */}
           <div className="provider-panel-section">

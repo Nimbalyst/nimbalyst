@@ -38,6 +38,11 @@ database_id = "placeholder-replace-after-creation"
 # binding = "ATTACHMENTS"
 # bucket_name = "nimbalyst-attachments"
 
+# Observability - enables logs, traces, and metrics in Cloudflare dashboard
+[observability]
+enabled = true
+head_sampling_rate = 1  # Sample 100% of requests
+
 # Environment variables
 [vars]
 ENVIRONMENT = "development"
@@ -51,5 +56,9 @@ ENVIRONMENT = "staging"
 # Production environment
 [env.production]
 name = "nimbalyst-collabv3"
+routes = [
+  { pattern = "sync.nimbalyst.com", custom_domain = true }
+]
 [env.production.vars]
 ENVIRONMENT = "production"
+ALLOWED_ORIGINS = "https://app.nimbalyst.com,https://nimbalyst.com,capacitor://localhost"

@@ -201,6 +201,22 @@ npm run deploy:staging
 npm run deploy
 ```
 
+After deployment, the worker is available at:
+- **Default**: `nimbalyst-collabv3.workers.dev`
+- **Custom domain**: `sync.nimbalyst.com` (configured in wrangler.toml)
+
+### Custom Domain Setup
+
+The production environment is configured to use `sync.nimbalyst.com`:
+
+1. Add `nimbalyst.com` domain to Cloudflare (if not already)
+2. Deploy with `npm run deploy` - Cloudflare will automatically:
+  - Create a DNS record for `sync.nimbalyst.com`
+  - Provision SSL certificate
+  - Route traffic to the worker
+
+Clients should connect to `wss://sync.nimbalyst.com/sync/{roomId}`.
+
 ## Security
 
 ### Authentication
@@ -241,6 +257,23 @@ npm run test:watch
 ```
 
 ## Monitoring
+
+### Cloudflare Observability
+
+The worker has observability enabled in `wrangler.toml`:
+
+```toml
+[observability]
+enabled = true
+head_sampling_rate = 1  # 100% sampling
+```
+
+This provides:
+- **Logs**: Persistent logs viewable in Cloudflare dashboard
+- **Traces**: Request traces with timing breakdowns
+- **Metrics**: Request counts, error rates, latency percentiles
+
+Access via: Cloudflare Dashboard > Workers & Pages > nimbalyst-collabv3 > Logs/Metrics
 
 ### Status Endpoints
 
