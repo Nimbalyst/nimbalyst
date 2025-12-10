@@ -13,6 +13,9 @@ import type { Env } from './types';
 import { SessionRoom } from './SessionRoom';
 import { IndexRoom } from './IndexRoom';
 import { parseAuth as parseAuthJWT, type AuthConfig, type AuthResult } from './auth';
+import { setLogEnvironment, createLogger } from './logger';
+
+const log = createLogger('sync');
 
 // Re-export Durable Object classes
 export { SessionRoom, IndexRoom };
@@ -61,7 +64,7 @@ function getAllowedOrigins(env: Env): string[] {
 
 /**
  * Check if origin is allowed.
- * In development, also allows local network IPs (192.168.x.x, 10.x.x.x).
+ * Also allows local network IPs for Capacitor dev testing.
  */
 function isOriginAllowed(origin: string | null, env: Env): boolean {
   if (!origin) return false;
@@ -73,22 +76,20 @@ function isOriginAllowed(origin: string | null, env: Env): boolean {
     return true;
   }
 
-  // In development, allow local network IPs
-  if (env.ENVIRONMENT === 'development' || env.ENVIRONMENT === 'local') {
-    try {
-      const url = new URL(origin);
-      const host = url.hostname;
-      // Allow 192.168.x.x, 10.x.x.x, 172.16-31.x.x (private networks)
-      if (
-        host.startsWith('192.168.') ||
-        host.startsWith('10.') ||
-        /^172\.(1[6-9]|2[0-9]|3[01])\./.test(host)
-      ) {
-        return true;
-      }
-    } catch {
-      // Invalid URL, not allowed
+  // Allow local network IPs for Capacitor dev testing (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
+  // This is needed when running Capacitor on a device connecting to local dev server
+  try {
+    const url = new URL(origin);
+    const host = url.hostname;
+    if (
+      host.startsWith('192.168.') ||
+      host.startsWith('10.') ||
+      /^172\.(1[6-9]|2[0-9]|3[01])\./.test(host)
+    ) {
+      return true;
     }
+  } catch {
+    // Invalid URL, not allowed
   }
 
   return false;
@@ -158,6 +159,9 @@ function getAuthConfig(env: Env): AuthConfig {
 // Main fetch handler
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    // Set log environment once per request (cheap operation)
+    setLogEnvironment(env.ENVIRONMENT || 'production');
+
     const url = new URL(request.url);
 
     // Health check
@@ -181,12 +185,12 @@ export default {
       // Validate auth matches room user (supports both simple and JWT auth)
       const authConfig = getAuthConfig(env);
       const auth = await parseAuthJWT(request, authConfig);
-      console.log('[sync] Auth result:', auth, 'Room userId:', parsed.userId);
+      log.debug('Auth result:', auth, 'Room userId:', parsed.userId);
       if (!auth || auth.user_id !== parsed.userId) {
-        console.log('[sync] Auth failed. auth:', auth, 'parsed.userId:', parsed.userId);
+        log.warn('Auth failed. auth:', auth, 'parsed.userId:', parsed.userId);
         return new Response('Unauthorized', { status: 401 });
       }
-      console.log('[sync] Auth passed, forwarding to DO');
+      log.debug('Auth passed, forwarding to DO');
 
       // Route to appropriate DO
       let stub: DurableObjectStub;
@@ -235,6 +239,8 @@ async function handleApiRequest(
   url: URL
 ): Promise<Response> {
   // Get CORS headers based on request origin
+  const origin = request.headers.get('Origin');
+  log.debug('API request to', url.pathname, 'from origin:', origin);
   const corsHeaders = getCorsHeaders(request, env);
 
   // Handle CORS preflight
@@ -486,7 +492,8 @@ async function handleAuthRoutes(
       const deepLinkUrl = `nimbalyst://auth/callback?${deepLinkParams.toString()}`;
 
       // Return a page that redirects to the deep link
-      return new Response(renderSuccessPage(deepLinkUrl, sessionData), {
+      const isDev = env.ENVIRONMENT === 'development' || env.ENVIRONMENT === 'local';
+      return new Response(renderSuccessPage(deepLinkUrl, sessionData, isDev), {
         status: 200,
         headers: { 'Content-Type': 'text/html' },
       });
@@ -583,7 +590,7 @@ async function handleAuthRoutes(
 
 /**
  * Render success page that redirects to deep link
- * Also shows tokens for dev mode browser testing
+ * Shows tokens for dev mode browser testing (only in development)
  */
 function renderSuccessPage(deepLinkUrl: string, sessionData: {
   sessionToken: string;
@@ -591,14 +598,37 @@ function renderSuccessPage(deepLinkUrl: string, sessionData: {
   userId: string;
   email: string;
   expiresAt: string;
-}): string {
-  const devJson = JSON.stringify({
+}, isDev: boolean = false): string {
+  const devJson = isDev ? JSON.stringify({
     sessionToken: sessionData.sessionToken,
     sessionJwt: sessionData.sessionJwt,
     userId: sessionData.userId,
     email: sessionData.email,
     expiresAt: sessionData.expiresAt,
-  }, null, 2);
+  }, null, 2) : '';
+
+  const devSectionHtml = isDev ? `
+    <div class="dev-section">
+      <h2>Dev Mode: Copy Session Tokens</h2>
+      <div class="token-box" id="tokenBox">${devJson}</div>
+      <button class="button copy-btn" onclick="copyTokens()">Copy Session JSON</button>
+    </div>
+  ` : '';
+
+  const devScriptHtml = isDev ? `
+    function copyTokens() {
+      const tokenBox = document.getElementById('tokenBox');
+      navigator.clipboard.writeText(tokenBox.textContent).then(() => {
+        const btn = document.querySelector('.copy-btn');
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => {
+          btn.textContent = 'Copy Session JSON';
+          btn.classList.remove('copied');
+        }, 2000);
+      });
+    }
+  ` : '';
 
   return `<!DOCTYPE html>
 <html>
@@ -685,31 +715,14 @@ function renderSuccessPage(deepLinkUrl: string, sessionData: {
     <p>Click the button below to return to Nimbalyst, or it will open automatically.</p>
     <a href="${deepLinkUrl}" class="button">Open Nimbalyst</a>
     <p class="auto-redirect">Redirecting automatically...</p>
-
-    <div class="dev-section">
-      <h2>Dev Mode: Copy Session Tokens</h2>
-      <div class="token-box" id="tokenBox">${devJson}</div>
-      <button class="button copy-btn" onclick="copyTokens()">Copy Session JSON</button>
-    </div>
+    ${devSectionHtml}
   </div>
   <script>
     // Try to open the deep link automatically
     setTimeout(() => {
       window.location.href = "${deepLinkUrl}";
     }, 1500);
-
-    function copyTokens() {
-      const tokenBox = document.getElementById('tokenBox');
-      navigator.clipboard.writeText(tokenBox.textContent).then(() => {
-        const btn = document.querySelector('.copy-btn');
-        btn.textContent = 'Copied!';
-        btn.classList.add('copied');
-        setTimeout(() => {
-          btn.textContent = 'Copy Session JSON';
-          btn.classList.remove('copied');
-        }, 2000);
-      });
-    }
+    ${devScriptHtml}
   </script>
 </body>
 </html>`;

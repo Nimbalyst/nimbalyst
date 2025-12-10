@@ -31,6 +31,7 @@ export interface SyncConfig {
   enabled: boolean;
   serverUrl: string;
   enabledProjects?: string[]; // workspace paths that are enabled for sync
+  environment?: 'development' | 'production'; // dev only: override environment
 }
 
 interface Project {
@@ -341,6 +342,44 @@ export function SyncPanel({
     onConfigChange({ ...config, enabledProjects: updated });
   };
 
+  // Environment switch handler (dev only)
+  // Saves config immediately so auth endpoints use the correct server
+  const handleEnvironmentSwitch = async (newEnv: 'development' | 'production') => {
+    if (!window.electronAPI?.stytch?.switchEnvironment) return;
+
+    // Determine the server URL for this environment
+    const serverUrl = newEnv === 'development' ? 'ws://localhost:8790' : 'wss://sync.nimbalyst.com';
+
+    // Build new config with environment and server URL
+    const newConfig = { ...config, environment: newEnv, serverUrl };
+
+    // Update local state
+    onConfigChange(newConfig);
+
+    // Save immediately so main process has correct config for auth
+    try {
+      await window.electronAPI.invoke('sync:set-config', newConfig);
+    } catch (err) {
+      console.error('Failed to save sync config:', err);
+    }
+
+    // Switch Stytch environment (this will sign out the user)
+    try {
+      await window.electronAPI.stytch.switchEnvironment(newEnv);
+    } catch (err) {
+      console.error('Failed to switch Stytch environment:', err);
+    }
+  };
+
+  // Get current environment (default to production in prod builds, development in dev)
+  const currentEnvironment = config.environment || (isDevelopment ? 'development' : 'production');
+
+  // Compute effective server URL (same logic as SyncManager)
+  const PRODUCTION_SYNC_URL = 'wss://sync.nimbalyst.com';
+  const DEVELOPMENT_SYNC_URL = 'ws://localhost:8790';
+  const effectiveServerUrl = config.serverUrl ||
+    (currentEnvironment === 'development' ? DEVELOPMENT_SYNC_URL : PRODUCTION_SYNC_URL);
+
   // Auth handlers
   const handleGoogleSignIn = async () => {
     if (!window.electronAPI?.stytch) return;
@@ -406,6 +445,52 @@ export function SyncPanel({
           Sign in to sync AI sessions across devices with end-to-end encryption.
         </p>
       </div>
+
+      {/* Environment Toggle - Dev Only */}
+      {isDevelopment && (
+        <div className="provider-panel-section">
+          <h4 className="provider-panel-section-title">Environment (Dev Only)</h4>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              onClick={() => handleEnvironmentSwitch('development')}
+              style={{
+                flex: 1,
+                padding: '8px 12px',
+                fontSize: '12px',
+                background: currentEnvironment === 'development' ? 'var(--primary-color)' : 'var(--surface-secondary)',
+                color: currentEnvironment === 'development' ? 'white' : 'var(--text-secondary)',
+                border: '1px solid var(--border-primary)',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontWeight: currentEnvironment === 'development' ? 600 : 400,
+              }}
+            >
+              Development
+            </button>
+            <button
+              onClick={() => handleEnvironmentSwitch('production')}
+              style={{
+                flex: 1,
+                padding: '8px 12px',
+                fontSize: '12px',
+                background: currentEnvironment === 'production' ? 'var(--primary-color)' : 'var(--surface-secondary)',
+                color: currentEnvironment === 'production' ? 'white' : 'var(--text-secondary)',
+                border: '1px solid var(--border-primary)',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontWeight: currentEnvironment === 'production' ? 600 : 400,
+              }}
+            >
+              Production
+            </button>
+          </div>
+          <p style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '6px', marginBottom: 0 }}>
+            {currentEnvironment === 'development'
+              ? 'Using test Stytch + localhost:8790'
+              : 'Using live Stytch + sync.nimbalyst.com'}
+          </p>
+        </div>
+      )}
 
       {/* Account Section */}
       <div className="provider-panel-section">
@@ -680,70 +765,6 @@ export function SyncPanel({
 
       {config.enabled && (
         <>
-          {/* Server URL - only editable in dev mode */}
-          {isDevelopment && (
-            <div className="provider-panel-section">
-              <h4 className="provider-panel-section-title">Server (Dev Only)</h4>
-              <div className="api-key-section">
-                <input
-                  type="text"
-                  className="api-key-input"
-                  value={config.serverUrl}
-                  onChange={(e) => handleFieldChange('serverUrl', e.target.value)}
-                  placeholder="wss://sync.nimbalyst.com"
-                />
-              </div>
-
-              <div style={{ marginTop: '12px', display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <button
-                  className={`test-connection-button ${testStatus}`}
-                  onClick={onTestConnection}
-                  disabled={testStatus === 'testing' || !config.serverUrl}
-                  style={{ padding: '6px 12px', fontSize: '12px' }}
-                >
-                  {testStatus === 'testing' ? 'Testing...' : 'Test'}
-                </button>
-                {testStatus === 'success' && (
-                  <span style={{ fontSize: '12px', color: '#22c55e' }}>Connected</span>
-                )}
-                {testStatus === 'error' && (
-                  <span style={{ fontSize: '12px', color: '#ef4444' }}>{testMessage || 'Failed'}</span>
-                )}
-              </div>
-
-              <div style={{ marginTop: '8px', display: 'flex', gap: '8px' }}>
-                <button
-                  onClick={() => handleFieldChange('serverUrl', 'ws://localhost:8790')}
-                  style={{
-                    padding: '4px 8px',
-                    fontSize: '11px',
-                    background: 'var(--surface-secondary)',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '4px',
-                    color: 'var(--text-secondary)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  localhost:8790
-                </button>
-                <button
-                  onClick={() => handleFieldChange('serverUrl', 'wss://sync.nimbalyst.com')}
-                  style={{
-                    padding: '4px 8px',
-                    fontSize: '11px',
-                    background: 'var(--surface-secondary)',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '4px',
-                    color: 'var(--text-secondary)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Production
-                </button>
-              </div>
-            </div>
-          )}
-
           {/* Projects */}
           <div className="provider-panel-section">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -852,7 +873,7 @@ export function SyncPanel({
       <QRPairingModal
         isOpen={showQRModal}
         onClose={() => setShowQRModal(false)}
-        serverUrl={config.serverUrl}
+        serverUrl={effectiveServerUrl}
       />
 
       <ProjectPickerPopup

@@ -8,9 +8,38 @@ import type { OnboardingState } from '../utils/store';
 import { getCredentials, resetCredentials, generateQRPairingPayload, isUsingSecureStorage } from '../services/CredentialService';
 import { onSyncStatusChange } from '../services/SyncManager';
 import * as StytchAuth from '../services/StytchAuthService';
+import { STYTCH_CONFIG } from '@nimbalyst/runtime';
 
 // Track if we've subscribed to sync status changes
 let syncStatusListenerSetup = false;
+
+// Track if Stytch has been initialized
+let stytchInitialized = false;
+
+/**
+ * Ensure Stytch is initialized based on current sync config.
+ * This is called lazily when any Stytch IPC is invoked.
+ */
+function ensureStytchInitialized(): void {
+    if (stytchInitialized) return;
+
+    const syncConfig = getSessionSyncConfig();
+    const isDev = process.env.NODE_ENV !== 'production';
+
+    // Determine environment: config setting > NODE_ENV default
+    const environment = syncConfig?.environment || (isDev ? 'development' : 'production');
+    const config = environment === 'production' ? STYTCH_CONFIG.live : STYTCH_CONFIG.test;
+
+    logger.main.info('[SettingsHandlers] Lazy-initializing Stytch for environment:', environment);
+
+    StytchAuth.initializeStytchAuth({
+        projectId: config.projectId,
+        publicToken: config.publicToken,
+        apiBase: config.apiBase,
+    });
+
+    stytchInitialized = true;
+}
 
 /**
  * Get the local network IP address (for LAN access from mobile devices)
@@ -273,8 +302,26 @@ export function registerSettingsHandlers() {
     ipcMain.handle('sync:get-status', async (_event, workspacePath?: string) => {
         const config = getSessionSyncConfig();
 
-        // Not configured - check for enabled, serverUrl, and Stytch auth
-        if (!config?.enabled || !config.serverUrl || !StytchAuth.isAuthenticated()) {
+        // Check basic config first (before initializing Stytch)
+        if (!config?.enabled || !config.serverUrl) {
+            return {
+                appConfigured: false,
+                projectEnabled: false,
+                connected: false,
+                syncing: false,
+                error: null,
+                stats: {
+                    sessionCount: 0,
+                    lastSyncedAt: null,
+                },
+            };
+        }
+
+        // Lazy init Stytch to check auth status
+        ensureStytchInitialized();
+
+        // Check if authenticated
+        if (!StytchAuth.isAuthenticated()) {
             return {
                 appConfigured: false,
                 projectEnabled: false,
@@ -442,53 +489,97 @@ export function registerSettingsHandlers() {
 
     // Get current Stytch auth state
     ipcMain.handle('stytch:get-auth-state', () => {
+        ensureStytchInitialized();
         return StytchAuth.getAuthState();
     });
 
     // Check if user is authenticated with Stytch
     ipcMain.handle('stytch:is-authenticated', () => {
+        ensureStytchInitialized();
         return StytchAuth.isAuthenticated();
     });
 
     // Sign in with Google OAuth
     ipcMain.handle('stytch:sign-in-google', async () => {
-        // Get the sync server URL from settings (for local dev, this could be http://localhost:8790)
+        ensureStytchInitialized();
+        // Get the sync server URL from settings
+        // Environment takes priority over serverUrl to ensure consistency
         const syncConfig = getSessionSyncConfig();
+        const isDev = process.env.NODE_ENV !== 'production';
+
+        let serverUrl: string;
+        // Environment setting takes priority (allows switching dev/prod in dev builds)
+        if (syncConfig?.environment === 'development') {
+            serverUrl = 'ws://localhost:8790';
+        } else if (syncConfig?.environment === 'production') {
+            serverUrl = 'wss://sync.nimbalyst.com';
+        } else if (syncConfig?.serverUrl) {
+            // Custom URL (rare - only if user manually configured)
+            serverUrl = syncConfig.serverUrl;
+        } else {
+            // Default based on NODE_ENV
+            serverUrl = isDev ? 'ws://localhost:8790' : 'wss://sync.nimbalyst.com';
+        }
+
         // Convert WebSocket URLs to HTTP: wss:// -> https://, ws:// -> http://
-        const serverUrl = syncConfig?.serverUrl?.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:');
-        return StytchAuth.signInWithGoogle(serverUrl);
+        const httpUrl = serverUrl.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:');
+        logger.main.info('[stytch:sign-in-google] Auth URL:', httpUrl, 'syncConfig:', JSON.stringify(syncConfig));
+        return StytchAuth.signInWithGoogle(httpUrl);
     });
 
     // Send magic link for passwordless authentication
     ipcMain.handle('stytch:send-magic-link', async (_event, email: string) => {
+        ensureStytchInitialized();
         if (!email) {
             return { success: false, error: 'Email is required' };
         }
-        // Get the sync server URL from settings (for local dev, this could be http://localhost:8790)
+        // Get the sync server URL from settings
+        // Environment takes priority over serverUrl to ensure consistency
         const syncConfig = getSessionSyncConfig();
+        const isDev = process.env.NODE_ENV !== 'production';
+
+        let serverUrl: string;
+        // Environment setting takes priority (allows switching dev/prod in dev builds)
+        if (syncConfig?.environment === 'development') {
+            serverUrl = 'ws://localhost:8790';
+        } else if (syncConfig?.environment === 'production') {
+            serverUrl = 'wss://sync.nimbalyst.com';
+        } else if (syncConfig?.serverUrl) {
+            // Custom URL (rare - only if user manually configured)
+            serverUrl = syncConfig.serverUrl;
+        } else {
+            // Default based on NODE_ENV
+            serverUrl = isDev ? 'ws://localhost:8790' : 'wss://sync.nimbalyst.com';
+        }
+
         // Convert WebSocket URLs to HTTP: wss:// -> https://, ws:// -> http://
-        const serverUrl = syncConfig?.serverUrl?.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:');
-        return StytchAuth.sendMagicLink(email, serverUrl);
+        const httpUrl = serverUrl.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:');
+        logger.main.info('[stytch:send-magic-link] Sending to:', httpUrl, 'syncConfig:', JSON.stringify(syncConfig));
+        return StytchAuth.sendMagicLink(email, httpUrl);
     });
 
     // Sign out
     ipcMain.handle('stytch:sign-out', async () => {
+        ensureStytchInitialized();
         await StytchAuth.signOut();
         return { success: true };
     });
 
     // Get session JWT for server authentication
     ipcMain.handle('stytch:get-session-jwt', () => {
+        ensureStytchInitialized();
         return StytchAuth.getSessionJwt();
     });
 
     // Validate and refresh the current session
     ipcMain.handle('stytch:refresh-session', async () => {
+        ensureStytchInitialized();
         return StytchAuth.validateAndRefreshSession();
     });
 
     // Subscribe to auth state changes
     ipcMain.handle('stytch:subscribe-auth-state', () => {
+        ensureStytchInitialized();
         // Set up listener to broadcast auth state changes to all windows
         StytchAuth.onAuthStateChange((state) => {
             for (const window of BrowserWindow.getAllWindows()) {
@@ -496,5 +587,19 @@ export function registerSettingsHandlers() {
             }
         });
         return StytchAuth.getAuthState();
+    });
+
+    // Switch Stytch environment (dev only - signs out and switches to test/live)
+    ipcMain.handle('stytch:switch-environment', async (_event, environment: 'development' | 'production') => {
+        try {
+            // Reset initialized flag so next call re-initializes with new environment
+            stytchInitialized = false;
+            await StytchAuth.switchStytchEnvironment(environment);
+            stytchInitialized = true; // Mark as initialized after switch
+            return { success: true };
+        } catch (error) {
+            logger.main.error('[Settings] Failed to switch Stytch environment:', error);
+            return { success: false, error: String(error) };
+        }
     });
 }

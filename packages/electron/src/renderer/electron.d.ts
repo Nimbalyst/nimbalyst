@@ -218,6 +218,8 @@ interface ElectronAPI {
     refreshSession: () => Promise<boolean>;
     subscribeAuthState: () => Promise<any>;
     onAuthStateChange: (callback: (state: any) => void) => () => void;
+    // Dev only: switch between test and live Stytch environments
+    switchEnvironment: (environment: 'development' | 'production') => Promise<{ success: boolean; error?: string }>;
   }
 
   // Document Service

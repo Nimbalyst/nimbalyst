@@ -583,6 +583,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('stytch:auth-state-changed', handler);
       return () => ipcRenderer.removeListener('stytch:auth-state-changed', handler);
     },
+    // Dev only: switch between test and live Stytch environments
+    switchEnvironment: (environment: 'development' | 'production') =>
+      ipcRenderer.invoke('stytch:switch-environment', environment),
   },
 
   // Generic IPC methods for services that need them

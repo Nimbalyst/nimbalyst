@@ -22,6 +22,7 @@ import { app } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from '../utils/logger';
+import { STYTCH_CONFIG } from '@nimbalyst/runtime';
 
 // Stytch types
 interface StytchUser {
@@ -213,7 +214,8 @@ export function initializeStytchAuth(config: StytchConfig): void {
     // Validate JWT format (must be 3 parts separated by dots)
     const hasValidJwt = savedCredentials.sessionJwt && savedCredentials.sessionJwt.split('.').length === 3;
 
-    authState = {
+    // Use updateAuthState to notify listeners (like RepositoryManager) of the restored session
+    updateAuthState({
       isAuthenticated: true,
       user: savedCredentials.userId ? {
         user_id: savedCredentials.userId,
@@ -224,7 +226,7 @@ export function initializeStytchAuth(config: StytchConfig): void {
       session: null,
       sessionToken: savedCredentials.sessionToken,
       sessionJwt: hasValidJwt ? savedCredentials.sessionJwt : null,
-    };
+    });
     logger.main.info('[StytchAuthService] Restored session for user:', savedCredentials.userId, savedCredentials.email, {
       hasValidJwt,
     });
@@ -624,5 +626,30 @@ export async function validateAndRefreshSession(): Promise<boolean> {
  */
 export function shutdownStytchAuth(): void {
   // Nothing to clean up - device tokens removed, auth state managed by Stytch
+}
+
+/**
+ * Switch to a different Stytch environment (test vs live).
+ * This will sign out the current user and reinitialize with the new config.
+ *
+ * @param environment - 'development' for test Stytch, 'production' for live Stytch
+ */
+export async function switchStytchEnvironment(environment: 'development' | 'production'): Promise<void> {
+  logger.main.info('[StytchAuthService] Switching to environment:', environment);
+
+  // Sign out current user (clears credentials)
+  await signOut();
+
+  // Get the appropriate config (STYTCH_CONFIG is statically imported to avoid dynamic import issues)
+  const config = environment === 'production' ? STYTCH_CONFIG.live : STYTCH_CONFIG.test;
+
+  // Reinitialize with new config
+  initializeStytchAuth({
+    projectId: config.projectId,
+    publicToken: config.publicToken,
+    apiBase: config.apiBase,
+  });
+
+  logger.main.info('[StytchAuthService] Switched to environment:', environment, 'projectId:', config.projectId);
 }
 

@@ -21,6 +21,7 @@ import { createPGLiteQueuedPromptsStore, type QueuedPromptsStore } from './PGLit
 import { database } from '../database/PGLiteDatabaseWorker';
 import { logger } from '../utils/logger';
 import { initializeSync, shutdownSync, isSyncEnabled, reinitializeSync } from './SyncManager';
+import { onAuthStateChange } from './StytchAuthService';
 
 class RepositoryManager {
   private sessionStore: SessionStore | null = null;
@@ -32,6 +33,8 @@ class RepositoryManager {
   private documentsRepository: DocumentsRepository | null = null;
   private queuedPromptsStore: QueuedPromptsStore | null = null;
   private initialized = false;
+  private authListenerUnsubscribe: (() => void) | null = null;
+  private wasAuthenticated = false; // Track auth state to detect transitions
 
   /**
    * Initialize all repositories with PGLite database
@@ -119,6 +122,23 @@ class RepositoryManager {
 
       this.initialized = true;
       logger.main.info('[RepositoryManager] All repositories initialized successfully');
+
+      // Subscribe to auth state changes to reinitialize sync when user authenticates
+      // This handles the case where Stytch is lazy-initialized after repositories are ready
+      this.authListenerUnsubscribe = onAuthStateChange((authState) => {
+        const isNowAuthenticated = authState.isAuthenticated && !!authState.user?.user_id;
+
+        // Only reinitialize sync when transitioning from not-authenticated to authenticated
+        // and sync is not already enabled
+        if (isNowAuthenticated && !this.wasAuthenticated && !isSyncEnabled()) {
+          logger.main.info('[RepositoryManager] Auth state changed to authenticated, reinitializing sync...');
+          this.reinitializeSyncWithNewConfig().catch(err => {
+            logger.main.error('[RepositoryManager] Failed to reinitialize sync after auth:', err);
+          });
+        }
+
+        this.wasAuthenticated = isNowAuthenticated;
+      });
     } catch (error) {
       logger.main.error('[RepositoryManager] Failed to initialize repositories:', error);
       throw error;
@@ -220,6 +240,12 @@ class RepositoryManager {
    * Called when sync settings are changed at runtime.
    */
   async reinitializeSyncWithNewConfig(): Promise<void> {
+    logger.main.info('[RepositoryManager] reinitializeSyncWithNewConfig called', {
+      initialized: this.initialized,
+      hasBaseSessionStore: !!this.baseSessionStore,
+      hasBaseAgentMessagesStore: !!this.baseAgentMessagesStore,
+    });
+
     if (!this.initialized || !this.baseSessionStore || !this.baseAgentMessagesStore) {
       logger.main.warn('[RepositoryManager] Cannot reinitialize sync - not initialized yet');
       return;
@@ -244,6 +270,12 @@ class RepositoryManager {
    * Clean up resources
    */
   async cleanup(): Promise<void> {
+    // Unsubscribe from auth state changes
+    if (this.authListenerUnsubscribe) {
+      this.authListenerUnsubscribe();
+      this.authListenerUnsubscribe = null;
+    }
+
     // Shutdown sync first
     shutdownSync();
 
@@ -263,6 +295,7 @@ class RepositoryManager {
     this.documentsRepository = null;
     this.queuedPromptsStore = null;
     this.initialized = false;
+    this.wasAuthenticated = false;
   }
 }
 

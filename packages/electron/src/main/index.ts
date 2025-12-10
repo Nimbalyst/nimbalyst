@@ -61,8 +61,7 @@ import { autoUpdaterService, AutoUpdaterService } from './services/autoUpdater';
 import { initializeDatabase } from './database/initialize';
 import { AnalyticsService } from "./services/analytics/AnalyticsService.ts";
 import { registerAnalyticsHandlers } from "./ipc/AnalyticsHandlers.ts";
-import { initializeStytchAuth, shutdownStytchAuth, handleAuthCallback } from './services/StytchAuthService';
-import { getStytchConfig } from '@nimbalyst/runtime';
+import { shutdownStytchAuth, handleAuthCallback } from './services/StytchAuthService';
 
 // CRITICAL: Hide dock icon when running as background Node process
 // This prevents Terminal icon from appearing when Claude Code spawns child processes
@@ -210,6 +209,12 @@ async function handleDeepLink(url: string): Promise<void> {
             const expiresAt = parsed.searchParams.get('expires_at');
 
             if (sessionToken) {
+                logger.main.info('[DeepLink] Auth callback params:', {
+                    hasSessionToken: !!sessionToken,
+                    hasSessionJwt: !!sessionJwt,
+                    userId,
+                    email,
+                });
                 await handleAuthCallback({
                     sessionToken,
                     sessionJwt: sessionJwt || undefined,
@@ -218,6 +223,15 @@ async function handleDeepLink(url: string): Promise<void> {
                     expiresAt: expiresAt || undefined,
                 });
                 logger.main.info('[DeepLink] Auth callback handled successfully');
+
+                // Reinitialize sync now that we're authenticated
+                try {
+                    const { repositoryManager } = await import('./services/RepositoryManager');
+                    await repositoryManager.reinitializeSyncWithNewConfig();
+                    logger.main.info('[DeepLink] Sync reinitialized after auth');
+                } catch (syncError) {
+                    logger.main.error('[DeepLink] Failed to reinitialize sync after auth:', syncError);
+                }
             } else {
                 logger.main.error('[DeepLink] Auth callback missing session_token');
             }
@@ -349,30 +363,8 @@ app.whenReady().then(async () => {
     // Initialize logging
     initializeLogging();
 
-    // Initialize Stytch Auth service BEFORE database (only if sync is enabled)
-    // This avoids keychain access prompts when sync is disabled
-    // (Database init creates SyncManager which checks isAuthenticated)
-    const syncConfig = getSessionSyncConfig();
-    if (syncConfig?.enabled) {
-        const stytchConfig = getStytchConfig();
-        if (stytchConfig.projectId && stytchConfig.publicToken &&
-            !stytchConfig.projectId.includes('XXXX')) {
-            try {
-                initializeStytchAuth({
-                    projectId: stytchConfig.projectId,
-                    publicToken: stytchConfig.publicToken,
-                    apiBase: stytchConfig.apiBase,
-                });
-                logger.main.info('[StytchAuth] Initialized with project:', stytchConfig.projectId, 'apiBase:', stytchConfig.apiBase);
-            } catch (error) {
-                logger.main.error('[StytchAuth] Failed to initialize:', error);
-            }
-        } else {
-            logger.main.info('[StytchAuth] Not configured (placeholder tokens) - skipping initialization');
-        }
-    } else {
-        logger.main.info('[StytchAuth] Skipping initialization - sync is disabled');
-    }
+    // NOTE: Stytch auth is initialized lazily when sync is requested for a project
+    // This avoids loading sync code at startup and prevents IPC handler registration issues
 
     // Initialize PGLite database
     try {

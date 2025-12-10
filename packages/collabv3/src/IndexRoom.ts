@@ -18,6 +18,9 @@ import type {
   DeviceJoinedMessage,
   DeviceLeftMessage,
 } from './types';
+import { createLogger } from './logger';
+
+const log = createLogger('IndexRoom');
 
 interface ConnectionState {
   auth: AuthContext;
@@ -141,7 +144,7 @@ export class IndexRoom implements DurableObject {
 
     // REST endpoints
     if (url.pathname.endsWith('/status')) {
-      return this.handleStatusRequest();
+      return await this.handleStatusRequest();
     }
 
     return new Response('Expected WebSocket', { status: 400 });
@@ -335,7 +338,7 @@ export class IndexRoom implements DurableObject {
     connState: ConnectionState,
     sessions: SessionIndexEntry[]
   ): Promise<void> {
-    console.log('[IndexRoom] handleIndexBatchUpdate called with', sessions.length, 'sessions');
+    log.debug('handleIndexBatchUpdate called with', sessions.length, 'sessions');
     const sql = this.state.storage.sql;
     const affectedProjects = new Set<string>();
 
@@ -361,7 +364,7 @@ export class IndexRoom implements DurableObject {
         affectedProjects.add(session.project_id);
       }
     });
-    console.log('[IndexRoom] Batch update committed successfully');
+    log.debug('Batch update committed successfully');
 
     // Update project stats for all affected projects
     for (const projectId of affectedProjects) {
@@ -634,7 +637,8 @@ export class IndexRoom implements DurableObject {
   /**
    * Status endpoint for debugging
    */
-  private handleStatusRequest(): Response {
+  private async handleStatusRequest(): Promise<Response> {
+    await this.ensureInitialized();
     const sql = this.state.storage.sql;
 
     const sessionCount = sql.exec<{ count: number }>(

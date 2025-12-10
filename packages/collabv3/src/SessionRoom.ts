@@ -14,6 +14,9 @@ import type {
   SyncResponseMessage,
   AuthContext,
 } from './types';
+import { createLogger } from './logger';
+
+const log = createLogger('SessionRoom');
 
 interface ConnectionState {
   auth: AuthContext;
@@ -61,7 +64,7 @@ export class SessionRoom implements DurableObject {
       }
     }
     if (webSockets.length > 0) {
-      console.log(`[SessionRoom] Restored ${webSockets.length} connections from hibernation`);
+      log.info(`Restored ${webSockets.length} connections from hibernation`);
     }
   }
 
@@ -185,10 +188,7 @@ export class SessionRoom implements DurableObject {
 
     try {
       const rawData = typeof data === 'string' ? data : new TextDecoder().decode(data);
-      console.log('[SessionRoom] Received message, length:', rawData.length, 'first 100 chars:', rawData.substring(0, 100));
-
       const message: ClientMessage = JSON.parse(rawData);
-      console.log('[SessionRoom] Parsed message type:', message.type);
 
       switch (message.type) {
         case 'sync_request':
@@ -196,7 +196,6 @@ export class SessionRoom implements DurableObject {
           break;
 
         case 'append_message':
-          console.log('[SessionRoom] Handling append_message, message id:', message.message?.id);
           await this.handleAppendMessage(ws, connState, message.message);
           break;
 
@@ -209,18 +208,12 @@ export class SessionRoom implements DurableObject {
           break;
 
         default:
-          console.log('[SessionRoom] Unknown message type:', (message as { type: string }).type);
+          log.warn('Unknown message type:', (message as { type: string }).type);
           this.sendError(ws, 'unknown_message_type', `Unknown message type`);
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
-      const errorStack = err instanceof Error ? err.stack : undefined;
-      console.error('[SessionRoom] Error handling message:', errorMessage);
-      console.error('[SessionRoom] Stack:', errorStack);
-      console.error('[SessionRoom] Data type:', typeof data, 'Data length:', typeof data === 'string' ? data.length : (data as ArrayBuffer).byteLength);
-      if (typeof data === 'string') {
-        console.error('[SessionRoom] First 200 chars:', data.substring(0, 200));
-      }
+      log.error('Error handling message:', errorMessage);
       this.sendError(ws, 'parse_error', `Failed to parse message: ${errorMessage}`);
     }
   }

@@ -6,6 +6,9 @@
  */
 
 import type { AuthContext } from './types';
+import { createLogger } from './logger';
+
+const log = createLogger('auth');
 
 // JWKS cache for Stytch public keys
 let jwksCache: JsonWebKeySet | null = null;
@@ -90,13 +93,13 @@ export async function parseAuth(
   }
 
   if (!token) {
-    console.log('[auth] No JWT found in header or query params');
+    log.debug('No JWT found in header or query params');
     return null;
   }
 
   // Validate as JWT (must be 3 base64url parts separated by dots)
   if (!token.includes('.') || token.split('.').length !== 3) {
-    console.log('[auth] Invalid JWT format');
+    log.warn('Invalid JWT format');
     return null;
   }
 
@@ -115,40 +118,38 @@ async function validateJWT(
   config: AuthConfig
 ): Promise<AuthResult | null> {
   try {
-    console.log('[auth] Validating JWT, token length:', token.length);
+    log.debug('Validating JWT, token length:', token.length);
 
     // Decode header and payload (without verification first)
     const parts = token.split('.');
     if (parts.length !== 3) {
-      console.log('[auth] Invalid JWT structure, parts:', parts.length);
+      log.warn('Invalid JWT structure, parts:', parts.length);
       return null;
     }
 
     const header: JWTHeader = JSON.parse(base64UrlDecode(parts[0]));
     const payload: StytchJWTPayload = JSON.parse(base64UrlDecode(parts[1]));
 
-    console.log('[auth] JWT header:', JSON.stringify(header));
-    console.log('[auth] JWT sub:', payload.sub, 'exp:', payload.exp, 'aud:', payload.aud);
+    log.debug('JWT sub:', payload.sub, 'exp:', payload.exp);
 
     // Basic validation
     const now = Math.floor(Date.now() / 1000);
-    console.log('[auth] Current time:', now, 'JWT exp:', payload.exp, 'diff:', payload.exp - now, 's');
 
     // Check expiration
     if (payload.exp && payload.exp < now) {
-      console.log('[auth] JWT expired');
+      log.warn('JWT expired');
       return null;
     }
 
     // Check not before
     if (payload.nbf && payload.nbf > now) {
-      console.log('[auth] JWT not yet valid');
+      log.warn('JWT not yet valid');
       return null;
     }
 
     // Check issuer
     if (!payload.iss?.includes('stytch.com')) {
-      console.log('[auth] JWT issuer not Stytch');
+      log.warn('JWT issuer not Stytch');
       return null;
     }
 
@@ -157,7 +158,7 @@ async function validateJWT(
     if (config.stytchProjectId) {
       const audiences = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
       if (!audiences.includes(config.stytchProjectId)) {
-        console.log('[auth] JWT audience mismatch. Expected:', config.stytchProjectId, 'Got:', payload.aud);
+        log.warn('JWT audience mismatch. Expected:', config.stytchProjectId, 'Got:', payload.aud);
         return null;
       }
     }
@@ -165,7 +166,7 @@ async function validateJWT(
     // Verify signature using JWKS
     const isValid = await verifyJWTSignature(token, header, config);
     if (!isValid) {
-      console.log('[auth] JWT signature verification failed');
+      log.warn('JWT signature verification failed');
       return null;
     }
 
@@ -175,7 +176,7 @@ async function validateJWT(
       session_id: payload.session_id,
     };
   } catch (error) {
-    console.error('[auth] JWT validation error:', error);
+    log.error('JWT validation error:', error);
     return null;
   }
 }
@@ -192,26 +193,23 @@ async function verifyJWTSignature(
     // Get JWKS
     const jwks = await fetchJWKS(config);
     if (!jwks) {
-      console.log('[auth] Failed to fetch JWKS');
+      log.warn('Failed to fetch JWKS');
       return false;
     }
-    console.log('[auth] JWKS fetched, keys:', jwks.keys.length);
 
     // Find the key by kid
     const key = jwks.keys.find((k) => k.kid === header.kid);
     if (!key) {
-      console.log('[auth] Key not found in JWKS. Looking for kid:', header.kid, 'Available kids:', jwks.keys.map(k => k.kid));
+      log.warn('Key not found in JWKS. Looking for kid:', header.kid);
       return false;
     }
-    console.log('[auth] Found key with kid:', key.kid);
 
     // Import the public key
     const cryptoKey = await importJWK(key, header.alg);
     if (!cryptoKey) {
-      console.log('[auth] Failed to import JWK');
+      log.warn('Failed to import JWK');
       return false;
     }
-    console.log('[auth] JWK imported successfully');
 
     // Verify signature
     const parts = token.split('.');
@@ -219,7 +217,6 @@ async function verifyJWTSignature(
     const signature = base64UrlToArrayBuffer(parts[2]);
 
     const algorithm = getVerifyAlgorithm(header.alg);
-    console.log('[auth] Verifying signature with algorithm:', algorithm);
     const isValid = await crypto.subtle.verify(
       algorithm,
       cryptoKey,
@@ -227,10 +224,12 @@ async function verifyJWTSignature(
       signedData
     );
 
-    console.log('[auth] Signature verification result:', isValid);
+    if (!isValid) {
+      log.warn('Signature verification failed');
+    }
     return isValid;
   } catch (error) {
-    console.error('[auth] Signature verification error:', error);
+    log.error('Signature verification error:', error);
     return false;
   }
 }
@@ -257,14 +256,14 @@ async function fetchJWKS(config: AuthConfig): Promise<JsonWebKeySet | null> {
     }
 
     if (!jwksUrl) {
-      console.log('[auth] No JWKS URL configured');
+      log.warn('No JWKS URL configured');
       return null;
     }
 
-    console.log('[auth] Fetching JWKS from:', jwksUrl);
+    log.debug('Fetching JWKS from:', jwksUrl);
     const response = await fetch(jwksUrl);
     if (!response.ok) {
-      console.error('[auth] JWKS fetch failed:', response.status);
+      log.error('JWKS fetch failed:', response.status);
       return null;
     }
 
@@ -272,7 +271,7 @@ async function fetchJWKS(config: AuthConfig): Promise<JsonWebKeySet | null> {
     jwksCacheTime = Date.now();
     return jwksCache;
   } catch (error) {
-    console.error('[auth] JWKS fetch error:', error);
+    log.error('JWKS fetch error:', error);
     return null;
   }
 }
@@ -298,7 +297,7 @@ async function importJWK(
       ['verify']
     );
   } catch (error) {
-    console.error('[auth] JWK import error:', error);
+    log.error('JWK import error:', error);
     return null;
   }
 }
@@ -324,7 +323,7 @@ function getImportAlgorithm(
     case 'ES512':
       return { name: 'ECDSA', namedCurve: jwk.crv || 'P-521' };
     default:
-      console.error('[auth] Unsupported algorithm:', alg);
+      log.error('Unsupported algorithm:', alg);
       return null;
   }
 }

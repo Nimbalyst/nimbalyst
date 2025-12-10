@@ -26,7 +26,7 @@ new_sqlite_classes = ["SessionRoom", "IndexRoom"]
 [[d1_databases]]
 binding = "DB"
 database_name = "nimbalyst-collabv3"
-database_id = "placeholder-replace-after-creation"
+database_id = "c3b3979d-e20c-4547-a103-91c1a0b32388"
 
 # KV for rate limiting and feature flags (optional)
 # [[kv_namespaces]]
@@ -59,6 +59,28 @@ name = "nimbalyst-collabv3"
 routes = [
   { pattern = "sync.nimbalyst.com", custom_domain = true }
 ]
+
+# Production Durable Objects
+[[env.production.durable_objects.bindings]]
+name = "SESSION_ROOM"
+class_name = "SessionRoom"
+
+[[env.production.durable_objects.bindings]]
+name = "INDEX_ROOM"
+class_name = "IndexRoom"
+
+# Production D1 Database
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "nimbalyst-collabv3"
+database_id = "c3b3979d-e20c-4547-a103-91c1a0b32388"
+
+# Production migrations
+[[env.production.migrations]]
+tag = "v1"
+new_sqlite_classes = ["SessionRoom", "IndexRoom"]
+
 [env.production.vars]
 ENVIRONMENT = "production"
+STYTCH_PROJECT_ID = "project-live-bc85edd6-90a8-43a0-b9e3-1315bbed6650"
 ALLOWED_ORIGINS = "https://app.nimbalyst.com,https://nimbalyst.com,capacitor://localhost"

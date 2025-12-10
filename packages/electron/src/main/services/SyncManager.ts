@@ -175,34 +175,44 @@ function getDeviceInfo(userId: string): DeviceInfo {
  * Returns a wrapped session store if sync is enabled, or the original store if not.
  */
 export async function initializeSync(baseStore: SessionStore): Promise<SessionStore> {
-  console.log('[SyncManager] initializeSync called');
+  logger.main.info('[SyncManager] initializeSync called');
 
   const config = getSessionSyncConfig();
-  console.log('[SyncManager] config:', JSON.stringify(config));
+  logger.main.info('[SyncManager] config:', JSON.stringify(config));
 
   if (!config?.enabled) {
-    console.log('[SyncManager] Session sync not enabled');
+    logger.main.info('[SyncManager] Session sync not enabled in config');
     return baseStore;
   }
 
-  // Use production server URL by default, allow override in dev mode
+  // Determine server URL based on environment setting
   const PRODUCTION_SYNC_URL = 'wss://sync.nimbalyst.com';
-  const serverUrl = config.serverUrl || PRODUCTION_SYNC_URL;
+  const DEVELOPMENT_SYNC_URL = 'ws://localhost:8790';
+
+  // Use explicit serverUrl if set, otherwise derive from environment
+  let serverUrl: string;
+  if (config.serverUrl) {
+    serverUrl = config.serverUrl;
+  } else if (config.environment === 'development') {
+    serverUrl = DEVELOPMENT_SYNC_URL;
+  } else {
+    serverUrl = PRODUCTION_SYNC_URL;
+  }
 
   // Require Stytch authentication for sync
   const authenticated = isAuthenticated();
-  console.log('[SyncManager] isAuthenticated:', authenticated);
+  logger.main.info('[SyncManager] isAuthenticated:', authenticated);
   if (!authenticated) {
-    console.log('[SyncManager] Session sync enabled but user not authenticated with Stytch');
+    logger.main.info('[SyncManager] Session sync enabled but user not authenticated with Stytch');
     return baseStore;
   }
 
   // Get user ID from Stytch (for encryption key derivation and device info)
   // Note: JWT refresh happens on-demand before each WebSocket connection via getJwt callback
   const stytchUserId = getStytchUserId();
-  console.log('[SyncManager] stytchUserId:', stytchUserId);
+  logger.main.info('[SyncManager] stytchUserId:', stytchUserId);
   if (!stytchUserId) {
-    console.log('[SyncManager] Session sync enabled but no Stytch user ID available');
+    logger.main.info('[SyncManager] Session sync enabled but no Stytch user ID available');
     return baseStore;
   }
 
