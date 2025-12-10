@@ -222,8 +222,10 @@ end tell`;
         };
       } else if (platform === 'win32') {
         // Windows: Use start command to open a new cmd window
-        const nodePath = process.execPath;
-        spawn('cmd', ['/c', 'start', 'cmd', '/k', `echo Claude Code Logout && echo. && echo Type /logout and press Enter to logout: && echo. && set ELECTRON_RUN_AS_NODE=1 && "${nodePath}" "${cliPath}"`], {
+        const claudeCodePath = path.join(os.homedir(), '.local', 'bin', 'claude.exe');
+        // TODO: On windows only, require access to a working claude installation because the Windows console
+        //  host is unable to provide a proper TTY raw mode required by Ink-based CLIs when running in Electron-NodeJS.
+        spawn('cmd', ['/c', 'start', '"Claude Code Logout"', 'cmd', '/k', `"${claudeCodePath}"`], {
           detached: true,
           stdio: 'ignore',
           shell: true
