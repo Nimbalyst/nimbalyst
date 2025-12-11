@@ -366,6 +366,8 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
             glyphMargin: false,
             // Accessibility
             accessibilitySupport: 'auto',
+            // Silently handle unusual line terminators (U+2028, U+2029)
+            unusualLineTerminators: 'auto',
           }}
         />
       ) : (
@@ -400,6 +402,8 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
             glyphMargin: false, // No error icons in margin
             // Accessibility
             accessibilitySupport: 'auto',
+            // Silently handle unusual line terminators (U+2028, U+2029)
+            unusualLineTerminators: 'auto',
           }}
         />
       )}

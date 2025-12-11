@@ -4,6 +4,8 @@
  * Extracts handleWorkspaceFileSelect logic from App.tsx
  */
 
+import { errorNotificationService } from '../services/ErrorNotificationService';
+
 const LOG_CONFIG = {
   WORKSPACE_FILE_SELECT: false,
 };
@@ -65,13 +67,22 @@ export async function handleWorkspaceFileSelect(options: FileSelectOptions): Pro
       console.error('[WORKSPACE_FILE_SELECT] This could mean the file does not exist or failed to load');
       return;
     }
+
+    // Handle error response from main process
+    if ('error' in result) {
+      errorNotificationService.showWarning('Cannot Open File', (result as { error: string }).error, { duration: 5000 });
+      return;
+    }
+
+    // Now result is the success type
+    const fileResult = result as { filePath: string; content: string };
     if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] File loaded successfully');
 
     // Add a new tab - onTabChange will handle all state updates
-    console.log('[TABS] Adding tab for file:', result.filePath);
-    const tabId = tabs.addTab(result.filePath, result.content);
+    console.log('[TABS] Adding tab for file:', fileResult.filePath);
+    const tabId = tabs.addTab(fileResult.filePath, fileResult.content);
     if (!tabId) {
-      console.error('[TABS] Failed to add tab for file:', result.filePath);
+      console.error('[TABS] Failed to add tab for file:', fileResult.filePath);
       console.error('[TABS] This should not happen - tabs should be unlimited');
       // Could show a dialog here
     } else {
@@ -95,12 +106,12 @@ export async function handleWorkspaceFileSelect(options: FileSelectOptions): Pro
     if (window.electronAPI.history) {
       try {
         // Check if we have previous snapshots
-        const snapshots = await window.electronAPI.history.listSnapshots(result.filePath);
+        const snapshots = await window.electronAPI.history.listSnapshots(fileResult.filePath);
         if (snapshots.length === 0) {
           // First time opening this file, create initial snapshot
           await window.electronAPI.history.createSnapshot(
-            result.filePath,
-            result.content,
+            fileResult.filePath,
+            fileResult.content,
             'auto',
             'Initial file open'
           );
@@ -108,14 +119,14 @@ export async function handleWorkspaceFileSelect(options: FileSelectOptions): Pro
           // Check if content changed since last snapshot
           const latestSnapshot = snapshots[0]; // Assuming sorted by timestamp desc
           const lastContent = await window.electronAPI.history.loadSnapshot(
-            result.filePath,
+            fileResult.filePath,
             latestSnapshot.timestamp
           );
-          if (lastContent !== result.content) {
+          if (lastContent !== fileResult.content) {
             // Content actually changed, create snapshot
             await window.electronAPI.history.createSnapshot(
-              result.filePath,
-              result.content,
+              fileResult.filePath,
+              fileResult.content,
               'auto',
               'File changed externally'
             );

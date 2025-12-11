@@ -11,7 +11,7 @@ export const EXCLUDED_EXTENSIONS = new Set([
   '.mp3', '.mp4', '.avi', '.mov', '.wmv',
   '.zip', '.tar', '.gz', '.rar', '.7z',
   '.exe', '.dll', '.so', '.dylib',
-  '.pdf', '.doc', '.docx', '.xls', '.xlsx',
+  '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
   '.db', '.sqlite', '.lock'
 ]);
 

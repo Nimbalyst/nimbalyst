@@ -231,7 +231,8 @@ export function registerWorkspaceHandlers() {
             };
         } catch (error) {
             console.error('[SWITCH_FILE] Error switching workspace file:', error);
-            return null;
+            const errorMessage = error instanceof Error ? error.message : 'Failed to open file';
+            return { error: errorMessage };
         }
     });
 

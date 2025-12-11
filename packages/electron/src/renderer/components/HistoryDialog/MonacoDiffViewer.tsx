@@ -55,7 +55,9 @@ export function MonacoDiffViewer({
       // Disable diff computation options that might cause issues
       ignoreTrimWhitespace: false,
       renderIndicators: true,
-      enableSplitViewResizing: false
+      enableSplitViewResizing: false,
+      // Silently handle unusual line terminators (U+2028, U+2029)
+      unusualLineTerminators: 'auto',
     });
 
     diffEditorRef.current = diffEditor;

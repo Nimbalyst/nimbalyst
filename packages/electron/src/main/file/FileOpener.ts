@@ -16,6 +16,7 @@ import { BrowserWindow, dialog } from 'electron';
 import { readFileSync, existsSync } from 'fs';
 import { basename, extname } from 'path';
 import * as path from 'path';
+import { shouldExcludeFile } from '../utils/fileFilters';
 import {
   windowStates,
   getWindowId,
@@ -134,6 +135,12 @@ export async function openFile(options: OpenFileOptions): Promise<OpenFileResult
   // Validate file exists
   if (!existsSync(filePath)) {
     throw new Error(`File does not exist: ${filePath}`);
+  }
+
+  // Reject binary/unsupported file types (PDFs, Office docs, images, etc.)
+  if (shouldExcludeFile(filePath)) {
+    const ext = extname(filePath).toLowerCase();
+    throw new Error(`Cannot open ${ext} files. Nimbalyst only supports text-based files like Markdown, code, and plain text.`);
   }
 
   // Determine target window
