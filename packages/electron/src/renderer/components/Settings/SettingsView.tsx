@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { usePostHog } from 'posthog-js/react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import { SettingsSidebar, type SettingsCategory } from './SettingsSidebar';
@@ -55,7 +55,6 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
 
   const [selectedCategory, setSelectedCategory] = useState<SettingsCategory>(initialCategory || 'claude-code');
   const [scope, setScope] = useState<SettingsScope>(initialScope || 'user');
-  const [searchQuery, setSearchQuery] = useState('');
   const [providers, setProviders] = useState<Record<string, ProviderConfig>>({
     claude: { enabled: false, testStatus: 'idle' },
     'claude-code': { enabled: true, testStatus: 'idle', installStatus: 'not-installed' },
@@ -72,8 +71,12 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
 
   const [availableModels, setAvailableModels] = useState<Record<string, Model[]>>({});
   const [loading, setLoading] = useState<Record<string, boolean>>({});
-  const [hasChanges, setHasChanges] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [showToolCalls, setShowToolCalls] = useState(false);
+
+  // Ref to track if we need to save (for debounce)
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingSaveRef = useRef(false);
   const [aiDebugLogging, setAiDebugLogging] = useState(false);
   const [completionSoundEnabled, setCompletionSoundEnabled] = useState(false);
   const [completionSoundType, setCompletionSoundType] = useState<'chime' | 'bell' | 'pop' | 'none'>('chime');
@@ -217,7 +220,7 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
         }
       };
     });
-    setHasChanges(true);
+    debouncedSave();
 
     if (enabled && provider !== 'claude-code' && provider !== 'openai-codex') {
       fetchModels(provider);
@@ -226,7 +229,7 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
 
   const handleApiKeyChange = (key: string, value: string) => {
     setApiKeys(prev => ({ ...prev, [key]: value }));
-    setHasChanges(true);
+    debouncedSave();
   };
 
   const fetchModels = async (provider: string) => {
@@ -244,44 +247,86 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
     }
   };
 
-  const handleSave = async () => {
-    const settings = {
-      apiKeys,
-      providerSettings: providers,
-      showToolCalls,
-      aiDebugLogging
+  // Perform the actual save
+  const performSave = useCallback(async () => {
+    if (!pendingSaveRef.current) return;
+    pendingSaveRef.current = false;
+
+    try {
+      setSaveStatus('saving');
+
+      const settings = {
+        apiKeys,
+        providerSettings: providers,
+        showToolCalls,
+        aiDebugLogging
+      };
+
+      await window.electronAPI.aiSaveSettings(settings);
+
+      // Save completion sound settings
+      await window.electronAPI.invoke('completion-sound:set-enabled', completionSoundEnabled);
+      await window.electronAPI.invoke('completion-sound:set-type', completionSoundType);
+
+      // Save OS notifications settings
+      await window.electronAPI.invoke('notifications:set-enabled', osNotificationsEnabled);
+
+      // Save release channel setting
+      await window.electronAPI.invoke('release-channel:set', releaseChannel);
+
+      // Save sync config
+      await window.electronAPI.invoke('sync:set-config', syncConfig.enabled ? syncConfig : null);
+
+      // Clear the model cache to force refresh with new API keys
+      await window.electronAPI.aiClearModelCache?.();
+
+      setSaveStatus('saved');
+
+      // Reset status after a delay
+      setTimeout(() => setSaveStatus('idle'), 2000);
+
+      // Refresh models for all enabled providers in the background
+      Promise.all(
+        Object.entries(providers)
+          .filter(([_, config]) => config.enabled)
+          .map(([provider, _]) => fetchModels(provider))
+      ).catch(error => {
+        console.error('Failed to refresh models in background:', error);
+      });
+    } catch (error) {
+      console.error('Failed to save settings:', error);
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus('idle'), 3000);
+    }
+  }, [apiKeys, providers, showToolCalls, aiDebugLogging, completionSoundEnabled, completionSoundType, osNotificationsEnabled, releaseChannel, syncConfig]);
+
+  // Debounced save - call this when settings change
+  const debouncedSave = useCallback(() => {
+    pendingSaveRef.current = true;
+
+    // Clear any existing timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    // Set new timeout - 500ms debounce
+    saveTimeoutRef.current = setTimeout(() => {
+      performSave();
+    }, 500);
+  }, [performSave]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        // Save immediately on unmount if there are pending changes
+        if (pendingSaveRef.current) {
+          performSave();
+        }
+      }
     };
-
-    await window.electronAPI.aiSaveSettings(settings);
-
-    // Save completion sound settings
-    await window.electronAPI.invoke('completion-sound:set-enabled', completionSoundEnabled);
-    await window.electronAPI.invoke('completion-sound:set-type', completionSoundType);
-
-    // Save OS notifications settings
-    await window.electronAPI.invoke('notifications:set-enabled', osNotificationsEnabled);
-
-    // Save release channel setting
-    await window.electronAPI.invoke('release-channel:set', releaseChannel);
-
-    // Save sync config
-    await window.electronAPI.invoke('sync:set-config', syncConfig.enabled ? syncConfig : null);
-
-    // Clear the model cache to force refresh with new API keys
-    await window.electronAPI.aiClearModelCache?.();
-
-    setHasChanges(false);
-    onClose();
-
-    // Refresh models for all enabled providers in the background
-    Promise.all(
-      Object.entries(providers)
-        .filter(([_, config]) => config.enabled)
-        .map(([provider, _]) => fetchModels(provider))
-    ).catch(error => {
-      console.error('Failed to refresh models in background:', error);
-    });
-  };
+  }, [performSave]);
 
   // Build provider status for sidebar
   const providerStatus = Object.fromEntries(
@@ -334,7 +379,7 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
             [selectedCategory]: { ...prev[selectedCategory], models: updated }
           };
         });
-        setHasChanges(true);
+        debouncedSave();
       },
       onSelectAllModels: (selectAll: boolean) => {
         if (selectAll) {
@@ -349,7 +394,7 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
             [selectedCategory]: { ...prev[selectedCategory], models: [] }
           }));
         }
-        setHasChanges(true);
+        debouncedSave();
       },
       onTestConnection: async () => {
         setProviders(prev => ({
@@ -395,7 +440,7 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
           ...prev,
           [selectedCategory]: { ...prev[selectedCategory], ...updates }
         }));
-        setHasChanges(true);
+        debouncedSave();
       }
     };
 
@@ -434,23 +479,23 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
           showToolCalls={showToolCalls}
           onShowToolCallsChange={(value) => {
             setShowToolCalls(value);
-            setHasChanges(true);
+            debouncedSave();
           }}
           aiDebugLogging={aiDebugLogging}
           onAiDebugLoggingChange={(value) => {
             setAiDebugLogging(value);
-            setHasChanges(true);
+            debouncedSave();
           }}
           releaseChannel={releaseChannel}
           onReleaseChannelChange={(value) => {
             setReleaseChannel(value);
-            setHasChanges(true);
+            debouncedSave();
           }}
           analyticsEnabled={analyticsEnabled}
           onAnalyticsEnabledChange={async (value) => {
             setAnalyticsEnabled(value);
             await window.electronAPI.invoke('analytics:set-enabled', value);
-            setHasChanges(true);
+            debouncedSave();
           }}
         />;
       case 'notifications':
@@ -458,17 +503,17 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
           completionSoundEnabled={completionSoundEnabled}
           onCompletionSoundEnabledChange={(value) => {
             setCompletionSoundEnabled(value);
-            setHasChanges(true);
+            debouncedSave();
           }}
           completionSoundType={completionSoundType}
           onCompletionSoundTypeChange={(value) => {
             setCompletionSoundType(value);
-            setHasChanges(true);
+            debouncedSave();
           }}
           osNotificationsEnabled={osNotificationsEnabled}
           onOSNotificationsEnabledChange={(value) => {
             setOSNotificationsEnabled(value);
-            setHasChanges(true);
+            debouncedSave();
           }}
         />;
       case 'mcp-servers':
@@ -484,7 +529,7 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
             config={syncConfig}
             onConfigChange={(config) => {
               setSyncConfig(config);
-              setHasChanges(true);
+              debouncedSave();
             }}
             onTestConnection={async () => {
               setSyncTestStatus('testing');
@@ -531,32 +576,38 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
       <header className="settings-view-header">
         <span className="settings-view-title">Settings</span>
 
-        <div className="settings-search">
-          <MaterialSymbol icon="search" size={14} className="settings-search-icon" />
-          <input
-            type="text"
-            placeholder="Search settings..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+
+
+        <div className="settings-scope-container">
+          <div className="settings-scope-tabs">
+            <button
+              className={`settings-scope-tab ${scope === 'user' ? 'active' : ''}`}
+              onClick={() => handleScopeChange('user')}
+            >
+              User
+            </button>
+            <button
+              className={`settings-scope-tab ${scope === 'project' ? 'active' : ''}`}
+              onClick={() => handleScopeChange('project')}
+              disabled={!workspacePath}
+              title={!workspacePath ? 'Open a project to access project settings' : undefined}
+            >
+              Project
+            </button>
+          </div>
+          <span className="settings-scope-hint">
+            {scope === 'user'
+              ? 'These settings apply to all projects'
+              : `These settings apply only for ${workspaceName || 'this project'}`}
+          </span>
         </div>
 
-        <div className="settings-scope-tabs">
-          <button
-            className={`settings-scope-tab ${scope === 'user' ? 'active' : ''}`}
-            onClick={() => handleScopeChange('user')}
-          >
-            User
-          </button>
-          <button
-            className={`settings-scope-tab ${scope === 'project' ? 'active' : ''}`}
-            onClick={() => handleScopeChange('project')}
-            disabled={!workspacePath}
-            title={!workspacePath ? 'Open a project to access project settings' : undefined}
-          >
-            Project
-          </button>
-        </div>
+
+        <span className={`settings-save-status ${saveStatus}`}>
+          {saveStatus === 'saving' && 'Saving...'}
+          {saveStatus === 'saved' && 'Saved'}
+          {saveStatus === 'error' && 'Error saving'}
+        </span>
       </header>
 
       <div className="settings-view-body">
@@ -573,22 +624,6 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
         <main className="settings-view-main">
           {renderPanel()}
         </main>
-      </div>
-
-      <div className="settings-view-footer">
-        <button
-          className="button-cancel"
-          onClick={onClose}
-        >
-          Close
-        </button>
-        <button
-          className="button-save"
-          onClick={handleSave}
-          disabled={!hasChanges}
-        >
-          {hasChanges ? 'Save Changes' : 'Save'}
-        </button>
       </div>
     </div>
   );
