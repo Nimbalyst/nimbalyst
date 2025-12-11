@@ -17,11 +17,11 @@ export class ModelRegistry {
     apiKey?: string,
     baseUrl?: string
   ): Promise<AIModel[]> {
-    console.log('[ModelRegistry] getModelsForProvider called:', {
-      provider,
-      hasApiKey: !!apiKey,
-      baseUrl
-    });
+    // console.log('[ModelRegistry] getModelsForProvider called:', {
+    //   provider,
+    //   hasApiKey: !!apiKey,
+    //   baseUrl
+    // });
 
     // SKIP CACHE FOR NOW - always fetch fresh
     // const lastFetchTime = this.lastFetch.get(provider) || 0;
@@ -39,7 +39,7 @@ export class ModelRegistry {
         case 'claude':
           const { ClaudeProvider } = await import('./providers/ClaudeProvider');
           models = this.filterLatestClaudeModels(ClaudeProvider.getModels());
-          console.log('[ModelRegistry] Claude models:', models);
+          // console.log('[ModelRegistry] Claude models:', models);
           break;
         case 'claude-code':
           // Use SDK version with dynamic loading

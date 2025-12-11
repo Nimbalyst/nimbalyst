@@ -2463,7 +2463,7 @@ export class AIService {
 
     // Get ALL available models for configuration UI
     ipcMain.handle('ai:getAllModels', async () => {
-      console.log('[AIService] ai:getAllModels called');
+      // console.log('[AIService] ai:getAllModels called');
 
       // Clear cache to get fresh models
       ModelRegistry.clearCache();
@@ -2471,11 +2471,11 @@ export class AIService {
       const providerSettings = this.getSettingsStore().get('providerSettings', {}) as Record<AIProviderType, any>;
       const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
 
-      console.log('[AIService] ai:getAllModels - API keys available:', {
-        anthropic: !!apiKeys['anthropic'],
-        openai: !!apiKeys['openai'],
-        lmstudio_url: apiKeys['lmstudio_url']
-      });
+      // console.log('[AIService] ai:getAllModels - API keys available:', {
+      //   anthropic: !!apiKeys['anthropic'],
+      //   openai: !!apiKeys['openai'],
+      //   lmstudio_url: apiKeys['lmstudio_url']
+      // });
 
       // Get all models - pass provider settings for LMStudio URL
       const modelsConfig = {
@@ -2571,7 +2571,7 @@ export class AIService {
         ...apiKeys,
         lmstudio_url: providerSettings['lmstudio']?.baseUrl || 'http://127.0.0.1:8234'
       };
-      console.log('[AIService] ai:getModels - calling ModelRegistry.getAllModels');
+      // console.log('[AIService] ai:getModels - calling ModelRegistry.getAllModels');
       const allModels = await ModelRegistry.getAllModels(modelsConfig);
 
       // Log claude-code models specifically
