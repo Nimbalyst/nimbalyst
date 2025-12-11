@@ -1154,6 +1154,97 @@
   cursor: pointer;
 }
 
+/* ========================================
+   Allowed Tools Section (Claude Code Panel)
+   ======================================== */
+
+.tools-selection {
+  margin-top: 16px;
+}
+
+.tools-header {
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.tools-categories {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.tool-category {
+  background: var(--surface-secondary);
+  border-radius: 8px;
+  padding: 16px;
+  border: 1px solid var(--border-primary);
+}
+
+.tool-category-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.tool-category-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.tool-category-description {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-left: 24px;
+}
+
+.tool-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 8px;
+}
+
+.tool-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.tool-checkbox:hover {
+  background: var(--surface-hover);
+}
+
+.tool-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  cursor: pointer;
+  accent-color: var(--accent-primary);
+  flex-shrink: 0;
+}
+
+.tool-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  margin-right: 8px;
+}
+
+.tool-description {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
 /* Progress Modal */
 .installation-progress-modal {
   position: fixed;
