@@ -446,30 +446,6 @@ export class PGLiteDatabaseWorker {
   }
 
   /**
-   * Start the PostgreSQL protocol server in the worker
-   */
-  async startProtocolServer(): Promise<{ port: number; host: string; message: string }> {
-    if (!this.initialized) {
-      throw new Error('Database not initialized. Call initialize() first.');
-    }
-    return await this.sendMessage('startProtocolServer');
-  }
-
-  /**
-   * Stop the PostgreSQL protocol server in the worker
-   */
-  async stopProtocolServer(): Promise<{ message: string }> {
-    return await this.sendMessage('stopProtocolServer');
-  }
-
-  /**
-   * Get the protocol server status from the worker
-   */
-  async getProtocolServerStatus(): Promise<{ running: boolean; port: number | null; host: string | null }> {
-    return await this.sendMessage('getProtocolServerStatus');
-  }
-
-  /**
    * Verify a backup database
    */
   async verifyBackup(backupPath: string): Promise<{ valid: boolean; error?: string }> {

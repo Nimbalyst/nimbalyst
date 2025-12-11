@@ -82,7 +82,6 @@ export function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardShortcutsDi
         { label: 'Toggle Developer Tools', shortcut: KeyboardShortcuts.view.toggleDevTools },
         { label: 'Reload', shortcut: KeyboardShortcuts.view.reload },
         { label: 'Force Reload', shortcut: KeyboardShortcuts.view.forceReload },
-        { label: 'Toggle Debug Console', shortcut: KeyboardShortcuts.developer.toggleDebugConsole },
         { label: 'Refresh File Tree', shortcut: KeyboardShortcuts.developer.refreshFileTree },
       ],
     },

@@ -1111,17 +1111,6 @@ export async function createApplicationMenu() {
                 },
                 { type: 'separator' },
                 {
-                    label: 'Toggle Debug Console',
-                    accelerator: KeyboardShortcuts.developer.toggleDebugConsole,
-                    click: async () => {
-                        const focused = getFocusedWindow();
-                        if (focused) {
-                            focused.webContents.send('toggle-debug-console');
-                        }
-                    }
-                },
-                { type: 'separator' },
-                {
                     label: 'File Watcher Status',
                     click: async () => {
                         const focused = getFocusedWindow();
@@ -1224,131 +1213,14 @@ export async function createApplicationMenu() {
                         }
                     ]
                 },
-                { type: 'separator' },
-                // Database menu items - only show in development mode
                 ...(isDev ? [
                     { type: 'separator' },
                     {
-                        label: 'Start Database Server',
+                        label: 'Database Browser',
                         click: async () => {
-                            try {
-                                const { database } = await import('../database/initialize');
-                                const result = await database.startProtocolServer();
-
-                            const focused = getFocusedWindow();
-                            if (focused) {
-                                dialog.showMessageBox(focused, {
-                                    type: 'info',
-                                    title: 'Database Server Started',
-                                    message: result.message || 'Database server started successfully',
-                                    detail: `You can now connect using:\npsql -h ${result.host} -p ${result.port} -d pglite\n\nOr use any PostgreSQL client like pgAdmin, DataGrip, or TablePlus.\n\nNote: Only one connection at a time is supported.`,
-                                    buttons: ['OK']
-                                });
-                            }
-                        } catch (error) {
-                            const focused = getFocusedWindow();
-                            if (focused) {
-                                dialog.showMessageBox(focused, {
-                                    type: 'error',
-                                    title: 'Failed to Start Database Server',
-                                    message: error instanceof Error ? error.message : 'Failed to start database server',
-                                    buttons: ['OK']
-                                });
-                            }
+                            createDatabaseBrowserWindow();
                         }
                     }
-                },
-                {
-                    label: 'Stop Database Server',
-                    click: async () => {
-                        try {
-                            const { database } = await import('../database/initialize');
-                            const result = await database.stopProtocolServer();
-
-                            const focused = getFocusedWindow();
-                            if (focused) {
-                                dialog.showMessageBox(focused, {
-                                    type: 'info',
-                                    title: 'Database Server Stopped',
-                                    message: result.message || 'Database server stopped',
-                                    buttons: ['OK']
-                                });
-                            }
-                        } catch (error) {
-                            const focused = getFocusedWindow();
-                            if (focused) {
-                                dialog.showMessageBox(focused, {
-                                    type: 'error',
-                                    title: 'Error',
-                                    message: error instanceof Error ? error.message : 'Failed to stop database server',
-                                    buttons: ['OK']
-                                });
-                            }
-                        }
-                    }
-                },
-                {
-                    label: 'Database Connection Info',
-                    click: async () => {
-                        try {
-                            const { database } = await import('../database/initialize');
-                            const status = await database.getProtocolServerStatus();
-
-                            const focused = getFocusedWindow();
-                            if (focused) {
-                                if (status.running) {
-                                    const connectionString = `postgresql://${status.host}:${status.port}/pglite`;
-                                    dialog.showMessageBox(focused, {
-                                        type: 'info',
-                                        title: 'Database Connection Info',
-                                        message: 'PostgreSQL Protocol Server',
-                                        detail: `The database server is running and accepting connections.
-
-Connection Details:
-Host: ${status.host}
-Port: ${status.port}
-Database: pglite
-
-Connection String:
-${connectionString}
-
-You can connect using any PostgreSQL client:
-• psql -h ${status.host} -p ${status.port} -d pglite
-• pgAdmin, DataGrip, TablePlus, etc.
-
-Note: Only one connection at a time is supported.`,
-                                        buttons: ['OK']
-                                    });
-                                } else {
-                                    dialog.showMessageBox(focused, {
-                                        type: 'info',
-                                        title: 'Database Server Not Running',
-                                        message: 'The PostgreSQL protocol server is not running.',
-                                        detail: 'Start the server from Debug > Start Database Server first.',
-                                        buttons: ['OK']
-                                    });
-                                }
-                            }
-                        } catch (error) {
-                            const focused = getFocusedWindow();
-                            if (focused) {
-                                dialog.showMessageBox(focused, {
-                                    type: 'error',
-                                    title: 'Error',
-                                    message: error instanceof Error ? error.message : 'Failed to get server status',
-                                    buttons: ['OK']
-                                });
-                            }
-                        }
-                    }
-                },
-                { type: 'separator' },
-                {
-                    label: 'Database Browser',
-                    click: async () => {
-                        createDatabaseBrowserWindow();
-                    }
-                }
                 ] : [])
             ]
         }

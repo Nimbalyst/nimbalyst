@@ -79,7 +79,6 @@ export const KeyboardShortcuts = {
 
   // Developer Menu
   developer: {
-    toggleDebugConsole: 'Cmd+Shift+D',
     refreshFileTree: 'Cmd+Shift+F5'
   }
 } as const;

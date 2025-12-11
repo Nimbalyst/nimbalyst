@@ -85,7 +85,6 @@
     "zod": "^3.24.0"
   },
   "devDependencies": {
-    "@electric-sql/pglite-socket": "^0.0.19",
     "@electron/notarize": "^2.3.2",
     "@eslint/js": "^9.37.0",
     "@playwright/test": "^1.55.1",

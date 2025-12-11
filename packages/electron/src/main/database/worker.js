@@ -26,15 +26,12 @@
 
 const { parentPort, workerData } = require('worker_threads');
 const { PGlite } = require('@electric-sql/pglite');
-const { PGLiteSocketServer } = require('@electric-sql/pglite-socket');
 const path = require('path');
 
 class PGLiteWorker {
   constructor() {
     this.db = null;
     this.dataDir = path.join(workerData.userDataPath, 'pglite-db');
-    this.protocolServer = null;
-    this.protocolServerPort = 5433;
     console.log('[PGLite Worker] Worker thread instantiated, dataDir:', this.dataDir);
     this.setupMessageHandler();
   }
@@ -82,12 +79,6 @@ class PGLiteWorker {
         return await this.getStats(message);
       case 'verifyBackup':
         return await this.verifyBackup(message);
-      case 'startProtocolServer':
-        return await this.startProtocolServer(message);
-      case 'stopProtocolServer':
-        return await this.stopProtocolServer(message);
-      case 'getProtocolServerStatus':
-        return await this.getProtocolServerStatus(message);
       default:
         throw new Error(`Unknown message type: ${message.type}`);
     }
@@ -667,113 +658,6 @@ class PGLiteWorker {
         data: { valid: false, error: error.message || String(error) }
       };
     }
-  }
-
-  async startProtocolServer(message) {
-    try {
-      // Check if server is already running
-      if (this.protocolServer) {
-        return {
-          id: message.id,
-          success: false,
-          error: 'Protocol server is already running'
-        };
-      }
-
-      // Ensure database is initialized
-      if (!this.db) {
-        return {
-          id: message.id,
-          success: false,
-          error: 'Database must be initialized before starting protocol server'
-        };
-      }
-
-      // Try to start the server, incrementing port if needed
-      let attempts = 0;
-      const maxAttempts = 10;
-      let port = this.protocolServerPort;
-
-      while (attempts < maxAttempts) {
-        try {
-          this.protocolServer = new PGLiteSocketServer({
-            db: this.db,
-            port: port,
-            host: '127.0.0.1',
-            inspect: false  // Disable verbose protocol logging
-          });
-
-          await this.protocolServer.start();
-          this.protocolServerPort = port;
-
-          return {
-            id: message.id,
-            success: true,
-            data: {
-              port: port,
-              host: '127.0.0.1',
-              message: `PostgreSQL protocol server started on port ${port}`
-            }
-          };
-        } catch (error) {
-          if (error.code === 'EADDRINUSE') {
-            port++;
-            attempts++;
-          } else {
-            throw error;
-          }
-        }
-      }
-
-      throw new Error('Could not find an available port');
-    } catch (error) {
-      return {
-        id: message.id,
-        success: false,
-        error: error.message || String(error)
-      };
-    }
-  }
-
-  async stopProtocolServer(message) {
-    try {
-      if (!this.protocolServer) {
-        return {
-          id: message.id,
-          success: false,
-          error: 'Protocol server is not running'
-        };
-      }
-
-      await this.protocolServer.stop();
-      this.protocolServer = null;
-
-      return {
-        id: message.id,
-        success: true,
-        data: {
-          message: 'PostgreSQL protocol server stopped'
-        }
-      };
-    } catch (error) {
-      return {
-        id: message.id,
-        success: false,
-        error: error.message || String(error)
-      };
-    }
-  }
-
-  async getProtocolServerStatus(message) {
-    return {
-      id: message.id,
-      success: true,
-      data: {
-        running: !!this.protocolServer,
-        port: this.protocolServer ? this.protocolServerPort : null,
-        host: this.protocolServer ? '127.0.0.1' : null
-      }
-    };
   }
 }
 
