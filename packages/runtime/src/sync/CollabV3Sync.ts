@@ -119,7 +119,7 @@ interface SessionIndexEntry {
 /** Decrypted session index entry with required title - used for return values */
 type DecryptedSessionIndexEntry = Omit<SessionIndexEntry, 'title' | 'encrypted_title' | 'title_iv' | 'encryptedQueuedPrompts'> & {
   title: string;  // Required after decryption
-  queuedPrompts?: QueuedPrompt[];  // Decrypted queued prompts
+  queuedPrompts?: PlaintextQueuedPrompt[];  // Decrypted queued prompts
 };
 
 type ClientMessage =
@@ -414,7 +414,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
    * Apply any pending metadata updates for a session that was just cached.
    * This handles the case where isExecuting is pushed before the session is in the cache.
    */
-  function applyPendingMetadataUpdates(sessionId: string): void {
+  async function applyPendingMetadataUpdates(sessionId: string): Promise<void> {
     const pending = pendingMetadataUpdates.get(sessionId);
     if (!pending) return;
 
@@ -444,18 +444,30 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
     // Update cache with decrypted values
     sessionIndexCache.set(sessionId, updatedCache);
 
-    // Build wire entry - encrypt title if we have encryption key
+    // Build wire entry - DO NOT include plaintext title
     const indexEntry: SessionIndexEntry = {
-      ...updatedCache,
+      session_id: updatedCache.session_id,
+      project_id: updatedCache.project_id,
+      provider: updatedCache.provider,
+      model: updatedCache.model,
+      mode: updatedCache.mode,
+      message_count: updatedCache.message_count,
+      last_message_at: updatedCache.last_message_at,
+      created_at: updatedCache.created_at,
+      updated_at: updatedCache.updated_at,
+      pendingExecution: updatedCache.pendingExecution,
+      isExecuting: updatedCache.isExecuting,
     };
 
-    // For wire transmission, encrypt the title
-    if (updatedCache.title && config.encryptionKey) {
-      // Async encryption - we'll send synchronously with plaintext for now
-      // TODO: Consider making this async or using cached encrypted values
-      indexEntry.title = updatedCache.title; // Fallback to plaintext for pending updates
-    } else {
-      indexEntry.title = updatedCache.title;
+    // For wire transmission, encrypt the title - encryption is required
+    if (updatedCache.title) {
+      if (!config.encryptionKey) {
+        console.error('[CollabV3] Cannot send session title: no encryption key');
+      } else {
+        const { encrypted_title, title_iv } = await encryptTitle(updatedCache.title, config.encryptionKey);
+        indexEntry.encrypted_title = encrypted_title;
+        indexEntry.title_iv = title_iv;
+      }
     }
 
     // Send to server
@@ -970,7 +982,9 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
             //   'isExecuting:', decryptedEntry.isExecuting);
 
             // Apply any pending metadata updates that were waiting for this session
-            applyPendingMetadataUpdates(entry.session_id);
+            applyPendingMetadataUpdates(entry.session_id).catch(err => {
+              console.error('[CollabV3] Error applying pending metadata updates:', err);
+            });
 
             // Notify all index change listeners with decrypted data
             indexChangeListeners.forEach((callback) => {
@@ -1194,7 +1208,10 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       sessionIndexCache.set(session.id, cacheEntry);
 
       // Apply any pending metadata updates (e.g., isExecuting set before cache was populated)
-      applyPendingMetadataUpdates(session.id);
+      // Note: This is fire-and-forget since we're already sending the encrypted entry
+      applyPendingMetadataUpdates(session.id).catch(err => {
+        console.error('[CollabV3] Error applying pending metadata updates:', err);
+      });
 
       return entry;
     }));
