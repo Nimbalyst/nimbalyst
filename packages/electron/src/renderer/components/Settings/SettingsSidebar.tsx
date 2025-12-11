@@ -127,11 +127,6 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
           icon: <MaterialSymbol icon="package_2" size={16} />,
           badge: totalPackageCount > 0 ? `${installedPackageCount}/${totalPackageCount}` : undefined,
         },
-        {
-          id: 'mcp-servers',
-          name: 'MCP Servers',
-          icon: <MaterialSymbol icon="dns" size={16} />,
-        },
       ],
     },
     {
@@ -147,12 +142,13 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
   ];
 
   // Filter groups based on scope
-  // Project scope: Show Project group first, then AI Providers (for overrides)
+  // Project scope: Show Project group, AI Providers (for overrides), Extensions
   // User scope: Show AI Providers, Application, Extensions (not Project)
   const filteredGroups = scope === 'project'
     ? [
         categoryGroups.find(g => g.title === 'Project')!,
         categoryGroups.find(g => g.title === 'AI Providers')!,
+        categoryGroups.find(g => g.title === 'Extensions')!,
       ].filter(Boolean)
     : categoryGroups.filter(g => g.title !== 'Project');
 

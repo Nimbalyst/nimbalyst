@@ -65,6 +65,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   // Session naming MCP server port (injected from electron main process)
   private static sessionNamingServerPort: number | null = null;
 
+  // MCP config loader (injected from electron main process)
+  // Returns merged user + workspace MCP servers
+  private static mcpConfigLoader: ((workspacePath?: string) => Promise<Record<string, any>>) | null = null;
+
   static readonly DEFAULT_MODEL = 'claude-code:sonnet';
 
   /**
@@ -81,6 +85,15 @@ export class ClaudeCodeProvider extends BaseAIProvider {
    */
   public static setSessionNamingServerPort(port: number | null): void {
     ClaudeCodeProvider.sessionNamingServerPort = port;
+  }
+
+  /**
+   * Set the MCP config loader function (called from electron main process)
+   * This allows the runtime package to load merged user + workspace MCP configs
+   * without directly depending on electron code
+   */
+  public static setMCPConfigLoader(loader: ((workspacePath?: string) => Promise<Record<string, any>>) | null): void {
+    ClaudeCodeProvider.mcpConfigLoader = loader;
   }
 
   async initialize(config: ProviderConfig): Promise<void> {
@@ -1482,8 +1495,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   }
 
   private async getMcpServersConfig(sessionId?: string, workspacePath?: string) {
-    // Load MCP servers from .mcp.json in the workspace (if available)
-    // and merge with built-in MCP servers
+    // Load MCP servers from user config (~/.config/claude/mcp.json) and workspace config (.mcp.json)
+    // and merge with built-in Nimbalyst MCP servers
     const config: any = {};
 
     // Include shared MCP server if it's started (provides capture_mockup_screenshot tool)
@@ -1507,68 +1520,85 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       console.log('[CLAUDE-CODE] Session naming MCP server configured on port', ClaudeCodeProvider.sessionNamingServerPort, 'for session', sessionId);
     }
 
-    // Load user and workspace MCP servers from .mcp.json
-    if (workspacePath) {
+    // Load user and workspace MCP servers using the injected loader (if available)
+    // This merges user-level (global) servers with workspace-level servers
+    if (ClaudeCodeProvider.mcpConfigLoader) {
       try {
-        const fs = require('fs');
-        const path = require('path');
-        const mcpJsonPath = path.join(workspacePath, '.mcp.json');
+        const mergedServers = await ClaudeCodeProvider.mcpConfigLoader(workspacePath);
+        console.log('[CLAUDE-CODE] Loaded MCP servers from config loader:', Object.keys(mergedServers));
 
-        if (fs.existsSync(mcpJsonPath)) {
-          const mcpJsonContent = fs.readFileSync(mcpJsonPath, 'utf8');
-          const mcpConfig = JSON.parse(mcpJsonContent);
-
-          if (mcpConfig.mcpServers && typeof mcpConfig.mcpServers === 'object') {
-            // Process and merge workspace MCP servers with built-in servers
-            for (const [serverName, serverConfig] of Object.entries(mcpConfig.mcpServers)) {
-              const processedConfig = { ...serverConfig as any };
-
-              // For SSE transport, convert env vars to headers (SDK requirement)
-              if (processedConfig.type === 'sse' && processedConfig.env) {
-                // TODO: Debug logging - uncomment if needed for MCP SSE troubleshooting (CONTAINS SENSITIVE DATA)
-                // console.log(`[CLAUDE-CODE] Processing SSE server "${serverName}", converting env to headers`);
-                processedConfig.headers = processedConfig.headers || {};
-
-                // Convert API keys from env to Authorization headers
-                for (const [key, value] of Object.entries(processedConfig.env)) {
-                  if (key.endsWith('_API_KEY')) {
-                    // TODO: Debug logging - uncomment if needed (LOGS API KEY FRAGMENTS - SECURITY RISK)
-                    // console.log(`[CLAUDE-CODE] Found API key: ${key}, value starts with:`, value.substring(0, 10));
-                    // Expand environment variable if needed
-                    const expandedValue = this.expandEnvVar(value as string, process.env as Record<string, string | undefined>);
-                    // TODO: Debug logging - uncomment if needed (LOGS API KEY FRAGMENTS - SECURITY RISK)
-                    // console.log(`[CLAUDE-CODE] Expanded value starts with:`, expandedValue.substring(0, 10));
-                    if (expandedValue && !expandedValue.startsWith('${')) {
-                      processedConfig.headers['Authorization'] = `Bearer ${expandedValue}`;
-                      // TODO: Debug logging - uncomment if needed for MCP SSE troubleshooting
-                      // console.log(`[CLAUDE-CODE] Converted ${key} to Authorization header for SSE server "${serverName}"`);
-                    } else {
-                      // TODO: Debug logging - uncomment if needed for MCP SSE troubleshooting
-                      // console.log(`[CLAUDE-CODE] Skipped ${key} - unexpanded or empty`);
-                    }
-                  }
-                }
-
-                // Remove env from SSE config (not used for SSE transport)
-                delete processedConfig.env;
-                // TODO: Debug logging - uncomment if needed (CONTAINS AUTHORIZATION HEADERS - SECURITY RISK)
-                // console.log(`[CLAUDE-CODE] Removed env field, headers:`, JSON.stringify(processedConfig.headers));
-              }
-
-              config[serverName] = processedConfig;
-              // TODO: Debug logging - uncomment if needed (MAY CONTAIN SENSITIVE CONFIG - SECURITY RISK)
-              // console.log(`[CLAUDE-CODE] Loaded MCP server "${serverName}":`, JSON.stringify(processedConfig));
-            }
-            // TODO: Debug logging - uncomment if needed for MCP troubleshooting
-            // console.log('[CLAUDE-CODE] Loaded MCP servers from .mcp.json:', Object.keys(mcpConfig.mcpServers));
-          }
+        // Process each server config
+        for (const [serverName, serverConfig] of Object.entries(mergedServers)) {
+          const processedConfig = this.processServerConfig(serverName, serverConfig as any);
+          config[serverName] = processedConfig;
         }
       } catch (error) {
-        console.error('[CLAUDE-CODE] Failed to load .mcp.json:', error);
+        console.error('[CLAUDE-CODE] Failed to load MCP servers from config loader:', error);
+        // Fall back to workspace-only loading
+        await this.loadWorkspaceMcpServers(workspacePath, config);
       }
+    } else {
+      // Fallback: Load from workspace .mcp.json only (legacy behavior)
+      await this.loadWorkspaceMcpServers(workspacePath, config);
     }
 
     return config;
+  }
+
+  /**
+   * Process a single MCP server config, converting env vars to headers for SSE transport
+   */
+  private processServerConfig(serverName: string, serverConfig: any): any {
+    const processedConfig = { ...serverConfig };
+
+    // For SSE transport, convert env vars to headers (SDK requirement)
+    if (processedConfig.type === 'sse' && processedConfig.env) {
+      processedConfig.headers = processedConfig.headers || {};
+
+      // Convert API keys from env to Authorization headers
+      for (const [key, value] of Object.entries(processedConfig.env)) {
+        if (key.endsWith('_API_KEY')) {
+          // Expand environment variable if needed
+          const expandedValue = this.expandEnvVar(value as string, process.env as Record<string, string | undefined>);
+          if (expandedValue && !expandedValue.startsWith('${')) {
+            processedConfig.headers['Authorization'] = `Bearer ${expandedValue}`;
+          }
+        }
+      }
+
+      // Remove env from SSE config (not used for SSE transport)
+      delete processedConfig.env;
+    }
+
+    return processedConfig;
+  }
+
+  /**
+   * Load MCP servers from workspace .mcp.json only (legacy fallback)
+   */
+  private async loadWorkspaceMcpServers(workspacePath: string | undefined, config: any): Promise<void> {
+    if (!workspacePath) return;
+
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const mcpJsonPath = path.join(workspacePath, '.mcp.json');
+
+      if (fs.existsSync(mcpJsonPath)) {
+        const mcpJsonContent = fs.readFileSync(mcpJsonPath, 'utf8');
+        const mcpConfig = JSON.parse(mcpJsonContent);
+
+        if (mcpConfig.mcpServers && typeof mcpConfig.mcpServers === 'object') {
+          // Process and merge workspace MCP servers with built-in servers
+          for (const [serverName, serverConfig] of Object.entries(mcpConfig.mcpServers)) {
+            const processedConfig = this.processServerConfig(serverName, serverConfig as any);
+            config[serverName] = processedConfig;
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[CLAUDE-CODE] Failed to load .mcp.json:', error);
+    }
   }
 
   /**

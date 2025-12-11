@@ -42,6 +42,7 @@ import {
     updateWorkspaceState
 } from './utils/store';
 import { registerMCPConfigHandlers } from './ipc/MCPConfigHandlers';
+import { MCPConfigService } from './services/MCPConfigService';
 import { registerDatabaseBrowserHandlers } from './ipc/DatabaseBrowserHandlers';
 import { AIService } from './services/ai/AIService';
 import { detectFileWorkspace, suggestWorkspaceForFile } from './utils/workspaceDetection';
@@ -423,6 +424,14 @@ app.whenReady().then(async () => {
     registerGitStatusHandlers();
     registerMCPConfigHandlers();
     registerDatabaseBrowserHandlers();
+
+    // Inject MCP config loader into ClaudeCodeProvider
+    // This allows the runtime package to load merged user + workspace MCP configs
+    const mcpConfigService = new MCPConfigService();
+    ClaudeCodeProvider.setMCPConfigLoader(async (workspacePath?: string) => {
+        const mergedConfig = await mcpConfigService.getMergedConfig(workspacePath);
+        return mergedConfig.mcpServers || {};
+    });
     registerMockupHandlers();
 
     // Initialize AI service

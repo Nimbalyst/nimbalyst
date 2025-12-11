@@ -472,11 +472,10 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
           }}
         />;
       case 'mcp-servers':
-        // When in project scope, default to workspace mode with current workspace
         return (
           <MCPServersPanel
-            defaultScope={scope === 'project' ? 'workspace' : 'user'}
-            workspacePath={scope === 'project' && workspacePath ? workspacePath : undefined}
+            scope={scope === 'project' ? 'workspace' : 'user'}
+            workspacePath={scope === 'project' ? workspacePath : undefined}
           />
         );
       case 'sync':

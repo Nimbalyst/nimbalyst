@@ -456,3 +456,21 @@
 .mcp-edit-button:hover {
   opacity: 0.9;
 }
+
+.mcp-save-status {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-left: auto;
+}
+
+.mcp-save-status.saving {
+  color: var(--text-secondary);
+}
+
+.mcp-save-status.saved {
+  color: #27ae60;
+}
+
+.mcp-save-status.error {
+  color: #e74c3c;
+}

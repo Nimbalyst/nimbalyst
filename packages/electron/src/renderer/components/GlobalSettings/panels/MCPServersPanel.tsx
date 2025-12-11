@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { getFileName } from '../../../utils/pathUtils';
 import './MCPServersPanel.css';
 
 interface MCPServerConfig {
@@ -132,22 +131,19 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
 ];
 
 interface MCPServersPanelProps {
-  /** Default scope to show (user or workspace). Defaults to 'user'. */
-  defaultScope?: 'user' | 'workspace';
-  /** If provided, pre-select this workspace path when in workspace scope. */
+  /** Scope for MCP config: 'user' for global, 'workspace' for project-specific. */
+  scope?: 'user' | 'workspace';
+  /** Workspace path required when scope is 'workspace'. */
   workspacePath?: string;
 }
 
-export function MCPServersPanel({ defaultScope = 'user', workspacePath: propWorkspacePath }: MCPServersPanelProps = {}) {
+export function MCPServersPanel({ scope = 'user', workspacePath }: MCPServersPanelProps = {}) {
   const [servers, setServers] = useState<MCPServerWithName[]>([]);
   const [selectedServer, setSelectedServer] = useState<MCPServerWithName | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
+  const [isNewServer, setIsNewServer] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [workspacePath, setWorkspacePath] = useState<string | null>(propWorkspacePath || null);
-  const [configScope, setConfigScope] = useState<'user' | 'workspace'>(defaultScope);
-  const [availableProjects, setAvailableProjects] = useState<Array<{ path: string; name: string }>>([]);
-  const [selectedProjectPath, setSelectedProjectPath] = useState<string | null>(propWorkspacePath || null);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
   // Form state
   const [formName, setFormName] = useState('');
@@ -160,42 +156,10 @@ export function MCPServersPanel({ defaultScope = 'user', workspacePath: propWork
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [testMessage, setTestMessage] = useState<string>('');
 
-  useEffect(() => {
-    // Get current workspace and recent projects
-    const loadProjects = async () => {
-      try {
-        // Get current workspace
-        const workspace = await window.electronAPI.invoke('workspace:get-current');
-        const currentPath = workspace?.path || null;
-        setWorkspacePath(currentPath);
-
-        // Get recent projects from settings
-        const recentProjects = await window.electronAPI.invoke('settings:get-recent-projects');
-        if (recentProjects && Array.isArray(recentProjects)) {
-          const projects = recentProjects.map((p: any) => ({
-            path: typeof p === 'string' ? p : p.path,
-            name: typeof p === 'string' ? getFileName(p) : (p.name || getFileName(p.path))
-          }));
-          setAvailableProjects(projects);
-
-          // Pre-select current workspace or most recent project
-          if (currentPath) {
-            setSelectedProjectPath(currentPath);
-          } else if (projects.length > 0) {
-            setSelectedProjectPath(projects[0].path);
-          }
-        }
-      } catch (err) {
-        console.error('Failed to load projects:', err);
-      }
-    };
-    loadProjects();
-  }, []);
-
-  // Reload servers when scope or selected project changes
+  // Reload servers when scope or workspace path changes
   useEffect(() => {
     loadServers();
-  }, [configScope, selectedProjectPath]);
+  }, [scope, workspacePath]);
 
   const loadServers = async () => {
     try {
@@ -203,8 +167,8 @@ export function MCPServersPanel({ defaultScope = 'user', workspacePath: propWork
       setError(null);
 
       // Load from the appropriate scope
-      const config: MCPConfig = configScope === 'workspace' && selectedProjectPath
-        ? await window.electronAPI.invoke('mcp-config:read-workspace', selectedProjectPath)
+      const config: MCPConfig = scope === 'workspace' && workspacePath
+        ? await window.electronAPI.invoke('mcp-config:read-workspace', workspacePath)
         : await window.electronAPI.invoke('mcp-config:read-user');
 
       const serverList: MCPServerWithName[] = Object.entries(config.mcpServers || {}).map(
@@ -225,7 +189,8 @@ export function MCPServersPanel({ defaultScope = 'user', workspacePath: propWork
 
   const handleServerSelect = (server: MCPServerWithName) => {
     setSelectedServer(server);
-    setIsEditing(false);
+    setIsNewServer(false);
+    setSaveStatus('idle');
 
     // Populate form
     setFormName(server.name);
@@ -236,11 +201,13 @@ export function MCPServersPanel({ defaultScope = 'user', workspacePath: propWork
     setFormEnv(
       Object.entries(server.env || {}).map(([key, value]) => ({ key, value }))
     );
+    setSelectedTemplateId(null);
   };
 
   const handleNewServer = () => {
     setSelectedServer(null);
-    setIsEditing(true);
+    setIsNewServer(true);
+    setSaveStatus('idle');
 
     // Clear form
     setFormName('');
@@ -249,6 +216,7 @@ export function MCPServersPanel({ defaultScope = 'user', workspacePath: propWork
     setFormUrl('');
     setFormArgs([]);
     setFormEnv([]);
+    setSelectedTemplateId(null);
   };
 
   const handleTemplateSelect = (templateId: string) => {
@@ -272,58 +240,23 @@ export function MCPServersPanel({ defaultScope = 'user', workspacePath: propWork
     setSelectedTemplateId(templateId);
   };
 
-  const handleEdit = () => {
-    setIsEditing(true);
-  };
+  // Auto-save function - called on blur from form fields
+  const autoSave = async () => {
+    // Don't save if form is incomplete
+    if (!formName.trim()) return;
 
-  const handleCancel = () => {
-    if (selectedServer) {
-      // Restore form to selected server
-      setFormName(selectedServer.name);
-      setFormType(selectedServer.type || 'stdio');
-      setFormCommand(selectedServer.command || '');
-      setFormUrl(selectedServer.url || '');
-      setFormArgs(selectedServer.args || []);
-      setFormEnv(
-        Object.entries(selectedServer.env || {}).map(([key, value]) => ({ key, value }))
-      );
-    } else {
-      // Clear form
-      setFormName('');
-      setFormType('stdio');
-      setFormCommand('');
-      setFormUrl('');
-      setFormArgs([]);
-      setFormEnv([]);
-    }
-    setIsEditing(false);
-  };
+    // Validate based on transport type
+    if (formType === 'stdio' && !formCommand.trim()) return;
+    if (formType === 'sse' && !formUrl.trim()) return;
 
-  const handleSave = async () => {
     try {
-      if (!formName.trim()) {
-        alert('Server name is required');
-        return;
-      }
-
-      // Validate based on transport type
-      if (formType === 'stdio') {
-        if (!formCommand.trim()) {
-          alert('Command is required for stdio transport');
-          return;
-        }
-      } else if (formType === 'sse') {
-        if (!formUrl.trim()) {
-          alert('URL is required for SSE transport');
-          return;
-        }
-      }
+      setSaveStatus('saving');
 
       // Build server config based on type
       const serverConfig: MCPServerConfig = {
         type: formType,
         env: Object.fromEntries(
-          formEnv.filter(({ key, value }) => key.trim()).map(({ key, value }) => [key.trim(), value])
+          formEnv.filter(({ key }) => key.trim()).map(({ key, value }) => [key.trim(), value])
         )
       };
 
@@ -345,8 +278,8 @@ export function MCPServersPanel({ defaultScope = 'user', workspacePath: propWork
       }
 
       // Build new config - read from the appropriate scope
-      const config: MCPConfig = configScope === 'workspace' && selectedProjectPath
-        ? await window.electronAPI.invoke('mcp-config:read-workspace', selectedProjectPath)
+      const config: MCPConfig = scope === 'workspace' && workspacePath
+        ? await window.electronAPI.invoke('mcp-config:read-workspace', workspacePath)
         : await window.electronAPI.invoke('mcp-config:read-user');
 
       // If renaming, delete old entry
@@ -359,30 +292,35 @@ export function MCPServersPanel({ defaultScope = 'user', workspacePath: propWork
       // Validate
       const validation = await window.electronAPI.invoke('mcp-config:validate', config);
       if (!validation.valid) {
-        alert(`Invalid configuration: ${validation.error}`);
+        setSaveStatus('error');
         return;
       }
 
       // Save to the appropriate scope
-      const result = configScope === 'workspace' && selectedProjectPath
-        ? await window.electronAPI.invoke('mcp-config:write-workspace', selectedProjectPath, config)
+      const result = scope === 'workspace' && workspacePath
+        ? await window.electronAPI.invoke('mcp-config:write-workspace', workspacePath, config)
         : await window.electronAPI.invoke('mcp-config:write-user', config);
+
       if (!result.success) {
-        alert(`Failed to save: ${result.error}`);
+        setSaveStatus('error');
         return;
       }
 
-      // Reload and select the saved server
+      // Reload servers list and update selected server
       await loadServers();
       const savedServer = {
         name: formName.trim(),
         ...serverConfig
       };
       setSelectedServer(savedServer);
-      setIsEditing(false);
+      setIsNewServer(false);
+      setSaveStatus('saved');
+
+      // Reset status after a delay
+      setTimeout(() => setSaveStatus('idle'), 2000);
     } catch (err: any) {
       console.error('Failed to save server:', err);
-      alert(`Error: ${err.message || 'Failed to save server'}`);
+      setSaveStatus('error');
     }
   };
 
@@ -395,14 +333,14 @@ export function MCPServersPanel({ defaultScope = 'user', workspacePath: propWork
 
     try {
       // Delete from the appropriate scope
-      const config: MCPConfig = configScope === 'workspace' && selectedProjectPath
-        ? await window.electronAPI.invoke('mcp-config:read-workspace', selectedProjectPath)
+      const config: MCPConfig = scope === 'workspace' && workspacePath
+        ? await window.electronAPI.invoke('mcp-config:read-workspace', workspacePath)
         : await window.electronAPI.invoke('mcp-config:read-user');
 
       delete config.mcpServers[selectedServer.name];
 
-      const result = configScope === 'workspace' && selectedProjectPath
-        ? await window.electronAPI.invoke('mcp-config:write-workspace', selectedProjectPath, config)
+      const result = scope === 'workspace' && workspacePath
+        ? await window.electronAPI.invoke('mcp-config:write-workspace', workspacePath, config)
         : await window.electronAPI.invoke('mcp-config:write-user', config);
       if (!result.success) {
         alert(`Failed to delete: ${result.error}`);
@@ -411,7 +349,7 @@ export function MCPServersPanel({ defaultScope = 'user', workspacePath: propWork
 
       await loadServers();
       setSelectedServer(null);
-      setIsEditing(false);
+      setIsNewServer(false);
     } catch (err: any) {
       console.error('Failed to delete server:', err);
       alert(`Error: ${err.message || 'Failed to delete server'}`);
@@ -518,53 +456,10 @@ export function MCPServersPanel({ defaultScope = 'user', workspacePath: propWork
       <div className="provider-panel-header">
         <h3 className="provider-panel-title">MCP Servers</h3>
         <p className="provider-panel-description">
-          Configure Model Context Protocol (MCP) servers for Claude Agent.
+          {scope === 'user'
+            ? 'Configure global MCP servers available in all projects.'
+            : 'Configure project-specific MCP servers (saved to .mcp.json).'}
         </p>
-      </div>
-
-      <div className="mcp-scope-selector">
-        <label>Configuration Scope:</label>
-        <div className="mcp-scope-buttons">
-          <button
-            className={`mcp-scope-button ${configScope === 'user' ? 'active' : ''}`}
-            onClick={() => setConfigScope('user')}
-          >
-            User (Global)
-          </button>
-          <button
-            className={`mcp-scope-button ${configScope === 'workspace' ? 'active' : ''}`}
-            onClick={() => setConfigScope('workspace')}
-            disabled={availableProjects.length === 0}
-          >
-            Workspace (Project)
-          </button>
-        </div>
-
-        {configScope === 'workspace' && availableProjects.length > 0 && (
-          <div className="mcp-project-selector">
-            <label>Project:</label>
-            <select
-              value={selectedProjectPath || ''}
-              onChange={(e) => setSelectedProjectPath(e.target.value)}
-              className="mcp-project-select"
-            >
-              {availableProjects.map((project) => (
-                <option key={project.path} value={project.path}>
-                  {project.name}
-                  {project.path === workspacePath && ' (current)'}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        <div className="mcp-scope-hint">
-          {configScope === 'user'
-            ? 'Global servers available in all projects'
-            : availableProjects.length === 0
-            ? 'No projects available. Open a workspace to configure project-specific servers.'
-            : 'Project-specific servers (saved to .mcp.json)'}
-        </div>
       </div>
 
       <div className="mcp-servers-container">
@@ -593,13 +488,13 @@ export function MCPServersPanel({ defaultScope = 'user', workspacePath: propWork
         </div>
 
         <div className="mcp-server-details">
-          {!selectedServer && !isEditing ? (
+          {!selectedServer && !isNewServer ? (
             <div className="mcp-no-selection">
               Select a server or create a new one
             </div>
           ) : (
             <div className="mcp-server-form">
-              {isEditing && !selectedServer && (
+              {isNewServer && (
                 <>
                   <div className="mcp-form-group">
                     <label>Start from Template</label>
@@ -639,7 +534,7 @@ export function MCPServersPanel({ defaultScope = 'user', workspacePath: propWork
                   type="text"
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
-                  disabled={!isEditing}
+                  onBlur={autoSave}
                   placeholder="my-server"
                 />
               </div>
@@ -648,8 +543,11 @@ export function MCPServersPanel({ defaultScope = 'user', workspacePath: propWork
                 <label>Transport Type</label>
                 <select
                   value={formType}
-                  onChange={(e) => setFormType(e.target.value as 'stdio' | 'sse')}
-                  disabled={!isEditing}
+                  onChange={(e) => {
+                    setFormType(e.target.value as 'stdio' | 'sse');
+                    // Auto-save after type change
+                    setTimeout(autoSave, 0);
+                  }}
                   className="mcp-type-select"
                 >
                   <option value="stdio">stdio (Local executable)</option>
@@ -671,7 +569,7 @@ export function MCPServersPanel({ defaultScope = 'user', workspacePath: propWork
                         type="text"
                         value={formCommand}
                         onChange={(e) => setFormCommand(e.target.value)}
-                        disabled={!isEditing}
+                        onBlur={autoSave}
                         placeholder="/path/to/server or npx @modelcontextprotocol/server-name"
                         className="mcp-command-input"
                       />
@@ -701,17 +599,13 @@ export function MCPServersPanel({ defaultScope = 'user', workspacePath: propWork
                           type="text"
                           value={arg}
                           onChange={(e) => updateArg(index, e.target.value)}
-                          disabled={!isEditing}
+                          onBlur={autoSave}
                           placeholder="argument"
                         />
-                        {isEditing && (
-                          <button onClick={() => removeArg(index)} className="mcp-remove-button">×</button>
-                        )}
+                        <button onClick={() => { removeArg(index); setTimeout(autoSave, 0); }} className="mcp-remove-button">×</button>
                       </div>
                     ))}
-                    {isEditing && (
-                      <button onClick={addArg} className="mcp-add-button">+ Add Argument</button>
-                    )}
+                    <button onClick={addArg} className="mcp-add-button">+ Add Argument</button>
                   </div>
                 </>
               ) : (
@@ -722,7 +616,7 @@ export function MCPServersPanel({ defaultScope = 'user', workspacePath: propWork
                       type="url"
                       value={formUrl}
                       onChange={(e) => setFormUrl(e.target.value)}
-                      disabled={!isEditing}
+                      onBlur={autoSave}
                       placeholder="https://example.com/mcp/sse"
                       className="mcp-command-input"
                     />
@@ -753,7 +647,7 @@ export function MCPServersPanel({ defaultScope = 'user', workspacePath: propWork
                       type="text"
                       value={envVar.key}
                       onChange={(e) => updateEnvVar(index, 'key', e.target.value)}
-                      disabled={!isEditing}
+                      onBlur={autoSave}
                       placeholder="KEY"
                       className="mcp-env-key"
                     />
@@ -761,34 +655,25 @@ export function MCPServersPanel({ defaultScope = 'user', workspacePath: propWork
                       type="text"
                       value={envVar.value}
                       onChange={(e) => updateEnvVar(index, 'value', e.target.value)}
-                      disabled={!isEditing}
+                      onBlur={autoSave}
                       placeholder="value or ${'{VAR}'}"
                       className="mcp-env-value"
                     />
-                    {isEditing && (
-                      <button onClick={() => removeEnvVar(index)} className="mcp-remove-button">×</button>
-                    )}
+                    <button onClick={() => { removeEnvVar(index); setTimeout(autoSave, 0); }} className="mcp-remove-button">×</button>
                   </div>
                 ))}
-                {isEditing && (
-                  <button onClick={addEnvVar} className="mcp-add-button">+ Add Environment Variable</button>
-                )}
+                <button onClick={addEnvVar} className="mcp-add-button">+ Add Environment Variable</button>
               </div>
 
               <div className="mcp-form-actions">
-                {isEditing ? (
-                  <>
-                    <button onClick={handleCancel} className="mcp-cancel-button">Cancel</button>
-                    <button onClick={handleSave} className="mcp-save-button">Save</button>
-                  </>
-                ) : (
-                  <>
-                    {selectedServer && (
-                      <button onClick={handleDelete} className="mcp-delete-button">Delete</button>
-                    )}
-                    <button onClick={handleEdit} className="mcp-edit-button">Edit</button>
-                  </>
+                {selectedServer && (
+                  <button onClick={handleDelete} className="mcp-delete-button">Delete</button>
                 )}
+                <span className={`mcp-save-status ${saveStatus}`}>
+                  {saveStatus === 'saving' && 'Saving...'}
+                  {saveStatus === 'saved' && 'Saved'}
+                  {saveStatus === 'error' && 'Error saving'}
+                </span>
               </div>
             </div>
           )}
