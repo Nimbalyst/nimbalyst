@@ -1,0 +1,524 @@
+/**
+ * DatamodelLM Extension Styles
+ *
+ * Uses CSS variables from Nimbalyst's theme system for consistent styling.
+ * Falls back to reasonable defaults if variables are not available.
+ */
+
+/* ============================================================================
+   Editor Container
+   ============================================================================ */
+
+.datamodel-editor {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--surface-primary, #ffffff);
+  color: var(--text-primary, #333333);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.datamodel-canvas {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+}
+
+/* ============================================================================
+   Toolbar
+   ============================================================================ */
+
+.datamodel-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-primary, #e2e8f0);
+  background-color: var(--surface-secondary, #f8fafc);
+  flex-shrink: 0;
+}
+
+.datamodel-toolbar-left,
+.datamodel-toolbar-center,
+.datamodel-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.datamodel-toolbar-button {
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 6px;
+  border: 1px solid var(--border-primary, #e2e8f0);
+  background-color: var(--surface-primary, #ffffff);
+  color: var(--text-primary, #333333);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.datamodel-toolbar-button:hover {
+  background-color: var(--surface-hover, #f3f4f6);
+  border-color: var(--primary-color, #3b82f6);
+}
+
+.datamodel-toolbar-button-primary {
+  background-color: var(--primary-color, #3b82f6);
+  border-color: var(--primary-color, #3b82f6);
+  color: white;
+}
+
+.datamodel-toolbar-button-primary:hover {
+  background-color: #2563eb;
+  border-color: #2563eb;
+}
+
+.datamodel-toolbar-label {
+  font-size: 13px;
+  color: var(--text-secondary, #6b7280);
+  margin-right: 4px;
+}
+
+.datamodel-view-mode-group {
+  display: flex;
+  border-radius: 6px;
+  border: 1px solid var(--border-primary, #e2e8f0);
+  overflow: hidden;
+}
+
+.datamodel-view-mode-button {
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border: none;
+  border-right: 1px solid var(--border-primary, #e2e8f0);
+  background-color: var(--surface-primary, #ffffff);
+  color: var(--text-secondary, #6b7280);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.datamodel-view-mode-button:last-child {
+  border-right: none;
+}
+
+.datamodel-view-mode-button:hover {
+  background-color: var(--surface-hover, #f3f4f6);
+}
+
+.datamodel-view-mode-button.active {
+  background-color: var(--primary-color, #3b82f6);
+  color: white;
+}
+
+.datamodel-toolbar-stats {
+  font-size: 13px;
+  color: var(--text-secondary, #6b7280);
+}
+
+/* Dark theme toolbar */
+[data-theme="dark"] .datamodel-toolbar,
+[data-theme="crystal-dark"] .datamodel-toolbar {
+  background-color: var(--surface-secondary, #1e1e1e);
+  border-color: var(--border-primary, #404040);
+}
+
+[data-theme="dark"] .datamodel-toolbar-button,
+[data-theme="crystal-dark"] .datamodel-toolbar-button {
+  background-color: var(--surface-tertiary, #2d2d2d);
+  border-color: var(--border-primary, #404040);
+  color: var(--text-primary, #e5e5e5);
+}
+
+[data-theme="dark"] .datamodel-toolbar-button:hover,
+[data-theme="crystal-dark"] .datamodel-toolbar-button:hover {
+  background-color: var(--surface-hover, #3d3d3d);
+}
+
+[data-theme="dark"] .datamodel-view-mode-group,
+[data-theme="crystal-dark"] .datamodel-view-mode-group {
+  border-color: var(--border-primary, #404040);
+}
+
+[data-theme="dark"] .datamodel-view-mode-button,
+[data-theme="crystal-dark"] .datamodel-view-mode-button {
+  background-color: var(--surface-tertiary, #2d2d2d);
+  border-color: var(--border-primary, #404040);
+  color: var(--text-secondary, #9ca3af);
+}
+
+[data-theme="dark"] .datamodel-view-mode-button:hover,
+[data-theme="crystal-dark"] .datamodel-view-mode-button:hover {
+  background-color: var(--surface-hover, #3d3d3d);
+}
+
+/* ============================================================================
+   Entity Node
+   ============================================================================ */
+
+.datamodel-entity {
+  min-width: 250px;
+  max-width: 350px;
+  border-radius: 8px;
+  border: 1px solid var(--border-primary, #e2e8f0);
+  background-color: var(--surface-secondary, #ffffff);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+}
+
+.datamodel-entity-selected {
+  border-color: var(--primary-color, #3b82f6);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2), 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.datamodel-entity-hovered {
+  border-color: rgba(59, 130, 246, 0.5);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.datamodel-entity-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background-color: var(--primary-color, #3b82f6);
+  border-radius: 7px 7px 0 0;
+}
+
+.datamodel-entity-icon {
+  width: 16px;
+  height: 16px;
+  color: white;
+  flex-shrink: 0;
+}
+
+.datamodel-entity-name {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+  cursor: pointer;
+}
+
+.datamodel-entity-name:hover {
+  opacity: 0.9;
+}
+
+.datamodel-entity-name-input {
+  flex: 1;
+  padding: 2px 8px;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  border-radius: 4px;
+  background-color: white;
+  color: var(--primary-color, #3b82f6);
+}
+
+.datamodel-entity-name-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.5);
+}
+
+.datamodel-entity-fields {
+  padding: 0;
+}
+
+.datamodel-entity-empty {
+  padding: 24px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-tertiary, #9ca3af);
+}
+
+.datamodel-entity-description {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-secondary, #6b7280);
+  background-color: var(--surface-tertiary, #f9fafb);
+  border-top: 1px solid var(--border-primary, #e2e8f0);
+  border-radius: 0 0 7px 7px;
+}
+
+/* ============================================================================
+   Field Row
+   ============================================================================ */
+
+.datamodel-field-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-primary, #e2e8f0);
+  transition: background-color 0.15s ease;
+}
+
+.datamodel-field-row:last-child {
+  border-bottom: none;
+}
+
+.datamodel-field-row:hover {
+  background-color: var(--surface-hover, rgba(0, 0, 0, 0.03));
+}
+
+.datamodel-field-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.datamodel-field-name {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary, #333333);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+.datamodel-field-name:hover {
+  background-color: var(--surface-hover, rgba(0, 0, 0, 0.05));
+}
+
+.datamodel-field-type {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  color: var(--text-secondary, #6b7280);
+}
+
+.datamodel-field-input {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  padding: 2px 6px;
+  border: 1px solid var(--border-primary, #e2e8f0);
+  border-radius: 4px;
+  background-color: var(--surface-primary, #ffffff);
+  color: var(--text-primary, #333333);
+}
+
+.datamodel-field-input:focus {
+  outline: none;
+  border-color: var(--primary-color, #3b82f6);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.datamodel-field-input-type {
+  font-size: 12px;
+  width: 80px;
+}
+
+.datamodel-field-badges {
+  display: flex;
+  gap: 4px;
+}
+
+/* ============================================================================
+   Badges
+   ============================================================================ */
+
+.datamodel-badge {
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+
+.datamodel-badge-pk {
+  background-color: rgba(234, 179, 8, 0.2);
+  color: #b45309;
+}
+
+.datamodel-badge-fk {
+  background-color: rgba(59, 130, 246, 0.2);
+  color: #1d4ed8;
+}
+
+.datamodel-badge-id {
+  background-color: rgba(168, 85, 247, 0.2);
+  color: #7c3aed;
+}
+
+.datamodel-badge-arr {
+  background-color: rgba(34, 197, 94, 0.2);
+  color: #15803d;
+}
+
+/* Dark theme badge colors */
+[data-theme="dark"] .datamodel-badge-pk,
+[data-theme="crystal-dark"] .datamodel-badge-pk {
+  color: #fbbf24;
+}
+
+[data-theme="dark"] .datamodel-badge-fk,
+[data-theme="crystal-dark"] .datamodel-badge-fk {
+  color: #60a5fa;
+}
+
+[data-theme="dark"] .datamodel-badge-id,
+[data-theme="crystal-dark"] .datamodel-badge-id {
+  color: #c084fc;
+}
+
+[data-theme="dark"] .datamodel-badge-arr,
+[data-theme="crystal-dark"] .datamodel-badge-arr {
+  color: #4ade80;
+}
+
+/* ============================================================================
+   Handles
+   ============================================================================ */
+
+.datamodel-handle {
+  width: 8px !important;
+  height: 8px !important;
+  border: 2px solid var(--primary-color, #3b82f6) !important;
+  background-color: var(--surface-primary, #ffffff) !important;
+}
+
+.datamodel-handle-source {
+  border-color: #22c55e !important;
+}
+
+.datamodel-handle-invisible {
+  opacity: 0 !important;
+}
+
+/* ============================================================================
+   Edge Styles
+   ============================================================================ */
+
+.datamodel-edge {
+  transition: stroke 0.15s ease;
+}
+
+.datamodel-edge:hover {
+  stroke: var(--primary-color, #3b82f6) !important;
+}
+
+.datamodel-edge-label-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.datamodel-edge-label {
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  border: 1px solid var(--border-primary, #e2e8f0);
+  border-radius: 4px;
+  background-color: var(--surface-secondary, #ffffff);
+  color: var(--text-primary, #333333);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.datamodel-edge-label-selected {
+  border-color: var(--primary-color, #3b82f6);
+  background-color: var(--primary-color, #3b82f6);
+  color: white;
+}
+
+/* ============================================================================
+   React Flow Overrides
+   ============================================================================ */
+
+.datamodel-controls {
+  border-radius: 8px !important;
+  border: 1px solid var(--border-primary, #e2e8f0) !important;
+  background-color: var(--surface-secondary, #ffffff) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+}
+
+.datamodel-controls button {
+  border-bottom: 1px solid var(--border-primary, #e2e8f0) !important;
+  background-color: transparent !important;
+}
+
+.datamodel-controls button:hover {
+  background-color: var(--surface-hover, rgba(0, 0, 0, 0.05)) !important;
+}
+
+.datamodel-controls button svg {
+  fill: var(--text-secondary, #6b7280) !important;
+}
+
+.datamodel-minimap {
+  border-radius: 8px !important;
+  border: 1px solid var(--border-primary, #e2e8f0) !important;
+  background-color: var(--surface-secondary, #ffffff) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* ============================================================================
+   Dark Theme Overrides
+   ============================================================================ */
+
+[data-theme="dark"] .datamodel-editor,
+[data-theme="crystal-dark"] .datamodel-editor {
+  background-color: var(--surface-primary, #1a1a1a);
+  color: var(--text-primary, #e5e5e5);
+}
+
+[data-theme="dark"] .datamodel-entity,
+[data-theme="crystal-dark"] .datamodel-entity {
+  background-color: var(--surface-secondary, #2d2d2d);
+  border-color: var(--border-primary, #404040);
+}
+
+[data-theme="dark"] .datamodel-field-row,
+[data-theme="crystal-dark"] .datamodel-field-row {
+  border-color: var(--border-primary, #404040);
+}
+
+[data-theme="dark"] .datamodel-field-row:hover,
+[data-theme="crystal-dark"] .datamodel-field-row:hover {
+  background-color: var(--surface-hover, rgba(255, 255, 255, 0.05));
+}
+
+[data-theme="dark"] .datamodel-entity-description,
+[data-theme="crystal-dark"] .datamodel-entity-description {
+  background-color: var(--surface-tertiary, #252525);
+  border-color: var(--border-primary, #404040);
+}
+
+[data-theme="dark"] .datamodel-field-input,
+[data-theme="crystal-dark"] .datamodel-field-input {
+  background-color: var(--surface-tertiary, #252525);
+  border-color: var(--border-primary, #404040);
+  color: var(--text-primary, #e5e5e5);
+}
+
+[data-theme="dark"] .datamodel-edge-label,
+[data-theme="crystal-dark"] .datamodel-edge-label {
+  background-color: var(--surface-secondary, #2d2d2d);
+  border-color: var(--border-primary, #404040);
+  color: var(--text-primary, #e5e5e5);
+}
+
+[data-theme="dark"] .datamodel-controls,
+[data-theme="crystal-dark"] .datamodel-controls {
+  background-color: var(--surface-secondary, #2d2d2d) !important;
+  border-color: var(--border-primary, #404040) !important;
+}
+
+[data-theme="dark"] .datamodel-controls button,
+[data-theme="crystal-dark"] .datamodel-controls button {
+  border-color: var(--border-primary, #404040) !important;
+}
+
+[data-theme="dark"] .datamodel-controls button svg,
+[data-theme="crystal-dark"] .datamodel-controls button svg {
+  fill: var(--text-secondary, #9ca3af) !important;
+}
+
+[data-theme="dark"] .datamodel-minimap,
+[data-theme="crystal-dark"] .datamodel-minimap {
+  background-color: var(--surface-secondary, #2d2d2d) !important;
+  border-color: var(--border-primary, #404040) !important;
+}
