@@ -41,14 +41,17 @@ export class PGLiteDatabaseWorker {
   async initialize(): Promise<void> {
     // Return existing initialization if in progress
     if (this.initPromise) {
+      logger.main.info('[PGLite] initialize() called but initPromise already exists - returning existing promise');
       return this.initPromise;
     }
 
     // Already initialized
     if (this.initialized) {
+      logger.main.info('[PGLite] initialize() called but already initialized - returning immediately');
       return;
     }
 
+    logger.main.info('[PGLite] initialize() called - starting fresh initialization');
     this.initPromise = this.doInitialize();
     return this.initPromise;
   }
@@ -67,6 +70,12 @@ export class PGLiteDatabaseWorker {
     const userDataPath = process.env.PLAYWRIGHT === '1'
       ? path.join(app.getPath('temp'), 'nimbalyst-test-db')
       : app.getPath('userData');
+
+    logger.main.info('[PGLite] createWorker() called', {
+      existingWorker: !!this.worker,
+      workerPath,
+      userDataPath
+    });
 
     this.worker = new Worker(workerPath, {
       workerData: {

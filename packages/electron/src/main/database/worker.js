@@ -35,6 +35,7 @@ class PGLiteWorker {
     this.dataDir = path.join(workerData.userDataPath, 'pglite-db');
     this.protocolServer = null;
     this.protocolServerPort = 5433;
+    console.log('[PGLite Worker] Worker thread instantiated, dataDir:', this.dataDir);
     this.setupMessageHandler();
   }
 
@@ -93,7 +94,10 @@ class PGLiteWorker {
   }
 
   async initialize(message) {
+    console.log('[PGLite Worker] initialize() called, existing db:', !!this.db, 'dataDir:', this.dataDir);
+
     if (this.db) {
+      console.log('[PGLite Worker] Database already initialized - returning early');
       return {
         id: message.id,
         success: true,
@@ -106,6 +110,7 @@ class PGLiteWorker {
       const fs = require('fs');
       const parentDir = path.dirname(this.dataDir);
       if (!fs.existsSync(parentDir)) {
+        console.log('[PGLite Worker] Creating parent directory:', parentDir);
         fs.mkdirSync(parentDir, { recursive: true });
       }
 
@@ -133,13 +138,16 @@ class PGLiteWorker {
 
           // Create PGlite instance
           // Use file-based storage for persistent data
+          console.log('[PGLite Worker] Creating PGlite instance at:', this.dataDir);
           this.db = new PGlite({
             dataDir: this.dataDir,
             debug: 0  // Disable PGLite debug logging
           });
 
+          console.log('[PGLite Worker] PGlite instance created, waiting for ready...');
           // Wait for database to be ready
           await this.db.waitReady;
+          console.log('[PGLite Worker] PGlite is ready');
 
           // If we get here, initialization succeeded
           break;
