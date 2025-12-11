@@ -19,6 +19,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.48.0] - 2025-12-10
+
+### Added
+- Production deployment configuration for CollabV3 sync server at sync.nimbalyst.com
+
+### Changed
+- Disabled console logs in AIService and ModelRegistry for cleaner output
+
+### Fixed
+- Mobile app no longer lags when typing in chat input
+- Sync now connects automatically after app restart
+- Auto-updater now downloads latest version even if update window sat idle
+- Analytics: ai_session_resumed event no longer fires incorrectly on app startup
+
 ## [0.47.2] - 2025-12-10
 
 
