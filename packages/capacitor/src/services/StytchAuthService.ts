@@ -32,6 +32,7 @@ export interface StytchSession {
 }
 
 let cachedSession: StytchSession | null = null;
+let hasCheckedSession = false;
 let refreshPromise: Promise<boolean> | null = null;
 
 /**
@@ -43,14 +44,17 @@ export async function saveSession(session: StytchSession): Promise<void> {
     value: JSON.stringify(session),
   });
   cachedSession = session;
+  hasCheckedSession = true;
   console.log('[StytchAuth] Session saved securely for user:', session.email);
 }
 
 /**
  * Load Stytch session from secure storage.
+ * Results are cached to avoid repeated native calls.
  */
 export async function loadSession(): Promise<StytchSession | null> {
-  if (cachedSession) {
+  // Return cached result if we've already checked
+  if (hasCheckedSession) {
     return cachedSession;
   }
 
@@ -58,7 +62,6 @@ export async function loadSession(): Promise<StytchSession | null> {
     const { value } = await SecureStoragePlugin.get({ key: STYTCH_SESSION_KEY });
     if (value) {
       cachedSession = JSON.parse(value);
-      return cachedSession;
     }
   } catch (error) {
     // SecureStoragePlugin throws an error if the key doesn't exist
@@ -67,7 +70,9 @@ export async function loadSession(): Promise<StytchSession | null> {
       console.error('[StytchAuth] Failed to load session:', error);
     }
   }
-  return null;
+
+  hasCheckedSession = true;
+  return cachedSession;
 }
 
 /**
@@ -83,6 +88,7 @@ export async function clearSession(): Promise<void> {
     }
   }
   cachedSession = null;
+  hasCheckedSession = true; // Keep flag true since we know it's now cleared
   console.log('[StytchAuth] Session cleared');
 }
 
@@ -209,7 +215,8 @@ async function doRefreshSession(serverUrl: string): Promise<boolean> {
 
 /**
  * Start Google OAuth login flow.
- * Opens the browser to the server's OAuth endpoint.
+ * Opens the system browser (Safari) to the server's OAuth endpoint.
+ * Using the system browser allows users to use saved passwords/passkeys.
  */
 export async function startGoogleLogin(serverUrl: string): Promise<void> {
   // Convert ws:// to https:// for the login URL
@@ -217,10 +224,11 @@ export async function startGoogleLogin(serverUrl: string): Promise<void> {
 
   console.log('[StytchAuth] Starting Google login:', loginUrl);
 
-  // Open in-app browser
+  // Open in system browser (Safari) for better security and UX
+  // Users can use saved passwords, passkeys, and autofill
   await Browser.open({
     url: loginUrl,
-    presentationStyle: 'popover',
+    windowName: '_system',
   });
 }
 
@@ -300,8 +308,12 @@ export async function handleAuthCallback(url: string): Promise<boolean> {
 
     await saveSession(session);
 
-    // Close the browser
-    await Browser.close();
+    // Try to close the browser (may fail if using external browser for magic link)
+    try {
+      await Browser.close();
+    } catch {
+      // Ignore - browser may not be open (e.g., magic link from email app)
+    }
 
     console.log('[StytchAuth] Auth callback handled successfully for:', email);
     return true;

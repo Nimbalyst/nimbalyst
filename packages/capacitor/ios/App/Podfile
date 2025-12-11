@@ -25,4 +25,27 @@ end
 
 post_install do |installer|
   assertDeploymentTarget(installer)
+
+  # Disable code signing for pod frameworks to suppress Xcode warnings
+  # and disable script sandboxing to fix "Operation not permitted" errors
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      config.build_settings['CODE_SIGN_IDENTITY'] = ''
+      config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+    end
+  end
+
+  # Disable script sandboxing for all script phases (fixes "Operation not permitted")
+  installer.pods_project.targets.each do |target|
+    target.build_phases.each do |phase|
+      if phase.is_a?(Xcodeproj::Project::Object::PBXShellScriptBuildPhase)
+        phase.always_out_of_date = "1"
+      end
+    end
+  end
+
+  # Also set for the main project build settings
+  installer.pods_project.build_configurations.each do |config|
+    config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+  end
 end

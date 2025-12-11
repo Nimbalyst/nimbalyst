@@ -23,6 +23,7 @@ export interface SyncCredentials {
 const CREDENTIALS_KEY = 'nimbalyst_sync_credentials_v2';
 
 let cachedCredentials: SyncCredentials | null = null;
+let hasCheckedCredentials = false;
 
 /**
  * Save credentials from QR code scan to secure storage.
@@ -33,6 +34,7 @@ export async function saveCredentials(credentials: SyncCredentials): Promise<voi
     value: JSON.stringify(credentials),
   });
   cachedCredentials = credentials;
+  hasCheckedCredentials = true;
   console.log('[CredentialService] Credentials saved securely', {
     serverUrl: credentials.serverUrl,
   });
@@ -40,10 +42,11 @@ export async function saveCredentials(credentials: SyncCredentials): Promise<voi
 
 /**
  * Load credentials from secure storage.
+ * Results are cached to avoid repeated native calls.
  */
 export async function loadCredentials(): Promise<SyncCredentials | null> {
-  // Return cached if available
-  if (cachedCredentials) {
+  // Return cached result if we've already checked
+  if (hasCheckedCredentials) {
     return cachedCredentials;
   }
 
@@ -54,7 +57,6 @@ export async function loadCredentials(): Promise<SyncCredentials | null> {
       console.log('[CredentialService] Credentials loaded from secure storage', {
         serverUrl: cachedCredentials?.serverUrl,
       });
-      return cachedCredentials;
     }
   } catch (error) {
     // SecureStoragePlugin throws an error if the key doesn't exist
@@ -63,23 +65,18 @@ export async function loadCredentials(): Promise<SyncCredentials | null> {
       console.error('[CredentialService] Failed to load credentials:', error);
     }
   }
-  return null;
+
+  hasCheckedCredentials = true;
+  return cachedCredentials;
 }
 
 /**
  * Check if credentials exist (without loading full data).
  */
 export async function hasCredentials(): Promise<boolean> {
-  if (cachedCredentials) {
-    return true;
-  }
-  try {
-    await SecureStoragePlugin.get({ key: CREDENTIALS_KEY });
-    return true;
-  } catch {
-    // Key doesn't exist
-    return false;
-  }
+  // Use loadCredentials to leverage the cache
+  const creds = await loadCredentials();
+  return creds !== null;
 }
 
 /**
@@ -95,6 +92,7 @@ export async function clearCredentials(): Promise<void> {
     }
   }
   cachedCredentials = null;
+  hasCheckedCredentials = true; // Keep flag true since we know it's now cleared
   console.log('[CredentialService] Credentials cleared');
 }
 
