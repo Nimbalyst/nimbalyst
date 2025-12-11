@@ -40,7 +40,7 @@ export interface AgenticPanelProps {
   isActive?: boolean;
 
   // Callbacks for external coordination
-  onSessionChange?: (sessionId: string | null) => void;
+  onSessionChange?: (sessionId: string | null, sessionName?: string) => void;
   onContentModeChange?: (mode: string) => void; // Switch to files mode when opening a document
   onFileOpen?: (filePath: string) => Promise<void>; // Canonical file opening function from App
 }
@@ -591,7 +591,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         // console.log('[AgenticPanel] Agent mode: session already open, switching');
         setActiveTabId(sessionId);
         if (onSessionChange) {
-          onSessionChange(sessionId);
+          onSessionChange(sessionId, existingTab.name);
         }
         await markSessionAsRead(sessionId);
         return;
@@ -641,7 +641,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
         if (onSessionChange) {
           // console.log('[AgenticPanel] Calling onSessionChange with:', sessionData.id);
-          onSessionChange(sessionData.id);
+          onSessionChange(sessionData.id, tabName);
         }
 
         // Mark as read when opening a new session
@@ -676,7 +676,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         if (activeTabId === sessionId && filtered.length > 0) {
           setActiveTabId(filtered[0].id);
           if (onSessionChange) {
-            onSessionChange(filtered[0].id);
+            onSessionChange(filtered[0].id, filtered[0].name);
           }
         } else if (filtered.length === 0) {
           setActiveTabId(null);
@@ -700,7 +700,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       if (activeTabId === sessionId && filtered.length > 0) {
         setActiveTabId(filtered[0].id);
         if (onSessionChange) {
-          onSessionChange(filtered[0].id);
+          onSessionChange(filtered[0].id, filtered[0].name);
         }
       } else if (activeTabId === sessionId && filtered.length === 0) {
         setActiveTabId(null);
@@ -800,7 +800,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     }
 
     if (onSessionChange) {
-      onSessionChange(sessionData.id);
+      onSessionChange(sessionData.id, tabName);
     }
 
     // Focus the input after a brief delay to ensure the component is rendered
@@ -921,7 +921,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
               setActiveTabId(activeId);
 
               if (onSessionChange) {
-                onSessionChange(activeId);
+                const activeTab = restoredTabs.find(t => t.id === activeId);
+                onSessionChange(activeId, activeTab?.name);
               }
 
               setLoading(false);
@@ -950,7 +951,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                 setActiveTabId(sessionData.id);
 
                 if (onSessionChange) {
-                  onSessionChange(sessionData.id);
+                  onSessionChange(sessionData.id, tab.name);
                 }
 
                 setLoading(false);
@@ -984,7 +985,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             setActiveTabId(sessionData.id);
 
             if (onSessionChange) {
-              onSessionChange(sessionData.id);
+              onSessionChange(sessionData.id, tabName);
             }
           } else {
             setError('Failed to load session');
@@ -1172,6 +1173,12 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   }, [sessionTabs, openSessionInTab]);
 
   // Listen for session title updates (from automatic naming)
+  // Use ref for activeTabId to avoid stale closure in IPC handler
+  const activeTabIdRef = useRef(activeTabId);
+  useEffect(() => {
+    activeTabIdRef.current = activeTabId;
+  }, [activeTabId]);
+
   useEffect(() => {
     const handleSessionTitleUpdated = (data: { sessionId: string; title: string }) => {
       if (!data || !data.sessionId || !data.title) return;
@@ -1201,6 +1208,11 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
       // Update session history efficiently without database reload
       setRenamedSession({ id: data.sessionId, title: data.title });
+
+      // Update window title if this is the active session
+      if (data.sessionId === activeTabIdRef.current && onSessionChange) {
+        onSessionChange(data.sessionId, data.title);
+      }
     };
 
     const cleanup = window.electronAPI.on('session:title-updated', handleSessionTitleUpdated);
@@ -1208,7 +1220,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     return () => {
       cleanup?.();
     };
-  }, []);
+  }, [onSessionChange]);
 
   // Listen for queued prompts notification - triggers processing from the queued_prompts table
   // The actual prompts are fetched from the database, not from the IPC payload
@@ -1979,15 +1991,15 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // Tab management (agent mode only)
   const handleTabSelect = useCallback(async (tabId: string) => {
     setActiveTabId(tabId);
+    const tab = sessionTabs.find(t => t?.id === tabId);
     if (onSessionChange) {
-      onSessionChange(tabId);
+      onSessionChange(tabId, tab?.name);
     }
 
     // Mark the session as read when switching to it
     await markSessionAsRead(tabId);
 
     // Check for and process any queued prompts (from mobile)
-    const tab = sessionTabs.find(t => t?.id === tabId);
     if (tab && processQueuedPromptsRef.current) {
       // Use setTimeout to avoid blocking the tab switch
       setTimeout(() => {
@@ -2007,10 +2019,10 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     setSessionTabs(prev => {
       const filtered = prev.filter(t => t != null && t.id !== tabId);
       if (activeTabId === tabId && filtered.length > 0) {
-        const newActiveId = filtered[filtered.length - 1].id;
-        setActiveTabId(newActiveId);
+        const newActiveTab = filtered[filtered.length - 1];
+        setActiveTabId(newActiveTab.id);
         if (onSessionChange) {
-          onSessionChange(newActiveId);
+          onSessionChange(newActiveTab.id, newActiveTab.name);
         }
       } else if (filtered.length === 0) {
         setActiveTabId(null);
@@ -2105,6 +2117,11 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       return tab;
     }));
 
+    // Update window title if this is the active tab
+    if (tabId === activeTabId && onSessionChange) {
+      onSessionChange(tabId, newName);
+    }
+
     try {
       // Save to database
       await window.electronAPI.invoke('sessions:update-title', tabId, newName);
@@ -2122,7 +2139,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     } catch (err) {
       console.error('[AgenticPanel] Failed to update session title:', err);
     }
-  }, []);
+  }, [activeTabId, onSessionChange]);
 
   const reopenLastClosedSession = useCallback(async () => {
     if (closedSessions.length === 0) return;

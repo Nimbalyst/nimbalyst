@@ -237,8 +237,15 @@ export default function App() {
     setActiveModeRaw(mode);
   };
 
-  // Track active session ID for agent mode (needed for search routing)
+  // Track active session ID and name for agent mode (needed for search routing and window title)
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [activeSessionName, setActiveSessionName] = useState<string | undefined>(undefined);
+
+  // Combined handler for session changes from AgenticPanel
+  const handleSessionChange = useCallback((sessionId: string | null, sessionName?: string) => {
+    setActiveSessionId(sessionId);
+    setActiveSessionName(sessionName);
+  }, []);
 
   // Expose test helpers for testing
   useEffect(() => {
@@ -915,7 +922,10 @@ export default function App() {
 
     let title = 'Nimbalyst';
     if (workspaceMode && workspaceName) {
-      if (currentFileName) {
+      // In agent mode, show the session name instead of file name
+      if (activeMode === 'agent' && activeSessionName) {
+        title = `${activeSessionName} - ${workspaceName} - Nimbalyst`;
+      } else if (currentFileName) {
         title = `${currentFileName}${isDirty ? ' •' : ''} - ${workspaceName} - Nimbalyst`;
       } else {
         title = `${workspaceName} - Nimbalyst`;
@@ -925,8 +935,9 @@ export default function App() {
     }
 
     window.electronAPI.setTitle(title);
-    window.electronAPI.setDocumentEdited(isDirty);
-  }, [currentFileName, isDirty, workspaceMode, workspaceName]);
+    // Only show document edited indicator for files mode (not agent mode)
+    window.electronAPI.setDocumentEdited(activeMode !== 'agent' && isDirty);
+  }, [currentFileName, isDirty, workspaceMode, workspaceName, activeMode, activeSessionName]);
 
   // Create refs to hold current values without triggering re-setup of event listeners
   const isDirtyRefForKeyboard = useRef(isDirty);
@@ -1498,7 +1509,7 @@ export default function App() {
                   documentContext={documentContext}
                   planDocumentPath={agentPlanReference || undefined}
                   onContentModeChange={setActiveMode as (mode: string) => void}
-                  onSessionChange={setActiveSessionId}
+                  onSessionChange={handleSessionChange}
                   onFileOpen={handleWorkspaceFileSelect}
                   isActive={activeMode === 'agent'}
                 />
