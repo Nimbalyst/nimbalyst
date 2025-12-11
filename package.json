@@ -60,7 +60,8 @@
     "packages/core",
     "packages/rexical",
     "packages/collabv3",
-    "packages/capacitor"
+    "packages/capacitor",
+    "packages/extensions/*"
   ],
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.1.65",

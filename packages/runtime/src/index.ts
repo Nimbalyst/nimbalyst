@@ -97,3 +97,5 @@ export {
 export { default as MockupPlugin } from './plugins/MockupPlugin';
 // Config
 export { STYTCH_CONFIG, getStytchConfig } from './config/stytch';
+// Extensions
+export * from './extensions';

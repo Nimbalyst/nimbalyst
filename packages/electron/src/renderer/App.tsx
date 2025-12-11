@@ -43,6 +43,7 @@ import { registerTrackerPlugin } from './plugins/registerTrackerPlugin';
 import { registerDiffApprovalBarPlugin } from './plugins/registerDiffApprovalBarPlugin';
 import { registerSearchReplacePlugin } from './plugins/registerSearchReplacePlugin';
 import { registerMockupPlugin } from './plugins/registerMockupPlugin';
+import { registerExtensionSystem } from './plugins/registerExtensionSystem';
 import ProjectSettingsScreen from './components/ProjectSettingsScreen/ProjectSettingsScreen.tsx';
 import { SettingsView, type SettingsScope } from './components/Settings/SettingsView';
 import type { SettingsCategory } from './components/Settings/SettingsSidebar';
@@ -94,10 +95,13 @@ export default function App() {
   // console.log('[APP RENDER]', new Date().toISOString(), 'App component rendering');
   logger.ui.info('App component rendering');
 
-  // Register custom editors based on settings
+  // Register custom editors and extensions based on settings
   useEffect(() => {
     const registerCustomEditors = async () => {
       try {
+        // Initialize the extension system (discovers and loads extensions)
+        await registerExtensionSystem();
+        logger.ui.info('[Extensions] Extension system initialized');
 
         // Conditionally register MockupLM based on settings
         const mockupLMEnabled = await window.electronAPI.invoke('mockupLM:is-enabled');

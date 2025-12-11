@@ -414,7 +414,7 @@ import { Nimbalyst, type EditorConfig } from 'nimbalyst';
 
 ### Releasing
 
-See [RELEASING.md](RELEASING.md) for complete release process documentation.
+See [RELEASING.md](./RELEASING.md) for complete release process documentation.
 
 ## License
 

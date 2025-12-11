@@ -1,0 +1,34 @@
+{
+  "id": "com.nimbalyst.datamodellm",
+  "name": "DatamodelLM",
+  "version": "1.0.0",
+  "description": "AI-assisted data modeling with visual entity-relationship diagrams",
+  "author": "Nimbalyst",
+  "main": "dist/index.js",
+  "styles": "dist/index.css",
+  "apiVersion": "1.0.0",
+  "permissions": {
+    "filesystem": true,
+    "ai": true
+  },
+  "contributions": {
+    "customEditors": [
+      {
+        "filePatterns": ["*.datamodel"],
+        "displayName": "Data Model Editor",
+        "component": "DatamodelLMEditor"
+      }
+    ],
+    "aiTools": [
+      "datamodellm.create_entity",
+      "datamodellm.update_entity",
+      "datamodellm.delete_entity",
+      "datamodellm.create_relationship",
+      "datamodellm.update_relationship",
+      "datamodellm.delete_relationship"
+    ],
+    "fileIcons": {
+      "*.datamodel": "database"
+    }
+  }
+}
