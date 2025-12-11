@@ -19,6 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.48.1] - 2025-12-11
+
+### Changed
+- Added diagnostic logging for PGLite database initialization
+
+### Fixed
+- Show clear error message when attempting to open binary files (PDF, PPTX, etc.)
+
 ## [0.48.0] - 2025-12-10
 
 ### Added
