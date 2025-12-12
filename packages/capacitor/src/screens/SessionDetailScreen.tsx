@@ -547,17 +547,18 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
 
   return (
     <div className="flex flex-col h-screen">
-      {/* Header - Fixed */}
-      <header className="sticky top-0 z-10 flex items-center px-3 py-2 border-b border-[var(--border-primary)] bg-[var(--surface-secondary)]">
+      {/* Header - Fixed with safe area for notch */}
+      <header className="sticky top-0 z-10 flex items-center px-3 py-2 border-b border-[var(--border-primary)] bg-[var(--surface-secondary)] safe-area-top">
         {!hiddenBackButton && (
           <button
             onClick={() => navigate('/')}
-            className="mr-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            className="mr-2 p-1 text-[var(--text-primary)] active:opacity-70"
+            aria-label="Go back"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              width="20"
-              height="20"
+              width="24"
+              height="24"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -570,8 +571,8 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
           </button>
         )}
         <div className="flex-1 min-w-0">
-          <h1 className="text-base font-semibold truncate">{title}</h1>
-          <div className="flex items-center gap-1.5 text-xs text-[var(--text-tertiary)]">
+          <h1 className="text-base font-semibold truncate text-[var(--text-primary)]">{title}</h1>
+          <div className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
             {metadata.provider && <span>{metadata.provider}</span>}
             {metadata.model && <span>/ {metadata.model}</span>}
             <span className={`status-dot ${connected ? 'connected' : 'disconnected'}`} />
@@ -611,8 +612,8 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
         )}
       </main>
 
-      {/* AI Input - Fixed at bottom */}
-      <footer className="flex-shrink-0">
+      {/* AI Input - Fixed at bottom with safe area for home indicator */}
+      <footer className="flex-shrink-0 safe-area-bottom bg-[var(--surface-primary)]">
         <AIInput
           value={inputValue}
           onChange={handleInputChange}

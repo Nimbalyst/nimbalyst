@@ -206,17 +206,18 @@ export function SettingsScreen() {
 
   return (
     <div className="flex flex-col min-h-screen">
-      {/* Header */}
-      <header className="flex items-center px-4 py-3 border-b border-[var(--border-primary)] bg-[var(--surface-secondary)]">
+      {/* Header with safe area for notch */}
+      <header className="flex items-center px-4 py-3 border-b border-[var(--border-primary)] bg-[var(--surface-secondary)] safe-area-top">
         <button
           onClick={() => navigate('/')}
-          className="mr-3 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+          className="mr-3 p-1 text-[var(--text-primary)] active:opacity-70"
+          aria-label="Go back"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="m15 18-6-6 6-6"/>
           </svg>
         </button>
-        <h1 className="text-lg font-semibold">Settings</h1>
+        <h1 className="text-lg font-semibold text-[var(--text-primary)]">Settings</h1>
       </header>
 
       {/* Content */}

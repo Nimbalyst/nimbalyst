@@ -32,8 +32,8 @@ export function SessionListScreen() {
 
   return (
     <div className="flex flex-col h-screen">
-      {/* Header - Fixed */}
-      <header className="sticky top-0 z-10 flex items-center justify-between px-3 py-2 border-b border-[var(--border-primary)] bg-[var(--surface-secondary)]">
+      {/* Header - Fixed with safe area for notch */}
+      <header className="sticky top-0 z-10 flex items-center justify-between px-3 py-2 border-b border-[var(--border-primary)] bg-[var(--surface-secondary)] safe-area-top">
         <div className="flex items-center gap-1">
           {/* Project Picker Button */}
           <button

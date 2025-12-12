@@ -5,6 +5,7 @@ import { SessionListScreen } from './screens/SessionListScreen';
 import { SessionDetailScreen } from './screens/SessionDetailScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { SplitView, useIsSplitView } from './components/SplitView';
+import { SwipeNavigation } from './components/SwipeNavigation';
 import { setupDeepLinkListener, type StytchSession } from './services/StytchAuthService';
 
 function AppContent() {
@@ -45,14 +46,16 @@ function AppContent() {
     );
   }
 
-  // On iPhone, use standard stack navigation
+  // On iPhone, use standard stack navigation with swipe-to-go-back
   return (
-    <Routes>
-      <Route path="/" element={<SessionListScreen />} />
-      <Route path="/session/:sessionId" element={<SessionDetailScreen />} />
-      <Route path="/settings" element={<SettingsScreen />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <SwipeNavigation>
+      <Routes>
+        <Route path="/" element={<SessionListScreen />} />
+        <Route path="/session/:sessionId" element={<SessionDetailScreen />} />
+        <Route path="/settings" element={<SettingsScreen />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </SwipeNavigation>
   );
 }
 
@@ -89,7 +92,7 @@ function SplitViewPlaceholder() {
 export function App() {
   return (
     <CollabV3SyncProvider>
-      <div className="min-h-screen bg-[var(--surface-primary)] safe-area-top safe-area-bottom">
+      <div className="min-h-screen bg-[var(--surface-primary)]">
         <AppContent />
       </div>
     </CollabV3SyncProvider>
