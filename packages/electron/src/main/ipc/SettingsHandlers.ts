@@ -503,15 +503,16 @@ export function registerSettingsHandlers() {
     ipcMain.handle('stytch:sign-in-google', async () => {
         ensureStytchInitialized();
         // Get the sync server URL from settings
-        // Environment takes priority over serverUrl to ensure consistency
         const syncConfig = getSessionSyncConfig();
         const isDev = process.env.NODE_ENV !== 'production';
 
+        // Only honor environment config in dev builds - production builds always use production
+        const effectiveEnvironment = isDev ? syncConfig?.environment : undefined;
+
         let serverUrl: string;
-        // Environment setting takes priority (allows switching dev/prod in dev builds)
-        if (syncConfig?.environment === 'development') {
+        if (effectiveEnvironment === 'development') {
             serverUrl = 'ws://localhost:8790';
-        } else if (syncConfig?.environment === 'production') {
+        } else if (effectiveEnvironment === 'production') {
             serverUrl = 'wss://sync.nimbalyst.com';
         } else if (syncConfig?.serverUrl) {
             // Custom URL (rare - only if user manually configured)
@@ -534,15 +535,16 @@ export function registerSettingsHandlers() {
             return { success: false, error: 'Email is required' };
         }
         // Get the sync server URL from settings
-        // Environment takes priority over serverUrl to ensure consistency
         const syncConfig = getSessionSyncConfig();
         const isDev = process.env.NODE_ENV !== 'production';
 
+        // Only honor environment config in dev builds - production builds always use production
+        const effectiveEnvironment = isDev ? syncConfig?.environment : undefined;
+
         let serverUrl: string;
-        // Environment setting takes priority (allows switching dev/prod in dev builds)
-        if (syncConfig?.environment === 'development') {
+        if (effectiveEnvironment === 'development') {
             serverUrl = 'ws://localhost:8790';
-        } else if (syncConfig?.environment === 'production') {
+        } else if (effectiveEnvironment === 'production') {
             serverUrl = 'wss://sync.nimbalyst.com';
         } else if (syncConfig?.serverUrl) {
             // Custom URL (rare - only if user manually configured)
