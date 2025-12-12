@@ -14,6 +14,7 @@ import type {
   DataModelFile,
   Database,
 } from './types';
+import { autoLayoutEntities } from './utils/autoLayout';
 
 // Simple ID generator
 function nanoid(): string {
@@ -65,6 +66,9 @@ interface DataModelStore {
   setViewport: (x: number, y: number, zoom: number) => void;
   setEntityViewMode: (mode: EntityViewMode) => void;
   setDatabase: (database: Database) => void;
+
+  // Actions - Layout
+  autoLayout: () => void;
 
   // Actions - Reset dirty state (after save)
   markClean: () => void;
@@ -286,6 +290,22 @@ export function createDataModelStore() {
       set((state) => {
         state.onDirtyChange?.(true);
         return { database, isDirty: true };
+      });
+    },
+
+    // Auto-layout entities based on relationships
+    autoLayout: () => {
+      set((state) => {
+        const positions = autoLayoutEntities(state.entities, state.relationships);
+        const entities = state.entities.map((entity) => {
+          const newPos = positions.get(entity.id);
+          if (newPos) {
+            return { ...entity, position: newPos };
+          }
+          return entity;
+        });
+        state.onDirtyChange?.(true);
+        return { entities, isDirty: true };
       });
     },
 

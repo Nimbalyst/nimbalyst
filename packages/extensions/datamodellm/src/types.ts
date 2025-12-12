@@ -82,7 +82,7 @@ export interface Relationship {
 }
 
 // Entity view modes for the canvas
-export type EntityViewMode = 'full' | 'standard' | 'minimal' | 'compact';
+export type EntityViewMode = 'full' | 'standard' | 'compact';
 
 /**
  * DataModel file format
