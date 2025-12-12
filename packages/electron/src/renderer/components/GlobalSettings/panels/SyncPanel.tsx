@@ -227,12 +227,12 @@ export function SyncPanel({
 
   // Compute effective server URL early so it can be used throughout
   // Only honor config.environment in dev builds - production always uses production sync
+  // Default to production even in dev builds (user must explicitly switch to development)
   const PRODUCTION_SYNC_URL = 'wss://sync.nimbalyst.com';
   const DEVELOPMENT_SYNC_URL = 'ws://localhost:8790';
   const effectiveEnvironment = isDevelopment ? config.environment : undefined;
-  const currentEnvironment = effectiveEnvironment || (isDevelopment ? 'development' : 'production');
-  const effectiveServerUrl = config.serverUrl ||
-    (currentEnvironment === 'development' ? DEVELOPMENT_SYNC_URL : PRODUCTION_SYNC_URL);
+  const currentEnvironment = effectiveEnvironment || 'production';
+  const effectiveServerUrl = currentEnvironment === 'development' ? DEVELOPMENT_SYNC_URL : PRODUCTION_SYNC_URL;
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [showQRModal, setShowQRModal] = useState(false);
@@ -357,11 +357,9 @@ export function SyncPanel({
   const handleEnvironmentSwitch = async (newEnv: 'development' | 'production') => {
     if (!window.electronAPI?.stytch?.switchEnvironment) return;
 
-    // Determine the server URL for this environment
-    const serverUrl = newEnv === 'development' ? 'ws://localhost:8790' : 'wss://sync.nimbalyst.com';
-
-    // Build new config with environment and server URL
-    const newConfig = { ...config, environment: newEnv, serverUrl };
+    // Build new config with environment - serverUrl is derived by the backend from environment
+    // Don't set serverUrl explicitly to avoid stale persisted values
+    const newConfig = { ...config, environment: newEnv, serverUrl: '' };
 
     // Update local state
     onConfigChange(newConfig);
