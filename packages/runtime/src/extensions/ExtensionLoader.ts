@@ -20,6 +20,7 @@ import type {
   Disposable,
   CustomEditorContribution,
   ExtensionAITool,
+  NewFileMenuContribution,
 } from './types';
 import { getExtensionPlatformService } from './ExtensionPlatformService';
 
@@ -447,6 +448,33 @@ export class ExtensionLoader {
     }
 
     return tools;
+  }
+
+  /**
+   * Get all new file menu contributions from loaded extensions
+   */
+  getNewFileMenuContributions(): Array<{
+    extensionId: string;
+    contribution: NewFileMenuContribution;
+  }> {
+    const contributions: Array<{
+      extensionId: string;
+      contribution: NewFileMenuContribution;
+    }> = [];
+
+    for (const loaded of this.loadedExtensions.values()) {
+      if (!loaded.enabled) continue;
+
+      const menuItems = loaded.manifest.contributions?.newFileMenu || [];
+      for (const item of menuItems) {
+        contributions.push({
+          extensionId: loaded.manifest.id,
+          contribution: item,
+        });
+      }
+    }
+
+    return contributions;
   }
 
   /**

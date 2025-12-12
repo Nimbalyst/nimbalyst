@@ -1,8 +1,19 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { MaterialSymbol } from '@nimbalyst/runtime';
+import { MaterialSymbol, type NewFileMenuContribution } from '@nimbalyst/runtime';
 import './NewFileMenu.css';
 
-export type NewFileType = 'markdown' | 'mockup' | 'any';
+// Built-in file types
+export type BuiltInFileType = 'markdown' | 'mockup' | 'any';
+
+// File type can be built-in or an extension-provided type (by extension string)
+export type NewFileType = BuiltInFileType | string;
+
+export interface ExtensionFileType {
+  extension: string;
+  displayName: string;
+  icon: string;
+  defaultContent: string;
+}
 
 interface NewFileMenuProps {
   x: number;
@@ -10,6 +21,8 @@ interface NewFileMenuProps {
   onSelect: (fileType: NewFileType) => void;
   onClose: () => void;
   mockupEnabled?: boolean;
+  /** Extension-contributed file types */
+  extensionFileTypes?: ExtensionFileType[];
 }
 
 export function NewFileMenu({
@@ -17,7 +30,8 @@ export function NewFileMenu({
   y,
   onSelect,
   onClose,
-  mockupEnabled = false
+  mockupEnabled = false,
+  extensionFileTypes = []
 }: NewFileMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [adjustedPosition, setAdjustedPosition] = useState({ x, y });
@@ -96,6 +110,18 @@ export function NewFileMenu({
         </div>
       )}
 
+      {/* Extension-contributed file types */}
+      {extensionFileTypes.map((extType) => (
+        <div
+          key={extType.extension}
+          className="new-file-menu-item"
+          onClick={() => handleSelect(`ext:${extType.extension}`)}
+        >
+          <MaterialSymbol icon={extType.icon} size={18} />
+          <span>New {extType.displayName}</span>
+        </div>
+      ))}
+
       <div className="new-file-menu-separator" />
 
       <div
@@ -107,4 +133,18 @@ export function NewFileMenu({
       </div>
     </div>
   );
+}
+
+/**
+ * Convert NewFileMenuContribution from extension to ExtensionFileType
+ */
+export function contributionToExtensionFileType(
+  contribution: NewFileMenuContribution
+): ExtensionFileType {
+  return {
+    extension: contribution.extension,
+    displayName: contribution.displayName,
+    icon: contribution.icon,
+    defaultContent: contribution.defaultContent,
+  };
 }

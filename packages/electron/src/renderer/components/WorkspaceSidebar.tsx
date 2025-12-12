@@ -3,9 +3,10 @@ import { FileTree, FileGitStatus } from './FileTree';
 import { InputModal } from './InputModal';
 import { PlansPanel } from './PlansPanel/PlansPanel';
 import { FileTreeFilterMenu, FileTreeFilter } from './FileTreeFilterMenu';
-import { NewFileMenu, NewFileType } from './NewFileMenu';
+import { NewFileMenu, NewFileType, ExtensionFileType, contributionToExtensionFileType } from './NewFileMenu';
 import { createInitialFileContent } from '../utils/fileUtils';
 import { getFileName } from '../utils/pathUtils';
+import { getExtensionLoader } from '@nimbalyst/runtime';
 import '../WorkspaceSidebar.css';
 
 interface FileTreeItem {
@@ -135,6 +136,25 @@ export function WorkspaceSidebar({
   const [newFileMenuPosition, setNewFileMenuPosition] = useState({ x: 0, y: 0 });
   const [mockupEnabled, setMockupEnabled] = useState(false);
   const [pendingFileType, setPendingFileType] = useState<NewFileType | null>(null);
+  const [extensionFileTypes, setExtensionFileTypes] = useState<ExtensionFileType[]>([]);
+
+  // Load extension file type contributions
+  useEffect(() => {
+    const loader = getExtensionLoader();
+
+    const updateExtensionFileTypes = () => {
+      const contributions = loader.getNewFileMenuContributions();
+      const fileTypes = contributions.map(c => contributionToExtensionFileType(c.contribution));
+      setExtensionFileTypes(fileTypes);
+    };
+
+    // Initial load
+    updateExtensionFileTypes();
+
+    // Subscribe to changes
+    const unsubscribe = loader.subscribe(updateExtensionFileTypes);
+    return unsubscribe;
+  }, []);
 
   // Load file tree settings from workspace state
   useEffect(() => {
@@ -260,23 +280,39 @@ export function WorkspaceSidebar({
     const fileType = pendingFileType;
     setPendingFileType(null);
 
-    // Determine full filename based on type
+    // Determine full filename and content based on type
     let fullFileName: string;
+    let content: string;
+
     if (fileType === 'markdown') {
       // Add .md extension if not present
       fullFileName = fileName.endsWith('.md') || fileName.endsWith('.markdown') ? fileName : `${fileName}.md`;
+      content = createInitialFileContent(fullFileName);
     } else if (fileType === 'mockup') {
       // Add .mockup.html extension if not present
       fullFileName = fileName.endsWith('.mockup.html') ? fileName : `${fileName}.mockup.html`;
+      content = createMockupContent();
+    } else if (fileType?.startsWith('ext:')) {
+      // Extension-provided file type
+      const extName = fileType.slice(4); // Remove 'ext:' prefix
+      const extType = extensionFileTypes.find(e => e.extension === extName);
+      if (extType) {
+        fullFileName = fileName.endsWith(extName) ? fileName : `${fileName}${extName}`;
+        content = extType.defaultContent;
+      } else {
+        // Fallback
+        fullFileName = fileName;
+        content = '';
+      }
     } else {
       // Any type - keep filename as-is
       fullFileName = fileName;
+      content = createInitialFileContent(fullFileName);
     }
 
     try {
       const basePath = targetFolder || workspacePath;
       const filePath = `${basePath}/${fullFileName}`;
-      const content = fileType === 'mockup' ? createMockupContent() : createInitialFileContent(fullFileName);
 
       const result = await (window as any).electronAPI?.createFile?.(filePath, content);
       if (result?.success) {
@@ -1067,6 +1103,7 @@ export function WorkspaceSidebar({
               onSelect={handleNewFileTypeSelect}
               onClose={() => setShowNewFileMenu(false)}
               mockupEnabled={mockupEnabled}
+              extensionFileTypes={extensionFileTypes}
             />
           )}
         </>
@@ -1079,27 +1116,35 @@ export function WorkspaceSidebar({
 
       <InputModal
         isOpen={isFileModalOpen}
-        title={
-          pendingFileType === 'markdown'
-            ? (targetFolder ? `New Markdown File in ${getFileName(targetFolder)}` : "New Markdown File")
-            : pendingFileType === 'mockup'
-              ? (targetFolder ? `New Mockup in ${getFileName(targetFolder)}` : "New Mockup")
-              : (targetFolder ? `New File in ${getFileName(targetFolder)}` : "New File")
-        }
+        title={(() => {
+          if (pendingFileType === 'markdown') {
+            return targetFolder ? `New Markdown File in ${getFileName(targetFolder)}` : "New Markdown File";
+          }
+          if (pendingFileType === 'mockup') {
+            return targetFolder ? `New Mockup in ${getFileName(targetFolder)}` : "New Mockup";
+          }
+          if (pendingFileType?.startsWith('ext:')) {
+            const extName = pendingFileType.slice(4);
+            const extType = extensionFileTypes.find(e => e.extension === extName);
+            const displayName = extType?.displayName || 'File';
+            return targetFolder ? `New ${displayName} in ${getFileName(targetFolder)}` : `New ${displayName}`;
+          }
+          return targetFolder ? `New File in ${getFileName(targetFolder)}` : "New File";
+        })()}
         placeholder={
-          pendingFileType === 'markdown'
+          pendingFileType === 'markdown' || pendingFileType === 'mockup' || pendingFileType?.startsWith('ext:')
             ? "Enter name"
-            : pendingFileType === 'mockup'
-              ? "Enter name"
-              : "Enter file name with extension"
+            : "Enter file name with extension"
         }
-        suffix={
-          pendingFileType === 'markdown'
-            ? ".md"
-            : pendingFileType === 'mockup'
-              ? ".mockup.html"
-              : undefined
-        }
+        suffix={(() => {
+          if (pendingFileType === 'markdown') return ".md";
+          if (pendingFileType === 'mockup') return ".mockup.html";
+          if (pendingFileType?.startsWith('ext:')) {
+            const extName = pendingFileType.slice(4);
+            return extName;
+          }
+          return undefined;
+        })()}
         defaultValue=""
         onConfirm={handleCreateFile}
         onCancel={() => {
