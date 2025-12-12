@@ -7,6 +7,7 @@ import { NewFileMenu, NewFileType, ExtensionFileType, contributionToExtensionFil
 import { createInitialFileContent } from '../utils/fileUtils';
 import { getFileName } from '../utils/pathUtils';
 import { getExtensionLoader } from '@nimbalyst/runtime';
+import { KeyboardShortcuts, getShortcutDisplay } from '../../shared/KeyboardShortcuts';
 import '../WorkspaceSidebar.css';
 
 interface FileTreeItem {
@@ -973,7 +974,7 @@ export function WorkspaceSidebar({
                 <button
                   className="workspace-action-button"
                   onClick={onOpenQuickSearch}
-                  title="Search files (⌘K)"
+                  title={`Search files (${getShortcutDisplay(KeyboardShortcuts.file.open)})`}
                   aria-label="Search files"
                 >
                   <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
