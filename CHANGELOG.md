@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.48.3] - 2025-12-11
+
+
+### Fixed
+- Stytch auth handlers now use production sync server in production builds
+
 ## [0.48.2] - 2025-12-11
 
 
