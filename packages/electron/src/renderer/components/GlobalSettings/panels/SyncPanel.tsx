@@ -367,15 +367,22 @@ export function SyncPanel({
       await window.electronAPI.invoke('sync:set-config', newConfig);
     } catch (err) {
       console.error('Failed to save sync config:', err);
+      setAuthError(`Failed to save config: ${err}`);
+      return;
     }
 
     // Switch Stytch environment (this will sign out the user)
-    if (window.electronAPI?.stytch?.switchEnvironment) {
-      try {
-        await window.electronAPI.stytch.switchEnvironment(newEnv);
-      } catch (err) {
-        console.error('Failed to switch Stytch environment:', err);
-      }
+    if (!window.electronAPI?.stytch?.switchEnvironment) {
+      console.error('Stytch API not available - cannot switch environment');
+      setAuthError('Stytch API not available. Try restarting the app.');
+      return;
+    }
+
+    try {
+      await window.electronAPI.stytch.switchEnvironment(newEnv);
+    } catch (err) {
+      console.error('Failed to switch Stytch environment:', err);
+      setAuthError(`Failed to switch environment: ${err}`);
     }
   };
 
