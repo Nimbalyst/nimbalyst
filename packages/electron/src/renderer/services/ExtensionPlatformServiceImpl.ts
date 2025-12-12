@@ -118,6 +118,10 @@ export class ExtensionPlatformServiceImpl implements ExtensionPlatformService {
         const module = await import(/* @vite-ignore */ blobUrl);
         console.log('[ExtensionPlatformService] Module loaded:', Object.keys(module));
 
+        // Debug: Check for aiTools in module
+        console.log('[ExtensionPlatformService] module.aiTools:', module.aiTools);
+        console.log('[ExtensionPlatformService] module.default?.aiTools:', module.default?.aiTools);
+
         // Normalize to ExtensionModule interface
         const extensionModule: ExtensionModule = {
           activate: module.activate || module.default?.activate,
@@ -127,6 +131,7 @@ export class ExtensionPlatformServiceImpl implements ExtensionPlatformService {
         };
 
         console.log('[ExtensionPlatformService] Extension module components:', Object.keys(extensionModule.components || {}));
+        console.log('[ExtensionPlatformService] Extension module aiTools count:', extensionModule.aiTools?.length ?? 0);
         return extensionModule;
       } finally {
         // Clean up blob URL
