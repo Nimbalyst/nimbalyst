@@ -19,6 +19,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.48.2] - 2025-12-11
+
+
+### Added
+- Window title now shows AI session name when in agent mode
+- Settings now auto-save and display scope description for each setting
+
+### Changed
+- Updated Claude Agent SDK to version 0.1.65
+- Removed dangerous developer menu database features
+
+### Fixed
+- Production builds no longer use dev sync server from persisted config
+- Plaintext session titles no longer sent during sync (privacy improvement)
+- Claude Code allowed tools section now displays properly in settings
+- Global MCP servers now work correctly in Claude Agent sessions
+
 ## [0.48.1] - 2025-12-11
 
 ### Changed
