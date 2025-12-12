@@ -26,8 +26,10 @@ function ensureStytchInitialized(): void {
     const syncConfig = getSessionSyncConfig();
     const isDev = process.env.NODE_ENV !== 'production';
 
-    // Determine environment: config setting > NODE_ENV default
-    const environment = syncConfig?.environment || (isDev ? 'development' : 'production');
+    // Only honor environment config in dev builds - production builds always use production
+    // Default to production even in dev builds (user must explicitly switch to development)
+    const effectiveEnvironment = isDev ? syncConfig?.environment : undefined;
+    const environment = effectiveEnvironment || 'production';
     const config = environment === 'production' ? STYTCH_CONFIG.live : STYTCH_CONFIG.test;
 
     logger.main.info('[SettingsHandlers] Lazy-initializing Stytch for environment:', environment);

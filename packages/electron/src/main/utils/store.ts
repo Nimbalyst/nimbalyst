@@ -51,7 +51,7 @@ interface AppStoreSchema {
     enabled: boolean;
     serverUrl: string; // e.g., 'ws://localhost:8790' or 'wss://sync.nimbalyst.com'
     enabledProjects?: string[]; // List of workspace paths enabled for sync
-    // Dev-only: override environment (defaults to 'production' in prod builds, 'development' in dev)
+    // Dev-only: override environment (defaults to 'production' even in dev builds)
     environment?: 'development' | 'production';
   };
   // Stytch Auth Configuration (project ID and public token only - secret stored in keychain)
@@ -825,7 +825,7 @@ export interface SessionSyncConfig {
   enabled: boolean;
   serverUrl: string;
   enabledProjects?: string[];
-  // Dev-only: override environment (defaults to 'production' in prod builds, 'development' in dev)
+  // Dev-only: override environment (defaults to 'production' even in dev builds)
   environment?: 'development' | 'production';
 }
 
