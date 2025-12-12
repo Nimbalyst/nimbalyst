@@ -355,8 +355,6 @@ export function SyncPanel({
   // Environment switch handler (dev only)
   // Saves config immediately so auth endpoints use the correct server
   const handleEnvironmentSwitch = async (newEnv: 'development' | 'production') => {
-    if (!window.electronAPI?.stytch?.switchEnvironment) return;
-
     // Build new config with environment - serverUrl is derived by the backend from environment
     // Don't set serverUrl explicitly to avoid stale persisted values
     const newConfig = { ...config, environment: newEnv, serverUrl: '' };
@@ -372,10 +370,12 @@ export function SyncPanel({
     }
 
     // Switch Stytch environment (this will sign out the user)
-    try {
-      await window.electronAPI.stytch.switchEnvironment(newEnv);
-    } catch (err) {
-      console.error('Failed to switch Stytch environment:', err);
+    if (window.electronAPI?.stytch?.switchEnvironment) {
+      try {
+        await window.electronAPI.stytch.switchEnvironment(newEnv);
+      } catch (err) {
+        console.error('Failed to switch Stytch environment:', err);
+      }
     }
   };
 
