@@ -17,7 +17,6 @@ planStatus:
   progress: 0
   startDate: "2025-12-11"
 ---
-
 # Extension System Security Review
 
 ## Executive Summary
@@ -213,50 +212,50 @@ Extensions currently run with the same privileges as the host application:
 ### Phase 1: Visibility (Low effort)
 
 1. **Extension audit logging**
-   - Log all extension loads/unloads
-   - Log IPC calls from extensions
-   - Log permission usage
+  - Log all extension loads/unloads
+  - Log IPC calls from extensions
+  - Log permission usage
 
 2. **User warnings**
-   - Show warning when installing extensions
-   - Display extension permissions in settings
-   - Mark first-party vs third-party extensions
+  - Show warning when installing extensions
+  - Display extension permissions in settings
+  - Mark first-party vs third-party extensions
 
 ### Phase 2: Permission Enforcement (Medium effort)
 
 1. **Implement permission system**
-   - Define permission scopes
-   - Enforce permissions in IPC layer
-   - Block unauthorized operations
+  - Define permission scopes
+  - Enforce permissions in IPC layer
+  - Block unauthorized operations
 
 2. **Permission UI**
-   - Show required permissions before install
-   - Allow users to revoke permissions
-   - Per-workspace permission overrides
+  - Show required permissions before install
+  - Allow users to revoke permissions
+  - Per-workspace permission overrides
 
 ### Phase 3: Sandboxing (High effort)
 
 1. **Iframe sandbox for untrusted extensions**
-   - Run extension UI in sandboxed iframe
-   - Message passing for all operations
-   - Limited API surface
+  - Run extension UI in sandboxed iframe
+  - Message passing for all operations
+  - Limited API surface
 
 2. **Worker-based execution**
-   - Run extension logic in Web Worker
-   - Proxy API calls through message passing
-   - Prevent direct DOM access
+  - Run extension logic in Web Worker
+  - Proxy API calls through message passing
+  - Prevent direct DOM access
 
 ### Phase 4: Trust Infrastructure (High effort)
 
 1. **Extension signing**
-   - Sign first-party extensions
-   - Verify signatures on load
-   - Different trust levels
+  - Sign first-party extensions
+  - Verify signatures on load
+  - Different trust levels
 
 2. **Extension marketplace** (future)
-   - Review process for extensions
-   - Malware scanning
-   - User ratings and reports
+  - Review process for extensions
+  - Malware scanning
+  - User ratings and reports
 
 ## Current Acceptable Use
 

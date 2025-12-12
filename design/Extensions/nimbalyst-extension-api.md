@@ -1,1083 +1,841 @@
-# Nimbalyst Extension API Design
+# Nimbalyst Extension API Reference
 
-This document provides the detailed TypeScript API definitions for the Nimbalyst Extension System.
+This document provides the TypeScript API definitions for the Nimbalyst Extension System. These types are the actual implementation from `packages/runtime/src/extensions/types.ts`.
 
-## Core Extension Interface
+## Implementation Status
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Extension Manifest | Implemented | Full validation on load |
+| Custom Editors | Implemented | Via `contributions.customEditors` |
+| AI Tools | Implemented | Integrated with Claude Code MCP |
+| New File Menu | Implemented | Via `contributions.newFileMenu` |
+| File Icons | Implemented | Via `contributions.fileIcons` |
+| Permissions | Partial | Declared but not fully enforced |
+| Commands | Not implemented | Planned |
+| Menu contributions | Not implemented | Planned |
+| Settings | Not implemented | Planned |
+| Database | Not implemented | Planned |
+
+## Extension Manifest (manifest.json)
+
+The manifest is a JSON file that declares extension capabilities.
 
 ```typescript
-// Top-level extension interface
-interface NimbalystExtension {
-  /** Extension metadata */
-  id: string;  // Unique ID (e.g., 'com.example.my-extension')
+interface ExtensionManifest {
+  /** Unique extension identifier (reverse domain notation) */
+  id: string;  // e.g., "com.nimbalyst.datamodellm"
+
+  /** Human-readable name */
   name: string;
-  version: string;
+
+  /** Semantic version */
+  version: string;  // e.g., "1.0.0"
+
+  /** Brief description */
   description?: string;
+
+  /** Author name or organization */
   author?: string;
-  homepage?: string;
 
-  /** Permissions required */
-  permissions?: {
-    database?: boolean;          // Access to database
-    filesystem?: boolean;         // File system access
-    network?: boolean;            // Network requests
-    ipc?: boolean;                // IPC communication
-    shell?: boolean;              // Shell command execution
-  };
+  /** Path to main JS entry point (relative to extension root) */
+  main: string;  // e.g., "dist/index.js"
 
-  /** Application-level hooks */
-  activate?: (context: ExtensionContext) => Promise<void> | void;
-  deactivate?: () => Promise<void> | void;
+  /** Path to CSS styles (relative to extension root) */
+  styles?: string;  // e.g., "dist/index.css"
 
-  /** Menu contributions */
-  menus?: MenuContribution[];
+  /** Minimum Nimbalyst API version required */
+  apiVersion?: string;
 
-  /** Command contributions */
-  commands?: CommandContribution[];
+  /** Permissions the extension needs */
+  permissions?: ExtensionPermissions;
 
-  /** UI contributions */
-  panels?: PanelContribution[];
-  dialogs?: DialogContribution[];
-  statusBarItems?: StatusBarItemContribution[];
+  /** What the extension contributes to Nimbalyst */
+  contributions?: ExtensionContributions;
+}
 
-  /** Database contributions */
-  database?: {
-    migrations?: Migration[];
-    queries?: Record<string, string>;  // Named queries
-  };
+interface ExtensionPermissions {
+  /** Access to read/write files in workspace */
+  filesystem?: boolean;
 
-  /** Settings contributions */
-  settings?: SettingsContribution[];
+  /** Access to AI services and tool registration */
+  ai?: boolean;
 
-  /** Custom editor contributions */
+  /** Access to network (for future use) */
+  network?: boolean;
+}
+
+interface ExtensionContributions {
+  /** Custom editor registrations */
   customEditors?: CustomEditorContribution[];
 
-  /** AI contributions */
-  ai?: {
-    /** Tools exposed to AI agents */
-    tools?: AIToolContribution[];
-    /** Context layered into AI prompts */
-    contextProvider?: (context: ExtensionContext) => Promise<string | AIContextLayer>;
-    /** Instructions for AI when extension is active */
-    instructions?: string;
-  };
+  /** AI tools the extension provides (names only, actual tools in module) */
+  aiTools?: string[];
 
-  /** Editor contributions (wraps Lexical) */
-  editor?: EditorExtension;
+  /** File icons by pattern */
+  fileIcons?: Record<string, string>;
+
+  /** New file menu contributions */
+  newFileMenu?: NewFileMenuContribution[];
+
+  /** Commands (future) */
+  commands?: CommandContribution[];
+}
+```
+
+## Custom Editor Contribution
+
+Extensions can register custom editors for specific file types:
+
+```typescript
+interface CustomEditorContribution {
+  /** File patterns this editor handles (glob patterns) */
+  filePatterns: string[];  // e.g., ["*.prisma", "*.datamodel"]
+
+  /** Display name shown in UI */
+  displayName: string;
+
+  /** Component name to look up in module's `components` export */
+  component: string;  // e.g., "DatamodelLMEditor"
+}
+```
+
+## New File Menu Contribution
+
+Extensions can add items to the "New File" menu:
+
+```typescript
+interface NewFileMenuContribution {
+  /** File extension (e.g., ".prisma") */
+  extension: string;
+
+  /** Display name in menu */
+  displayName: string;
+
+  /** Material icon name */
+  icon: string;
+
+  /** Default content for new files */
+  defaultContent: string;
+}
+```
+
+## Extension Module
+
+The extension's main JS file must export specific symbols:
+
+```typescript
+interface ExtensionModule {
+  /** Called when extension is activated */
+  activate?: (context: ExtensionContext) => Promise<void> | void;
+
+  /** Called when extension is deactivated */
+  deactivate?: () => Promise<void> | void;
+
+  /** React components exported by the extension */
+  components?: Record<string, ComponentType<CustomEditorComponentProps>>;
+
+  /** AI tools exported by the extension */
+  aiTools?: ExtensionAITool[];
+}
+```
+
+### Example Extension Module
+
+```typescript
+// src/index.tsx
+import { MyEditor } from './components/MyEditor';
+import { myTools } from './aiTools';
+
+export async function activate(context: ExtensionContext) {
+  console.log('Extension activated');
+}
+
+export async function deactivate() {
+  console.log('Extension deactivated');
+}
+
+export const components = {
+  MyEditor,
+};
+
+export const aiTools = myTools;
+```
+
+## Custom Editor Component Props
+
+Props passed to custom editor components:
+
+```typescript
+interface CustomEditorComponentProps {
+  /** Absolute path to the file being edited */
+  filePath: string;
+
+  /** File name without path */
+  fileName: string;
+
+  /** Initial file content as string */
+  initialContent: string;
+
+  /** Current theme */
+  theme: 'light' | 'dark' | 'crystal-dark';
+
+  /** Whether this editor is the active/focused one */
+  isActive: boolean;
+
+  /** Workspace identifier (if in a workspace) */
+  workspaceId?: string;
+
+  /** Called when content changes (for dirty tracking) */
+  onContentChange?: () => void;
+
+  /** Called when dirty state changes */
+  onDirtyChange?: (isDirty: boolean) => void;
+
+  /** Register a function to get current content (for saving) */
+  onGetContentReady?: (getContentFn: () => string) => void;
+
+  /** Open document history dialog */
+  onViewHistory?: () => void;
+
+  /** Trigger document rename */
+  onRenameDocument?: () => void;
 }
 ```
 
 ## Extension Context
 
+Context provided to extensions when they activate:
+
 ```typescript
-// Extension context provided to extensions
 interface ExtensionContext {
-  /** Extension metadata */
-  extensionId: string;
+  /** The extension's manifest */
+  manifest: ExtensionManifest;
+
+  /** Absolute path to the extension's root directory */
   extensionPath: string;
-  storageUri: string;  // Private storage for this extension
 
-  /** Application APIs */
-  app: {
-    registerCommand(id: string, handler: CommandHandler): Disposable;
-    registerMenu(menu: MenuContribution): Disposable;
-    showDialog(options: DialogOptions): Promise<any>;
-    getWorkspacePath(): string | undefined;
-    onDidChangeWorkspace(handler: (path: string) => void): Disposable;
-  };
+  /** Services provided by the host */
+  services: ExtensionServices;
 
-  /** Database API */
-  database?: {
-    query<T>(sql: string, params?: any[]): Promise<T[]>;
-    execute(sql: string, params?: any[]): Promise<void>;
-    transaction<T>(callback: () => Promise<T>): Promise<T>;
-  };
+  /** Disposables to clean up on deactivation */
+  subscriptions: Disposable[];
+}
 
-  /** UI APIs */
-  ui: {
-    showPanel(panel: PanelOptions): Disposable;
-    showNotification(message: string, type?: 'info' | 'warning' | 'error'): void;
-    showStatusBarItem(item: StatusBarItem): Disposable;
-  };
+interface ExtensionServices {
+  /** File system operations */
+  filesystem: ExtensionFileSystemService;
 
-  /** Settings API */
-  settings: {
-    get<T>(key: string, defaultValue?: T): T;
-    set(key: string, value: any): Promise<void>;
-    onChange(key: string, handler: (value: any) => void): Disposable;
-  };
+  /** UI operations */
+  ui: ExtensionUIService;
 
-  /** File system API */
-  fs?: {
-    readFile(path: string): Promise<string>;
-    writeFile(path: string, content: string): Promise<void>;
-    watchFile(path: string, handler: (event: FileChangeEvent) => void): Disposable;
-  };
+  /** AI operations (if permitted) */
+  ai?: ExtensionAIService;
+}
 
-  /** Editor API */
-  editor: {
-    getActiveEditor(): LexicalEditor | undefined;
-    onDidChangeActiveEditor(handler: (editor: LexicalEditor | undefined) => void): Disposable;
-  };
+interface ExtensionFileSystemService {
+  readFile(path: string): Promise<string>;
+  writeFile(path: string, content: string): Promise<void>;
+  fileExists(path: string): Promise<boolean>;
+  findFiles(pattern: string): Promise<string[]>;
+}
+
+interface ExtensionUIService {
+  showInfo(message: string): void;
+  showWarning(message: string): void;
+  showError(message: string): void;
+}
+
+interface ExtensionAIService {
+  registerTool(tool: ExtensionAITool): Disposable;
+  registerContextProvider(provider: ExtensionContextProvider): Disposable;
 }
 ```
 
-## Menu and Command Contributions
+## AI Tools
+
+Extensions can expose AI tools that are available to Claude Code via MCP:
 
 ```typescript
-// Menu contribution
-interface MenuContribution {
-  menu: 'file' | 'edit' | 'view' | 'help' | 'context';
-  group?: string;
-  items: MenuItem[];
-}
-
-interface MenuItem {
-  id: string;
-  label: string;
-  command: string;  // Command ID to execute
-  accelerator?: string;  // Keyboard shortcut
-  icon?: string;
-  when?: string;  // Condition expression
-}
-
-// Command contribution
-interface CommandContribution {
-  id: string;
-  title: string;
-  description?: string;
-  icon?: string;
-  keywords?: string[];
-  handler: CommandHandler;
-  when?: string;  // Condition expression
-}
-
-type CommandHandler = (args?: any) => Promise<any> | any;
-```
-
-## UI Contributions
-
-```typescript
-// Panel contribution
-interface PanelContribution {
-  id: string;
-  title: string;
-  icon?: string;
-  location: 'sidebar' | 'bottom' | 'modal';
-  component: React.ComponentType<PanelProps>;
-}
-
-interface PanelProps {
-  context: ExtensionContext;
-}
-```
-
-## Custom Editor System
-
-```typescript
-// Custom editor contribution
-interface CustomEditorContribution {
-  /** File patterns this editor handles (e.g., '*.wireframe.html') */
-  filePatterns: string[];
-
-  /** Display name for this editor type */
-  displayName: string;
-
-  /** Icon for this editor type */
-  icon?: string;
-
-  /** Priority when multiple editors can handle the same file type */
-  priority?: number;
-
-  /** React component that renders the editor */
-  component: React.ComponentType<CustomEditorProps>;
-
-  /** Custom toolbar component (optional) */
-  toolbarComponent?: React.ComponentType<CustomEditorToolbarProps>;
-
-  /** Custom save handler (optional, if not using default text save) */
-  saveHandler?: (filePath: string, content: any) => Promise<void>;
-
-  /** Custom load handler (optional, if not using default text load) */
-  loadHandler?: (filePath: string) => Promise<any>;
-}
-
-interface CustomEditorProps {
-  /** Path to the file being edited */
-  filePath: string;
-
-  /** Initial content */
-  initialContent: any;
-
-  /** Callback when content changes */
-  onChange: (content: any, isDirty: boolean) => void;
-
-  /** Extension context */
-  context: ExtensionContext;
-}
-
-interface CustomEditorToolbarProps {
-  /** Current file path */
-  filePath: string;
-
-  /** Current content */
-  content: any;
-
-  /** Extension context */
-  context: ExtensionContext;
-}
-```
-
-## AI Integration
-
-```typescript
-// AI tool contribution
-interface AIToolContribution {
-  /** Tool name as exposed to AI (e.g., 'create_wireframe') */
+interface ExtensionAITool {
+  /** Tool name (should be namespaced, e.g., "datamodellm.create_entity") */
   name: string;
 
-  /** Tool description for AI to understand when to use it */
+  /** Human-readable description shown to AI */
   description: string;
 
-  /** JSON schema for tool parameters */
-  parameters: {
-    type: 'object';
-    properties: Record<string, any>;
-    required?: string[];
-  };
+  /** JSON Schema for tool parameters */
+  parameters: JSONSchema;
 
-  /** Handler that executes when AI invokes this tool */
-  handler: (params: any, context: AIToolContext) => Promise<AIToolResult>;
+  /**
+   * Tool scope - determines when the tool is available:
+   * - 'global': Always available in MCP
+   * - 'editor': Only available when a matching editor is active
+   * Defaults to 'editor' for backwards compatibility
+   */
+  scope?: 'global' | 'editor';
+
+  /**
+   * File patterns this tool applies to (for editor-scoped tools).
+   * Uses glob patterns like ["*.prisma"].
+   * If not specified for editor-scoped tools, inherits from the extension's
+   * customEditors contribution.
+   */
+  editorFilePatterns?: string[];
+
+  /** Tool execution handler */
+  handler: (
+    params: Record<string, unknown>,
+    context: AIToolContext
+  ) => Promise<ExtensionToolResult>;
 }
 
-interface AIToolContext extends ExtensionContext {
-  /** Current AI session information */
-  session: {
-    id: string;
-    provider: string;
-  };
+interface AIToolContext {
+  /** Absolute path to current workspace */
+  workspacePath?: string;
 
-  /** Current workspace and file context */
-  workspace?: {
-    path: string;
-    currentFile?: string;
-  };
+  /** Absolute path to currently active file */
+  activeFilePath?: string;
+
+  /** Extension context for accessing services */
+  extensionContext: ExtensionContext;
 }
 
-interface AIToolResult {
-  /** Success indicator */
+interface ExtensionToolResult {
+  /** Whether the tool executed successfully */
   success: boolean;
 
-  /** Result data to send back to AI */
-  data?: any;
+  /** Human-readable result message for AI */
+  message?: string;
 
-  /** Error message if failed */
+  /** Structured data result */
+  data?: unknown;
+
+  /** Error message if success is false */
   error?: string;
-
-  /** Optional attachments to add to conversation (screenshots, exports, etc.) */
-  attachments?: AIAttachment[];
 }
 
-interface AIAttachment {
-  /** Type of attachment */
-  type: 'image' | 'file' | 'text';
-
-  /** File path or data URL */
-  data: string;
-
-  /** Display name */
-  name?: string;
-
-  /** MIME type */
-  mimeType?: string;
-}
-
-// AI context layer
-interface AIContextLayer {
-  /** Layer priority (higher = added later in prompt) */
-  priority: number;
-
-  /** Context content to inject */
-  content: string;
-
-  /** Optional: only include for specific providers */
-  providers?: string[];
-}
-```
-
-## Editor Extensions (Lexical Wrapper)
-
-```typescript
-// Editor extension (wraps Lexical)
-interface EditorExtension {
-  /** Lexical nodes to register */
-  nodes?: Array<Klass<LexicalNode>>;
-
-  /** Markdown transformers */
-  transformers?: Transformer[];
-
-  /** Component Picker commands */
-  componentCommands?: ComponentCommand[];
-
-  /** Lexical extension configuration */
-  lexical?: {
-    config?: (context: LexicalExtensionContext) => Partial<InitialEditorConfig>;
-    init?: (context: LexicalExtensionContext) => void;
-    build?: (context: LexicalExtensionContext) => ExtensionOutput;
-    register?: (editor: LexicalEditor) => () => void;
-    afterRegistration?: (editor: LexicalEditor) => void;
-    dependencies?: Extension[];
-    peerDependencies?: Extension[];
-    conflictsWith?: Extension[];
-  };
-}
-
-interface ComponentCommand {
-  title: string;
+interface JSONSchema {
+  type: 'object' | 'array' | 'string' | 'number' | 'boolean' | 'null';
+  properties?: Record<string, JSONSchemaProperty>;
+  required?: string[];
+  items?: JSONSchema;
   description?: string;
-  icon?: string;
-  keywords?: string[];
-  command: LexicalCommand<any>;
-  payload?: any;
+}
+
+interface JSONSchemaProperty {
+  type: 'string' | 'number' | 'boolean' | 'array' | 'object' | 'null';
+  description?: string;
+  enum?: (string | number)[];
+  items?: JSONSchemaProperty;
+  properties?: Record<string, JSONSchemaProperty>;
+  required?: string[];
+  default?: unknown;
 }
 ```
 
-## Extension System Manager
+### Example AI Tool
 
 ```typescript
-// Extension manager
-class NimbalystExtensionSystem {
-  private extensions = new Map<string, NimbalystExtension>();
-  private contexts = new Map<string, ExtensionContext>();
-
-  async register(ext: NimbalystExtension): Promise<void> {
-    // Validate extension
-    this.validateExtension(ext);
-
-    // Create context
-    const context = this.createContext(ext);
-    this.contexts.set(ext.id, context);
-
-    // Store extension
-    this.extensions.set(ext.id, ext);
-
-    // Activate extension
-    if (ext.activate) {
-      await ext.activate(context);
-    }
-
-    // Register contributions
-    this.registerMenus(ext, context);
-    this.registerCommands(ext, context);
-    this.registerPanels(ext, context);
-    this.runDatabaseMigrations(ext, context);
-  }
-
-  async unregister(extensionId: string): Promise<void> {
-    const ext = this.extensions.get(extensionId);
-    if (!ext) return;
-
-    // Deactivate
-    if (ext.deactivate) {
-      await ext.deactivate();
-    }
-
-    // Cleanup
-    this.extensions.delete(extensionId);
-    this.contexts.delete(extensionId);
-  }
-
-  // Get editor extensions for Lexical
-  getEditorExtensions(): Extension[] {
-    return Array.from(this.extensions.values())
-      .filter(e => e.editor?.lexical)
-      .map(e => this.wrapLexicalExtension(e));
-  }
-
-  // Get markdown transformers
-  getTransformers(): Transformer[] {
-    return Array.from(this.extensions.values())
-      .filter(e => e.editor?.transformers)
-      .flatMap(e => e.editor!.transformers!);
-  }
-
-  // Get component commands for Component Picker
-  getComponentCommands(): ComponentCommand[] {
-    return Array.from(this.extensions.values())
-      .filter(e => e.editor?.componentCommands)
-      .flatMap(e => e.editor!.componentCommands!);
-  }
-
-  // Get custom editor registrations
-  getCustomEditors(): CustomEditorContribution[] {
-    return Array.from(this.extensions.values())
-      .filter(e => e.customEditors)
-      .flatMap(e => e.customEditors!);
-  }
-
-  // Find custom editor for a file path
-  findCustomEditorForFile(filePath: string): CustomEditorContribution | undefined {
-    const editors = this.getCustomEditors();
-    return editors
-      .filter(e => this.matchesPattern(filePath, e.filePatterns))
-      .sort((a, b) => (b.priority || 0) - (a.priority || 0))[0];
-  }
-
-  // Get AI tools from all extensions
-  getAITools(): Map<string, AIToolContribution> {
-    const tools = new Map<string, AIToolContribution>();
-    for (const ext of this.extensions.values()) {
-      if (ext.ai?.tools) {
-        for (const tool of ext.ai.tools) {
-          tools.set(tool.name, tool);
-        }
-      }
-    }
-    return tools;
-  }
-
-  // Get AI context layers from all active extensions
-  async getAIContextLayers(context: { provider?: string }): Promise<string[]> {
-    const layers: AIContextLayer[] = [];
-
-    for (const ext of this.extensions.values()) {
-      if (ext.ai?.instructions) {
-        layers.push({
-          priority: 0,
-          content: ext.ai.instructions,
-        });
+// aiTools.ts
+export const aiTools = [
+  {
+    name: 'get_schema',
+    description: `Get the current data model schema. Use this to understand
+the existing entities and relationships before making changes.`,
+    parameters: {
+      type: 'object' as const,
+      properties: {},
+    },
+    handler: async (
+      _params: Record<string, never>,
+      context: { activeFilePath?: string }
+    ) => {
+      const store = getStore(context.activeFilePath);
+      if (!store) {
+        return {
+          success: false,
+          error: 'No active data model editor found.',
+        };
       }
 
-      if (ext.ai?.contextProvider) {
-        const extContext = this.contexts.get(ext.id);
-        if (extContext) {
-          const result = await ext.ai.contextProvider(extContext);
-          if (typeof result === 'string') {
-            layers.push({ priority: 50, content: result });
-          } else {
-            if (!result.providers || result.providers.includes(context.provider || '')) {
-              layers.push(result);
-            }
-          }
-        }
-      }
-    }
-
-    return layers
-      .sort((a, b) => a.priority - b.priority)
-      .map(l => l.content);
-  }
-
-  // Invoke an AI tool
-  async invokeAITool(
-    toolName: string,
-    params: any,
-    aiContext: AIToolContext
-  ): Promise<AIToolResult> {
-    const tool = this.getAITools().get(toolName);
-    if (!tool) {
+      const state = store.getState();
       return {
-        success: false,
-        error: `Tool '${toolName}' not found`,
+        success: true,
+        message: `Found ${state.entities.length} entities.`,
+        data: {
+          entities: state.entities.map(e => ({
+            name: e.name,
+            fields: e.fields,
+          })),
+        },
       };
-    }
+    },
+  },
+];
+```
 
-    try {
-      return await tool.handler(params, aiContext);
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      };
-    }
-  }
+## AI Tools Bridge
 
-  private createContext(ext: NimbalystExtension): ExtensionContext {
-    // Create context with APIs based on permissions
-    return {
-      extensionId: ext.id,
-      extensionPath: this.getExtensionPath(ext.id),
-      storageUri: this.getStorageUri(ext.id),
-      app: this.createAppAPI(ext),
-      database: ext.permissions?.database ? this.createDatabaseAPI(ext) : undefined,
-      ui: this.createUIAPI(ext),
-      settings: this.createSettingsAPI(ext),
-      fs: ext.permissions?.filesystem ? this.createFsAPI(ext) : undefined,
-      editor: this.createEditorAPI(ext),
-    };
-  }
+The `ExtensionAIToolsBridge` connects extension tools to Claude Code:
 
-  // ... implementation details
+```typescript
+// packages/runtime/src/extensions/ExtensionAIToolsBridge.ts
+
+// Get all tools in MCP format (serializable)
+function getMCPToolDefinitions(): MCPToolDefinition[];
+
+// Execute a tool by name (called from MCP server)
+async function executeExtensionTool(
+  toolName: string,
+  args: Record<string, unknown>,
+  context: { workspacePath?: string; activeFilePath?: string }
+): Promise<ExtensionToolResult>;
+
+// Register tools from a loaded extension
+function registerExtensionTools(extension: LoadedExtension): void;
+
+// Unregister tools from an extension
+function unregisterExtensionTools(extensionId: string): void;
+```
+
+Tools are automatically namespaced with the extension ID to avoid conflicts (e.g., `datamodellm.get_schema`).
+
+## Platform Service
+
+The `ExtensionPlatformService` abstracts platform-specific operations:
+
+```typescript
+interface ExtensionPlatformService {
+  /** Get the directory where user extensions are installed */
+  getExtensionsDirectory(): Promise<string>;
+
+  /** List all subdirectories in a directory */
+  listDirectories(dirPath: string): Promise<string[]>;
+
+  /** Read a file as text */
+  readFile(filePath: string): Promise<string>;
+
+  /** Write content to a file */
+  writeFile(filePath: string, content: string): Promise<void>;
+
+  /** Check if a file exists */
+  fileExists(filePath: string): Promise<boolean>;
+
+  /** Load a JavaScript module from the given path */
+  loadModule(modulePath: string): Promise<ExtensionModule>;
+
+  /** Inject CSS styles into the document */
+  injectStyles(css: string): () => void;
+
+  /** Resolve a relative path from an extension's root */
+  resolvePath(extensionPath: string, relativePath: string): string;
+
+  /** Get files matching a glob pattern in a directory */
+  findFiles(dirPath: string, pattern: string): Promise<string[]>;
 }
+```
+
+The Electron implementation handles import transformation to use host dependencies:
+
+```typescript
+// ElectronExtensionPlatformService transforms imports like:
+// import React from 'react'
+// to:
+// const React = window.__nimbalyst_extensions['react']
+```
+
+## Extension Loader
+
+The `ExtensionLoader` manages extension lifecycle:
+
+```typescript
+class ExtensionLoader {
+  /** Discover all extensions in the extensions directory */
+  async discoverExtensions(): Promise<DiscoveredExtension[]>;
+
+  /** Load an extension from a discovered extension */
+  async loadExtension(discovered: DiscoveredExtension): Promise<ExtensionLoadResult>;
+
+  /** Unload an extension by ID */
+  async unloadExtension(extensionId: string): Promise<void>;
+
+  /** Enable a loaded extension */
+  enableExtension(extensionId: string): void;
+
+  /** Disable a loaded extension without unloading it */
+  disableExtension(extensionId: string): void;
+
+  /** Get all loaded extensions */
+  getLoadedExtensions(): LoadedExtension[];
+
+  /** Get a loaded extension by ID */
+  getExtension(extensionId: string): LoadedExtension | undefined;
+
+  /** Get all custom editor contributions from loaded extensions */
+  getCustomEditors(): Array<{
+    extensionId: string;
+    contribution: CustomEditorContribution;
+    component: React.ComponentType<unknown>;
+  }>;
+
+  /** Get all AI tools from loaded extensions */
+  getAITools(): Array<{
+    extensionId: string;
+    tool: ExtensionAITool;
+  }>;
+
+  /** Get all new file menu contributions */
+  getNewFileMenuContributions(): Array<{
+    extensionId: string;
+    contribution: NewFileMenuContribution;
+  }>;
+
+  /** Find a custom editor for a given file extension */
+  findEditorForExtension(fileExtension: string): {
+    extensionId: string;
+    contribution: CustomEditorContribution;
+    component: React.ComponentType<unknown>;
+  } | undefined;
+
+  /** Subscribe to extension changes */
+  subscribe(listener: () => void): () => void;
+
+  /** Unload all extensions */
+  async unloadAll(): Promise<void>;
+}
+
+interface LoadedExtension {
+  manifest: ExtensionManifest;
+  module: ExtensionModule;
+  context: ExtensionContext;
+  disposeStyles?: () => void;
+  enabled: boolean;
+  dispose(): Promise<void>;
+}
+
+interface DiscoveredExtension {
+  path: string;
+  manifest: ExtensionManifest;
+}
+
+type ExtensionLoadResult =
+  | { success: true; extension: LoadedExtension }
+  | { success: false; error: string; manifestPath?: string };
+```
+
+### Global Instance
+
+```typescript
+// Get the global ExtensionLoader instance
+function getExtensionLoader(): ExtensionLoader;
+
+// Initialize extensions by discovering and loading all
+async function initializeExtensions(): Promise<void>;
 ```
 
 ## Application Initialization
 
 ```typescript
-// Initialize extension system at app startup
-const extensionSystem = new NimbalystExtensionSystem();
+// In the Electron renderer, during app initialization:
 
-// Register built-in extensions
-await extensionSystem.register(MermaidExtension);
-await extensionSystem.register(TableExtension);
-await extensionSystem.register(TaskManagerExtension);
+// 1. Set up the platform service
+import { setExtensionPlatformService } from '@nimbalyst/runtime/extensions';
+import { ExtensionPlatformServiceImpl } from './extensions/ExtensionPlatformServiceImpl';
 
-// Register third-party extensions
-const userExtensions = await loadUserExtensions();
-for (const ext of userExtensions) {
-  await extensionSystem.register(ext);
-}
+setExtensionPlatformService(new ExtensionPlatformServiceImpl());
 
-// Initialize editor with aggregated editor extensions
-const editor = buildEditorFromExtensions(
-  extensionSystem.getEditorExtensions(),
-  {
-    // Additional editor config
-  }
-);
+// 2. Initialize extensions (discovers and loads all)
+import { initializeExtensions, getExtensionLoader } from '@nimbalyst/runtime/extensions';
 
-// Or with React
-<LexicalExtensionComposer extensions={extensionSystem.getEditorExtensions()}>
-  <Editor transformers={extensionSystem.getTransformers()} />
-</LexicalExtensionComposer>
+await initializeExtensions();
 
-// Component Picker uses aggregated commands
-<ComponentPicker commands={extensionSystem.getComponentCommands()} />
+// 3. Initialize the AI tools bridge
+import { initializeExtensionAIToolsBridge } from '@nimbalyst/runtime/extensions';
 
-// Route files to custom editors
-const customEditor = extensionSystem.findCustomEditorForFile('design.wireframe.html');
-if (customEditor) {
-  <customEditor.component
+initializeExtensionAIToolsBridge();
+
+// 4. Get custom editors for a file
+const loader = getExtensionLoader();
+const editor = loader.findEditorForExtension('.prisma');
+if (editor) {
+  // Render the extension's custom editor component
+  <editor.component
     filePath={filePath}
+    fileName={fileName}
     initialContent={content}
-    onChange={handleChange}
-    context={extensionContext}
+    theme={theme}
+    isActive={true}
+    onDirtyChange={setIsDirty}
+    onGetContentReady={(fn) => getContentRef.current = fn}
   />
 }
 
-// Inject AI context layers
-const aiContext = await extensionSystem.getAIContextLayers({ provider: 'claude' });
-const systemPrompt = [...basePrompt, ...aiContext].join('\n\n');
-
-// Invoke AI tools
-const result = await extensionSystem.invokeAITool('create_wireframe', {
-  filename: 'dashboard',
-  title: 'Admin Dashboard',
-}, aiToolContext);
+// 5. Get new file menu items from extensions
+const newFileItems = loader.getNewFileMenuContributions();
+// Add to "New File" dropdown menu
 ```
 
-## Example Extensions
+## Example: DatamodelLM Extension
 
-### Example 1: Simple Editor Extension (Mermaid)
+DatamodelLM is the first extension built on this system. Here's its actual implementation:
 
-```typescript
-export const MermaidExtension: NimbalystExtension = {
-  id: 'com.nimbalyst.mermaid',
-  name: 'Mermaid Diagrams',
-  version: '1.0.0',
-  description: 'Add Mermaid diagram support to your documents',
-  author: 'Nimbalyst Team',
+### manifest.json
 
-  // Editor-only extension, no special permissions needed
-  editor: {
-    nodes: [MermaidNode],
-    transformers: [MERMAID_TRANSFORMER],
-    componentCommands: [
+```json
+{
+  "id": "com.nimbalyst.datamodellm",
+  "name": "DatamodelLM",
+  "version": "1.0.0",
+  "description": "AI-assisted data modeling with visual entity-relationship diagrams",
+  "author": "Nimbalyst",
+  "main": "dist/index.js",
+  "styles": "dist/index.css",
+  "apiVersion": "1.0.0",
+  "permissions": {
+    "filesystem": true,
+    "ai": true
+  },
+  "contributions": {
+    "customEditors": [
       {
-        title: 'Mermaid Diagram',
-        description: 'Insert a Mermaid diagram for flowcharts, sequence diagrams, and more',
-        icon: 'account_tree',
-        keywords: ['mermaid', 'diagram', 'flowchart', 'sequence', 'chart', 'graph', 'uml'],
-        command: INSERT_MERMAID_COMMAND,
-      },
+        "filePatterns": ["*.prisma"],
+        "displayName": "Data Model Editor",
+        "component": "DatamodelLMEditor"
+      }
     ],
-    lexical: {
-      register: (editor) => {
-        return editor.registerCommand(
-          INSERT_MERMAID_COMMAND,
-          (payload) => {
-            // Insert mermaid diagram
-            return true;
-          },
-          COMMAND_PRIORITY_EDITOR
-        );
-      },
-    },
-  },
-};
-```
-
-### Example 2: Full Application Extension (Task Manager)
-
-```typescript
-export const TaskManagerExtension: NimbalystExtension = {
-  id: 'com.example.task-manager',
-  name: 'Task Manager',
-  version: '1.0.0',
-  description: 'Manage tasks across your documents',
-
-  permissions: {
-    database: true,
-    filesystem: true,
-  },
-
-  activate: async (context) => {
-    // Initialize task database
-    await context.database!.execute(`
-      CREATE TABLE IF NOT EXISTS ext_tasks (
-        id TEXT PRIMARY KEY,
-        title TEXT NOT NULL,
-        completed BOOLEAN DEFAULT false,
-        document_path TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // Register command to show task panel
-    context.app.registerCommand('task-manager.show', async () => {
-      context.ui.showPanel({
-        id: 'task-panel',
-        title: 'Tasks',
-        component: TaskPanelComponent,
-      });
-    });
-  },
-
-  menus: [
-    {
-      menu: 'view',
-      group: 'panels',
-      items: [
-        {
-          id: 'task-manager.show',
-          label: 'Show Tasks',
-          command: 'task-manager.show',
-          accelerator: 'CmdOrCtrl+Shift+T',
-          icon: 'check_box',
-        },
-      ],
-    },
-  ],
-
-  commands: [
-    {
-      id: 'task-manager.add',
-      title: 'Add Task',
-      icon: 'add_task',
-      keywords: ['task', 'todo', 'add'],
-      handler: async (context) => {
-        const title = await context.app.showDialog({
-          type: 'input',
-          title: 'New Task',
-          placeholder: 'Enter task title...',
-        });
-
-        if (title) {
-          await context.database!.execute(
-            'INSERT INTO ext_tasks (id, title) VALUES (?, ?)',
-            [crypto.randomUUID(), title]
-          );
-          context.ui.showNotification('Task added!', 'info');
-        }
-      },
-    },
-  ],
-
-  panels: [
-    {
-      id: 'task-panel',
-      title: 'Tasks',
-      icon: 'check_box',
-      location: 'sidebar',
-      component: TaskPanelComponent,
-    },
-  ],
-
-  settings: [
-    {
-      key: 'task-manager.showCompleted',
-      title: 'Show Completed Tasks',
-      type: 'boolean',
-      default: true,
-    },
-  ],
-};
-```
-
-### Example 3: Extension with Editor + App Features (Word Counter)
-
-```typescript
-export const WordCounterExtension: NimbalystExtension = {
-  id: 'com.example.word-counter',
-  name: 'Word Counter',
-  version: '1.0.0',
-
-  permissions: {
-    database: true,
-  },
-
-  activate: async (context) => {
-    // Track word count changes
-    context.editor.onDidChangeActiveEditor((editor) => {
-      if (!editor) return;
-
-      const updateWordCount = () => {
-        const text = editor.getEditorState().read(() => {
-          return $getRoot().getTextContent();
-        });
-
-        const wordCount = text.split(/\s+/).filter(w => w.length > 0).length;
-
-        // Update status bar
-        context.ui.showStatusBarItem({
-          id: 'word-count',
-          text: `${wordCount} words`,
-          alignment: 'right',
-        });
-
-        // Store in database
-        const docPath = context.app.getWorkspacePath();
-        if (docPath) {
-          context.database!.execute(
-            'INSERT INTO ext_word_counts (path, count, timestamp) VALUES (?, ?, ?)',
-            [docPath, wordCount, Date.now()]
-          );
-        }
-      };
-
-      // Update on every change
-      editor.registerUpdateListener(updateWordCount);
-      updateWordCount();
-    });
-  },
-
-  database: {
-    migrations: [
-      {
-        version: 1,
-        up: `
-          CREATE TABLE IF NOT EXISTS ext_word_counts (
-            path TEXT NOT NULL,
-            count INTEGER NOT NULL,
-            timestamp INTEGER NOT NULL
-          )
-        `,
-      },
+    "aiTools": [
+      "datamodellm.get_schema",
+      "datamodellm.capture_screenshot"
     ],
-  },
-
-  statusBarItems: [
-    {
-      id: 'word-count',
-      alignment: 'right',
-      priority: 100,
+    "fileIcons": {
+      "*.prisma": "database"
     },
-  ],
-};
+    "newFileMenu": [
+      {
+        "extension": ".prisma",
+        "displayName": "Data Model",
+        "icon": "database",
+        "defaultContent": "// @nimbalyst {...}\n\ndatasource db {\n  provider = \"postgresql\"\n  url      = env(\"DATABASE_URL\")\n}\n"
+      }
+    ]
+  }
+}
 ```
 
-### Example 4: Custom Editor with AI Integration (WireframeLM)
-
-This example demonstrates how the WireframeLM system could be implemented as an extension, showcasing:
-- Custom editor registration for `.wireframe.html` files
-- AI tool integration (`create_wireframe`, `export_wireframe`)
-- AI context layering (listing wireframes in workspace)
-- AI instructions for understanding wireframe capabilities
-- Screenshot attachments sent back to AI
-- Custom save/load handlers
-- Menu and command contributions
-- Specialized toolbar component
+### index.tsx (Entry Point)
 
 ```typescript
-export const WireframeLMExtension: NimbalystExtension = {
-  id: 'com.nimbalyst.wireframelm',
-  name: 'WireframeLM Designer',
-  version: '1.0.0',
-  description: 'Visual wireframe designer with AI integration',
-  author: 'Nimbalyst Team',
+import './styles.css';
+import { DatamodelLMEditor } from './components/DatamodelLMEditor';
+import { aiTools as datamodelAITools } from './aiTools';
 
-  permissions: {
-    filesystem: true,
-  },
+export async function activate(context: unknown) {
+  console.log('[DatamodelLM] Extension activated');
+}
 
-  // Register custom editor for .wireframe.html files
-  customEditors: [
-    {
-      filePatterns: ['*.wireframe.html'],
-      displayName: 'Wireframe Designer',
-      icon: 'grid_on',
-      priority: 100,
-      component: WireframeLMEditor,
-      toolbarComponent: WireframeLMToolbar,
+export async function deactivate() {
+  console.log('[DatamodelLM] Extension deactivated');
+}
 
-      saveHandler: async (filePath, content) => {
-        // Custom save logic for wireframe format
-        await fs.writeFile(filePath, content.html, 'utf8');
-      },
+export const components = {
+  DatamodelLMEditor,
+};
 
-      loadHandler: async (filePath) => {
-        // Custom load logic
-        const html = await fs.readFile(filePath, 'utf8');
-        return { html, elements: parseWireframe(html) };
-      },
+export const aiTools = datamodelAITools;
+```
+
+### aiTools.ts (AI Tools)
+
+```typescript
+const activeStores = new Map<string, DataModelStoreApi>();
+
+export function registerEditorStore(filePath: string, store: DataModelStoreApi): void {
+  activeStores.set(filePath, store);
+}
+
+export function unregisterEditorStore(filePath: string): void {
+  activeStores.delete(filePath);
+}
+
+function getStore(filePath?: string): DataModelStoreApi | null {
+  if (filePath && activeStores.has(filePath)) {
+    return activeStores.get(filePath)!;
+  }
+  if (activeStores.size === 1) {
+    return activeStores.values().next().value;
+  }
+  return null;
+}
+
+export const aiTools = [
+  {
+    name: 'get_schema',
+    description: `Get the current data model schema. Use this to understand the existing entities and relationships before making changes.
+
+Example usage:
+- "What tables exist?"
+- "Show me the current schema"
+- "What fields does User have?"`,
+    parameters: {
+      type: 'object' as const,
+      properties: {},
     },
-  ],
+    handler: async (
+      _params: Record<string, never>,
+      context: { activeFilePath?: string }
+    ) => {
+      const store = getStore(context.activeFilePath);
+      if (!store) {
+        return {
+          success: false,
+          error: 'No active data model editor found. Please open a .prisma file first.',
+        };
+      }
 
-  // AI integration
-  ai: {
-    // Layer instructions into AI prompts
-    instructions: `
-You have access to a wireframe design system. You can create interactive wireframes
-for web applications using the create_wireframe tool. Wireframes are saved as
-.wireframe.html files that can be edited visually.
-    `.trim(),
-
-    // Expose AI tools
-    tools: [
-      {
-        name: 'create_wireframe',
-        description: 'Create a new wireframe design file for a web application or UI mockup',
-        parameters: {
-          type: 'object',
-          properties: {
-            filename: {
-              type: 'string',
-              description: 'Name for the wireframe file (will add .wireframe.html extension)',
-            },
-            title: {
-              type: 'string',
-              description: 'Title/description of what the wireframe represents',
-            },
-            elements: {
-              type: 'array',
-              description: 'Initial wireframe elements to create',
-              items: {
-                type: 'object',
-                properties: {
-                  type: { type: 'string', enum: ['box', 'text', 'button', 'image'] },
-                  x: { type: 'number' },
-                  y: { type: 'number' },
-                  width: { type: 'number' },
-                  height: { type: 'number' },
-                  label: { type: 'string' },
-                },
-              },
-            },
-          },
-          required: ['filename', 'title'],
-        },
-        handler: async (params, context) => {
-          const { filename, title, elements = [] } = params;
-          const fullPath = path.join(
-            context.workspace!.path,
-            `${filename}.wireframe.html`
-          );
-
-          // Generate wireframe HTML
-          const html = generateWireframeHTML(title, elements);
-
-          // Save file
-          await context.fs!.writeFile(fullPath, html);
-
-          // Capture screenshot
-          const screenshot = await captureWireframeScreenshot(html);
-
-          return {
-            success: true,
-            data: {
-              filePath: fullPath,
-              elementCount: elements.length,
-            },
-            attachments: [
-              {
-                type: 'image',
-                data: screenshot,
-                name: `${filename}-preview.png`,
-                mimeType: 'image/png',
-              },
-            ],
-          };
-        },
-      },
-      {
-        name: 'export_wireframe',
-        description: 'Export wireframe as PNG image or HTML',
-        parameters: {
-          type: 'object',
-          properties: {
-            filename: {
-              type: 'string',
-              description: 'Wireframe filename to export',
-            },
-            format: {
-              type: 'string',
-              enum: ['png', 'html'],
-              description: 'Export format',
-            },
-          },
-          required: ['filename', 'format'],
-        },
-        handler: async (params, context) => {
-          const { filename, format } = params;
-          const wireframePath = path.join(
-            context.workspace!.path,
-            filename.endsWith('.wireframe.html') ? filename : `${filename}.wireframe.html`
-          );
-
-          const html = await context.fs!.readFile(wireframePath);
-
-          if (format === 'png') {
-            const screenshot = await captureWireframeScreenshot(html);
-            const exportPath = wireframePath.replace('.wireframe.html', '.png');
-            await context.fs!.writeFile(exportPath, screenshot);
-
-            return {
-              success: true,
-              data: { exportPath },
-              attachments: [
-                {
-                  type: 'image',
-                  data: screenshot,
-                  name: path.basename(exportPath),
-                  mimeType: 'image/png',
-                },
-              ],
-            };
-          } else {
-            const exportPath = wireframePath.replace('.wireframe.html', '.html');
-            await context.fs!.writeFile(exportPath, html);
-
-            return {
-              success: true,
-              data: { exportPath },
-            };
-          }
-        },
-      },
-    ],
-
-    // Dynamic context provider
-    contextProvider: async (context) => {
-      const workspace = context.app.getWorkspacePath();
-      if (!workspace) return '';
-
-      // Find all wireframe files in workspace
-      const wireframes = await findWireframeFiles(workspace);
-
-      if (wireframes.length === 0) return '';
+      const state = store.getState();
+      const { entities, relationships, database } = state;
 
       return {
-        priority: 75,
-        content: `
-This workspace contains ${wireframes.length} wireframe design(s):
-${wireframes.map(w => `- ${w.name}: ${w.title}`).join('\n')}
-
-You can reference, modify, or export these wireframes using the wireframe tools.
-        `.trim(),
+        success: true,
+        message: `Found ${entities.length} entities and ${relationships.length} relationships.`,
+        data: {
+          database,
+          entities: entities.map(e => ({
+            name: e.name,
+            fields: e.fields.map(f => ({
+              name: f.name,
+              type: f.dataType,
+              isPrimaryKey: f.isPrimaryKey,
+              isForeignKey: f.isForeignKey,
+            })),
+          })),
+          relationships: relationships.map(r => ({
+            from: `${r.sourceEntityName}.${r.sourceFieldName || 'id'}`,
+            to: `${r.targetEntityName}.${r.targetFieldName || 'id'}`,
+            type: r.type,
+          })),
+        },
       };
     },
   },
 
-  // Menu contributions
-  menus: [
-    {
-      menu: 'file',
-      group: 'new',
-      items: [
-        {
-          id: 'wireframelm.new',
-          label: 'New Wireframe',
-          command: 'wireframelm.create',
-          accelerator: 'CmdOrCtrl+Shift+W',
-          icon: 'grid_on',
+  {
+    name: 'capture_screenshot',
+    description: `Capture a screenshot of the current data model diagram.`,
+    parameters: {
+      type: 'object' as const,
+      properties: {},
+    },
+    handler: async (
+      _params: Record<string, never>,
+      context: { activeFilePath?: string }
+    ) => {
+      const store = getStore(context.activeFilePath);
+      if (!store) {
+        return {
+          success: false,
+          error: 'No active data model editor found.',
+        };
+      }
+
+      return {
+        success: true,
+        message: 'Screenshot capture requested.',
+        captureScreenshot: true,
+        data: {
+          filePath: context.activeFilePath,
+          entityCount: store.getState().entities.length,
         },
+      };
+    },
+  },
+];
+```
+
+### vite.config.ts (Build Configuration)
+
+```typescript
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [react()],
+  build: {
+    lib: {
+      entry: 'src/index.tsx',
+      formats: ['es'],
+      fileName: 'index',
+    },
+    outDir: 'dist',
+    rollupOptions: {
+      external: [
+        'react',
+        'react-dom',
+        'react/jsx-runtime',
+        'react/jsx-dev-runtime',
+        'zustand',
+        '@xyflow/react',
       ],
     },
-  ],
-
-  // Commands
-  commands: [
-    {
-      id: 'wireframelm.create',
-      title: 'Create New Wireframe',
-      icon: 'grid_on',
-      keywords: ['wireframe', 'mockup', 'design', 'ui'],
-      handler: async (context) => {
-        const filename = await context.app.showDialog({
-          type: 'input',
-          title: 'New Wireframe',
-          placeholder: 'Enter wireframe name...',
-        });
-
-        if (filename) {
-          const workspace = context.app.getWorkspacePath();
-          if (!workspace) return;
-
-          const filePath = path.join(workspace, `${filename}.wireframe.html`);
-          const html = generateWireframeHTML(filename, []);
-          await context.fs!.writeFile(filePath, html);
-
-          context.ui.showNotification('Wireframe created!', 'info');
-        }
-      },
-    },
-  ],
-};
+    cssCodeSplit: false,
+  },
+});
 ```
 
 ## Helper Types
 
 ```typescript
-type Disposable = {
+interface Disposable {
   dispose(): void;
-};
-
-interface FileChangeEvent {
-  type: 'created' | 'modified' | 'deleted';
-  path: string;
 }
 
-interface DialogOptions {
-  type: 'input' | 'confirm' | 'select';
-  title: string;
-  placeholder?: string;
-  message?: string;
-  options?: string[];
-}
-
-interface PanelOptions {
+interface CommandContribution {
+  /** Unique command ID */
   id: string;
+
+  /** Display name */
   title: string;
-  component: React.ComponentType<any>;
+
+  /** Optional keyboard shortcut */
+  keybinding?: string;
 }
 
-interface StatusBarItem {
+interface ExtensionContextProvider {
+  /** Provider identifier */
   id: string;
-  text: string;
-  alignment: 'left' | 'right';
+
+  /** Priority (higher = earlier in context) */
   priority?: number;
-}
 
-interface Migration {
-  version: number;
-  up: string;
-  down?: string;
-}
-
-interface SettingsContribution {
-  key: string;
-  title: string;
-  type: 'boolean' | 'string' | 'number' | 'select';
-  default: any;
-  options?: any[];
-}
-
-interface StatusBarItemContribution {
-  id: string;
-  alignment: 'left' | 'right';
-  priority?: number;
-}
-
-interface DialogContribution {
-  // TBD - for custom dialog registration
+  /** Generate context string */
+  provideContext(): Promise<string>;
 }
 ```
+
+## Security Considerations
+
+Extensions currently run with full renderer process privileges. See the [Extension System Security Review](./extension-system-security-review.md) for details on:
+
+- Current trust model (full trust)
+- IPC access concerns
+- Permission enforcement status
+- Recommended security roadmap
+
+## Future API Additions (Planned)
+
+The following APIs are designed but not yet implemented:
+
+- **Menu contributions**: Register items in application menus
+- **Command palette**: Add commands to the command palette
+- **Database access**: SQL queries for extension data storage
+- **Settings panels**: Extension-specific settings UI
+- **Context providers**: Layer extension context into AI prompts
+- **Editor extensions**: Lexical nodes and markdown transformers
+
+## References
+
+- Implementation: `packages/runtime/src/extensions/`
+- DatamodelLM Extension: `packages/extensions/datamodellm/`
+- Platform Service: `packages/electron/src/renderer/extensions/`
+- Security Review: `design/Extensions/extension-system-security-review.md`
