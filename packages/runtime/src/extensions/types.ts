@@ -74,8 +74,28 @@ export interface ExtensionContributions {
   /** File icons by pattern */
   fileIcons?: Record<string, string>;
 
+  /** New file menu contributions */
+  newFileMenu?: NewFileMenuContribution[];
+
   /** Commands (for future use) */
   commands?: CommandContribution[];
+}
+
+/**
+ * New file menu contribution - adds option to "New File" menu
+ */
+export interface NewFileMenuContribution {
+  /** File extension (e.g., ".datamodel") */
+  extension: string;
+
+  /** Display name in menu (e.g., "Data Model") */
+  displayName: string;
+
+  /** Material icon name */
+  icon: string;
+
+  /** Default content for new files (JSON string or function name) */
+  defaultContent: string;
 }
 
 /**
@@ -202,6 +222,22 @@ export interface ExtensionAITool {
 
   /** JSON Schema for tool parameters */
   parameters: JSONSchema;
+
+  /**
+   * Tool scope - determines when the tool is available:
+   * - 'global': Always available in MCP
+   * - 'editor': Only available when a matching editor is active
+   * Defaults to 'editor' for backwards compatibility
+   */
+  scope?: 'global' | 'editor';
+
+  /**
+   * File patterns this tool applies to (for editor-scoped tools).
+   * Uses glob patterns like ["*.datamodel", "*.dm"].
+   * If not specified for editor-scoped tools, inherits from the extension's
+   * customEditors contribution.
+   */
+  editorFilePatterns?: string[];
 
   /** Tool execution handler */
   handler: (

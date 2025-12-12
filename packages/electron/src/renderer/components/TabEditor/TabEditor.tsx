@@ -158,6 +158,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const hasInitialContentSyncRef = useRef<boolean>(false);
   const pendingAIEditTagRef = useRef<{tagId: string, sessionId: string, filePath: string} | null>(null);
   const isApplyingDiffRef = useRef<boolean>(false); // Track programmatic diff application
+  const customEditorReloadRef = useRef<((newContent: string) => void) | null>(null); // Callback to reload custom editor content
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -912,6 +913,14 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             } catch (error) {
               logger.ui.error(`[TabEditor] Failed to update editor content:`, error);
             }
+          } else if (customEditorReloadRef.current) {
+            // Update custom editor content
+            try {
+              logger.ui.info(`[TabEditor] Reloading custom editor content for ${fileName}`);
+              customEditorReloadRef.current(newContent);
+            } catch (error) {
+              logger.ui.error(`[TabEditor] Failed to reload custom editor content:`, error);
+            }
           }
         };
 
@@ -1415,9 +1424,26 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                   theme={theme}
                   isActive={isActive}
                   workspaceId={workspaceId}
-                  onContentChange={onContentChange}
-                  onDirtyChange={onDirtyChange}
-                  onGetContentReady={onGetContentReady}
+                  onContentChange={handleContentChange}
+                  onDirtyChange={(isDirty: boolean) => {
+                    setIsDirty(isDirty);
+                    isDirtyRef.current = isDirty;
+                    onDirtyChange?.(isDirty);
+                  }}
+                  onGetContentReady={(getContentFn: () => string) => {
+                    // Store the getContent function for TabEditor's save machinery
+                    getContentFnRef.current = getContentFn;
+                    // Notify parent
+                    onGetContentReady?.(getContentFn);
+                    // Expose the manual save function
+                    onManualSaveReady?.(handleManualSave);
+                    // Mark editor as ready
+                    setIsEditorReady(true);
+                  }}
+                  onReloadContent={(callback) => {
+                    // Store the reload callback for file watcher to call
+                    customEditorReloadRef.current = callback;
+                  }}
                   onViewHistory={onViewHistory}
                   onRenameDocument={onRenameDocument}
                 />

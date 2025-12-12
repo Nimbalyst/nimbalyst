@@ -48,7 +48,7 @@ import { AIService } from './services/ai/AIService';
 import { detectFileWorkspace, suggestWorkspaceForFile } from './utils/workspaceDetection';
 // import { AgentService } from './services/agents/AgentService';
 import { cliManager } from './services/CLIManager';
-import { registerWorkspaceWindow, shutdownHttpServer, startMcpHttpServer, updateDocumentState } from './mcp/httpServer';
+import { registerWorkspaceWindow, registerExtensionTools, shutdownHttpServer, startMcpHttpServer, updateDocumentState } from './mcp/httpServer';
 import { SessionNamingService } from './services/SessionNamingService';
 import { MockupScreenshotService } from './services/MockupScreenshotService';
 import { registerMockupHandlers } from './ipc/MockupHandlers';
@@ -485,6 +485,14 @@ app.whenReady().then(async () => {
 
         // Update document state with the workspace path (canonical identifier)
         updateDocumentState(state);
+    });
+
+    // Set up IPC handler for extension tool registration
+    ipcMain.on('mcp:registerExtensionTools', (event, data) => {
+        const { workspacePath, tools } = data;
+        if (workspacePath && tools) {
+            registerExtensionTools(workspacePath, tools);
+        }
     });
 
     // Set up IPC handler for theme changes from renderer

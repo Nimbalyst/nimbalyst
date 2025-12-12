@@ -482,6 +482,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.send('mcp:updateDocumentState', state),
   clearMcpDocumentState: () => ipcRenderer.invoke('mcp:clearDocumentState'),
 
+  // Extension tool registration for MCP
+  registerExtensionTools: (workspacePath: string, tools: any[]) =>
+    ipcRenderer.send('mcp:registerExtensionTools', { workspacePath, tools }),
+  onExecuteExtensionTool: (callback: (data: { toolName: string; args: any; resultChannel: string; context: any }) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('mcp:executeExtensionTool', handler);
+    return () => ipcRenderer.removeListener('mcp:executeExtensionTool', handler);
+  },
+  sendExtensionToolResult: (resultChannel: string, result: any) =>
+    ipcRenderer.send(resultChannel, result),
+
   // AI object wrapper for cleaner component access
   ai: {
     hasApiKey: () => ipcRenderer.invoke('ai:hasApiKey'),

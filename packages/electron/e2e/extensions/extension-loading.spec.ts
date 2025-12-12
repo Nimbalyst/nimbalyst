@@ -34,28 +34,27 @@ test.describe('Extension Loading', () => {
     consoleLogs.length = 0;
     consoleErrors.length = 0;
 
-    // Create temp workspace with a .datamodel file
+    // Create temp workspace with a .prisma file
     workspaceDir = await createTempWorkspace();
 
-    // Create a .datamodel file that the extension should handle
-    const datamodelContent = JSON.stringify({
-      entities: [
-        {
-          id: 'entity-1',
-          name: 'User',
-          fields: [
-            { id: 'field-1', name: 'id', type: 'uuid', isPrimaryKey: true },
-            { id: 'field-2', name: 'email', type: 'string' },
-          ],
-          position: { x: 100, y: 100 },
-        },
-      ],
-      relationships: [],
-    }, null, 2);
+    // Create a .prisma file that the extension should handle
+    const prismaContent = `// @nimbalyst {"viewport":{"x":0,"y":0,"zoom":1},"positions":{"User":{"x":100,"y":100}},"entityViewMode":"standard"}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id
+  email     String   @unique
+  createdAt DateTime @default(now())
+}
+`;
 
     await fs.writeFile(
-      path.join(workspaceDir, 'test.datamodel'),
-      datamodelContent,
+      path.join(workspaceDir, 'test.prisma'),
+      prismaContent,
       'utf8'
     );
 
@@ -157,7 +156,7 @@ test.describe('Extension Loading', () => {
       await page.waitForTimeout(500);
     }
 
-    // The .datamodel file should be visible in the file tree
+    // The .prisma file should be visible in the file tree
     // First, we might need to change the file filter to show all files
     const filterButton = page.locator('button[aria-label="Filter files"]');
     if (await filterButton.isVisible()) {
@@ -173,25 +172,25 @@ test.describe('Extension Loading', () => {
       }
     }
 
-    // Wait for file tree and find the .datamodel file
+    // Wait for file tree and find the .prisma file
     await page.waitForTimeout(500);
-    const datamodelFile = page.locator('.file-tree-name', { hasText: 'test.datamodel' });
+    const prismaFile = page.locator('.file-tree-name', { hasText: 'test.prisma' });
 
     // The file might not be visible due to filtering, try to find it
-    const isVisible = await datamodelFile.isVisible().catch(() => false);
+    const isVisible = await prismaFile.isVisible().catch(() => false);
     if (!isVisible) {
-      console.log('Note: .datamodel file not visible in tree (may be filtered out)');
+      console.log('Note: .prisma file not visible in tree (may be filtered out)');
       // Try using File > Open or keyboard shortcut
       // For now, we'll verify the extension loaded correctly
       return;
     }
 
-    // Click to open the .datamodel file
-    await datamodelFile.click();
+    // Click to open the .prisma file
+    await prismaFile.click();
 
     // Wait for tab to appear
     await expect(
-      page.locator('.tab-title', { hasText: 'test.datamodel' })
+      page.locator('.tab-title', { hasText: 'test.prisma' })
     ).toBeVisible({ timeout: 5000 });
 
     // Wait for the custom editor to render

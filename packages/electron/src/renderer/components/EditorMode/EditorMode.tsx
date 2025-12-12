@@ -8,6 +8,7 @@ import { createInitialFileContent } from '../../utils/fileUtils';
 import { getFileName } from '../../utils/pathUtils';
 import { aiToolService } from '../../services/AIToolService';
 import { editorRegistry } from '@nimbalyst/runtime/ai/EditorRegistry';
+import { customEditorRegistry } from '../CustomEditors';
 import { WorkspaceSidebar } from '../WorkspaceSidebar';
 import { WorkspaceWelcome } from '../WorkspaceWelcome';
 import { TabManager } from '../TabManager/TabManager';
@@ -153,6 +154,48 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   useEffect(() => {
     (window as any).__currentDocumentPath = currentFilePath;
     (window as any).workspacePath = workspacePath;
+  }, [currentFilePath, workspacePath]);
+
+  // Update MCP document state for custom editors (non-markdown files)
+  // Markdown files update MCP state via useIPCHandlers when content changes,
+  // but custom editors need to update when they become active
+  useEffect(() => {
+    if (!currentFilePath || !workspacePath) return;
+
+    // Check if this is a custom editor file
+    const lastDot = currentFilePath.lastIndexOf('.');
+    if (lastDot <= 0) return;
+
+    const ext = currentFilePath.substring(lastDot).toLowerCase();
+
+    // Skip markdown files - they update MCP state via useIPCHandlers
+    if (ext === '.md' || ext === '.markdown') return;
+
+    // Check if it's a custom editor (either single or compound extension)
+    const isCustom = customEditorRegistry.hasEditor(ext) ||
+      (() => {
+        const secondLastDot = currentFilePath.lastIndexOf('.', lastDot - 1);
+        if (secondLastDot > 0) {
+          const compoundExt = currentFilePath.substring(secondLastDot).toLowerCase();
+          return customEditorRegistry.hasEditor(compoundExt);
+        }
+        return false;
+      })();
+
+    if (!isCustom) return;
+
+    // Update MCP document state for custom editor
+    if (window.electronAPI?.updateMcpDocumentState) {
+      const docState = {
+        content: '', // Custom editors don't use content-based MCP state
+        filePath: currentFilePath,
+        fileType: ext.substring(1), // Remove the dot
+        workspacePath,
+        cursorPosition: undefined,
+        selection: undefined
+      };
+      window.electronAPI.updateMcpDocumentState(docState);
+    }
   }, [currentFilePath, workspacePath]);
 
   // Build document context for AI features

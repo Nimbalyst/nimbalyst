@@ -35,6 +35,12 @@ export interface CustomEditorProps {
   // Document actions
   onViewHistory?: () => void;
   onRenameDocument?: () => void;
+
+  /**
+   * Called when the file content changes externally (e.g., AI edited the file).
+   * Custom editors should implement this to reload their content from the new value.
+   */
+  onReloadContent?: (callback: (newContent: string) => void) => void;
 }
 
 /**

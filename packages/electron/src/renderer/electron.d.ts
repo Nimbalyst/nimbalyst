@@ -147,6 +147,11 @@ interface ElectronAPI {
   updateMcpDocumentState?: (state: any) => Promise<void>;
   clearMcpDocumentState?: () => Promise<void>;
 
+  // Extension tool registration for MCP
+  registerExtensionTools?: (workspacePath: string, tools: any[]) => void;
+  onExecuteExtensionTool?: (callback: (data: { toolName: string; args: any; resultChannel: string; context: any }) => void) => () => void;
+  sendExtensionToolResult?: (resultChannel: string, result: any) => void;
+
   // Workspace Manager operations
   workspaceManager?: {
     getRecentWorkspaces: () => Promise<any[]>;

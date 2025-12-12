@@ -14,21 +14,25 @@
   "contributions": {
     "customEditors": [
       {
-        "filePatterns": ["*.datamodel"],
+        "filePatterns": ["*.prisma"],
         "displayName": "Data Model Editor",
         "component": "DatamodelLMEditor"
       }
     ],
     "aiTools": [
-      "datamodellm.create_entity",
-      "datamodellm.update_entity",
-      "datamodellm.delete_entity",
-      "datamodellm.create_relationship",
-      "datamodellm.update_relationship",
-      "datamodellm.delete_relationship"
+      "datamodellm.get_schema",
+      "datamodellm.capture_screenshot"
     ],
     "fileIcons": {
-      "*.datamodel": "database"
-    }
+      "*.prisma": "database"
+    },
+    "newFileMenu": [
+      {
+        "extension": ".prisma",
+        "displayName": "Data Model",
+        "icon": "database",
+        "defaultContent": "// @nimbalyst {\"viewport\":{\"x\":0,\"y\":0,\"zoom\":1},\"positions\":{},\"entityViewMode\":\"standard\"}\n\ndatasource db {\n  provider = \"postgresql\"\n  url      = env(\"DATABASE_URL\")\n}\n"
+      }
+    ]
   }
 }
