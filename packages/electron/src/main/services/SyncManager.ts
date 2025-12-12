@@ -189,15 +189,20 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
   const PRODUCTION_SYNC_URL = 'wss://sync.nimbalyst.com';
   const DEVELOPMENT_SYNC_URL = 'ws://localhost:8790';
 
+  // Only honor the environment config in dev builds - production builds always use production sync
+  const isDevelopmentBuild = process.env.NODE_ENV !== 'production';
+  const effectiveEnvironment = isDevelopmentBuild ? config.environment : undefined;
+
   // Use explicit serverUrl if set, otherwise derive from environment
   let serverUrl: string;
   if (config.serverUrl) {
     serverUrl = config.serverUrl;
-  } else if (config.environment === 'development') {
+  } else if (effectiveEnvironment === 'development') {
     serverUrl = DEVELOPMENT_SYNC_URL;
   } else {
     serverUrl = PRODUCTION_SYNC_URL;
   }
+  logger.main.info(`[SyncManager] isDevelopmentBuild=${isDevelopmentBuild}, effectiveEnvironment=${effectiveEnvironment}, serverUrl=${serverUrl}`);
 
   // Require Stytch authentication for sync
   const authenticated = isAuthenticated();
