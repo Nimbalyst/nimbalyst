@@ -21,6 +21,9 @@ export default defineConfig({
         'zustand',
         'html2canvas',
         /^@nimbalyst\/runtime/,
+        // Lexical must be externalized to use the host's instance
+        'lexical',
+        /^@lexical\//,
       ],
       output: {
         // Provide global variables for externals

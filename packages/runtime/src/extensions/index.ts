@@ -13,6 +13,7 @@ export type {
   CustomEditorContribution,
   CommandContribution,
   NewFileMenuContribution,
+  SlashCommandContribution,
   ExtensionModule,
   CustomEditorComponentProps,
   JSONSchema,

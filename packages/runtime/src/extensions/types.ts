@@ -79,6 +79,18 @@ export interface ExtensionContributions {
 
   /** Commands (for future use) */
   commands?: CommandContribution[];
+
+  /** Slash commands for the component picker (e.g., /datamodel) */
+  slashCommands?: SlashCommandContribution[];
+
+  /** Custom Lexical nodes (names of exported node classes) */
+  nodes?: string[];
+
+  /** Markdown transformers (names of exported transformer objects) */
+  transformers?: string[];
+
+  /** Host components to mount at app level (names of exported components) */
+  hostComponents?: string[];
 }
 
 /**
@@ -126,6 +138,29 @@ export interface CommandContribution {
   keybinding?: string;
 }
 
+/**
+ * Slash command contribution for the component picker ("/command" menu)
+ */
+export interface SlashCommandContribution {
+  /** Unique command ID (namespaced, e.g., "datamodellm.insert") */
+  id: string;
+
+  /** Display title in the "/" menu */
+  title: string;
+
+  /** Optional description */
+  description?: string;
+
+  /** Material icon name */
+  icon?: string;
+
+  /** Search keywords */
+  keywords?: string[];
+
+  /** Handler function name exported from module */
+  handler: string;
+}
+
 // ============================================================================
 // Extension Module Types
 // ============================================================================
@@ -140,11 +175,23 @@ export interface ExtensionModule {
   /** Called when extension is deactivated */
   deactivate?: () => Promise<void> | void;
 
-  /** React components exported by the extension */
+  /** React components exported by the extension (for custom editors) */
   components?: Record<string, ComponentType<CustomEditorComponentProps>>;
 
   /** AI tools exported by the extension */
   aiTools?: ExtensionAITool[];
+
+  /** Slash command handlers (function name -> handler function) */
+  slashCommandHandlers?: Record<string, () => void>;
+
+  /** Lexical node classes (node name -> node class) */
+  nodes?: Record<string, unknown>; // Klass<LexicalNode> - but we avoid lexical dependency here
+
+  /** Markdown transformers (transformer name -> transformer object) */
+  transformers?: Record<string, unknown>; // Transformer type from @lexical/markdown
+
+  /** Host components to mount at app level (component name -> React component) */
+  hostComponents?: Record<string, ComponentType>;
 }
 
 /**

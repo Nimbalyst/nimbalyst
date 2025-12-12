@@ -33,6 +33,19 @@
         "icon": "database",
         "defaultContent": "// @nimbalyst {\"viewport\":{\"x\":0,\"y\":0,\"zoom\":1},\"positions\":{},\"entityViewMode\":\"standard\"}\n\ndatasource db {\n  provider = \"postgresql\"\n  url      = env(\"DATABASE_URL\")\n}\n"
       }
-    ]
+    ],
+    "slashCommands": [
+      {
+        "id": "datamodellm.insert",
+        "title": "Data Model",
+        "description": "Insert a data model diagram",
+        "icon": "database",
+        "keywords": ["datamodel", "schema", "erd", "database", "entity", "prisma"],
+        "handler": "handleInsertDataModel"
+      }
+    ],
+    "nodes": ["DataModelNode"],
+    "transformers": ["DATAMODEL_TRANSFORMER"],
+    "hostComponents": ["DataModelPickerMenuHost"]
   }
 }
