@@ -459,6 +459,8 @@ export const WorkspaceManager: React.FC = () => {
               <div className="welcome-info-compact">
                 <p className="welcome-description">
                   Projects are local folders on your computer. Open any folder to view and edit all markdown files within it.
+                  If you are working on a coding project, it is recommended to open the root folder of your project as
+                  agents are configured at the project level.
                 </p>
               </div>
 
