@@ -495,11 +495,14 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           chunkCount++;
 
           // Log raw SDK chunks to database
+          // Extract SDK-provided uuid for deduplication in sync
           if (sessionId) {
             const rawChunkJson = typeof chunk === 'string'
               ? JSON.stringify({ type: 'text', content: chunk })
               : JSON.stringify(chunk);
-            this.logAgentMessage(sessionId, 'claude-code', 'output', rawChunkJson, undefined, this.markMessagesAsHidden);
+            // Non-string chunks from SDK have a uuid field we can use for deduplication
+            const providerMessageId = typeof chunk !== 'string' ? chunk.uuid : undefined;
+            this.logAgentMessage(sessionId, 'claude-code', 'output', rawChunkJson, undefined, this.markMessagesAsHidden, providerMessageId);
           }
 
           // if (chunkCount <= 5) {

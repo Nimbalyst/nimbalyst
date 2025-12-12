@@ -302,6 +302,7 @@ export interface AgentMessage {
   content: string;  // Raw message content
   metadata?: Record<string, unknown>;  // Optional provider-specific metadata
   hidden?: boolean;  // Whether to hide this message from UI (e.g., /context commands)
+  providerMessageId?: string;  // Provider-assigned message ID (e.g., SDK uuid) for deduplication
 }
 
 /**
@@ -315,4 +316,5 @@ export interface CreateAgentMessageInput {
   metadata?: Record<string, unknown>;
   hidden?: boolean;  // Whether to hide this message from UI (e.g., /context commands)
   createdAt?: Date | string;  // Optional timestamp for imported messages (defaults to NOW())
+  providerMessageId?: string;  // Provider-assigned message ID (e.g., SDK uuid) for deduplication
 }

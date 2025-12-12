@@ -41,9 +41,9 @@ export function createPGLiteAgentMessagesStore(db: PGliteLike, ensureDbReady?: E
       try {
         await db.query(
           `INSERT INTO ai_agent_messages (
-            session_id, source, direction, content, metadata, hidden, created_at
+            session_id, source, direction, content, metadata, hidden, created_at, provider_message_id
           ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7
+            $1, $2, $3, $4, $5, $6, $7, $8
           )`,
           [
             message.sessionId,
@@ -53,6 +53,7 @@ export function createPGLiteAgentMessagesStore(db: PGliteLike, ensureDbReady?: E
             message.metadata ? JSON.stringify(message.metadata) : null,
             message.hidden ?? false,
             timestamp,
+            message.providerMessageId ?? null,
           ]
         );
 
@@ -80,7 +81,7 @@ export function createPGLiteAgentMessagesStore(db: PGliteLike, ensureDbReady?: E
       const offset = options?.offset ?? 0;
       const includeHidden = options?.includeHidden ?? false;
 
-      const query = `SELECT id, session_id, created_at, source, direction, content, metadata, hidden
+      const query = `SELECT id, session_id, created_at, source, direction, content, metadata, hidden, provider_message_id
          FROM ai_agent_messages
          WHERE session_id = $1${includeHidden ? '' : ' AND hidden = FALSE'}
          ORDER BY id ASC
@@ -104,6 +105,7 @@ export function createPGLiteAgentMessagesStore(db: PGliteLike, ensureDbReady?: E
             // Keep as string if parsing fails
           }
         }
+
         return {
           id: Number(row.id),
           sessionId: row.session_id,
@@ -113,6 +115,7 @@ export function createPGLiteAgentMessagesStore(db: PGliteLike, ensureDbReady?: E
           content: row.content,
           metadata: metadata ?? undefined,
           hidden: row.hidden ?? false,
+          providerMessageId: row.provider_message_id ?? undefined,
         };
       });
     },

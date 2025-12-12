@@ -530,6 +530,25 @@ class PGLiteWorker {
       throw error;
     }
 
+    // Add provider_message_id column to ai_agent_messages table (migration)
+    // This stores the provider-assigned message ID (e.g., SDK uuid) for sync deduplication
+    try {
+      await this.db.exec(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'ai_agent_messages' AND column_name = 'provider_message_id'
+          ) THEN
+            ALTER TABLE ai_agent_messages ADD COLUMN provider_message_id TEXT;
+          END IF;
+        END $$;
+      `);
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to add provider_message_id column:', error);
+      throw error;
+    }
+
     // Queued Prompts table - stores prompts queued from any device for execution
     // Uses simple row-level atomic updates instead of JSONB array manipulation
     console.log('[PGLite Worker] Creating queued_prompts table...');

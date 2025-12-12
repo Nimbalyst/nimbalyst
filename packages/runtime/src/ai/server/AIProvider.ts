@@ -196,7 +196,8 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
     direction: 'input' | 'output',
     content: string,
     metadata?: Record<string, unknown>,
-    hidden?: boolean
+    hidden?: boolean,
+    providerMessageId?: string  // Provider-assigned message ID (e.g., SDK uuid) for deduplication
   ): Promise<void> {
     // Create timestamp HERE - this is the authoritative source
     // This same timestamp must be used for message.created_at, session.updated_at, and sync index
@@ -210,6 +211,7 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
       metadata,
       hidden,
       createdAt,
+      providerMessageId,
     }).then(() => {
       // Emit event to notify listeners that new message was written to database
       // Include hidden flag so sync handlers can skip hidden messages

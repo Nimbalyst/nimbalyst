@@ -561,22 +561,30 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
     const { encrypted, iv } = await encrypt(content, key);
 
-    // Generate a STABLE sync ID from message content + timestamp
-    // This prevents duplicate messages when the same message is synced multiple times
-    // We hash: sessionId + timestamp + first 100 chars of content + direction
-    const timestamp = message.createdAt instanceof Date
-      ? message.createdAt.getTime()
-      : typeof message.createdAt === 'number'
-        ? message.createdAt
-        : Date.now();
-    const contentPreview = message.content.substring(0, 100);
-    const hashInput = `${message.sessionId}:${timestamp}:${message.direction}:${contentPreview}`;
+    // Use provider-assigned message ID if available (e.g., SDK uuid)
+    // This is the most reliable deduplication method as the provider guarantees uniqueness
+    // Fall back to hash-based ID for older messages or non-SDK providers
+    let syncId: string;
+    if (message.providerMessageId) {
+      syncId = message.providerMessageId;
+    } else {
+      // Generate a STABLE sync ID from message content + timestamp
+      // This prevents duplicate messages when the same message is synced multiple times
+      // We hash: sessionId + timestamp + first 100 chars of content + direction
+      const timestamp = message.createdAt instanceof Date
+        ? message.createdAt.getTime()
+        : typeof message.createdAt === 'number'
+          ? message.createdAt
+          : Date.now();
+      const contentPreview = message.content.substring(0, 100);
+      const hashInput = `${message.sessionId}:${timestamp}:${message.direction}:${contentPreview}`;
 
-    // Use SubtleCrypto to generate a stable hash
-    const encoder = new TextEncoder();
-    const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(hashInput));
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const syncId = hashArray.slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
+      // Use SubtleCrypto to generate a stable hash
+      const encoder = new TextEncoder();
+      const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(hashInput));
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      syncId = hashArray.slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
 
     return {
       id: syncId,
