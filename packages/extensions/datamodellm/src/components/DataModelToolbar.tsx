@@ -13,10 +13,30 @@ interface DataModelToolbarProps {
 
 const VIEW_MODES: { value: EntityViewMode; label: string }[] = [
   { value: 'compact', label: 'Compact' },
-  { value: 'minimal', label: 'Minimal' },
   { value: 'standard', label: 'Standard' },
   { value: 'full', label: 'Full' },
 ];
+
+// Auto-layout icon (grid/layout icon)
+function AutoLayoutIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="3" y="3" width="7" height="7" />
+      <rect x="14" y="3" width="7" height="7" />
+      <rect x="3" y="14" width="7" height="7" />
+      <rect x="14" y="14" width="7" height="7" />
+    </svg>
+  );
+}
 
 export function DataModelToolbar({ store }: DataModelToolbarProps) {
   const state = store.getState();
@@ -63,6 +83,10 @@ export function DataModelToolbar({ store }: DataModelToolbarProps) {
     store.getState().setEntityViewMode(mode);
   };
 
+  const handleAutoLayout = () => {
+    store.getState().autoLayout();
+  };
+
   return (
     <div className="datamodel-toolbar">
       <div className="datamodel-toolbar-left">
@@ -71,6 +95,14 @@ export function DataModelToolbar({ store }: DataModelToolbarProps) {
           onClick={handleAddEntity}
         >
           + Add Entity
+        </button>
+        <button
+          className="datamodel-toolbar-button datamodel-toolbar-icon-button"
+          onClick={handleAutoLayout}
+          title="Auto-layout entities"
+          disabled={entities.length === 0}
+        >
+          <AutoLayoutIcon />
         </button>
       </div>
 
