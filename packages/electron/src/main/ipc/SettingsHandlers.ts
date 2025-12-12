@@ -509,22 +509,18 @@ export function registerSettingsHandlers() {
         // Only honor environment config in dev builds - production builds always use production
         const effectiveEnvironment = isDev ? syncConfig?.environment : undefined;
 
+        // Derive server URL from environment - don't rely on persisted serverUrl
         let serverUrl: string;
         if (effectiveEnvironment === 'development') {
             serverUrl = 'ws://localhost:8790';
-        } else if (effectiveEnvironment === 'production') {
-            serverUrl = 'wss://sync.nimbalyst.com';
-        } else if (syncConfig?.serverUrl) {
-            // Custom URL (rare - only if user manually configured)
-            serverUrl = syncConfig.serverUrl;
         } else {
-            // Default based on NODE_ENV
-            serverUrl = isDev ? 'ws://localhost:8790' : 'wss://sync.nimbalyst.com';
+            // Production is the default (for both prod builds and when not explicitly set in dev)
+            serverUrl = 'wss://sync.nimbalyst.com';
         }
 
         // Convert WebSocket URLs to HTTP: wss:// -> https://, ws:// -> http://
         const httpUrl = serverUrl.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:');
-        logger.main.info('[stytch:sign-in-google] Auth URL:', httpUrl, 'syncConfig:', JSON.stringify(syncConfig));
+        logger.main.info('[stytch:sign-in-google] Auth URL:', httpUrl, 'effectiveEnvironment:', effectiveEnvironment);
         return StytchAuth.signInWithGoogle(httpUrl);
     });
 
@@ -541,22 +537,18 @@ export function registerSettingsHandlers() {
         // Only honor environment config in dev builds - production builds always use production
         const effectiveEnvironment = isDev ? syncConfig?.environment : undefined;
 
+        // Derive server URL from environment - don't rely on persisted serverUrl
         let serverUrl: string;
         if (effectiveEnvironment === 'development') {
             serverUrl = 'ws://localhost:8790';
-        } else if (effectiveEnvironment === 'production') {
-            serverUrl = 'wss://sync.nimbalyst.com';
-        } else if (syncConfig?.serverUrl) {
-            // Custom URL (rare - only if user manually configured)
-            serverUrl = syncConfig.serverUrl;
         } else {
-            // Default based on NODE_ENV
-            serverUrl = isDev ? 'ws://localhost:8790' : 'wss://sync.nimbalyst.com';
+            // Production is the default (for both prod builds and when not explicitly set in dev)
+            serverUrl = 'wss://sync.nimbalyst.com';
         }
 
         // Convert WebSocket URLs to HTTP: wss:// -> https://, ws:// -> http://
         const httpUrl = serverUrl.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:');
-        logger.main.info('[stytch:send-magic-link] Sending to:', httpUrl, 'syncConfig:', JSON.stringify(syncConfig));
+        logger.main.info('[stytch:send-magic-link] Sending to:', httpUrl, 'effectiveEnvironment:', effectiveEnvironment);
         return StytchAuth.sendMagicLink(email, httpUrl);
     });
 

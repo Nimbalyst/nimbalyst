@@ -193,11 +193,10 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
   const isDevelopmentBuild = process.env.NODE_ENV !== 'production';
   const effectiveEnvironment = isDevelopmentBuild ? config.environment : undefined;
 
-  // Use explicit serverUrl if set, otherwise derive from environment
+  // Derive server URL from environment - don't rely on persisted serverUrl as it may be stale
+  // (e.g., user switched from dev to production but old localhost URL was persisted)
   let serverUrl: string;
-  if (config.serverUrl) {
-    serverUrl = config.serverUrl;
-  } else if (effectiveEnvironment === 'development') {
+  if (effectiveEnvironment === 'development') {
     serverUrl = DEVELOPMENT_SYNC_URL;
   } else {
     serverUrl = PRODUCTION_SYNC_URL;
