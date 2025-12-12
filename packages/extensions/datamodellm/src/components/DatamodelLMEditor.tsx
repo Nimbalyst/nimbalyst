@@ -7,12 +7,13 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
-import { DataModelCanvas } from './DataModelCanvas';
+import { DataModelCanvas, type DataModelCanvasRef } from './DataModelCanvas';
 import { DataModelToolbar } from './DataModelToolbar';
 import { createDataModelStore, type DataModelStoreApi } from '../store';
 import { createEmptyDataModel } from '../types';
 import { parsePrismaSchema, serializeToPrismaSchema } from '../prismaParser';
 import { registerEditorStore, unregisterEditorStore } from '../aiTools';
+import { captureDataModelCanvas, copyScreenshotToClipboard } from '../utils/screenshotUtils';
 
 /**
  * Props received from Nimbalyst's custom editor system
@@ -45,6 +46,7 @@ export function DatamodelLMEditor({
 }: CustomEditorProps) {
   // Create a store instance for this editor
   const storeRef = useRef<DataModelStoreApi | null>(null);
+  const canvasRef = useRef<DataModelCanvasRef>(null);
 
   // Initialize store on mount
   if (!storeRef.current) {
@@ -126,11 +128,28 @@ export function DatamodelLMEditor({
     onReloadContent?.(handleReloadContent);
   }, [onReloadContent, handleReloadContent]);
 
+  // Handle screenshot capture
+  const handleScreenshot = useCallback(async () => {
+    const canvasElement = canvasRef.current?.getCanvasElement();
+    if (!canvasElement) {
+      console.error('[DatamodelLM] Could not find canvas element for screenshot');
+      return;
+    }
+
+    try {
+      const base64Data = await captureDataModelCanvas(canvasElement);
+      await copyScreenshotToClipboard(base64Data);
+      console.log('[DatamodelLM] Screenshot copied to clipboard');
+    } catch (error) {
+      console.error('[DatamodelLM] Failed to capture screenshot:', error);
+    }
+  }, []);
+
   return (
     <div className="datamodel-editor" data-theme={theme}>
-      <DataModelToolbar store={store} />
+      <DataModelToolbar store={store} onScreenshot={handleScreenshot} />
       <ReactFlowProvider>
-        <DataModelCanvas store={store} theme={theme} />
+        <DataModelCanvas ref={canvasRef} store={store} theme={theme} />
       </ReactFlowProvider>
     </div>
   );

@@ -4,11 +4,13 @@
  * Toolbar component with view mode selector, add entity button, and stats display.
  */
 
+import { MaterialSymbol } from '@nimbalyst/runtime/ui/icons/MaterialSymbol';
 import type { DataModelStoreApi } from '../store';
 import type { EntityViewMode } from '../types';
 
 interface DataModelToolbarProps {
   store: DataModelStoreApi;
+  onScreenshot?: () => void;
 }
 
 const VIEW_MODES: { value: EntityViewMode; label: string }[] = [
@@ -17,28 +19,7 @@ const VIEW_MODES: { value: EntityViewMode; label: string }[] = [
   { value: 'full', label: 'Full' },
 ];
 
-// Auto-layout icon (grid/layout icon)
-function AutoLayoutIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <rect x="3" y="3" width="7" height="7" />
-      <rect x="14" y="3" width="7" height="7" />
-      <rect x="3" y="14" width="7" height="7" />
-      <rect x="14" y="14" width="7" height="7" />
-    </svg>
-  );
-}
-
-export function DataModelToolbar({ store }: DataModelToolbarProps) {
+export function DataModelToolbar({ store, onScreenshot }: DataModelToolbarProps) {
   const state = store.getState();
   const { entities, relationships, entityViewMode } = state;
 
@@ -102,7 +83,15 @@ export function DataModelToolbar({ store }: DataModelToolbarProps) {
           title="Auto-layout entities"
           disabled={entities.length === 0}
         >
-          <AutoLayoutIcon />
+          <MaterialSymbol icon="grid_view" size={18} />
+        </button>
+        <button
+          className="datamodel-toolbar-button datamodel-toolbar-icon-button"
+          onClick={onScreenshot}
+          title="Capture screenshot"
+          disabled={!onScreenshot}
+        >
+          <MaterialSymbol icon="photo_camera" size={18} />
         </button>
       </div>
 

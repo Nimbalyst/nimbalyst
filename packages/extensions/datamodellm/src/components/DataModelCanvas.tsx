@@ -5,7 +5,7 @@
  * Displays entities as nodes and relationships as edges.
  */
 
-import { useCallback, useMemo, useEffect, useRef } from 'react';
+import { useCallback, useMemo, useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
 import {
   ReactFlow,
   Node,
@@ -33,9 +33,20 @@ interface DataModelCanvasProps {
   theme: 'light' | 'dark' | 'crystal-dark';
 }
 
-export function DataModelCanvas({ store, theme }: DataModelCanvasProps) {
+export interface DataModelCanvasRef {
+  getCanvasElement: () => HTMLElement | null;
+}
+
+export const DataModelCanvas = forwardRef<DataModelCanvasRef, DataModelCanvasProps>(
+  function DataModelCanvas({ store, theme }, ref) {
   // Use refs to ensure stable references
   const nodeTypesRef = useRef<NodeTypes>({ entity: EntityNode as any });
+  const canvasRef = useRef<HTMLDivElement>(null);
+
+  // Expose canvas element for screenshot capture
+  useImperativeHandle(ref, () => ({
+    getCanvasElement: () => canvasRef.current,
+  }));
   const edgeTypesRef = useRef<EdgeTypes>({ relationship: RelationshipEdge as any });
 
   // Subscribe to store changes
@@ -209,7 +220,7 @@ export function DataModelCanvas({ store, theme }: DataModelCanvasProps) {
   const isDark = theme === 'dark' || theme === 'crystal-dark';
 
   return (
-    <div className="datamodel-canvas">
+    <div className="datamodel-canvas" ref={canvasRef}>
       <ReactFlow
         nodes={localNodes}
         edges={localEdges}
@@ -244,4 +255,4 @@ export function DataModelCanvas({ store, theme }: DataModelCanvasProps) {
       </ReactFlow>
     </div>
   );
-}
+});
