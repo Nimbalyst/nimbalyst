@@ -450,13 +450,6 @@ export async function createApplicationMenu() {
                         }
                     }
                 },
-                {
-                    label: 'New Window',
-                    accelerator: KeyboardShortcuts.file.newWindow,
-                    click: async () => {
-                        createWindow();
-                    }
-                },
                 { type: 'separator' },
                 {
                     label: 'Open...',
