@@ -22,6 +22,72 @@ const activeTransports = new Map<string, SSEServerTransport>();
 // This is populated when we receive document state updates
 const workspaceToWindowMap = new Map<string, number>();
 
+// Extension tools registered from renderer
+interface ExtensionToolDefinition {
+  name: string;
+  description: string;
+  inputSchema: {
+    type: 'object';
+    properties: Record<string, any>;
+    required?: string[];
+  };
+  extensionId: string;
+  scope: 'global' | 'editor';
+  editorFilePatterns?: string[];
+}
+const extensionToolsByWorkspace = new Map<string, ExtensionToolDefinition[]>();
+
+/**
+ * Register extension tools from a workspace window
+ */
+export function registerExtensionTools(workspacePath: string, tools: ExtensionToolDefinition[]) {
+  extensionToolsByWorkspace.set(workspacePath, tools);
+  console.log(`[MCP Server] Registered ${tools.length} extension tools for workspace: ${workspacePath}`);
+  tools.forEach(t => console.log(`[MCP Server]   - ${t.name} (${t.scope})`));
+}
+
+/**
+ * Unregister extension tools for a workspace (when window closes)
+ */
+export function unregisterExtensionTools(workspacePath: string) {
+  extensionToolsByWorkspace.delete(workspacePath);
+  console.log(`[MCP Server] Unregistered extension tools for workspace: ${workspacePath}`);
+}
+
+/**
+ * Get available extension tools for a given file path
+ * Filters based on scope and file patterns
+ */
+function getAvailableExtensionTools(workspacePath: string | undefined, filePath: string | undefined): ExtensionToolDefinition[] {
+  if (!workspacePath) return [];
+
+  const tools = extensionToolsByWorkspace.get(workspacePath) || [];
+
+  return tools.filter(tool => {
+    // Global tools are always available
+    if (tool.scope === 'global') return true;
+
+    // Editor-scoped tools require a matching file
+    if (!filePath) return false;
+
+    // Check if file matches any pattern
+    if (!tool.editorFilePatterns || tool.editorFilePatterns.length === 0) {
+      return false;
+    }
+
+    const fileExtension = filePath.substring(filePath.lastIndexOf('.'));
+    return tool.editorFilePatterns.some(pattern => {
+      // Handle "*.ext" patterns
+      if (pattern.startsWith('*.')) {
+        const patternExt = pattern.substring(1); // ".ext"
+        return fileExtension.toLowerCase() === patternExt.toLowerCase();
+      }
+      // Exact match
+      return filePath.toLowerCase().endsWith(pattern.toLowerCase());
+    });
+  });
+}
+
 export function updateDocumentState(state: any, sessionId?: string) {
   if (!sessionId) {
     // console.warn('[MCP Server] No sessionId provided for document state update - using "default"');
@@ -322,76 +388,95 @@ async function tryCreateServer(port: number): Promise<any> {
 
       // Register tool handlers
       server.setRequestHandler(ListToolsRequestSchema, async () => {
-        // console.log('[MCP Server] Listing tools');
-        return {
-          tools: [
-            {
-              name: 'applyDiff',
-              description: 'Apply text replacements to a markdown document. IMPORTANT: Only .md files can be modified. If no filePath is provided, applies to the currently active document.',
-              inputSchema: {
-                type: 'object',
-                properties: {
-                  filePath: {
-                    type: 'string',
-                    description: 'Optional absolute path to the markdown file (.md) to apply replacements to. If not provided, applies to the currently active document. MUST end in .md extension.'
-                  },
-                  replacements: {
-                    type: 'array',
-                    items: {
-                      type: 'object',
-                      properties: {
-                        oldText: { type: 'string' },
-                        newText: { type: 'string' }
-                      },
-                      required: ['oldText', 'newText']
-                    }
-                  }
+        // Get current document state to determine which extension tools to show
+        const states = Array.from(documentStateBySession.values());
+        const currentDocState = states[states.length - 1];
+        const currentFilePath = currentDocState?.filePath;
+
+        // Built-in tools
+        const builtInTools = [
+          {
+            name: 'applyDiff',
+            description: 'Apply text replacements to a markdown document. IMPORTANT: Only .md files can be modified. If no filePath is provided, applies to the currently active document.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                filePath: {
+                  type: 'string',
+                  description: 'Optional absolute path to the markdown file (.md) to apply replacements to. If not provided, applies to the currently active document. MUST end in .md extension.'
                 },
-                required: ['replacements']
-              }
-            },
-            {
-              name: 'streamContent',
-              description: 'Stream new content into the document at a specific position. Use this for inserting NEW content without replacing existing text.',
-              inputSchema: {
-                type: 'object',
-                properties: {
-                  content: {
-                    type: 'string',
-                    description: 'The content to insert into the document'
-                  },
-                  position: {
-                    type: 'string',
-                    enum: ['cursor', 'end', 'after-selection'],
-                    description: 'Where to insert the content. "cursor" inserts at current cursor position, "end" appends to end of document, "after-selection" inserts after selected text.'
-                  },
-                  insertAfter: {
-                    type: 'string',
-                    description: 'Optional: specific text to insert after. If provided, content will be inserted after the first occurrence of this text.'
-                  },
-                  filePath: {
-                    type: 'string',
-                    description: 'Optional: absolute path to the file to insert into. If not provided, uses the currently active document.'
+                replacements: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      oldText: { type: 'string' },
+                      newText: { type: 'string' }
+                    },
+                    required: ['oldText', 'newText']
                   }
-                },
-                required: ['content']
-              }
-            },
-            {
-              name: 'capture_mockup_screenshot',
-              description: 'Capture a screenshot of a .mockup.html file. Returns the screenshot as a base64-encoded PNG image. If the file is open in the editor, the screenshot will include any user annotations (drawings, highlights). If the file is not open, it will be rendered in a headless window (without annotations).',
-              inputSchema: {
-                type: 'object',
-                properties: {
-                  file_path: {
-                    type: 'string',
-                    description: 'The absolute path to the .mockup.html file to capture.'
-                  }
-                },
-                required: ['file_path']
-              }
+                }
+              },
+              required: ['replacements']
             }
-          ]
+          },
+          {
+            name: 'streamContent',
+            description: 'Stream new content into the document at a specific position. Use this for inserting NEW content without replacing existing text.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                content: {
+                  type: 'string',
+                  description: 'The content to insert into the document'
+                },
+                position: {
+                  type: 'string',
+                  enum: ['cursor', 'end', 'after-selection'],
+                  description: 'Where to insert the content. "cursor" inserts at current cursor position, "end" appends to end of document, "after-selection" inserts after selected text.'
+                },
+                insertAfter: {
+                  type: 'string',
+                  description: 'Optional: specific text to insert after. If provided, content will be inserted after the first occurrence of this text.'
+                },
+                filePath: {
+                  type: 'string',
+                  description: 'Optional: absolute path to the file to insert into. If not provided, uses the currently active document.'
+                }
+              },
+              required: ['content']
+            }
+          },
+          {
+            name: 'capture_mockup_screenshot',
+            description: 'Capture a screenshot of a .mockup.html file. Returns the screenshot as a base64-encoded PNG image. If the file is open in the editor, the screenshot will include any user annotations (drawings, highlights). If the file is not open, it will be rendered in a headless window (without annotations).',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                file_path: {
+                  type: 'string',
+                  description: 'The absolute path to the .mockup.html file to capture.'
+                }
+              },
+              required: ['file_path']
+            }
+          }
+        ];
+
+        // Get extension tools for the current workspace/file
+        const extensionTools = getAvailableExtensionTools(workspacePath, currentFilePath);
+        const extensionToolSchemas = extensionTools.map(tool => ({
+          name: tool.name,
+          description: tool.description,
+          inputSchema: tool.inputSchema
+        }));
+
+        if (extensionTools.length > 0) {
+          console.log(`[MCP Server] Including ${extensionTools.length} extension tools for file: ${currentFilePath}`);
+        }
+
+        return {
+          tools: [...builtInTools, ...extensionToolSchemas]
         };
       });
 
@@ -694,8 +779,102 @@ async function tryCreateServer(port: number): Promise<any> {
             }
           }
 
-          default:
-            throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
+          default: {
+            // Check if this is an extension tool
+            const extensionTools = getAvailableExtensionTools(workspacePath, (() => {
+              const states = Array.from(documentStateBySession.values());
+              const currentDocState = states[states.length - 1];
+              return currentDocState?.filePath;
+            })());
+
+            const extensionTool = extensionTools.find(t => t.name === toolName);
+            if (!extensionTool) {
+              throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
+            }
+
+            // Execute extension tool via IPC to renderer
+            console.log(`[MCP Server] Executing extension tool: ${toolName}`);
+
+            // Find the correct window for this workspace
+            const windowId = workspaceToWindowMap.get(workspacePath || '');
+            if (!windowId) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: `Error: No window found for workspace`
+                  }
+                ],
+                isError: true
+              };
+            }
+
+            const targetWindow = BrowserWindow.fromId(windowId);
+            if (!targetWindow) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: `Error: Window no longer exists`
+                  }
+                ],
+                isError: true
+              };
+            }
+
+            // Create a unique channel for the result
+            const resultChannel = `mcp-extension-result-${Date.now()}-${Math.random()}`;
+
+            // Get current file path for context
+            const states = Array.from(documentStateBySession.values());
+            const currentDocState = states[states.length - 1];
+            const activeFilePath = currentDocState?.filePath;
+
+            return new Promise((resolve) => {
+              const timeout = setTimeout(() => {
+                ipcMain.removeAllListeners(resultChannel);
+                resolve({
+                  content: [
+                    {
+                      type: 'text',
+                      text: 'Timed out waiting for extension tool to execute'
+                    }
+                  ],
+                  isError: true
+                });
+              }, 30000);
+
+              ipcMain.once(resultChannel, (_event, result) => {
+                clearTimeout(timeout);
+
+                const success = result?.success ?? false;
+                const message = result?.message || result?.error || (success ? 'Tool executed successfully' : 'Tool execution failed');
+
+                resolve({
+                  content: [
+                    {
+                      type: 'text',
+                      text: success
+                        ? `${message}${result?.data ? '\n\nData: ' + JSON.stringify(result.data, null, 2) : ''}`
+                        : `Error: ${message}`
+                    }
+                  ],
+                  isError: !success
+                });
+              });
+
+              // Send IPC to renderer to execute the tool
+              targetWindow.webContents.send('mcp:executeExtensionTool', {
+                toolName,
+                args: args || {},
+                resultChannel,
+                context: {
+                  workspacePath,
+                  activeFilePath
+                }
+              });
+            });
+          }
         }
       });
 

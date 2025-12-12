@@ -10,7 +10,9 @@ import { ReactFlowProvider } from '@xyflow/react';
 import { DataModelCanvas } from './DataModelCanvas';
 import { DataModelToolbar } from './DataModelToolbar';
 import { createDataModelStore, type DataModelStoreApi } from '../store';
-import { parseDataModelFile, serializeDataModelFile, createEmptyDataModel } from '../types';
+import { createEmptyDataModel } from '../types';
+import { parsePrismaSchema, serializeToPrismaSchema } from '../prismaParser';
+import { registerEditorStore, unregisterEditorStore } from '../aiTools';
 
 /**
  * Props received from Nimbalyst's custom editor system
@@ -25,6 +27,7 @@ interface CustomEditorProps {
   onContentChange?: () => void;
   onDirtyChange?: (isDirty: boolean) => void;
   onGetContentReady?: (getContentFn: () => string) => void;
+  onReloadContent?: (callback: (newContent: string) => void) => void;
   onViewHistory?: () => void;
   onRenameDocument?: () => void;
 }
@@ -38,6 +41,7 @@ export function DatamodelLMEditor({
   onContentChange,
   onDirtyChange,
   onGetContentReady,
+  onReloadContent,
 }: CustomEditorProps) {
   // Create a store instance for this editor
   const storeRef = useRef<DataModelStoreApi | null>(null);
@@ -53,10 +57,10 @@ export function DatamodelLMEditor({
   useEffect(() => {
     if (initialContent) {
       try {
-        const data = parseDataModelFile(initialContent);
+        const data = parsePrismaSchema(initialContent);
         store.getState().loadFromFile(data);
       } catch (error) {
-        console.error('[DatamodelLM] Failed to parse initial content:', error);
+        console.error('[DatamodelLM] Failed to parse Prisma schema:', error);
         store.getState().loadFromFile(createEmptyDataModel());
       }
     } else {
@@ -80,7 +84,7 @@ export function DatamodelLMEditor({
   // Register getContent function for saving
   const getContent = useCallback(() => {
     const data = store.getState().toFileData();
-    return serializeDataModelFile(data);
+    return serializeToPrismaSchema(data);
   }, [store]);
 
   useEffect(() => {
@@ -95,6 +99,32 @@ export function DatamodelLMEditor({
     });
     return unsubscribe;
   }, [store]);
+
+  // Register store for AI tool access
+  useEffect(() => {
+    registerEditorStore(filePath, store);
+    return () => {
+      unregisterEditorStore(filePath);
+    };
+  }, [filePath, store]);
+
+  // Handle external content changes (e.g., AI edited the file)
+  const handleReloadContent = useCallback((newContent: string) => {
+    console.log('[DatamodelLM] Reloading content from external change');
+    try {
+      const data = parsePrismaSchema(newContent);
+      store.getState().loadFromFile(data);
+      // Mark as clean since we just loaded fresh content
+      store.getState().markClean();
+    } catch (error) {
+      console.error('[DatamodelLM] Failed to parse reloaded content:', error);
+    }
+  }, [store]);
+
+  // Register the reload callback with TabEditor
+  useEffect(() => {
+    onReloadContent?.(handleReloadContent);
+  }, [onReloadContent, handleReloadContent]);
 
   return (
     <div className="datamodel-editor" data-theme={theme}>

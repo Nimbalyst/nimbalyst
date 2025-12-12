@@ -9,9 +9,23 @@
 import {
   setExtensionPlatformService,
   initializeExtensions,
+  initializeExtensionAIToolsBridge,
+  setOnToolsChangedCallback,
+  executeExtensionTool,
 } from '@nimbalyst/runtime';
 import { ExtensionPlatformServiceImpl } from '../services/ExtensionPlatformServiceImpl';
 import { initializeExtensionEditorBridge } from '../extensions/ExtensionEditorBridge';
+
+// Track workspace path for MCP tool registration
+let currentWorkspacePath: string | null = null;
+
+/**
+ * Set the workspace path for extension tool registration.
+ * Should be called when workspace changes.
+ */
+export function setExtensionWorkspacePath(workspacePath: string | null): void {
+  currentWorkspacePath = workspacePath;
+}
 
 /**
  * Register the Extension System with its platform service.
@@ -32,6 +46,37 @@ export async function registerExtensionSystem(): Promise<void> {
 
     // Initialize the bridge to register custom editors from extensions
     initializeExtensionEditorBridge();
+
+    // Initialize the AI tools bridge to register extension tools with the tool registry
+    initializeExtensionAIToolsBridge();
+
+    // Set up callback to notify main process when extension tools change
+    setOnToolsChangedCallback((tools) => {
+      if (currentWorkspacePath && window.electronAPI?.registerExtensionTools) {
+        console.log(`[ExtensionSystem] Registering ${tools.length} extension tools for workspace: ${currentWorkspacePath}`);
+        window.electronAPI.registerExtensionTools(currentWorkspacePath, tools);
+      }
+    });
+
+    // Set up IPC listener for extension tool execution
+    if (window.electronAPI?.onExecuteExtensionTool && window.electronAPI?.sendExtensionToolResult) {
+      const sendResult = window.electronAPI.sendExtensionToolResult;
+      window.electronAPI.onExecuteExtensionTool(async (data) => {
+        const { toolName, args, resultChannel, context } = data;
+        console.log(`[ExtensionSystem] Executing extension tool: ${toolName}`);
+
+        try {
+          const result = await executeExtensionTool(toolName, args, context);
+          sendResult(resultChannel, result);
+        } catch (error) {
+          console.error(`[ExtensionSystem] Error executing tool ${toolName}:`, error);
+          sendResult(resultChannel, {
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+      });
+    }
   } catch (error) {
     console.error('[ExtensionSystem] Failed to initialize extensions:', error);
     // Don't throw - extensions failing shouldn't prevent the app from starting

@@ -8,11 +8,12 @@
  * - A custom editor for .datamodel files
  * - Visual canvas with drag-and-drop entities
  * - Crow's foot notation for relationships
- * - AI tools for schema manipulation (coming soon)
+ * - AI tools for schema manipulation
  */
 
 import './styles.css';
 import { DatamodelLMEditor } from './components/DatamodelLMEditor';
+import { aiTools as datamodelAITools } from './aiTools';
 
 // Export types for consumers
 export type {
@@ -23,6 +24,9 @@ export type {
   EntityViewMode,
   DataModelFile,
 } from './types';
+
+// Export store registration for AI tools
+export { registerEditorStore, unregisterEditorStore } from './aiTools';
 
 /**
  * Extension activation
@@ -50,6 +54,7 @@ export const components = {
 };
 
 /**
- * AI tools exported by this extension (coming in Phase 2)
+ * AI tools exported by this extension
+ * These enable Claude to create and modify data models through conversation.
  */
-export const aiTools: unknown[] = [];
+export const aiTools = datamodelAITools;

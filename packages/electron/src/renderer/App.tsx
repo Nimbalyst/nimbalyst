@@ -43,7 +43,7 @@ import { registerTrackerPlugin } from './plugins/registerTrackerPlugin';
 import { registerDiffApprovalBarPlugin } from './plugins/registerDiffApprovalBarPlugin';
 import { registerSearchReplacePlugin } from './plugins/registerSearchReplacePlugin';
 import { registerMockupPlugin } from './plugins/registerMockupPlugin';
-import { registerExtensionSystem } from './plugins/registerExtensionSystem';
+import { registerExtensionSystem, setExtensionWorkspacePath } from './plugins/registerExtensionSystem';
 import ProjectSettingsScreen from './components/ProjectSettingsScreen/ProjectSettingsScreen.tsx';
 import { SettingsView, type SettingsScope } from './components/Settings/SettingsView';
 import type { SettingsCategory } from './components/Settings/SettingsSidebar';
@@ -627,6 +627,8 @@ export default function App() {
     if (typeof window !== 'undefined') {
       (window as any).workspacePath = workspacePath;
     }
+    // Update extension system with workspace path for MCP tool registration
+    setExtensionWorkspacePath(workspacePath);
   }, [workspacePath]);
 
   useEffect(() => {

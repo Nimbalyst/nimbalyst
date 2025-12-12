@@ -12,6 +12,7 @@ export type {
   ExtensionContributions,
   CustomEditorContribution,
   CommandContribution,
+  NewFileMenuContribution,
   ExtensionModule,
   CustomEditorComponentProps,
   JSONSchema,
@@ -45,3 +46,15 @@ export {
   getExtensionLoader,
   initializeExtensions,
 } from './ExtensionLoader';
+
+// AI Tools Bridge
+export {
+  initializeExtensionAIToolsBridge,
+  registerExtensionTools,
+  unregisterExtensionTools,
+  getExtensionTools,
+  setOnToolsChangedCallback,
+  getMCPToolDefinitions,
+  executeExtensionTool,
+} from './ExtensionAIToolsBridge';
+export type { MCPToolDefinition } from './ExtensionAIToolsBridge';
