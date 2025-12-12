@@ -139,8 +139,7 @@ export function SettingsScreen() {
 
   const handleGoogleLogin = async () => {
     if (!serverUrl) {
-      setScanError('Please scan QR code first to get server URL');
-      return;
+      throw new Error('handleGoogleLogin called without serverUrl - UI should prevent this');
     }
 
     setIsLoggingIn(true);
@@ -173,8 +172,7 @@ export function SettingsScreen() {
   const handleSendMagicLink = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!serverUrl) {
-      setScanError('Please scan QR code first to get server URL');
-      return;
+      throw new Error('handleSendMagicLink called without serverUrl - UI should prevent this');
     }
     if (!email) {
       setScanError('Please enter your email address');
@@ -201,8 +199,9 @@ export function SettingsScreen() {
   };
 
   // Determine what state we're in
+  // Use serverUrl as the gate for login - it must be set before we can authenticate
   const needsPairing = !isPaired;
-  const needsLogin = isPaired && !isAuthenticated;
+  const needsLogin = isPaired && !isAuthenticated && !!serverUrl;
   const isConnected = isPaired && isAuthenticated;
 
   return (
