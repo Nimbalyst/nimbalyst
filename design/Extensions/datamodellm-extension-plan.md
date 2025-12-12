@@ -15,62 +15,71 @@ planStatus:
     - ai-tools
     - api-design
   created: "2025-12-11"
-  updated: "2025-12-11T22:15:00.000Z"
-  progress: 60
+  updated: "2025-12-12T00:00:00.000Z"
+  progress: 75
   startDate: "2025-12-11"
 ---
 # DatamodelLM Extension - First Plugin Implementation
 
+## Current Status
+
+DatamodelLM is the first working extension for Nimbalyst. The extension system infrastructure is complete and the extension loads successfully from `packages/extensions/datamodellm/`.
+
+**Key accomplishments:**
+- Extension system fully functional (discovery, loading, lifecycle)
+- Custom editor renders .prisma files with visual ERD canvas
+- AI tools (get_schema, capture_screenshot) integrated with Claude Code via MCP
+- Theme integration working across light/dark/crystal-dark
+- New File menu contribution for creating data models
+
 ## Implementation Progress
 
-### Phase 0: Extension System Infrastructure
+### Phase 0: Extension System Infrastructure - COMPLETE
 - [x] Define extension manifest schema (JSON schema + TypeScript types)
 - [x] Create ExtensionPlatformService interface in runtime package
 - [x] Build ExtensionLoader (discover, load, unload extensions)
 - [x] Create ExtensionContext for extensions to use
 - [x] Implement ElectronExtensionPlatformService
 - [x] Integrate ExtensionLoader with CustomEditorRegistry
-- [ ] Add extension management UI in settings (deferred - enabled by default for dev builds)
-- [x] Test with minimal "hello world" extension (created)
-- [x] Fix symlink handling in extension discovery (fs.stat follows symlinks)
+- [x] Test with minimal "hello world" extension
+- [x] Fix symlink handling in extension discovery
 - [x] Fix ES module import transformation (handle `import X as Y` syntax)
 - [x] Fix identifier regex to handle `$` in minified variable names
 - [x] Add jsx-dev-runtime to externals and host dependencies
-- [x] Create E2E test for extension loading (`e2e/extensions/extension-loading.spec.ts`)
+- [x] Create E2E test for extension loading
 - [x] Isolate test extensions directory for Playwright tests
+- [ ] Add extension management UI in settings (deferred)
 
-### Phase 1: DatamodelLM Extension Package
+### Phase 1: DatamodelLM Extension Package - COMPLETE
 - [x] Create separate datamodellm-extension project structure
 - [x] Port DataModelCanvas and related components
 - [x] Port EntityNode and RelationshipEdge components
 - [x] Adapt Zustand store for file-based model
 - [x] Create DatamodelLMEditor implementing CustomEditorProps
-- [x] Configure Vite/bundler with externals (React, Zustand, React Flow, jsx-dev-runtime)
+- [x] Configure Vite/bundler with externals
 - [x] Build extension manifest.json
 - [x] Theme integration via CSS variables
-- [x] Install via symlink and test loading - WORKING
+- [x] Install via symlink and test loading
 - [x] Add toolbar with view mode selector, add entity button, and stats
 
-### Phase 2: AI Tool Integration
-- [ ] Design and implement AIToolRegistry in runtime package
-- [ ] Integrate AIToolRegistry with AI service
-- [ ] Implement create_entity tool in extension
-- [ ] Implement update_entity tool in extension
-- [ ] Implement delete_entity tool in extension
-- [ ] Implement create_relationship tool in extension
-- [ ] Implement update_relationship tool in extension
-- [ ] Implement delete_relationship tool in extension
-- [ ] Test conversational data model creation
+### Phase 2: AI Tool Integration - COMPLETE
+- [x] Create ExtensionAIToolsBridge for MCP integration
+- [x] Implement get_schema tool (read-only schema access)
+- [x] Implement capture_screenshot tool
+- [x] Tools integrated with Claude Code via MCP
+- [x] Tool scoping (editor-scoped vs global)
+- Note: Schema manipulation is handled by Claude editing the .prisma file directly
 
-### Phase 3: Context Layering
+### Phase 3: Context Layering - NOT STARTED
 - [ ] Implement context provider for workspace data models
 - [ ] Add active document context (current schema in AI context)
 - [ ] Add DatamodelLM-specific instructions injection
 - [ ] Test AI awareness of existing data models
 
-### Phase 4: Advanced Features
-- [x] Custom toolbar for data model files (view mode selector, add entity, stats)
-- [ ] File tree integration (custom icon, context menu)
+### Phase 4: Advanced Features - PARTIAL
+- [x] Custom toolbar for data model files
+- [x] New File menu contribution for .prisma files
+- [ ] File tree integration (custom icon from manifest - partially working)
 - [ ] Export to document (insert SQL/JSON Schema as code block)
 - [ ] History integration with Nimbalyst's document history
 

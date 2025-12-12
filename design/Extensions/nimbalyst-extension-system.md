@@ -2,7 +2,7 @@
 planStatus:
   planId: plan-nimbalyst-extensions
   title: Nimbalyst Extension System - Comprehensive Application Extensions
-  status: draft
+  status: in-development
   planType: system-design
   priority: high
   owner: ghinkle
@@ -15,75 +15,205 @@ planStatus:
     - ui
     - database
     - menus
-  progress: 0
+  progress: 60
   startDate: "2025-02-01"
-  updated: "2025-01-15T00:00:00.000Z"
+  updated: "2025-12-12T00:00:00.000Z"
 ---
-# Nimbalyst Extension System - Comprehensive Application Extensions 
+# Nimbalyst Extension System - Comprehensive Application Extensions
 
+## Implementation Status
+
+The Nimbalyst Extension System is now partially implemented and functional. The first extension (DatamodelLM) is loading and working.
+
+### What's Working
+
+- **Extension Discovery & Loading**: Extensions are discovered from `~/Library/Application Support/@nimbalyst/electron/extensions/`
+- **Custom Editors**: Extensions can register custom editors for specific file types (e.g., `.prisma` files)
+- **AI Tools**: Extensions can expose AI tools that are integrated with Claude Code via MCP
+- **New File Menu**: Extensions can add items to the "New File" menu
+- **Theme Integration**: Extension CSS uses host CSS variables for theme compatibility
+- **Hot Reload**: Extensions can be reloaded without restarting the app
+
+### Reference Implementation
+
+**DatamodelLM** is the first extension built on this system:
+- Location: `packages/extensions/datamodellm/`
+- File type: `.prisma` (Prisma schema files)
+- Custom editor: Visual entity-relationship diagram canvas
+- AI tools: `get_schema`, `capture_screenshot`
+- Uses React Flow for the diagram canvas
 
 ## Executive Summary
 
-Build a comprehensive Nimbalyst Extension System that allows third-party developers to extend the entire application - not just the editor. Extensions should be able to:
+The Nimbalyst Extension System allows developers to extend the entire application - not just the editor. Extensions can:
 
-- Add custom menus, commands, dialogs, database tables, and UI panels
-- Register editor nodes and markdown transformers (wrapping Lexical's API)
-- **Provide completely custom editor systems** for specialized file types (like WireframeLM for .wireframe.html)
-- **Expose AI tools** that agents can invoke during conversations
-- **Layer context into AI prompts** with extension-specific instructions and workspace awareness
-- **Send attachments to AI** (screenshots, exports, generated content)
+- **Provide completely custom editor systems** for specialized file types
+- **Expose AI tools** that Claude Code can invoke during conversations
+- Register new file types with custom icons and "New File" menu entries
+- Access the file system (with permission)
+- Integrate with the host's React, Zustand, and React Flow instances
 
-The system provides both application-level extension capabilities and editor-specific features, with deep AI integration that enables extensions to participate in conversational AI workflows.
+The system is platform-agnostic - core extension infrastructure lives in `packages/runtime/` while platform-specific implementations live in the platform packages.
 
-## Problem Statement
+## Current Architecture
 
-Nimbalyst needs a proper extension system that goes far beyond editor plugins. Current limitations:
+### Extension Package Structure
 
-**Too Editor-Focused**: Our current plugin system only handles Lexical nodes and markdown transformers. But extensions need to:
-- Add menu items to application menus (File, Edit, View, etc.)
-- Register custom commands accessible via command palette
-- Create dialogs and UI panels
-- Add custom database tables and queries
-- Integrate with the AI system
-- Add sidebar panels and toolbar buttons
-- Register file type handlers
-- Provide custom settings panels
-- **Register custom editor systems** (like WireframeLM editor for .wireframe.html files)
-- **Expose AI tools** that agents can invoke during conversations
-- **Layer AI context** with extension-specific instructions and capabilities
+```
+extension-name/
+├── manifest.json          # Extension manifest (required)
+├── package.json           # npm package metadata
+├── dist/
+│   ├── index.js          # Bundled extension entry point
+│   └── index.css         # Bundled styles (optional)
+└── src/                  # Source code (not shipped)
+    └── index.tsx         # Entry point
+```
 
-**Real-World Example - WireframeLM System**:
-The recent wireframe feature demonstrates what extensions should enable:
-- Custom file type handler (.wireframe.html files)
-- Specialized editor UI (wireframe design canvas)
-- AI integration with custom instructions ("you can create wireframes...")
-- Screenshot capture and attachment to AI messages
-- Custom toolbar and export capabilities
-- This should have been possible as a **completely external extension**
+### Extension Location
 
-**Lexical Limitations**: While Lexical v0.36.1's extension API is useful for editor features, it:
-- Only covers editor-level concerns (nodes, commands, transformers)
-- Doesn't integrate with Electron menus, IPC, or application state
-- Lacks markdown transformer support (still a gap we need to fill)
-- Has no concept of database access, dialogs, or UI chrome
-- **Can't handle custom editor systems** that replace the markdown editor entirely
+Extensions are loaded from:
+- **User extensions directory**: `~/Library/Application Support/@nimbalyst/electron/extensions/`
 
-**AI Integration Gap**: Extensions need to deeply integrate with AI capabilities:
-- **Expose custom tools** that AI agents can invoke (like "create_wireframe")
-- **Layer context into AI prompts** ("this workspace has wireframe support...")
-- **Hook into attachment system** (adding screenshots, diagrams, exports)
-- **Provide specialized instructions** for domain-specific features
-- **Register custom file type handlers** that AI can create/modify
+Each extension lives in its own subdirectory with a `manifest.json` file.
 
-**Need for Application-Level APIs**: Extensions should be first-class citizens that can:
-- Register menu items with keyboard shortcuts
-- Add items to context menus and dropdowns
-- Create custom dialogs and modal workflows
-- Store data in the database with proper schema management
-- Integrate with the project system and file tree
-- Provide settings UI that integrates with app preferences
-- **Register custom editor systems** for specialized file types
-- **Contribute AI tools and context** to agent conversations
+### Core Files
+
+The extension system is implemented across these files:
+
+| File | Purpose |
+|------|---------|
+| `packages/runtime/src/extensions/types.ts` | TypeScript type definitions |
+| `packages/runtime/src/extensions/ExtensionLoader.ts` | Discovery, loading, lifecycle |
+| `packages/runtime/src/extensions/ExtensionPlatformService.ts` | Platform abstraction interface |
+| `packages/runtime/src/extensions/ExtensionAIToolsBridge.ts` | AI tool registration and MCP integration |
+| `packages/electron/src/renderer/extensions/ExtensionEditorBridge.ts` | Custom editor integration |
+
+## Extension Manifest
+
+The `manifest.json` declares extension capabilities:
+
+```json
+{
+  "id": "com.nimbalyst.datamodellm",
+  "name": "DatamodelLM",
+  "version": "1.0.0",
+  "description": "AI-assisted data modeling",
+  "author": "Nimbalyst",
+  "main": "dist/index.js",
+  "styles": "dist/index.css",
+  "apiVersion": "1.0.0",
+
+  "permissions": {
+    "filesystem": true,
+    "ai": true
+  },
+
+  "contributions": {
+    "customEditors": [
+      {
+        "filePatterns": ["*.prisma"],
+        "displayName": "Data Model Editor",
+        "component": "DatamodelLMEditor"
+      }
+    ],
+    "aiTools": [
+      "datamodellm.get_schema",
+      "datamodellm.capture_screenshot"
+    ],
+    "fileIcons": {
+      "*.prisma": "database"
+    },
+    "newFileMenu": [
+      {
+        "extension": ".prisma",
+        "displayName": "Data Model",
+        "icon": "database",
+        "defaultContent": "// Default content..."
+      }
+    ]
+  }
+}
+```
+
+## Extension Module Exports
+
+Extensions export a module with specific exports:
+
+```typescript
+// Extension entry point (index.tsx)
+import { MyEditorComponent } from './components/MyEditor';
+import { myAITools } from './aiTools';
+
+// Called when extension loads
+export async function activate(context: ExtensionContext) {
+  console.log('Extension activated');
+}
+
+// Called when extension unloads
+export async function deactivate() {
+  console.log('Extension deactivated');
+}
+
+// Components referenced in manifest.json
+export const components = {
+  MyEditorComponent,
+};
+
+// AI tools for Claude Code
+export const aiTools = myAITools;
+```
+
+## Dependency Management
+
+Extensions use the host's React, Zustand, and React Flow instances. The extension bundler (Vite) marks these as externals:
+
+```javascript
+// vite.config.ts
+export default {
+  build: {
+    rollupOptions: {
+      external: [
+        'react',
+        'react-dom',
+        'react/jsx-runtime',
+        'react/jsx-dev-runtime',
+        'zustand',
+        '@xyflow/react',
+      ],
+    },
+  },
+};
+```
+
+At runtime, the host provides these dependencies via `window.__nimbalyst_extensions`:
+
+```typescript
+window.__nimbalyst_extensions = {
+  react: React,
+  'react-dom': ReactDOM,
+  'react/jsx-runtime': jsxRuntime,
+  zustand: zustand,
+  '@xyflow/react': xyflowReact,
+};
+```
+
+## Future Work
+
+The following features are planned but not yet implemented:
+
+- **Application-level menus**: Register items in File, Edit, View menus
+- **Command palette**: Add commands to the command palette
+- **Database access**: Extensions with their own database tables
+- **Settings panels**: Extension-specific settings UI
+- **Context providers**: Layer extension context into AI prompts
+- **Editor extensions**: Lexical nodes and markdown transformers
+
+---
+
+## Original Design Goals
+
+The following sections describe the full vision for the extension system, including features not yet implemented.
 
 ## Goals
 
