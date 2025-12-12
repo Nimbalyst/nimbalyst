@@ -371,8 +371,10 @@ export function SyncPanel({
     }
   };
 
-  // Get current environment (default to production in prod builds, development in dev)
-  const currentEnvironment = config.environment || (isDevelopment ? 'development' : 'production');
+  // Get current environment - only honor config.environment in dev builds
+  // Production builds always use production sync regardless of stored config
+  const effectiveEnvironment = isDevelopment ? config.environment : undefined;
+  const currentEnvironment = effectiveEnvironment || (isDevelopment ? 'development' : 'production');
 
   // Compute effective server URL (same logic as SyncManager)
   const PRODUCTION_SYNC_URL = 'wss://sync.nimbalyst.com';
