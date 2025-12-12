@@ -9,6 +9,7 @@
  * identically on Electron and Capacitor.
  */
 
+import type { ComponentType } from 'react';
 import type {
   ExtensionManifest,
   ExtensionModule,
@@ -21,6 +22,7 @@ import type {
   CustomEditorContribution,
   ExtensionAITool,
   NewFileMenuContribution,
+  SlashCommandContribution,
 } from './types';
 import { getExtensionPlatformService } from './ExtensionPlatformService';
 
@@ -475,6 +477,162 @@ export class ExtensionLoader {
     }
 
     return contributions;
+  }
+
+  /**
+   * Get all slash command contributions from loaded extensions
+   */
+  getSlashCommands(): Array<{
+    extensionId: string;
+    contribution: SlashCommandContribution;
+    handler: () => void;
+  }> {
+    const commands: Array<{
+      extensionId: string;
+      contribution: SlashCommandContribution;
+      handler: () => void;
+    }> = [];
+
+    for (const loaded of this.loadedExtensions.values()) {
+      if (!loaded.enabled) continue;
+
+      const contributions = loaded.manifest.contributions?.slashCommands || [];
+      const handlers = loaded.module.slashCommandHandlers || {};
+
+      for (const contribution of contributions) {
+        const handler = contribution.handler in handlers ? handlers[contribution.handler] : undefined;
+        if (handler !== undefined) {
+          commands.push({
+            extensionId: loaded.manifest.id,
+            contribution,
+            handler,
+          });
+        } else {
+          console.warn(
+            `[ExtensionLoader] Extension ${loaded.manifest.id} declares slash command '${contribution.id}' with handler '${contribution.handler}' but does not export it`
+          );
+        }
+      }
+    }
+
+    return commands;
+  }
+
+  /**
+   * Get all Lexical node contributions from loaded extensions
+   */
+  getNodes(): Array<{
+    extensionId: string;
+    nodeName: string;
+    nodeClass: unknown; // Klass<LexicalNode>
+  }> {
+    const nodes: Array<{
+      extensionId: string;
+      nodeName: string;
+      nodeClass: unknown;
+    }> = [];
+
+    for (const loaded of this.loadedExtensions.values()) {
+      if (!loaded.enabled) continue;
+
+      const nodeNames = loaded.manifest.contributions?.nodes || [];
+      const nodeClasses = loaded.module.nodes || {};
+
+      for (const nodeName of nodeNames) {
+        const nodeClass = nodeClasses[nodeName];
+        if (nodeClass) {
+          nodes.push({
+            extensionId: loaded.manifest.id,
+            nodeName,
+            nodeClass,
+          });
+        } else {
+          console.warn(
+            `[ExtensionLoader] Extension ${loaded.manifest.id} declares node '${nodeName}' but does not export it`
+          );
+        }
+      }
+    }
+
+    return nodes;
+  }
+
+  /**
+   * Get all markdown transformer contributions from loaded extensions
+   */
+  getTransformers(): Array<{
+    extensionId: string;
+    transformerName: string;
+    transformer: unknown; // Transformer from @lexical/markdown
+  }> {
+    const transformers: Array<{
+      extensionId: string;
+      transformerName: string;
+      transformer: unknown;
+    }> = [];
+
+    for (const loaded of this.loadedExtensions.values()) {
+      if (!loaded.enabled) continue;
+
+      const transformerNames = loaded.manifest.contributions?.transformers || [];
+      const transformerObjects = loaded.module.transformers || {};
+
+      for (const transformerName of transformerNames) {
+        const transformer = transformerObjects[transformerName];
+        if (transformer) {
+          transformers.push({
+            extensionId: loaded.manifest.id,
+            transformerName,
+            transformer,
+          });
+        } else {
+          console.warn(
+            `[ExtensionLoader] Extension ${loaded.manifest.id} declares transformer '${transformerName}' but does not export it`
+          );
+        }
+      }
+    }
+
+    return transformers;
+  }
+
+  /**
+   * Get all host component contributions from loaded extensions
+   */
+  getHostComponents(): Array<{
+    extensionId: string;
+    componentName: string;
+    component: ComponentType;
+  }> {
+    const components: Array<{
+      extensionId: string;
+      componentName: string;
+      component: ComponentType;
+    }> = [];
+
+    for (const loaded of this.loadedExtensions.values()) {
+      if (!loaded.enabled) continue;
+
+      const componentNames = loaded.manifest.contributions?.hostComponents || [];
+      const hostComponents = loaded.module.hostComponents || {};
+
+      for (const componentName of componentNames) {
+        const component = hostComponents[componentName];
+        if (component) {
+          components.push({
+            extensionId: loaded.manifest.id,
+            componentName,
+            component,
+          });
+        } else {
+          console.warn(
+            `[ExtensionLoader] Extension ${loaded.manifest.id} declares host component '${componentName}' but does not export it`
+          );
+        }
+      }
+    }
+
+    return components;
   }
 
   /**

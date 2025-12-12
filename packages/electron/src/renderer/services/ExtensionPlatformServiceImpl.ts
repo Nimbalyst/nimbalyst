@@ -16,8 +16,19 @@ import * as jsxDevRuntime from 'react/jsx-dev-runtime';
 import * as zustand from 'zustand';
 import html2canvas from 'html2canvas';
 
+// Import Lexical packages for extensions that use Lexical nodes
+import * as lexical from 'lexical';
+import * as lexicalReact from '@lexical/react/LexicalComposerContext';
+import * as lexicalReactEditable from '@lexical/react/useLexicalEditable';
+import * as lexicalReactNodeSelection from '@lexical/react/useLexicalNodeSelection';
+import * as lexicalUtils from '@lexical/utils';
+import * as lexicalMarkdown from '@lexical/markdown';
+
 // Import runtime UI components that extensions can use
 import { MaterialSymbol } from '@nimbalyst/runtime/ui/icons/MaterialSymbol';
+
+// Import DataModel platform service for datamodellm extension
+import { DataModelPlatformServiceImpl } from './DataModelPlatformServiceImpl';
 
 export class ExtensionPlatformServiceImpl implements ExtensionPlatformService {
   private static instance: ExtensionPlatformServiceImpl | null = null;
@@ -132,10 +143,19 @@ export class ExtensionPlatformServiceImpl implements ExtensionPlatformService {
           deactivate: module.deactivate || module.default?.deactivate,
           components: module.components || module.default?.components || {},
           aiTools: module.aiTools || module.default?.aiTools || [],
+          // Lexical integration
+          nodes: module.nodes || module.default?.nodes || {},
+          transformers: module.transformers || module.default?.transformers || {},
+          hostComponents: module.hostComponents || module.default?.hostComponents || {},
+          slashCommandHandlers: module.slashCommandHandlers || module.default?.slashCommandHandlers || {},
         };
 
         console.log('[ExtensionPlatformService] Extension module components:', Object.keys(extensionModule.components || {}));
         console.log('[ExtensionPlatformService] Extension module aiTools count:', extensionModule.aiTools?.length ?? 0);
+        console.log('[ExtensionPlatformService] Extension module nodes:', Object.keys(extensionModule.nodes || {}));
+        console.log('[ExtensionPlatformService] Extension module transformers:', Object.keys(extensionModule.transformers || {}));
+        console.log('[ExtensionPlatformService] Extension module hostComponents:', Object.keys(extensionModule.hostComponents || {}));
+        console.log('[ExtensionPlatformService] Extension module slashCommandHandlers:', Object.keys(extensionModule.slashCommandHandlers || {}));
         return extensionModule;
       } finally {
         // Clean up blob URL
@@ -164,8 +184,20 @@ export class ExtensionPlatformServiceImpl implements ExtensionPlatformService {
       'react/jsx-dev-runtime': jsxDevRuntime,
       zustand: zustand,
       html2canvas: html2canvas,
+      // Lexical packages
+      lexical: lexical,
+      '@lexical/react/LexicalComposerContext': lexicalReact,
+      '@lexical/react/useLexicalEditable': lexicalReactEditable,
+      '@lexical/react/useLexicalNodeSelection': lexicalReactNodeSelection,
+      '@lexical/utils': lexicalUtils,
+      '@lexical/markdown': lexicalMarkdown,
       // Runtime UI components
       '@nimbalyst/runtime/ui/icons/MaterialSymbol': { MaterialSymbol },
+      // Extension-specific services
+      '@nimbalyst/datamodel-platform-service': {
+        DataModelPlatformServiceImpl,
+        getInstance: () => DataModelPlatformServiceImpl.getInstance(),
+      },
     };
 
     console.log('[ExtensionPlatformService] Host dependencies exposed');
@@ -289,6 +321,78 @@ export class ExtensionPlatformServiceImpl implements ExtensionPlatformService {
         const converted = convertAsToColon(namedImports);
         return `const {${converted}} = window.__nimbalyst_extensions.html2canvas`;
       }
+    );
+
+    // Handle: import { X } from 'lexical'
+    transformed = transformed.replace(
+      /import\s+{([^}]+)}\s+from\s+['"]lexical['"]/g,
+      (_match, namedImports) => {
+        const converted = convertAsToColon(namedImports);
+        return `const {${converted}} = window.__nimbalyst_extensions.lexical`;
+      }
+    );
+
+    // Handle: import * as X from 'lexical'
+    transformed = transformed.replace(
+      /import\s+\*\s+as\s+(\w+)\s+from\s+['"]lexical['"]/g,
+      'const $1 = window.__nimbalyst_extensions.lexical'
+    );
+
+    // Handle: import { X } from '@lexical/react/LexicalComposerContext'
+    transformed = transformed.replace(
+      /import\s+{([^}]+)}\s+from\s+['"]@lexical\/react\/LexicalComposerContext['"]/g,
+      (_match, namedImports) => {
+        const converted = convertAsToColon(namedImports);
+        return `const {${converted}} = window.__nimbalyst_extensions["@lexical/react/LexicalComposerContext"]`;
+      }
+    );
+
+    // Handle: import { X } from '@lexical/react/useLexicalEditable'
+    transformed = transformed.replace(
+      /import\s+{([^}]+)}\s+from\s+['"]@lexical\/react\/useLexicalEditable['"]/g,
+      (_match, namedImports) => {
+        const converted = convertAsToColon(namedImports);
+        return `const {${converted}} = window.__nimbalyst_extensions["@lexical/react/useLexicalEditable"]`;
+      }
+    );
+
+    // Handle: import { X } from '@lexical/react/useLexicalNodeSelection'
+    transformed = transformed.replace(
+      /import\s+{([^}]+)}\s+from\s+['"]@lexical\/react\/useLexicalNodeSelection['"]/g,
+      (_match, namedImports) => {
+        const converted = convertAsToColon(namedImports);
+        return `const {${converted}} = window.__nimbalyst_extensions["@lexical/react/useLexicalNodeSelection"]`;
+      }
+    );
+
+    // Handle: import { X } from '@lexical/utils'
+    transformed = transformed.replace(
+      /import\s+{([^}]+)}\s+from\s+['"]@lexical\/utils['"]/g,
+      (_match, namedImports) => {
+        const converted = convertAsToColon(namedImports);
+        return `const {${converted}} = window.__nimbalyst_extensions["@lexical/utils"]`;
+      }
+    );
+
+    // Handle: import { X } from '@lexical/markdown'
+    transformed = transformed.replace(
+      /import\s+{([^}]+)}\s+from\s+['"]@lexical\/markdown['"]/g,
+      (_match, namedImports) => {
+        const converted = convertAsToColon(namedImports);
+        return `const {${converted}} = window.__nimbalyst_extensions["@lexical/markdown"]`;
+      }
+    );
+
+    // Handle: import type { X } from 'lexical' - remove type-only imports
+    transformed = transformed.replace(
+      /import\s+type\s+{[^}]+}\s+from\s+['"]lexical['"]\s*;?/g,
+      '/* type import removed */'
+    );
+
+    // Handle: import type { X } from '@lexical/*' - remove type-only imports
+    transformed = transformed.replace(
+      /import\s+type\s+{[^}]+}\s+from\s+['"]@lexical\/[^'"]+['"]\s*;?/g,
+      '/* type import removed */'
     );
 
     // Handle: import { X } from '@nimbalyst/runtime/ui/icons/MaterialSymbol'

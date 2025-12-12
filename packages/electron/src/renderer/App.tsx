@@ -51,6 +51,7 @@ import { loadCustomTrackers } from './services/CustomTrackerLoader';
 import { customEditorRegistry } from './components/CustomEditors';
 import { MockupViewer } from './components/CustomEditors/MockupEditor/MockupViewer';
 import { MockupPickerMenuHost } from './components/MockupPickerMenu';
+import { ExtensionHostComponents } from './components/ExtensionHostComponents';
 import { ClaudeCommandsToast } from './components/ClaudeCommandsToast';
 import OnboardingService from './services/OnboardingService';
 import './WorkspaceWelcome.css';
@@ -1699,6 +1700,7 @@ export default function App() {
       )}
       <ErrorToastContainer />
       <MockupPickerMenuHost />
+      <ExtensionHostComponents />
     </div>
   );
 }

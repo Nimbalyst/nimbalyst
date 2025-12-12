@@ -15,6 +15,7 @@ import {
 } from '@nimbalyst/runtime';
 import { ExtensionPlatformServiceImpl } from '../services/ExtensionPlatformServiceImpl';
 import { initializeExtensionEditorBridge } from '../extensions/ExtensionEditorBridge';
+import { initializeExtensionPluginBridge } from '../extensions/ExtensionPluginBridge';
 
 // Track workspace path for MCP tool registration
 let currentWorkspacePath: string | null = null;
@@ -42,10 +43,19 @@ export async function registerExtensionSystem(): Promise<void> {
   // Discover and load extensions
   // This will scan the extensions directory and load any valid extensions
   try {
+    console.log('[ExtensionSystem] Starting extension initialization...');
     await initializeExtensions();
+    console.log('[ExtensionSystem] Extensions initialized');
 
     // Initialize the bridge to register custom editors from extensions
+    console.log('[ExtensionSystem] Initializing editor bridge...');
     initializeExtensionEditorBridge();
+    console.log('[ExtensionSystem] Editor bridge initialized');
+
+    // Initialize the plugin bridge to register slash commands, nodes, and transformers
+    console.log('[ExtensionSystem] Initializing plugin bridge...');
+    initializeExtensionPluginBridge();
+    console.log('[ExtensionSystem] Plugin bridge initialized');
 
     // Initialize the AI tools bridge to register extension tools with the tool registry
     initializeExtensionAIToolsBridge();

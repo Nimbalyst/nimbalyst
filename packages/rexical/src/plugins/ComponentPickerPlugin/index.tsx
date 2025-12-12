@@ -387,10 +387,20 @@ export default function ComponentPickerMenuPlugin({
   const [modal, showModal] = useModal();
   const [queryString, setQueryString] = useState<string | null>(null);
   const [pluginDynamicOptions, setPluginDynamicOptions] = useState<TypeaheadMenuOption[]>([]);
+  // Track registry changes to re-render when extensions are loaded
+  const [registryVersion, setRegistryVersion] = useState(0);
 
   // Ensure Material Symbols font is loaded
   useEffect(() => {
     ensureMaterialSymbolsLoaded();
+  }, []);
+
+  // Subscribe to plugin registry changes (e.g., when extensions load)
+  useEffect(() => {
+    const unsubscribe = pluginRegistry.subscribe(() => {
+      setRegistryVersion((v) => v + 1);
+    });
+    return unsubscribe;
   }, []);
 
   // Fetch dynamic options from plugins when query changes
@@ -448,7 +458,7 @@ export default function ComponentPickerMenuPlugin({
           (option.keywords && option.keywords.some((keyword) => regex.test(keyword))),
       ),
     ];
-  }, [editor, queryString, showModal, pluginDynamicOptions]);
+  }, [editor, queryString, showModal, pluginDynamicOptions, registryVersion]);
 
   const triggerFn = useMemo(
     () => createBasicTriggerFunction('/', {minLength: 0}),

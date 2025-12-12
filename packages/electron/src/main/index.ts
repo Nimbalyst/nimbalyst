@@ -52,6 +52,7 @@ import { registerWorkspaceWindow, registerExtensionTools, shutdownHttpServer, st
 import { SessionNamingService } from './services/SessionNamingService';
 import { MockupScreenshotService } from './services/MockupScreenshotService';
 import { registerMockupHandlers } from './ipc/MockupHandlers';
+import { registerDataModelHandlers } from './ipc/DataModelHandlers';
 import { registerExtensionHandlers } from './ipc/ExtensionHandlers';
 import { ClaudeCodeProvider } from '@nimbalyst/runtime/ai/server';
 import { logger, overrideConsole } from './utils/logger';
@@ -434,6 +435,7 @@ app.whenReady().then(async () => {
         return mergedConfig.mcpServers || {};
     });
     registerMockupHandlers();
+    registerDataModelHandlers();
     registerExtensionHandlers();
 
     // Initialize AI service

@@ -12,12 +12,36 @@ import type { PluginPackage, UserCommand, DynamicMenuOption } from '../types/Plu
 
 class PluginRegistryImpl {
   private plugins = new Map<string, PluginPackage>();
+  private subscribers = new Set<() => void>();
 
   register(plugin: PluginPackage): void {
     if (this.plugins.has(plugin.name)) {
       // console.warn(`Plugin "${plugin.name}" is already registered. Overwriting.`);
     }
     this.plugins.set(plugin.name, plugin);
+    // Notify subscribers that the registry has changed
+    this.notifySubscribers();
+  }
+
+  /**
+   * Subscribe to registry changes.
+   * @returns Unsubscribe function
+   */
+  subscribe(callback: () => void): () => void {
+    this.subscribers.add(callback);
+    return () => {
+      this.subscribers.delete(callback);
+    };
+  }
+
+  private notifySubscribers(): void {
+    for (const callback of this.subscribers) {
+      try {
+        callback();
+      } catch (error) {
+        console.error('[PluginRegistry] Subscriber error:', error);
+      }
+    }
   }
 
   getAll(): PluginPackage[] {
