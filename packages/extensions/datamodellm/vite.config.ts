@@ -19,6 +19,8 @@ export default defineConfig({
         'react/jsx-runtime',
         'react/jsx-dev-runtime',
         'zustand',
+        'html2canvas',
+        /^@nimbalyst\/runtime/,
       ],
       output: {
         // Provide global variables for externals
@@ -27,6 +29,7 @@ export default defineConfig({
           'react-dom': 'ReactDOM',
           'react/jsx-runtime': 'jsxRuntime',
           zustand: 'zustand',
+          html2canvas: 'html2canvas',
         },
         // Ensure CSS is extracted
         assetFileNames: (assetInfo) => {

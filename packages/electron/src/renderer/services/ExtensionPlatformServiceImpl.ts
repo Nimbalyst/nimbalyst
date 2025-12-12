@@ -14,6 +14,10 @@ import * as ReactDOM from 'react-dom';
 import * as jsxRuntime from 'react/jsx-runtime';
 import * as jsxDevRuntime from 'react/jsx-dev-runtime';
 import * as zustand from 'zustand';
+import html2canvas from 'html2canvas';
+
+// Import runtime UI components that extensions can use
+import { MaterialSymbol } from '@nimbalyst/runtime/ui/icons/MaterialSymbol';
 
 export class ExtensionPlatformServiceImpl implements ExtensionPlatformService {
   private static instance: ExtensionPlatformServiceImpl | null = null;
@@ -159,6 +163,9 @@ export class ExtensionPlatformServiceImpl implements ExtensionPlatformService {
       'react/jsx-runtime': jsxRuntime,
       'react/jsx-dev-runtime': jsxDevRuntime,
       zustand: zustand,
+      html2canvas: html2canvas,
+      // Runtime UI components
+      '@nimbalyst/runtime/ui/icons/MaterialSymbol': { MaterialSymbol },
     };
 
     console.log('[ExtensionPlatformService] Host dependencies exposed');
@@ -266,6 +273,40 @@ export class ExtensionPlatformServiceImpl implements ExtensionPlatformService {
       (_match, namedImports) => {
         const converted = convertAsToColon(namedImports);
         return `const {${converted}} = window.__nimbalyst_extensions.zustand`;
+      }
+    );
+
+    // Handle: import html2canvas from 'html2canvas'
+    transformed = transformed.replace(
+      /import\s+(\w+)\s+from\s+['"]html2canvas['"]/g,
+      'const $1 = window.__nimbalyst_extensions.html2canvas'
+    );
+
+    // Handle: import { X } from 'html2canvas'
+    transformed = transformed.replace(
+      /import\s+{([^}]+)}\s+from\s+['"]html2canvas['"]/g,
+      (_match, namedImports) => {
+        const converted = convertAsToColon(namedImports);
+        return `const {${converted}} = window.__nimbalyst_extensions.html2canvas`;
+      }
+    );
+
+    // Handle: import { X } from '@nimbalyst/runtime/ui/icons/MaterialSymbol'
+    transformed = transformed.replace(
+      /import\s+{([^}]+)}\s+from\s+['"]@nimbalyst\/runtime\/ui\/icons\/MaterialSymbol['"]/g,
+      (_match, namedImports) => {
+        const converted = convertAsToColon(namedImports);
+        return `const {${converted}} = window.__nimbalyst_extensions["@nimbalyst/runtime/ui/icons/MaterialSymbol"]`;
+      }
+    );
+
+    // Generic handler for any @nimbalyst/runtime/* imports
+    // This catches any other runtime imports we might add in the future
+    transformed = transformed.replace(
+      /import\s+{([^}]+)}\s+from\s+['"](@nimbalyst\/runtime[^'"]+)['"]/g,
+      (_match, namedImports, modulePath) => {
+        const converted = convertAsToColon(namedImports);
+        return `const {${converted}} = window.__nimbalyst_extensions["${modulePath}"]`;
       }
     );
 
