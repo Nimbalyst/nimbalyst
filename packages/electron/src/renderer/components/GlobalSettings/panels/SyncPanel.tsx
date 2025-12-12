@@ -224,6 +224,16 @@ export function SyncPanel({
   testMessage,
 }: SyncPanelProps) {
   const isDevelopment = import.meta.env.DEV;
+
+  // Compute effective server URL early so it can be used throughout
+  // Only honor config.environment in dev builds - production always uses production sync
+  const PRODUCTION_SYNC_URL = 'wss://sync.nimbalyst.com';
+  const DEVELOPMENT_SYNC_URL = 'ws://localhost:8790';
+  const effectiveEnvironment = isDevelopment ? config.environment : undefined;
+  const currentEnvironment = effectiveEnvironment || (isDevelopment ? 'development' : 'production');
+  const effectiveServerUrl = config.serverUrl ||
+    (currentEnvironment === 'development' ? DEVELOPMENT_SYNC_URL : PRODUCTION_SYNC_URL);
+
   const [projects, setProjects] = useState<Project[]>([]);
   const [showQRModal, setShowQRModal] = useState(false);
   const [showProjectPicker, setShowProjectPicker] = useState(false);
@@ -295,7 +305,7 @@ export function SyncPanel({
 
   // Load connected devices when sync is enabled
   const loadDevices = async () => {
-    if (!config.enabled || !config.serverUrl) {
+    if (!config.enabled || !effectiveServerUrl) {
       setConnectedDevices([]);
       return;
     }
@@ -320,7 +330,7 @@ export function SyncPanel({
   };
 
   useEffect(() => {
-    if (config.enabled && config.serverUrl) {
+    if (config.enabled && effectiveServerUrl) {
       loadDevices();
       const interval = setInterval(loadDevices, 30000);
       return () => clearInterval(interval);
@@ -328,7 +338,7 @@ export function SyncPanel({
       setConnectedDevices([]);
       return undefined;
     }
-  }, [config.enabled, config.serverUrl]);
+  }, [config.enabled, effectiveServerUrl]);
 
   const handleFieldChange = (field: keyof SyncConfig, value: string | boolean) => {
     onConfigChange({ ...config, [field]: value });
@@ -370,17 +380,6 @@ export function SyncPanel({
       console.error('Failed to switch Stytch environment:', err);
     }
   };
-
-  // Get current environment - only honor config.environment in dev builds
-  // Production builds always use production sync regardless of stored config
-  const effectiveEnvironment = isDevelopment ? config.environment : undefined;
-  const currentEnvironment = effectiveEnvironment || (isDevelopment ? 'development' : 'production');
-
-  // Compute effective server URL (same logic as SyncManager)
-  const PRODUCTION_SYNC_URL = 'wss://sync.nimbalyst.com';
-  const DEVELOPMENT_SYNC_URL = 'ws://localhost:8790';
-  const effectiveServerUrl = config.serverUrl ||
-    (currentEnvironment === 'development' ? DEVELOPMENT_SYNC_URL : PRODUCTION_SYNC_URL);
 
   // Auth handlers
   const handleGoogleSignIn = async () => {
@@ -797,7 +796,7 @@ export function SyncPanel({
             <button
               className="pair-device-button"
               onClick={() => setShowQRModal(true)}
-              disabled={!config.serverUrl}
+              disabled={!effectiveServerUrl}
               style={{ width: '100%' }}
             >
               <svg style={{ width: '18px', height: '18px', marginRight: '8px' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
