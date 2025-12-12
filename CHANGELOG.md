@@ -19,6 +19,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.48.5] - 2025-12-12
+
+### Added
+- Extension system with DatamodelLM as first plugin
+- Extensions can add slash commands and custom Lexical nodes
+- Extensions can add items to the New File menu
+- Extensions can use shared host dependencies like MaterialSymbol
+- DatamodelLM view modes and auto-layout
+- DatamodelLM now uses Prisma schema format (.prisma files)
+
+### Changed
+- Removed 'New Window' option from application menu
+- Updated welcome message to recommend opening project root folder
+
+### Fixed
+- Mobile app header no longer hidden under notch, input no longer cut off at bottom
+- Duplicate messages no longer appear in AI session sync
+- Error now shown to user when environment switch fails
+- Environment toggle now saves config when Stytch API unavailable
+- Stytch auth now defaults to production in dev builds
+- Sync server now correctly uses production when selected in dev builds
+- Ensure serverUrl is set before allowing login actions
+- Search files button tooltip shows correct shortcut (Cmd+O)
+- Capacitor app icon
+
 ## [0.48.4] - 2025-12-11
 
 
