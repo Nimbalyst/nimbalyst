@@ -14,6 +14,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { ConfigTheme, TextReplacement } from 'rexical';
 import type { Tab } from '../TabManager/TabManager';
 import { TabEditor } from '../TabEditor/TabEditor';
+import { TabEditorErrorBoundary } from '../TabEditorErrorBoundary';
 import { logger } from '../../utils/logger';
 
 interface TabContentProps {
@@ -35,6 +36,9 @@ interface TabContentProps {
   onSwitchToAgentMode?: (planDocumentPath?: string, sessionId?: string) => void;
   onOpenSessionInChat?: (sessionId: string) => void;
 
+  // Tab management
+  onTabClose?: (tabId: string) => void;
+
   // Document metadata
   workspaceId?: string;
 }
@@ -53,8 +57,11 @@ export const TabContent: React.FC<TabContentProps> = ({
   onRenameDocument,
   onSwitchToAgentMode,
   onOpenSessionInChat,
+  onTabClose,
   workspaceId,
 }) => {
+  // Track retry keys for error recovery - incrementing the key forces a remount
+  const [retryKeys, setRetryKeys] = useState<Map<string, number>>(new Map());
   // Track manual save functions for each tab
   const saveFunctionsRef = useRef<Map<string, () => Promise<void>>>(new Map());
 
@@ -349,29 +356,45 @@ export const TabContent: React.FC<TabContentProps> = ({
           );
         }
 
+        // Get the retry key for this tab (used to force remount on retry)
+        const retryKey = retryKeys.get(tab.id) ?? 0;
+
         return (
-          <TabEditor
-            key={tab.id}
+          <TabEditorErrorBoundary
+            key={`${tab.id}-boundary-${retryKey}`}
             filePath={tab.filePath}
             fileName={tab.fileName}
-            initialContent={content}
-            theme={theme}
-            isActive={isActive}
-            textReplacements={isActive ? textReplacements : undefined}
-            onDirtyChange={(isDirty) => {
-              if (onTabDirtyChange) {
-                onTabDirtyChange(tab.id, isDirty);
-              }
+            onRetry={() => {
+              // Increment retry key to force remount of the TabEditor
+              setRetryKeys(prev => new Map(prev).set(tab.id, (prev.get(tab.id) ?? 0) + 1));
             }}
-            onSaveComplete={onSaveComplete}
-            onManualSaveReady={(saveFn) => handleManualSaveReady(tab.id, saveFn)}
-            onGetContentReady={(getContentFn) => handleGetContentReady(tab.id, getContentFn)}
-            onViewHistory={onViewHistory}
-            onRenameDocument={onRenameDocument}
-            onSwitchToAgentMode={onSwitchToAgentMode}
-            onOpenSessionInChat={onOpenSessionInChat}
-            workspaceId={workspaceId}
-          />
+            onClose={() => {
+              onTabClose?.(tab.id);
+            }}
+          >
+            <TabEditor
+              key={`${tab.id}-${retryKey}`}
+              filePath={tab.filePath}
+              fileName={tab.fileName}
+              initialContent={content}
+              theme={theme}
+              isActive={isActive}
+              textReplacements={isActive ? textReplacements : undefined}
+              onDirtyChange={(isDirty) => {
+                if (onTabDirtyChange) {
+                  onTabDirtyChange(tab.id, isDirty);
+                }
+              }}
+              onSaveComplete={onSaveComplete}
+              onManualSaveReady={(saveFn) => handleManualSaveReady(tab.id, saveFn)}
+              onGetContentReady={(getContentFn) => handleGetContentReady(tab.id, getContentFn)}
+              onViewHistory={onViewHistory}
+              onRenameDocument={onRenameDocument}
+              onSwitchToAgentMode={onSwitchToAgentMode}
+              onOpenSessionInChat={onOpenSessionInChat}
+              workspaceId={workspaceId}
+            />
+          </TabEditorErrorBoundary>
         );
       })}
     </div>

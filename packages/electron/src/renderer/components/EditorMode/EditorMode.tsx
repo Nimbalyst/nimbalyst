@@ -777,6 +777,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
                   }}
                   onSwitchToAgentMode={onSwitchToAgentMode}
                   onOpenSessionInChat={handleOpenSessionInChat}
+                  onTabClose={handleTabClose}
                   workspaceId={workspacePath}
                 />
               </TabManager>

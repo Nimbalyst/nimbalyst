@@ -77,13 +77,26 @@ class EditorRegistry {
 
   /**
    * Set the active editor by file path
+   *
+   * DEFENSIVE: This method is called during tab switching. If the editor hasn't
+   * registered yet (e.g., due to slow mount or error), we silently skip rather
+   * than blocking or throwing. The editor will set itself as active when it
+   * registers if it has data-active="true".
+   *
+   * @returns true if the editor was found and set active, false otherwise
    */
-  setActive(filePath: string): void {
+  setActive(filePath: string): boolean {
     if (this.editors.has(filePath)) {
       // console.log('[EditorRegistry] Setting active editor:', filePath);
       this.activeFilePath = filePath;
+      return true;
     } else {
-      console.warn('[EditorRegistry] Attempted to set active editor for unregistered file:', filePath);
+      // DEFENSIVE: Don't log as warning during normal tab switching.
+      // The editor may not have mounted yet (race condition) or may have failed
+      // to load. The AIChatIntegrationPlugin will set active when it mounts.
+      // Only log at debug level to reduce noise.
+      // console.debug('[EditorRegistry] Editor not yet registered for:', filePath);
+      return false;
     }
   }
 
