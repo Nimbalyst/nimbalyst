@@ -292,11 +292,14 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
           } else if (parsed.type === 'error' && parsed.error) {
             // Error message from SDK or API
             const errorContent = typeof parsed.error === 'string' ? parsed.error : JSON.stringify(parsed.error);
+            // Check for isAuthError from both parsed content and metadata
+            const isAuthError = parsed.is_auth_error === true || agentMsg.metadata?.isAuthError === true;
             uiMessages.push({
               role: 'assistant',
               content: errorContent,
               timestamp,
               isError: true,
+              isAuthError,
               errorMessage: errorContent
             });
           } else if (parsed.type === 'user' && parsed.message) {

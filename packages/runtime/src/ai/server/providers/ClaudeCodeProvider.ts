@@ -548,6 +548,20 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             }
 
             if (chunk.type === 'assistant' && chunk.message) {
+            // Check for SDK-detected authentication error (first-class detection)
+            // This is much more reliable than string matching in message content
+            if (chunk.error === 'authentication_failed') {
+              console.error('[CLAUDE-CODE] Authentication error detected via SDK error field');
+              this.logError(sessionId, 'claude-code', new Error('Authentication failed'), 'assistant_chunk', 'authentication_error');
+              yield {
+                type: 'error',
+                error: 'Authentication failed. Please log in to continue.',
+                isAuthError: true
+              };
+              yield { type: 'complete', isComplete: true };
+              break;
+            }
+
             // Capture usage data from the message if available
             if (chunk.message.usage) {
               usageData = chunk.message.usage;
@@ -904,13 +918,23 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                 errorMessage = JSON.stringify(chunk, null, 2);
               }
 
-              // Log error to database (as 'output' since errors are provider responses)
-              this.logError(sessionId, 'claude-code', new Error(errorMessage), 'result_chunk', 'api_error');
+              // Check if this is an authentication error
+              const lowerError = (typeof errorMessage === 'string' ? errorMessage : '').toLowerCase();
+              const isAuthError = (
+                lowerError.includes('invalid api key') ||
+                lowerError.includes('authentication') ||
+                lowerError.includes('unauthorized') ||
+                lowerError.includes('401')
+              );
 
-              // Yield error to UI - MessageSegment will handle displaying it (possibly as LoginRequiredWidget)
+              // Log error to database (as 'output' since errors are provider responses)
+              this.logError(sessionId, 'claude-code', new Error(errorMessage), 'result_chunk', isAuthError ? 'authentication_error' : 'api_error');
+
+              // Yield error to UI with isAuthError flag if applicable
               yield {
                 type: 'error',
-                error: errorMessage
+                error: errorMessage,
+                ...(isAuthError && { isAuthError: true })
               };
 
               // CRITICAL: Send completion and break on result errors (like "prompt too long")
@@ -1153,10 +1177,11 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               // Log error to database (as 'output' since errors are provider responses)
               this.logError(sessionId, 'claude-code', new Error(errorMessage), 'summary_chunk', 'authentication_error');
 
-              // Yield error to UI - MessageSegment will handle displaying it (possibly as LoginRequiredWidget)
+              // Yield error to UI with isAuthError flag for structured detection
               yield {
                 type: 'error',
-                error: errorMessage
+                error: errorMessage,
+                isAuthError: true
               };
 
               // Send completion event before breaking
@@ -1180,6 +1205,24 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                 type: 'text',
                 content: displayMessage
               };
+            }
+          } else if (chunk.type === 'auth_status') {
+            // Handle SDK auth status messages (first-class authentication detection)
+            // This is the preferred way to detect auth issues rather than string matching
+            if (chunk.error || chunk.isAuthenticating === false) {
+              const errorMessage = chunk.error || 'Authentication required';
+              console.error('[CLAUDE-CODE] Auth status error:', errorMessage);
+              this.logError(sessionId, 'claude-code', new Error(errorMessage), 'auth_status_chunk', 'authentication_error');
+              yield {
+                type: 'error',
+                error: errorMessage,
+                isAuthError: true
+              };
+              // Don't break here - auth_status might be informational during auth flow
+            }
+            // Log auth output for debugging (but don't display to user)
+            if (chunk.output && chunk.output.length > 0) {
+              console.log('[CLAUDE-CODE] Auth status output:', chunk.output.join('\n'));
             }
           } else {
             // Unknown chunk type - display it anyway so nothing is lost

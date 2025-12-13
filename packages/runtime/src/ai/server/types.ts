@@ -48,6 +48,7 @@ export interface Message {
     childToolCalls?: Message[];     // Nested tools executed by sub-agent
   };
   isError?: boolean;
+  isAuthError?: boolean; // True when error is an authentication failure (SDK first-class detection)
   errorMessage?: string;
   isSystem?: boolean; // For system messages like slash command output
   isStreamingStatus?: boolean;
@@ -187,6 +188,7 @@ export interface StreamChunk {
     result?: any;
   };
   error?: string;
+  isAuthError?: boolean; // True when error is an authentication failure (SDK first-class detection)
   isComplete?: boolean;
   config?: any; // For stream_edit_start
   usage?: {

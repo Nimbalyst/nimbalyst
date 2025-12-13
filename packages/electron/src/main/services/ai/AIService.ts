@@ -1612,7 +1612,8 @@ export class AIService {
                   chunksSoFar: chunkCount,
                   textChunksSoFar: textChunks,
                   responseLengthSoFar: fullResponse.length,
-                  timeElapsed: Date.now() - startTime
+                  timeElapsed: Date.now() - startTime,
+                  isAuthError: chunk.isAuthError || false
                 });
               }
               console.error(`${logPrefix} Provider error:`, chunk.error || 'Unknown error');
@@ -1626,7 +1627,8 @@ export class AIService {
 
               event.sender.send('ai:error', {
                 sessionId: session.id,
-                message: chunk.error || 'Unknown error occurred'
+                message: chunk.error || 'Unknown error occurred',
+                isAuthError: chunk.isAuthError || false
               });
               break;
 

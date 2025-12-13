@@ -392,9 +392,16 @@ export const RichTranscriptView = React.forwardRef<
   }, [messages]);
 
   // Helper to check if message is a login-required error
-  // IMPORTANT: Only match specific authentication error patterns, NOT generic words
-  // These patterns should only match actual error messages from Claude Code CLI, not discussions about auth
+  // Uses SDK's first-class isAuthError flag when available (preferred)
+  // Falls back to string matching for backwards compatibility with old messages
   const isLoginRequiredError = (message: Message) => {
+    // First-class detection via SDK's isAuthError flag (most reliable)
+    if (message.isAuthError === true) {
+      return true;
+    }
+
+    // Fallback to string matching for backwards compatibility
+    // IMPORTANT: Only match specific authentication error patterns, NOT generic words
     const content = message.content || message.errorMessage || '';
     const lowerContent = content.toLowerCase();
     return (

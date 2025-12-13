@@ -48,9 +48,17 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
   }, [enlargedImage]);
 
   // Helper function to check if content indicates login is required
-  // IMPORTANT: Only match specific authentication error patterns, NOT generic words
-  // These patterns should only match actual error messages from Claude Code CLI, not discussions about auth
+  // Uses SDK's first-class isAuthError flag when available (preferred)
+  // Falls back to string matching for backwards compatibility with old messages
   const isLoginRequiredError = (text: string): boolean => {
+    // First-class detection via SDK's isAuthError flag (most reliable)
+    // This is set by ClaudeCodeProvider when it detects auth errors from the SDK
+    if (message.isAuthError === true) {
+      return true;
+    }
+
+    // Fallback to string matching for backwards compatibility
+    // IMPORTANT: Only match specific authentication error patterns, NOT generic words
     const lowerText = text.toLowerCase();
     const result = (
       lowerText.includes('invalid api key') ||
@@ -68,9 +76,9 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
       // Match "/login" only at word boundary (not in URLs like "example.com/login-page")
       /\b\/login\b/.test(lowerText)
     );
-    // Log when login widget is triggered so we can debug false positives
+    // Log when login widget is triggered via string matching so we can debug false positives
     if (result) {
-      console.warn('[MessageSegment] Login widget triggered. Text preview:', text.substring(0, 100));
+      console.warn('[MessageSegment] Login widget triggered via string matching. Text preview:', text.substring(0, 100));
     }
     return result;
   };

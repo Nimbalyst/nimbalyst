@@ -236,15 +236,19 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
   ): void {
     if (!sessionId) return;
 
+    const isAuthError = errorType === 'authentication_error';
+
     this.logAgentMessage(sessionId, providerName, 'output', JSON.stringify({
       type: 'error',
       error: error.message,
       source,
       is_error: true,
+      is_auth_error: isAuthError,
       error_name: error.name,
       error_stack: error.stack
     }), {
       isError: true,
+      isAuthError,
       errorType,
       errorName: error.name
     });
