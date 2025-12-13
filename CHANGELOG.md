@@ -19,6 +19,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.48.6] - 2025-12-13
+
+### Added
+- Auto-updater now uses subtle toast instead of popup window
+- Mobile app now allows device to sleep after inactivity
+- Easier browser testing for mobile sync
+
+### Fixed
+- One failing editor tab no longer breaks the entire app
+- Custom editors now load correctly after app restart
+- New projects now sync to mobile immediately when enabled
+- Login widget no longer triggers on normal AI responses
+- Login widget no longer re-renders when scrolling old sessions
+- Use SDK's first-class auth error detection for login widget
+- Mobile session detail layout works correctly on iPhone and iPad
+- Skip export compliance prompt on TestFlight uploads
+- Update pod paths for Capacitor dependencies
+
 ## [0.48.5] - 2025-12-12
 
 ### Added
