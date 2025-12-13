@@ -90,6 +90,16 @@ src/
 
 ## Building for TestFlight
 
+### Export Compliance
+
+The app has `ITSAppUsesNonExemptEncryption` set to `false` in `Info.plist`. This bypasses the export compliance questionnaire in App Store Connect.
+
+While the app does use AES-256-GCM encryption for E2E session sync, it uses the Web Crypto API (`crypto.subtle`) which is provided by the operating system, not bundled encryption code. Apple's export compliance rules primarily concern encryption algorithms shipped with the app, not system-provided APIs.
+
+If you add custom encryption libraries (e.g., bundled native crypto code), you may need to change this to `true` and answer the export compliance questions.
+
+### Build Steps
+
 1. Configure signing in Xcode:
    - Open `ios/App/App.xcworkspace`
    - Select the "App" target
