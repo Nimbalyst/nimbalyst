@@ -392,14 +392,26 @@ export const RichTranscriptView = React.forwardRef<
   }, [messages]);
 
   // Helper to check if message is a login-required error
+  // IMPORTANT: Only match specific authentication error patterns, NOT generic words
+  // These patterns should only match actual error messages from Claude Code CLI, not discussions about auth
   const isLoginRequiredError = (message: Message) => {
     const content = message.content || message.errorMessage || '';
+    const lowerContent = content.toLowerCase();
     return (
-      content.toLowerCase().includes('invalid api key') ||
-      content.includes('/login') ||
-      content.toLowerCase().includes('please run /login') ||
-      content.toLowerCase().includes('unauthorized') ||
-      content.toLowerCase().includes('authentication required')
+      lowerContent.includes('invalid api key') ||
+      lowerContent.includes('please run /login') ||
+      // Match "401 unauthorized" or "unauthorized error" but not just "unauthorized" alone
+      lowerContent.includes('401 unauthorized') ||
+      lowerContent.includes('unauthorized error') ||
+      lowerContent.includes('authentication required') ||
+      lowerContent.includes('oauth token has expired') ||
+      lowerContent.includes('token has expired') ||
+      lowerContent.includes('expired token') ||
+      lowerContent.includes('please obtain a new token') ||
+      lowerContent.includes('refresh your existing token') ||
+      lowerContent.includes('authentication_error') ||
+      // Match "/login" only at word boundary (not in URLs)
+      /\b\/login\b/.test(lowerContent)
     );
   };
 

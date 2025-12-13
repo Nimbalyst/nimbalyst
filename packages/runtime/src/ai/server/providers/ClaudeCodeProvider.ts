@@ -865,7 +865,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             };
           } else if (chunk.type === 'result') {
             // Final result - capture comprehensive usage data if available
-            // console.log(`[CLAUDE-CODE] Result chunk received, is_error: ${chunk.is_error}`);
 
             // The result chunk often has the most complete usage data
             if (chunk.usage) {
@@ -1120,22 +1119,31 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             // Other user messages are internal - don't display
           } else if (chunk.type === 'summary') {
             // Handle summary messages from Claude Code
-            // console.log(`[CLAUDE-CODE] Summary chunk received:`, chunk);
             const summary = chunk.summary || '';
 
-            // Check if this is an error summary
+            // Check if this is an authentication-related error summary
+            // IMPORTANT: Only match specific authentication error patterns, NOT generic words like 'error' or 'failed'
+            // Those broad patterns were causing false positives (e.g., "I fixed the error" would trigger login widget)
             const lowerSummary = summary.toLowerCase();
-            if (lowerSummary.includes('invalid api key') ||
-                lowerSummary.includes('error') ||
-                lowerSummary.includes('failed') ||
-                lowerSummary.includes('/login') ||
-                lowerSummary.includes('unauthorized') ||
-                lowerSummary.includes('oauth token has expired') ||
-                lowerSummary.includes('token has expired') ||
-                lowerSummary.includes('expired token') ||
-                lowerSummary.includes('authentication_error') ||
-                lowerSummary.includes('process exited with code')) {
-              console.error('[CLAUDE-CODE] ERROR: Summary contains error message:', summary);
+            const isAuthenticationError = (
+              lowerSummary.includes('invalid api key') ||
+              lowerSummary.includes('please run /login') ||
+              // Match "401 unauthorized" or "unauthorized error" but not just "unauthorized" alone
+              lowerSummary.includes('401 unauthorized') ||
+              lowerSummary.includes('unauthorized error') ||
+              lowerSummary.includes('oauth token has expired') ||
+              lowerSummary.includes('token has expired') ||
+              lowerSummary.includes('expired token') ||
+              lowerSummary.includes('please obtain a new token') ||
+              lowerSummary.includes('refresh your existing token') ||
+              lowerSummary.includes('authentication_error') ||
+              lowerSummary.includes('authentication required') ||
+              // Match "/login" only at word boundary (not in URLs like "example.com/login-page")
+              /\b\/login\b/.test(lowerSummary)
+            );
+
+            if (isAuthenticationError) {
+              console.error('[CLAUDE-CODE] Authentication error detected in summary:', summary);
               console.error('[CLAUDE-CODE] Full summary chunk:', JSON.stringify(chunk, null, 2));
 
               // Pass through the error message directly
