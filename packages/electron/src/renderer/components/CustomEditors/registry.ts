@@ -10,6 +10,31 @@ import { logger } from '../../utils/logger';
 
 class CustomEditorRegistry {
   private registrations: Map<string, CustomEditorRegistration> = new Map();
+  private changeListeners: Set<() => void> = new Set();
+
+  /**
+   * Subscribe to registry changes (extensions being registered/unregistered).
+   * Returns an unsubscribe function.
+   */
+  onChange(listener: () => void): () => void {
+    this.changeListeners.add(listener);
+    return () => {
+      this.changeListeners.delete(listener);
+    };
+  }
+
+  /**
+   * Notify all listeners that the registry has changed.
+   */
+  private notifyChange(): void {
+    for (const listener of this.changeListeners) {
+      try {
+        listener();
+      } catch (error) {
+        logger.ui.error('[CustomEditorRegistry] Error in change listener:', error);
+      }
+    }
+  }
 
   /**
    * Register a custom editor for one or more file extensions
@@ -44,6 +69,9 @@ class CustomEditorRegistry {
         `[CustomEditorRegistry] Registered ${name || 'custom editor'} for extension ${ext}`
       );
     }
+
+    // Notify listeners that registry has changed
+    this.notifyChange();
   }
 
   /**
@@ -76,15 +104,22 @@ class CustomEditorRegistry {
    * Unregister a custom editor for specific extensions
    */
   unregister(extensions: string[]): void {
+    let changed = false;
     for (const ext of extensions) {
       const normalizedExt = ext.toLowerCase();
       const registration = this.registrations.get(normalizedExt);
       if (registration) {
         this.registrations.delete(normalizedExt);
+        changed = true;
         logger.ui.info(
           `[CustomEditorRegistry] Unregistered ${registration.name || 'custom editor'} for extension ${ext}`
         );
       }
+    }
+
+    // Notify listeners if any registrations were removed
+    if (changed) {
+      this.notifyChange();
     }
   }
 

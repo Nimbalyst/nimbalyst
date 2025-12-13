@@ -93,7 +93,18 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                                                       onOpenSessionInChat,
                                                       workspaceId,
                                                     }) => {
+  // Subscribe to custom editor registry changes to re-evaluate file type
+  // when extensions finish loading (handles race condition on startup)
+  const [registryVersion, setRegistryVersion] = useState(0);
+  useEffect(() => {
+    const unsubscribe = customEditorRegistry.onChange(() => {
+      setRegistryVersion(v => v + 1);
+    });
+    return unsubscribe;
+  }, []);
+
   // Detect file type (markdown vs code vs image vs custom)
+  // Re-computed when registry changes (registryVersion dependency)
   const fileType = useMemo(() => {
     // Extract extension and check if custom editor is registered
     // Handle compound extensions like .mockup.html by checking multiple levels
@@ -121,7 +132,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     };
 
     return getFileType(filePath, checkCustomEditor);
-  }, [filePath]);
+  }, [filePath, registryVersion]);
 
   const isMarkdown = fileType === 'markdown';
   const isImage = fileType === 'image';

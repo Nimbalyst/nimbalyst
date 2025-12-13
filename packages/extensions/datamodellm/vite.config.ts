@@ -4,6 +4,12 @@ import { resolve } from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  // Replace process.env.NODE_ENV with "production" during build
+  // This is necessary because some dependencies (like use-sync-external-store)
+  // use process.env.NODE_ENV for conditional exports, and the browser doesn't have process
+  define: {
+    'process.env.NODE_ENV': JSON.stringify('production'),
+  },
   build: {
     lib: {
       entry: resolve(__dirname, 'src/index.tsx'),
