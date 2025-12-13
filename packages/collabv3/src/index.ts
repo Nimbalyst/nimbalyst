@@ -492,8 +492,10 @@ async function handleAuthRoutes(
       const deepLinkUrl = `nimbalyst://auth/callback?${deepLinkParams.toString()}`;
 
       // Return a page that redirects to the deep link
+      // Show tokens in dev mode or if ?showTokens=1 query param is present (for browser testing)
       const isDev = env.ENVIRONMENT === 'development' || env.ENVIRONMENT === 'local';
-      return new Response(renderSuccessPage(deepLinkUrl, sessionData, isDev), {
+      const showTokens = isDev || url.searchParams.get('showTokens') === '1';
+      return new Response(renderSuccessPage(deepLinkUrl, sessionData, showTokens), {
         status: 200,
         headers: { 'Content-Type': 'text/html' },
       });
@@ -570,8 +572,13 @@ async function handleAuthRoutes(
 
   // GET /auth/login/google - Initiate Google OAuth
   // Desktop app opens this URL in browser
+  // Pass ?showTokens=1 to show session tokens on callback page (for browser testing)
   if (url.pathname === '/auth/login/google') {
-    const callbackUrl = `${url.origin}/auth/callback`;
+    // Pass showTokens param through to callback if present
+    const showTokens = url.searchParams.get('showTokens') === '1';
+    const callbackUrl = showTokens
+      ? `${url.origin}/auth/callback?showTokens=1`
+      : `${url.origin}/auth/callback`;
     const publicToken = env.STYTCH_PROJECT_ID.replace('project-', 'public-token-');
 
     // Note: We need the public token, not project ID, for OAuth start

@@ -187,7 +187,18 @@ export function QRPairingModal({ isOpen, onClose, serverUrl }: QRPairingModalPro
           ) : qrDataUrl ? (
             <>
               <div className="qr-code-container">
-                <img src={qrDataUrl} alt="QR Code for mobile pairing" className="qr-code-image" />
+                <img
+                  src={qrDataUrl}
+                  alt="QR Code for mobile pairing"
+                  className="qr-code-image"
+                  style={{ cursor: 'pointer' }}
+                  onClick={(e) => {
+                    if (e.metaKey && qrPayload) {
+                      handleCopyPayload();
+                    }
+                  }}
+                  title="Cmd+click to copy payload"
+                />
               </div>
 
               <div className="qr-instructions">
