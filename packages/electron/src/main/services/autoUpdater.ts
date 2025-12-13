@@ -1,13 +1,16 @@
 import { autoUpdater } from 'electron-updater';
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import log from 'electron-log';
-import { showUpdateAvailable, showDownloadProgress, showUpdateReady, showUpdateError, closeUpdateWindow } from '../window/UpdateWindow';
-import { getReleaseChannel } from '../utils/store';
+import { getReleaseChannel, store } from '../utils/store';
+
+// Reminder suppression duration: 24 hours
+const REMINDER_SUPPRESSION_DURATION_MS = 24 * 60 * 60 * 1000;
 
 export class AutoUpdaterService {
   private updateCheckInterval: NodeJS.Timeout | null = null;
   private isCheckingForUpdate = false;
   private static isUpdating = false;
+  private pendingUpdateInfo: { version: string; releaseNotes?: string; releaseDate?: string } | null = null;
 
   constructor() {
     // Configure electron-updater logger
@@ -89,9 +92,17 @@ export class AutoUpdaterService {
 
       log.info(`Final releaseNotes being sent to window: "${releaseNotes?.substring(0, 100)}..."`);
 
-      // Show custom update window
-      showUpdateAvailable({
+      // Store pending update info for later use
+      this.pendingUpdateInfo = {
         version: info.version,
+        releaseNotes: releaseNotes,
+        releaseDate: info.releaseDate
+      };
+
+      // Send to frontmost window via toast system
+      this.sendToFrontmostWindow('update-toast:show-available', {
+        currentVersion: app.getVersion(),
+        newVersion: info.version,
         releaseNotes: releaseNotes,
         releaseDate: info.releaseDate
       });
@@ -109,8 +120,10 @@ export class AutoUpdaterService {
       log.error('Update error:', err);
       this.isCheckingForUpdate = false;
 
-      // Show error in update window
-      showUpdateError(err.message);
+      // Send error to frontmost window via toast system
+      this.sendToFrontmostWindow('update-toast:error', {
+        message: err.message
+      });
 
       this.sendToAllWindows('update-error', err.message);
     });
@@ -121,8 +134,8 @@ export class AutoUpdaterService {
       logMessage = `${logMessage} (${progressObj.transferred}/${progressObj.total})`;
       log.info(logMessage);
 
-      // Update the update window with progress
-      showDownloadProgress({
+      // Send progress to frontmost window via toast system
+      this.sendToFrontmostWindow('update-toast:progress', {
         bytesPerSecond: progressObj.bytesPerSecond,
         percent: progressObj.percent,
         transferred: progressObj.transferred,
@@ -135,15 +148,52 @@ export class AutoUpdaterService {
     autoUpdater.on('update-downloaded', (info) => {
       log.info('Update downloaded:', info);
 
-      // Show update ready state in update window
-      showUpdateReady({
-        version: info.version,
-        releaseNotes: info.releaseNotes as string,
-        releaseDate: info.releaseDate
+      // Send ready notification to frontmost window via toast system
+      this.sendToFrontmostWindow('update-toast:show-ready', {
+        version: info.version
       });
 
       this.sendToAllWindows('update-downloaded', info);
     });
+  }
+
+  /**
+   * Get the frontmost (focused) window, or the first workspace window if no window is focused
+   */
+  private getFrontmostWindow(): BrowserWindow | null {
+    // First try to get the focused window
+    const focused = BrowserWindow.getFocusedWindow();
+    if (focused && !focused.isDestroyed()) {
+      return focused;
+    }
+
+    // Otherwise, find the first visible workspace window
+    const allWindows = BrowserWindow.getAllWindows();
+    for (const win of allWindows) {
+      if (!win.isDestroyed() && win.isVisible()) {
+        // Check if it's a workspace window (not update window, settings window, etc.)
+        const url = win.webContents.getURL();
+        if (!url.includes('mode=') || url.includes('mode=workspace')) {
+          return win;
+        }
+      }
+    }
+
+    // Last resort: return the first visible window
+    return allWindows.find(w => !w.isDestroyed() && w.isVisible()) || null;
+  }
+
+  /**
+   * Send a message to the frontmost window
+   */
+  private sendToFrontmostWindow(channel: string, data?: any) {
+    const window = this.getFrontmostWindow();
+    if (window && !window.isDestroyed()) {
+      log.info(`Sending ${channel} to frontmost window`);
+      window.webContents.send(channel, data);
+    } else {
+      log.warn(`No frontmost window available to send ${channel}`);
+    }
   }
 
   public reconfigureFeedURL() {
@@ -202,10 +252,10 @@ export class AutoUpdaterService {
       return app.getVersion();
     });
 
-    // Update window IPC handlers
-    ipcMain.on('update-window:download', async () => {
+    // Toast-based update IPC handlers
+    ipcMain.on('update-toast:download', async () => {
       try {
-        log.info('Update window: Starting download...');
+        log.info('Update toast: Starting download...');
         // In test mode, skip the actual download (tests will manually trigger progress)
         if (process.env.NODE_ENV !== 'test' && process.env.PLAYWRIGHT !== '1') {
           // Re-check for the latest version before downloading in case a newer update
@@ -215,13 +265,15 @@ export class AutoUpdaterService {
           log.info('Test mode: Skipping actual download');
         }
       } catch (error) {
-        log.error('Failed to download update from update window:', error);
-        showUpdateError(error instanceof Error ? error.message : 'Unknown error');
+        log.error('Failed to download update from toast:', error);
+        this.sendToFrontmostWindow('update-toast:error', {
+          message: error instanceof Error ? error.message : 'Unknown error'
+        });
       }
     });
 
-    ipcMain.on('update-window:install', () => {
-      log.info('Update window: Installing update...');
+    ipcMain.on('update-toast:install', () => {
+      log.info('Update toast: Installing update...');
       setImmediate(() => {
         try {
           // Set flag to bypass quit prevention
@@ -243,9 +295,35 @@ export class AutoUpdaterService {
       });
     });
 
-    ipcMain.on('update-window:dismiss', () => {
-      log.info('Update window: Dismissed');
-      closeUpdateWindow();
+    // Reminder suppression handlers
+    ipcMain.handle('update:check-reminder-suppression', (_event, version: string) => {
+      const dismissedVersion = store.get('updateDismissedVersion');
+      const dismissedAt = store.get('updateDismissedAt') as number | undefined;
+
+      if (dismissedVersion !== version) {
+        // Different version, don't suppress
+        return { suppressed: false };
+      }
+
+      if (!dismissedAt) {
+        return { suppressed: false };
+      }
+
+      const timeSinceDismissal = Date.now() - dismissedAt;
+      if (timeSinceDismissal < REMINDER_SUPPRESSION_DURATION_MS) {
+        log.info(`Update reminder suppressed for version ${version} (${Math.round(timeSinceDismissal / 1000 / 60)} minutes ago)`);
+        return { suppressed: true };
+      }
+
+      // Suppression expired
+      return { suppressed: false };
+    });
+
+    ipcMain.handle('update:set-reminder-suppression', (_event, version: string) => {
+      store.set('updateDismissedVersion', version);
+      store.set('updateDismissedAt', Date.now());
+      log.info(`Update reminder suppressed for version ${version}`);
+      return { success: true };
     });
   }
 
@@ -294,34 +372,25 @@ export class AutoUpdaterService {
 
   public async checkForUpdatesWithUI() {
     if (this.isCheckingForUpdate) {
-      dialog.showMessageBox({
-        type: 'info',
-        title: 'Update Check',
-        message: 'Already checking for updates...',
-        buttons: ['OK']
-      });
+      // Already checking, don't show anything - the checking toast is already visible
       return;
     }
+
+    // Show checking toast
+    this.sendToFrontmostWindow('update-toast:checking');
 
     try {
       const result = await autoUpdater.checkForUpdates();
 
       if (!result || !result.updateInfo) {
-        dialog.showMessageBox({
-          type: 'info',
-          title: 'No Updates',
-          message: 'You are running the latest version.',
-          buttons: ['OK']
-        });
+        // No update available - show up-to-date toast
+        this.sendToFrontmostWindow('update-toast:up-to-date');
       }
+      // If an update IS available, the 'update-available' event handler will show the toast
     } catch (error) {
       log.error('Failed to check for updates:', error);
-      dialog.showMessageBox({
-        type: 'error',
-        title: 'Update Check Failed',
-        message: 'Failed to check for updates.',
-        detail: error instanceof Error ? error.message : 'Unknown error',
-        buttons: ['OK']
+      this.sendToFrontmostWindow('update-toast:error', {
+        message: error instanceof Error ? error.message : 'Failed to check for updates'
       });
     }
   }
@@ -336,31 +405,18 @@ export class AutoUpdaterService {
       if (result && result.updateInfo) {
         log.info(`Latest version found: ${result.updateInfo.version}, downloading...`);
 
-        // Show a quick info that we're downloading the latest version
-        // This is non-blocking and will be replaced by the download progress
-        this.sendToAllWindows('update-checking-latest', {
-          message: `Downloading latest version ${result.updateInfo.version}...`
-        });
-
         // Download the latest version that was just checked
+        // Progress events will update the toast automatically
         await autoUpdater.downloadUpdate();
       } else {
         log.info('No update found during re-check');
-        dialog.showMessageBox({
-          type: 'info',
-          title: 'Up to Date',
-          message: 'You already have the latest version.',
-          buttons: ['OK']
-        });
+        // Show up-to-date toast (rare edge case - update was released then pulled)
+        this.sendToFrontmostWindow('update-toast:up-to-date');
       }
     } catch (error) {
       log.error('Failed to check and download latest:', error);
-      dialog.showMessageBox({
-        type: 'error',
-        title: 'Download Failed',
-        message: 'Failed to download the latest update.',
-        detail: error instanceof Error ? error.message : 'Unknown error',
-        buttons: ['OK']
+      this.sendToFrontmostWindow('update-toast:error', {
+        message: error instanceof Error ? error.message : 'Failed to download the update'
       });
     }
   }
@@ -368,3 +424,75 @@ export class AutoUpdaterService {
 
 // Export singleton instance
 export const autoUpdaterService = new AutoUpdaterService();
+
+// Test helpers - only used in test environment
+if (process.env.NODE_ENV === 'test' || process.env.PLAYWRIGHT === '1') {
+  ipcMain.handle('test:trigger-update-available', (_event, updateInfo: { version: string; releaseNotes?: string; releaseDate?: string }) => {
+    log.info('Test: Triggering update available');
+    const focused = BrowserWindow.getFocusedWindow();
+    const window = focused || BrowserWindow.getAllWindows().find(w => !w.isDestroyed() && w.isVisible());
+    if (window && !window.isDestroyed()) {
+      window.webContents.send('update-toast:show-available', {
+        currentVersion: app.getVersion(),
+        newVersion: updateInfo.version,
+        releaseNotes: updateInfo.releaseNotes || '',
+        releaseDate: updateInfo.releaseDate
+      });
+    }
+  });
+
+  ipcMain.handle('test:trigger-download-progress', (_event, progress: { bytesPerSecond: number; percent: number; transferred: number; total: number }) => {
+    log.info(`Test: Triggering download progress ${progress.percent}%`);
+    const focused = BrowserWindow.getFocusedWindow();
+    const window = focused || BrowserWindow.getAllWindows().find(w => !w.isDestroyed() && w.isVisible());
+    if (window && !window.isDestroyed()) {
+      window.webContents.send('update-toast:progress', progress);
+    }
+  });
+
+  ipcMain.handle('test:trigger-update-ready', (_event, updateInfo: { version: string }) => {
+    log.info('Test: Triggering update ready');
+    const focused = BrowserWindow.getFocusedWindow();
+    const window = focused || BrowserWindow.getAllWindows().find(w => !w.isDestroyed() && w.isVisible());
+    if (window && !window.isDestroyed()) {
+      window.webContents.send('update-toast:show-ready', {
+        version: updateInfo.version
+      });
+    }
+  });
+
+  ipcMain.handle('test:trigger-update-error', (_event, errorMessage: string) => {
+    log.info('Test: Triggering update error');
+    const focused = BrowserWindow.getFocusedWindow();
+    const window = focused || BrowserWindow.getAllWindows().find(w => !w.isDestroyed() && w.isVisible());
+    if (window && !window.isDestroyed()) {
+      window.webContents.send('update-toast:error', {
+        message: errorMessage
+      });
+    }
+  });
+
+  ipcMain.handle('test:trigger-update-checking', () => {
+    log.info('Test: Triggering update checking');
+    const focused = BrowserWindow.getFocusedWindow();
+    const window = focused || BrowserWindow.getAllWindows().find(w => !w.isDestroyed() && w.isVisible());
+    if (window && !window.isDestroyed()) {
+      window.webContents.send('update-toast:checking');
+    }
+  });
+
+  ipcMain.handle('test:trigger-update-up-to-date', () => {
+    log.info('Test: Triggering up to date');
+    const focused = BrowserWindow.getFocusedWindow();
+    const window = focused || BrowserWindow.getAllWindows().find(w => !w.isDestroyed() && w.isVisible());
+    if (window && !window.isDestroyed()) {
+      window.webContents.send('update-toast:up-to-date');
+    }
+  });
+
+  ipcMain.handle('test:clear-update-suppression', () => {
+    log.info('Test: Clearing update suppression');
+    store.delete('updateDismissedVersion');
+    store.delete('updateDismissedAt');
+  });
+}

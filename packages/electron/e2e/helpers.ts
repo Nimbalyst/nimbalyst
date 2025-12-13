@@ -31,21 +31,31 @@ export async function launchElectronApp(options?: {
   const electronMain = path.resolve(__dirname, '../out/main/index.js');
   const electronCwd = path.resolve(__dirname, '../../../');
 
-  // Check if dev server is running
-  const devServerUrl = 'http://localhost:5273';
-  try {
-    const response = await fetch(devServerUrl, { method: 'HEAD' });
-    if (!response.ok) {
-      throw new Error(`Dev server returned status ${response.status}`);
+  // Check if dev server is running (try both IPv4 and IPv6)
+  const devServerUrls = ['http://127.0.0.1:5273', 'http://[::1]:5273'];
+  let devServerUrl: string | null = null;
+  let lastError: Error | null = null;
+
+  for (const url of devServerUrls) {
+    try {
+      const response = await fetch(url, { method: 'HEAD' });
+      if (response.ok) {
+        devServerUrl = url;
+        break;
+      }
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
     }
-  } catch (error) {
+  }
+
+  if (!devServerUrl) {
     throw new Error(
       `\n\n❌ Dev server is not running!\n\n` +
       `Playwright tests require the Vite dev server to be running on port 5273.\n` +
       `Please start it in a separate terminal:\n\n` +
       `  cd packages/electron && npm run dev\n\n` +
       `Then run the tests again.\n\n` +
-      `Original error: ${error instanceof Error ? error.message : String(error)}\n`
+      `Original error: ${lastError?.message ?? 'Unknown error'}\n`
     );
   }
 

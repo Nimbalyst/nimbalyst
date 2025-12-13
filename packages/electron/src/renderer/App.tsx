@@ -53,6 +53,7 @@ import { MockupViewer } from './components/CustomEditors/MockupEditor/MockupView
 import { MockupPickerMenuHost } from './components/MockupPickerMenu';
 import { ExtensionHostComponents } from './components/ExtensionHostComponents';
 import { ClaudeCommandsToast } from './components/ClaudeCommandsToast';
+import { UpdateToast } from './components/UpdateToast';
 import OnboardingService from './services/OnboardingService';
 import './WorkspaceWelcome.css';
 
@@ -1701,6 +1702,7 @@ export default function App() {
       <ErrorToastContainer />
       <MockupPickerMenuHost />
       <ExtensionHostComponents />
+      <UpdateToast />
     </div>
   );
 }
