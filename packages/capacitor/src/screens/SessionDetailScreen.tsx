@@ -546,9 +546,9 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
   };
 
   return (
-    <div className="flex flex-col h-screen">
+    <div className="flex flex-col w-full bg-[var(--surface-primary)]" style={{ height: hiddenBackButton ? '100%' : '100dvh' }}>
       {/* Header - Fixed with safe area for notch */}
-      <header className="sticky top-0 z-10 flex items-center px-3 py-2 border-b border-[var(--border-primary)] bg-[var(--surface-secondary)] safe-area-top">
+      <header className="flex-shrink-0 flex items-center px-3 py-2 border-b border-[var(--border-primary)] bg-[var(--surface-secondary)] safe-area-top">
         {!hiddenBackButton && (
           <button
             onClick={() => navigate('/')}
@@ -578,11 +578,10 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
             <span className={`status-dot ${connected ? 'connected' : 'disconnected'}`} />
           </div>
         </div>
-        {/* Prompts count badge - prompts menu rendered via renderHeaderActions */}
       </header>
 
       {/* Transcript - Scrollable */}
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto min-h-0">
         {error && (
           <div className="m-4 p-3 rounded-lg bg-red-50 text-red-600 text-sm">{error}</div>
         )}
@@ -613,7 +612,7 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
       </main>
 
       {/* AI Input - Fixed at bottom with safe area for home indicator */}
-      <footer className="flex-shrink-0 safe-area-bottom bg-[var(--surface-primary)]">
+      <footer className="flex-shrink-0 bg-[var(--surface-primary)] border-t border-[var(--border-primary)] safe-area-bottom">
         <AIInput
           value={inputValue}
           onChange={handleInputChange}

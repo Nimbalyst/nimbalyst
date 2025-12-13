@@ -44,11 +44,17 @@ body {
 
 /* Safe area insets for mobile */
 .safe-area-top {
-  padding-top: env(safe-area-inset-top, 0);
+  /* iOS 11.0 - use constant() */
+  padding-top: constant(safe-area-inset-top);
+  /* iOS 11.2+ - use env() */
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
 .safe-area-bottom {
-  padding-bottom: env(safe-area-inset-bottom, 0);
+  /* iOS 11.0 - use constant() */
+  padding-bottom: constant(safe-area-inset-bottom);
+  /* iOS 11.2+ - use env() */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 /* Status badge styles */
