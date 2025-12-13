@@ -81,6 +81,10 @@ interface SyncContextValue {
   }) => void;
   /** Trigger a reconnection (e.g., after login) */
   reconnect: () => void;
+  /** Inactivity timeout in minutes (0 = disabled) */
+  inactivityTimeoutMinutes: number;
+  /** Set the inactivity timeout (in minutes, 0 to disable) */
+  setInactivityTimeoutMinutes: (minutes: number) => void;
 }
 
 // ============================================================================
@@ -356,6 +360,38 @@ function extractUserIdFromJwt(jwt: string): string {
 
 const SELECTED_PROJECT_KEY = 'nimbalyst_selected_project';
 const DEVICE_ID_KEY = 'nimbalyst_device_id';
+const INACTIVITY_TIMEOUT_KEY = 'nimbalyst_inactivity_timeout';
+
+// Default: Disconnect WebSocket after 2 minutes of inactivity to allow device to sleep
+const DEFAULT_INACTIVITY_TIMEOUT_MS = 2 * 60 * 1000;
+
+// Available timeout options (in minutes)
+export const INACTIVITY_TIMEOUT_OPTIONS = [
+  { value: 0, label: 'Never (keep awake)' },
+  { value: 1, label: '1 minute' },
+  { value: 2, label: '2 minutes' },
+  { value: 5, label: '5 minutes' },
+  { value: 10, label: '10 minutes' },
+];
+
+function loadInactivityTimeout(): number {
+  try {
+    const stored = localStorage.getItem(INACTIVITY_TIMEOUT_KEY);
+    if (stored !== null) {
+      const minutes = parseInt(stored, 10);
+      if (!isNaN(minutes) && minutes >= 0) {
+        return minutes * 60 * 1000;
+      }
+    }
+  } catch {
+    // Ignore
+  }
+  return DEFAULT_INACTIVITY_TIMEOUT_MS;
+}
+
+function saveInactivityTimeout(minutes: number): void {
+  localStorage.setItem(INACTIVITY_TIMEOUT_KEY, String(minutes));
+}
 
 /**
  * Get or generate a stable device ID for this device.
@@ -472,10 +508,13 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
   const [hasReceivedInitialData, setHasReceivedInitialData] = useState(false);
   // Connection config for session rooms (set when connected)
   const [connectionConfig, setConnectionConfig] = useState<SyncConnectionConfig | null>(null);
+  // Inactivity timeout setting (in ms, 0 = disabled)
+  const [inactivityTimeoutMs, setInactivityTimeoutMs] = useState(() => loadInactivityTimeout());
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const deviceAnnounceIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const inactivityTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   // Encryption key derived from credentials
   const encryptionKeyRef = useRef<ForgeKey | null>(null);
 
@@ -928,12 +967,42 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
       clearInterval(deviceAnnounceIntervalRef.current);
       deviceAnnounceIntervalRef.current = null;
     }
+    if (inactivityTimeoutRef.current) {
+      clearTimeout(inactivityTimeoutRef.current);
+      inactivityTimeoutRef.current = null;
+    }
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
     }
     setConnectionConfig(null);
   }, []);
+
+  // Start inactivity timer (called after connection opens)
+  const startInactivityTimer = useCallback(() => {
+    if (inactivityTimeoutRef.current) {
+      clearTimeout(inactivityTimeoutRef.current);
+      inactivityTimeoutRef.current = null;
+    }
+
+    // If timeout is disabled (0), don't set a timer
+    if (inactivityTimeoutMs === 0) {
+      return;
+    }
+
+    inactivityTimeoutRef.current = setTimeout(() => {
+      if (wsRef.current) {
+        console.log('[CollabV3] Disconnecting due to inactivity to allow device sleep');
+        wsRef.current.close();
+        wsRef.current = null;
+        // Don't trigger automatic reconnect - wait for user activity
+        if (reconnectTimeoutRef.current) {
+          clearTimeout(reconnectTimeoutRef.current);
+          reconnectTimeoutRef.current = null;
+        }
+      }
+    }, inactivityTimeoutMs);
+  }, [inactivityTimeoutMs]);
 
   // Refresh
   const refresh = useCallback(() => {
@@ -1002,6 +1071,42 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
     };
   }, [authenticated, paired, serverUrl, connect]);
 
+  // Start inactivity timer when connected
+  useEffect(() => {
+    if (status.connected) {
+      startInactivityTimer();
+    }
+  }, [status.connected, startInactivityTimer]);
+
+  // Handle user activity - reset inactivity timer and reconnect if disconnected
+  useEffect(() => {
+    const handleUserActivity = () => {
+      // If disconnected due to inactivity, reconnect
+      if (!wsRef.current && authenticated && paired && serverUrl) {
+        console.log('[CollabV3] User activity detected, reconnecting...');
+        connect();
+      } else if (wsRef.current) {
+        // Reset inactivity timer if still connected
+        startInactivityTimer();
+      }
+    };
+
+    // Listen for touch and scroll events (mobile-focused)
+    document.addEventListener('touchstart', handleUserActivity, { passive: true });
+    document.addEventListener('scroll', handleUserActivity, { passive: true });
+
+    return () => {
+      document.removeEventListener('touchstart', handleUserActivity);
+      document.removeEventListener('scroll', handleUserActivity);
+    };
+  }, [authenticated, paired, serverUrl, connect, startInactivityTimer]);
+
+  // Setter for inactivity timeout
+  const setInactivityTimeoutMinutes = useCallback((minutes: number) => {
+    saveInactivityTimeout(minutes);
+    setInactivityTimeoutMs(minutes * 60 * 1000);
+  }, []);
+
   const value: SyncContextValue = {
     isAuthenticated: authenticated,
     isPaired: paired,
@@ -1018,6 +1123,8 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
     hasReceivedInitialData,
     sendIndexUpdate,
     reconnect,
+    inactivityTimeoutMinutes: inactivityTimeoutMs / 60000,
+    setInactivityTimeoutMinutes,
   };
 
   return <SyncContext.Provider value={value}>{children}</SyncContext.Provider>;

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BarcodeScanner, BarcodeFormat } from '@capacitor-mlkit/barcode-scanning';
-import { useSync } from '../contexts/CollabV3SyncContext';
+import { useSync, INACTIVITY_TIMEOUT_OPTIONS } from '../contexts/CollabV3SyncContext';
 import { SyncStatusBadge } from '../components/SyncStatusBadge';
 import {
   loadCredentials,
@@ -21,7 +21,7 @@ import {
 
 export function SettingsScreen() {
   const navigate = useNavigate();
-  const { isAuthenticated, isPaired, serverUrl, status, reconnect } = useSync();
+  const { isAuthenticated, isPaired, serverUrl, status, reconnect, inactivityTimeoutMinutes, setInactivityTimeoutMinutes } = useSync();
 
   const [credentials, setCredentials] = useState<SyncCredentials | null>(null);
   const [stytchSession, setStytchSession] = useState<StytchSession | null>(null);
@@ -461,6 +461,32 @@ export function SettingsScreen() {
             </button>
           </div>
         )}
+
+        {/* Sleep Settings */}
+        <div className="mb-6">
+          <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">
+            Sleep Settings
+          </h2>
+
+          <div className="p-4 rounded-lg bg-[var(--surface-secondary)] border border-[var(--border-primary)]">
+            <div className="text-sm text-[var(--text-secondary)] mb-2">Disconnect after inactivity</div>
+            <p className="text-xs text-[var(--text-tertiary)] mb-3">
+              Disconnect sync when idle to let your device sleep and save battery.
+            </p>
+
+            <select
+              value={inactivityTimeoutMinutes}
+              onChange={(e) => setInactivityTimeoutMinutes(Number(e.target.value))}
+              className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--surface-primary)] text-[var(--text-primary)]"
+            >
+              {INACTIVITY_TIMEOUT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
 
         {/* Help Section */}
         <div className="mt-8 p-4 rounded-lg bg-[var(--surface-secondary)] border border-[var(--border-primary)]">
