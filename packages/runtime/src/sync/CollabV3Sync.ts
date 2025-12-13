@@ -139,6 +139,7 @@ type ServerMessage =
   | { type: 'metadata_broadcast'; metadata: Partial<SessionMetadata>; from_connection_id?: string }
   | { type: 'index_sync_response'; sessions: SessionIndexEntry[]; projects: Array<{ project_id: string; name: string; session_count: number; last_activity_at: number; sync_enabled: boolean }> }
   | { type: 'index_broadcast'; session: SessionIndexEntry; from_connection_id?: string }
+  | { type: 'project_broadcast'; project: { project_id: string; name: string; session_count: number; last_activity_at: number; sync_enabled: boolean }; from_connection_id?: string }
   | { type: 'devices_list'; devices: DeviceInfo[] }
   | { type: 'device_joined'; device: DeviceInfo }
   | { type: 'device_left'; device_id: string }
@@ -1007,6 +1008,13 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
             });
             break;
           }
+
+          case 'project_broadcast':
+            // New project created by another device - log for now
+            // Desktop clients currently don't need to update local state since projects are
+            // derived from local workspace folders, not server state
+            console.log('[CollabV3] New project received from another device:', message.project.name);
+            break;
 
           case 'devices_list':
             // console.log('[CollabV3] Received devices list:', message.devices.length, 'devices');

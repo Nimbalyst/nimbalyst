@@ -170,6 +170,11 @@ type ServerMessage =
       session_id: string;
       from_connection_id?: string;
     }
+  | {
+      type: 'project_broadcast';
+      project: ServerProjectEntry;
+      from_connection_id?: string;
+    }
   | { type: 'error'; code: string; message: string };
 
 // ============================================================================
@@ -625,6 +630,24 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
             const deletedSessionId = message.session_id;
             setAllSessions((prev) => prev.filter((s) => s.id !== deletedSessionId));
             // console.log('[CollabV3] Session deleted:', deletedSessionId);
+            break;
+          }
+
+          case 'project_broadcast': {
+            // New project was created - add it to our projects list
+            const newProject = convertProject(message.project);
+            setProjects((prev) => {
+              // Check if project already exists (shouldn't happen, but be safe)
+              const existing = prev.findIndex((p) => p.id === newProject.id);
+              if (existing >= 0) {
+                const updated = [...prev];
+                updated[existing] = newProject;
+                return updated.sort((a, b) => b.sessionCount - a.sessionCount);
+              }
+              // Add new project and sort by session count
+              return [...prev, newProject].sort((a, b) => b.sessionCount - a.sessionCount);
+            });
+            console.log('[CollabV3] New project received:', newProject.name);
             break;
           }
 

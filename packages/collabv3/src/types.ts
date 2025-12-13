@@ -98,6 +98,7 @@ export type ServerMessage =
   | IndexSyncResponseMessage
   | IndexBroadcastMessage
   | IndexDeleteBroadcastMessage
+  | ProjectBroadcastMessage
   | DevicesListMessage
   | DeviceJoinedMessage
   | DeviceLeftMessage
@@ -144,6 +145,13 @@ export interface IndexBroadcastMessage {
 export interface IndexDeleteBroadcastMessage {
   type: 'index_delete_broadcast';
   session_id: string;
+  from_connection_id?: string;
+}
+
+/** Broadcast project update (new or updated) to other devices */
+export interface ProjectBroadcastMessage {
+  type: 'project_broadcast';
+  project: ProjectIndexEntry;
   from_connection_id?: string;
 }
 

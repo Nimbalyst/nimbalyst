@@ -422,6 +422,19 @@ export function registerSettingsHandlers() {
 
         logger.store.info(`[sync:toggle-project] Project sync ${enabled ? 'enabled' : 'disabled'} for: ${workspacePath}`);
 
+        // If a project was enabled, trigger an incremental sync to push its sessions
+        if (enabled) {
+            try {
+                const { triggerIncrementalSync } = await import('../services/SyncManager');
+                // Run async - don't block the IPC response
+                triggerIncrementalSync().catch(err => {
+                    logger.store.error('[sync:toggle-project] Failed to trigger sync:', err);
+                });
+            } catch (err) {
+                logger.store.error('[sync:toggle-project] Failed to import SyncManager:', err);
+            }
+        }
+
         return { success: true };
     });
 

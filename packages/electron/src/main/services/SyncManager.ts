@@ -468,3 +468,125 @@ export async function reinitializeSync(baseStore: SessionStore): Promise<Session
   shutdownSync();
   return initializeSync(baseStore);
 }
+
+/**
+ * Trigger an incremental sync to push local sessions to the server.
+ * Useful when a new project is enabled for sync.
+ */
+export async function triggerIncrementalSync(): Promise<void> {
+  const provider = state.provider;
+  if (!provider) {
+    logger.main.warn('[SyncManager] Cannot trigger sync - provider not initialized');
+    return;
+  }
+
+  if (!provider.syncSessionsToIndex || !provider.fetchIndex) {
+    logger.main.warn('[SyncManager] Provider missing required sync methods');
+    return;
+  }
+
+  const syncStart = performance.now();
+  logger.main.info('[SyncManager] Starting triggered incremental sync...');
+
+  try {
+    // Fetch the server's current index
+    const fetchStart = performance.now();
+    logger.main.info('[SyncManager] Fetching server index...');
+    let serverIndex: Awaited<ReturnType<NonNullable<typeof provider.fetchIndex>>>;
+    try {
+      serverIndex = await provider.fetchIndex();
+      const fetchTime = performance.now() - fetchStart;
+      logger.main.info(`[SyncManager] Server has ${serverIndex.sessions.length} sessions (fetch took ${fetchTime.toFixed(1)}ms)`);
+    } catch (fetchError) {
+      logger.main.warn('[SyncManager] Failed to fetch server index:', fetchError);
+      serverIndex = { sessions: [], projects: [] };
+    }
+
+    // Build a map of server sessions for quick lookup
+    const serverSessionMap = new Map(
+      serverIndex.sessions.map(s => [s.session_id, s])
+    );
+
+    // Get local sessions
+    const localStart = performance.now();
+    const { getAllSessionsForSync } = await import('./PGLiteSessionStore');
+    const allLocalSessions = await getAllSessionsForSync(false);
+    const localTime = performance.now() - localStart;
+    logger.main.info(`[SyncManager] Local has ${allLocalSessions.length} sessions (query took ${localTime.toFixed(1)}ms)`);
+
+    // Get enabled projects filter
+    const { store } = await import('../utils/store');
+    const syncSettings = store.get('sessionSync');
+    const enabledProjects = syncSettings?.enabledProjects;
+
+    const enabledProjectIds = enabledProjects
+      ? new Set(enabledProjects)
+      : null;
+
+    // Find sessions that need syncing
+    const sessionsNeedingIndexUpdate: typeof allLocalSessions = [];
+    const sessionsNeedingMessageSync: string[] = [];
+
+    for (const localSession of allLocalSessions) {
+      if (!localSession.workspaceId) {
+        continue;
+      }
+
+      // Skip sessions from disabled projects
+      if (enabledProjectIds && !enabledProjectIds.has(localSession.workspaceId)) {
+        continue;
+      }
+
+      const serverSession = serverSessionMap.get(localSession.id);
+
+      if (!serverSession) {
+        sessionsNeedingIndexUpdate.push(localSession);
+        sessionsNeedingMessageSync.push(localSession.id);
+      } else {
+        const serverMessageCount = serverSession.message_count || 0;
+        const localMessageCount = localSession.messageCount || 0;
+
+        if (localMessageCount > serverMessageCount) {
+          sessionsNeedingIndexUpdate.push(localSession);
+          sessionsNeedingMessageSync.push(localSession.id);
+          logger.main.info(`[SyncManager] Session ${localSession.id} needs message sync: local=${localMessageCount} server=${serverMessageCount}`);
+        }
+      }
+    }
+
+    logger.main.info('[SyncManager] Triggered sync results:', {
+      totalLocal: allLocalSessions.length,
+      totalServer: serverIndex.sessions.length,
+      needingIndexUpdate: sessionsNeedingIndexUpdate.length,
+      needingMessageSync: sessionsNeedingMessageSync.length,
+    });
+
+    if (sessionsNeedingIndexUpdate.length === 0 && sessionsNeedingMessageSync.length === 0) {
+      logger.main.info('[SyncManager] All sessions up to date, no sync needed');
+    } else {
+      if (sessionsNeedingMessageSync.length > 0) {
+        const { getSessionMessagesForSync } = await import('./PGLiteSessionStore');
+
+        for (const session of sessionsNeedingIndexUpdate) {
+          if (sessionsNeedingMessageSync.includes(session.id)) {
+            const serverSession = serverSessionMap.get(session.id);
+            const serverMessageCount = serverSession?.message_count || 0;
+            const newMessages = await getSessionMessagesForSync(session.id, serverMessageCount);
+            session.messages = newMessages;
+            logger.main.info(`[SyncManager] Session ${session.id}: syncing ${newMessages.length} new messages`);
+          }
+        }
+      }
+
+      logger.main.info(`[SyncManager] Syncing ${sessionsNeedingIndexUpdate.length} sessions`);
+      provider.syncSessionsToIndex(sessionsNeedingIndexUpdate, {
+        syncMessages: sessionsNeedingMessageSync.length > 0,
+      });
+    }
+
+    const totalSyncTime = performance.now() - syncStart;
+    logger.main.info(`[SyncManager] Triggered sync completed in ${totalSyncTime.toFixed(1)}ms`);
+  } catch (error) {
+    logger.main.error('[SyncManager] Triggered sync failed:', error);
+  }
+}

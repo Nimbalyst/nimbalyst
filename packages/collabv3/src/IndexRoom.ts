@@ -316,8 +316,8 @@ export class IndexRoom implements DurableObject {
       session.updated_at
     );
 
-    // Update project stats
-    await this.updateProjectStats(session.project_id);
+    // Update project stats (and broadcast if new project)
+    await this.updateProjectStats(session.project_id, ws);
 
     // Broadcast to other connections
     this.broadcast(
@@ -366,9 +366,9 @@ export class IndexRoom implements DurableObject {
     });
     log.debug('Batch update committed successfully');
 
-    // Update project stats for all affected projects
+    // Update project stats for all affected projects (and broadcast if new projects)
     for (const projectId of affectedProjects) {
-      await this.updateProjectStats(projectId);
+      await this.updateProjectStats(projectId, ws);
     }
 
     // Broadcast each session update to other connections
@@ -413,8 +413,8 @@ export class IndexRoom implements DurableObject {
     // Delete from index
     sql.exec(`DELETE FROM session_index WHERE session_id = ?`, sessionId);
 
-    // Update project stats
-    await this.updateProjectStats(session.project_id);
+    // Update project stats (no broadcast needed for deletion - project already exists)
+    await this.updateProjectStats(session.project_id, ws);
 
     // Broadcast deletion to other connections
     this.broadcast(
@@ -481,8 +481,9 @@ export class IndexRoom implements DurableObject {
 
   /**
    * Update project statistics (session count, last activity)
+   * Broadcasts project updates to all connected clients when a new project is created.
    */
-  private async updateProjectStats(projectId: string): Promise<void> {
+  private async updateProjectStats(projectId: string, originatingWs?: WebSocket): Promise<void> {
     const sql = this.state.storage.sql;
 
     // Calculate stats from sessions
@@ -492,11 +493,13 @@ export class IndexRoom implements DurableObject {
       projectId
     ).toArray()[0];
 
-    // Upsert project with updated stats
+    // Check if project exists before upserting
     const existing = sql.exec<ProjectIndexRow>(
       `SELECT * FROM project_index WHERE project_id = ?`,
       projectId
     ).toArray()[0];
+
+    const isNewProject = !existing;
 
     if (existing) {
       sql.exec(
@@ -516,6 +519,28 @@ export class IndexRoom implements DurableObject {
         stats?.count ?? 0,
         stats?.last_activity ?? Date.now()
       );
+    }
+
+    // Broadcast project update to all connected clients when a new project is created
+    // This ensures mobile clients see new projects immediately
+    if (isNewProject) {
+      const updatedProject = sql.exec<ProjectIndexRow>(
+        `SELECT * FROM project_index WHERE project_id = ?`,
+        projectId
+      ).toArray()[0];
+
+      if (updatedProject) {
+        const projectEntry = rowToProjectEntry(updatedProject);
+        this.broadcast(
+          {
+            type: 'project_broadcast',
+            project: projectEntry,
+            from_connection_id: originatingWs ? this.getConnectionId(originatingWs) : undefined,
+          },
+          originatingWs
+        );
+        log.debug('Broadcast new project:', projectId);
+      }
     }
   }
 
