@@ -404,26 +404,17 @@ export const RichTranscriptView = React.forwardRef<
   };
 
   // Helper to check if we should show the login widget for a given message index
-  // Show the widget if this is a login error AND the previous non-tool message wasn't also a login error
+  // Only show the widget if this is a login error AND it's the last message in the session
+  // This prevents redundant widgets from being shown when scrolling through history
   const shouldShowLoginWidgetForIndex = (index: number): boolean => {
     const message = messages[index];
     if (!isLoginRequiredError(message) || message.role === 'user') {
       return false;
     }
 
-    // Find the previous non-tool message
-    let prevIndex = index - 1;
-    while (prevIndex >= 0 && messages[prevIndex].role === 'tool') {
-      prevIndex--;
-    }
-
-    // If no previous message, show the widget
-    if (prevIndex < 0) {
-      return true;
-    }
-
-    // Show the widget only if the previous message wasn't also a login error
-    return !isLoginRequiredError(messages[prevIndex]);
+    // Only show the login widget if this is the last message in the session
+    // This prevents re-rendering/re-checking login status when scrolling through old messages
+    return index === messages.length - 1;
   };
 
   // Helper to get provider display name
