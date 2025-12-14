@@ -55,7 +55,7 @@ async function loadMermaid(isDarkTheme: boolean): Promise<any> {
   return mermaidPromise;
 }
 
-function MermaidDiagram({ content, id }: { content: string; id: string }) {
+function MermaidDiagram({ content, id, renderKey }: { content: string; id: string; renderKey: number }) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -78,35 +78,48 @@ function MermaidDiagram({ content, id }: { content: string; id: string }) {
 
         if (!mounted) return;
 
-        // Parse the diagram to check for errors
-        const parseResult = await mermaid.parse(content);
+        // Use mermaid.render() for more control - it returns SVG directly
+        // Use a unique ID with renderKey to avoid mermaid's internal caching issues
+        const elementId = `mermaid_${id}_${renderKey}_${Date.now()}`;
+        const { svg, bindFunctions } = await mermaid.render(elementId, content);
 
         if (!mounted) return;
 
-        // Render the diagram
+        // Insert the rendered SVG
         if (containerRef.current) {
-          containerRef.current.innerHTML = '';
-          const elementId = `mermaid_${id}`;
-          const div = document.createElement('div');
-          div.id = elementId;
-          div.textContent = content;
-          containerRef.current.appendChild(div);
-
-          await mermaid.run({
-            querySelector: `#${elementId}`,
-          });
-
+          containerRef.current.innerHTML = svg;
+          // Bind any interactive functions (like click handlers) to the SVG
+          if (bindFunctions) {
+            bindFunctions(containerRef.current);
+          }
           setError(null);
         }
       } catch (err: any) {
         if (mounted) {
           console.error('Mermaid render error:', err);
-          // Extract error message properly - err.message for Error objects,
-          // toString() as fallback, but avoid "[object Object]"
-          const errorMessage = err?.message ||
-            (typeof err?.toString === 'function' && err.toString() !== '[object Object]'
-              ? err.toString()
-              : 'Failed to render diagram');
+          // Extract error message - mermaid errors can have various structures
+          let errorMessage = 'Failed to render diagram';
+          if (typeof err === 'string') {
+            errorMessage = err;
+          } else if (err?.message) {
+            errorMessage = err.message;
+          } else if (err?.str) {
+            // Mermaid parser errors often have a 'str' property
+            errorMessage = err.str;
+          } else if (err?.hash?.text) {
+            // Some mermaid errors have hash.text
+            errorMessage = `Parse error near: ${err.hash.text}`;
+          } else if (typeof err === 'object') {
+            // Last resort: try to stringify the object for debugging
+            try {
+              const jsonStr = JSON.stringify(err, null, 2);
+              if (jsonStr !== '{}') {
+                errorMessage = jsonStr;
+              }
+            } catch {
+              // If JSON.stringify fails, keep default message
+            }
+          }
           setError(errorMessage);
         }
       } finally {
@@ -122,7 +135,7 @@ function MermaidDiagram({ content, id }: { content: string; id: string }) {
         clearTimeout(renderTimeoutRef.current);
       }
     };
-  }, [content, id, isDarkTheme]);
+  }, [content, id, isDarkTheme, renderKey]);
 
   return (
     <div className="mermaid-diagram">
@@ -143,8 +156,14 @@ function MermaidComponent({ content: initialContent, nodeKey, className }: Merma
   const [isEditing, setIsEditing] = useState(false);
   const [content, setContent] = useState(initialContent);
   const [editedContent, setEditedContent] = useState(initialContent);
+  const [renderKey, setRenderKey] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const hasInitializedRef = useRef(false);
+
+  const handleRedraw = useCallback(() => {
+    // Force re-render by incrementing the render key
+    setRenderKey((k) => k + 1);
+  }, []);
 
   // Auto-resize textarea
   const adjustTextareaHeight = useCallback(() => {
@@ -198,12 +217,21 @@ function MermaidComponent({ content: initialContent, nodeKey, className }: Merma
     <div className={`mermaid-block ${className || ''}`}>
       <div className="mermaid-header">
         <span className="mermaid-label">Mermaid Diagram</span>
-        <button
-          className={`mermaid-edit-button ${isEditing ? 'mermaid-edit-button-active' : ''}`}
-          onClick={handleToggleEdit}
-        >
-          {isEditing ? 'Done' : 'Edit'}
-        </button>
+        <div className="mermaid-header-buttons">
+          <button
+            className="mermaid-redraw-button"
+            onClick={handleRedraw}
+            title="Redraw diagram"
+          >
+            Redraw
+          </button>
+          <button
+            className={`mermaid-edit-button ${isEditing ? 'mermaid-edit-button-active' : ''}`}
+            onClick={handleToggleEdit}
+          >
+            {isEditing ? 'Done' : 'Edit'}
+          </button>
+        </div>
       </div>
 
       {isEditing && (
@@ -234,7 +262,7 @@ function MermaidComponent({ content: initialContent, nodeKey, className }: Merma
         }
       >
         <React.Suspense fallback={<div className="mermaid-loading">Loading...</div>}>
-          <MermaidDiagram content={content} id={nodeKey} />
+          <MermaidDiagram content={content} id={nodeKey} renderKey={renderKey} />
         </React.Suspense>
       </ErrorBoundary>
     </div>

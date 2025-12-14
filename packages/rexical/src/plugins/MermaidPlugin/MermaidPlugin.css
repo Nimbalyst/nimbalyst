@@ -28,6 +28,26 @@
   gap: 0.5rem;
 }
 
+.mermaid-header-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.mermaid-redraw-button {
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  background: var(--surface-primary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.mermaid-redraw-button:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
 
 .mermaid-edit-button {
   padding: 0.25rem 0.75rem;
