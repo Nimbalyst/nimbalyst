@@ -565,3 +565,4 @@ Defensive coding that masks failures is worse than crashing:
 - nimbalyst always preserves newlines and spacing in markdown
 
 Put react components that might be used by the mobile app version in the runtime package, not electron
+we use linear mcp with the "NIM" project
