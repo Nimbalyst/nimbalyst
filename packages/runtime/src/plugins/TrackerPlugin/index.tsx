@@ -574,7 +574,8 @@ function TrackerPlugin(): JSX.Element | null {
 
   // Typeahead trigger function
   const trackerTriggerFn: TriggerFunction = useCallback((text: string, editor: LexicalEditor) => {
-    const match = text.match(/#(\w*)$/);
+    // Use negative lookbehind to ensure we only match a single # (not ## or ###, which are headers)
+    const match = text.match(/(?<!#)#(\w*)$/);
     if (match) {
       // Get the full paragraph/list item text by reading from editor state
       let fullText = text;
@@ -600,8 +601,8 @@ function TrackerPlugin(): JSX.Element | null {
         }
       });
 
-      // Now match against the full text
-      const fullMatch = fullText.match(/#(\w*)$/);
+      // Now match against the full text (also use negative lookbehind to avoid ## headers)
+      const fullMatch = fullText.match(/(?<!#)#(\w*)$/);
       if (fullMatch) {
         const textBeforeHash = fullText.substring(0, fullMatch.index);
         capturedTextRef.current = textBeforeHash.trim();
