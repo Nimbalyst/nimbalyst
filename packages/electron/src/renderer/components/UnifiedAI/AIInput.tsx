@@ -572,26 +572,40 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
       }
     }, [onAttachmentAdd, handleFileAttachment]);
 
-    // Paste handler for images
+    // Paste handler for images and text
     const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
-      if (!onAttachmentAdd) return;
-
       const items = Array.from(e.clipboardData.items);
-      for (const item of items) {
-        if (item.type.startsWith('image/')) {
-          e.preventDefault();
-          const file = item.getAsFile();
-          if (file) {
-            // Generate unique filename for pasted images (clipboard gives generic "image.png")
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-            const ext = file.type.split('/')[1] || 'png';
-            const uniqueName = `pasted-image-${timestamp}.${ext}`;
-            const renamedFile = new File([file], uniqueName, { type: file.type });
-            await handleFileAttachment(renamedFile);
+
+      // Handle image attachments
+      if (onAttachmentAdd) {
+        for (const item of items) {
+          if (item.type.startsWith('image/')) {
+            e.preventDefault();
+            const file = item.getAsFile();
+            if (file) {
+              // Generate unique filename for pasted images (clipboard gives generic "image.png")
+              const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+              const ext = file.type.split('/')[1] || 'png';
+              const uniqueName = `pasted-image-${timestamp}.${ext}`;
+              const renamedFile = new File([file], uniqueName, { type: file.type });
+              await handleFileAttachment(renamedFile);
+            }
+            return; // Exit early after handling image
           }
         }
       }
-    }, [onAttachmentAdd, handleFileAttachment]);
+
+      // For Claude Code provider: prevent pasted text starting with '#' from triggering memory mode
+      // by prepending a newline when pasting into an empty input
+      if (provider === 'claude-code' && value.trim() === '') {
+        const pastedText = e.clipboardData.getData('text');
+        if (pastedText && pastedText.trimStart().startsWith('#')) {
+          e.preventDefault();
+          // Prepend a newline to prevent '#' from being the first character
+          onChange('\n' + pastedText);
+        }
+      }
+    }, [onAttachmentAdd, handleFileAttachment, provider, value, onChange]);
 
     // Handle attachment removal
     const handleRemoveAttachment = useCallback((attachmentId: string) => {
