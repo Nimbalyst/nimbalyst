@@ -240,8 +240,7 @@ export default defineConfig({
       sourcemap: isDev,
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'src/renderer/index.html'),
-          update: resolve(__dirname, 'src/renderer/update.html')
+          index: resolve(__dirname, 'src/renderer/index.html')
         }
       }
     },
