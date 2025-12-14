@@ -117,6 +117,9 @@ export interface SessionData {
   // Session naming tracking
   hasBeenNamed?: boolean;  // Whether the session has been named by name_session tool
 
+  // Archive state
+  isArchived?: boolean;  // Whether the session is archived
+
   // Token usage tracking (for providers that support it)
   tokenUsage?: {
     inputTokens: number;      // Total input tokens used

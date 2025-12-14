@@ -142,8 +142,12 @@ interface FloatingTranscriptActionsProps {
   isSidebarCollapsed: boolean;
   onToggleSidebar: () => void;
   onNavigateToPrompt: (marker: PromptMarker) => void;
+  /** Whether the session is archived */
+  isArchived?: boolean;
   /** Optional callback to close and archive the session */
   onCloseAndArchive?: () => void;
+  /** Optional callback to unarchive the session */
+  onUnarchive?: () => void;
 }
 
 export const FloatingTranscriptActions: React.FC<FloatingTranscriptActionsProps> = ({
@@ -151,22 +155,39 @@ export const FloatingTranscriptActions: React.FC<FloatingTranscriptActionsProps>
   isSidebarCollapsed,
   onToggleSidebar,
   onNavigateToPrompt,
-  onCloseAndArchive
+  isArchived,
+  onCloseAndArchive,
+  onUnarchive
 }) => {
   const historyButtonRef = useRef<HTMLButtonElement>(null);
 
   return (
     <div className="floating-transcript-actions">
-      {/* Close and Archive Button */}
-      {onCloseAndArchive && (
-        <button
-          className="floating-transcript-button"
-          onClick={onCloseAndArchive}
-          aria-label="Close and archive session"
-          title="Close and archive session"
-        >
-          <MaterialSymbol icon="archive" size={20} />
-        </button>
+      {/* Archive/Unarchive Button - show based on current state */}
+      {isArchived ? (
+        // Show Unarchive button for archived sessions
+        onUnarchive && (
+          <button
+            className="floating-transcript-button"
+            onClick={onUnarchive}
+            aria-label="Unarchive session"
+            title="Unarchive session"
+          >
+            <MaterialSymbol icon="unarchive" size={20} />
+          </button>
+        )
+      ) : (
+        // Show Close and Archive button for non-archived sessions
+        onCloseAndArchive && (
+          <button
+            className="floating-transcript-button"
+            onClick={onCloseAndArchive}
+            aria-label="Close and archive session"
+            title="Close and archive session"
+          >
+            <MaterialSymbol icon="archive" size={20} />
+          </button>
+        )
       )}
 
       {/* Prompts Menu Button */}

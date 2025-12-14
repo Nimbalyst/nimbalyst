@@ -55,6 +55,7 @@ interface SessionTab {
   draftAttachments?: ChatAttachment[];
   mode?: AIMode; // Planning vs Agent mode (default: agent)
   model?: string; // Current model ID (provider:model format)
+  isArchived?: boolean; // Whether session is archived
 }
 
 type SessionListItem = Pick<SessionData, 'id' | 'createdAt' | 'name' | 'title' | 'provider' | 'model'> & {
@@ -218,6 +219,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                     draftInput: sessionData.draftInput || tab.draftInput,
                     mode: sessionData.mode || tab.mode,
                     model: sessionData.model || sessionData.provider || tab.model,
+                    isArchived: sessionData.isArchived,
                   }
                 : tab
             ));
@@ -528,6 +530,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             return {
               ...tab,
               name: sessionData.title || tab.name,
+              isArchived: sessionData.isArchived,
               sessionData: {
                 ...sessionData,
                 messages,
@@ -618,7 +621,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           sessionData,
           draftInput: sessionData.draftInput,
           mode: sessionData.mode || 'agent',
-          model: sessionData.model || sessionData.provider || 'claude-code'
+          model: sessionData.model || sessionData.provider || 'claude-code',
+          isArchived: sessionData.isArchived
         };
 
         // console.log('[AgenticPanel] Created new tab:', newTab);
@@ -725,13 +729,54 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       // Trigger a refresh of the session history
       setSessionHistoryRefreshTrigger(prev => prev + 1);
 
-      // Show success toast
-      errorNotificationService.showInfo('Session Archived', 'Session has been archived');
+      // Show success toast with undo action
+      errorNotificationService.showInfo('Session Archived', 'Session has been archived', {
+        action: {
+          label: 'Undo',
+          onClick: async () => {
+            try {
+              // Unarchive the session
+              await window.electronAPI.invoke('sessions:update-metadata', sessionId, { isArchived: false });
+              // Reopen the session in a tab
+              if (openSessionInTabRef.current) {
+                await openSessionInTabRef.current(sessionId);
+              }
+              // Refresh the session history
+              setSessionHistoryRefreshTrigger(prev => prev + 1);
+            } catch (undoErr) {
+              console.error('[AgenticPanel] Failed to undo archive:', undoErr);
+              errorNotificationService.showError('Undo Failed', 'Failed to restore session');
+            }
+          }
+        }
+      });
     } catch (err) {
       console.error('[AgenticPanel] Failed to archive session:', err);
       errorNotificationService.showError('Archive Failed', 'Failed to archive session');
     }
   }, [closeArchivedSession]);
+
+  // Unarchive a session (for archived sessions that are opened)
+  const handleUnarchive = useCallback(async (sessionId: string) => {
+    try {
+      // Unarchive the session in the database
+      await window.electronAPI.invoke('sessions:update-metadata', sessionId, { isArchived: false });
+
+      // Update the tab's isArchived state
+      setSessionTabs(prev => prev.map(tab =>
+        tab.id === sessionId ? { ...tab, isArchived: false } : tab
+      ));
+
+      // Trigger a refresh of the session history
+      setSessionHistoryRefreshTrigger(prev => prev + 1);
+
+      // Show success toast
+      errorNotificationService.showInfo('Session Unarchived', 'Session has been restored');
+    } catch (err) {
+      console.error('[AgenticPanel] Failed to unarchive session:', err);
+      errorNotificationService.showError('Unarchive Failed', 'Failed to restore session');
+    }
+  }, []);
 
   // Create a new session
   const createNewSession = useCallback(async (planPath?: string) => {
@@ -903,7 +948,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                       isPinned: savedTab.isPinned,
                       draftInput: sessionData.draftInput,
                       mode: sessionData.mode || 'agent',
-                      model: sessionData.model || sessionData.provider || 'claude-code'
+                      model: sessionData.model || sessionData.provider || 'claude-code',
+                      isArchived: sessionData.isArchived
                     });
                   }
                 } else {
@@ -2390,7 +2436,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             onAIModeChange={(newMode) => handleModeChange(activeTab.id, newMode)}
             currentModel={activeTab.model || activeTab.sessionData.model || 'claude-code'}
             onModelChange={(newModel) => handleModelChange(activeTab.id, newModel)}
+            isArchived={activeTab.isArchived}
             onCloseAndArchive={handleCloseAndArchive}
+            onUnarchive={handleUnarchive}
           />
         ) : (
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -2498,7 +2546,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                 onAIModeChange={(newMode) => handleModeChange(tab.id, newMode)}
                 currentModel={tab.model || tab.sessionData.model || 'claude-code'}
                 onModelChange={(newModel) => handleModelChange(tab.id, newModel)}
+                isArchived={tab.isArchived}
                 onCloseAndArchive={handleCloseAndArchive}
+                onUnarchive={handleUnarchive}
               />
             ))}
 

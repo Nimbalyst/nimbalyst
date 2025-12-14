@@ -350,6 +350,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
         providerSessionId: row.provider_session_id ?? undefined,
         lastReadMessageTimestamp: row.last_read_ms ? Number(row.last_read_ms) : undefined,
         hasBeenNamed: row.has_been_named ?? false,
+        isArchived: row.is_archived ?? false,
       } satisfies ChatSession;
     },
 

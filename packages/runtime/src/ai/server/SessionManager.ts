@@ -68,6 +68,7 @@ function sessionDataFromChatSession(session: ChatSession, fallbackWorkspace: str
     lastReadMessageTimestamp: session.lastReadMessageTimestamp ?? undefined,
     tokenUsage,
     metadata: session.metadata ?? {},
+    isArchived: session.isArchived ?? false,
   } satisfies SessionData;
 }
 

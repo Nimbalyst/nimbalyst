@@ -8,6 +8,11 @@ import posthog from 'posthog-js';
 
 export type ErrorSeverity = 'error' | 'warning' | 'info';
 
+export interface NotificationAction {
+  label: string;
+  onClick: () => void;
+}
+
 export interface ErrorNotification {
   id: string;
   title: string;
@@ -19,6 +24,7 @@ export interface ErrorNotification {
   context?: Record<string, any>;
   dismissible?: boolean;
   duration?: number; // Auto-dismiss after this many ms (0 = never)
+  action?: NotificationAction; // Optional action button (e.g., Undo)
 }
 
 type ErrorListener = (notification: ErrorNotification) => void;
@@ -85,6 +91,7 @@ class ErrorNotificationService {
     options?: {
       details?: string;
       duration?: number;
+      action?: NotificationAction;
     }
   ): string {
     return this.notify({
@@ -121,6 +128,7 @@ class ErrorNotificationService {
     stack?: string;
     context?: Record<string, any>;
     duration?: number;
+    action?: NotificationAction;
   }): string {
     const notification: ErrorNotification = {
       id: `error-${this.nextId++}`,

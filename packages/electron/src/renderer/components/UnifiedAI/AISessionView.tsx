@@ -65,8 +65,10 @@ export interface AISessionViewProps {
   currentModel?: string;
   onModelChange?: (modelId: string) => void;
 
-  // Close and archive
+  // Archive state and actions
+  isArchived?: boolean;
   onCloseAndArchive?: (sessionId: string) => void;
+  onUnarchive?: (sessionId: string) => void;
 }
 
 /**
@@ -84,7 +86,9 @@ interface TranscriptSectionProps {
   onFileClick?: (filePath: string) => void;
   onTodoClick?: (todo: TodoItem) => void;
   onCancelQueuedPrompt: (id: string) => void;
+  isArchived?: boolean;
   onCloseAndArchive?: () => void;
+  onUnarchive?: () => void;
 }
 
 const TranscriptSectionComponent: React.FC<TranscriptSectionProps> = ({
@@ -98,7 +102,9 @@ const TranscriptSectionComponent: React.FC<TranscriptSectionProps> = ({
   onFileClick,
   onTodoClick,
   onCancelQueuedPrompt,
-  onCloseAndArchive
+  isArchived,
+  onCloseAndArchive,
+  onUnarchive
 }) => {
   return (
     <>
@@ -130,7 +136,9 @@ const TranscriptSectionComponent: React.FC<TranscriptSectionProps> = ({
             showThinking: true,
             showSessionInit: false
           }}
+          isArchived={isArchived}
           onCloseAndArchive={onCloseAndArchive}
+          onUnarchive={onUnarchive}
         />
       </div>
 
@@ -204,7 +212,9 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
   onAIModeChange,
   currentModel,
   onModelChange,
-  onCloseAndArchive
+  isArchived,
+  onCloseAndArchive,
+  onUnarchive
 }, ref) => {
   const inputRef = useRef<AIInputRef>(null);
   const [todos, setTodos] = useState<Todo[]>([]);
@@ -485,6 +495,13 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
     }
   }, [sessionId, onCloseAndArchive]);
 
+  // Handle unarchive session
+  const handleUnarchive = useCallback(() => {
+    if (onUnarchive) {
+      onUnarchive(sessionId);
+    }
+  }, [sessionId, onUnarchive]);
+
   // Handle slash command suggestion selection
   const handleCommandSelect = useCallback((command: string) => {
     if (onDraftInputChange) {
@@ -530,7 +547,9 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
         onFileClick={handleFileClick}
         onTodoClick={handleTodoClick}
         onCancelQueuedPrompt={handleCancelQueuedPrompt}
+        isArchived={isArchived}
         onCloseAndArchive={handleCloseAndArchive}
+        onUnarchive={handleUnarchive}
       />
 
       {/* ExitPlanMode confirmation - shown when agent requests to exit planning mode */}

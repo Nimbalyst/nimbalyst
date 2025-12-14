@@ -103,6 +103,23 @@
   background: var(--color-button-hover, #0056b3);
 }
 
+.error-toast-action-btn {
+  background: var(--surface-secondary, #f0f0f0);
+  color: var(--text-primary, #333);
+  border: 1px solid var(--border-primary, #ccc);
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.error-toast-action-btn:hover {
+  background: var(--surface-hover, #e0e0e0);
+  border-color: var(--border-focus, #999);
+}
+
 @keyframes slideIn {
   from {
     transform: translateX(100%);

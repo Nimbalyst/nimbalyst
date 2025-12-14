@@ -30,8 +30,12 @@ interface AgentTranscriptPanelProps {
     prompts: PromptMarker[];
     onNavigateToPrompt: (marker: PromptMarker) => void;
   }) => React.ReactNode;
+  /** Whether the session is archived */
+  isArchived?: boolean;
   /** Optional callback to close and archive the session */
   onCloseAndArchive?: () => void;
+  /** Optional callback to unarchive the session */
+  onUnarchive?: () => void;
 }
 
 export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
@@ -46,7 +50,9 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
   hideSidebar = false,
   workspacePath: workspacePathProp,
   renderHeaderActions,
-  onCloseAndArchive
+  isArchived,
+  onCloseAndArchive,
+  onUnarchive
 }) => {
   // Use prop if provided, otherwise fall back to sessionData.workspacePath
   const effectiveWorkspacePath = workspacePathProp || sessionData.workspacePath;
@@ -240,7 +246,9 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
             isSidebarCollapsed={isSidebarCollapsed}
             onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
             onNavigateToPrompt={handleNavigateToPrompt}
+            isArchived={isArchived}
             onCloseAndArchive={onCloseAndArchive}
+            onUnarchive={onUnarchive}
           />
         )}
 
