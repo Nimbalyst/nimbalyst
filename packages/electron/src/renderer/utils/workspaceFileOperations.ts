@@ -39,13 +39,19 @@ export async function handleWorkspaceFileSelect(options: FileSelectOptions): Pro
   if (activeFilePath === filePath) {
     const existingTab = tabs.findTabByPath(filePath);
     if (existingTab) {
-      if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] File already active, ensuring tab focus');
-      tabs.switchTab(existingTab.id);
-      return;
+      // BUGFIX: Check if the tab is actually in the visible tabs array (tabs.tabs)
+      // There can be a state corruption where a tab exists in the Map but not in tabOrder
+      const isInVisibleTabs = tabs.tabs?.some((t: any) => t.id === existingTab.id);
+      if (!isInVisibleTabs) {
+        // State corruption detected - fall through to re-open the file
+        // This will trigger addTab which will repair the tabOrder
+      } else {
+        if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] File already active, ensuring tab focus');
+        tabs.switchTab(existingTab.id);
+        return;
+      }
     }
-    // If activeFilePath matches but no tab exists, there's a state inconsistency.
-    // Fall through to open the file normally instead of returning silently.
-    console.warn('[WORKSPACE_FILE_SELECT] activeFilePath matches but no tab found, proceeding to open file:', filePath);
+    // activeFilePath matches but tab not visible - fall through to open normally
   }
 
   // NOTE: No need to manually save here - EditorContainer handles save-on-tab-switch
@@ -53,11 +59,17 @@ export async function handleWorkspaceFileSelect(options: FileSelectOptions): Pro
   // which triggers EditorContainer's visibility useEffect, which saves dirty tabs before hiding.
 
   // If tabs are enabled, check if file is already open in a tab
-  const existingTab = tabs.findTabByPath(filePath);
-  if (existingTab) {
-    if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] File already open in tab, switching');
-    tabs.switchTab(existingTab.id);
-    return;
+  const existingTab2 = tabs.findTabByPath(filePath);
+  if (existingTab2) {
+    // BUGFIX: Same check as above - verify tab is actually in visible tabs array
+    const isInVisibleTabs2 = tabs.tabs?.some((t: any) => t.id === existingTab2.id);
+    if (isInVisibleTabs2) {
+      if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] File already open in tab, switching');
+      tabs.switchTab(existingTab2.id);
+      return;
+    }
+    // Tab exists in Map but not in tabOrder - fall through to load fresh
+    // addTab will repair the state by adding the tab to tabOrder
   }
 
   try {

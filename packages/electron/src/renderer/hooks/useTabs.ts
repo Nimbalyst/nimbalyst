@@ -140,10 +140,7 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
 
   // Add a new tab
   const addTab = useCallback((filePath: string, content: string = '', switchToTab: boolean = true): string | null => {
-    console.log('[useTabs] addTab called:', { filePath, enabled, currentTabCount: tabs.size, maxTabs });
-
     if (!enabled) {
-      console.warn('[useTabs] addTab called but tabs are disabled');
       return null;
     }
 
@@ -154,11 +151,10 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
 
     // Check if tab already exists and add new tab in a single state update
     setTabs(prev => {
-      console.log('[useTabs] setTabs prev.size:', prev.size);
       // Check if tab already exists using the LATEST state
       const existingTab = Array.from(prev.values()).find(tab => tab.filePath === filePath);
       if (existingTab) {
-        // Tab already exists, don't create a new one
+        // Tab exists in Map - tabOrder repair happens after setTabs if needed
         resultTabId = existingTab.id;
         if (switchToTab) {
           setActiveTabId(existingTab.id);
@@ -214,6 +210,15 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
     // Update tab order if we created a new tab
     if (isNewTab && resultTabId) {
       setTabOrder(prev => [...prev, resultTabId!]);
+    } else if (resultTabId && !isNewTab) {
+      // BUGFIX: Repair state corruption - tab exists in Map but might not be in tabOrder
+      // This can happen due to persistence issues or race conditions
+      setTabOrder(prev => {
+        if (!prev.includes(resultTabId!)) {
+          return [...prev, resultTabId!];
+        }
+        return prev;
+      });
     }
 
     // Only switch to the new tab if requested
@@ -239,8 +244,6 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
       // console.log('[useTabs] NOT calling start-watching-file - electronAPI:', !!electronAPI, 'isVirtual:', filePath.startsWith('virtual://'));
     }
 
-    // console.log('[useTabs] After file watcher code');
-    console.log('[useTabs] addTab returning:', resultTabId);
     return resultTabId;
   }, [enabled, tabs, maxTabs, generateTabId, onTabChange, removeTab]);
 
@@ -426,16 +429,21 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
         return;
       }
 
-      const tabsArray = Array.from(tabs.values()).map(tab => ({
-        id: tab.id,
-        filePath: tab.filePath,
-        fileName: tab.fileName,
-        isDirty: tab.isDirty,
-        isPinned: tab.isPinned,
-        isVirtual: tab.isVirtual,
-        lastSaved: tab.lastSaved?.toISOString()
-        // Don't save content or editor state
-      }));
+      // Only save tabs that are in tabOrder - this prevents saving orphaned tabs
+      // that exist in the Map but aren't visible (which can cause state corruption on restore)
+      const tabsArray = tabOrder
+        .map(id => tabs.get(id))
+        .filter((tab): tab is TabData => tab !== undefined)
+        .map(tab => ({
+          id: tab.id,
+          filePath: tab.filePath,
+          fileName: tab.fileName,
+          isDirty: tab.isDirty,
+          isPinned: tab.isPinned,
+          isVirtual: tab.isVirtual,
+          lastSaved: tab.lastSaved?.toISOString()
+          // Don't save content or editor state
+        }));
 
       const closedTabsArray = closedTabs.map(tab => ({
         id: tab.id,
@@ -447,9 +455,12 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
         lastSaved: tab.lastSaved?.toISOString()
       }));
 
+      // Only save activeTabId if it's in tabOrder (not orphaned)
+      const validActiveTabId = activeTabId && tabOrder.includes(activeTabId) ? activeTabId : null;
+
       const tabState: any = {
         tabs: tabsArray,
-        activeTabId,
+        activeTabId: validActiveTabId,
         tabOrder,
         closedTabs: closedTabsArray
       };
