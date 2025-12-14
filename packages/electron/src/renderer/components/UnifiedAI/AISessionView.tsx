@@ -163,7 +163,7 @@ const TranscriptSectionComponent: React.FC<TranscriptSectionProps> = ({
 
 // Memoize TranscriptSection to prevent re-renders when input changes
 const TranscriptSection = React.memo(TranscriptSectionComponent, (prevProps, nextProps) => {
-  // Only re-render if session data, todos, queue, or processing state actually changed
+  // Only re-render if session data, todos, queue, processing state, or archive state changed
   return (
     prevProps.sessionId === nextProps.sessionId &&
     prevProps.sessionData === nextProps.sessionData &&
@@ -171,7 +171,8 @@ const TranscriptSection = React.memo(TranscriptSectionComponent, (prevProps, nex
     prevProps.mode === nextProps.mode &&
     prevProps.todos === nextProps.todos &&
     prevProps.queuedPrompts === nextProps.queuedPrompts &&
-    prevProps.isProcessing === nextProps.isProcessing
+    prevProps.isProcessing === nextProps.isProcessing &&
+    prevProps.isArchived === nextProps.isArchived
   );
 });
 
@@ -629,6 +630,7 @@ export const AISessionView = React.memo(AISessionViewComponent, (prevProps, next
     prevProps.currentModel !== nextProps.currentModel ||
     prevProps.workspacePath !== nextProps.workspacePath ||
     prevProps.mode !== nextProps.mode ||
+    prevProps.isArchived !== nextProps.isArchived ||
     prevProps.draftAttachments?.length !== nextProps.draftAttachments?.length ||
     prevProps.fileMentionOptions?.length !== nextProps.fileMentionOptions?.length
   ) {
