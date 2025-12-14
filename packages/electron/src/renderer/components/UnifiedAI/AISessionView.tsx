@@ -89,6 +89,8 @@ interface TranscriptSectionProps {
   isArchived?: boolean;
   onCloseAndArchive?: () => void;
   onUnarchive?: () => void;
+  provider: string;
+  onCommandSelect: (command: string) => void;
 }
 
 const TranscriptSectionComponent: React.FC<TranscriptSectionProps> = ({
@@ -104,8 +106,27 @@ const TranscriptSectionComponent: React.FC<TranscriptSectionProps> = ({
   onCancelQueuedPrompt,
   isArchived,
   onCloseAndArchive,
-  onUnarchive
+  onUnarchive,
+  provider,
+  onCommandSelect
 }) => {
+  // Create the renderEmptyExtra callback for slash command suggestions
+  const renderEmptyExtra = React.useCallback(() => {
+    // Only show for claude-code provider with empty session
+    if (provider !== 'claude-code' || sessionData.messages.length > 0) {
+      return null;
+    }
+    return (
+      <SlashCommandSuggestions
+        provider={provider}
+        hasMessages={sessionData.messages.length > 0}
+        workspacePath={workspacePath}
+        sessionId={sessionId}
+        onCommandSelect={onCommandSelect}
+      />
+    );
+  }, [provider, sessionData.messages.length, workspacePath, sessionId, onCommandSelect]);
+
   return (
     <>
       {/* Referenced files gutter at top - only in chat mode (agent mode has sidebar) */}
@@ -136,6 +157,7 @@ const TranscriptSectionComponent: React.FC<TranscriptSectionProps> = ({
             showThinking: true,
             showSessionInit: false
           }}
+          renderEmptyExtra={renderEmptyExtra}
           isArchived={isArchived}
           onCloseAndArchive={onCloseAndArchive}
           onUnarchive={onUnarchive}
@@ -172,7 +194,8 @@ const TranscriptSection = React.memo(TranscriptSectionComponent, (prevProps, nex
     prevProps.todos === nextProps.todos &&
     prevProps.queuedPrompts === nextProps.queuedPrompts &&
     prevProps.isProcessing === nextProps.isProcessing &&
-    prevProps.isArchived === nextProps.isArchived
+    prevProps.isArchived === nextProps.isArchived &&
+    prevProps.provider === nextProps.provider
   );
 });
 
@@ -551,6 +574,8 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
         isArchived={isArchived}
         onCloseAndArchive={handleCloseAndArchive}
         onUnarchive={handleUnarchive}
+        provider={sessionData.provider}
+        onCommandSelect={handleCommandSelect}
       />
 
       {/* ExitPlanMode confirmation - shown when agent requests to exit planning mode */}
@@ -561,15 +586,6 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
           onDeny={handleExitPlanModeDeny}
         />
       )}
-
-      {/* Slash command suggestions - shown for empty Claude Code sessions */}
-      <SlashCommandSuggestions
-        provider={sessionData.provider}
-        hasMessages={sessionData.messages.length > 0}
-        workspacePath={workspacePath}
-        sessionId={sessionId}
-        onCommandSelect={handleCommandSelect}
-      />
 
       {/* Input area - separate so typing doesn't re-render transcript */}
       <AIInput

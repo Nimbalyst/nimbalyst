@@ -26,6 +26,8 @@ interface RichTranscriptViewProps {
   showSettings?: boolean;
   documentContext?: { filePath?: string };
   workspacePath?: string;
+  /** Optional: render additional content in the empty state (e.g., command suggestions) */
+  renderEmptyExtra?: () => React.ReactNode;
 }
 
 const defaultSettings: TranscriptSettings = {
@@ -223,7 +225,7 @@ const extractEditsFromToolMessage = (message: Message): any[] => {
 export const RichTranscriptView = React.forwardRef<
   { scrollToMessage: (index: number) => void },
   RichTranscriptViewProps
->(({ sessionId, sessionStatus, isProcessing, messages, provider, settings: propsSettings, onSettingsChange, showSettings, documentContext, workspacePath }, ref) => {
+>(({ sessionId, sessionStatus, isProcessing, messages, provider, settings: propsSettings, onSettingsChange, showSettings, documentContext, workspacePath, renderEmptyExtra }, ref) => {
   const [collapsedMessages, setCollapsedMessages] = useState<Set<number>>(new Set());
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -712,6 +714,7 @@ export const RichTranscriptView = React.forwardRef<
                   Enter a task below to get started
                 </div>
               </div>
+              {renderEmptyExtra?.()}
             </div>
           ) : (
             <div className="rich-transcript-messages">

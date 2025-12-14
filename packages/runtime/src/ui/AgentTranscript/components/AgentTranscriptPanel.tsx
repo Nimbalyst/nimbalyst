@@ -30,6 +30,8 @@ interface AgentTranscriptPanelProps {
     prompts: PromptMarker[];
     onNavigateToPrompt: (marker: PromptMarker) => void;
   }) => React.ReactNode;
+  /** Optional: render additional content in the empty state (e.g., command suggestions) */
+  renderEmptyExtra?: () => React.ReactNode;
   /** Whether the session is archived */
   isArchived?: boolean;
   /** Optional callback to close and archive the session */
@@ -50,6 +52,7 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
   hideSidebar = false,
   workspacePath: workspacePathProp,
   renderHeaderActions,
+  renderEmptyExtra,
   isArchived,
   onCloseAndArchive,
   onUnarchive
@@ -237,6 +240,7 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
           showSettings={showSettings}
           documentContext={sessionData.documentContext}
           workspacePath={effectiveWorkspacePath}
+          renderEmptyExtra={renderEmptyExtra}
         />
 
         {/* Floating Actions - hidden if hideSidebar is true */}

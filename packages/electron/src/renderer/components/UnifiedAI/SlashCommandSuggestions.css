@@ -6,6 +6,8 @@
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
+  max-width: 64rem;
+  margin: 0 auto;
 }
 
 .slash-command-suggestions-label {

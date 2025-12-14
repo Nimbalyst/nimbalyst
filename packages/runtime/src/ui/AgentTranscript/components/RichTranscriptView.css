@@ -46,13 +46,19 @@
 
 .rich-transcript-empty {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
   align-items: center;
   padding: 2rem 1rem;
-  min-height: 300px;
+  height: 100%;
+  max-width: 64rem;
+  margin: 0 auto;
 }
 
 .rich-transcript-empty-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   max-width: 400px;
   text-align: left;
 }
