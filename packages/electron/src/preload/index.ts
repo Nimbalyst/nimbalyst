@@ -210,7 +210,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // File context menu operations
   renameFile: (oldPath: string, newName: string) => ipcRenderer.invoke('rename-file', oldPath, newName),
   deleteFile: (filePath: string) => ipcRenderer.invoke('delete-file', filePath),
-  openFileInNewWindow: (filePath: string) => ipcRenderer.invoke('open-file-in-new-window', filePath),
+  openInDefaultApp: (filePath: string) => ipcRenderer.invoke('open-in-default-app', filePath),
   openSessionManager: (filterWorkspace?: string) => ipcRenderer.invoke('open-session-manager', filterWorkspace),
   showInFinder: (filePath: string) => ipcRenderer.invoke('show-in-finder', filePath),
   moveFile: (sourcePath: string, targetPath: string) => ipcRenderer.invoke('move-file', sourcePath, targetPath),

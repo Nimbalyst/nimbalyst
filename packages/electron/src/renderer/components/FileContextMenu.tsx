@@ -12,7 +12,7 @@ interface FileContextMenuProps {
   onRename: (filePath: string, newName: string) => void;
   onDelete: (filePath: string) => void;
   onDeleteMultiple?: (filePaths: string[]) => void;
-  onOpenInNewWindow: (filePath: string) => void;
+  onOpenInDefaultApp: (filePath: string) => void;
   onShowInFinder: (filePath: string) => void;
   onNewFile?: (folderPath: string) => void;
   onNewFolder?: (folderPath: string) => void;
@@ -31,7 +31,7 @@ export function FileContextMenu({
   onRename,
   onDelete,
   onDeleteMultiple,
-  onOpenInNewWindow,
+  onOpenInDefaultApp,
   onShowInFinder,
   onNewFile,
   onNewFolder,
@@ -133,8 +133,8 @@ export function FileContextMenu({
     }
   };
 
-  const handleOpenInNewWindow = () => {
-    onOpenInNewWindow(filePath);
+  const handleOpenInDefaultApp = () => {
+    onOpenInDefaultApp(filePath);
     onClose();
   };
 
@@ -248,9 +248,9 @@ export function FileContextMenu({
 
       {fileType === 'file' && (
         <>
-          <div className="context-menu-item" onClick={handleOpenInNewWindow}>
-            <MaterialSymbol icon="open_in_new" size={18} />
-            <span>Open in New Window</span>
+          <div className="context-menu-item" onClick={handleOpenInDefaultApp}>
+            <MaterialSymbol icon="launch" size={18} />
+            <span>Open in Default App</span>
           </div>
           {onViewHistory && (
             <div className="context-menu-item" onClick={() => { onViewHistory(filePath); onClose(); }}>

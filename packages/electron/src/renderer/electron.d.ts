@@ -75,7 +75,7 @@ interface ElectronAPI {
   // File context menu operations
   renameFile: (oldPath: string, newName: string) => Promise<{ success: boolean; newPath?: string; error?: string }>;
   deleteFile: (filePath: string) => Promise<{ success: boolean; error?: string }>;
-  openFileInNewWindow: (filePath: string) => Promise<{ success: boolean; error?: string }>;
+  openInDefaultApp: (filePath: string) => Promise<{ success: boolean; error?: string }>;
   showInFinder: (filePath: string) => Promise<{ success: boolean; error?: string }>;
   moveFile: (sourcePath: string, targetPath: string) => Promise<{ success: boolean; newPath?: string; error?: string }>;
   copyFile: (sourcePath: string, targetPath: string) => Promise<{ success: boolean; newPath?: string; error?: string }>;

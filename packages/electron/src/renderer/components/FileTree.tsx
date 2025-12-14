@@ -368,10 +368,10 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
     onSelectionChange?.(new Set());
   }, [setSelectedPaths, onSelectionChange]);
 
-  const handleOpenInNewWindow = useCallback(async (filePath: string) => {
-    const result = await window.electronAPI.openFileInNewWindow(filePath);
+  const handleOpenInDefaultApp = useCallback(async (filePath: string) => {
+    const result = await window.electronAPI.openInDefaultApp(filePath);
     if (!result.success) {
-      console.error('Failed to open in new window:', result.error);
+      console.error('Failed to open in default app:', result.error);
     }
   }, []);
 
@@ -692,7 +692,7 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
           onRename={handleRename}
           onDelete={handleDelete}
           onDeleteMultiple={handleDeleteMultiple}
-          onOpenInNewWindow={handleOpenInNewWindow}
+          onOpenInDefaultApp={handleOpenInDefaultApp}
           onShowInFinder={handleShowInFinder}
           onNewFile={onNewFile}
           onNewFolder={onNewFolder}

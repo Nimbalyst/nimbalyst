@@ -7,7 +7,7 @@ import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 import os from 'os';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
-import { openWorkspaceFile, openFileInNewWindow, openFile } from '../file/FileOpener';
+import { openWorkspaceFile, openFile } from '../file/FileOpener';
 
 const { writeFile, mkdir, rename, unlink, rmdir, copyFile, readFile, rm, stat, cp } = fsPromises;
 
@@ -743,13 +743,17 @@ export function registerWorkspaceHandlers() {
         }
     });
 
-    ipcMain.handle('open-file-in-new-window', async (event, filePath: string) => {
+    ipcMain.handle('open-in-default-app', async (event, filePath: string) => {
         try {
-            // Use unified FileOpener API
-            await openFileInNewWindow(filePath);
+            // Open file in the OS default application
+            const result = await shell.openPath(filePath);
+            if (result) {
+                // openPath returns an error string if it failed, empty string on success
+                return { success: false, error: result };
+            }
             return { success: true };
         } catch (error: any) {
-            console.error('Error opening file in new window:', error);
+            console.error('Error opening file in default app:', error);
             return { success: false, error: error.message };
         }
     });
