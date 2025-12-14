@@ -8,6 +8,26 @@ import { AnalyticsService } from '../services/analytics/AnalyticsService';
 
 let workspaceManagerWindow: BrowserWindow | null = null;
 
+// Track whether the WorkspaceManager is closing because a project was opened
+// (vs user manually closing it with the close button)
+let workspaceManagerClosingForProject = false;
+
+// Track whether the WorkspaceManager was manually closed by the user
+// Used to prevent reopening it when it was the last window
+let workspaceManagerManuallyClosed = false;
+
+/**
+ * Returns true if the WorkspaceManager was manually closed by the user.
+ * Used by window-all-closed handler to decide whether to show it again.
+ * Resets the flag after reading.
+ */
+export function wasWorkspaceManagerManuallyClosed(): boolean {
+  const result = workspaceManagerManuallyClosed;
+  // Reset the flag after reading
+  workspaceManagerManuallyClosed = false;
+  return result;
+}
+
 // Helper function to bucket file counts for analytics
 function bucketFileCount(count: number): string {
   if (count <= 10) return '1-10';
@@ -133,6 +153,12 @@ export function createWorkspaceManagerWindow() {
 
   // Clean up when closed
   workspaceManagerWindow.on('closed', () => {
+    // If not closing for project selection, mark as manually closed by user
+    if (!workspaceManagerClosingForProject) {
+      workspaceManagerManuallyClosed = true;
+    }
+    // Reset the project selection flag now that the window is closed
+    workspaceManagerClosingForProject = false;
     workspaceManagerWindow = null;
   });
 
@@ -323,6 +349,8 @@ export function setupWorkspaceManagerHandlers() {
 
     // Close workspace manager after opening workspace
     if (workspaceManagerWindow && !workspaceManagerWindow.isDestroyed()) {
+      // Mark that we're closing because a project was selected (not user manually closing)
+      workspaceManagerClosingForProject = true;
       workspaceManagerWindow.close();
     }
 

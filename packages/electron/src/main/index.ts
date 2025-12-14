@@ -10,7 +10,7 @@ import { loadFileIntoWindow } from './file/FileOperations';
 import { createApplicationMenu } from './menu/ApplicationMenu';
 import { updateNativeTheme, updateWindowTitleBars } from './theme/ThemeManager';
 import { restoreSessionState, saveSessionState } from './session/SessionState';
-import { createWorkspaceManagerWindow, setupWorkspaceManagerHandlers } from './window/WorkspaceManagerWindow.ts';
+import { createWorkspaceManagerWindow, setupWorkspaceManagerHandlers, wasWorkspaceManagerManuallyClosed } from './window/WorkspaceManagerWindow.ts';
 import { registerFileHandlers } from './ipc/FileHandlers';
 import { registerWorkspaceHandlers } from './ipc/WorkspaceHandlers.ts';
 import { registerSettingsHandlers } from './ipc/SettingsHandlers';
@@ -748,9 +748,9 @@ app.on('activate', () => {
     if (isAppQuitting) return;
     // Only create window if app is ready (screen module requires app to be ready)
     if (!app.isReady()) return;
-    // On macOS, re-create window when dock icon is clicked
+    // On macOS, show WorkspaceManager when dock icon is clicked and no windows are open
     if (BrowserWindow.getAllWindows().length === 0) {
-        createWindow();
+        createWorkspaceManagerWindow();
     }
 });
 
@@ -1210,14 +1210,28 @@ app.on('before-quit', async (event) => {
 // Window all closed handler
 app.on('window-all-closed', () => {
   logger.main.info('All windows closed');
-  if (!isAppQuitting) {
-    // Only create Workspace Manager if app is ready
-    if (app.isReady()) {
-      createWorkspaceManagerWindow();
-    }
-    // If we are quitting, do nothing here and allow normal quit to proceed
-  } else {
-    // On other platforms, quit when all windows are closed
+  if (isAppQuitting) {
+    // App is quitting, allow normal quit to proceed
     app.quit();
+    return;
+  }
+
+  // Check if the WorkspaceManager itself was manually closed by the user
+  // In that case, don't reopen it (quit on Windows/Linux, stay running on macOS)
+  if (wasWorkspaceManagerManuallyClosed()) {
+    if (process.platform !== 'darwin') {
+      logger.main.info('WorkspaceManager manually closed on non-macOS platform, quitting app');
+      app.quit();
+    } else {
+      logger.main.info('WorkspaceManager manually closed on macOS, app stays running (dock icon can reopen)');
+    }
+    return;
+  }
+
+  // A project window was closed (not the WorkspaceManager)
+  // Show the WorkspaceManager so user can open another project
+  if (app.isReady()) {
+    logger.main.info('Project window closed, showing WorkspaceManager');
+    createWorkspaceManagerWindow();
   }
 });
