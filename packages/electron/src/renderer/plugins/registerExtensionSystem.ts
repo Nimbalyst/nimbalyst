@@ -12,6 +12,8 @@ import {
   initializeExtensionAIToolsBridge,
   setOnToolsChangedCallback,
   executeExtensionTool,
+  setEnabledStateProvider,
+  setConfigurationServiceProvider,
 } from '@nimbalyst/runtime';
 import { ExtensionPlatformServiceImpl } from '../services/ExtensionPlatformServiceImpl';
 import { initializeExtensionEditorBridge } from '../extensions/ExtensionEditorBridge';
@@ -39,6 +41,25 @@ export async function registerExtensionSystem(): Promise<void> {
   // Set up the platform service
   const service = ExtensionPlatformServiceImpl.getInstance();
   setExtensionPlatformService(service);
+
+  // Set up the enabled state provider to query persisted enabled state from main process
+  setEnabledStateProvider(async (extensionId: string) => {
+    return window.electronAPI.extensions.getEnabled(extensionId);
+  });
+
+  // Set up the configuration service provider for extension settings
+  setConfigurationServiceProvider({
+    get: async (extensionId: string, key: string): Promise<unknown> => {
+      const config = await window.electronAPI.extensions.getConfig(extensionId);
+      return config[key];
+    },
+    getAll: async (extensionId: string): Promise<Record<string, unknown>> => {
+      return window.electronAPI.extensions.getConfig(extensionId);
+    },
+    set: async (extensionId: string, key: string, value: unknown, scope?: 'user' | 'workspace'): Promise<void> => {
+      await window.electronAPI.extensions.setConfig(extensionId, key, value, scope);
+    },
+  });
 
   // Discover and load extensions
   // This will scan the extensions directory and load any valid extensions

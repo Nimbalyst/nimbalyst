@@ -18,6 +18,7 @@ import type {
   DiscoveredExtension,
   ExtensionContext,
   ExtensionServices,
+  ExtensionConfigurationService,
   Disposable,
   CustomEditorContribution,
   ExtensionAITool,
@@ -125,6 +126,53 @@ function createExtensionContext(
             );
           },
         };
+      },
+    };
+  }
+
+  // Add configuration service if extension has configuration contribution
+  if (manifest.contributions?.configuration && configurationServiceProvider) {
+    // Cache for synchronous access
+    let configCache: Record<string, unknown> = {};
+    let configLoaded = false;
+
+    // Load config asynchronously
+    configurationServiceProvider.getAll(manifest.id).then(config => {
+      configCache = config;
+      configLoaded = true;
+    }).catch(err => {
+      console.warn(`[${manifest.name}] Failed to load configuration:`, err);
+    });
+
+    services.configuration = {
+      get: <T>(key: string, defaultValue?: T): T => {
+        // Return cached value or default from schema
+        if (key in configCache) {
+          return configCache[key] as T;
+        }
+        // Check for default in schema
+        const prop = manifest.contributions?.configuration?.properties[key];
+        if (prop?.default !== undefined) {
+          return prop.default as T;
+        }
+        return defaultValue as T;
+      },
+      update: async (key: string, value: unknown, scope?: 'user' | 'workspace'): Promise<void> => {
+        if (!configurationServiceProvider) {
+          throw new Error('Configuration service not available');
+        }
+        await configurationServiceProvider.set(manifest.id, key, value, scope);
+        // Update cache
+        configCache[key] = value;
+      },
+      getAll: (): Record<string, unknown> => {
+        // Merge defaults with cached values
+        const result: Record<string, unknown> = {};
+        const props = manifest.contributions?.configuration?.properties ?? {};
+        for (const [key, prop] of Object.entries(props)) {
+          result[key] = configCache[key] ?? prop.default;
+        }
+        return result;
       },
     };
   }
@@ -702,6 +750,46 @@ export class ExtensionLoader {
 let extensionLoader: ExtensionLoader | null = null;
 
 /**
+ * Callback to query persisted enabled state for extensions.
+ * Allows platform-specific persistence (Electron store, etc.)
+ */
+let enabledStateProvider: ((extensionId: string) => Promise<boolean>) | null = null;
+
+/**
+ * Configuration service provider interface.
+ * Allows platform-specific persistence (Electron store, etc.)
+ */
+export interface ConfigurationServiceProvider {
+  get(extensionId: string, key: string): Promise<unknown>;
+  getAll(extensionId: string): Promise<Record<string, unknown>>;
+  set(extensionId: string, key: string, value: unknown, scope?: 'user' | 'workspace'): Promise<void>;
+}
+
+let configurationServiceProvider: ConfigurationServiceProvider | null = null;
+
+/**
+ * Set a callback that will be called to get the persisted enabled state
+ * for each extension when it's loaded. This allows the platform layer
+ * (Electron, Capacitor) to provide persistence.
+ */
+export function setEnabledStateProvider(
+  provider: (extensionId: string) => Promise<boolean>
+): void {
+  enabledStateProvider = provider;
+}
+
+/**
+ * Set the configuration service provider that handles reading/writing
+ * extension configuration values. This allows the platform layer
+ * (Electron, Capacitor) to provide persistence.
+ */
+export function setConfigurationServiceProvider(
+  provider: ConfigurationServiceProvider
+): void {
+  configurationServiceProvider = provider;
+}
+
+/**
  * Get the global ExtensionLoader instance.
  * Creates one if it doesn't exist.
  */
@@ -715,6 +803,9 @@ export function getExtensionLoader(): ExtensionLoader {
 /**
  * Initialize extensions by discovering and loading all enabled extensions.
  * Should be called during app startup after platform service is set.
+ *
+ * Uses the enabledStateProvider (if set) to check persisted enabled state
+ * for each extension.
  */
 export async function initializeExtensions(): Promise<void> {
   const loader = getExtensionLoader();
@@ -724,6 +815,27 @@ export async function initializeExtensions(): Promise<void> {
   console.info(`[ExtensionLoader] Found ${discovered.length} extension(s)`);
 
   for (const ext of discovered) {
+    // Check persisted enabled state
+    let shouldLoad = true;
+    if (enabledStateProvider) {
+      try {
+        shouldLoad = await enabledStateProvider(ext.manifest.id);
+      } catch (error) {
+        console.warn(
+          `[ExtensionLoader] Failed to check enabled state for ${ext.manifest.id}, defaulting to enabled:`,
+          error
+        );
+        shouldLoad = true;
+      }
+    }
+
+    if (!shouldLoad) {
+      console.info(
+        `[ExtensionLoader] Skipping disabled extension: ${ext.manifest.name}`
+      );
+      continue;
+    }
+
     console.info(
       `[ExtensionLoader] Loading ${ext.manifest.name} v${ext.manifest.version}...`
     );

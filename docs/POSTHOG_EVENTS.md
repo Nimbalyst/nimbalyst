@@ -94,6 +94,12 @@ All events include `$session_id` property automatically. Dev users are marked wi
 | `package_uninstalled` | `ProjectSettingsScreen.tsx:116` | User successfully uninstalls package | `packageId`<br/>`packageName` |
 | `package_uninstall_failed` | `ProjectSettingsScreen.tsx:128` | Package uninstallation fails | `packageId`<br/>`error` |
 
+### Extensions
+
+| Event Name | File(s) | Trigger | Properties |
+| --- | --- | --- | --- |
+| `extension_toggled` | `InstalledExtensionsPanel.tsx:81` | User enables or disables an extension | `action` (enabled/disabled) |
+
 ### Menu & Application
 
 | Event Name | File(s) | Trigger | Properties |
@@ -140,12 +146,13 @@ All events include `$session_id` property automatically. Dev users are marked wi
 
 ## Event Summary Statistics
 
-- **Total Events**: 58 unique event names
+- **Total Events**: 59 unique event names
 - **Main Process Events**: 39 (via AnalyticsService)
-- **Renderer Process Events**: 19 (via usePostHog hook)
+- **Renderer Process Events**: 20 (via usePostHog hook)
 - **File Operations**: 7 events
 - **Workspace Operations**: 4 events
 - **AI-Related**: 20 events
+- **Extensions**: 1 event
 - **Onboarding**: 8 events
 - **System/Infrastructure**: 10 events
 

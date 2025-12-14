@@ -91,6 +91,68 @@ export interface ExtensionContributions {
 
   /** Host components to mount at app level (names of exported components) */
   hostComponents?: string[];
+
+  /** Extension configuration schema */
+  configuration?: ExtensionConfigurationContribution;
+}
+
+// ============================================================================
+// Extension Configuration Types
+// ============================================================================
+
+/**
+ * Configuration schema for extension settings.
+ * Follows a JSON Schema-like structure for defining configurable properties.
+ */
+export interface ExtensionConfigurationContribution {
+  /** Title displayed in settings panel */
+  title?: string;
+
+  /** Configuration properties */
+  properties: Record<string, ConfigurationProperty>;
+}
+
+/**
+ * A single configuration property that can be set by the user.
+ */
+export interface ConfigurationProperty {
+  /** Property type */
+  type: 'string' | 'number' | 'boolean' | 'array' | 'object';
+
+  /** Default value */
+  default?: unknown;
+
+  /** Human-readable description */
+  description?: string;
+
+  /** Enum values for dropdown selection */
+  enum?: (string | number)[];
+
+  /** Human-readable labels for enum values */
+  enumDescriptions?: string[];
+
+  /**
+   * Scope of the setting:
+   * - 'user': Global setting (same across all projects)
+   * - 'workspace': Per-project setting
+   * - 'both': Available in both scopes (workspace overrides user)
+   */
+  scope?: 'user' | 'workspace' | 'both';
+
+  /** Order for display (lower = higher priority) */
+  order?: number;
+
+  /** Minimum value for numbers */
+  minimum?: number;
+
+  /** Maximum value for numbers */
+  maximum?: number;
+
+  /** Pattern for string validation (regex) */
+  pattern?: string;
+
+  /** Placeholder text for input fields */
+  placeholder?: string;
 }
 
 /**
@@ -357,6 +419,33 @@ export interface ExtensionServices {
 
   /** AI operations (if permitted) */
   ai?: ExtensionAIService;
+
+  /** Configuration service (if extension has configuration contribution) */
+  configuration?: ExtensionConfigurationService;
+}
+
+/**
+ * Configuration service for extensions to read/write their settings.
+ */
+export interface ExtensionConfigurationService {
+  /**
+   * Get a configuration value.
+   * Returns the workspace value if set, otherwise the user value, otherwise the default.
+   */
+  get<T>(key: string, defaultValue?: T): T;
+
+  /**
+   * Update a configuration value.
+   * @param key - Configuration property key
+   * @param value - New value to set
+   * @param scope - Which scope to update ('user' or 'workspace')
+   */
+  update(key: string, value: unknown, scope?: 'user' | 'workspace'): Promise<void>;
+
+  /**
+   * Get all configuration values for this extension.
+   */
+  getAll(): Record<string, unknown>;
 }
 
 /**

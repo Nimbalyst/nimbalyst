@@ -16,6 +16,7 @@ import { MCPServersPanel } from '../GlobalSettings/panels/MCPServersPanel';
 import { SyncPanel, type SyncConfig } from '../GlobalSettings/panels/SyncPanel';
 import { ToolPackagesPanel } from './panels/ToolPackagesPanel';
 import { ProviderOverrideWrapper } from './panels/ProviderOverrideWrapper';
+import { InstalledExtensionsPanel } from './panels/InstalledExtensionsPanel';
 
 export interface ProviderConfig {
   enabled: boolean;
@@ -97,8 +98,8 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
   const [totalPackageCount, setTotalPackageCount] = useState(0);
 
   // Valid categories for each scope
-  const projectCategories: SettingsCategory[] = ['tool-packages', 'mcp-servers', 'claude-code', 'claude', 'openai', 'openai-codex', 'lmstudio'];
-  const userCategories: SettingsCategory[] = ['claude-code', 'claude', 'openai', 'openai-codex', 'lmstudio', 'sync', 'notifications', 'advanced', 'mcp-servers'];
+  const projectCategories: SettingsCategory[] = ['tool-packages', 'installed-extensions', 'mcp-servers', 'claude-code', 'claude', 'openai', 'openai-codex', 'lmstudio'];
+  const userCategories: SettingsCategory[] = ['claude-code', 'claude', 'openai', 'openai-codex', 'lmstudio', 'sync', 'notifications', 'advanced', 'installed-extensions', 'mcp-servers'];
 
   // When initialCategory/initialScope props change, update state (for deep linking)
   useEffect(() => {
@@ -516,6 +517,13 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
             debouncedSave();
           }}
         />;
+      case 'installed-extensions':
+        return (
+          <InstalledExtensionsPanel
+            scope={scope}
+            workspacePath={workspacePath ?? undefined}
+          />
+        );
       case 'mcp-servers':
         return (
           <MCPServersPanel

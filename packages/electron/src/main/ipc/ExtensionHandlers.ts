@@ -13,6 +13,17 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { logger } from '../utils/logger';
 import { minimatch } from 'minimatch';
+import {
+  getExtensionSettings,
+  getExtensionEnabled,
+  setExtensionEnabled,
+  getExtensionConfiguration,
+  setExtensionConfiguration,
+  setExtensionConfigurationBulk,
+  getWorkspaceExtensionConfiguration,
+  setWorkspaceExtensionConfiguration,
+  setWorkspaceExtensionConfigurationBulk,
+} from '../utils/store';
 
 /**
  * Get the path to the extensions directory.
@@ -198,6 +209,84 @@ export function registerExtensionHandlers(): void {
     } catch (error) {
       logger.main.error('[ExtensionHandlers] Failed to list installed extensions:', error);
       return [];
+    }
+  });
+
+  // Get all extension settings
+  ipcMain.handle('extensions:get-all-settings', async () => {
+    try {
+      return getExtensionSettings();
+    } catch (error) {
+      logger.main.error('[ExtensionHandlers] Failed to get extension settings:', error);
+      return {};
+    }
+  });
+
+  // Get enabled state for a specific extension
+  ipcMain.handle('extensions:get-enabled', async (_event, extensionId: string) => {
+    try {
+      return getExtensionEnabled(extensionId);
+    } catch (error) {
+      logger.main.error(`[ExtensionHandlers] Failed to get enabled state for ${extensionId}:`, error);
+      return true; // Default to enabled
+    }
+  });
+
+  // Set enabled state for a specific extension
+  ipcMain.handle('extensions:set-enabled', async (_event, extensionId: string, enabled: boolean) => {
+    try {
+      setExtensionEnabled(extensionId, enabled);
+      logger.main.info(`[ExtensionHandlers] Extension ${extensionId} ${enabled ? 'enabled' : 'disabled'}`);
+      return { success: true };
+    } catch (error) {
+      logger.main.error(`[ExtensionHandlers] Failed to set enabled state for ${extensionId}:`, error);
+      return { success: false, error: String(error) };
+    }
+  });
+
+  // Get configuration for a specific extension (scope-aware)
+  // scope: 'user' for global config, 'workspace' for project-specific config
+  ipcMain.handle('extensions:get-config', async (_event, extensionId: string, scope?: 'user' | 'workspace', workspacePath?: string) => {
+    try {
+      if (scope === 'workspace' && workspacePath) {
+        return getWorkspaceExtensionConfiguration(workspacePath, extensionId);
+      }
+      return getExtensionConfiguration(extensionId);
+    } catch (error) {
+      logger.main.error(`[ExtensionHandlers] Failed to get config for ${extensionId}:`, error);
+      return {};
+    }
+  });
+
+  // Set a single configuration value for an extension (scope-aware)
+  ipcMain.handle('extensions:set-config', async (_event, extensionId: string, key: string, value: unknown, scope?: 'user' | 'workspace', workspacePath?: string) => {
+    try {
+      if (scope === 'workspace' && workspacePath) {
+        setWorkspaceExtensionConfiguration(workspacePath, extensionId, key, value);
+      } else {
+        setExtensionConfiguration(extensionId, key, value);
+      }
+      logger.main.info(`[ExtensionHandlers] Set config ${key} for ${extensionId} (scope: ${scope ?? 'user'})`);
+      return { success: true };
+    } catch (error) {
+      logger.main.error(`[ExtensionHandlers] Failed to set config for ${extensionId}:`, error);
+      return { success: false, error: String(error) };
+    }
+  });
+
+  // Set all configuration values for an extension (scope-aware)
+  ipcMain.handle('extensions:set-config-bulk', async (_event, extensionId: string, configuration: Record<string, unknown>, scope?: 'user' | 'workspace', workspacePath?: string) => {
+    try {
+      if (scope === 'workspace' && workspacePath) {
+        setWorkspaceExtensionConfigurationBulk(workspacePath, extensionId, configuration);
+      } else {
+        setExtensionConfigurationBulk(extensionId, configuration);
+      }
+      logger.main.info(`[ExtensionHandlers] Set bulk config for ${extensionId} (scope: ${scope ?? 'user'})`);
+      return { success: true };
+    } catch (error) {
+      logger.main.error(`[ExtensionHandlers] Failed to set bulk config for ${extensionId}:`, error);
+      return { success: false, error: String(error) };
     }
   });
 

@@ -13,6 +13,17 @@ export type CompletionSoundType = 'chime' | 'bell' | 'pop' | 'none';
 export type ReleaseChannel = 'stable' | 'alpha';
 export type WorkspaceFileTreeFilter = 'all' | 'markdown' | 'known' | 'git-uncommitted' | 'git-worktree' | 'ai-read' | 'ai-written';
 
+/**
+ * Extension settings stored per extension.
+ * Tracks enabled state and extension-specific configuration.
+ */
+export interface ExtensionSettings {
+  /** Whether the extension is enabled */
+  enabled: boolean;
+  /** Extension-specific configuration values (user scope) */
+  configuration?: Record<string, unknown>;
+}
+
 interface AppStoreSchema {
   theme: AppTheme;
   recent: {
@@ -46,6 +57,8 @@ interface AppStoreSchema {
   claudeCodeInstallationChecked?: boolean;
   // Feature walkthrough shown on first launch
   featureWalkthroughCompleted?: boolean;
+  // Extension settings (enabled/disabled state and configuration)
+  extensionSettings?: Record<string, ExtensionSettings>;
   // Session Sync (optional device sync)
   sessionSync?: {
     enabled: boolean;
@@ -177,6 +190,8 @@ export interface WorkspaceState {
   showFileIcons?: boolean;
   // AI provider overrides for this project
   aiProviderOverrides?: AIProviderOverrides;
+  // Extension configuration for this project (extensionId -> key -> value)
+  extensionConfiguration?: Record<string, Record<string, unknown>>;
   lastUpdated: number;
 }
 
@@ -330,6 +345,7 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
     fileTreeFilter: raw.fileTreeFilter ?? undefined,
     showFileIcons: raw.showFileIcons ?? undefined,
     aiProviderOverrides: raw.aiProviderOverrides ? { ...raw.aiProviderOverrides } : undefined,
+    extensionConfiguration: raw.extensionConfiguration ? { ...raw.extensionConfiguration } : undefined,
     lastUpdated: raw.lastUpdated ?? raw.updated_at ?? Date.now(),
   };
 }
@@ -388,6 +404,14 @@ function cloneWorkspaceState(state: WorkspaceState): WorkspaceState {
       defaultProvider: state.aiProviderOverrides.defaultProvider,
       providers: state.aiProviderOverrides.providers ? { ...state.aiProviderOverrides.providers } : undefined,
     } : undefined,
+    extensionConfiguration: state.extensionConfiguration
+      ? Object.fromEntries(
+          Object.entries(state.extensionConfiguration).map(([extId, config]) => [
+            extId,
+            { ...config }
+          ])
+        )
+      : undefined,
     lastUpdated: state.lastUpdated,
   };
 }
@@ -873,4 +897,101 @@ export function isFeatureWalkthroughCompleted(): boolean {
 
 export function setFeatureWalkthroughCompleted(completed: boolean): void {
   appStore.set('featureWalkthroughCompleted', completed);
+}
+
+// Extension Settings Management
+export function getExtensionSettings(): Record<string, ExtensionSettings> {
+  return appStore.get('extensionSettings', {});
+}
+
+export function setExtensionSettings(settings: Record<string, ExtensionSettings>): void {
+  appStore.set('extensionSettings', settings);
+}
+
+export function getExtensionEnabled(extensionId: string): boolean {
+  const settings = getExtensionSettings();
+  // Default to enabled if not explicitly set
+  return settings[extensionId]?.enabled ?? true;
+}
+
+export function setExtensionEnabled(extensionId: string, enabled: boolean): void {
+  const settings = getExtensionSettings();
+  if (!settings[extensionId]) {
+    settings[extensionId] = { enabled };
+  } else {
+    settings[extensionId].enabled = enabled;
+  }
+  setExtensionSettings(settings);
+}
+
+export function getExtensionConfiguration(extensionId: string): Record<string, unknown> {
+  const settings = getExtensionSettings();
+  return settings[extensionId]?.configuration ?? {};
+}
+
+export function setExtensionConfiguration(
+  extensionId: string,
+  key: string,
+  value: unknown
+): void {
+  const settings = getExtensionSettings();
+  if (!settings[extensionId]) {
+    settings[extensionId] = { enabled: true };
+  }
+  if (!settings[extensionId].configuration) {
+    settings[extensionId].configuration = {};
+  }
+  settings[extensionId].configuration[key] = value;
+  setExtensionSettings(settings);
+}
+
+export function setExtensionConfigurationBulk(
+  extensionId: string,
+  configuration: Record<string, unknown>
+): void {
+  const settings = getExtensionSettings();
+  if (!settings[extensionId]) {
+    settings[extensionId] = { enabled: true };
+  }
+  settings[extensionId].configuration = { ...configuration };
+  setExtensionSettings(settings);
+}
+
+// Workspace-level extension configuration
+export function getWorkspaceExtensionConfiguration(
+  workspacePath: string,
+  extensionId: string
+): Record<string, unknown> {
+  const workspace = getWorkspaceState(workspacePath);
+  return workspace.extensionConfiguration?.[extensionId] ?? {};
+}
+
+export function setWorkspaceExtensionConfiguration(
+  workspacePath: string,
+  extensionId: string,
+  key: string,
+  value: unknown
+): void {
+  updateWorkspaceState(workspacePath, (state) => {
+    if (!state.extensionConfiguration) {
+      state.extensionConfiguration = {};
+    }
+    if (!state.extensionConfiguration[extensionId]) {
+      state.extensionConfiguration[extensionId] = {};
+    }
+    state.extensionConfiguration[extensionId][key] = value;
+  });
+}
+
+export function setWorkspaceExtensionConfigurationBulk(
+  workspacePath: string,
+  extensionId: string,
+  configuration: Record<string, unknown>
+): void {
+  updateWorkspaceState(workspacePath, (state) => {
+    if (!state.extensionConfiguration) {
+      state.extensionConfiguration = {};
+    }
+    state.extensionConfiguration[extensionId] = { ...configuration };
+  });
 }

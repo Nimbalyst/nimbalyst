@@ -12,6 +12,7 @@ export type SettingsCategory =
   | 'sync'
   | 'advanced'
   | 'mcp-servers'
+  | 'installed-extensions'
   | 'marketplace'
   | 'installed';
 
@@ -132,6 +133,11 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
     {
       title: 'Extensions',
       items: [
+        {
+          id: 'installed-extensions',
+          name: 'Installed',
+          icon: <MaterialSymbol icon="extension" size={16} />,
+        },
         {
           id: 'mcp-servers',
           name: 'MCP Servers',

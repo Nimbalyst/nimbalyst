@@ -599,6 +599,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('stytch:switch-environment', environment),
   },
 
+  // Extensions API
+  extensions: {
+    listInstalled: () => ipcRenderer.invoke('extensions:list-installed'),
+    getAllSettings: () => ipcRenderer.invoke('extensions:get-all-settings'),
+    getEnabled: (extensionId: string) => ipcRenderer.invoke('extensions:get-enabled', extensionId),
+    setEnabled: (extensionId: string, enabled: boolean) => ipcRenderer.invoke('extensions:set-enabled', extensionId, enabled),
+    // Configuration with scope support (user = global, workspace = per-project)
+    getConfig: (extensionId: string, scope?: 'user' | 'workspace', workspacePath?: string) =>
+      ipcRenderer.invoke('extensions:get-config', extensionId, scope, workspacePath),
+    setConfig: (extensionId: string, key: string, value: unknown, scope?: 'user' | 'workspace', workspacePath?: string) =>
+      ipcRenderer.invoke('extensions:set-config', extensionId, key, value, scope, workspacePath),
+    setConfigBulk: (extensionId: string, configuration: Record<string, unknown>, scope?: 'user' | 'workspace', workspacePath?: string) =>
+      ipcRenderer.invoke('extensions:set-config-bulk', extensionId, configuration, scope, workspacePath),
+  },
+
   // Generic IPC methods for services that need them
   invoke: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args),
   send: (channel: string, ...args: any[]) => ipcRenderer.send(channel, ...args),

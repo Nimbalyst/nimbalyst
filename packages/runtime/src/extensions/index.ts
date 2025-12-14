@@ -10,6 +10,8 @@ export type {
   ExtensionManifest,
   ExtensionPermissions,
   ExtensionContributions,
+  ExtensionConfigurationContribution,
+  ConfigurationProperty,
   CustomEditorContribution,
   CommandContribution,
   NewFileMenuContribution,
@@ -26,6 +28,7 @@ export type {
   ExtensionFileSystemService,
   ExtensionUIService,
   ExtensionAIService,
+  ExtensionConfigurationService,
   ExtensionContextProvider,
   Disposable,
   LoadedExtension,
@@ -46,7 +49,10 @@ export {
   ExtensionLoader,
   getExtensionLoader,
   initializeExtensions,
+  setEnabledStateProvider,
+  setConfigurationServiceProvider,
 } from './ExtensionLoader';
+export type { ConfigurationServiceProvider } from './ExtensionLoader';
 
 // AI Tools Bridge
 export {
