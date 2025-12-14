@@ -142,18 +142,33 @@ interface FloatingTranscriptActionsProps {
   isSidebarCollapsed: boolean;
   onToggleSidebar: () => void;
   onNavigateToPrompt: (marker: PromptMarker) => void;
+  /** Optional callback to close and archive the session */
+  onCloseAndArchive?: () => void;
 }
 
 export const FloatingTranscriptActions: React.FC<FloatingTranscriptActionsProps> = ({
   prompts,
   isSidebarCollapsed,
   onToggleSidebar,
-  onNavigateToPrompt
+  onNavigateToPrompt,
+  onCloseAndArchive
 }) => {
   const historyButtonRef = useRef<HTMLButtonElement>(null);
 
   return (
     <div className="floating-transcript-actions">
+      {/* Close and Archive Button */}
+      {onCloseAndArchive && (
+        <button
+          className="floating-transcript-button"
+          onClick={onCloseAndArchive}
+          aria-label="Close and archive session"
+          title="Close and archive session"
+        >
+          <MaterialSymbol icon="archive" size={20} />
+        </button>
+      )}
+
       {/* Prompts Menu Button */}
       <PromptsMenuButton
         prompts={prompts}

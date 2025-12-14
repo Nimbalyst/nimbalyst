@@ -12,6 +12,7 @@ import type { TypeaheadOption } from '../Typeahead/GenericTypeahead';
 import type { AIMode } from './ModeTag';
 import { DiffTestDropdown } from "../AIChat/DiffTestDropdown.tsx";
 import { getFileName } from '../../utils/pathUtils';
+import { errorNotificationService } from '../../services/ErrorNotificationService';
 
 export interface AgenticPanelRef {
   createNewSession: (planPath?: string) => Promise<void>;
@@ -711,6 +712,26 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       return filtered;
     });
   }, [activeTabId, onSessionChange]);
+
+  // Close and archive session from the floating action button
+  const handleCloseAndArchive = useCallback(async (sessionId: string) => {
+    try {
+      // Archive the session in the database
+      await window.electronAPI.invoke('sessions:update-metadata', sessionId, { isArchived: true });
+
+      // Close the tab
+      closeArchivedSession(sessionId);
+
+      // Trigger a refresh of the session history
+      setSessionHistoryRefreshTrigger(prev => prev + 1);
+
+      // Show success toast
+      errorNotificationService.showInfo('Session Archived', 'Session has been archived');
+    } catch (err) {
+      console.error('[AgenticPanel] Failed to archive session:', err);
+      errorNotificationService.showError('Archive Failed', 'Failed to archive session');
+    }
+  }, [closeArchivedSession]);
 
   // Create a new session
   const createNewSession = useCallback(async (planPath?: string) => {
@@ -2369,6 +2390,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             onAIModeChange={(newMode) => handleModeChange(activeTab.id, newMode)}
             currentModel={activeTab.model || activeTab.sessionData.model || 'claude-code'}
             onModelChange={(newModel) => handleModelChange(activeTab.id, newModel)}
+            onCloseAndArchive={handleCloseAndArchive}
           />
         ) : (
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -2476,6 +2498,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                 onAIModeChange={(newMode) => handleModeChange(tab.id, newMode)}
                 currentModel={tab.model || tab.sessionData.model || 'claude-code'}
                 onModelChange={(newModel) => handleModelChange(tab.id, newModel)}
+                onCloseAndArchive={handleCloseAndArchive}
               />
             ))}
 

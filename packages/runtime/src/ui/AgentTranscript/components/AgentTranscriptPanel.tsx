@@ -30,6 +30,8 @@ interface AgentTranscriptPanelProps {
     prompts: PromptMarker[];
     onNavigateToPrompt: (marker: PromptMarker) => void;
   }) => React.ReactNode;
+  /** Optional callback to close and archive the session */
+  onCloseAndArchive?: () => void;
 }
 
 export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
@@ -43,7 +45,8 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
   onFileClick,
   hideSidebar = false,
   workspacePath: workspacePathProp,
-  renderHeaderActions
+  renderHeaderActions,
+  onCloseAndArchive
 }) => {
   // Use prop if provided, otherwise fall back to sessionData.workspacePath
   const effectiveWorkspacePath = workspacePathProp || sessionData.workspacePath;
@@ -237,6 +240,7 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
             isSidebarCollapsed={isSidebarCollapsed}
             onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
             onNavigateToPrompt={handleNavigateToPrompt}
+            onCloseAndArchive={onCloseAndArchive}
           />
         )}
 

@@ -64,6 +64,9 @@ export interface AISessionViewProps {
   // Model selection
   currentModel?: string;
   onModelChange?: (modelId: string) => void;
+
+  // Close and archive
+  onCloseAndArchive?: (sessionId: string) => void;
 }
 
 /**
@@ -81,6 +84,7 @@ interface TranscriptSectionProps {
   onFileClick?: (filePath: string) => void;
   onTodoClick?: (todo: TodoItem) => void;
   onCancelQueuedPrompt: (id: string) => void;
+  onCloseAndArchive?: () => void;
 }
 
 const TranscriptSectionComponent: React.FC<TranscriptSectionProps> = ({
@@ -93,7 +97,8 @@ const TranscriptSectionComponent: React.FC<TranscriptSectionProps> = ({
   isProcessing,
   onFileClick,
   onTodoClick,
-  onCancelQueuedPrompt
+  onCancelQueuedPrompt,
+  onCloseAndArchive
 }) => {
   return (
     <>
@@ -125,6 +130,7 @@ const TranscriptSectionComponent: React.FC<TranscriptSectionProps> = ({
             showThinking: true,
             showSessionInit: false
           }}
+          onCloseAndArchive={onCloseAndArchive}
         />
       </div>
 
@@ -197,7 +203,8 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
   aiMode = 'agent',
   onAIModeChange,
   currentModel,
-  onModelChange
+  onModelChange,
+  onCloseAndArchive
 }, ref) => {
   const inputRef = useRef<AIInputRef>(null);
   const [todos, setTodos] = useState<Todo[]>([]);
@@ -471,6 +478,13 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
     }
   }, []);
 
+  // Handle close and archive session
+  const handleCloseAndArchive = useCallback(() => {
+    if (onCloseAndArchive) {
+      onCloseAndArchive(sessionId);
+    }
+  }, [sessionId, onCloseAndArchive]);
+
   // Handle slash command suggestion selection
   const handleCommandSelect = useCallback((command: string) => {
     if (onDraftInputChange) {
@@ -516,6 +530,7 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
         onFileClick={handleFileClick}
         onTodoClick={handleTodoClick}
         onCancelQueuedPrompt={handleCancelQueuedPrompt}
+        onCloseAndArchive={handleCloseAndArchive}
       />
 
       {/* ExitPlanMode confirmation - shown when agent requests to exit planning mode */}
