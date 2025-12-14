@@ -200,14 +200,14 @@
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  background-color: var(--primary-color, #3b82f6);
+  background-color: var(--surface-tertiary, #3b82f6);
   border-radius: 7px 7px 0 0;
 }
 
 .datamodel-entity-icon {
   width: 16px;
   height: 16px;
-  color: white;
+  color: var(--text-primary);
   flex-shrink: 0;
 }
 
@@ -215,7 +215,7 @@
   margin: 0;
   font-size: 14px;
   font-weight: 600;
-  color: white;
+  color: var(--text-primary);
   cursor: pointer;
 }
 
