@@ -572,6 +572,10 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
       }
     }, [onAttachmentAdd, handleFileAttachment]);
 
+    // Threshold for converting large text pastes to attachments (25 lines or 1000 characters)
+    const LARGE_PASTE_LINE_THRESHOLD = 25;
+    const LARGE_PASTE_CHAR_THRESHOLD = 1000;
+
     // Paste handler for images and text
     const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
       const items = Array.from(e.clipboardData.items);
@@ -595,17 +599,35 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
         }
       }
 
+      // Get pasted text for further processing
+      const pastedText = e.clipboardData.getData('text');
+      if (!pastedText) return;
+
+      // Handle large text pastes as attachments (keeps transcript clean)
+      if (onAttachmentAdd && sessionId) {
+        const lineCount = pastedText.split('\n').length;
+        const isLargePaste = lineCount >= LARGE_PASTE_LINE_THRESHOLD ||
+                            pastedText.length >= LARGE_PASTE_CHAR_THRESHOLD;
+
+        if (isLargePaste) {
+          e.preventDefault();
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+          const textFile = new File([pastedText], `pasted-text-${timestamp}.txt`, { type: 'text/plain' });
+          await handleFileAttachment(textFile);
+          return;
+        }
+      }
+
       // For Claude Code provider: prevent pasted text starting with '#' from triggering memory mode
       // by prepending a newline when pasting into an empty input
       if (provider === 'claude-code' && value.trim() === '') {
-        const pastedText = e.clipboardData.getData('text');
-        if (pastedText && pastedText.trimStart().startsWith('#')) {
+        if (pastedText.trimStart().startsWith('#')) {
           e.preventDefault();
           // Prepend a newline to prevent '#' from being the first character
           onChange('\n' + pastedText);
         }
       }
-    }, [onAttachmentAdd, handleFileAttachment, provider, value, onChange]);
+    }, [onAttachmentAdd, handleFileAttachment, provider, value, onChange, sessionId]);
 
     // Handle attachment removal
     const handleRemoveAttachment = useCallback((attachmentId: string) => {

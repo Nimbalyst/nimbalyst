@@ -366,7 +366,7 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
               />
             ) : (
               <div className="message-attachment-icon">
-                <span className="material-icons">{getFileIcon(attachment.type)}</span>
+                <MaterialSymbol icon={getFileIcon(attachment.type)} size={24} />
               </div>
             )}
             <div className="message-attachment-info">

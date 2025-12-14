@@ -44,8 +44,7 @@
   flex-shrink: 0;
 }
 
-.message-attachment-icon .material-icons {
-  font-size: 24px;
+.message-attachment-icon .material-symbols-rounded {
   color: var(--text-secondary);
 }
 

@@ -4,7 +4,7 @@
  */
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
-import type { MessageParam, ImageBlockParam, TextBlockParam, ContentBlockParam } from '@anthropic-ai/sdk/resources';
+import type { MessageParam, ImageBlockParam, TextBlockParam, ContentBlockParam, DocumentBlockParam } from '@anthropic-ai/sdk/resources';
 import { BaseAIProvider } from '../AIProvider';
 import {
   DocumentContext,
@@ -154,8 +154,9 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     this.currentMode = (documentContext as any)?.mode || 'agent';
     // console.log(`[CLAUDE-CODE] Session mode: ${this.currentMode}`);
 
-    // Build image content blocks for attachments (sent directly to Claude, not via file paths)
+    // Build content blocks for attachments (sent directly to Claude, not via file paths)
     const imageContentBlocks: ImageBlockParam[] = [];
+    const documentContentBlocks: DocumentBlockParam[] = [];
     // Debug logging - uncomment if needed for attachment troubleshooting
     // console.log(`[CLAUDE-CODE] Attachments received:`, attachments?.length || 0, attachments);
     if (attachments && attachments.length > 0) {
@@ -193,7 +194,25 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             });
             // console.log(`[CLAUDE-CODE] Created image content block for ${attachment.filename || path.basename(attachment.filepath)}, size: ${base64Data.length} bytes`);
           } catch (error) {
-            console.error(`[CLAUDE-CODE] Failed to read attachment for content block:`, error);
+            console.error(`[CLAUDE-CODE] Failed to read image attachment:`, error);
+          }
+        } else if (attachment.type === 'document' && attachment.filepath) {
+          // Read text/document files and send as document content blocks
+          try {
+            const textContent = await fs.promises.readFile(attachment.filepath, 'utf-8');
+            const filename = attachment.filename || path.basename(attachment.filepath);
+            documentContentBlocks.push({
+              type: 'document',
+              source: {
+                type: 'text',
+                media_type: 'text/plain',
+                data: textContent
+              },
+              title: filename
+            });
+            // console.log(`[CLAUDE-CODE] Created document content block for ${filename}, ${textContent.length} chars`);
+          } catch (error) {
+            console.error(`[CLAUDE-CODE] Failed to read document attachment:`, error);
           }
         }
       }
@@ -408,8 +427,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // Log MCP servers being passed to SDK (CONTAINS SENSITIVE CONFIG - commented out for production)
       // console.log('[CLAUDE-CODE] Final MCP config for SDK:', JSON.stringify(options.mcpServers, null, 2));
 
-      // Build the prompt - use streaming input mode when we have image attachments
-      // This allows us to send images directly as content blocks instead of file paths
+      // Build the prompt - use streaming input mode when we have attachments (images or documents)
+      // This allows us to send content directly as content blocks instead of file paths
       // See: https://platform.claude.com/docs/en/agent-sdk/streaming-vs-single-mode
       type SDKUserMessage = {
         type: 'user';
@@ -419,10 +438,13 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
       let promptInput: string | AsyncIterable<SDKUserMessage>;
 
-      if (imageContentBlocks.length > 0) {
-        // Use streaming input mode with content blocks for images + text
+      const hasAttachmentBlocks = imageContentBlocks.length > 0 || documentContentBlocks.length > 0;
+
+      if (hasAttachmentBlocks) {
+        // Use streaming input mode with content blocks for attachments + text
         const contentBlocks: ContentBlockParam[] = [
           ...imageContentBlocks,
+          ...documentContentBlocks,
           { type: 'text', text: message } as TextBlockParam
         ];
 
@@ -430,6 +452,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         // console.log(`[CLAUDE-CODE] Content blocks structure:`, JSON.stringify(contentBlocks.map(b => ({
         //   type: b.type,
         //   ...(b.type === 'image' ? { media_type: (b as any).source?.media_type, data_length: (b as any).source?.data?.length } : {}),
+        //   ...(b.type === 'document' ? { title: (b as any).title, data_length: (b as any).source?.data?.length } : {}),
         //   ...(b.type === 'text' ? { text_length: (b as any).text?.length } : {})
         // })), null, 2));
 
@@ -448,9 +471,9 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         }
 
         promptInput = createStreamingInput();
-        // console.log(`[CLAUDE-CODE] Using streaming input with ${imageContentBlocks.length} image(s) + text`);
+        // console.log(`[CLAUDE-CODE] Using streaming input with ${imageContentBlocks.length} image(s), ${documentContentBlocks.length} document(s) + text`);
       } else {
-        // Simple string prompt when no images
+        // Simple string prompt when no attachments
         promptInput = message;
       }
 
