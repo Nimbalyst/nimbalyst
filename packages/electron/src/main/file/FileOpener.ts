@@ -137,10 +137,11 @@ export async function openFile(options: OpenFileOptions): Promise<OpenFileResult
     throw new Error(`File does not exist: ${filePath}`);
   }
 
-  // Reject binary/unsupported file types (PDFs, Office docs, images, etc.)
+  // Reject binary/unsupported file types (Office docs, images, etc.)
+  // Note: Extensions can register custom editors for file types
   if (shouldExcludeFile(filePath)) {
     const ext = extname(filePath).toLowerCase();
-    throw new Error(`Cannot open ${ext} files. Nimbalyst only supports text-based files like Markdown, code, and plain text.`);
+    throw new Error(`Cannot open ${ext} files. Nimbalyst does not support that file type yet.`);
   }
 
   // Determine target window
