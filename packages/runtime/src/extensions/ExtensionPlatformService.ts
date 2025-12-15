@@ -22,6 +22,13 @@ export interface ExtensionPlatformService {
   getExtensionsDirectory(): Promise<string>;
 
   /**
+   * Get all extension directories (user extensions + built-in extensions).
+   * Used by the extension loader to discover all extensions.
+   * @returns Array of directory paths to scan for extensions
+   */
+  getAllExtensionsDirectories(): Promise<string[]>;
+
+  /**
    * List all subdirectories in a directory.
    * Used to discover extensions in the extensions directory.
    * @param dirPath - Absolute path to the directory

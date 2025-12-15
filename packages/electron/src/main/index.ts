@@ -53,7 +53,7 @@ import { SessionNamingService } from './services/SessionNamingService';
 import { MockupScreenshotService } from './services/MockupScreenshotService';
 import { registerMockupHandlers } from './ipc/MockupHandlers';
 import { registerDataModelHandlers } from './ipc/DataModelHandlers';
-import { registerExtensionHandlers } from './ipc/ExtensionHandlers';
+import { registerExtensionHandlers, getClaudePluginPaths } from './ipc/ExtensionHandlers';
 import { ClaudeCodeProvider } from '@nimbalyst/runtime/ai/server';
 import { logger, overrideConsole } from './utils/logger';
 import { startPerformanceMonitoring, stopPerformanceMonitoring } from './utils/performanceMonitor';
@@ -434,6 +434,19 @@ app.whenReady().then(async () => {
         const mergedConfig = await mcpConfigService.getMergedConfig(workspacePath);
         return mergedConfig.mcpServers || {};
     });
+
+    // Inject extension plugins loader into ClaudeCodeProvider
+    // This allows extensions to provide Claude SDK plugins with custom commands/agents
+    // Uses main-process-native implementation that reads extension manifests directly
+    ClaudeCodeProvider.setExtensionPluginsLoader(getClaudePluginPaths);
+
+    // Inject Claude Code settings loader
+    // This allows user/project commands to be enabled/disabled via settings
+    ClaudeCodeProvider.setClaudeCodeSettingsLoader(async () => {
+        const { getClaudeCodeSettings } = await import('./utils/store');
+        return getClaudeCodeSettings();
+    });
+
     registerMockupHandlers();
     registerDataModelHandlers();
     registerExtensionHandlers();

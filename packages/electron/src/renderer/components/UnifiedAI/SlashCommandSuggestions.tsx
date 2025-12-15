@@ -10,6 +10,15 @@ interface CommandWithPackage {
   packageName: string;
 }
 
+interface ExtensionPluginCommand {
+  extensionId: string;
+  extensionName: string;
+  pluginName: string;
+  pluginNamespace: string;
+  commandName: string;
+  description: string;
+}
+
 export interface SlashCommandSuggestionsProps {
   /** Session provider - only shows for claude-code */
   provider: string;
@@ -53,21 +62,41 @@ export const SlashCommandSuggestions: React.FC<SlashCommandSuggestionsProps> = (
 }) => {
   const posthog = usePostHog();
   const [installedCommands, setInstalledCommands] = useState<CommandWithPackage[]>([]);
+  const [extensionCommands, setExtensionCommands] = useState<ExtensionPluginCommand[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);
 
   // Only show for claude-code provider with empty session
   const shouldShow = provider === 'claude-code' && !hasMessages;
 
-  // Fetch commands from installed tool packages
+  // Fetch commands from installed tool packages and extension plugins
   useEffect(() => {
     if (!shouldShow || !workspacePath) {
       setIsLoading(false);
       return;
     }
 
-    const fetchInstalledCommands = async () => {
+    const fetchAllCommands = async () => {
       setIsLoading(true);
+      try {
+        // Fetch tool package commands and extension plugin commands in parallel
+        const [packageCommands, pluginCommands] = await Promise.all([
+          fetchPackageCommands(),
+          fetchExtensionPluginCommands(),
+        ]);
+
+        setInstalledCommands(packageCommands);
+        setExtensionCommands(pluginCommands);
+      } catch (error) {
+        console.error('[SlashCommandSuggestions] Failed to load commands:', error);
+        setInstalledCommands([]);
+        setExtensionCommands([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    const fetchPackageCommands = async (): Promise<CommandWithPackage[]> => {
       try {
         // Set workspace path for PackageService
         PackageService.setWorkspacePath(workspacePath);
@@ -88,55 +117,95 @@ export const SlashCommandSuggestions: React.FC<SlashCommandSuggestionsProps> = (
             }
           }
         }
-
-        setInstalledCommands(commands);
+        return commands;
       } catch (error) {
         console.error('[SlashCommandSuggestions] Failed to load installed packages:', error);
-        setInstalledCommands([]);
-      } finally {
-        setIsLoading(false);
+        return [];
       }
     };
 
-    fetchInstalledCommands();
+    const fetchExtensionPluginCommands = async (): Promise<ExtensionPluginCommand[]> => {
+      try {
+        return await window.electronAPI.extensions.getClaudePluginCommands();
+      } catch (error) {
+        console.error('[SlashCommandSuggestions] Failed to load extension plugin commands:', error);
+        return [];
+      }
+    };
+
+    fetchAllCommands();
   }, [shouldShow, workspacePath]);
 
-  // Shuffle commands once for consistent display (memoized to prevent re-shuffle on every render)
-  const shuffledCommands = useMemo(() => {
-    return shuffleArray(installedCommands);
-  }, [installedCommands]);
+  // Unified command type for display
+  type UnifiedCommand = {
+    type: 'package' | 'extension';
+    name: string;
+    description: string;
+    sourceId: string;
+    sourceName: string;
+  };
+
+  // Combine and shuffle all commands
+  const allCommands = useMemo((): UnifiedCommand[] => {
+    const unified: UnifiedCommand[] = [];
+
+    // Add package commands
+    for (const cmd of installedCommands) {
+      unified.push({
+        type: 'package',
+        name: cmd.command.name,
+        description: cmd.command.description,
+        sourceId: cmd.packageId,
+        sourceName: cmd.packageName,
+      });
+    }
+
+    // Add extension plugin commands
+    // Extension plugin commands are namespaced: pluginNamespace:commandName
+    for (const cmd of extensionCommands) {
+      unified.push({
+        type: 'extension',
+        name: `${cmd.pluginNamespace}:${cmd.commandName}`,
+        description: cmd.description,
+        sourceId: cmd.extensionId,
+        sourceName: cmd.extensionName,
+      });
+    }
+
+    return shuffleArray(unified);
+  }, [installedCommands, extensionCommands]);
 
   // Get commands to display based on expanded state
   const displayCommands = useMemo(() => {
-    if (isExpanded || shuffledCommands.length <= 3) {
-      return shuffledCommands;
+    if (isExpanded || allCommands.length <= 3) {
+      return allCommands;
     }
-    return shuffledCommands.slice(0, 3);
-  }, [shuffledCommands, isExpanded]);
+    return allCommands.slice(0, 3);
+  }, [allCommands, isExpanded]);
 
   // Calculate how many additional commands are hidden
-  const hiddenCount = shuffledCommands.length - 3;
+  const hiddenCount = allCommands.length - 3;
 
-  const handleCommandClick = useCallback((cmd: CommandWithPackage) => {
+  const handleCommandClick = useCallback((cmd: UnifiedCommand) => {
     // Track the suggestion click in analytics.
-    // PRIVACY NOTE: It's safe to send commandName and packageId because this component
+    // PRIVACY NOTE: It's safe to send commandName and sourceId because this component
     // only displays commands from official Nimbalyst packages (defined in ALL_PACKAGES
-    // in packages/electron/src/shared/toolPackages/index.ts). User-created custom
-    // commands are never shown here. If that changes in the future, add filtering
-    // to avoid sending potentially sensitive custom command names to analytics.
+    // in packages/electron/src/shared/toolPackages/index.ts) and built-in extensions.
+    // User-created custom commands are never shown here.
     posthog?.capture('slash_command_suggestion_clicked', {
-      commandName: cmd.command.name,
-      packageId: cmd.packageId,
+      commandName: cmd.name,
+      packageId: cmd.sourceId,
+      commandType: cmd.type,
     });
 
-    onCommandSelect(`/${cmd.command.name} `);
+    onCommandSelect(`/${cmd.name} `);
   }, [onCommandSelect, posthog]);
 
   const handleExpandClick = useCallback(() => {
     setIsExpanded(true);
   }, []);
 
-  // Don't render if not applicable or no installed commands
+  // Don't render if not applicable or no commands
   if (!shouldShow || isLoading || displayCommands.length === 0) {
     return null;
   }
@@ -148,17 +217,17 @@ export const SlashCommandSuggestions: React.FC<SlashCommandSuggestionsProps> = (
       </div>
       <div className="slash-command-suggestions-pills">
         {displayCommands.map((cmd) => (
-          <div key={cmd.command.name} className="slash-command-pill-wrapper">
+          <div key={cmd.name} className="slash-command-pill-wrapper">
             <button
               className="slash-command-pill"
               onClick={() => handleCommandClick(cmd)}
             >
               <span className="slash-command-pill-icon">/</span>
-              <span className="slash-command-pill-name">{cmd.command.name}</span>
+              <span className="slash-command-pill-name">{cmd.name}</span>
             </button>
-            {cmd.command.description && (
+            {cmd.description && (
               <div className="slash-command-tooltip" role="tooltip">
-                {cmd.command.description}
+                {cmd.description}
               </div>
             )}
           </div>

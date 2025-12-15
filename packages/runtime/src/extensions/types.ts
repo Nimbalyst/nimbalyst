@@ -94,6 +94,15 @@ export interface ExtensionContributions {
 
   /** Extension configuration schema */
   configuration?: ExtensionConfigurationContribution;
+
+  /**
+   * Claude Agent SDK plugin bundled with this extension.
+   * Provides slash commands, agents, skills, and hooks that are loaded
+   * into Claude Code sessions. Unlike MCP tools (which are context-aware
+   * and only active for matching editors), these plugins are always available
+   * when enabled.
+   */
+  claudePlugin?: ClaudePluginContribution;
 }
 
 // ============================================================================
@@ -153,6 +162,57 @@ export interface ConfigurationProperty {
 
   /** Placeholder text for input fields */
   placeholder?: string;
+}
+
+// ============================================================================
+// Claude Plugin Types
+// ============================================================================
+
+/**
+ * Claude Agent SDK plugin contribution.
+ * Allows extensions to bundle Claude Code plugins that provide
+ * slash commands, agents, skills, and hooks.
+ */
+export interface ClaudePluginContribution {
+  /** Path to plugin directory relative to extension root */
+  path: string;
+
+  /** Human-readable name for settings UI */
+  displayName: string;
+
+  /** Description for settings UI */
+  description?: string;
+
+  /** Whether this plugin is enabled by default */
+  enabledByDefault?: boolean;
+
+  /** Commands provided by this plugin (for documentation/UI) */
+  commands?: ClaudePluginCommand[];
+
+  /** Agents provided by this plugin (for documentation/UI) */
+  agents?: ClaudePluginAgent[];
+}
+
+/**
+ * A slash command provided by a Claude plugin
+ */
+export interface ClaudePluginCommand {
+  /** Command name (without slash or namespace) */
+  name: string;
+
+  /** Human-readable description */
+  description: string;
+}
+
+/**
+ * An agent provided by a Claude plugin
+ */
+export interface ClaudePluginAgent {
+  /** Agent name */
+  name: string;
+
+  /** Human-readable description */
+  description: string;
 }
 
 /**

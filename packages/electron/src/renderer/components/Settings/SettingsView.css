@@ -1756,3 +1756,129 @@
   color: var(--text-tertiary);
   font-style: italic;
 }
+
+/* Claude Plugin Section */
+.claude-plugin-section {
+  background: var(--surface-secondary);
+  border-radius: 8px;
+  padding: 12px;
+  border: 1px solid var(--border-primary);
+}
+
+.claude-plugin-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.claude-plugin-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.claude-plugin-info .package-details-section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.claude-plugin-info .package-details-section-title .material-symbols-outlined {
+  font-size: 16px;
+  color: var(--accent-primary);
+}
+
+.claude-plugin-description {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.claude-plugin-commands {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-primary);
+}
+
+.claude-plugin-commands-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+  margin-bottom: 8px;
+}
+
+.claude-plugin-disabled-notice {
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.2);
+  border-radius: 4px;
+  color: #fbbf24;
+  font-size: 12px;
+}
+
+/* Claude Commands Section */
+.claude-commands-section {
+  margin-bottom: 24px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.claude-commands-description {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 8px 0 16px 0;
+}
+
+.claude-commands-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.claude-command-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+}
+
+.claude-command-toggle-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.claude-command-toggle-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.claude-command-toggle-title .material-symbols-outlined {
+  font-size: 18px;
+  color: var(--text-secondary);
+}
+
+.claude-command-toggle-description {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.claude-command-toggle-description code {
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+  font-size: 11px;
+  padding: 2px 4px;
+  background: var(--surface-tertiary);
+  border-radius: 3px;
+  color: var(--text-primary);
+}

@@ -3,7 +3,8 @@
  */
 
 import { ipcMain } from 'electron';
-import { SlashCommandService } from '../services/SlashCommandService';
+import { SlashCommandService, SlashCommand } from '../services/SlashCommandService';
+import { getExtensionPluginCommands } from './ExtensionHandlers';
 
 // Cache services by workspace path
 const servicesByWorkspace = new Map<string, SlashCommandService>();
@@ -24,7 +25,7 @@ function getService(workspacePath: string): SlashCommandService {
  * Register all slash command IPC handlers
  */
 export function registerSlashCommandHandlers() {
-  // List all available slash commands (custom + SDK)
+  // List all available slash commands (custom + SDK + extension plugins)
   ipcMain.handle('slash-command:list', async (event, payload: { workspacePath: string; sdkCommands?: string[] }) => {
     try {
       const { workspacePath, sdkCommands = [] } = payload;
@@ -37,8 +38,21 @@ export function registerSlashCommandHandlers() {
       const service = getService(workspacePath);
       const commands = await service.listCommands(sdkCommands);
 
-      // console.log(`[SlashCommandHandlers] Returning ${commands.length} slash commands for workspace: ${workspacePath}`);
-      return commands;
+      // Also get extension plugin commands
+      const extensionPluginCommands = await getExtensionPluginCommands();
+
+      // Convert extension plugin commands to SlashCommand format
+      const pluginSlashCommands: SlashCommand[] = extensionPluginCommands.map(cmd => ({
+        name: `${cmd.pluginNamespace}:${cmd.commandName}`,
+        description: cmd.description || `Execute ${cmd.commandName} command from ${cmd.extensionName}`,
+        source: 'plugin' as const
+      }));
+
+      // Merge: built-in first, then project, then user, then plugins
+      const allCommands = [...commands, ...pluginSlashCommands];
+
+      // console.log(`[SlashCommandHandlers] Returning ${allCommands.length} slash commands (${commands.length} standard + ${pluginSlashCommands.length} plugins) for workspace: ${workspacePath}`);
+      return allCommands;
     } catch (error) {
       console.error('[SlashCommandHandlers] Error listing slash commands:', error);
       return [];

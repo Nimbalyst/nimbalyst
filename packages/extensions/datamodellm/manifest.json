@@ -46,6 +46,18 @@
     ],
     "nodes": ["DataModelNode"],
     "transformers": ["DATAMODEL_TRANSFORMER"],
-    "hostComponents": ["DataModelPickerMenuHost"]
+    "hostComponents": ["DataModelPickerMenuHost"],
+    "claudePlugin": {
+      "path": "claude-plugin",
+      "displayName": "Data Model Commands",
+      "description": "Provides /datamodel command for creating Prisma-based data models with full schema syntax guidance",
+      "enabledByDefault": true,
+      "commands": [
+        {
+          "name": "datamodel",
+          "description": "Create or modify Prisma-based data models"
+        }
+      ]
+    }
   }
 }

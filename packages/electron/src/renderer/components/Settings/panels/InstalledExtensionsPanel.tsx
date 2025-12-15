@@ -11,8 +11,14 @@ interface InstalledExtension {
   manifest: ExtensionManifest;
 }
 
+interface ExtensionSettings {
+  enabled: boolean;
+  claudePluginEnabled?: boolean;
+}
+
 interface ExtensionWithState extends InstalledExtension {
   enabled: boolean;
+  claudePluginEnabled?: boolean;
 }
 
 interface InstalledExtensionsPanelProps {
@@ -31,10 +37,58 @@ export const InstalledExtensionsPanel: React.FC<InstalledExtensionsPanelProps> =
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  // Claude Code command settings
+  const [projectCommandsEnabled, setProjectCommandsEnabled] = useState(true);
+  const [userCommandsEnabled, setUserCommandsEnabled] = useState(true);
+  const [commandsLoading, setCommandsLoading] = useState(false);
+
   // Load extensions and their enabled state
   useEffect(() => {
     loadExtensions();
+    loadClaudeCodeSettings();
   }, []);
+
+  const loadClaudeCodeSettings = async () => {
+    try {
+      const settings = await window.electronAPI.claudeCode.getSettings();
+      setProjectCommandsEnabled(settings.projectCommandsEnabled);
+      setUserCommandsEnabled(settings.userCommandsEnabled);
+    } catch (err) {
+      console.error('Failed to load Claude Code settings:', err);
+    }
+  };
+
+  const handleProjectCommandsToggle = useCallback(async (enabled: boolean) => {
+    setCommandsLoading(true);
+    try {
+      await window.electronAPI.claudeCode.setProjectCommandsEnabled(enabled);
+      setProjectCommandsEnabled(enabled);
+      posthog?.capture('claude_code_project_commands_toggled', {
+        action: enabled ? 'enabled' : 'disabled',
+      });
+    } catch (err) {
+      console.error('Failed to toggle project commands:', err);
+      setError('Failed to update setting');
+    } finally {
+      setCommandsLoading(false);
+    }
+  }, [posthog]);
+
+  const handleUserCommandsToggle = useCallback(async (enabled: boolean) => {
+    setCommandsLoading(true);
+    try {
+      await window.electronAPI.claudeCode.setUserCommandsEnabled(enabled);
+      setUserCommandsEnabled(enabled);
+      posthog?.capture('claude_code_user_commands_toggled', {
+        action: enabled ? 'enabled' : 'disabled',
+      });
+    } catch (err) {
+      console.error('Failed to toggle user commands:', err);
+      setError('Failed to update setting');
+    } finally {
+      setCommandsLoading(false);
+    }
+  }, [posthog]);
 
   const loadExtensions = async () => {
     try {
@@ -45,13 +99,19 @@ export const InstalledExtensionsPanel: React.FC<InstalledExtensionsPanelProps> =
       const installed = await window.electronAPI.extensions.listInstalled() as InstalledExtension[];
 
       // Get enabled state for all extensions
-      const settings = await window.electronAPI.extensions.getAllSettings() as Record<string, { enabled: boolean }>;
+      const settings = await window.electronAPI.extensions.getAllSettings() as Record<string, ExtensionSettings>;
 
       // Combine extension info with enabled state
-      const extensionsWithState: ExtensionWithState[] = installed.map(ext => ({
-        ...ext,
-        enabled: settings[ext.id]?.enabled ?? true, // Default to enabled
-      }));
+      const extensionsWithState: ExtensionWithState[] = installed.map(ext => {
+        const extSettings = settings[ext.id];
+        const claudePlugin = ext.manifest.contributions?.claudePlugin;
+        return {
+          ...ext,
+          enabled: extSettings?.enabled ?? true, // Default to enabled
+          // Claude plugin enabled defaults to the manifest's enabledByDefault, then true
+          claudePluginEnabled: extSettings?.claudePluginEnabled ?? claudePlugin?.enabledByDefault ?? true,
+        };
+      });
 
       setExtensions(extensionsWithState);
     } catch (err) {
@@ -95,6 +155,32 @@ export const InstalledExtensionsPanel: React.FC<InstalledExtensionsPanelProps> =
     }
   }, [posthog]);
 
+  const handleClaudePluginToggle = useCallback(async (extensionId: string, enabled: boolean) => {
+    setProcessingId(extensionId);
+    setError(null);
+
+    try {
+      // Update persisted state for Claude plugin
+      await window.electronAPI.extensions.setClaudePluginEnabled(extensionId, enabled);
+
+      // Track analytics
+      posthog?.capture('extension_claude_plugin_toggled', {
+        extensionId,
+        action: enabled ? 'enabled' : 'disabled',
+      });
+
+      // Update local state
+      setExtensions(prev => prev.map(ext =>
+        ext.id === extensionId ? { ...ext, claudePluginEnabled: enabled } : ext
+      ));
+    } catch (err) {
+      console.error(`Failed to ${enabled ? 'enable' : 'disable'} Claude plugin:`, err);
+      setError(err instanceof Error ? err.message : `Failed to ${enabled ? 'enable' : 'disable'} Claude plugin`);
+    } finally {
+      setProcessingId(null);
+    }
+  }, [posthog]);
+
   const toggleDetails = (extensionId: string) => {
     setExpandedId(expandedId === extensionId ? null : extensionId);
   };
@@ -128,6 +214,62 @@ export const InstalledExtensionsPanel: React.FC<InstalledExtensionsPanelProps> =
           <span>{error}</span>
         </div>
       )}
+
+      {/* Claude Code Commands Section */}
+      <div className="claude-commands-section">
+        <div className="packages-section-title">Claude Code Commands</div>
+        <p className="claude-commands-description">
+          Control which Claude slash commands are available in AI sessions.
+        </p>
+
+        <div className="claude-commands-toggles">
+          <div className="claude-command-toggle">
+            <div className="claude-command-toggle-info">
+              <div className="claude-command-toggle-title">
+                <span className="material-symbols-outlined">folder</span>
+                Project Commands
+              </div>
+              <div className="claude-command-toggle-description">
+                Load commands from <code>.claude/commands/</code> in your workspace
+              </div>
+            </div>
+            <div className="provider-enable">
+              <label className="provider-toggle">
+                <input
+                  type="checkbox"
+                  checked={projectCommandsEnabled}
+                  onChange={(e) => handleProjectCommandsToggle(e.target.checked)}
+                  disabled={commandsLoading}
+                />
+                <span className="provider-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <div className="claude-command-toggle">
+            <div className="claude-command-toggle-info">
+              <div className="claude-command-toggle-title">
+                <span className="material-symbols-outlined">person</span>
+                User Commands
+              </div>
+              <div className="claude-command-toggle-description">
+                Load commands from <code>~/.claude/commands/</code> (your personal commands)
+              </div>
+            </div>
+            <div className="provider-enable">
+              <label className="provider-toggle">
+                <input
+                  type="checkbox"
+                  checked={userCommandsEnabled}
+                  onChange={(e) => handleUserCommandsToggle(e.target.checked)}
+                  disabled={commandsLoading}
+                />
+                <span className="provider-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {totalCount === 0 ? (
         <div className="extensions-empty-state">
@@ -271,6 +413,50 @@ export const InstalledExtensionsPanel: React.FC<InstalledExtensionsPanelProps> =
                                   <span key={idx} className="package-command">{node}</span>
                                 ))}
                               </div>
+                            </div>
+                          )}
+
+                          {ext.manifest.contributions.claudePlugin && (
+                            <div className="package-details-section claude-plugin-section">
+                              <div className="claude-plugin-header">
+                                <div className="claude-plugin-info">
+                                  <div className="package-details-section-title">
+                                    <span className="material-symbols-outlined">smart_toy</span>
+                                    Claude Agent Plugin
+                                  </div>
+                                  <div className="claude-plugin-description">
+                                    {ext.manifest.contributions.claudePlugin.description || ext.manifest.contributions.claudePlugin.displayName}
+                                  </div>
+                                </div>
+                                <div className="provider-enable">
+                                  <label className="provider-toggle">
+                                    <input
+                                      type="checkbox"
+                                      checked={ext.claudePluginEnabled ?? true}
+                                      onChange={(e) => handleClaudePluginToggle(ext.id, e.target.checked)}
+                                      disabled={processingId === ext.id || !ext.enabled}
+                                    />
+                                    <span className="provider-toggle-slider"></span>
+                                  </label>
+                                </div>
+                              </div>
+                              {ext.manifest.contributions.claudePlugin.commands && ext.manifest.contributions.claudePlugin.commands.length > 0 && (
+                                <div className="claude-plugin-commands">
+                                  <div className="claude-plugin-commands-label">Commands:</div>
+                                  <div className="package-commands">
+                                    {ext.manifest.contributions.claudePlugin.commands.map((cmd, idx) => (
+                                      <span key={idx} className="package-command" title={cmd.description}>
+                                        /{cmd.name}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              {!ext.enabled && (
+                                <div className="claude-plugin-disabled-notice">
+                                  Enable the extension to use this plugin
+                                </div>
+                              )}
                             </div>
                           )}
                         </>

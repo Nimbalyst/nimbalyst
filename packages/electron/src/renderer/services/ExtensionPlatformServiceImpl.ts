@@ -55,6 +55,18 @@ export class ExtensionPlatformServiceImpl implements ExtensionPlatformService {
   }
 
   /**
+   * Get all extension directories (user extensions + built-in extensions).
+   */
+  async getAllExtensionsDirectories(): Promise<string[]> {
+    const electronAPI = (window as any).electronAPI;
+    if (!electronAPI) {
+      throw new Error('electronAPI not available');
+    }
+
+    return electronAPI.invoke('extensions:get-all-directories');
+  }
+
+  /**
    * List all subdirectories in a directory.
    */
   async listDirectories(dirPath: string): Promise<string[]> {

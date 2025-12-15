@@ -17,6 +17,8 @@ import {
   getExtensionSettings,
   getExtensionEnabled,
   setExtensionEnabled,
+  getClaudePluginEnabled,
+  setClaudePluginEnabled,
   getExtensionConfiguration,
   setExtensionConfiguration,
   setExtensionConfigurationBulk,
@@ -26,11 +28,11 @@ import {
 } from '../utils/store';
 
 /**
- * Get the path to the extensions directory.
+ * Get the path to the user extensions directory.
  * Creates it if it doesn't exist.
  * In Playwright tests, uses a temp directory to avoid touching production extensions.
  */
-async function getExtensionsDirectory(): Promise<string> {
+async function getUserExtensionsDirectory(): Promise<string> {
   // Use test-specific path for Playwright tests to avoid conflicts
   const userDataPath = process.env.PLAYWRIGHT === '1'
     ? path.join(app.getPath('temp'), 'nimbalyst-test-extensions')
@@ -41,22 +43,316 @@ async function getExtensionsDirectory(): Promise<string> {
     await fs.mkdir(extensionsPath, { recursive: true });
   } catch (error) {
     // Directory already exists or other error
-    logger.main.debug('[ExtensionHandlers] Extensions directory:', extensionsPath);
+    logger.main.debug('[ExtensionHandlers] User extensions directory:', extensionsPath);
   }
 
   return extensionsPath;
 }
 
 /**
+ * Get the path to the built-in extensions directory.
+ * Returns null if the directory doesn't exist.
+ */
+async function getBuiltinExtensionsDirectory(): Promise<string | null> {
+  // In production, built-in extensions are in resources/extensions
+  // In development, they're in packages/extensions relative to the electron package
+  const possiblePaths = app.isPackaged
+    ? [
+        path.join(process.resourcesPath, 'extensions'),
+        path.join(process.resourcesPath, 'app.asar.unpacked', 'extensions'),
+      ]
+    : [
+        // Development: relative to __dirname (out/main)
+        path.join(__dirname, '..', '..', '..', 'extensions'),
+        path.join(__dirname, '..', '..', 'resources', 'extensions'),
+      ];
+
+  for (const possiblePath of possiblePaths) {
+    try {
+      await fs.access(possiblePath);
+      logger.main.debug('[ExtensionHandlers] Built-in extensions directory:', possiblePath);
+      return possiblePath;
+    } catch {
+      // Path doesn't exist, try next
+    }
+  }
+
+  logger.main.debug('[ExtensionHandlers] No built-in extensions directory found');
+  return null;
+}
+
+/**
+ * Get all extension directories (both user and built-in).
+ */
+async function getAllExtensionDirectories(): Promise<string[]> {
+  const dirs: string[] = [];
+
+  // Always include user extensions directory
+  dirs.push(await getUserExtensionsDirectory());
+
+  // Include built-in extensions if available
+  const builtinDir = await getBuiltinExtensionsDirectory();
+  if (builtinDir) {
+    dirs.push(builtinDir);
+  }
+
+  return dirs;
+}
+
+/**
+ * Return type for extension plugin commands
+ */
+export interface ExtensionPluginCommand {
+  extensionId: string;
+  extensionName: string;
+  pluginName: string;
+  pluginNamespace: string;
+  commandName: string;
+  description: string;
+}
+
+/**
+ * Get Claude plugin commands from all enabled extensions.
+ * Exported for use by SlashCommandHandlers.
+ */
+export async function getExtensionPluginCommands(): Promise<ExtensionPluginCommand[]> {
+  try {
+    const commands: ExtensionPluginCommand[] = [];
+    const seenExtensionIds = new Set<string>();
+
+    // Scan all extension directories
+    const extensionDirs = await getAllExtensionDirectories();
+
+    for (const extensionsDir of extensionDirs) {
+      let subdirs;
+      try {
+        subdirs = await fs.readdir(extensionsDir, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+
+      for (const subdir of subdirs) {
+        let isDir = subdir.isDirectory();
+        if (!isDir && subdir.isSymbolicLink()) {
+          try {
+            const targetPath = path.join(extensionsDir, subdir.name);
+            const stat = await fs.stat(targetPath);
+            isDir = stat.isDirectory();
+          } catch {
+            continue;
+          }
+        }
+        if (!isDir) continue;
+
+        const extensionPath = path.join(extensionsDir, subdir.name);
+        const manifestPath = path.join(extensionPath, 'manifest.json');
+
+        try {
+          const manifestContent = await fs.readFile(manifestPath, 'utf-8');
+          const manifest = JSON.parse(manifestContent);
+          const extensionId = manifest.id || subdir.name;
+
+          // Skip if we've already seen this extension
+          if (seenExtensionIds.has(extensionId)) {
+            continue;
+          }
+          seenExtensionIds.add(extensionId);
+
+          // Check if extension is enabled
+          if (!getExtensionEnabled(extensionId)) {
+            continue;
+          }
+
+          // Check if extension has a Claude plugin
+          const claudePlugin = manifest.contributions?.claudePlugin;
+          if (!claudePlugin) {
+            continue;
+          }
+
+          // Check if the plugin is enabled
+          const storedPluginEnabled = getClaudePluginEnabled(extensionId);
+          const pluginEnabled = storedPluginEnabled ?? claudePlugin.enabledByDefault ?? true;
+          if (!pluginEnabled) {
+            continue;
+          }
+
+          // Try to read the plugin.json to get the actual plugin name for namespacing
+          let pluginNamespace = extensionId; // Default to extension ID
+          const pluginJsonPath = path.join(extensionPath, claudePlugin.path, '.claude-plugin', 'plugin.json');
+          try {
+            const pluginJsonContent = await fs.readFile(pluginJsonPath, 'utf-8');
+            const pluginJson = JSON.parse(pluginJsonContent);
+            if (pluginJson.name) {
+              pluginNamespace = pluginJson.name;
+            }
+          } catch {
+            // plugin.json not found or invalid, use extension ID
+          }
+
+          // Add commands from the plugin
+          if (claudePlugin.commands && Array.isArray(claudePlugin.commands)) {
+            for (const cmd of claudePlugin.commands) {
+              commands.push({
+                extensionId,
+                extensionName: manifest.name || extensionId,
+                pluginName: claudePlugin.displayName || 'Claude Plugin',
+                pluginNamespace, // The namespace used in slash commands (e.g., "datamodellm" for "/datamodellm:datamodel")
+                commandName: cmd.name,
+                description: cmd.description || '',
+              });
+            }
+          }
+        } catch {
+          // Skip directories without valid manifest
+        }
+      }
+    }
+
+    return commands;
+  } catch (error) {
+    logger.main.error('[ExtensionHandlers] Failed to get Claude plugin commands:', error);
+    return [];
+  }
+}
+
+/**
+ * Scan a single extension directory for Claude plugins.
+ */
+async function scanDirectoryForClaudePlugins(
+  extensionsDir: string,
+  plugins: Array<{ type: 'local'; path: string }>,
+  seenExtensionIds: Set<string>
+): Promise<void> {
+  let subdirs;
+  try {
+    subdirs = await fs.readdir(extensionsDir, { withFileTypes: true });
+  } catch {
+    // Directory doesn't exist or can't be read
+    return;
+  }
+
+  for (const subdir of subdirs) {
+    // Handle both directories and symlinks to directories
+    let isDir = subdir.isDirectory();
+    if (!isDir && subdir.isSymbolicLink()) {
+      try {
+        const targetPath = path.join(extensionsDir, subdir.name);
+        const stat = await fs.stat(targetPath);
+        isDir = stat.isDirectory();
+      } catch {
+        // Symlink target doesn't exist
+        continue;
+      }
+    }
+    if (!isDir) continue;
+
+    const extensionPath = path.join(extensionsDir, subdir.name);
+    const manifestPath = path.join(extensionPath, 'manifest.json');
+
+    try {
+      const manifestContent = await fs.readFile(manifestPath, 'utf-8');
+      const manifest = JSON.parse(manifestContent);
+
+      // Check if extension is enabled
+      const extensionId = manifest.id || subdir.name;
+
+      // Skip if we've already seen this extension (user extensions take priority)
+      if (seenExtensionIds.has(extensionId)) {
+        continue;
+      }
+      seenExtensionIds.add(extensionId);
+
+      const isEnabled = getExtensionEnabled(extensionId);
+      if (!isEnabled) {
+        logger.main.debug(`[ExtensionHandlers] Skipping disabled extension: ${extensionId}`);
+        continue;
+      }
+
+      // Check if extension has a Claude plugin contribution
+      const claudePlugin = manifest.contributions?.claudePlugin;
+      if (!claudePlugin?.path) {
+        continue;
+      }
+
+      // Check if the plugin is enabled
+      // Priority: stored setting > manifest enabledByDefault > true
+      const storedPluginEnabled = getClaudePluginEnabled(extensionId);
+      const pluginEnabled = storedPluginEnabled ?? claudePlugin.enabledByDefault ?? true;
+      if (!pluginEnabled) {
+        logger.main.debug(`[ExtensionHandlers] Skipping disabled Claude plugin from: ${extensionId}`);
+        continue;
+      }
+
+      // Resolve the absolute path to the plugin directory
+      const pluginPath = path.resolve(extensionPath, claudePlugin.path);
+
+      // Verify the plugin path exists
+      try {
+        await fs.access(pluginPath);
+        plugins.push({
+          type: 'local' as const,
+          path: pluginPath,
+        });
+        logger.main.info(`[ExtensionHandlers] Found Claude plugin: ${extensionId} at ${pluginPath}`);
+      } catch {
+        logger.main.warn(`[ExtensionHandlers] Claude plugin path not found: ${pluginPath}`);
+      }
+    } catch {
+      // Skip directories without valid manifest
+    }
+  }
+}
+
+/**
+ * Get Claude Agent SDK plugin paths from enabled extensions.
+ * This is a main-process-native implementation that directly reads extension manifests
+ * without requiring the renderer-process ExtensionLoader.
+ *
+ * Scans both user extensions and built-in extensions directories.
+ * User extensions take priority over built-in extensions with the same ID.
+ *
+ * Returns paths in the format expected by the Claude Agent SDK:
+ * { type: 'local', path: string }
+ */
+export async function getClaudePluginPaths(): Promise<Array<{ type: 'local'; path: string }>> {
+  try {
+    const plugins: Array<{ type: 'local'; path: string }> = [];
+    const seenExtensionIds = new Set<string>();
+
+    // Scan all extension directories (user first, then built-in)
+    const extensionDirs = await getAllExtensionDirectories();
+    for (const extensionsDir of extensionDirs) {
+      await scanDirectoryForClaudePlugins(extensionsDir, plugins, seenExtensionIds);
+    }
+
+    return plugins;
+  } catch (error) {
+    logger.main.error('[ExtensionHandlers] Failed to get Claude plugin paths:', error);
+    return [];
+  }
+}
+
+/**
  * Register IPC handlers for extension operations.
  */
 export function registerExtensionHandlers(): void {
-  // Get the extensions directory path
+  // Get the user extensions directory path (for installing new extensions)
   ipcMain.handle('extensions:get-directory', async () => {
     try {
-      return await getExtensionsDirectory();
+      return await getUserExtensionsDirectory();
     } catch (error) {
       logger.main.error('[ExtensionHandlers] Failed to get extensions directory:', error);
+      throw error;
+    }
+  });
+
+  // Get all extension directories (user + built-in)
+  // Used by the renderer's ExtensionLoader to discover all extensions
+  ipcMain.handle('extensions:get-all-directories', async () => {
+    try {
+      return await getAllExtensionDirectories();
+    } catch (error) {
+      logger.main.error('[ExtensionHandlers] Failed to get all extensions directories:', error);
       throw error;
     }
   });
@@ -176,32 +472,69 @@ export function registerExtensionHandlers(): void {
   );
 
   // Get list of installed extensions (for settings UI)
+  // Scans both user extensions and built-in extensions directories.
+  // User extensions take priority over built-in extensions with the same ID.
   ipcMain.handle('extensions:list-installed', async () => {
     try {
-      const extensionsDir = await getExtensionsDirectory();
-      const subdirs = await fs.readdir(extensionsDir, { withFileTypes: true });
       const extensions: Array<{
         id: string;
         path: string;
         manifest: unknown;
+        isBuiltin: boolean;
       }> = [];
+      const seenExtensionIds = new Set<string>();
 
-      for (const subdir of subdirs) {
-        if (!subdir.isDirectory()) continue;
+      // Scan all extension directories (user first, then built-in)
+      const extensionDirs = await getAllExtensionDirectories();
 
-        const extensionPath = path.join(extensionsDir, subdir.name);
-        const manifestPath = path.join(extensionPath, 'manifest.json');
+      for (let i = 0; i < extensionDirs.length; i++) {
+        const extensionsDir = extensionDirs[i];
+        const isBuiltinDir = i > 0; // First directory is user extensions
 
+        let subdirs;
         try {
-          const manifestContent = await fs.readFile(manifestPath, 'utf-8');
-          const manifest = JSON.parse(manifestContent);
-          extensions.push({
-            id: manifest.id || subdir.name,
-            path: extensionPath,
-            manifest,
-          });
+          subdirs = await fs.readdir(extensionsDir, { withFileTypes: true });
         } catch {
-          // Skip directories without valid manifest
+          continue;
+        }
+
+        for (const subdir of subdirs) {
+          // Handle both directories and symlinks to directories
+          let isDir = subdir.isDirectory();
+          if (!isDir && subdir.isSymbolicLink()) {
+            try {
+              const targetPath = path.join(extensionsDir, subdir.name);
+              const stat = await fs.stat(targetPath);
+              isDir = stat.isDirectory();
+            } catch {
+              continue;
+            }
+          }
+          if (!isDir) continue;
+
+          const extensionPath = path.join(extensionsDir, subdir.name);
+          const manifestPath = path.join(extensionPath, 'manifest.json');
+
+          try {
+            const manifestContent = await fs.readFile(manifestPath, 'utf-8');
+            const manifest = JSON.parse(manifestContent);
+            const extensionId = manifest.id || subdir.name;
+
+            // Skip if we've already seen this extension (user extensions take priority)
+            if (seenExtensionIds.has(extensionId)) {
+              continue;
+            }
+            seenExtensionIds.add(extensionId);
+
+            extensions.push({
+              id: extensionId,
+              path: extensionPath,
+              manifest,
+              isBuiltin: isBuiltinDir,
+            });
+          } catch {
+            // Skip directories without valid manifest
+          }
         }
       }
 
@@ -210,6 +543,12 @@ export function registerExtensionHandlers(): void {
       logger.main.error('[ExtensionHandlers] Failed to list installed extensions:', error);
       return [];
     }
+  });
+
+  // Get Claude plugin commands from all enabled extensions
+  // Used to populate slash command suggestions in the UI
+  ipcMain.handle('extensions:get-claude-plugin-commands', async () => {
+    return await getExtensionPluginCommands();
   });
 
   // Get all extension settings
@@ -240,6 +579,18 @@ export function registerExtensionHandlers(): void {
       return { success: true };
     } catch (error) {
       logger.main.error(`[ExtensionHandlers] Failed to set enabled state for ${extensionId}:`, error);
+      return { success: false, error: String(error) };
+    }
+  });
+
+  // Set Claude plugin enabled state for a specific extension
+  ipcMain.handle('extensions:set-claude-plugin-enabled', async (_event, extensionId: string, enabled: boolean) => {
+    try {
+      setClaudePluginEnabled(extensionId, enabled);
+      logger.main.info(`[ExtensionHandlers] Claude plugin for ${extensionId} ${enabled ? 'enabled' : 'disabled'}`);
+      return { success: true };
+    } catch (error) {
+      logger.main.error(`[ExtensionHandlers] Failed to set Claude plugin state for ${extensionId}:`, error);
       return { success: false, error: String(error) };
     }
   });

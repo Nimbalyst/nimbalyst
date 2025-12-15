@@ -605,6 +605,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getAllSettings: () => ipcRenderer.invoke('extensions:get-all-settings'),
     getEnabled: (extensionId: string) => ipcRenderer.invoke('extensions:get-enabled', extensionId),
     setEnabled: (extensionId: string, enabled: boolean) => ipcRenderer.invoke('extensions:set-enabled', extensionId, enabled),
+    setClaudePluginEnabled: (extensionId: string, enabled: boolean) => ipcRenderer.invoke('extensions:set-claude-plugin-enabled', extensionId, enabled),
+    getClaudePluginCommands: () => ipcRenderer.invoke('extensions:get-claude-plugin-commands') as Promise<Array<{
+      extensionId: string;
+      extensionName: string;
+      pluginName: string;
+      pluginNamespace: string;
+      commandName: string;
+      description: string;
+    }>>,
     // Configuration with scope support (user = global, workspace = per-project)
     getConfig: (extensionId: string, scope?: 'user' | 'workspace', workspacePath?: string) =>
       ipcRenderer.invoke('extensions:get-config', extensionId, scope, workspacePath),
@@ -612,6 +621,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('extensions:set-config', extensionId, key, value, scope, workspacePath),
     setConfigBulk: (extensionId: string, configuration: Record<string, unknown>, scope?: 'user' | 'workspace', workspacePath?: string) =>
       ipcRenderer.invoke('extensions:set-config-bulk', extensionId, configuration, scope, workspacePath),
+  },
+
+  // Claude Code API
+  claudeCode: {
+    getSettings: () => ipcRenderer.invoke('claudeCode:get-settings') as Promise<{ projectCommandsEnabled: boolean; userCommandsEnabled: boolean }>,
+    setProjectCommandsEnabled: (enabled: boolean) => ipcRenderer.invoke('claudeCode:set-project-commands-enabled', enabled),
+    setUserCommandsEnabled: (enabled: boolean) => ipcRenderer.invoke('claudeCode:set-user-commands-enabled', enabled),
   },
 
   // Generic IPC methods for services that need them

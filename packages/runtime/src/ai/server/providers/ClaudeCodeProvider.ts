@@ -69,6 +69,14 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   // Returns merged user + workspace MCP servers
   private static mcpConfigLoader: ((workspacePath?: string) => Promise<Record<string, any>>) | null = null;
 
+  // Extension plugins loader (injected from electron main process)
+  // Returns plugin paths from enabled extensions with Claude plugins
+  private static extensionPluginsLoader: (() => Promise<Array<{ type: 'local'; path: string }>>) | null = null;
+
+  // Claude Code settings loader (injected from electron main process)
+  // Returns settings for project/user commands
+  private static claudeCodeSettingsLoader: (() => Promise<{ projectCommandsEnabled: boolean; userCommandsEnabled: boolean }>) | null = null;
+
   static readonly DEFAULT_MODEL = 'claude-code:sonnet';
 
   /**
@@ -94,6 +102,23 @@ export class ClaudeCodeProvider extends BaseAIProvider {
    */
   public static setMCPConfigLoader(loader: ((workspacePath?: string) => Promise<Record<string, any>>) | null): void {
     ClaudeCodeProvider.mcpConfigLoader = loader;
+  }
+
+  /**
+   * Set the extension plugins loader function (called from electron main process)
+   * This allows the runtime package to load Claude SDK plugins from extensions
+   * without directly depending on electron extension loader code
+   */
+  public static setExtensionPluginsLoader(loader: (() => Promise<Array<{ type: 'local'; path: string }>>) | null): void {
+    ClaudeCodeProvider.extensionPluginsLoader = loader;
+  }
+
+  /**
+   * Set the Claude Code settings loader function (called from electron main process)
+   * This allows the runtime package to get user/project command settings
+   */
+  public static setClaudeCodeSettingsLoader(loader: (() => Promise<{ projectCommandsEnabled: boolean; userCommandsEnabled: boolean }>) | null): void {
+    ClaudeCodeProvider.claudeCodeSettingsLoader = loader;
   }
 
   async initialize(config: ProviderConfig): Promise<void> {
@@ -274,6 +299,30 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // Build options for claude-code SDK
       // console.log('[CLAUDE-CODE] Building SDK options...');
 
+      // Determine which settings sources to use based on user preferences
+      // 'local' is always included (machine-level settings)
+      // 'user' includes ~/.claude/commands/
+      // 'project' includes .claude/commands/ in workspace
+      let settingSources: string[] = ['local'];
+      if (ClaudeCodeProvider.claudeCodeSettingsLoader) {
+        try {
+          const ccSettings = await ClaudeCodeProvider.claudeCodeSettingsLoader();
+          if (ccSettings.userCommandsEnabled) {
+            settingSources.push('user');
+          }
+          if (ccSettings.projectCommandsEnabled) {
+            settingSources.push('project');
+          }
+        } catch (error) {
+          // Fall back to all sources enabled
+          console.warn('[CLAUDE-CODE] Failed to load Claude Code settings, using defaults:', error);
+          settingSources = ['user', 'project', 'local'];
+        }
+      } else {
+        // No loader configured, enable all sources
+        settingSources = ['user', 'project', 'local'];
+      }
+
       const options: any = {
         // The SDK might internally need the CLI path
         pathToClaudeCodeExecutable: await this.findCliPath().catch(() => undefined),
@@ -284,7 +333,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           append: systemPrompt
         },
         // BREAKING CHANGE: Claude Agent SDK requires explicit settings sources
-        settingSources: ['user', 'project', 'local'],
+        settingSources,
         mcpServers: await this.getMcpServersConfig(sessionId, workspacePath),
         cwd: workspacePath,
         abortController: this.abortController,
@@ -306,6 +355,21 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         },
         // API key is passed via environment variable if configured (see env setup below)
       };
+
+      // Load extension plugins if available
+      // These are Claude SDK plugins bundled with Nimbalyst extensions
+      if (ClaudeCodeProvider.extensionPluginsLoader) {
+        try {
+          const extensionPlugins = await ClaudeCodeProvider.extensionPluginsLoader();
+          if (extensionPlugins.length > 0) {
+            options.plugins = extensionPlugins;
+            console.log(`[CLAUDE-CODE] Loaded ${extensionPlugins.length} extension plugin(s):`, extensionPlugins.map(p => p.path));
+          }
+        } catch (error) {
+          console.warn('[CLAUDE-CODE] Failed to load extension plugins:', error);
+          // Continue without extension plugins
+        }
+      }
 
       // Apply tool restrictions based on session mode
       // Planning mode: restrict to read-only tools + Write/Edit/MultiEdit for markdown files

@@ -190,6 +190,24 @@ export function registerSettingsHandlers() {
         logger.store.info(`[SettingsHandlers] MockupLM ${enabled ? 'enabled' : 'disabled'}`);
     });
 
+    // Claude Code settings
+    ipcMain.handle('claudeCode:get-settings', async () => {
+        const { getClaudeCodeSettings } = await import('../utils/store');
+        return getClaudeCodeSettings();
+    });
+
+    ipcMain.handle('claudeCode:set-project-commands-enabled', async (_event, enabled: boolean) => {
+        const { setClaudeCodeProjectCommandsEnabled } = await import('../utils/store');
+        setClaudeCodeProjectCommandsEnabled(enabled);
+        logger.store.info(`[SettingsHandlers] Claude Code project commands ${enabled ? 'enabled' : 'disabled'}`);
+    });
+
+    ipcMain.handle('claudeCode:set-user-commands-enabled', async (_event, enabled: boolean) => {
+        const { setClaudeCodeUserCommandsEnabled } = await import('../utils/store');
+        setClaudeCodeUserCommandsEnabled(enabled);
+        logger.store.info(`[SettingsHandlers] Claude Code user commands ${enabled ? 'enabled' : 'disabled'}`);
+    });
+
     // Session sync settings
     ipcMain.handle('sync:get-config', () => {
         return getSessionSyncConfig();

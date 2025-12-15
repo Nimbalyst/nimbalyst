@@ -20,6 +20,8 @@ export type WorkspaceFileTreeFilter = 'all' | 'markdown' | 'known' | 'git-uncomm
 export interface ExtensionSettings {
   /** Whether the extension is enabled */
   enabled: boolean;
+  /** Whether the Claude Agent SDK plugin is enabled (if extension has one) */
+  claudePluginEnabled?: boolean;
   /** Extension-specific configuration values (user scope) */
   configuration?: Record<string, unknown>;
 }
@@ -59,6 +61,13 @@ interface AppStoreSchema {
   featureWalkthroughCompleted?: boolean;
   // Extension settings (enabled/disabled state and configuration)
   extensionSettings?: Record<string, ExtensionSettings>;
+  // Claude Code settings
+  claudeCode?: {
+    // Enable project-level commands (.claude/commands/ in workspace)
+    projectCommandsEnabled?: boolean;
+    // Enable user-level commands (~/.claude/commands/)
+    userCommandsEnabled?: boolean;
+  };
   // Session Sync (optional device sync)
   sessionSync?: {
     enabled: boolean;
@@ -922,6 +931,41 @@ export function setExtensionEnabled(extensionId: string, enabled: boolean): void
     settings[extensionId].enabled = enabled;
   }
   setExtensionSettings(settings);
+}
+
+export function getClaudePluginEnabled(extensionId: string): boolean | undefined {
+  const settings = getExtensionSettings();
+  // Returns undefined if not explicitly set (to allow manifest default)
+  return settings[extensionId]?.claudePluginEnabled;
+}
+
+export function setClaudePluginEnabled(extensionId: string, enabled: boolean): void {
+  const settings = getExtensionSettings();
+  if (!settings[extensionId]) {
+    settings[extensionId] = { enabled: true, claudePluginEnabled: enabled };
+  } else {
+    settings[extensionId].claudePluginEnabled = enabled;
+  }
+  setExtensionSettings(settings);
+}
+
+// Claude Code settings
+export function getClaudeCodeSettings(): { projectCommandsEnabled: boolean; userCommandsEnabled: boolean } {
+  const settings = appStore.get('claudeCode', {});
+  return {
+    projectCommandsEnabled: settings.projectCommandsEnabled ?? true,
+    userCommandsEnabled: settings.userCommandsEnabled ?? true,
+  };
+}
+
+export function setClaudeCodeProjectCommandsEnabled(enabled: boolean): void {
+  const current = appStore.get('claudeCode', {});
+  appStore.set('claudeCode', { ...current, projectCommandsEnabled: enabled });
+}
+
+export function setClaudeCodeUserCommandsEnabled(enabled: boolean): void {
+  const current = appStore.get('claudeCode', {});
+  appStore.set('claudeCode', { ...current, userCommandsEnabled: enabled });
 }
 
 export function getExtensionConfiguration(extensionId: string): Record<string, unknown> {

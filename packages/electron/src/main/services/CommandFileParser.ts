@@ -21,7 +21,7 @@ export interface SlashCommand {
   agentName?: string;            // Agent name from frontmatter (for agent-type commands)
   handoffs?: SlashCommandHandoff[]; // Workflow handoffs to other commands
   tools?: string[];              // External tool dependencies (e.g., MCP tools)
-  source: 'builtin' | 'project' | 'user';
+  source: 'builtin' | 'project' | 'user' | 'plugin';  // plugin = extension plugin commands
   filePath?: string;             // For custom commands
   allowedTools?: string[];       // From frontmatter
   content?: string;              // Command content/template

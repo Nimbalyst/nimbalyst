@@ -8,6 +8,9 @@ import * as path from 'path';
 import { homedir } from 'os';
 import { parseCommandFile, SlashCommand, validateCommand } from './CommandFileParser';
 
+// Re-export SlashCommand type for use by handlers
+export type { SlashCommand };
+
 export class SlashCommandService {
   private workspacePath: string;
   private commandsCache: SlashCommand[] | null = null;

@@ -209,6 +209,9 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
         };
         return builtinIcons[cmd.name] || 'bolt';
       }
+      if (cmd.source === 'plugin') {
+        return 'extension';
+      }
       return 'code';
     };
 
@@ -255,7 +258,8 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
             description: cmd.description || `Execute ${cmd.name} command`,
             icon: getCommandIcon(cmd),
             section: cmd.source === 'builtin' ? 'Built-in Commands' :
-                     cmd.source === 'project' ? 'Project Commands' : 'User Commands',
+                     cmd.source === 'project' ? 'Project Commands' :
+                     cmd.source === 'plugin' ? 'Extension Commands' : 'User Commands',
             data: cmd
           };
         });

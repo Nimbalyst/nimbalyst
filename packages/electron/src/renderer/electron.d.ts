@@ -230,6 +230,33 @@ interface ElectronAPI {
   // Document Service
   documentService: import('@nimbalyst/runtime').DocumentService;
 
+  // Extensions API
+  extensions: {
+    listInstalled: () => Promise<Array<{ id: string; path: string; manifest: any }>>;
+    getAllSettings: () => Promise<Record<string, { enabled: boolean; claudePluginEnabled?: boolean }>>;
+    getEnabled: (extensionId: string) => Promise<boolean>;
+    setEnabled: (extensionId: string, enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+    setClaudePluginEnabled: (extensionId: string, enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+    getClaudePluginCommands: () => Promise<Array<{
+      extensionId: string;
+      extensionName: string;
+      pluginName: string;
+      pluginNamespace: string;
+      commandName: string;
+      description: string;
+    }>>;
+    getConfig: (extensionId: string, scope?: 'user' | 'workspace', workspacePath?: string) => Promise<Record<string, unknown>>;
+    setConfig: (extensionId: string, key: string, value: unknown, scope?: 'user' | 'workspace', workspacePath?: string) => Promise<{ success: boolean; error?: string }>;
+    setConfigBulk: (extensionId: string, configuration: Record<string, unknown>, scope?: 'user' | 'workspace', workspacePath?: string) => Promise<{ success: boolean; error?: string }>;
+  };
+
+  // Claude Code API
+  claudeCode: {
+    getSettings: () => Promise<{ projectCommandsEnabled: boolean; userCommandsEnabled: boolean }>;
+    setProjectCommandsEnabled: (enabled: boolean) => Promise<void>;
+    setUserCommandsEnabled: (enabled: boolean) => Promise<void>;
+  };
+
   // Open external links
   openExternal: (url: string) => Promise<void>;
 

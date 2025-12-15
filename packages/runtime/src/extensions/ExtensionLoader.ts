@@ -24,6 +24,7 @@ import type {
   ExtensionAITool,
   NewFileMenuContribution,
   SlashCommandContribution,
+  ClaudePluginContribution,
 } from './types';
 import { getExtensionPlatformService } from './ExtensionPlatformService';
 
@@ -195,60 +196,72 @@ export class ExtensionLoader {
   private listeners = new Set<() => void>();
 
   /**
-   * Discover all extensions in the extensions directory
+   * Discover all extensions in both user and built-in extensions directories
    */
   async discoverExtensions(): Promise<DiscoveredExtension[]> {
     const platformService = getExtensionPlatformService();
-    const extensionsDir = await platformService.getExtensionsDirectory();
+    const extensionsDirs = await platformService.getAllExtensionsDirectories();
 
     const discovered: DiscoveredExtension[] = [];
+    const seenIds = new Set<string>();
 
-    try {
-      const subdirs = await platformService.listDirectories(extensionsDir);
+    for (const extensionsDir of extensionsDirs) {
+      try {
+        const subdirs = await platformService.listDirectories(extensionsDir);
 
-      for (const subdir of subdirs) {
-        const extensionPath = platformService.resolvePath(extensionsDir, subdir);
-        const manifestPath = platformService.resolvePath(
-          extensionPath,
-          MANIFEST_FILENAME
-        );
-
-        try {
-          const exists = await platformService.fileExists(manifestPath);
-          if (!exists) {
-            console.warn(
-              `[ExtensionLoader] No manifest.json in ${subdir}, skipping`
-            );
-            continue;
-          }
-
-          const manifestContent = await platformService.readFile(manifestPath);
-          const manifestJson = JSON.parse(manifestContent);
-          const validationResult = validateManifest(manifestJson, manifestPath);
-
-          if ('error' in validationResult) {
-            console.error(
-              `[ExtensionLoader] ${validationResult.error}, skipping`
-            );
-            continue;
-          }
-
-          discovered.push({
-            path: extensionPath,
-            manifest: validationResult,
-          });
-        } catch (error) {
-          console.error(
-            `[ExtensionLoader] Failed to read manifest from ${subdir}:`,
-            error
+        for (const subdir of subdirs) {
+          const extensionPath = platformService.resolvePath(extensionsDir, subdir);
+          const manifestPath = platformService.resolvePath(
+            extensionPath,
+            MANIFEST_FILENAME
           );
+
+          try {
+            const exists = await platformService.fileExists(manifestPath);
+            if (!exists) {
+              console.warn(
+                `[ExtensionLoader] No manifest.json in ${subdir}, skipping`
+              );
+              continue;
+            }
+
+            const manifestContent = await platformService.readFile(manifestPath);
+            const manifestJson = JSON.parse(manifestContent);
+            const validationResult = validateManifest(manifestJson, manifestPath);
+
+            if ('error' in validationResult) {
+              console.error(
+                `[ExtensionLoader] ${validationResult.error}, skipping`
+              );
+              continue;
+            }
+
+            // Skip if we've already seen this extension ID (user extensions take priority)
+            if (seenIds.has(validationResult.id)) {
+              console.info(
+                `[ExtensionLoader] Skipping duplicate extension ${validationResult.id} at ${extensionPath}`
+              );
+              continue;
+            }
+            seenIds.add(validationResult.id);
+
+            discovered.push({
+              path: extensionPath,
+              manifest: validationResult,
+            });
+          } catch (error) {
+            console.error(
+              `[ExtensionLoader] Failed to read manifest from ${subdir}:`,
+              error
+            );
+          }
         }
+      } catch (error) {
+        console.error(
+          `[ExtensionLoader] Failed to list extensions directory ${extensionsDir}:`,
+          error
+        );
       }
-    } catch (error) {
-      console.error(
-        `[ExtensionLoader] Failed to list extensions directory:`,
-        error
-      );
     }
 
     return discovered;
@@ -681,6 +694,65 @@ export class ExtensionLoader {
     }
 
     return components;
+  }
+
+  /**
+   * Get all Claude Agent SDK plugin contributions from loaded extensions.
+   * Returns the absolute paths to plugin directories for use with the SDK.
+   */
+  getClaudePlugins(): Array<{
+    extensionId: string;
+    contribution: ClaudePluginContribution;
+    pluginPath: string;
+    enabled: boolean;
+  }> {
+    const plugins: Array<{
+      extensionId: string;
+      contribution: ClaudePluginContribution;
+      pluginPath: string;
+      enabled: boolean;
+    }> = [];
+
+    const platformService = getExtensionPlatformService();
+
+    for (const loaded of this.loadedExtensions.values()) {
+      // Only include plugins from enabled extensions
+      if (!loaded.enabled) continue;
+
+      const claudePlugin = loaded.manifest.contributions?.claudePlugin;
+      if (!claudePlugin) continue;
+
+      // Resolve the absolute path to the plugin directory
+      const pluginPath = platformService.resolvePath(
+        loaded.context.extensionPath,
+        claudePlugin.path
+      );
+
+      plugins.push({
+        extensionId: loaded.manifest.id,
+        contribution: claudePlugin,
+        pluginPath,
+        // Plugin is enabled if extension is enabled and plugin is enabled by default
+        // (or if there's no explicit setting, default to the contribution's enabledByDefault)
+        enabled: claudePlugin.enabledByDefault !== false,
+      });
+    }
+
+    return plugins;
+  }
+
+  /**
+   * Get Claude plugin paths formatted for the Claude Agent SDK.
+   * Only returns plugins that are both from enabled extensions and have their
+   * plugin feature enabled.
+   */
+  getClaudePluginPaths(): Array<{ type: 'local'; path: string }> {
+    return this.getClaudePlugins()
+      .filter(plugin => plugin.enabled)
+      .map(plugin => ({
+        type: 'local' as const,
+        path: plugin.pluginPath,
+      }));
   }
 
   /**
