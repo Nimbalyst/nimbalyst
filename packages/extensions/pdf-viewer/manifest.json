@@ -1,0 +1,29 @@
+{
+  "id": "com.nimbalyst.pdf-viewer",
+  "name": "PDF Viewer",
+  "version": "1.0.0",
+  "description": "View PDF files directly in Nimbalyst",
+  "author": "Nimbalyst Team",
+  "main": "dist/index.mjs",
+  "styles": "dist/style.css",
+  "apiVersion": "1.0.0",
+  "permissions": {
+    "filesystem": true
+  },
+  "contributions": {
+    "customEditors": [
+      {
+        "filePatterns": ["*.pdf"],
+        "displayName": "PDF Viewer",
+        "component": "PDFViewerEditor"
+      }
+    ],
+    "fileIcons": [
+      {
+        "pattern": "*.pdf",
+        "icon": "picture_as_pdf",
+        "color": "#FF0000"
+      }
+    ]
+  }
+}

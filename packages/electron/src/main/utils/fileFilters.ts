@@ -5,9 +5,11 @@
  * to ensure we exclude worktrees, build artifacts, and other undesired files/directories.
  */
 
+import { hasCustomEditor } from '../extensions/RegisteredFileTypes';
+
 // File extensions to exclude from search and scanning
+// Note: Extensions with custom editors (like .pdf) are allowed even if in this list
 export const EXCLUDED_EXTENSIONS = new Set([
-  '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.ico',
   '.mp3', '.mp4', '.avi', '.mov', '.wmv',
   '.zip', '.tar', '.gz', '.rar', '.7z',
   '.exe', '.dll', '.so', '.dylib',
@@ -35,11 +37,22 @@ export const EXCLUDED_DIRS = new Set([
 ]);
 
 /**
- * Check if a file should be excluded based on extension
+ * Check if a file should be excluded based on extension.
+ * Returns false if the file type has a custom editor registered via an extension.
  */
 export function shouldExcludeFile(filePath: string): boolean {
   const ext = filePath.substring(filePath.lastIndexOf('.')).toLowerCase();
-  return EXCLUDED_EXTENSIONS.has(ext);
+
+  // If in excluded list, check if there's a custom editor for it
+  if (EXCLUDED_EXTENSIONS.has(ext)) {
+    // Allow if there's a custom editor registered
+    if (hasCustomEditor(filePath)) {
+      return false;
+    }
+    return true;
+  }
+
+  return false;
 }
 
 /**

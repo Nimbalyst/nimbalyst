@@ -15,6 +15,8 @@ import * as jsxRuntime from 'react/jsx-runtime';
 import * as jsxDevRuntime from 'react/jsx-dev-runtime';
 import * as zustand from 'zustand';
 import html2canvas from 'html2canvas';
+import * as pdfjsLib from 'pdfjs-dist';
+import * as virtua from 'virtua';
 
 // Import Lexical packages for extensions that use Lexical nodes
 import * as lexical from 'lexical';
@@ -196,6 +198,8 @@ export class ExtensionPlatformServiceImpl implements ExtensionPlatformService {
       'react/jsx-dev-runtime': jsxDevRuntime,
       zustand: zustand,
       html2canvas: html2canvas,
+      'pdfjs-dist': pdfjsLib,
+      virtua: virtua,
       // Lexical packages
       lexical: lexical,
       '@lexical/react/LexicalComposerContext': lexicalReact,

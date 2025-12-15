@@ -69,7 +69,18 @@ interface ElectronAPI {
   getFolderContents: (dirPath: string) => Promise<FileTreeItem[]>;
   refreshFolderContents: (folderPath: string) => Promise<FileTreeItem[]>;
   switchWorkspaceFile: (filePath: string) => Promise<{ filePath: string; content: string } | { error: string } | null>;
-  readFileContent: (filePath: string) => Promise<{ content: string } | null>;
+  readFileContent: (
+    filePath: string,
+    options?: {
+      encoding?: BufferEncoding | 'binary' | 'auto';
+      binary?: boolean;
+    }
+  ) => Promise<
+    | { success: true; content: string; isBinary: true }
+    | { success: true; content: string; isBinary: false; detectedEncoding?: BufferEncoding }
+    | { success: false; error: string }
+    | null
+  >;
   createFile: (filePath: string, content: string) => Promise<{ success: boolean; filePath?: string; error?: string }>;
 
   // File context menu operations

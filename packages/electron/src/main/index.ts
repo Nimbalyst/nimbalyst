@@ -53,7 +53,7 @@ import { SessionNamingService } from './services/SessionNamingService';
 import { MockupScreenshotService } from './services/MockupScreenshotService';
 import { registerMockupHandlers } from './ipc/MockupHandlers';
 import { registerDataModelHandlers } from './ipc/DataModelHandlers';
-import { registerExtensionHandlers, getClaudePluginPaths } from './ipc/ExtensionHandlers';
+import { registerExtensionHandlers, getClaudePluginPaths, initializeExtensionFileTypes } from './ipc/ExtensionHandlers';
 import { ClaudeCodeProvider } from '@nimbalyst/runtime/ai/server';
 import { logger, overrideConsole } from './utils/logger';
 import { startPerformanceMonitoring, stopPerformanceMonitoring } from './utils/performanceMonitor';
@@ -450,6 +450,9 @@ app.whenReady().then(async () => {
     registerMockupHandlers();
     registerDataModelHandlers();
     registerExtensionHandlers();
+
+    // Initialize extension file types (must happen before file operations)
+    await initializeExtensionFileTypes();
 
     // Initialize AI service
     if (!runtimeSessionStore) {

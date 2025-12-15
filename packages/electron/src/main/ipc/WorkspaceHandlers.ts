@@ -6,6 +6,7 @@ import * as path from 'path';
 import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 import os from 'os';
+import * as chardet from 'chardet';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { openWorkspaceFile, openFile } from '../file/FileOpener';
 
@@ -176,7 +177,10 @@ export function registerWorkspaceHandlers() {
     });
 
     // Read file content (without changing watcher or state)
-    ipcMain.handle('read-file-content', async (event, filePath: string) => {
+    // Options:
+    //   - encoding: 'utf-8' (default), 'latin1', 'ascii', etc., or 'binary' for base64, or 'auto' to auto-detect
+    //   - binary: true to force binary/base64 reading (auto-detected by extension if not specified)
+    ipcMain.handle('read-file-content', async (event, filePath: string, options?: { encoding?: BufferEncoding | 'binary' | 'auto'; binary?: boolean }) => {
         // Skip virtual files - they don't exist on disk
         if (filePath.startsWith('virtual://')) {
             return null;
@@ -188,11 +192,54 @@ export function registerWorkspaceHandlers() {
         }
 
         try {
-            const content = readFileSync(filePath, 'utf-8');
-            return { content };
+            const forceBinary = options?.binary || options?.encoding === 'binary';
+
+            // Auto-detect binary files by extension if not explicitly specified
+            let isBinary = forceBinary;
+            if (!forceBinary) {
+                const ext = extname(filePath).toLowerCase();
+                const binaryExtensions = ['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.zip', '.tar', '.gz', '.woff', '.woff2', '.ttf', '.eot'];
+                isBinary = binaryExtensions.includes(ext);
+            }
+
+            if (isBinary) {
+                // Read binary files as base64
+                const buffer = readFileSync(filePath);
+                const content = buffer.toString('base64');
+                return { success: true, content, isBinary: true };
+            } else {
+                // Read text files - auto-detect encoding or use specified encoding
+                let encoding: BufferEncoding = 'utf-8';
+
+                if (options?.encoding === 'auto' || !options?.encoding) {
+                    // Auto-detect encoding for text files
+                    const buffer = readFileSync(filePath);
+                    const detected = chardet.detect(buffer);
+
+                    if (detected) {
+                        // Map detected encoding to Node.js encoding name
+                        const encodingMap: Record<string, BufferEncoding> = {
+                            'UTF-8': 'utf8',
+                            'UTF-16LE': 'utf16le',
+                            'UTF-16BE': 'utf16le', // Node doesn't have utf16be, use utf16le
+                            'ISO-8859-1': 'latin1',
+                            'windows-1252': 'latin1',
+                            'Shift_JIS': 'utf8', // Fallback to utf8 for unsupported
+                            'GB18030': 'utf8', // Fallback to utf8 for unsupported
+                        };
+
+                        encoding = encodingMap[detected] || 'utf8';
+                    }
+                } else if (options.encoding !== 'binary') {
+                    encoding = options.encoding as BufferEncoding;
+                }
+
+                const content = readFileSync(filePath, encoding);
+                return { success: true, content, isBinary: false, detectedEncoding: encoding };
+            }
         } catch (error: any) {
             console.error('[READ_FILE] Failed to read file:', filePath, error);
-            return null;
+            return { success: false, error: error.message };
         }
     });
 

@@ -1,0 +1,22 @@
+{
+  "name": "@nimbalyst/pdf-viewer",
+  "version": "1.0.0",
+  "description": "PDF viewer extension for Nimbalyst",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "vite build --watch",
+    "build": "vite build",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
+    "typescript": "^5.0.0",
+    "vite": "^5.0.0"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  }
+}

@@ -26,6 +26,73 @@ import {
   setWorkspaceExtensionConfiguration,
   setWorkspaceExtensionConfigurationBulk,
 } from '../utils/store';
+import { registerFileExtension, clearRegisteredExtensions } from '../extensions/RegisteredFileTypes';
+
+/**
+ * Initialize extension file type registry.
+ * Should be called during app startup to ensure file types are registered
+ * before any file operations occur.
+ */
+export async function initializeExtensionFileTypes(): Promise<void> {
+  try {
+    logger.main.info('[ExtensionHandlers] Initializing extension file types...');
+    clearRegisteredExtensions();
+
+    const extensionDirs = await getAllExtensionDirectories();
+
+    for (const extensionsDir of extensionDirs) {
+      let subdirs;
+      try {
+        subdirs = await fs.readdir(extensionsDir, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+
+      for (const subdir of subdirs) {
+        let isDir = subdir.isDirectory();
+        if (!isDir && subdir.isSymbolicLink()) {
+          try {
+            const targetPath = path.join(extensionsDir, subdir.name);
+            const stat = await fs.stat(targetPath);
+            isDir = stat.isDirectory();
+          } catch {
+            continue;
+          }
+        }
+        if (!isDir) continue;
+
+        const extensionPath = path.join(extensionsDir, subdir.name);
+        const manifestPath = path.join(extensionPath, 'manifest.json');
+
+        try {
+          const manifestContent = await fs.readFile(manifestPath, 'utf-8');
+          const manifest = JSON.parse(manifestContent);
+
+          // Register file patterns from customEditors
+          if (manifest.contributions?.customEditors) {
+            for (const editor of manifest.contributions.customEditors) {
+              if (editor.filePatterns) {
+                for (const pattern of editor.filePatterns) {
+                  if (pattern.startsWith('*.')) {
+                    const ext = pattern.substring(1);
+                    registerFileExtension(ext);
+                    logger.main.info(`[ExtensionHandlers] Registered file type: ${ext} (from ${manifest.id})`);
+                  }
+                }
+              }
+            }
+          }
+        } catch {
+          // Skip directories without valid manifest
+        }
+      }
+    }
+
+    logger.main.info('[ExtensionHandlers] Extension file types initialized');
+  } catch (error) {
+    logger.main.error('[ExtensionHandlers] Failed to initialize extension file types:', error);
+  }
+}
 
 /**
  * Get the path to the user extensions directory.
@@ -484,6 +551,9 @@ export function registerExtensionHandlers(): void {
       }> = [];
       const seenExtensionIds = new Set<string>();
 
+      // Clear previously registered file types
+      clearRegisteredExtensions();
+
       // Scan all extension directories (user first, then built-in)
       const extensionDirs = await getAllExtensionDirectories();
 
@@ -525,6 +595,22 @@ export function registerExtensionHandlers(): void {
               continue;
             }
             seenExtensionIds.add(extensionId);
+
+            // Register file patterns from customEditors
+            if (manifest.contributions?.customEditors) {
+              for (const editor of manifest.contributions.customEditors) {
+                if (editor.filePatterns) {
+                  for (const pattern of editor.filePatterns) {
+                    // Extract extension from pattern like "*.pdf"
+                    if (pattern.startsWith('*.')) {
+                      const ext = pattern.substring(1); // Remove the *
+                      registerFileExtension(ext);
+                      logger.main.debug(`[ExtensionHandlers] Registered file type: ${ext} (from ${extensionId})`);
+                    }
+                  }
+                }
+              }
+            }
 
             extensions.push({
               id: extensionId,
