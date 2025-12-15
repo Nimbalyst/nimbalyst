@@ -1,8 +1,11 @@
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { launchElectronApp, createTempWorkspace, waitForAppReady } from '../helpers';
+import { launchElectronApp, createTempWorkspace, waitForAppReady, TEST_TIMEOUTS } from '../helpers';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+
+// This test involves real AI interactions and can take several minutes
+test.setTimeout(180000); // 3 minute timeout for the whole test
 
 let electronApp: ElectronApplication;
 let page: Page;
@@ -104,5 +107,52 @@ test.describe('DataModelLM Claude Plugin', () => {
     // Check if datamodellm:datamodel is in the menu
     const hasDatamodelCommand = menuOptions.some(opt => opt.includes('datamodellm:datamodel') || opt.includes('datamodel'));
     expect(hasDatamodelCommand, 'datamodellm:datamodel should appear in slash command menu').toBe(true);
+
+    // 5. Press Enter to select the datamodellm:datamodel command
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(300);
+
+    // 6. Verify the command was inserted and type a prompt to create a simple data model
+    // The slash command should expand to its prompt, we just need to append our request
+    await chatInput.press('End'); // Go to end of input
+    await chatInput.type(' Create a simple data model with two entities: User (with id, email, name fields) and Post (with id, title, content, authorId fields). The User should have a one-to-many relationship with Post.');
+
+    // 7. Submit the prompt
+    await page.keyboard.press('Meta+Enter');
+
+    // 8. Wait for the agent to process (this is a long-running AI interaction)
+    // We should see a .prisma file being created
+    // Wait for the AI response to complete - look for the file in the edited files sidebar
+    console.log('Waiting for AI to generate data model...');
+
+    // Wait for a .prisma file to appear in the edited files sidebar
+    const prismaFileInSidebar = page.locator('.file-edits-sidebar__file-name', { hasText: '.prisma' });
+    await expect(prismaFileInSidebar).toBeVisible({ timeout: 120000 }); // 2 minute timeout for AI
+
+    console.log('Prisma file appeared in edited files sidebar');
+
+    // 9. Click on the .prisma file in the edited files sidebar to open it
+    await prismaFileInSidebar.click();
+    await page.waitForTimeout(1000);
+
+    // 10. Wait for the DataModelLM editor to render the entities
+    // The editor should show the datamodel-canvas with entity nodes
+    const datamodelCanvas = page.locator('.datamodel-canvas');
+    await expect(datamodelCanvas).toBeVisible({ timeout: 10000 });
+
+    console.log('DataModel canvas is visible');
+
+    // 11. Verify that entities are rendered
+    const entityNodes = page.locator('.datamodel-entity');
+    await expect(entityNodes).toHaveCount(2, { timeout: 5000 }); // Should have User and Post entities
+
+    // 12. Verify the entity names
+    const entityNames = await page.locator('.datamodel-entity-name').allTextContents();
+    console.log('Entity names found:', entityNames);
+
+    expect(entityNames.some(name => name.toLowerCase().includes('user')), 'Should have User entity').toBe(true);
+    expect(entityNames.some(name => name.toLowerCase().includes('post')), 'Should have Post entity').toBe(true);
+
+    console.log('Test passed: DataModelLM plugin successfully created and rendered entities');
   });
 });
