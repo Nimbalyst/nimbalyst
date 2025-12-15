@@ -760,13 +760,15 @@ export interface OnboardingState {
   userRole?: string;
   userEmail?: string;
   onboardingNextPrompt?: number;
+  onboardingCompleted?: boolean;
 }
 
 export function getOnboardingState(): OnboardingState {
   return {
     userRole: appStore.get('userRole'),
     userEmail: appStore.get('userEmail'),
-    onboardingNextPrompt: appStore.get('onboardingNextPrompt')
+    onboardingNextPrompt: appStore.get('onboardingNextPrompt'),
+    onboardingCompleted: appStore.get('onboardingCompleted')
   };
 }
 
@@ -779,6 +781,9 @@ export function updateOnboardingState(state: Partial<OnboardingState>): void {
   }
   if (state.onboardingNextPrompt !== undefined) {
     appStore.set('onboardingNextPrompt', state.onboardingNextPrompt);
+  }
+  if (state.onboardingCompleted !== undefined) {
+    appStore.set('onboardingCompleted', state.onboardingCompleted);
   }
 }
 

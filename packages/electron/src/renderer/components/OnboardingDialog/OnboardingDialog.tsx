@@ -3,7 +3,8 @@ import './OnboardingDialog.css';
 
 export interface OnboardingDialogProps {
   isOpen: boolean;
-  onComplete: (role: string, customRole: string | null, email: string | null) => void;
+  onComplete: (role: string | null, customRole: string | null, email: string | null) => void;
+  onSkip: () => void;
 }
 
 const ROLE_OPTIONS = [
@@ -17,7 +18,7 @@ const isValidEmail = (email: string): boolean => {
   return emailRegex.test(email);
 };
 
-export const OnboardingDialog: React.FC<OnboardingDialogProps> = ({ isOpen, onComplete }) => {
+export const OnboardingDialog: React.FC<OnboardingDialogProps> = ({ isOpen, onComplete, onSkip }) => {
   const [selectedRole, setSelectedRole] = useState<string>('');
   const [customRole, setCustomRole] = useState<string>('');
   const [email, setEmail] = useState<string>('');
@@ -35,29 +36,16 @@ export const OnboardingDialog: React.FC<OnboardingDialogProps> = ({ isOpen, onCo
   };
 
   const handleSubmit = () => {
-    // Validate required fields
-    if (!selectedRole) {
-      return;
-    }
-
-    // Validate custom role if "other" is selected
-    if (selectedRole === 'other' && !customRole.trim()) {
-      return;
-    }
-
-    // Call onComplete with the collected data
+    // Call onComplete with the collected data (all fields optional)
     onComplete(
-      selectedRole,
-      selectedRole === 'other' ? customRole.trim() : null,
+      selectedRole || null,
+      selectedRole === 'other' ? customRole.trim() || null : null,
       email.trim() || null
     );
   };
 
-  const isSubmitDisabled =
-    !selectedRole ||
-    (selectedRole === 'other' && !customRole.trim()) ||
-    !email.trim() ||
-    !isValidEmail(email.trim());
+  // Only disable if email is entered but invalid
+  const isSubmitDisabled = email.trim() !== '' && !isValidEmail(email.trim());
 
   return (
     <div className="onboarding-overlay">
@@ -72,7 +60,7 @@ export const OnboardingDialog: React.FC<OnboardingDialogProps> = ({ isOpen, onCo
         <div className="onboarding-content">
           <div className="onboarding-section">
             <label className="onboarding-label">
-              What best describes your role? <span className="required">*</span>
+              What best describes your role?
             </label>
             <div className="role-options">
               {ROLE_OPTIONS.map((option) => (
@@ -100,7 +88,7 @@ export const OnboardingDialog: React.FC<OnboardingDialogProps> = ({ isOpen, onCo
             {selectedRole === 'other' && (
               <div className="custom-role-input">
                 <label className="onboarding-label" htmlFor="custom-role-input">
-                  Your role <span className="required">*</span>
+                  Your role
                 </label>
                 <input
                   id="custom-role-input"
@@ -117,7 +105,7 @@ export const OnboardingDialog: React.FC<OnboardingDialogProps> = ({ isOpen, onCo
 
           <div className="onboarding-section">
             <label className="onboarding-label" htmlFor="email-input">
-              Email address <span className="required">*</span>
+              Email address
             </label>
             <p className="onboarding-help-text">
               Receive occasional product updates and tips
@@ -141,6 +129,14 @@ export const OnboardingDialog: React.FC<OnboardingDialogProps> = ({ isOpen, onCo
         </div>
 
         <div className="onboarding-footer">
+          <div className="onboarding-footer-left">
+            <button
+              className="onboarding-secondary-button"
+              onClick={onSkip}
+            >
+              Skip
+            </button>
+          </div>
           <button
             className="onboarding-submit"
             onClick={handleSubmit}

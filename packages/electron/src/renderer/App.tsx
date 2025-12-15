@@ -298,7 +298,7 @@ export default function App() {
       const state = await window.electronAPI.invoke('onboarding:get');
 
       // Don't show if user has completed or permanently skipped
-      if (state.userRole) {
+      if (state.onboardingCompleted || state.userRole) {
         return;
       }
 
@@ -322,13 +322,14 @@ export default function App() {
   }, [isInitializing, workspaceMode]);
 
   // Handle onboarding completion
-  const handleOnboardingComplete = useCallback(async (role: string, customRole: string | null, email: string | null) => {
-    const roleToStore = customRole || role;
+  const handleOnboardingComplete = useCallback(async (role: string | null, customRole: string | null, email: string | null) => {
+    const roleToStore = customRole || role || undefined;
 
     // Store onboarding data in electron-store
     await window.electronAPI.invoke('onboarding:update', {
       userRole: roleToStore,
-      userEmail: email || undefined
+      userEmail: email || undefined,
+      onboardingCompleted: true
     });
 
     // Associate email with user in PostHog if provided
@@ -339,11 +340,27 @@ export default function App() {
     // Track onboarding completion event
     if (posthog) {
       posthog.capture('onboarding_completed', {
-        user_role: role,
+        user_role: role || undefined,
         custom_role_provided: !!customRole,
         custom_role_text: customRole || undefined,
         email_provided: !!email,
       });
+    }
+
+    // Close the dialog
+    setIsOnboardingOpen(false);
+  }, [posthog]);
+
+  // Handle onboarding skip
+  const handleOnboardingSkip = useCallback(async () => {
+    // Mark as completed to prevent re-showing
+    await window.electronAPI.invoke('onboarding:update', {
+      onboardingCompleted: true
+    });
+
+    // Track skip event
+    if (posthog) {
+      posthog.capture('onboarding_skipped');
     }
 
     // Close the dialog
@@ -1661,6 +1678,7 @@ export default function App() {
       <OnboardingDialog
         isOpen={isOnboardingOpen}
         onComplete={handleOnboardingComplete}
+        onSkip={handleOnboardingSkip}
       />
       <FeatureWalkthrough
         isOpen={isFeatureWalkthroughOpen}
