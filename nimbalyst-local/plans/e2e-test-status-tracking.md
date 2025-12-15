@@ -30,7 +30,7 @@ planStatus:
 
 
 ## References
-[[document:PLAYWRIGHT.md|df17bc242e78fbeef41082418aa540f8]] 
+[PLAYWRIGHT.md](./PLAYWRIGHT.md) 
 
 ## Goals
 

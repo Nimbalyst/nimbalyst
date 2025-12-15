@@ -7,7 +7,7 @@ planStatus:
   priority: high
   owner: developer
   stakeholders: null
-  tags: null  
+  tags: null
   created: "2025-01-29"
   updated: "2025-01-30T00:15:00.000Z"
   progress: 100

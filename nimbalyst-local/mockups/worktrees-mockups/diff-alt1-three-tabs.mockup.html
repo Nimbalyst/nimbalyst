@@ -1,0 +1,1444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nimbalyst - Diff Mode Alternative 1 (Three Tabs)</title>
+  <style>
+    /* Dark theme CSS Variables */
+    :root {
+      --surface-primary: #1a1a1a;
+      --surface-secondary: #252526;
+      --surface-tertiary: #2d2d2d;
+      --surface-hover: rgba(255, 255, 255, 0.05);
+      --surface-selected: rgba(59, 130, 246, 0.2);
+      --text-primary: #ffffff;
+      --text-secondary: #a0a0a0;
+      --text-tertiary: #6b6b6b;
+      --border-primary: #3c3c3c;
+      --border-focus: #3b82f6;
+      --primary-color: #4a9eff;
+      --error-color: #ef4444;
+      --success-color: #22c55e;
+      --warning-color: #f59e0b;
+      --accent-purple: #a855f7;
+      --diff-add-bg: rgba(34, 197, 94, 0.15);
+      --diff-add-text: #4ade80;
+      --diff-remove-bg: rgba(239, 68, 68, 0.15);
+      --diff-remove-text: #f87171;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: #0d0d0d;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    /* Full app window */
+    .app-window {
+      width: 1400px;
+      height: 850px;
+      background: var(--surface-primary);
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* macOS title bar */
+    .title-bar {
+      height: 38px;
+      background: var(--surface-secondary);
+      border-bottom: 1px solid var(--border-primary);
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      gap: 8px;
+    }
+
+    .traffic-lights {
+      display: flex;
+      gap: 8px;
+    }
+
+    .traffic-light {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+
+    .traffic-light.close { background: #ff5f57; }
+    .traffic-light.minimize { background: #febc2e; }
+    .traffic-light.maximize { background: #28c840; }
+
+    .title-bar-title {
+      flex: 1;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+
+    /* Mode toggle header bar */
+    .mode-header {
+      height: 48px;
+      background: var(--surface-secondary);
+      border-bottom: 1px solid var(--border-primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: 0 24px;
+    }
+
+    .mode-toggle {
+      display: flex;
+      gap: 8px;
+      background: var(--surface-tertiary);
+      padding: 4px;
+      border-radius: 8px;
+    }
+
+    .mode-btn {
+      padding: 8px 20px;
+      font-size: 13px;
+      font-weight: 500;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+    }
+
+    .mode-btn:hover {
+      background: var(--surface-hover);
+    }
+
+    .mode-btn.active {
+      background: var(--primary-color);
+      color: white;
+    }
+
+    .mode-icon {
+      width: 16px;
+      height: 16px;
+    }
+
+    /* Main content area */
+    .main-content {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* Left sidebar - Sessions */
+    .sidebar {
+      width: 280px;
+      background: var(--surface-secondary);
+      border-right: 1px solid var(--border-primary);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sidebar-header {
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-primary);
+    }
+
+    .sidebar-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sidebar-actions {
+      display: flex;
+      gap: 4px;
+    }
+
+    .sidebar-btn {
+      width: 28px;
+      height: 28px;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .sidebar-btn:hover {
+      background: var(--surface-hover);
+      color: var(--text-primary);
+    }
+
+    /* Search */
+    .search-container {
+      padding: 12px;
+      border-bottom: 1px solid var(--border-primary);
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 8px 12px;
+      font-size: 13px;
+      background: var(--surface-tertiary);
+      border: 1px solid var(--border-primary);
+      border-radius: 6px;
+      color: var(--text-primary);
+      outline: none;
+    }
+
+    .search-input::placeholder {
+      color: var(--text-tertiary);
+    }
+
+    /* Session list */
+    .session-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+    }
+
+    /* Worktree group */
+    .worktree-group {
+      margin-bottom: 8px;
+    }
+
+    .worktree-header {
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      border-radius: 6px;
+      background: var(--surface-tertiary);
+      margin-bottom: 4px;
+    }
+
+    .worktree-header:hover {
+      background: var(--surface-hover);
+    }
+
+    .worktree-header.selected {
+      background: var(--surface-selected);
+      border: 1px solid var(--primary-color);
+    }
+
+    .worktree-chevron {
+      width: 12px;
+      height: 12px;
+      color: var(--text-tertiary);
+      transition: transform 0.2s;
+    }
+
+    .worktree-header.expanded .worktree-chevron {
+      transform: rotate(90deg);
+    }
+
+    .worktree-icon {
+      width: 16px;
+      height: 16px;
+      color: var(--primary-color);
+    }
+
+    .worktree-name {
+      flex: 1;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .worktree-badge {
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-weight: 500;
+    }
+
+    .worktree-badge.modified {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--warning-color);
+    }
+
+    .worktree-badge.ahead {
+      background: rgba(74, 158, 255, 0.15);
+      color: var(--primary-color);
+    }
+
+    .worktree-badge.merged {
+      background: rgba(34, 197, 94, 0.15);
+      color: var(--success-color);
+    }
+
+    .worktree-sessions {
+      padding-left: 16px;
+    }
+
+    /* Session item */
+    .session-item {
+      padding: 8px 12px;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      cursor: pointer;
+      border-radius: 6px;
+      margin-bottom: 2px;
+    }
+
+    .session-item:hover {
+      background: var(--surface-hover);
+    }
+
+    .session-item.active {
+      background: var(--surface-selected);
+    }
+
+    .session-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      background: linear-gradient(135deg, #d97706 0%, #ea580c 100%);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      color: white;
+      font-weight: 600;
+    }
+
+    .session-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .session-title {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 2px;
+    }
+
+    .session-meta {
+      font-size: 11px;
+      color: var(--text-tertiary);
+    }
+
+    .session-badge {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 10px;
+      background: var(--surface-tertiary);
+      color: var(--text-secondary);
+    }
+
+    /* Single-session worktree (AI icon with worktree badge overlay) */
+    .worktree-single {
+      padding: 8px 12px;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      cursor: pointer;
+      border-radius: 6px;
+      background: var(--surface-tertiary);
+      margin-bottom: 8px;
+    }
+
+    .worktree-single:hover {
+      background: var(--surface-hover);
+    }
+
+    .worktree-single .icon-wrapper {
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .worktree-single .ai-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      background: linear-gradient(135deg, #d97706 0%, #ea580c 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      color: white;
+      font-weight: 600;
+    }
+
+    .worktree-single .wt-badge {
+      position: absolute;
+      bottom: -4px;
+      right: -4px;
+      width: 14px;
+      height: 14px;
+      background: var(--surface-secondary);
+      border: 1px solid var(--border-primary);
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .worktree-single .wt-badge svg {
+      width: 10px;
+      height: 10px;
+      color: var(--primary-color);
+    }
+
+    .worktree-single .content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .worktree-single .session-title {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .worktree-single .meta-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 2px;
+    }
+
+    .worktree-single .worktree-name {
+      font-size: 11px;
+      color: var(--primary-color);
+      font-weight: 500;
+    }
+
+    .worktree-single .badge {
+      font-size: 9px;
+      padding: 1px 6px;
+      border-radius: 10px;
+      font-weight: 500;
+    }
+
+    .worktree-single .badge.ahead {
+      background: rgba(74, 158, 255, 0.15);
+      color: var(--primary-color);
+    }
+
+    .worktree-single .session-badge {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 10px;
+      background: var(--surface-secondary);
+      color: var(--text-secondary);
+    }
+
+    /* Standalone sessions */
+    .standalone-section {
+      margin-top: 16px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border-primary);
+    }
+
+    .standalone-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 0 12px 8px;
+    }
+
+    /* Center area - Diff View */
+    .center-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      background: var(--surface-primary);
+    }
+
+    /* File tabs - Diff tabs */
+    .file-tabs {
+      display: flex;
+      background: var(--surface-secondary);
+      border-bottom: 1px solid var(--border-primary);
+      padding: 0 8px;
+      gap: 2px;
+      overflow-x: auto;
+    }
+
+    .file-tab {
+      padding: 10px 16px;
+      font-size: 13px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+      background: transparent;
+    }
+
+    .file-tab:hover {
+      background: var(--surface-hover);
+    }
+
+    .file-tab.active {
+      color: var(--text-primary);
+      border-bottom-color: var(--primary-color);
+      background: var(--surface-primary);
+    }
+
+    .tab-icon {
+      width: 14px;
+      height: 14px;
+    }
+
+    .tab-badge {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 10px;
+    }
+
+    .tab-badge.modified {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--warning-color);
+    }
+
+    .tab-badge.added {
+      background: rgba(34, 197, 94, 0.15);
+      color: var(--success-color);
+    }
+
+    .tab-close {
+      width: 14px;
+      height: 14px;
+      color: var(--text-tertiary);
+      margin-left: 4px;
+    }
+
+    .tab-close:hover {
+      color: var(--text-primary);
+    }
+
+    /* Diff content */
+    .diff-content {
+      flex: 1;
+      overflow: auto;
+      font-family: 'SF Mono', Monaco, monospace;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .diff-line {
+      display: flex;
+      padding: 0 16px;
+      min-height: 22px;
+    }
+
+    .diff-line.addition {
+      background: var(--diff-add-bg);
+    }
+
+    .diff-line.deletion {
+      background: var(--diff-remove-bg);
+    }
+
+    .line-number {
+      width: 50px;
+      text-align: right;
+      color: var(--text-tertiary);
+      padding-right: 16px;
+      user-select: none;
+      flex-shrink: 0;
+    }
+
+    .line-content {
+      flex: 1;
+      white-space: pre;
+      color: var(--text-secondary);
+    }
+
+    .diff-line.addition .line-content {
+      color: var(--diff-add-text);
+    }
+
+    .diff-line.deletion .line-content {
+      color: var(--diff-remove-text);
+    }
+
+    .diff-hunk-header {
+      padding: 8px 16px;
+      background: var(--surface-tertiary);
+      color: var(--text-tertiary);
+      font-size: 12px;
+      border-top: 1px solid var(--border-primary);
+      border-bottom: 1px solid var(--border-primary);
+      margin: 8px 0;
+    }
+
+    /* Right panel */
+    .right-panel {
+      width: 300px;
+      background: var(--surface-secondary);
+      border-left: 1px solid var(--border-primary);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .panel-header {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border-primary);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .panel-tabs {
+      display: flex;
+      gap: 4px;
+      background: var(--surface-tertiary);
+      padding: 3px;
+      border-radius: 6px;
+    }
+
+    .panel-tab {
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 500;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+
+    .panel-tab:hover {
+      background: var(--surface-hover);
+    }
+
+    .panel-tab.active {
+      background: var(--surface-primary);
+      color: var(--text-primary);
+    }
+
+    .panel-tab-icon {
+      width: 14px;
+      height: 14px;
+    }
+
+    .panel-collapse-btn {
+      width: 24px;
+      height: 24px;
+      border: none;
+      border-radius: 4px;
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .panel-collapse-btn:hover {
+      background: var(--surface-hover);
+    }
+
+    /* Diff panel content */
+    .diff-panel-content {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Changed files panel header */
+    .changed-files-header {
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-primary);
+    }
+
+    .changed-files-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .file-count {
+      font-size: 12px;
+      color: var(--text-tertiary);
+      background: var(--surface-tertiary);
+      padding: 2px 8px;
+      border-radius: 10px;
+    }
+
+    /* Changed files list */
+    .changed-files {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+    }
+
+    .change-indicator {
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 500;
+    }
+
+    .change-indicator.modified {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--warning-color);
+    }
+
+    .change-indicator.added {
+      background: rgba(34, 197, 94, 0.15);
+      color: var(--success-color);
+    }
+
+    /* Tree folder structure */
+    .tree-folder {
+      margin-bottom: 2px;
+    }
+
+    .tree-folder-header {
+      padding: 6px 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+
+    .tree-folder-header:hover {
+      background: var(--surface-hover);
+    }
+
+    .tree-folder-checkbox {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--primary-color);
+      cursor: pointer;
+    }
+
+    .tree-folder-chevron {
+      width: 12px;
+      height: 12px;
+      color: var(--text-tertiary);
+      transition: transform 0.15s;
+    }
+
+    .tree-folder.expanded .tree-folder-chevron {
+      transform: rotate(90deg);
+    }
+
+    .tree-folder-icon {
+      width: 16px;
+      height: 16px;
+      color: var(--warning-color);
+    }
+
+    .tree-folder-name {
+      font-size: 13px;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .tree-folder-path {
+      font-size: 11px;
+      color: var(--text-tertiary);
+      margin-left: 4px;
+    }
+
+    .tree-folder-count {
+      font-size: 11px;
+      color: var(--text-tertiary);
+      margin-left: auto;
+    }
+
+    .tree-folder-children {
+      padding-left: 20px;
+    }
+
+    .tree-file {
+      padding: 5px 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      border-radius: 4px;
+      margin-bottom: 1px;
+    }
+
+    .tree-file:hover {
+      background: var(--surface-hover);
+    }
+
+    .tree-file.active {
+      background: var(--surface-selected);
+    }
+
+    .tree-file-checkbox {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--primary-color);
+      cursor: pointer;
+    }
+
+    .tree-file-icon {
+      width: 16px;
+      height: 16px;
+      color: var(--primary-color);
+    }
+
+    .tree-file-name {
+      flex: 1;
+      font-size: 13px;
+      color: var(--text-primary);
+    }
+
+    /* Commit message section */
+    .commit-section {
+      padding: 12px;
+      border-bottom: 1px solid var(--border-primary);
+    }
+
+    .commit-message-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    .commit-message-input {
+      width: 100%;
+      padding: 10px 12px;
+      font-size: 13px;
+      font-family: inherit;
+      background: var(--surface-tertiary);
+      border: 1px solid var(--border-primary);
+      border-radius: 6px;
+      color: var(--text-primary);
+      outline: none;
+      resize: vertical;
+      min-height: 60px;
+    }
+
+    .commit-message-input::placeholder {
+      color: var(--text-tertiary);
+    }
+
+    .commit-message-input:focus {
+      border-color: var(--primary-color);
+    }
+
+    .commit-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .commit-btn {
+      flex: 1;
+      padding: 8px 12px;
+      font-size: 13px;
+      font-weight: 500;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .commit-btn.primary {
+      background: var(--primary-color);
+      color: white;
+    }
+
+    .commit-btn.primary:hover {
+      background: #3a8eef;
+    }
+
+    .commit-btn.success {
+      background: var(--success-color);
+      color: white;
+    }
+
+    .commit-btn.success:hover {
+      background: #16a34a;
+    }
+
+    .commit-btn-icon {
+      width: 14px;
+      height: 14px;
+    }
+
+    /* Commits history */
+    .commits-section {
+      padding: 12px;
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .commits-header {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    .commit-item {
+      padding: 8px;
+      background: var(--surface-tertiary);
+      border-radius: 6px;
+      margin-bottom: 6px;
+    }
+
+    .commit-item-message {
+      font-size: 12px;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+    }
+
+    .commit-meta {
+      font-size: 11px;
+      color: var(--text-tertiary);
+    }
+
+    svg {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-window">
+    <!-- macOS Title Bar -->
+    <div class="title-bar">
+      <div class="traffic-lights">
+        <div class="traffic-light close"></div>
+        <div class="traffic-light minimize"></div>
+        <div class="traffic-light maximize"></div>
+      </div>
+      <div class="title-bar-title">Diff View - auth-refactor - Nimbalyst</div>
+      <div style="width: 52px;"></div>
+    </div>
+
+    <!-- Mode Toggle Header - THREE TABS: Agent | Files | Diff -->
+    <div class="mode-header">
+      <div class="mode-toggle">
+        <button class="mode-btn">
+          <svg class="mode-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="8" cy="8" r="5"/>
+            <path d="M8 3v5l3 3"/>
+          </svg>
+          Agent
+        </button>
+        <button class="mode-btn">
+          <svg class="mode-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M3 4h10M3 8h10M3 12h6"/>
+            <rect x="2" y="2" width="12" height="12" rx="1"/>
+          </svg>
+          Files
+        </button>
+        <button class="mode-btn active">
+          <svg class="mode-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M4 4h3v8H4zM9 4h3v8H9z"/>
+            <path d="M5.5 7l-1 1 1 1M10.5 7l1 1-1 1"/>
+          </svg>
+          Diff
+        </button>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+      <!-- LEFT: Sessions Sidebar -->
+      <div class="sidebar">
+        <div class="sidebar-header">
+          <div class="sidebar-title">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="8" cy="8" r="5"/>
+              <path d="M8 4v4l3 3"/>
+            </svg>
+            Agent Sessions
+          </div>
+          <div class="sidebar-actions">
+            <button class="sidebar-btn" title="New Worktree">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M5 13v-2.5a1.5 1.5 0 0 1 1.5-1.5h3"/>
+                <path d="M9.5 9V4.5"/>
+                <circle cx="5" cy="4.5" r="1.5"/>
+                <circle cx="9.5" cy="4.5" r="1.5"/>
+                <path d="M5 6v2.5a1.5 1.5 0 0 0 1.5 1.5"/>
+                <path d="M12 7v4M10 9h4"/>
+              </svg>
+            </button>
+            <button class="sidebar-btn" title="New Session">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M8 3v10M3 8h10"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="search-container">
+          <input type="text" class="search-input" placeholder="Search sessions...">
+        </div>
+
+        <div class="session-list">
+          <!-- Worktree: Auth Refactor (SELECTED - viewing diff) -->
+          <div class="worktree-group">
+            <div class="worktree-header expanded selected">
+              <svg class="worktree-chevron" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M4 2l4 4-4 4"/>
+              </svg>
+              <svg class="worktree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M8 21v-4a2 2 0 0 1 2-2h4"/>
+                <path d="M14 15V7"/>
+                <circle cx="8" cy="7" r="2"/>
+                <circle cx="14" cy="7" r="2"/>
+                <path d="M8 9v4a2 2 0 0 0 2 2"/>
+              </svg>
+              <span class="worktree-name">auth-refactor</span>
+              <span class="worktree-badge modified">+12 -3</span>
+            </div>
+            <div class="worktree-sessions">
+              <div class="session-item">
+                <div class="session-icon">AI</div>
+                <div class="session-content">
+                  <div class="session-title">Implement OAuth flow</div>
+                  <div class="session-meta">2:34 PM</div>
+                </div>
+                <span class="session-badge">12</span>
+              </div>
+              <div class="session-item">
+                <div class="session-icon">AI</div>
+                <div class="session-content">
+                  <div class="session-title">Fix token refresh</div>
+                  <div class="session-meta">11:20 AM</div>
+                </div>
+                <span class="session-badge">8</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Worktree: Database Migration (single session) -->
+          <div class="worktree-single">
+            <div class="icon-wrapper">
+              <div class="ai-icon">AI</div>
+              <div class="wt-badge">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M8 21v-4a2 2 0 0 1 2-2h4"/>
+                  <path d="M14 15V7"/>
+                  <circle cx="8" cy="7" r="2"/>
+                  <circle cx="14" cy="7" r="2"/>
+                  <path d="M8 9v4a2 2 0 0 0 2 2"/>
+                </svg>
+              </div>
+            </div>
+            <div class="content">
+              <div class="session-title">Schema changes</div>
+              <div class="meta-row">
+                <span class="worktree-name">db-migration</span>
+                <span class="badge ahead">3 ahead</span>
+              </div>
+            </div>
+            <span class="session-badge">24</span>
+          </div>
+
+          <!-- Worktree: UI Polish (merged) -->
+          <div class="worktree-group">
+            <div class="worktree-header">
+              <svg class="worktree-chevron" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M4 2l4 4-4 4"/>
+              </svg>
+              <svg class="worktree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M8 21v-4a2 2 0 0 1 2-2h4"/>
+                <path d="M14 15V7"/>
+                <circle cx="8" cy="7" r="2"/>
+                <circle cx="14" cy="7" r="2"/>
+                <path d="M8 9v4a2 2 0 0 0 2 2"/>
+              </svg>
+              <span class="worktree-name">ui-polish</span>
+              <span class="worktree-badge merged">merged</span>
+            </div>
+          </div>
+
+          <!-- Standalone Sessions -->
+          <div class="standalone-section">
+            <div class="standalone-label">Sessions</div>
+            <div class="session-item">
+              <div class="session-icon">AI</div>
+              <div class="session-content">
+                <div class="session-title">Add dark mode support</div>
+                <div class="session-meta">Yesterday</div>
+              </div>
+              <span class="session-badge">15</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CENTER: Diff View with Diff Tabs -->
+      <div class="center-area">
+        <!-- Diff file tabs -->
+        <div class="file-tabs">
+          <div class="file-tab active">
+            <svg class="tab-icon" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M3 2h8l-3 3v7H3V2z"/>
+              <path d="M8 2v3h3"/>
+            </svg>
+            OAuthProvider.tsx
+            <span class="tab-badge modified">M</span>
+            <svg class="tab-close" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 3l8 8M11 3l-8 8"/>
+            </svg>
+          </div>
+          <div class="file-tab">
+            <svg class="tab-icon" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M3 2h8l-3 3v7H3V2z"/>
+              <path d="M8 2v3h3"/>
+            </svg>
+            SessionManager.tsx
+            <span class="tab-badge added">A</span>
+            <svg class="tab-close" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 3l8 8M11 3l-8 8"/>
+            </svg>
+          </div>
+          <div class="file-tab">
+            <svg class="tab-icon" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M3 2h8l-3 3v7H3V2z"/>
+              <path d="M8 2v3h3"/>
+            </svg>
+            App.tsx
+            <span class="tab-badge modified">M</span>
+            <svg class="tab-close" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 3l8 8M11 3l-8 8"/>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Diff content -->
+        <div class="diff-content">
+          <div class="diff-hunk-header">@@ -1,5 +1,15 @@ import statements</div>
+
+          <div class="diff-line">
+            <span class="line-number">1</span>
+            <span class="line-content">import { OAuth2Client } from 'google-auth-library';</span>
+          </div>
+          <div class="diff-line addition">
+            <span class="line-number">2</span>
+            <span class="line-content">+ import { Octokit } from '@octokit/rest';</span>
+          </div>
+          <div class="diff-line">
+            <span class="line-number">3</span>
+            <span class="line-content"></span>
+          </div>
+          <div class="diff-line addition">
+            <span class="line-number">4</span>
+            <span class="line-content">+ export interface OAuthConfig {</span>
+          </div>
+          <div class="diff-line addition">
+            <span class="line-number">5</span>
+            <span class="line-content">+   clientId: string;</span>
+          </div>
+          <div class="diff-line addition">
+            <span class="line-number">6</span>
+            <span class="line-content">+   clientSecret: string;</span>
+          </div>
+          <div class="diff-line addition">
+            <span class="line-number">7</span>
+            <span class="line-content">+   redirectUri: string;</span>
+          </div>
+          <div class="diff-line addition">
+            <span class="line-number">8</span>
+            <span class="line-content">+ }</span>
+          </div>
+
+          <div class="diff-hunk-header">@@ -10,8 +20,25 @@ OAuthService class</div>
+
+          <div class="diff-line">
+            <span class="line-number">10</span>
+            <span class="line-content">export class OAuthService {</span>
+          </div>
+          <div class="diff-line deletion">
+            <span class="line-number">11</span>
+            <span class="line-content">-   private client: OAuth2Client;</span>
+          </div>
+          <div class="diff-line addition">
+            <span class="line-number">11</span>
+            <span class="line-content">+   private googleClient: OAuth2Client;</span>
+          </div>
+          <div class="diff-line addition">
+            <span class="line-number">12</span>
+            <span class="line-content">+   private githubClient: Octokit;</span>
+          </div>
+          <div class="diff-line">
+            <span class="line-number">13</span>
+            <span class="line-content"></span>
+          </div>
+          <div class="diff-line deletion">
+            <span class="line-number">14</span>
+            <span class="line-content">-   constructor(config: OAuthConfig) {</span>
+          </div>
+          <div class="diff-line addition">
+            <span class="line-number">14</span>
+            <span class="line-content">+   constructor(</span>
+          </div>
+          <div class="diff-line addition">
+            <span class="line-number">15</span>
+            <span class="line-content">+     private googleConfig: OAuthConfig,</span>
+          </div>
+          <div class="diff-line addition">
+            <span class="line-number">16</span>
+            <span class="line-content">+     private githubConfig: OAuthConfig</span>
+          </div>
+          <div class="diff-line addition">
+            <span class="line-number">17</span>
+            <span class="line-content">+   ) {</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: Diff Panel (from original worktree-diff) -->
+      <div class="right-panel">
+        <div class="panel-header">
+          <div class="panel-tabs">
+            <button class="panel-tab">
+              <svg class="panel-tab-icon" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5">
+                <circle cx="7" cy="7" r="4"/>
+                <path d="M7 4v3l2 2"/>
+              </svg>
+              Chat
+            </button>
+            <button class="panel-tab">
+              <svg class="panel-tab-icon" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M2 3l1.5-1h2.5l1 1h5v8H2V3z"/>
+              </svg>
+              Files
+            </button>
+            <button class="panel-tab active">
+              <svg class="panel-tab-icon" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M4 4h3v8H4zM9 4h3v8H9z"/>
+              </svg>
+              Changes
+            </button>
+          </div>
+          <button class="panel-collapse-btn" title="Collapse panel">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 3l5 4-5 4"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="diff-panel-content">
+          <!-- Changed files header -->
+          <div class="changed-files-header">
+            <span class="changed-files-title">Changed Files</span>
+            <span class="file-count">9 files</span>
+          </div>
+
+          <!-- Changed files tree -->
+          <div class="changed-files">
+            <!-- packages/electron folder (collapsed path) -->
+            <div class="tree-folder expanded">
+              <div class="tree-folder-header">
+                <input type="checkbox" class="tree-folder-checkbox" checked>
+                <svg class="tree-folder-chevron" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M4 2l4 4-4 4"/>
+                </svg>
+                <svg class="tree-folder-icon" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M1 3.5A1.5 1.5 0 0 1 2.5 2h3.172a1.5 1.5 0 0 1 1.06.44l.329.328a.5.5 0 0 0 .353.146H13.5A1.5 1.5 0 0 1 15 4.5v8a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 1 12.5v-9z"/>
+                </svg>
+                <span class="tree-folder-name">renderer<span class="tree-folder-path">packages/electron/src/</span></span>
+                <span class="tree-folder-count">5 files</span>
+              </div>
+              <div class="tree-folder-children">
+                <!-- Nested components folder -->
+                <div class="tree-folder expanded">
+                  <div class="tree-folder-header">
+                    <input type="checkbox" class="tree-folder-checkbox" checked>
+                    <svg class="tree-folder-chevron" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M4 2l4 4-4 4"/>
+                    </svg>
+                    <svg class="tree-folder-icon" viewBox="0 0 16 16" fill="currentColor">
+                      <path d="M1 3.5A1.5 1.5 0 0 1 2.5 2h3.172a1.5 1.5 0 0 1 1.06.44l.329.328a.5.5 0 0 0 .353.146H13.5A1.5 1.5 0 0 1 15 4.5v8a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 1 12.5v-9z"/>
+                    </svg>
+                    <span class="tree-folder-name">Auth</span>
+                    <span class="tree-folder-count">3 files</span>
+                  </div>
+                  <div class="tree-folder-children">
+                    <div class="tree-file active">
+                      <input type="checkbox" class="tree-file-checkbox" checked>
+                      <svg class="tree-file-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M3 2h7l3 3v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/>
+                        <path d="M10 2v3h3"/>
+                      </svg>
+                      <span class="tree-file-name">OAuthProvider.tsx</span>
+                      <span class="change-indicator modified">M</span>
+                    </div>
+                    <div class="tree-file">
+                      <input type="checkbox" class="tree-file-checkbox" checked>
+                      <svg class="tree-file-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M3 2h7l3 3v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/>
+                        <path d="M10 2v3h3"/>
+                      </svg>
+                      <span class="tree-file-name">SessionManager.tsx</span>
+                      <span class="change-indicator added">A</span>
+                    </div>
+                    <div class="tree-file">
+                      <input type="checkbox" class="tree-file-checkbox" checked>
+                      <svg class="tree-file-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M3 2h7l3 3v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/>
+                        <path d="M10 2v3h3"/>
+                      </svg>
+                      <span class="tree-file-name">index.ts</span>
+                      <span class="change-indicator modified">M</span>
+                    </div>
+                  </div>
+                </div>
+                <!-- File directly in renderer -->
+                <div class="tree-file">
+                  <input type="checkbox" class="tree-file-checkbox" checked>
+                  <svg class="tree-file-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M3 2h7l3 3v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/>
+                    <path d="M10 2v3h3"/>
+                  </svg>
+                  <span class="tree-file-name">App.tsx</span>
+                  <span class="change-indicator modified">M</span>
+                </div>
+                <div class="tree-file">
+                  <input type="checkbox" class="tree-file-checkbox">
+                  <svg class="tree-file-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M3 2h7l3 3v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/>
+                    <path d="M10 2v3h3"/>
+                  </svg>
+                  <span class="tree-file-name">types.ts</span>
+                  <span class="change-indicator modified">M</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- packages/runtime folder (collapsed) -->
+            <div class="tree-folder">
+              <div class="tree-folder-header">
+                <input type="checkbox" class="tree-folder-checkbox" checked>
+                <svg class="tree-folder-chevron" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M4 2l4 4-4 4"/>
+                </svg>
+                <svg class="tree-folder-icon" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M1 3.5A1.5 1.5 0 0 1 2.5 2h3.172a1.5 1.5 0 0 1 1.06.44l.329.328a.5.5 0 0 0 .353.146H13.5A1.5 1.5 0 0 1 15 4.5v8a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 1 12.5v-9z"/>
+                </svg>
+                <span class="tree-folder-name">auth<span class="tree-folder-path">packages/runtime/src/</span></span>
+                <span class="tree-folder-count">2 files</span>
+              </div>
+            </div>
+
+            <!-- Root level files -->
+            <div class="tree-file">
+              <input type="checkbox" class="tree-file-checkbox" checked>
+              <svg class="tree-file-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M3 2h7l3 3v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/>
+                <path d="M10 2v3h3"/>
+              </svg>
+              <span class="tree-file-name">package.json</span>
+              <span class="change-indicator modified">M</span>
+            </div>
+            <div class="tree-file">
+              <input type="checkbox" class="tree-file-checkbox">
+              <svg class="tree-file-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M3 2h7l3 3v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/>
+                <path d="M10 2v3h3"/>
+              </svg>
+              <span class="tree-file-name">.env.example</span>
+              <span class="change-indicator added">A</span>
+            </div>
+          </div>
+
+          <!-- Commit message section -->
+          <div class="commit-section">
+            <div class="commit-message-label">Commit Message</div>
+            <textarea class="commit-message-input" placeholder="Enter commit message...">Add OAuth service with Google and GitHub support</textarea>
+            <div class="commit-actions">
+              <button class="commit-btn primary">
+                <svg class="commit-btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <circle cx="8" cy="8" r="5"/>
+                  <path d="M6 8l1.5 1.5L10 6"/>
+                </svg>
+                Commit
+              </button>
+              <button class="commit-btn success">
+                <svg class="commit-btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M3 8h10M8 3l5 5-5 5"/>
+                </svg>
+                Merge
+              </button>
+            </div>
+          </div>
+
+          <!-- Commits history -->
+          <div class="commits-section">
+            <div class="commits-header">Commits (2)</div>
+            <div class="commit-item">
+              <div class="commit-item-message">Add OAuth service skeleton</div>
+              <div class="commit-meta">2 hours ago</div>
+            </div>
+            <div class="commit-item">
+              <div class="commit-item-message">Initial auth folder setup</div>
+              <div class="commit-meta">Yesterday</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

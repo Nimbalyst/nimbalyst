@@ -19,7 +19,6 @@ planStatus:
   progress: 60
   startDate: "2025-11-15"
 ---
-
 ## Implementation Progress
 
 - [x] Create TrackerTypeRegistry service with built-in tracker type definitions

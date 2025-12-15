@@ -17,7 +17,6 @@ planStatus:
   updated: "2025-01-06T18:58:00.000Z"
   progress: 70
 ---
-
 # TOPT-Based Diff System - Status and Next Steps
 
 ## Overview
@@ -220,29 +219,29 @@ Even after cleanup, maintain these essential logs:
 ## Next Immediate Steps
 
 1. **Fix ListDiffHandler** (highest priority)
-   - Skip sub-tree diff when parent lists are exact matches
-   - Or apply same exact-match forcing to sub-tree diffs
-   - Target: Get append-content test to 0 modified nodes
+  - Skip sub-tree diff when parent lists are exact matches
+  - Or apply same exact-match forcing to sub-tree diffs
+  - Target: Get append-content test to 0 modified nodes
 
 2. **Clean up debug logging**
-   - Remove console.log statements
-   - Add structured logger
-   - Keep essential metrics
+  - Remove console.log statements
+  - Add structured logger
+  - Keep essential metrics
 
 3. **Run existing test suite**
-   - Ensure all previous tests still pass
-   - Fix any regressions from TOPT changes
-   - Document any behavioral changes
+  - Ensure all previous tests still pass
+  - Fix any regressions from TOPT changes
+  - Document any behavioral changes
 
 4. **Create commit**
-   - Clear commit message explaining TOPT migration
-   - Reference specific bugs fixed
-   - Note any breaking changes
+  - Clear commit message explaining TOPT migration
+  - Reference specific bugs fixed
+  - Note any breaking changes
 
 5. **Begin comprehensive test suite**
-   - Start with lists/ directory (most problematic area)
-   - Create 10-15 focused list tests
-   - Use these to validate fixes
+  - Start with lists/ directory (most problematic area)
+  - Create 10-15 focused list tests
+  - Use these to validate fixes
 
 ## Success Criteria
 
