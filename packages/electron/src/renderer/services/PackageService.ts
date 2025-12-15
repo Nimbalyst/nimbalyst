@@ -54,6 +54,8 @@ interface VersionStatus {
   needsUpdate: boolean;
 }
 
+const NIMBALYST_LOCAL_DIR = 'nimbalyst-local';
+
 export class PackageService {
   private static instance: PackageService;
   private workspacePath: string = '';
@@ -175,6 +177,116 @@ export class PackageService {
   }
 
   /**
+   * Check if a package uses the nimbalyst-local directory
+   */
+  private packageUsesNimbalystLocal(pkg: ToolPackage): boolean {
+    // Check if any command content references nimbalyst-local
+    for (const command of pkg.customCommands) {
+      if (command.content.includes(NIMBALYST_LOCAL_DIR)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Check if the nimbalyst-local directory exists
+   */
+  private async nimbalystLocalExists(): Promise<boolean> {
+    try {
+      const result = await window.electronAPI.invoke('file:exists', `${this.workspacePath}/${NIMBALYST_LOCAL_DIR}`);
+      return !!result;
+    } catch (error) {
+      console.log(`[PackageService] Could not check if ${NIMBALYST_LOCAL_DIR} exists:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Check if nimbalyst-local is already in .gitignore
+   */
+  private async isInGitignore(): Promise<boolean> {
+    try {
+      const gitignorePath = `${this.workspacePath}/.gitignore`;
+      const result = await window.electronAPI.readFileContent(gitignorePath);
+      if (result && result.content) {
+        // Check if nimbalyst-local/ is already ignored
+        return result.content.includes(`${NIMBALYST_LOCAL_DIR}/`);
+      }
+      return false;
+    } catch (error) {
+      // .gitignore doesn't exist
+      return false;
+    }
+  }
+
+  /**
+   * Add nimbalyst-local to .gitignore if not already present
+   */
+  private async addToGitignore(): Promise<void> {
+    try {
+      const gitignorePath = `${this.workspacePath}/.gitignore`;
+      const ignoreEntry = `\n# Nimbalyst local data (not checked into version control)\n${NIMBALYST_LOCAL_DIR}/\n`;
+
+      let content = '';
+      try {
+        const result = await window.electronAPI.readFileContent(gitignorePath);
+        if (result && result.content) {
+          content = result.content;
+        }
+      } catch (err) {
+        // File doesn't exist, will create it
+      }
+
+      // Double-check it's not already there
+      if (content.includes(`${NIMBALYST_LOCAL_DIR}/`)) {
+        console.log(`[PackageService] ${NIMBALYST_LOCAL_DIR}/ already in .gitignore`);
+        return;
+      }
+
+      // Append the ignore entry
+      const finalContent = content + ignoreEntry;
+      await window.electronAPI.invoke('create-document', '.gitignore', finalContent);
+      console.log(`[PackageService] Added ${NIMBALYST_LOCAL_DIR}/ to .gitignore`);
+    } catch (error) {
+      console.error(`[PackageService] Failed to update .gitignore:`, error);
+      // Don't throw - this is not critical
+    }
+  }
+
+  /**
+   * Create the nimbalyst-local directory
+   */
+  private async createNimbalystLocalDir(): Promise<void> {
+    try {
+      // Create a .gitkeep file to ensure the directory exists
+      await window.electronAPI.invoke('create-document', `${NIMBALYST_LOCAL_DIR}/.gitkeep`, '');
+      console.log(`[PackageService] Created ${NIMBALYST_LOCAL_DIR} directory`);
+    } catch (error) {
+      console.error(`[PackageService] Failed to create ${NIMBALYST_LOCAL_DIR} directory:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Ensure nimbalyst-local directory exists and is in .gitignore (if first time creation)
+   */
+  private async ensureNimbalystLocalDir(): Promise<void> {
+    const dirExists = await this.nimbalystLocalExists();
+    const alreadyIgnored = await this.isInGitignore();
+
+    if (!dirExists) {
+      // First time creation - create directory and add to .gitignore
+      await this.createNimbalystLocalDir();
+
+      if (!alreadyIgnored) {
+        await this.addToGitignore();
+      }
+    }
+    // If directory already exists, don't touch .gitignore
+  }
+
+  /**
    * Install a package
    */
   async installPackage(packageId: string): Promise<void> {
@@ -202,6 +314,11 @@ export class PackageService {
             console.log(`[PackageService] Dependency ${depId} already installed`);
           }
         }
+      }
+
+      // Check if this package uses nimbalyst-local and ensure directory exists
+      if (this.packageUsesNimbalystLocal(pkg)) {
+        await this.ensureNimbalystLocalDir();
       }
 
       // Install custom commands

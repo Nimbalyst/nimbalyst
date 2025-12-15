@@ -1303,9 +1303,61 @@ ${config.description}
   }
 
   /**
+   * Check if the nimbalyst-local directory exists
+   */
+  private async nimbalystLocalExists(workspacePath: string): Promise<boolean> {
+    try {
+      const result = await window.electronAPI.invoke('file:exists', `${workspacePath}/nimbalyst-local`);
+      return !!result;
+    } catch (error) {
+      console.log('[OnboardingService] Could not check if nimbalyst-local exists:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Check if nimbalyst-local is already in .gitignore
+   */
+  private async isNimbalystLocalInGitignore(workspacePath: string): Promise<boolean> {
+    try {
+      const gitignorePath = `${workspacePath}/.gitignore`;
+      const result = await window.electronAPI.readFileContent(gitignorePath);
+      if (result && result.content) {
+        return result.content.includes('nimbalyst-local/');
+      }
+      return false;
+    } catch (error) {
+      // .gitignore doesn't exist
+      return false;
+    }
+  }
+
+  /**
+   * Ensure nimbalyst-local directory exists and is in .gitignore (if first time creation)
+   * This is called when installing commands that use nimbalyst-local
+   */
+  private async ensureNimbalystLocalDir(workspacePath: string): Promise<void> {
+    const dirExists = await this.nimbalystLocalExists(workspacePath);
+    const alreadyIgnored = await this.isNimbalystLocalInGitignore(workspacePath);
+
+    if (!dirExists) {
+      // First time creation - create directory and add to .gitignore
+      await this.ensurePlansDirectory(workspacePath);
+
+      if (!alreadyIgnored) {
+        await this.configureGitignore(workspacePath, 'nimbalyst-local');
+      }
+    }
+    // If directory already exists, don't touch .gitignore
+  }
+
+  /**
    * Install all commands at once
    */
   async installAllCommands(workspacePath: string): Promise<void> {
+    // Ensure nimbalyst-local directory exists before installing commands that use it
+    await this.ensureNimbalystLocalDir(workspacePath);
+
     // Install each command - they already skip if already installed
     await this.installPlanCommand(workspacePath);
     await this.installTrackCommand(workspacePath);

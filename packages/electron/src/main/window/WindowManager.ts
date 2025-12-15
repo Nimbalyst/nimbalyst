@@ -1,6 +1,6 @@
 import { BrowserWindow, dialog, app, nativeImage, ipcMain, screen, nativeTheme, Menu, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
 import { join, basename } from 'path';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync } from 'fs';
 import { WindowState, FileTreeItem } from '../types';
 import { WINDOW_CASCADE_OFFSET } from '../utils/constants';
 import { getTheme, saveWorkspaceWindowState, getWorkspaceNavigationHistory, saveWorkspaceNavigationHistory } from '../utils/store';
@@ -240,44 +240,8 @@ export function createWindow(
                 // console.log('[MAIN] Restored navigation history for workspace:', workspacePath);
             }
 
-            // Ensure nimbalyst-local directory exists
-            const nimbalystLocalPath = join(workspacePath, 'nimbalyst-local');
-            if (!existsSync(nimbalystLocalPath)) {
-                try {
-                    mkdirSync(nimbalystLocalPath, { recursive: true });
-                    // console.log('[MAIN] Created nimbalyst-local directory:', nimbalystLocalPath);
-                } catch (error) {
-                    console.error('[MAIN] Failed to create nimbalyst-local directory:', error);
-                }
-            }
-
-            // Ensure nimbalyst-local is in .gitignore
-            const gitignorePath = join(workspacePath, '.gitignore');
-            const ignoreEntry = 'nimbalyst-local/';
-            try {
-                let content = '';
-                if (existsSync(gitignorePath)) {
-                    content = readFileSync(gitignorePath, 'utf8');
-                }
-
-                // Check if entry already exists (as a whole line or pattern)
-                const lines = content.split('\n');
-                const hasEntry = lines.some(line => {
-                    const trimmed = line.trim();
-                    return trimmed === ignoreEntry || trimmed === 'nimbalyst-local';
-                });
-
-                if (!hasEntry) {
-                    // Append the ignore entry with a comment
-                    const needsNewline = content.length > 0 && !content.endsWith('\n');
-                    const ignoreBlock = `${needsNewline ? '\n' : ''}# Nimbalyst local data (not checked into version control)\n${ignoreEntry}\n`;
-                    writeFileSync(gitignorePath, content + ignoreBlock, 'utf8');
-                    // console.log('[MAIN] Added nimbalyst-local to .gitignore');
-                }
-            } catch (error) {
-                console.error('[MAIN] Failed to update .gitignore:', error);
-                // Don't throw - this is not critical
-            }
+            // Note: nimbalyst-local directory is only created when tool packages are installed
+            // See PackageService.ensureNimbalystLocalDir and OnboardingService.ensureNimbalystLocalDir
         }
         windowFocusOrder.set(windowId, ++focusOrderCounter); // Track initial focus order
 
