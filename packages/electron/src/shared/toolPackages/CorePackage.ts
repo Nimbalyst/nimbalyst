@@ -107,18 +107,7 @@ When a plan involves UI components, screens, or visual design, use the \`/mockup
 - Infrastructure or configuration changes
 - Minor and well-described UI changes where there are no remaining design choices
 
-If a visual mockup would help communicate the plan, tell the user you'll use \`/mockup\` to create one, and do so after completing the plan document.
-Make sure the plan document references and links the mockup file using the mockup image syntax, and use your Capture Mockup Screenshot tool to view it once the sub-agent completes and verify that it conforms to the plan.
-
-**Mockup image syntax:**
-\`\`\`markdown
-[![Description](assets/mockup-name.mockup.png)](mockup-name.mockup.html)
-\`\`\`
-
-With optional size:
-\`\`\`markdown
-[![Description](assets/mockup-name.mockup.png)](mockup-name.mockup.html){800x600}
-\`\`\` 
+If a visual mockup would help communicate the plan, tell the user you'll use \`/mockup\` to create one, and do so after completing the plan document. Link to the mockup file from the plan document.
 
 ## Best Practices
 
