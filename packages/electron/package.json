@@ -165,6 +165,16 @@
       {
         "from": "assets",
         "to": "assets"
+      },
+      {
+        "from": "../extensions",
+        "to": "extensions",
+        "filter": [
+          "**/manifest.json",
+          "**/package.json",
+          "**/dist/**",
+          "**/claude-plugin/**"
+        ]
       }
     ],
     "afterSign": "build/afterSign.js",
