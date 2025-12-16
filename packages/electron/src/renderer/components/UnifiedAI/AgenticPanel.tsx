@@ -530,6 +530,11 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
               readStateRef.current.set(sessionId, { lastReadMessageTimestamp: finalTimestamp });
             }
 
+            // For claude-code sessions, don't use tokenUsage from database reload
+            // Token usage for claude-code comes ONLY from /context command via ai:tokenUsageUpdated IPC
+            // This prevents stale data from showing before fresh /context data arrives
+            const preserveTokenUsage = sessionData.provider === 'claude-code';
+
             return {
               ...tab,
               name: sessionData.title || tab.name,
@@ -537,7 +542,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
               sessionData: {
                 ...sessionData,
                 messages,
-                lastReadMessageTimestamp: finalTimestamp
+                lastReadMessageTimestamp: finalTimestamp,
+                // Keep existing tokenUsage for claude-code, use database value for other providers
+                tokenUsage: preserveTokenUsage ? tab.sessionData.tokenUsage : sessionData.tokenUsage
               }
             };
           }));
@@ -618,10 +625,16 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           ? `Plan: ${getFileName(planPath)}`
           : sessionData.title || `Session ${sessionTabs.length + 1}`;
 
+        // For claude-code sessions, don't use tokenUsage from database when opening tab
+        // Token usage for claude-code comes ONLY from /context command via ai:tokenUsageUpdated IPC
+        const sessionDataForTab = sessionData.provider === 'claude-code'
+          ? { ...sessionData, tokenUsage: undefined }
+          : sessionData;
+
         const newTab: SessionTab = {
           id: sessionData.id,
           name: tabName,
-          sessionData,
+          sessionData: sessionDataForTab,
           draftInput: sessionData.draftInput,
           mode: sessionData.mode || 'agent',
           model: sessionData.model || sessionData.provider || 'claude-code',

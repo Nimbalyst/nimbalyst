@@ -742,23 +742,14 @@ export class AIService {
           const parsedUsage = parseContextUsageMessage(contextResponse);
 
           if (parsedUsage) {
-            // Get current session to preserve inputTokens/outputTokens from modelUsage
-            // The /context command only gives us totalTokens (context window usage),
-            // not the actual input/output breakdown which comes from modelUsage
-            const currentSession = await this.sessionManager.loadSession(session.id, workspacePath);
-            const currentUsage = currentSession?.tokenUsage;
-
+            // For claude-code, token usage comes ONLY from /context command
+            // This provides accurate context window usage with category breakdown
             const tokenUsage = {
-              // Preserve input/output tokens from modelUsage (set earlier in the response)
-              inputTokens: currentUsage?.inputTokens ?? 0,
-              outputTokens: currentUsage?.outputTokens ?? 0,
-              // Use totalTokens from /context (represents current context window usage)
+              inputTokens: 0,
+              outputTokens: 0,
               totalTokens: parsedUsage.totalTokens,
               contextWindow: parsedUsage.contextWindow,
-              categories: parsedUsage.categories,
-              // Preserve cost and web search data from modelUsage
-              costUSD: currentUsage?.costUSD,
-              webSearchRequests: currentUsage?.webSearchRequests
+              categories: parsedUsage.categories
             };
 
             // Persist token usage to session metadata
@@ -1726,43 +1717,9 @@ export class AIService {
               });
 
               // Update session token usage if available
-              // For claude-code: use modelUsage (from SDK) which has accurate input/output breakdown
+              // For claude-code: token usage comes ONLY from /context command (auto-fetched after response)
               // For other providers: use tokenUsage from chunk.usage
-              if (session.provider === 'claude-code' && modelUsage) {
-                // Calculate totals from modelUsage (sum across all models)
-                let newInputTokens = 0;
-                let newOutputTokens = 0;
-                let totalCostUSD = 0;
-                let totalWebSearchRequests = 0;
-
-                for (const modelName of Object.keys(modelUsage)) {
-                  const stats = modelUsage[modelName];
-                  newInputTokens += stats.inputTokens || 0;
-                  newOutputTokens += stats.outputTokens || 0;
-                  totalCostUSD += stats.costUSD || 0;
-                  totalWebSearchRequests += stats.webSearchRequests || 0;
-                }
-
-                const currentUsage = session.tokenUsage ?? {
-                  inputTokens: 0,
-                  outputTokens: 0,
-                  totalTokens: 0
-                };
-
-                const updatedUsage = {
-                  inputTokens: currentUsage.inputTokens + newInputTokens,
-                  outputTokens: currentUsage.outputTokens + newOutputTokens,
-                  totalTokens: currentUsage.totalTokens + newInputTokens + newOutputTokens,
-                  contextWindow: currentUsage.contextWindow,
-                  costUSD: (currentUsage.costUSD || 0) + totalCostUSD,
-                  webSearchRequests: (currentUsage.webSearchRequests || 0) + totalWebSearchRequests
-                };
-
-                await this.sessionManager.updateSessionTokenUsage(session.id, updatedUsage);
-
-                // Update local session reference for next iteration
-                session.tokenUsage = updatedUsage;
-              } else if (tokenUsage && session.provider !== 'claude-code') {
+              if (tokenUsage && session.provider !== 'claude-code') {
                 // For non-claude-code providers, use tokenUsage from chunk
                 const currentUsage = session.tokenUsage ?? {
                   inputTokens: 0,
