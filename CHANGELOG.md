@@ -19,6 +19,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.48.10] - 2025-12-16
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Build extensions before packaging in CI
+- Manual "Check for Updates" no longer hangs on checking state
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.48.9] - 2025-12-16
 
 
