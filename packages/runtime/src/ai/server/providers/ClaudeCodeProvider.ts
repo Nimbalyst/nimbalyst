@@ -236,9 +236,27 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // Skip adding system message if the prompt starts with a slash command
       const isSlashCommand = message.trimStart().startsWith('/');
       const currentDocPath = documentContext?.filePath;
-      if (currentDocPath && !isSlashCommand) {
-        const fileName = path.basename(currentDocPath) || currentDocPath;
-        message = `${message}\n\n<NIMBALYST_SYSTEM_MESSAGE>\nThe user is currently viewing this document:\n<current_open_document>${fileName}</current_open_document>\n</NIMBALYST_SYSTEM_MESSAGE>`;
+      const mockupDrawing = (documentContext as any)?.mockupDrawing;
+      const fileType = (documentContext as any)?.fileType;
+      const hasMockupAnnotations = mockupDrawing && fileType === 'mockup';
+
+      // Build system message content based on context
+      if (!isSlashCommand && (currentDocPath || hasMockupAnnotations)) {
+        let systemMessageContent = '';
+
+        if (currentDocPath) {
+          const fileName = path.basename(currentDocPath) || currentDocPath;
+          systemMessageContent += `The user is currently viewing this document:\n<current_open_document>${fileName}</current_open_document>`;
+        }
+
+        if (hasMockupAnnotations) {
+          if (systemMessageContent) {
+            systemMessageContent += '\n\n';
+          }
+          systemMessageContent += 'IMPORTANT: The user has drawn annotations on the mockup to show you what they want. Use the mcp__nimbalyst-mcp__capture_mockup_screenshot tool to see their annotations before responding.';
+        }
+
+        message = `${message}\n\n<NIMBALYST_SYSTEM_MESSAGE>\n${systemMessageContent}\n</NIMBALYST_SYSTEM_MESSAGE>`;
       }
 
       // Build system prompt with document context

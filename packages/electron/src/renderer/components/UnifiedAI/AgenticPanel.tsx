@@ -1851,6 +1851,15 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           queuedPromptId  // For deduplication in main process
         };
 
+        // IMPORTANT: Refresh mockup annotations from window at send time
+        // The useDocumentContext hook memoizes values, so the mockupDrawing may be stale
+        // if the user drew annotations after the context was created
+        if (contextToSend.fileType === 'mockup') {
+          contextToSend.mockupDrawing = (window as any).__mockupDrawing;
+          contextToSend.mockupSelection = (window as any).__mockupSelectedElement;
+          contextToSend.mockupAnnotationTimestamp = (window as any).__mockupAnnotationTimestamp;
+        }
+
         // Debug log to verify filePath is included
         console.log('[AgenticPanel] Sending document context:', {
           hasFilePath: !!contextToSend.filePath,
@@ -1858,7 +1867,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           workspacePath: contextToSend.workspacePath,  // Log workspacePath
           sessionType: contextToSend.sessionType,
           hasContent: !!contextToSend.content,
-          contentLength: contextToSend.content?.length
+          contentLength: contextToSend.content?.length,
+          fileType: contextToSend.fileType,
+          hasMockupDrawing: !!contextToSend.mockupDrawing
         });
       } else if (attachments.length > 0) {
         contextToSend = { attachments, sessionType, workspacePath, queuedPromptId };  // Include workspacePath even without document
