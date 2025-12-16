@@ -73,6 +73,18 @@ jobs:
           NODE_ENV: production
         run: npm run build
 
+      - name: Build extensions
+        env:
+          NODE_ENV: production
+        run: |
+          # Build datamodellm extension
+          cd packages/extensions/datamodellm
+          npm run build
+          cd ../../..
+          # Build pdf-viewer extension
+          cd packages/extensions/pdf-viewer
+          npm run build
+
       # macOS specific setup
       - name: Import macOS certificates
         if: matrix.os == 'macos-latest'
