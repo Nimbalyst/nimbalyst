@@ -677,3 +677,316 @@
   background-color: var(--surface-secondary, #2d2d2d) !important;
   border-color: var(--border-primary, #404040) !important;
 }
+
+/* ============================================================================
+   Export Dropdown
+   ============================================================================ */
+
+.datamodel-export-dropdown-container {
+  position: relative;
+}
+
+.datamodel-toolbar-button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.datamodel-export-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  min-width: 200px;
+  border-radius: 8px;
+  border: 1px solid var(--border-primary, #e2e8f0);
+  background-color: var(--surface-primary, #ffffff);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  z-index: 100;
+  overflow: hidden;
+}
+
+.datamodel-export-dropdown-header {
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary, #9ca3af);
+  border-bottom: 1px solid var(--border-primary, #e2e8f0);
+}
+
+.datamodel-export-dropdown-item {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 13px;
+  text-align: left;
+  color: var(--text-primary, #333333);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.datamodel-export-dropdown-item:hover {
+  background-color: var(--surface-hover, #f3f4f6);
+}
+
+/* Dark theme export dropdown */
+[data-theme="dark"] .datamodel-export-dropdown,
+[data-theme="crystal-dark"] .datamodel-export-dropdown {
+  background-color: var(--surface-secondary, #2d2d2d);
+  border-color: var(--border-primary, #404040);
+}
+
+[data-theme="dark"] .datamodel-export-dropdown-header,
+[data-theme="crystal-dark"] .datamodel-export-dropdown-header {
+  border-color: var(--border-primary, #404040);
+}
+
+[data-theme="dark"] .datamodel-export-dropdown-item,
+[data-theme="crystal-dark"] .datamodel-export-dropdown-item {
+  color: var(--text-primary, #e5e5e5);
+}
+
+[data-theme="dark"] .datamodel-export-dropdown-item:hover,
+[data-theme="crystal-dark"] .datamodel-export-dropdown-item:hover {
+  background-color: var(--surface-hover, #3d3d3d);
+}
+
+/* ============================================================================
+   Export Dialog
+   ============================================================================ */
+
+.datamodel-export-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+}
+
+.datamodel-export-dialog {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 800px;
+  max-height: 80vh;
+  margin: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border-primary, #e2e8f0);
+  background-color: var(--surface-primary, #ffffff);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+.datamodel-export-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-primary, #e2e8f0);
+}
+
+.datamodel-export-dialog-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary, #333333);
+}
+
+.datamodel-export-dialog-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: none;
+  background: none;
+  color: var(--text-secondary, #6b7280);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.datamodel-export-dialog-close:hover {
+  color: var(--text-primary, #333333);
+  background-color: var(--surface-hover, #f3f4f6);
+}
+
+.datamodel-export-dialog-format {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-primary, #e2e8f0);
+}
+
+.datamodel-export-dialog-format label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary, #333333);
+}
+
+.datamodel-export-dialog-format select {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border-primary, #e2e8f0);
+  background-color: var(--surface-primary, #ffffff);
+  color: var(--text-primary, #333333);
+  cursor: pointer;
+}
+
+.datamodel-export-dialog-format select:focus {
+  outline: none;
+  border-color: var(--primary-color, #3b82f6);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+.datamodel-export-dialog-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 20px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.datamodel-export-dialog-content-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.datamodel-export-dialog-content-header label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary, #333333);
+}
+
+.datamodel-export-dialog-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.datamodel-export-dialog-action {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  border: none;
+  background: none;
+  color: var(--primary-color, #3b82f6);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 0.15s ease;
+}
+
+.datamodel-export-dialog-action:hover {
+  background-color: rgba(59, 130, 246, 0.1);
+}
+
+.datamodel-export-dialog-code {
+  flex: 1;
+  overflow: auto;
+  margin: 0;
+  padding: 16px;
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-primary, #333333);
+  background-color: var(--surface-secondary, #f8fafc);
+  border: 1px solid var(--border-primary, #e2e8f0);
+  border-radius: 8px;
+  white-space: pre;
+}
+
+.datamodel-export-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-primary, #e2e8f0);
+}
+
+.datamodel-export-dialog-button {
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 6px;
+  border: 1px solid var(--border-primary, #e2e8f0);
+  background-color: var(--surface-primary, #ffffff);
+  color: var(--text-primary, #333333);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.datamodel-export-dialog-button:hover {
+  background-color: var(--surface-hover, #f3f4f6);
+}
+
+/* Dark theme export dialog */
+[data-theme="dark"] .datamodel-export-dialog,
+[data-theme="crystal-dark"] .datamodel-export-dialog {
+  background-color: var(--surface-primary, #1a1a1a);
+  border-color: var(--border-primary, #404040);
+}
+
+[data-theme="dark"] .datamodel-export-dialog-header,
+[data-theme="dark"] .datamodel-export-dialog-format,
+[data-theme="dark"] .datamodel-export-dialog-footer,
+[data-theme="crystal-dark"] .datamodel-export-dialog-header,
+[data-theme="crystal-dark"] .datamodel-export-dialog-format,
+[data-theme="crystal-dark"] .datamodel-export-dialog-footer {
+  border-color: var(--border-primary, #404040);
+}
+
+[data-theme="dark"] .datamodel-export-dialog-header h2,
+[data-theme="dark"] .datamodel-export-dialog-format label,
+[data-theme="dark"] .datamodel-export-dialog-content-header label,
+[data-theme="crystal-dark"] .datamodel-export-dialog-header h2,
+[data-theme="crystal-dark"] .datamodel-export-dialog-format label,
+[data-theme="crystal-dark"] .datamodel-export-dialog-content-header label {
+  color: var(--text-primary, #e5e5e5);
+}
+
+[data-theme="dark"] .datamodel-export-dialog-close,
+[data-theme="crystal-dark"] .datamodel-export-dialog-close {
+  color: var(--text-secondary, #9ca3af);
+}
+
+[data-theme="dark"] .datamodel-export-dialog-close:hover,
+[data-theme="crystal-dark"] .datamodel-export-dialog-close:hover {
+  color: var(--text-primary, #e5e5e5);
+  background-color: var(--surface-hover, #3d3d3d);
+}
+
+[data-theme="dark"] .datamodel-export-dialog-format select,
+[data-theme="crystal-dark"] .datamodel-export-dialog-format select {
+  background-color: var(--surface-secondary, #2d2d2d);
+  border-color: var(--border-primary, #404040);
+  color: var(--text-primary, #e5e5e5);
+}
+
+[data-theme="dark"] .datamodel-export-dialog-code,
+[data-theme="crystal-dark"] .datamodel-export-dialog-code {
+  background-color: var(--surface-secondary, #2d2d2d);
+  border-color: var(--border-primary, #404040);
+  color: var(--text-primary, #e5e5e5);
+}
+
+[data-theme="dark"] .datamodel-export-dialog-button,
+[data-theme="crystal-dark"] .datamodel-export-dialog-button {
+  background-color: var(--surface-secondary, #2d2d2d);
+  border-color: var(--border-primary, #404040);
+  color: var(--text-primary, #e5e5e5);
+}
+
+[data-theme="dark"] .datamodel-export-dialog-button:hover,
+[data-theme="crystal-dark"] .datamodel-export-dialog-button:hover {
+  background-color: var(--surface-hover, #3d3d3d);
+}
