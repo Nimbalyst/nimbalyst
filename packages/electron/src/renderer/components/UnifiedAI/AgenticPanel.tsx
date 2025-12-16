@@ -1364,17 +1364,21 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       if (data.isComplete) {
         const holdForAutoContext = data.autoContextPending === true;
 
+        // Always clear sending state immediately so UI shows agent is ready
+        // This allows the user to start typing/submitting the next message right away
+        sendingSessionsRef.current.delete(data.sessionId);
+        globalSendingSessions.delete(data.sessionId);
+        setSendingSessions(prev => {
+          const next = new Set(prev);
+          next.delete(data.sessionId);
+          return next;
+        });
+
         if (holdForAutoContext) {
+          // Track that auto-context is running so we can defer queued prompt processing
+          // (but NOT the UI state - user can still interact immediately)
           autoContextSessionsRef.current.add(data.sessionId);
         } else {
-          sendingSessionsRef.current.delete(data.sessionId);
-          globalSendingSessions.delete(data.sessionId);
-          setSendingSessions(prev => {
-            const next = new Set(prev);
-            next.delete(data.sessionId);
-            return next;
-          });
-
           // Process any queued prompts after stream completion
           // This handles prompts queued while the AI was processing (from local or mobile)
           console.log('[AgenticPanel] Stream complete, checking for queued prompts:', data.sessionId);
@@ -1514,24 +1518,14 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         return;
       }
 
-      // console.log('[AgenticPanel] Auto-context ended, clearing state and checking queue:', data.sessionId);
+      // Auto-context finished - clear tracking ref and process any queued prompts
+      // Note: sendingSessions was already cleared in handleStreamResponse when isComplete was received
+      // so the UI was ready for input immediately. We just deferred queued prompt processing.
       autoContextSessionsRef.current.delete(data.sessionId);
-      sendingSessionsRef.current.delete(data.sessionId);
-      globalSendingSessions.delete(data.sessionId);
-      setSendingSessions(prev => {
-        const next = new Set(prev);
-        next.delete(data.sessionId);
-        return next;
-      });
 
       // Process any queued prompts after auto-context completes
       setTimeout(() => {
         const tab = sessionTabsRef.current.find(t => t.id === data.sessionId);
-        // console.log('[AgenticPanel] Auto-context end queue check:', {
-        //   sessionId: data.sessionId,
-        //   tabFound: !!tab,
-        //   processQueuedPromptsRefSet: !!processQueuedPromptsRef.current
-        // });
         if (tab && processQueuedPromptsRef.current) {
           processQueuedPromptsRef.current(data.sessionId, tab);
         }

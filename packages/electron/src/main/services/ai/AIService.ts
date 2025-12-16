@@ -1859,6 +1859,10 @@ export class AIService {
               });
               // console.log('[AIService] COMPLETION SIGNAL SENT TO UI!');
 
+              // Mark session as complete immediately so UI shows agent is ready
+              // This must happen before auto-context so the UI updates right away
+              await stateManager.endSession(session.id);
+
               // Play completion sound if enabled
               const soundService = SoundNotificationService.getInstance();
               soundService.playCompletionSound(workspacePath);
@@ -1896,8 +1900,6 @@ export class AIService {
             logger.main.error('Auto /context fetch promise rejected', contextError);
           }
         }
-
-        await stateManager.endSession(session.id);
 
         // Clear executing flag for mobile sync
         if (syncProvider) {
