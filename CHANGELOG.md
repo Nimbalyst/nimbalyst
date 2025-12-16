@@ -19,6 +19,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.48.11] - 2025-12-16
+
+
+### Added
+- DataModelLM can export schemas to SQL, JSON, DBML formats
+- Support for model and field descriptions from comments in Prisma parser
+- "Learn more" button for slash commands with explanation modal
+- Info about nimbalyst-local directory shown before creating
+
+### Changed
+- Downgraded @anthropic-ai/claude-agent-sdk to version 0.1.62
+
+### Fixed
+- List of edited files in sidebar no longer takes over the screen
+
 ## [0.48.10] - 2025-12-16
 
 
