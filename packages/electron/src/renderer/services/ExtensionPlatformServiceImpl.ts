@@ -11,6 +11,7 @@ import type { ExtensionPlatformService, ExtensionModule } from '@nimbalyst/runti
 // Import host dependencies that will be shared with extensions
 import * as React from 'react';
 import * as ReactDOM from 'react-dom';
+import * as ReactDOMClient from 'react-dom/client';
 import * as jsxRuntime from 'react/jsx-runtime';
 import * as jsxDevRuntime from 'react/jsx-dev-runtime';
 import * as zustand from 'zustand';
@@ -28,6 +29,9 @@ import * as lexicalMarkdown from '@lexical/markdown';
 
 // Import runtime UI components that extensions can use
 import { MaterialSymbol } from '@nimbalyst/runtime/ui/icons/MaterialSymbol';
+
+// Import screenshot service for extensions to register capabilities
+import { screenshotService } from '@nimbalyst/runtime';
 
 // Import DataModel platform service for datamodellm extension
 import { DataModelPlatformServiceImpl } from './DataModelPlatformServiceImpl';
@@ -194,6 +198,7 @@ export class ExtensionPlatformServiceImpl implements ExtensionPlatformService {
     w.__nimbalyst_extensions = {
       react: React,
       'react-dom': ReactDOM,
+      'react-dom/client': ReactDOMClient,
       'react/jsx-runtime': jsxRuntime,
       'react/jsx-dev-runtime': jsxDevRuntime,
       zustand: zustand,
@@ -209,6 +214,10 @@ export class ExtensionPlatformServiceImpl implements ExtensionPlatformService {
       '@lexical/markdown': lexicalMarkdown,
       // Runtime UI components
       '@nimbalyst/runtime/ui/icons/MaterialSymbol': { MaterialSymbol },
+      // Core services for extensions
+      '@nimbalyst/screenshot-service': {
+        screenshotService,
+      },
       // Extension-specific services
       '@nimbalyst/datamodel-platform-service': {
         DataModelPlatformServiceImpl,

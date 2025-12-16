@@ -52,6 +52,10 @@ export function syncExtensionPlugins(): void {
     console.log('[ExtensionPluginBridge] Slash commands:', slashCommands.map(c => c.contribution.title));
   }
 
+  if (nodes.length > 0) {
+    console.log('[ExtensionPluginBridge] Nodes:', nodes.map(n => n.nodeName));
+  }
+
   logger.ui.info(
     `[ExtensionPluginBridge] Syncing ${slashCommands.length} slash command(s), ` +
     `${nodes.length} node(s), ${transformers.length} transformer(s)`

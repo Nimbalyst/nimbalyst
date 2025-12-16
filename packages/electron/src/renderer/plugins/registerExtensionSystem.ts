@@ -14,6 +14,7 @@ import {
   executeExtensionTool,
   setEnabledStateProvider,
   setConfigurationServiceProvider,
+  screenshotService,
 } from '@nimbalyst/runtime';
 import { ExtensionPlatformServiceImpl } from '../services/ExtensionPlatformServiceImpl';
 import { initializeExtensionEditorBridge } from '../extensions/ExtensionEditorBridge';
@@ -21,6 +22,50 @@ import { initializeExtensionPluginBridge } from '../extensions/ExtensionPluginBr
 
 // Track workspace path for MCP tool registration
 let currentWorkspacePath: string | null = null;
+
+// Track if screenshot IPC listener is set up
+let screenshotListenerSetup = false;
+
+/**
+ * Set up IPC listener for screenshot capture requests from main process.
+ * Uses the generic screenshotService to route requests to the appropriate capability.
+ */
+function setupScreenshotIPCListener(): void {
+  if (screenshotListenerSetup) return;
+  screenshotListenerSetup = true;
+
+  const electronAPI = (window as any).electronAPI;
+  if (!electronAPI?.on) {
+    console.warn('[ExtensionSystem] electronAPI.on not available for screenshot listener');
+    return;
+  }
+
+  electronAPI.on('screenshot:capture', async (data: { requestId: string; filePath: string }) => {
+    console.log(`[ExtensionSystem] Screenshot capture request for: ${data.filePath}`);
+
+    try {
+      const base64Data = await screenshotService.capture(data.filePath);
+
+      // Send result back to main process
+      await electronAPI.invoke('screenshot:result-' + data.requestId, {
+        requestId: data.requestId,
+        success: true,
+        imageBase64: base64Data,
+      });
+    } catch (error) {
+      console.error('[ExtensionSystem] Screenshot capture failed:', error);
+
+      // Send error result back to main process
+      await electronAPI.invoke('screenshot:result-' + data.requestId, {
+        requestId: data.requestId,
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  });
+
+  console.log('[ExtensionSystem] Screenshot IPC listener set up');
+}
 
 /**
  * Set the workspace path for extension tool registration.
@@ -77,6 +122,9 @@ export async function registerExtensionSystem(): Promise<void> {
     console.log('[ExtensionSystem] Initializing plugin bridge...');
     initializeExtensionPluginBridge();
     console.log('[ExtensionSystem] Plugin bridge initialized');
+
+    // Set up IPC listener for screenshot capture requests
+    setupScreenshotIPCListener();
 
     // Initialize the AI tools bridge to register extension tools with the tool registry
     initializeExtensionAIToolsBridge();

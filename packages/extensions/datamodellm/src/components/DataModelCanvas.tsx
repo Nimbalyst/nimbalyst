@@ -31,6 +31,8 @@ import type { DataModelStoreApi } from '../store';
 interface DataModelCanvasProps {
   store: DataModelStoreApi;
   theme: 'light' | 'dark' | 'crystal-dark';
+  /** When true, hides interactive controls (minimap, zoom, background) for cleaner screenshots */
+  screenshotMode?: boolean;
 }
 
 export interface DataModelCanvasRef {
@@ -38,7 +40,7 @@ export interface DataModelCanvasRef {
 }
 
 export const DataModelCanvas = forwardRef<DataModelCanvasRef, DataModelCanvasProps>(
-  function DataModelCanvas({ store, theme }, ref) {
+  function DataModelCanvas({ store, theme, screenshotMode = false }, ref) {
   // Use refs to ensure stable references
   const nodeTypesRef = useRef<NodeTypes>({ entity: EntityNode as any });
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -224,34 +226,45 @@ export const DataModelCanvas = forwardRef<DataModelCanvasRef, DataModelCanvasPro
       <ReactFlow
         nodes={localNodes}
         edges={localEdges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onNodeDragStop={onNodeDragStop}
-        onNodeClick={onNodeClick}
-        onEdgeClick={onEdgeClick}
-        onPaneClick={onPaneClick}
-        onMoveEnd={onMoveEnd}
+        onNodesChange={screenshotMode ? undefined : onNodesChange}
+        onEdgesChange={screenshotMode ? undefined : onEdgesChange}
+        onNodeDragStop={screenshotMode ? undefined : onNodeDragStop}
+        onNodeClick={screenshotMode ? undefined : onNodeClick}
+        onEdgeClick={screenshotMode ? undefined : onEdgeClick}
+        onPaneClick={screenshotMode ? undefined : onPaneClick}
+        onMoveEnd={screenshotMode ? undefined : onMoveEnd}
         nodeTypes={nodeTypesRef.current}
         edgeTypes={edgeTypesRef.current}
         defaultViewport={state.viewport}
-        fitView={entities.length > 0 && state.viewport.x === 0 && state.viewport.y === 0}
+        fitView={entities.length > 0 && (screenshotMode || (state.viewport.x === 0 && state.viewport.y === 0))}
         minZoom={0.1}
         maxZoom={2}
-        snapToGrid
+        snapToGrid={!screenshotMode}
         snapGrid={[20, 20]}
+        nodesDraggable={!screenshotMode}
+        nodesConnectable={!screenshotMode}
+        elementsSelectable={!screenshotMode}
+        panOnDrag={!screenshotMode}
+        zoomOnScroll={!screenshotMode}
+        zoomOnPinch={!screenshotMode}
+        zoomOnDoubleClick={!screenshotMode}
       >
-        <Controls className="datamodel-controls" />
-        <Background
-          variant={BackgroundVariant.Dots}
-          gap={20}
-          size={1}
-          color={isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}
-        />
-        <MiniMap
-          className="datamodel-minimap"
-          nodeColor={isDark ? '#4b5563' : '#e5e7eb'}
-          maskColor={isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.6)'}
-        />
+        {!screenshotMode && <Controls className="datamodel-controls" />}
+        {!screenshotMode && (
+          <Background
+            variant={BackgroundVariant.Dots}
+            gap={20}
+            size={1}
+            color={isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}
+          />
+        )}
+        {!screenshotMode && (
+          <MiniMap
+            className="datamodel-minimap"
+            nodeColor={isDark ? '#4b5563' : '#e5e7eb'}
+            maskColor={isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.6)'}
+          />
+        )}
       </ReactFlow>
     </div>
   );

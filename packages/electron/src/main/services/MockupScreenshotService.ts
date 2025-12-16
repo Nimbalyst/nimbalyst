@@ -46,14 +46,26 @@ export class MockupScreenshotService {
     // First, try to capture from an open window/tab (this includes user annotations)
     const openTabResult = await this.captureFromOpenTab(filePath, workspacePath);
 
-    // If we got a successful result or a definitive error (not just "file not open"), return it
-    if (openTabResult.success || !openTabResult.error?.includes('not open')) {
+    // If successful, return the result with annotations
+    if (openTabResult.success) {
       return openTabResult;
     }
 
-    // Fall back to headless capture (no annotations, but works for any file)
-    console.log('[MockupScreenshotService] File not open in tab, falling back to headless capture');
-    return this.captureHeadless(filePath);
+    // If the file isn't open or the capture failed for rendering reasons, fall back to headless
+    // Common failure reasons when file isn't open: "not open", "zero dimensions", "timeout"
+    const errorLower = (openTabResult.error || '').toLowerCase();
+    const shouldFallback = errorLower.includes('not open') ||
+                           errorLower.includes('zero dimensions') ||
+                           errorLower.includes('timeout') ||
+                           errorLower.includes('iframe');
+
+    if (shouldFallback) {
+      console.log('[MockupScreenshotService] File not open or capture failed, falling back to headless capture');
+      return this.captureHeadless(filePath);
+    }
+
+    // Some other error occurred - return it
+    return openTabResult;
   }
 
   /**

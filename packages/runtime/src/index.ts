@@ -99,3 +99,6 @@ export { default as MockupPlugin } from './plugins/MockupPlugin';
 export { STYTCH_CONFIG, getStytchConfig } from './config/stytch';
 // Extensions
 export * from './extensions';
+// Services
+export { screenshotService } from './services/ScreenshotService';
+export type { ScreenshotCapability } from './services/ScreenshotService';

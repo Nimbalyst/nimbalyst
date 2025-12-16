@@ -134,7 +134,7 @@ generator client {
   );
 
   // Capture data model screenshot and save to file
-  // This leverages the existing datamodellm_capture_screenshot MCP tool
+  // Uses the generic screenshot service via IPC
   ipcMain.handle(
     'datamodel:capture-and-save-screenshot',
     async (event, dataModelPath: string, outputPath: string) => {
@@ -151,17 +151,17 @@ generator client {
         }
 
         // Request screenshot capture from the renderer process
-        // The datamodellm extension provides the capture_screenshot AI tool
-        // We can use IPC to invoke it
+        // The generic screenshot service routes to the appropriate capability
         const result = await new Promise<{
           success: boolean;
           imageBase64?: string;
           error?: string;
         }>((resolve) => {
-          const requestId = `datamodel-screenshot-${Date.now()}`;
+          const requestId = `screenshot-${Date.now()}`;
           const timeout = setTimeout(() => {
+            ipcMain.removeHandler('screenshot:result-' + requestId);
             resolve({ success: false, error: 'Screenshot request timed out' });
-          }, 10000);
+          }, 15000); // 15 second timeout for headless render
 
           // Set up one-time handler for result
           const handler = (_event: Electron.IpcMainInvokeEvent, payload: {
@@ -172,17 +172,17 @@ generator client {
           }) => {
             if (payload.requestId === requestId) {
               clearTimeout(timeout);
-              ipcMain.removeHandler('datamodel:screenshot-result-' + requestId);
+              ipcMain.removeHandler('screenshot:result-' + requestId);
               resolve(payload);
             }
           };
 
-          ipcMain.handle('datamodel:screenshot-result-' + requestId, handler);
+          ipcMain.handle('screenshot:result-' + requestId, handler);
 
-          // Request screenshot from renderer
-          senderWindow.webContents.send('datamodel:capture-screenshot', {
+          // Request screenshot from renderer using generic channel
+          senderWindow.webContents.send('screenshot:capture', {
             requestId,
-            dataModelPath,
+            filePath: dataModelPath,
           });
         });
 

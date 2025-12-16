@@ -102,6 +102,8 @@ export default function App() {
     const registerCustomEditors = async () => {
       try {
         // Initialize the extension system (discovers and loads extensions)
+        // This MUST complete before any editors are mounted so that extension nodes
+        // (like DataModelNode) are registered with the pluginRegistry
         await registerExtensionSystem();
         logger.ui.info('[Extensions] Extension system initialized');
 
@@ -120,6 +122,9 @@ export default function App() {
         logger.ui.info('[CustomEditors] Custom editors registration complete');
       } catch (error) {
         logger.ui.error('[CustomEditors] Failed to register custom editors:', error);
+      } finally {
+        // Mark extensions as ready even on error - we don't want to block the app
+        setExtensionsReady(true);
       }
     };
 
@@ -180,6 +185,7 @@ export default function App() {
   const tabStatesRef = useRef<Map<string, { isDirty: boolean }>>(new Map());  // Track tab dirty states without re-renders
   const tabsRef = useRef<any>(null);  // Reference to current tabs object for use in intervals only
   const [isInitializing, setIsInitializing] = useState(true);
+  const [extensionsReady, setExtensionsReady] = useState(false);
   const [workspaceMode, setWorkspaceMode] = useState(false);
   const [workspacePath, setWorkspacePath] = useState<string | null>(null);
   const [workspaceName, setWorkspaceName] = useState<string | null>(null);
@@ -1414,7 +1420,9 @@ export default function App() {
   }, []);
 
   // Show nothing while initializing - let HTML/CSS background show through
-  if (isInitializing) {
+  // Wait for both initial state and extensions to be ready before rendering editors
+  // This ensures extension nodes (like DataModelNode) are registered with the pluginRegistry
+  if (isInitializing || !extensionsReady) {
     return <div style={{ height: '100vh' }} />;
   }
 
