@@ -2,6 +2,8 @@
   display: flex;
   flex-direction: column;
   background-color: var(--surface-secondary);
+  max-height: 50%;
+  flex-shrink: 0;
 }
 
 .file-gutter--referenced {
@@ -66,6 +68,9 @@
 .file-gutter__files {
   margin-top: 0.25rem;
   padding: 0 0.25rem 0.25rem 0.5rem;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
 }
 
 /* File Item */
