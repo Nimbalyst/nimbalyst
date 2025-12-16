@@ -19,6 +19,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.48.8] - 2025-12-16
+
+
+### Added
+- Extension system: extensions can now provide Claude Code slash commands
+- Extension system: extensions can open binary files with custom editors
+- Extension settings UI with enable/disable and configuration support
+- File context menu now opens files in system default app
+- Archive button shows undo toast, archived sessions show unarchive option
+
+### Changed
+- Updated to latest version of Anthropic Agent SDK
+- Removed 'New Window' option from application menu
+- Updated welcome message to recommend opening project root folder
+
+### Fixed
+- Tab state corruption preventing files from opening
+- Toast notification now appears below tabs
+- Slash command suggestions now match transcript content width
+- Archive button updates immediately after unarchiving
+- Datamodel and mockup screenshots work without files being open
+- Bundle built-in extensions in packaged app
+- Clarify file type error message
+- Search files button tooltip shows correct shortcut (Cmd+O)
+- QR pairing button now enabled when using default sync server URL
+- Stytch auth handlers now use production sync in production builds
+- Production builds no longer use dev sync server from persisted config
+- Ensure serverUrl is set before allowing login actions
+- Sync server now correctly uses production when selected in dev builds
+- Capacitor app icon
+- Mockup annotations now sent to AI when using "+ mockup annotations"
+- Skip button restored to data collection form, all fields optional
+
 ## [0.48.7] - 2025-12-14
 
 
