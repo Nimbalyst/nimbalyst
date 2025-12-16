@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { usePostHog } from 'posthog-js/react';
 import PackageService from '../../../services/PackageService';
 import { ToolPackage } from '../../../../shared/toolPackages';
+import { ClaudeCommandsLearnMoreDialog } from '../../ClaudeCommandsLearnMoreDialog';
 
 interface VersionStatus {
   isInstalled: boolean;
@@ -34,6 +35,7 @@ export const ToolPackagesPanel: React.FC<ToolPackagesPanelProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [expandedPackageId, setExpandedPackageId] = useState<string | null>(null);
+  const [showLearnMore, setShowLearnMore] = useState(false);
 
   // Load packages on mount
   useEffect(() => {
@@ -166,7 +168,13 @@ export const ToolPackagesPanel: React.FC<ToolPackagesPanelProps> = ({
         <h2>Tool Packages for {workspaceName}</h2>
         <p>
           Tool packages bundle custom commands and tracker schemas into curated sets for different
-          workflows. Each package includes everything you need to get started quickly.
+          workflows. Each package includes everything you need to get started quickly.{' '}
+          <button
+            className="settings-learn-more-link"
+            onClick={() => setShowLearnMore(true)}
+          >
+            Learn more
+          </button>
         </p>
       </div>
 
@@ -304,6 +312,15 @@ export const ToolPackagesPanel: React.FC<ToolPackagesPanelProps> = ({
           </div>
         ))}
       </div>
+
+      <ClaudeCommandsLearnMoreDialog
+        isOpen={showLearnMore}
+        onClose={() => setShowLearnMore(false)}
+        onOpenSettings={() => {
+          // Already on settings screen, just close the dialog
+          setShowLearnMore(false);
+        }}
+      />
     </div>
   );
 };

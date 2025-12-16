@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import './ClaudeCommandsToast.css';
+import { ClaudeCommandsLearnMoreDialog } from './ClaudeCommandsLearnMoreDialog';
 
 interface ClaudeCommandsToastProps {
   onInstallAll: () => void;
@@ -12,6 +13,7 @@ export function ClaudeCommandsToast({
   onOpenSettings,
   onSkip,
 }: ClaudeCommandsToastProps): React.ReactElement {
+  const [showLearnMore, setShowLearnMore] = useState(false);
   return (
     <div className="claude-commands-toast-container">
       <div className="claude-commands-toast">
@@ -42,7 +44,13 @@ export function ClaudeCommandsToast({
               Install custom commands to help Claude work better with Nimbalyst features.
               <br />
               <br />
-              This will also create a git-ignored nimbalyst-local folder to hold plans and mockups.
+              This will also create a git-ignored nimbalyst-local folder to hold plans and mockups.{' '}
+              <button
+                className="claude-commands-toast-learn-more"
+                onClick={() => setShowLearnMore(true)}
+              >
+                Learn more
+              </button>
             </div>
           </div>
         </div>
@@ -91,6 +99,12 @@ export function ClaudeCommandsToast({
           </button>
         </div>
       </div>
+
+      <ClaudeCommandsLearnMoreDialog
+        isOpen={showLearnMore}
+        onClose={() => setShowLearnMore(false)}
+        onOpenSettings={onOpenSettings}
+      />
     </div>
   );
 }
