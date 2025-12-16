@@ -107,6 +107,8 @@ export interface WorkspaceAIPanelState {
   draftInput?: string;
   // Planning mode toggle for AI sidebar (Claude Code safety)
   planningModeEnabled?: boolean;
+  // User-set prompt box height (null = auto-size)
+  promptBoxHeight?: number | null;
 }
 
 export interface NavigationHistoryState {
@@ -345,6 +347,7 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
       draftInput: aiPanelRaw.draftInput ?? undefined,
       // Default planning mode ON if missing
       planningModeEnabled: aiPanelRaw.planningModeEnabled ?? true,
+      promptBoxHeight: aiPanelRaw.promptBoxHeight ?? undefined,
     },
     navigationHistory,
     trackerBottomPanel: raw.trackerBottomPanel ?? raw.bottomPanel ?? null,
@@ -398,7 +401,10 @@ function cloneWorkspaceState(state: WorkspaceState): WorkspaceState {
       tabOrder: [...state.agenticTabs.tabOrder],
       closedTabs: state.agenticTabs.closedTabs?.map(tab => ({ ...tab })) ?? [],
     } : undefined,
-    aiPanel: { ...state.aiPanel },
+    aiPanel: {
+      ...state.aiPanel,
+      promptBoxHeight: state.aiPanel.promptBoxHeight,
+    },
     navigationHistory: state.navigationHistory ? {
       history: [...state.navigationHistory.history],
       currentIndex: state.navigationHistory.currentIndex

@@ -84,6 +84,11 @@ interface AIInputProps {
  * - Auto-resize
  * - Send/Cancel buttons
  */
+// Constants for prompt box resize
+const MIN_PROMPT_HEIGHT = 36;
+const MAX_PROMPT_HEIGHT = 600;
+const DEFAULT_MAX_PROMPT_HEIGHT = 200;
+
 export const AIInput = forwardRef<AIInputRef, AIInputProps>(
   ({
     value,
@@ -122,6 +127,15 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
     const [allSlashCommands, setAllSlashCommands] = useState<any[]>([]);
     const [dragActive, setDragActive] = useState(false);
 
+    // Prompt box resize state
+    // userSetHeight: null means auto-size to content, number means user manually resized
+    const [userSetHeight, setUserSetHeight] = useState<number | null>(null);
+    const [isLoadingHeight, setIsLoadingHeight] = useState(true);
+    const [isResizing, setIsResizing] = useState(false);
+    const isResizingRef = useRef(false);
+    const resizeStartY = useRef<number>(0);
+    const resizeStartHeight = useRef<number>(DEFAULT_MAX_PROMPT_HEIGHT);
+
     // Memory mode hook
     const {
       isMemoryMode,
@@ -134,6 +148,97 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
       saveToMemory,
     } = useMemoryMode(workspacePath);
 
+    // Load prompt box height from workspace state on mount
+    useEffect(() => {
+      if (!workspacePath) {
+        setIsLoadingHeight(false);
+        return;
+      }
+
+      const loadHeight = async () => {
+        try {
+          const workspaceState = await window.electronAPI.invoke('workspace:get-state', workspacePath);
+          const savedHeight = workspaceState?.aiPanel?.promptBoxHeight;
+          if (savedHeight !== undefined) {
+            setUserSetHeight(savedHeight);
+          }
+        } catch (err) {
+          console.error('[AIInput] Failed to load prompt box height:', err);
+        } finally {
+          setIsLoadingHeight(false);
+        }
+      };
+      loadHeight();
+    }, [workspacePath]);
+
+    // Save prompt box height to workspace state when it changes
+    useEffect(() => {
+      if (!workspacePath || isLoadingHeight) return;
+
+      const saveHeight = async () => {
+        try {
+          await window.electronAPI.invoke('workspace:update-state', workspacePath, {
+            aiPanel: {
+              promptBoxHeight: userSetHeight,
+            }
+          });
+        } catch (err) {
+          console.error('[AIInput] Failed to save prompt box height:', err);
+        }
+      };
+      saveHeight();
+    }, [userSetHeight, workspacePath, isLoadingHeight]);
+
+    // Prompt box resize handlers
+    const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      isResizingRef.current = true;
+      setIsResizing(true);
+      resizeStartY.current = e.clientY;
+      // Start from current textarea height or default
+      const currentHeight = textareaRef.current?.offsetHeight || DEFAULT_MAX_PROMPT_HEIGHT;
+      resizeStartHeight.current = currentHeight;
+      document.body.style.cursor = 'row-resize';
+      document.body.style.userSelect = 'none';
+    }, []);
+
+    useEffect(() => {
+      const handleMouseMove = (e: MouseEvent) => {
+        if (!isResizingRef.current) return;
+
+        // Dragging up increases height (negative deltaY = larger height)
+        const deltaY = resizeStartY.current - e.clientY;
+        const newHeight = Math.max(
+          MIN_PROMPT_HEIGHT,
+          Math.min(MAX_PROMPT_HEIGHT, resizeStartHeight.current + deltaY)
+        );
+        setUserSetHeight(newHeight);
+      };
+
+      const handleMouseUp = () => {
+        if (!isResizingRef.current) return;
+
+        isResizingRef.current = false;
+        setIsResizing(false);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      };
+
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        // Cleanup: reset cursor and user-select if component unmounts during drag
+        if (isResizingRef.current) {
+          document.body.style.cursor = '';
+          document.body.style.userSelect = '';
+        }
+      };
+    }, []);
+
     // Expose focus method and textarea element through the ref
     useImperativeHandle(ref, () => ({
       focus: () => {
@@ -145,17 +250,25 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
     }));
 
     // Auto-resize textarea (use RAF to batch DOM operations)
+    // If user has manually resized (userSetHeight is set), use that height
+    // Otherwise, auto-size based on content up to DEFAULT_MAX_PROMPT_HEIGHT
     useEffect(() => {
       if (!textareaRef.current) return;
 
       const textarea = textareaRef.current;
       const rafId = requestAnimationFrame(() => {
-        textarea.style.height = 'auto';
-        textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+        if (userSetHeight !== null) {
+          // User has manually set the height - use it directly
+          textarea.style.height = `${userSetHeight}px`;
+        } else {
+          // Auto-size based on content
+          textarea.style.height = 'auto';
+          textarea.style.height = `${Math.min(textarea.scrollHeight, DEFAULT_MAX_PROMPT_HEIGHT)}px`;
+        }
       });
 
       return () => cancelAnimationFrame(rafId);
-    }, [value]);
+    }, [value, userSetHeight]);
 
     // Fetch slash commands on mount and when workspace changes (if enabled)
     useEffect(() => {
@@ -666,6 +779,13 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
 
     return (
       <div className={`ai-chat-input ${isMemoryMode ? 'memory-mode' : ''}`} style={{ position: 'relative' }}>
+        {/* Vertical resize handle at top of input area */}
+        <div
+          className={`ai-chat-input-resize-handle ${isResizing ? 'resizing' : ''}`}
+          onMouseDown={handleResizeMouseDown}
+          title="Drag to resize prompt box"
+        />
+
         {/* Memory mode indicator */}
         {isMemoryMode && (
           <MemoryPromptIndicator
@@ -742,8 +862,8 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
             rows={1}
             style={{
               flex: 1,
-              minHeight: '36px',
-              maxHeight: '200px',
+              minHeight: `${MIN_PROMPT_HEIGHT}px`,
+              maxHeight: `${userSetHeight ?? DEFAULT_MAX_PROMPT_HEIGHT}px`,
               resize: 'none'
             }}
           />

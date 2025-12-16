@@ -431,6 +431,34 @@
   border-top: 1px solid var(--border-primary);
   background: var(--surface-secondary);
   flex-shrink: 0;
+  position: relative;
+}
+
+/* Vertical Resize Handle for Prompt Box */
+.ai-chat-input-resize-handle {
+  position: absolute;
+  top: -3px;
+  left: 0;
+  right: 0;
+  height: 6px;
+  cursor: row-resize;
+  z-index: 10;
+}
+
+.ai-chat-input-resize-handle::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+
+.ai-chat-input-resize-handle:hover::before,
+.ai-chat-input-resize-handle.resizing::before {
+  background: var(--accent-primary);
 }
 
 .ai-chat-input-row {
@@ -442,7 +470,7 @@
 .ai-chat-input-field {
   flex: 1;
   min-height: 36px;
-  max-height: 200px;
+  /* max-height is controlled via inline style for resizable prompt box */
   padding: 8px 12px;
   background: var(--surface-primary);
   border: 1px solid var(--border-primary);
