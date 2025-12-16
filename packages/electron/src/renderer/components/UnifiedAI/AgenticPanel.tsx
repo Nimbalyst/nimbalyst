@@ -72,6 +72,10 @@ const globalProcessingSessionQueues = new Set<string>();
 // Track which sessions are currently sending messages (module-level for cross-panel coordination)
 const globalSendingSessions = new Set<string>();
 
+// Track which sessions are waiting for auto-context to complete (module-level for cross-panel coordination)
+// This ensures that when ai:auto-context-end fires, any panel can process the queued prompts
+const globalAutoContextSessions = new Set<string>();
+
 interface SessionHistoryRefreshDetail {
   workspacePath?: string;
   sourceId: string;
@@ -147,7 +151,6 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   const sessionTabsRef = useRef<SessionTab[]>(sessionTabs);
   const workspacePathRef = useRef(workspacePath);
   const panelInstanceIdRef = useRef<string>(`agentic-panel-${Math.random().toString(36).slice(2)}`);
-  const autoContextSessionsRef = useRef<Set<string>>(new Set());
 
   // Ref to hold processQueuedPrompts function (defined later, used in openSessionInTab)
   const processQueuedPromptsRef = useRef<((sessionId: string, tab: SessionTab) => Promise<void>) | null>(null);
@@ -1307,25 +1310,37 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       }
 
       // Check if this session tab is already open in THIS panel
-      const existingTab = sessionTabsRef.current.find(t => t?.id === data.sessionId);
+      let existingTab = sessionTabsRef.current.find(t => t?.id === data.sessionId);
 
-      // CRITICAL: Only process if this panel actually has the session open
-      // This prevents a second AgenticPanel instance (e.g., chat sidebar) from
-      // processing prompts for a session it doesn't own
+      console.log('[AgenticPanel] Received queue notification for session:', data.sessionId, 'promptCount:', data.promptCount, 'workspace:', workspacePathRef.current, 'tabExists:', !!existingTab);
+
+      // If session isn't open, try to open it first
+      // Note: openSessionInTab already calls processQueuedPrompts, so we return after opening
+      if (!existingTab && openSessionInTabRef.current) {
+        console.log('[AgenticPanel] Session not open, opening it to process queued prompts:', data.sessionId);
+        try {
+          // openSessionInTab will call processQueuedPrompts after loading the session
+          await openSessionInTabRef.current(data.sessionId);
+          // Don't process queue again here - openSessionInTab already did it
+          return;
+        } catch (err) {
+          console.error('[AgenticPanel] Error opening session for queued prompts:', err);
+          return;
+        }
+      }
+
       if (!existingTab) {
-        console.log('[AgenticPanel] Session not in this panel, ignoring:', data.sessionId, 'panelId:', panelInstanceIdRef.current);
+        console.log('[AgenticPanel] Session tab not found and could not open, ignoring:', data.sessionId);
         return;
       }
 
-      console.log('[AgenticPanel] Received queue notification for session:', data.sessionId, 'promptCount:', data.promptCount, 'workspace:', workspacePathRef.current);
-
-      // Tab exists - process the queue
+      // Tab already exists - process the queue
       // The processQueuedPrompts function fetches pending prompts from the database
-      console.log('[AgenticPanel] Session tab exists, processing queue:', data.sessionId);
+      console.log('[AgenticPanel] Processing queue for existing session tab:', data.sessionId);
 
       setTimeout(() => {
         if (processQueuedPromptsRef.current) {
-          processQueuedPromptsRef.current(data.sessionId, existingTab);
+          processQueuedPromptsRef.current(data.sessionId, existingTab!);
         }
       }, 100);
     };
@@ -1377,7 +1392,12 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         if (holdForAutoContext) {
           // Track that auto-context is running so we can defer queued prompt processing
           // (but NOT the UI state - user can still interact immediately)
-          autoContextSessionsRef.current.add(data.sessionId);
+          // Using global set so any panel instance can process the queue when auto-context ends
+          globalAutoContextSessions.add(data.sessionId);
+          console.log('[AgenticPanel] Added session to globalAutoContextSessions:', {
+            sessionId: data.sessionId,
+            trackedSessions: Array.from(globalAutoContextSessions)
+          });
         } else {
           // Process any queued prompts after stream completion
           // This handles prompts queued while the AI was processing (from local or mobile)
@@ -1459,7 +1479,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
         // Also clear autoContext state if session was waiting for it
         // This ensures the UI is fully cleaned up even if completion signal is missing
-        autoContextSessionsRef.current.delete(sessionId);
+        globalAutoContextSessions.delete(sessionId);
 
         // The error is logged to database by ClaudeCodeProvider.logError()
         // The message-logged event will fire when the write completes
@@ -1514,18 +1534,31 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   useEffect(() => {
     const handleAutoContextEnd = (data: { sessionId: string }) => {
       if (!data || !data.sessionId) return;
-      if (!autoContextSessionsRef.current.has(data.sessionId)) {
+
+      console.log('[AgenticPanel] handleAutoContextEnd received:', {
+        sessionId: data.sessionId,
+        isTracked: globalAutoContextSessions.has(data.sessionId),
+        trackedSessions: Array.from(globalAutoContextSessions)
+      });
+
+      if (!globalAutoContextSessions.has(data.sessionId)) {
+        console.log('[AgenticPanel] Session not in globalAutoContextSessions, skipping queue processing');
         return;
       }
 
-      // Auto-context finished - clear tracking ref and process any queued prompts
+      // Auto-context finished - clear tracking and process any queued prompts
       // Note: sendingSessions was already cleared in handleStreamResponse when isComplete was received
       // so the UI was ready for input immediately. We just deferred queued prompt processing.
-      autoContextSessionsRef.current.delete(data.sessionId);
+      globalAutoContextSessions.delete(data.sessionId);
 
       // Process any queued prompts after auto-context completes
       setTimeout(() => {
         const tab = sessionTabsRef.current.find(t => t.id === data.sessionId);
+        console.log('[AgenticPanel] Auto-context end - processing queue:', {
+          sessionId: data.sessionId,
+          tabFound: !!tab,
+          processQueuedPromptsRefSet: !!processQueuedPromptsRef.current
+        });
         if (tab && processQueuedPromptsRef.current) {
           processQueuedPromptsRef.current(data.sessionId, tab);
         }

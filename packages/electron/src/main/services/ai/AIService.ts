@@ -527,34 +527,55 @@ export class AIService {
     return globalEnabled;
   }
 
+  private mobileSyncHandlerInitialized = false;
+  private syncStatusUnsubscribe: (() => void) | null = null;
+
   private async initializeMobileSyncHandler() {
     // Listen for index changes from mobile sync and insert queuedPrompts into the database.
     // The renderer's processQueuedPrompts function handles execution from the database queue.
     // Both local queuing (via ai:createQueuedPrompt) and mobile sync use the same database queue.
 
-    const maxRetries = 5;
-    const retryDelayMs = 1000;
+    // If already initialized, don't do it again
+    if (this.mobileSyncHandlerInitialized) {
+      logger.main.info('[AIService] Mobile sync handler already initialized, skipping');
+      return;
+    }
 
     logger.main.info('[AIService] Initializing mobile sync handler (metadata sync only)...');
 
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        const { getSyncProvider } = await import('../SyncManager');
-        const syncProvider = getSyncProvider();
-
-        if (!syncProvider) {
-          if (attempt < maxRetries) {
-            logger.main.info(`[AIService] Sync not ready yet, retrying in ${retryDelayMs}ms (attempt ${attempt}/${maxRetries})`);
-            await new Promise(resolve => setTimeout(resolve, retryDelayMs));
-            continue;
-          }
-          logger.main.info('[AIService] Sync not enabled after retries, mobile sync handler not initialized');
-          return;
+    // First, subscribe to sync status changes so we can initialize later if sync becomes available
+    if (!this.syncStatusUnsubscribe) {
+      const { onSyncStatusChange } = await import('../SyncManager');
+      this.syncStatusUnsubscribe = onSyncStatusChange((status) => {
+        if (status.connected && !this.mobileSyncHandlerInitialized) {
+          logger.main.info('[AIService] Sync connected, attempting to initialize mobile sync handler...');
+          this.tryInitializeMobileSyncHandler();
         }
+      });
+    }
 
-        // Listen for index changes and insert queued prompts into the queued_prompts table
-        if (syncProvider.onIndexChange) {
-          syncProvider.onIndexChange(async (sessionId, entry) => {
+    // Try to initialize immediately
+    await this.tryInitializeMobileSyncHandler();
+  }
+
+  private async tryInitializeMobileSyncHandler() {
+    // If already initialized, don't do it again
+    if (this.mobileSyncHandlerInitialized) {
+      return;
+    }
+
+    try {
+      const { getSyncProvider } = await import('../SyncManager');
+      const syncProvider = getSyncProvider();
+
+      if (!syncProvider) {
+        logger.main.info('[AIService] Sync provider not available yet');
+        return;
+      }
+
+      // Listen for index changes and insert queued prompts into the queued_prompts table
+      if (syncProvider.onIndexChange) {
+        syncProvider.onIndexChange(async (sessionId, entry) => {
             // Only process if there are queuedPrompts in the broadcast
             if (entry.queuedPrompts && entry.queuedPrompts.length > 0) {
               logger.main.info('[AIService] Received queuedPrompts from mobile via onIndexChange:', {
@@ -640,16 +661,13 @@ export class AIService {
             }
           });
 
-          logger.main.info('[AIService] Mobile sync handler initialized (using queued_prompts table)');
-        } else {
-          logger.main.info('[AIService] onIndexChange not available, mobile sync handler not initialized');
-        }
-
-        return;
-      } catch (error) {
-        logger.main.error('[AIService] Failed to initialize mobile sync handler:', error);
-        return;
+        this.mobileSyncHandlerInitialized = true;
+        logger.main.info('[AIService] Mobile sync handler initialized (using queued_prompts table)');
+      } else {
+        logger.main.info('[AIService] onIndexChange not available on sync provider');
       }
+    } catch (error) {
+      logger.main.error('[AIService] Failed to initialize mobile sync handler:', error);
     }
   }
 
