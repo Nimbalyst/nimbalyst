@@ -19,6 +19,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.48.9] - 2025-12-16
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Lexical editor crashes in production builds
+- Mobile queued prompts now process correctly
+- Agent transcript updates immediately when turn completes
+- Only add markdown header when creating markdown files
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.48.8] - 2025-12-16
 
 
