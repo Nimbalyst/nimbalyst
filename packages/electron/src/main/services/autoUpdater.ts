@@ -9,6 +9,7 @@ const REMINDER_SUPPRESSION_DURATION_MS = 24 * 60 * 60 * 1000;
 export class AutoUpdaterService {
   private updateCheckInterval: NodeJS.Timeout | null = null;
   private isCheckingForUpdate = false;
+  private isManualCheck = false; // Track if this is a user-initiated check (for showing up-to-date toast)
   private static isUpdating = false;
   private pendingUpdateInfo: { version: string; releaseNotes?: string; releaseDate?: string } | null = null;
 
@@ -63,6 +64,7 @@ export class AutoUpdaterService {
     autoUpdater.on('update-available', async (info) => {
       log.info('Update available:', info);
       this.isCheckingForUpdate = false;
+      this.isManualCheck = false; // Reset manual check flag
 
       // Fetch release notes from R2 if using alpha channel
       let releaseNotes = info.releaseNotes as string | undefined;
@@ -113,12 +115,18 @@ export class AutoUpdaterService {
     autoUpdater.on('update-not-available', (info) => {
       log.info('Update not available:', info);
       this.isCheckingForUpdate = false;
+      // Only show up-to-date toast for manual (user-initiated) checks
+      if (this.isManualCheck) {
+        this.sendToFrontmostWindow('update-toast:up-to-date');
+        this.isManualCheck = false;
+      }
       this.sendToAllWindows('update-not-available', info);
     });
 
     autoUpdater.on('error', (err) => {
       log.error('Update error:', err);
       this.isCheckingForUpdate = false;
+      this.isManualCheck = false; // Reset manual check flag
 
       // Send error to frontmost window via toast system
       this.sendToFrontmostWindow('update-toast:error', {
@@ -376,19 +384,33 @@ export class AutoUpdaterService {
       return;
     }
 
+    // In dev mode (not packaged), electron-updater skips the check without firing events
+    // Show appropriate feedback to the user
+    if (!app.isPackaged) {
+      log.info('Skipping update check in dev mode (app not packaged)');
+      this.sendToFrontmostWindow('update-toast:checking');
+      // Brief delay so user sees the checking state, then show error
+      setTimeout(() => {
+        this.sendToFrontmostWindow('update-toast:error', {
+          message: 'Update checking is not available in development mode'
+        });
+      }, 500);
+      return;
+    }
+
+    // Mark this as a manual check so the event handlers know to show UI feedback
+    this.isManualCheck = true;
+
     // Show checking toast
     this.sendToFrontmostWindow('update-toast:checking');
 
     try {
-      const result = await autoUpdater.checkForUpdates();
-
-      if (!result || !result.updateInfo) {
-        // No update available - show up-to-date toast
-        this.sendToFrontmostWindow('update-toast:up-to-date');
-      }
-      // If an update IS available, the 'update-available' event handler will show the toast
+      // checkForUpdates() will fire either 'update-available' or 'update-not-available' events
+      // The event handlers will send the appropriate toast messages
+      await autoUpdater.checkForUpdates();
     } catch (error) {
       log.error('Failed to check for updates:', error);
+      this.isManualCheck = false;
       this.sendToFrontmostWindow('update-toast:error', {
         message: error instanceof Error ? error.message : 'Failed to check for updates'
       });
