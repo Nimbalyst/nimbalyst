@@ -34,6 +34,7 @@ interface ParsedPrismaModel {
   name: string;
   fields: ParsedPrismaField[];
   attributes: string[]; // @@index, @@unique, etc.
+  description?: string; // From /// comments before model
 }
 
 interface ParsedPrismaField {
@@ -42,6 +43,7 @@ interface ParsedPrismaField {
   isOptional: boolean;
   isArray: boolean;
   attributes: string[]; // @id, @unique, @default, @relation, etc.
+  description?: string; // From /// comments before field or inline // comment
 }
 
 interface ParsedPrismaType {
@@ -161,19 +163,50 @@ function parseModels(lines: string[]): ParsedPrismaModel[] {
   const models: ParsedPrismaModel[] = [];
   let currentModel: ParsedPrismaModel | null = null;
   let braceDepth = 0;
+  let pendingDescription: string[] = []; // Collect /// comments
 
   for (const line of lines) {
     const trimmed = line.trim();
 
-    // Skip comments and empty lines
-    if (trimmed.startsWith('//') || trimmed === '') continue;
+    // Skip empty lines (but reset pending description)
+    if (trimmed === '') {
+      // Don't reset pendingDescription here - allow multiple /// comments
+      continue;
+    }
+
+    // Collect /// documentation comments
+    if (trimmed.startsWith('///')) {
+      const docText = trimmed.slice(3).trim();
+      pendingDescription.push(docText);
+      continue;
+    }
+
+    // Skip other comments (but reset pending description)
+    if (trimmed.startsWith('//')) {
+      // Don't skip @nimbalyst comments, but don't reset description either
+      if (!trimmed.includes('@nimbalyst')) {
+        pendingDescription = [];
+      }
+      continue;
+    }
 
     // Start of model
     const modelMatch = trimmed.match(/^model\s+(\w+)\s*\{/);
     if (modelMatch) {
-      currentModel = { name: modelMatch[1], fields: [], attributes: [] };
+      currentModel = {
+        name: modelMatch[1],
+        fields: [],
+        attributes: [],
+        description: pendingDescription.length > 0 ? pendingDescription.join(' ') : undefined,
+      };
       braceDepth = 1;
+      pendingDescription = [];
       continue;
+    }
+
+    // Reset description if we're not at a model
+    if (!currentModel) {
+      pendingDescription = [];
     }
 
     if (currentModel) {
@@ -185,20 +218,23 @@ function parseModels(lines: string[]): ParsedPrismaModel[] {
       if (braceDepth === 0) {
         models.push(currentModel);
         currentModel = null;
+        pendingDescription = [];
         continue;
       }
 
       // Model-level attribute (@@)
       if (trimmed.startsWith('@@')) {
         currentModel.attributes.push(trimmed);
+        pendingDescription = [];
         continue;
       }
 
       // Field definition
-      const field = parseFieldLine(trimmed);
+      const field = parseFieldLine(trimmed, pendingDescription.length > 0 ? pendingDescription.join(' ') : undefined);
       if (field) {
         currentModel.fields.push(field);
       }
+      pendingDescription = [];
     }
   }
 
@@ -208,20 +244,28 @@ function parseModels(lines: string[]): ParsedPrismaModel[] {
 /**
  * Parse a single field line
  */
-function parseFieldLine(line: string): ParsedPrismaField | null {
-  // Field format: name Type? @attribute1 @attribute2
+function parseFieldLine(line: string, pendingDescription?: string): ParsedPrismaField | null {
+  // Field format: name Type? @attribute1 @attribute2 // inline comment
   // Examples:
   //   id        String   @id @default(cuid())
   //   email     String   @unique
   //   posts     Post[]
   //   author    User     @relation(fields: [authorId], references: [id])
+  //   name      String   // User's display name
 
-  // Remove inline comments
-  const withoutComment = line.split('//')[0].trim();
-  if (!withoutComment) return null;
+  // Extract inline comment as description if present
+  let inlineDescription: string | undefined;
+  const commentIndex = line.indexOf('//');
+  let fieldPart = line;
+  if (commentIndex !== -1) {
+    inlineDescription = line.slice(commentIndex + 2).trim();
+    fieldPart = line.slice(0, commentIndex).trim();
+  }
+
+  if (!fieldPart) return null;
 
   // Match field: name, type (with optional ? and []), and attributes
-  const match = withoutComment.match(/^(\w+)\s+(\w+)(\?)?(\[\])?\s*(.*)/);
+  const match = fieldPart.match(/^(\w+)\s+(\w+)(\?)?(\[\])?\s*(.*)/);
   if (!match) return null;
 
   const [, name, type, optional, array, attributesStr] = match;
@@ -234,12 +278,16 @@ function parseFieldLine(line: string): ParsedPrismaField | null {
     attributes.push(attrMatch[0]);
   }
 
+  // Use pending description (from ///) first, then inline comment
+  const description = pendingDescription || inlineDescription;
+
   return {
     name,
     type,
     isOptional: !!optional,
     isArray: !!array,
     attributes,
+    description,
   };
 }
 
@@ -352,6 +400,7 @@ function convertModelsToEntities(
       name: model.name,
       fields,
       position,
+      description: model.description,
     };
   });
 }
@@ -378,6 +427,7 @@ function convertPrismaFieldToField(
     dataType: mapPrismaTypeToDataType(prismaField.type),
     isNullable: prismaField.isOptional,
     isArray: prismaField.isArray,
+    description: prismaField.description,
   };
 
   // Check for @id
@@ -575,10 +625,18 @@ export function serializeToPrismaSchema(model: DataModelFile): string {
 
   // Output models
   for (const entity of model.entities) {
+    // Output entity description as /// comment
+    if (entity.description) {
+      lines.push(`/// ${entity.description}`);
+    }
     lines.push(`model ${entity.name} {`);
 
     // Output fields
     for (const field of entity.fields) {
+      // Output field description as /// comment
+      if (field.description) {
+        lines.push(`  /// ${field.description}`);
+      }
       lines.push(`  ${serializeField(field)}`);
     }
 
