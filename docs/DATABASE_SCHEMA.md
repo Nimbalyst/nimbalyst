@@ -1,5 +1,9 @@
 # Database Schema Documentation
 
+
+[![nimbalyst-schema](assets/nimbalyst-schema.prisma.png)](nimbalyst-schema.prisma){911x570}
+
+
 ## Overview
 
 Nimbalyst uses **PGLite** (PostgreSQL in WebAssembly) for all data persistence. The database runs in a Node.js worker thread and provides a robust, ACID-compliant storage system for the application.
