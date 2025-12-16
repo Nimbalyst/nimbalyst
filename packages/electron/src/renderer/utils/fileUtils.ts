@@ -41,12 +41,26 @@ export function formatFileNameAsTitle(fileName: string): string {
 }
 
 /**
- * Creates initial markdown content for a new file with a title heading
+ * Checks if a filename has a markdown extension
+ *
+ * @param fileName - The filename to check
+ * @returns True if the file is a markdown file
+ */
+export function isMarkdownFile(fileName: string): boolean {
+  return /\.(md|markdown)$/i.test(fileName);
+}
+
+/**
+ * Creates initial content for a new file.
+ * Only adds a markdown title heading for markdown files.
  *
  * @param fileName - The filename to use for the title
- * @returns Initial markdown content with title
+ * @returns Initial content (markdown heading for .md/.markdown files, empty string otherwise)
  */
 export function createInitialFileContent(fileName: string): string {
+  if (!isMarkdownFile(fileName)) {
+    return '';
+  }
   const title = formatFileNameAsTitle(fileName);
   return `# ${title}\n\n`;
 }
