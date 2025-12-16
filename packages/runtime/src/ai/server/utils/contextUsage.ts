@@ -9,22 +9,61 @@ export interface ParsedContextUsage {
 const TOKEN_LINE_REGEX = /\*\*Tokens:\*\*\s+([\d.,]+)([kKmM]?)\s*\/\s*([\d.,]+)([kKmM]?)\s*\((\d+)%\)/i;
 
 /**
+ * Extract the actual markdown content from the stored message.
+ * The database stores raw SDK chunks as JSON like:
+ * {"type":"user","message":{"content":"<local-command-stdout>## Context Usage..."}}
+ *
+ * This function extracts the markdown from that structure.
+ */
+function extractMarkdownFromStoredContent(content: string): string {
+  let markdown = content;
+
+  // Check if content is a JSON object (starts with { and contains "type")
+  if (content.trim().startsWith('{') && content.includes('"type"')) {
+    try {
+      const parsed = JSON.parse(content);
+      // Extract from user message structure
+      if (parsed.type === 'user' && typeof parsed.message?.content === 'string') {
+        markdown = parsed.message.content;
+      }
+    } catch {
+      // Not valid JSON, use content as-is
+    }
+  }
+
+  // Strip <local-command-stdout> tags if present
+  const match = markdown.match(/<local-command-stdout>([\s\S]*?)<\/local-command-stdout>/);
+  if (match && match[1]) {
+    markdown = match[1].trim();
+  }
+
+  return markdown;
+}
+
+/**
  * Parse the markdown emitted by the `/context` command to extract token usage information.
  * Returns undefined if the expected token line cannot be parsed.
+ *
+ * Handles two formats:
+ * 1. Raw JSON from database: {"type":"user","message":{"content":"<local-command-stdout>..."}}
+ * 2. Extracted markdown: "## Context Usage\n**Tokens:** 32.9k / 200.0k (16%)\n..."
  */
 export function parseContextUsageMessage(content?: string): ParsedContextUsage | undefined {
   if (!content) {
     return undefined;
   }
 
-  const tokenMatch = content.match(TOKEN_LINE_REGEX);
+  // Extract markdown from JSON/XML wrapper if needed
+  const markdown = extractMarkdownFromStoredContent(content);
+
+  const tokenMatch = markdown.match(TOKEN_LINE_REGEX);
   if (!tokenMatch) {
     return undefined;
   }
 
   const totalTokens = convertToTokens(tokenMatch[1], tokenMatch[2]);
   const contextWindow = convertToTokens(tokenMatch[3], tokenMatch[4]);
-  const categories = extractCategories(content);
+  const categories = extractCategories(markdown);
 
   return {
     totalTokens,
