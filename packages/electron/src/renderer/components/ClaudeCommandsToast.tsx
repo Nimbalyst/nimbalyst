@@ -39,7 +39,10 @@ export function ClaudeCommandsToast({
               Enhance Claude with Nimbalyst Commands
             </div>
             <div className="claude-commands-toast-subtitle">
-              Install custom commands to help Claude work better with Nimbalyst features
+              Install custom commands to help Claude work better with Nimbalyst features.
+              <br />
+              <br />
+              This will also create a git-ignored nimbalyst-local folder to hold plans and mockups.
             </div>
           </div>
         </div>
