@@ -9,13 +9,16 @@
 import type { ExtensionPlatformService, ExtensionModule } from '@nimbalyst/runtime';
 
 // Import host dependencies that will be shared with extensions
+// ONLY React and Lexical need to be shared (singleton requirements)
+// Extensions should bundle their own utility libraries (zustand, html2canvas, etc.)
 import * as React from 'react';
 import * as ReactDOM from 'react-dom';
 import * as ReactDOMClient from 'react-dom/client';
 import * as jsxRuntime from 'react/jsx-runtime';
 import * as jsxDevRuntime from 'react/jsx-dev-runtime';
-import * as zustand from 'zustand';
-import html2canvas from 'html2canvas';
+
+// PDF.js and virtua are shared for the pdf-viewer extension
+// These are accessed directly from __nimbalyst_extensions rather than ES imports
 import * as pdfjsLib from 'pdfjs-dist';
 import * as virtua from 'virtua';
 
@@ -189,30 +192,56 @@ export class ExtensionPlatformServiceImpl implements ExtensionPlatformService {
 
   /**
    * Expose host dependencies on the window object for extensions to use.
+   *
+   * IMPORTANT: Only React and Lexical are shared (singleton requirements).
+   * Extensions should bundle their own utility libraries (zustand, html2canvas, etc.)
    */
   private exposeHostDependencies(): void {
     const w = window as any;
     if (w.__nimbalyst_extensions) return;
 
+    // Create a shimmed jsx-dev-runtime that works even in production builds
+    // This handles the case where an extension was built in dev mode but the host is in prod mode
+    // jsxDEV signature: (type, props, key, isStaticChildren, source, self)
+    // jsx signature: (type, props, key)
+    // The extra dev params (isStaticChildren, source, self) are only for dev warnings, safe to ignore
+    const shimmedJsxDevRuntime = {
+      ...jsxDevRuntime,
+      // If jsxDEV is undefined (production build), shim it with jsx
+      jsxDEV:
+        jsxDevRuntime.jsxDEV ??
+        ((
+          type: any,
+          props: any,
+          key: any,
+          _isStaticChildren?: boolean,
+          _source?: any,
+          _self?: any
+        ) => {
+          return jsxRuntime.jsx(type, props, key);
+        }),
+    };
+
     // Use the imported modules from the top of this file
     // IMPORTANT: Use namespace imports (* as) to prevent tree-shaking in production builds
     w.__nimbalyst_extensions = {
+      // React core - multiple instances break hooks
       react: React,
       'react-dom': ReactDOM,
       'react-dom/client': ReactDOMClient,
       'react/jsx-runtime': jsxRuntime,
-      'react/jsx-dev-runtime': jsxDevRuntime,
-      zustand: zustand,
-      html2canvas: html2canvas,
-      'pdfjs-dist': pdfjsLib,
-      virtua: virtua,
-      // Lexical packages
+      'react/jsx-dev-runtime': shimmedJsxDevRuntime,
+      // Lexical - extensions contribute nodes to host's editor
       lexical: lexical,
       '@lexical/react/LexicalComposerContext': lexicalReact,
       '@lexical/react/useLexicalEditable': lexicalReactEditable,
       '@lexical/react/useLexicalNodeSelection': lexicalReactNodeSelection,
       '@lexical/utils': lexicalUtils,
       '@lexical/markdown': lexicalMarkdown,
+      // PDF.js and virtua for pdf-viewer extension
+      // These are accessed directly from __nimbalyst_extensions rather than ES imports
+      'pdfjs-dist': pdfjsLib,
+      virtua: virtua,
       // Document path context for extensions
       '@nimbalyst/editor-context': { useDocumentPath },
       // Runtime UI components
@@ -321,35 +350,8 @@ export class ExtensionPlatformServiceImpl implements ExtensionPlatformService {
       }
     );
 
-    // Handle: import X from 'zustand'
-    transformed = transformed.replace(
-      /import\s+(\w+)\s+from\s+['"]zustand['"]/g,
-      'const $1 = window.__nimbalyst_extensions.zustand'
-    );
-
-    // Handle: import { X as Y } from 'zustand'
-    transformed = transformed.replace(
-      /import\s+{([^}]+)}\s+from\s+['"]zustand['"]/g,
-      (_match, namedImports) => {
-        const converted = convertAsToColon(namedImports);
-        return `const {${converted}} = window.__nimbalyst_extensions.zustand`;
-      }
-    );
-
-    // Handle: import html2canvas from 'html2canvas'
-    transformed = transformed.replace(
-      /import\s+(\w+)\s+from\s+['"]html2canvas['"]/g,
-      'const $1 = window.__nimbalyst_extensions.html2canvas'
-    );
-
-    // Handle: import { X } from 'html2canvas'
-    transformed = transformed.replace(
-      /import\s+{([^}]+)}\s+from\s+['"]html2canvas['"]/g,
-      (_match, namedImports) => {
-        const converted = convertAsToColon(namedImports);
-        return `const {${converted}} = window.__nimbalyst_extensions.html2canvas`;
-      }
-    );
+    // NOTE: zustand, html2canvas, pdfjs-dist, virtua are NOT shared
+    // Extensions should bundle these themselves for version independence
 
     // Handle: import { X } from 'lexical'
     transformed = transformed.replace(

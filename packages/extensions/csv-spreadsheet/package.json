@@ -11,7 +11,8 @@
   "dependencies": {
     "@revolist/react-datagrid": "^4.19.4",
     "papaparse": "^5.4.1",
-    "@formulajs/formulajs": "^4.4.9"
+    "@formulajs/formulajs": "^4.4.9",
+    "zustand": "^5.0.0"
   },
   "devDependencies": {
     "@types/papaparse": "^5.3.14",
@@ -23,7 +24,6 @@
   },
   "peerDependencies": {
     "react": "^18.2.0 || ^19.0.0",
-    "react-dom": "^18.2.0 || ^19.0.0",
-    "zustand": "^4.0.0 || ^5.0.0"
+    "react-dom": "^18.2.0 || ^19.0.0"
   }
 }

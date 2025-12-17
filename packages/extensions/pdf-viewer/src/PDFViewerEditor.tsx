@@ -33,15 +33,16 @@ export function PDFViewerEditor(props: CustomEditorComponentProps) {
   const [scale, setScale] = useState(1.0);
   const [fitToWidth, setFitToWidth] = useState(true); // Start with fit-to-width enabled
 
-  // PDFs are read-only, so content never changes
+  // PDFs are read-only - do NOT register a getContent function
+  // Registering one that returns '' would cause the save system to overwrite
+  // the PDF with an empty string if it detects a "change"
   useEffect(() => {
-    if (onGetContentReady) {
-      onGetContentReady(() => ''); // No content to save
-    }
+    // Only set dirty to false, never provide a getContent function
     if (onDirtyChange) {
       onDirtyChange(false); // Never dirty
     }
-  }, [onGetContentReady, onDirtyChange]);
+    // Intentionally NOT calling onGetContentReady - this prevents any save attempts
+  }, [onDirtyChange]);
 
   // Handle scale changes from user zoom actions
   const handleScaleChange = useCallback((newScale: number) => {

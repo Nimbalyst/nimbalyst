@@ -27,28 +27,29 @@ export default defineConfig({
       fileName: () => 'index.js',
     },
     rollupOptions: {
-      // Externalize dependencies that Nimbalyst provides
+      // Externalize ONLY libraries that must be singletons (React, Lexical)
+      // Extensions should bundle their own utility libraries for version independence
       external: [
+        // React core - multiple instances break hooks
         'react',
         'react-dom',
         'react/jsx-runtime',
         'react/jsx-dev-runtime',
-        'zustand',
-        'html2canvas',
-        /^@nimbalyst\/runtime/,
-        '@nimbalyst/editor-context',
-        // Lexical must be externalized to use the host's instance
+        // Lexical - extensions contribute nodes to host's editor
         'lexical',
         /^@lexical\//,
+        // Nimbalyst services
+        /^@nimbalyst\/runtime/,
+        '@nimbalyst/editor-context',
       ],
+      // NOTE: zustand, html2canvas, @xyflow/react are bundled by the extension
+      // This gives the extension control over its own versions
       output: {
         // Provide global variables for externals
         globals: {
           react: 'React',
           'react-dom': 'ReactDOM',
           'react/jsx-runtime': 'jsxRuntime',
-          zustand: 'zustand',
-          html2canvas: 'html2canvas',
         },
         // Ensure CSS is extracted
         assetFileNames: (assetInfo) => {

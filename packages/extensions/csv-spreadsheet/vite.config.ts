@@ -21,15 +21,17 @@ export default defineConfig({
       fileName: 'index',
     },
     rollupOptions: {
+      // Externalize ONLY libraries that must be singletons (React, Lexical)
+      // Extensions should bundle their own utility libraries for version independence
       external: [
         'react',
         'react-dom',
         'react/jsx-runtime',
         'react/jsx-dev-runtime',
-        'zustand',
         /^@nimbalyst\/runtime/,
         '@nimbalyst/editor-context',
       ],
+      // NOTE: zustand is bundled by the extension
       output: {
         // CRITICAL: Inline all chunks into a single file
         // Extensions are loaded via blob URLs which don't support relative imports
@@ -38,7 +40,6 @@ export default defineConfig({
           react: 'React',
           'react-dom': 'ReactDOM',
           'react/jsx-runtime': 'jsxRuntime',
-          zustand: 'zustand',
         },
         assetFileNames: (assetInfo) => {
           if (assetInfo.name === 'style.css') {
