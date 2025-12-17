@@ -105,42 +105,8 @@ function LazyImage({
   } | null>(null);
   const isSVGImage = isSVG(src);
 
-  // Resolve relative paths to absolute file:// URLs for Electron
-  const resolvedSrc = useCallback(() => {
-    // If it's already an absolute URL (http://, https://, file://, data:), use as-is
-    if (src.match(/^(https?|file|data):/)) {
-      return src;
-    }
-
-    // If in Electron and we have a current document path, resolve relative to document
-    if (typeof window !== 'undefined' && (window as any).__currentDocumentPath) {
-      const documentPath = (window as any).__currentDocumentPath;
-
-      // Handle old .nimbalyst/assets/ paths (workspace-relative)
-      if (src.includes('.nimbalyst/assets/')) {
-        // Get workspace path (directory containing .nimbalyst)
-        const workspacePath = (window as any).workspacePath;
-        if (workspacePath) {
-          // Remove leading ./ or / if present
-          const cleanSrc = src.replace(/^\.?\//, '');
-          const absolutePath = workspacePath + '/' + cleanSrc;
-          return 'file://' + absolutePath;
-        }
-      }
-
-      // Handle new assets/ paths (document-relative)
-      // Get document directory
-      const lastSlash = documentPath.lastIndexOf('/');
-      const documentDir = lastSlash >= 0 ? documentPath.substring(0, lastSlash) : '';
-
-      // Resolve relative path
-      const absolutePath = documentDir + '/' + src;
-      return 'file://' + absolutePath;
-    }
-
-    // Fallback: use src as-is (for web or when no document context)
-    return src;
-  }, [src])();
+  // src is already resolved by the parent ImageComponent
+  const resolvedSrc = src;
 
   // Set initial dimensions for SVG images
   useEffect(() => {
@@ -242,6 +208,19 @@ function BrokenImage(): JSX.Element {
   );
 }
 
+// Helper function to get document path from TabEditor's data-file-path attribute
+// This is stable per-editor instance, unlike window.__currentDocumentPath which is global
+function getDocumentPathFromDOM(element: HTMLElement | null): string | null {
+  if (!element) return null;
+  let current: HTMLElement | null = element;
+  while (current) {
+    const filePath = current.getAttribute('data-file-path');
+    if (filePath) return filePath;
+    current = current.parentElement;
+  }
+  return null;
+}
+
 export default function ImageComponent({
   src,
   altText,
@@ -267,6 +246,7 @@ export default function ImageComponent({
 }): JSX.Element {
   const imageRef = useRef<null | HTMLImageElement>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const [isSelected, setSelected, clearSelection] =
     useLexicalNodeSelection(nodeKey);
   const [isResizing, setIsResizing] = useState<boolean>(false);
@@ -277,16 +257,32 @@ export default function ImageComponent({
   const [isLoadError, setIsLoadError] = useState<boolean>(false);
   const isEditable = useLexicalEditable();
   const [resolvedSrc, setResolvedSrc] = useState<string | null>(null);
+  const [containerMounted, setContainerMounted] = useState(false);
+
+  // Callback ref to detect when container is mounted
+  const setContainerRef = useCallback((node: HTMLDivElement | null) => {
+    containerRef.current = node;
+    if (node) {
+      setContainerMounted(true);
+    }
+  }, []);
 
   // Reset load error when src changes
   useEffect(() => {
     setIsLoadError(false);
   }, [src]);
 
-  // Resolve .nimbalyst/assets/ paths to absolute file:// URLs
+  // Resolve image paths to absolute file:// URLs
+  // Uses DOM traversal to find document path (stable per-editor instance)
   useEffect(() => {
+    // If it's already an absolute URL, use as-is
+    if (src.match(/^(https?|file|data):/)) {
+      setResolvedSrc(src);
+      return;
+    }
+
+    // Handle .nimbalyst/assets/ paths via asset service
     if (src.includes('.nimbalyst/assets/') && typeof window !== 'undefined' && (window as any).electronAPI) {
-      // Extract hash from path
       const match = src.match(/\.nimbalyst\/assets\/([a-f0-9]+)\./);
       if (match) {
         const hash = match[1];
@@ -294,24 +290,36 @@ export default function ImageComponent({
           .then((absolutePath: string | null) => {
             if (absolutePath) {
               const resolved = `file://${absolutePath}`;
-              // Clear the image cache for the old src so it can reload with new src
               imageCache.delete(src);
               setResolvedSrc(resolved);
             } else {
               setResolvedSrc(src);
             }
           })
-          .catch((error: Error) => {
-            console.error('Failed to resolve asset path:', error);
+          .catch(() => {
             setResolvedSrc(src);
           });
-      } else {
-        setResolvedSrc(src);
+        return;
       }
+    }
+
+    // For relative paths, resolve using document path from DOM
+    // Wait for container to be mounted before trying to resolve
+    if (!containerMounted) {
+      return;
+    }
+
+    const documentPath = getDocumentPathFromDOM(containerRef.current);
+    if (documentPath) {
+      const lastSlash = documentPath.lastIndexOf('/');
+      const documentDir = lastSlash >= 0 ? documentPath.substring(0, lastSlash) : '';
+      const absolutePath = documentDir + '/' + src;
+      setResolvedSrc('file://' + absolutePath);
     } else {
+      // Fallback to src as-is
       setResolvedSrc(src);
     }
-  }, [src]);
+  }, [src, containerMounted]);
 
   const $onEnter = useCallback(
     (event: KeyboardEvent) => {
@@ -541,80 +549,81 @@ export default function ImageComponent({
   const draggable = isSelected && $isNodeSelection(selection) && !isResizing;
   const isFocused = (isSelected || isResizing) && isEditable;
 
-  // Don't render until we have a resolved src
-  if (!resolvedSrc) {
-    return <div style={{ width, height, minHeight: 100 }}>Loading...</div>;
-  }
-
   return (
     <Suspense fallback={null}>
-      <>
-        <div draggable={draggable}>
-          {isLoadError ? (
-            <BrokenImage />
-          ) : (
-            <LazyImage
-              className={
-                isFocused
-                  ? `focused ${$isNodeSelection(selection) ? 'draggable' : ''}`
-                  : null
-              }
-              src={resolvedSrc}
-              altText={altText}
-              imageRef={imageRef}
-              width={width}
-              height={height}
-              maxWidth={maxWidth}
-              onError={() => setIsLoadError(true)}
-            />
-          )}
-        </div>
-
-        {showCaption && (
-          <div className="image-caption-container">
-            <LexicalNestedComposer initialEditor={caption}>
-              <AutoFocusPlugin />
-              {/*<LinkPlugin />*/}
-              {/*<EmojisPlugin />*/}
-              {/*<HashtagPlugin />*/}
-              {/* Collaboration disabled */}
-              {/* {isCollabActive ? (
-                <CollaborationPlugin
-                  id={caption.getKey()}
-                  // providerFactory={createWebsocketProvider}
-                  shouldBootstrap={true}
+      <div ref={setContainerRef}>
+        {!resolvedSrc ? (
+          <div style={{ width, height, minHeight: 100 }}>Loading...</div>
+        ) : (
+          <>
+            <div draggable={draggable}>
+              {isLoadError ? (
+                <BrokenImage />
+              ) : (
+                <LazyImage
+                  className={
+                    isFocused
+                      ? `focused ${$isNodeSelection(selection) ? 'draggable' : ''}`
+                      : null
+                  }
+                  src={resolvedSrc}
+                  altText={altText}
+                  imageRef={imageRef}
+                  width={width}
+                  height={height}
+                  maxWidth={maxWidth}
+                  onError={() => setIsLoadError(true)}
                 />
-              ) : ( */}
-                <HistoryPlugin externalHistoryState={historyState} />
-              {/* )} */}
-              <RichTextPlugin
-                contentEditable={
-                  <ContentEditable
-                    placeholder="Enter a caption..."
-                    placeholderClassName="ImageNode__placeholder"
-                    className="ImageNode__contentEditable"
+              )}
+            </div>
+
+            {showCaption && (
+              <div className="image-caption-container">
+                <LexicalNestedComposer initialEditor={caption}>
+                  <AutoFocusPlugin />
+                  {/*<LinkPlugin />*/}
+                  {/*<EmojisPlugin />*/}
+                  {/*<HashtagPlugin />*/}
+                  {/* Collaboration disabled */}
+                  {/* {isCollabActive ? (
+                    <CollaborationPlugin
+                      id={caption.getKey()}
+                      // providerFactory={createWebsocketProvider}
+                      shouldBootstrap={true}
+                    />
+                  ) : ( */}
+                    <HistoryPlugin externalHistoryState={historyState} />
+                  {/* )} */}
+                  <RichTextPlugin
+                    contentEditable={
+                      <ContentEditable
+                        placeholder="Enter a caption..."
+                        placeholderClassName="ImageNode__placeholder"
+                        className="ImageNode__contentEditable"
+                      />
+                    }
+                    ErrorBoundary={LexicalErrorBoundary}
                   />
-                }
-                ErrorBoundary={LexicalErrorBoundary}
+                </LexicalNestedComposer>
+              </div>
+            )}
+            {resizable && $isNodeSelection(selection) && isFocused && (
+              <ImageResizer
+                showCaption={showCaption}
+                setShowCaption={setShowCaption}
+                editor={editor}
+                buttonRef={buttonRef}
+                imageRef={imageRef}
+                maxWidth={maxWidth}
+                onResizeStart={onResizeStart}
+                onResizeEnd={onResizeEnd}
+                captionsEnabled={false}
+                // captionsEnabled={!isLoadError && captionsEnabled}
               />
-            </LexicalNestedComposer>
-          </div>
+            )}
+          </>
         )}
-        {resizable && $isNodeSelection(selection) && isFocused && (
-          <ImageResizer
-            showCaption={showCaption}
-            setShowCaption={setShowCaption}
-            editor={editor}
-            buttonRef={buttonRef}
-            imageRef={imageRef}
-            maxWidth={maxWidth}
-            onResizeStart={onResizeStart}
-            onResizeEnd={onResizeEnd}
-            captionsEnabled={false}
-            // captionsEnabled={!isLoadError && captionsEnabled}
-          />
-        )}
-      </>
+      </div>
     </Suspense>
   );
 }
