@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.48.13] - 2025-12-17
+
+
+### Fixed
+- DataModel extension now loads correctly in production builds
+
 ## [0.48.12] - 2025-12-17
 
 
