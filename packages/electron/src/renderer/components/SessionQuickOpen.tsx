@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ProviderIcon } from '@nimbalyst/runtime';
 import { getRelativeTimeString } from '../utils/dateFormatting';
 import './SessionQuickOpen.css';
@@ -28,78 +28,37 @@ export const SessionQuickOpen: React.FC<SessionQuickOpenProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [searchResults, setSearchResults] = useState<SessionItem[]>([]);
-  const [recentSessions, setRecentSessions] = useState<SessionItem[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
+  const [allSessions, setAllSessions] = useState<SessionItem[]>([]);
   const [mouseHasMoved, setMouseHasMoved] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const searchTimeoutRef = useRef<NodeJS.Timeout>();
   const resultsListRef = useRef<HTMLUListElement>(null);
 
-  // Combined list of sessions to display
-  const displaySessions = searchQuery ? searchResults : recentSessions;
-
-  // Search for sessions by title
-  const searchSessions = useCallback(async (query: string) => {
-    if (!query.trim()) {
-      setSearchResults([]);
-      return;
+  // Filter sessions in-memory by title (fast, no database query)
+  const displaySessions = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return allSessions;
     }
+    const query = searchQuery.toLowerCase();
+    return allSessions.filter(session =>
+      (session.title || 'New conversation').toLowerCase().includes(query)
+    );
+  }, [searchQuery, allSessions]);
 
-    setIsSearching(true);
-
-    try {
-      const result = await window.electronAPI.invoke('sessions:search', workspacePath, query.trim(), { includeArchived: false });
-
-      if (result.success && Array.isArray(result.sessions)) {
-        setSearchResults(result.sessions);
-      } else {
-        setSearchResults([]);
-      }
-    } catch (error) {
-      console.error('Error searching sessions:', error);
-      setSearchResults([]);
-    } finally {
-      setIsSearching(false);
-    }
-  }, [workspacePath]);
-
-  // Debounced search
-  useEffect(() => {
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
-
-    if (searchQuery) {
-      searchTimeoutRef.current = setTimeout(() => {
-        searchSessions(searchQuery);
-      }, 150);
-    } else {
-      setSearchResults([]);
-    }
-
-    return () => {
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
-      }
-    };
-  }, [searchQuery, searchSessions]);
-
-  // Load recent sessions when modal opens
+  // Load all sessions when modal opens
   useEffect(() => {
     if (isOpen && workspacePath) {
       window.electronAPI.invoke('sessions:list', workspacePath, { includeArchived: false })
         .then((result: { success: boolean; sessions: SessionItem[] }) => {
+          console.log('[SessionQuickOpen] sessions:list returned', result.sessions?.length, 'sessions');
           if (result.success && Array.isArray(result.sessions)) {
-            // Take most recent 10 sessions
-            setRecentSessions(result.sessions.slice(0, 10));
+            setAllSessions(result.sessions);
           } else {
-            setRecentSessions([]);
+            setAllSessions([]);
           }
         })
         .catch((error: Error) => {
-          console.error('[SessionQuickOpen] Failed to load recent sessions:', error);
-          setRecentSessions([]);
+          console.error('[SessionQuickOpen] Failed to load sessions:', error);
+          setAllSessions([]);
         });
     }
   }, [isOpen, workspacePath]);
@@ -109,7 +68,6 @@ export const SessionQuickOpen: React.FC<SessionQuickOpenProps> = ({
     if (isOpen) {
       setSearchQuery('');
       setSelectedIndex(0);
-      setSearchResults([]);
       setMouseHasMoved(false);
       setTimeout(() => searchInputRef.current?.focus(), 100);
     }
@@ -192,11 +150,6 @@ export const SessionQuickOpen: React.FC<SessionQuickOpenProps> = ({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
-          {isSearching && (
-            <div className="session-quick-open-searching">
-              Searching...
-            </div>
-          )}
         </div>
 
         <div className="session-quick-open-results">
