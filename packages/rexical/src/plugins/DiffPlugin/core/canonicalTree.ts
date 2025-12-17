@@ -114,9 +114,9 @@ function normalizeTableSeparator(text: string): string {
     const cols = (text.match(/\|/g) || []).length - 1;
     // Return normalized format: |---|---|...|
     const normalized = '|' + Array(cols).fill('---').join('|') + '|';
-    if (text !== normalized) {
-      console.log('[canonicalTree] Normalizing table separator:', text, '→', normalized);
-    }
+    // if (text !== normalized) {
+    //   console.log('[canonicalTree] Normalizing table separator:', text, '→', normalized);
+    // }
     return normalized;
   }
   return text;

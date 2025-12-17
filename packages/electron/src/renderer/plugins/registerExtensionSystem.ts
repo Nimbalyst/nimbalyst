@@ -109,19 +109,19 @@ export async function registerExtensionSystem(): Promise<void> {
   // Discover and load extensions
   // This will scan the extensions directory and load any valid extensions
   try {
-    console.log('[ExtensionSystem] Starting extension initialization...');
+    // console.log('[ExtensionSystem] Starting extension initialization...');
     await initializeExtensions();
-    console.log('[ExtensionSystem] Extensions initialized');
+    // console.log('[ExtensionSystem] Extensions initialized');
 
     // Initialize the bridge to register custom editors from extensions
-    console.log('[ExtensionSystem] Initializing editor bridge...');
+    // console.log('[ExtensionSystem] Initializing editor bridge...');
     initializeExtensionEditorBridge();
-    console.log('[ExtensionSystem] Editor bridge initialized');
+    // console.log('[ExtensionSystem] Editor bridge initialized');
 
     // Initialize the plugin bridge to register slash commands, nodes, and transformers
-    console.log('[ExtensionSystem] Initializing plugin bridge...');
+    // console.log('[ExtensionSystem] Initializing plugin bridge...');
     initializeExtensionPluginBridge();
-    console.log('[ExtensionSystem] Plugin bridge initialized');
+    // console.log('[ExtensionSystem] Plugin bridge initialized');
 
     // Set up IPC listener for screenshot capture requests
     setupScreenshotIPCListener();

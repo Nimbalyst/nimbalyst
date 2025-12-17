@@ -43,7 +43,7 @@ const extensionToolsByWorkspace = new Map<string, ExtensionToolDefinition[]>();
 export function registerExtensionTools(workspacePath: string, tools: ExtensionToolDefinition[]) {
   extensionToolsByWorkspace.set(workspacePath, tools);
   console.log(`[MCP Server] Registered ${tools.length} extension tools for workspace: ${workspacePath}`);
-  tools.forEach(t => console.log(`[MCP Server]   - ${t.name} (${t.scope})`));
+  // tools.forEach(t => console.log(`[MCP Server]   - ${t.name} (${t.scope})`));
 }
 
 /**

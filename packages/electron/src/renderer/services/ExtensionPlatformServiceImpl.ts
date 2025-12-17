@@ -133,7 +133,7 @@ export class ExtensionPlatformServiceImpl implements ExtensionPlatformService {
 
       // Read the module source
       const source = await this.readFile(modulePath);
-      console.log('[ExtensionPlatformService] Module source loaded, length:', source.length);
+      // console.log('[ExtensionPlatformService] Module source loaded, length:', source.length);
 
       // Ensure host dependencies are available globally
       this.exposeHostDependencies();
@@ -147,13 +147,13 @@ export class ExtensionPlatformServiceImpl implements ExtensionPlatformService {
 
       try {
         // Dynamic import the blob URL
-        console.log('[ExtensionPlatformService] Importing blob URL...');
+        // console.log('[ExtensionPlatformService] Importing blob URL...');
         const module = await import(/* @vite-ignore */ blobUrl);
-        console.log('[ExtensionPlatformService] Module loaded:', Object.keys(module));
+        // console.log('[ExtensionPlatformService] Module loaded:', Object.keys(module));
 
         // Debug: Check for aiTools in module
-        console.log('[ExtensionPlatformService] module.aiTools:', module.aiTools);
-        console.log('[ExtensionPlatformService] module.default?.aiTools:', module.default?.aiTools);
+        // console.log('[ExtensionPlatformService] module.aiTools:', module.aiTools);
+        // console.log('[ExtensionPlatformService] module.default?.aiTools:', module.default?.aiTools);
 
         // Normalize to ExtensionModule interface
         const extensionModule: ExtensionModule = {
@@ -168,12 +168,12 @@ export class ExtensionPlatformServiceImpl implements ExtensionPlatformService {
           slashCommandHandlers: module.slashCommandHandlers || module.default?.slashCommandHandlers || {},
         };
 
-        console.log('[ExtensionPlatformService] Extension module components:', Object.keys(extensionModule.components || {}));
-        console.log('[ExtensionPlatformService] Extension module aiTools count:', extensionModule.aiTools?.length ?? 0);
-        console.log('[ExtensionPlatformService] Extension module nodes:', Object.keys(extensionModule.nodes || {}));
-        console.log('[ExtensionPlatformService] Extension module transformers:', Object.keys(extensionModule.transformers || {}));
-        console.log('[ExtensionPlatformService] Extension module hostComponents:', Object.keys(extensionModule.hostComponents || {}));
-        console.log('[ExtensionPlatformService] Extension module slashCommandHandlers:', Object.keys(extensionModule.slashCommandHandlers || {}));
+        // console.log('[ExtensionPlatformService] Extension module components:', Object.keys(extensionModule.components || {}));
+        // console.log('[ExtensionPlatformService] Extension module aiTools count:', extensionModule.aiTools?.length ?? 0);
+        // console.log('[ExtensionPlatformService] Extension module nodes:', Object.keys(extensionModule.nodes || {}));
+        // console.log('[ExtensionPlatformService] Extension module transformers:', Object.keys(extensionModule.transformers || {}));
+        // console.log('[ExtensionPlatformService] Extension module hostComponents:', Object.keys(extensionModule.hostComponents || {}));
+        // console.log('[ExtensionPlatformService] Extension module slashCommandHandlers:', Object.keys(extensionModule.slashCommandHandlers || {}));
         return extensionModule;
       } finally {
         // Clean up blob URL

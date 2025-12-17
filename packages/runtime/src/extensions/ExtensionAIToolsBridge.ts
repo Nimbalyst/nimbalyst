@@ -186,11 +186,11 @@ function convertExtensionTool(
 export function registerExtensionTools(extension: LoadedExtension): void {
   const { manifest, module } = extension;
 
-  console.info(
-    `[ExtensionAIToolsBridge] Checking extension ${manifest.id} for AI tools:`,
-    module.aiTools?.length ?? 0,
-    'tools found'
-  );
+  // console.info(
+  //   `[ExtensionAIToolsBridge] Checking extension ${manifest.id} for AI tools:`,
+  //   module.aiTools?.length ?? 0,
+  //   'tools found'
+  // );
 
   if (!module.aiTools || module.aiTools.length === 0) {
     return;
@@ -207,9 +207,9 @@ export function registerExtensionTools(extension: LoadedExtension): void {
       // Store handler for MCP execution
       toolHandlers.set(toolDef.name, { tool, extension });
 
-      console.info(
-        `[ExtensionAIToolsBridge] Registered tool: ${toolDef.name} from ${manifest.name}`
-      );
+      // console.info(
+      //   `[ExtensionAIToolsBridge] Registered tool: ${toolDef.name} from ${manifest.name}`
+      // );
     } catch (error) {
       console.error(
         `[ExtensionAIToolsBridge] Failed to register tool ${tool.name} from ${manifest.id}:`,
@@ -235,7 +235,7 @@ export function unregisterExtensionTools(extensionId: string): void {
   for (const toolName of tools) {
     toolRegistry.unregister(toolName);
     toolHandlers.delete(toolName);
-    console.info(`[ExtensionAIToolsBridge] Unregistered tool: ${toolName}`);
+    // console.info(`[ExtensionAIToolsBridge] Unregistered tool: ${toolName}`);
   }
 
   extensionToolsMap.delete(extensionId);
