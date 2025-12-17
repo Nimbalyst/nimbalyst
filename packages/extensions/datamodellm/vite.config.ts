@@ -3,13 +3,22 @@ import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react({
+      // Use jsx-runtime instead of jsx-dev-runtime in production
+      // The host app's jsx-dev-runtime has jsxDEV as undefined in production
+      jsxRuntime: 'automatic',
+      jsxImportSource: 'react',
+    }),
+  ],
   // Replace process.env.NODE_ENV with "production" during build
   // This is necessary because some dependencies (like use-sync-external-store)
   // use process.env.NODE_ENV for conditional exports, and the browser doesn't have process
   define: {
     'process.env.NODE_ENV': JSON.stringify('production'),
   },
+  // Ensure production mode for JSX transform
+  mode: 'production',
   build: {
     lib: {
       entry: resolve(__dirname, 'src/index.tsx'),

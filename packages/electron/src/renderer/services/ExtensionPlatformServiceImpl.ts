@@ -12,8 +12,8 @@ import type { ExtensionPlatformService, ExtensionModule } from '@nimbalyst/runti
 import * as React from 'react';
 import * as ReactDOM from 'react-dom';
 import * as ReactDOMClient from 'react-dom/client';
-import { jsx, jsxs, Fragment as JsxFragment } from 'react/jsx-runtime';
-import { jsxDEV, Fragment as JsxDevFragment } from 'react/jsx-dev-runtime';
+import * as jsxRuntime from 'react/jsx-runtime';
+import * as jsxDevRuntime from 'react/jsx-dev-runtime';
 import * as zustand from 'zustand';
 import html2canvas from 'html2canvas';
 import * as pdfjsLib from 'pdfjs-dist';
@@ -195,14 +195,13 @@ export class ExtensionPlatformServiceImpl implements ExtensionPlatformService {
     if (w.__nimbalyst_extensions) return;
 
     // Use the imported modules from the top of this file
-    // IMPORTANT: jsx-runtime and jsx-dev-runtime must explicitly expose named exports
-    // because namespace imports can be tree-shaken in production builds
+    // IMPORTANT: Use namespace imports (* as) to prevent tree-shaking in production builds
     w.__nimbalyst_extensions = {
       react: React,
       'react-dom': ReactDOM,
       'react-dom/client': ReactDOMClient,
-      'react/jsx-runtime': { jsx, jsxs, Fragment: JsxFragment },
-      'react/jsx-dev-runtime': { jsxDEV, Fragment: JsxDevFragment },
+      'react/jsx-runtime': jsxRuntime,
+      'react/jsx-dev-runtime': jsxDevRuntime,
       zustand: zustand,
       html2canvas: html2canvas,
       'pdfjs-dist': pdfjsLib,
