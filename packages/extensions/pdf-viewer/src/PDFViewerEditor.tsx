@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { usePDFDocument } from './hooks/usePDFDocument';
 import { PDFScrollView } from './components/PDFScrollView';
 import { Toolbar } from './components/Toolbar';
@@ -31,6 +31,7 @@ export function PDFViewerEditor(props: CustomEditorComponentProps) {
 
   const { document, totalPages, loading, error } = usePDFDocument(filePath);
   const [scale, setScale] = useState(1.0);
+  const [fitToWidth, setFitToWidth] = useState(true); // Start with fit-to-width enabled
 
   // PDFs are read-only, so content never changes
   useEffect(() => {
@@ -42,6 +43,25 @@ export function PDFViewerEditor(props: CustomEditorComponentProps) {
     }
   }, [onGetContentReady, onDirtyChange]);
 
+  // Handle scale changes from user zoom actions
+  const handleScaleChange = useCallback((newScale: number) => {
+    setFitToWidth(false); // Disable fit-to-width when user manually zooms
+    setScale(newScale);
+  }, []);
+
+  // Handle fit-to-width scale updates (from resize observer)
+  const handleFitWidthScaleChange = useCallback((newScale: number) => {
+    setScale(newScale);
+  }, []);
+
+  // Toggle fit-to-width mode
+  const handleFitToWidthToggle = useCallback(() => {
+    setFitToWidth((prev) => !prev);
+    if (!fitToWidth) {
+      // When enabling, the PDFScrollView will calculate the appropriate scale
+    }
+  }, [fitToWidth]);
+
   // Handle keyboard shortcuts for zoom
   useEffect(() => {
     if (!isActive) return;
@@ -50,17 +70,19 @@ export function PDFViewerEditor(props: CustomEditorComponentProps) {
       if (e.metaKey || e.ctrlKey) {
         if (e.key === '=' || e.key === '+') {
           e.preventDefault();
+          setFitToWidth(false);
           const ZOOM_LEVELS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
           const nextLevel = ZOOM_LEVELS.find((level) => level > scale);
           if (nextLevel) setScale(nextLevel);
         } else if (e.key === '-') {
           e.preventDefault();
+          setFitToWidth(false);
           const ZOOM_LEVELS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
           const prevLevel = [...ZOOM_LEVELS].reverse().find((level) => level < scale);
           if (prevLevel) setScale(prevLevel);
         } else if (e.key === '0') {
           e.preventDefault();
-          setScale(1.0);
+          setFitToWidth(true); // Cmd+0 enables fit-to-width
         }
       }
     };
@@ -93,13 +115,17 @@ export function PDFViewerEditor(props: CustomEditorComponentProps) {
       <Toolbar
         totalPages={totalPages}
         scale={scale}
-        onScaleChange={setScale}
+        fitToWidth={fitToWidth}
+        onScaleChange={handleScaleChange}
+        onFitToWidthToggle={handleFitToWidthToggle}
       />
       <PDFScrollView
         document={document}
         totalPages={totalPages}
         scale={scale}
+        fitToWidth={fitToWidth}
         theme={theme}
+        onFitWidthScaleChange={handleFitWidthScaleChange}
       />
     </div>
   );

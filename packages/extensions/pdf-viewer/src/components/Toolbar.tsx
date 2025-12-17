@@ -1,12 +1,14 @@
 interface ToolbarProps {
   totalPages: number;
   scale: number;
+  fitToWidth: boolean;
   onScaleChange: (scale: number) => void;
+  onFitToWidthToggle: () => void;
 }
 
 const ZOOM_LEVELS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 
-export function Toolbar({ totalPages, scale, onScaleChange }: ToolbarProps) {
+export function Toolbar({ totalPages, scale, fitToWidth, onScaleChange, onFitToWidthToggle }: ToolbarProps) {
   const currentZoomPercent = Math.round(scale * 100);
 
   const handleZoomIn = () => {
@@ -35,6 +37,14 @@ export function Toolbar({ totalPages, scale, onScaleChange }: ToolbarProps) {
         </div>
 
         <div className="pdf-zoom-controls">
+          <button
+            className={`pdf-toolbar-button pdf-fit-button ${fitToWidth ? 'active' : ''}`}
+            onClick={onFitToWidthToggle}
+            title="Fit to Width"
+          >
+            Fit
+          </button>
+
           <button
             className="pdf-toolbar-button"
             onClick={handleZoomOut}

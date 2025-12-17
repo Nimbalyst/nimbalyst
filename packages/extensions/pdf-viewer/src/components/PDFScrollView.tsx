@@ -1,3 +1,4 @@
+import { useRef, useEffect, useCallback } from 'react';
 import { PDFPage } from './PDFPage';
 import type { PDFDocumentProxy } from '../hooks/usePDFDocument';
 
@@ -8,20 +9,67 @@ interface PDFScrollViewProps {
   document: PDFDocumentProxy | null;
   totalPages: number;
   scale: number;
+  fitToWidth: boolean;
   theme: 'light' | 'dark' | 'crystal-dark';
+  onFitWidthScaleChange?: (scale: number) => void;
 }
 
-export function PDFScrollView({ document, totalPages, scale, theme }: PDFScrollViewProps) {
-  // Calculate page dimensions (standard US Letter PDF page aspect ratio)
-  const PAGE_WIDTH = 612; // US Letter width in points
-  const PAGE_HEIGHT = 792; // US Letter height in points
+// Standard PDF page dimensions in points
+const PAGE_WIDTH = 612; // US Letter width in points
+const PAGE_HEIGHT = 792; // US Letter height in points
+const GAP = 16; // Gap between pages
+const PADDING = 32; // Horizontal padding for container
+
+export function PDFScrollView({
+  document,
+  totalPages,
+  scale,
+  fitToWidth,
+  theme,
+  onFitWidthScaleChange,
+}: PDFScrollViewProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Calculate fit-to-width scale based on container width
+  const calculateFitScale = useCallback(() => {
+    if (!containerRef.current) return 1.0;
+    const containerWidth = containerRef.current.clientWidth - PADDING;
+    const fitScale = containerWidth / PAGE_WIDTH;
+    // Clamp scale between reasonable bounds
+    return Math.max(0.25, Math.min(3.0, fitScale));
+  }, []);
+
+  // Update fit-to-width scale when container resizes
+  useEffect(() => {
+    if (!fitToWidth || !onFitWidthScaleChange) return;
+
+    const updateFitScale = () => {
+      const newScale = calculateFitScale();
+      onFitWidthScaleChange(newScale);
+    };
+
+    // Initial calculation
+    updateFitScale();
+
+    // Watch for container resize
+    const resizeObserver = new ResizeObserver(updateFitScale);
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+
+    return () => resizeObserver.disconnect();
+  }, [fitToWidth, calculateFitScale, onFitWidthScaleChange]);
+
   const scaledWidth = PAGE_WIDTH * scale;
   const scaledHeight = PAGE_HEIGHT * scale;
-  const GAP = 16; // Gap between pages
 
   if (!document) {
     return (
-      <div className="pdf-scroll-container" style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div
+        ref={containerRef}
+        className="pdf-scroll-container"
+        style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      >
         <div>No document loaded</div>
       </div>
     );
@@ -32,6 +80,7 @@ export function PDFScrollView({ document, totalPages, scale, theme }: PDFScrollV
 
   return (
     <div
+      ref={containerRef}
       className="pdf-scroll-container"
       style={{
         height: '100%',

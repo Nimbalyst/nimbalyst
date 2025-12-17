@@ -13,8 +13,8 @@ planStatus:
     - file-viewer
     - document-viewer
   created: "2025-12-15"
-  updated: "2025-12-15T09:15:00.000Z"
-  progress: 45
+  updated: "2025-12-17T00:00:00.000Z"
+  progress: 80
   startDate: "2025-12-15"
 ---
 # PDF Viewer Extension for Nimbalyst
@@ -33,13 +33,13 @@ planStatus:
 - [x] Add theme-aware CSS
 
 ### Phase 2: UI Polish and Features
-- [ ] Implement Toolbar component with zoom controls
-- [ ] Add keyboard shortcuts (zoom)
-- [ ] Add loading states and error handling
-- [ ] Implement text layer for selection/copying
-- [ ] Optimize rendering performance
-- [ ] Add fit-to-width calculation
-- [ ] Polish scrolling behavior
+- [x] Implement Toolbar component with zoom controls
+- [x] Add keyboard shortcuts (zoom)
+- [x] Add loading states and error handling
+- [x] Implement text layer for selection/copying
+- [x] Optimize rendering performance (debounced scale, cancel render tasks)
+- [x] Add fit-to-width calculation (responsive to container resize)
+- [x] Polish scrolling behavior (smooth scrolling CSS)
 
 ### Phase 3: Testing and Documentation
 - [ ] Write extension tests
