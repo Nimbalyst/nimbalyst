@@ -1078,6 +1078,11 @@ export async function createApplicationMenu() {
             label: 'Developer',
             submenu: [
                 {
+                    label: 'For assisting the development of Nimbalyst',
+                    enabled: false
+                },
+                { type: 'separator' },
+                {
                     label: 'Toggle Developer Tools',
                     accelerator: KeyboardShortcuts.view.toggleDevTools,
                     click: async () => {
