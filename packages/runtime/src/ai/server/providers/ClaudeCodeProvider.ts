@@ -590,6 +590,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         contextWindow?: number;
         webSearchRequests?: number;
       }> | undefined;
+      // Track whether any displayable content was yielded during this request
+      // Used to detect when a slash command returns no output
+      let hasYieldedContent = false;
+      let hasYieldedError = false;
 
       // console.log('[CLAUDE-CODE] Starting to iterate over query response...');
 
@@ -657,7 +661,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             // This is much more reliable than string matching in message content
             if (chunk.error === 'authentication_failed') {
               console.error('[CLAUDE-CODE] Authentication error detected via SDK error field');
-              this.logError(sessionId, 'claude-code', new Error('Authentication failed'), 'assistant_chunk', 'authentication_error');
+              this.logError(sessionId, 'claude-code', new Error('Authentication failed'), 'assistant_chunk', 'authentication_error', this.markMessagesAsHidden);
               yield {
                 type: 'error',
                 error: 'Authentication failed. Please log in to continue.',
@@ -1033,7 +1037,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               );
 
               // Log error to database (as 'output' since errors are provider responses)
-              this.logError(sessionId, 'claude-code', new Error(errorMessage), 'result_chunk', isAuthError ? 'authentication_error' : 'api_error');
+              this.logError(sessionId, 'claude-code', new Error(errorMessage), 'result_chunk', isAuthError ? 'authentication_error' : 'api_error', this.markMessagesAsHidden);
 
               // Yield error to UI with isAuthError flag if applicable
               yield {
@@ -1245,6 +1249,23 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                 };
               }
             }
+
+            // Check if this is a slash command error result with <local-command-stderr>
+            if (typeof content === 'string' && content.includes('<local-command-stderr>')) {
+              // Extract and display the command error
+              const match = content.match(/<local-command-stderr>([\s\S]*?)<\/local-command-stderr>/);
+              if (match && match[1]) {
+                const commandError = match[1].trim();
+                console.error('[CLAUDE-CODE] Slash command error detected:', commandError);
+
+                // Log error to database for persistence
+                // The logError call saves the message to the database and emits 'message:logged'
+                // which triggers a session reload in the UI, displaying the error
+                // Do NOT yield an error chunk here - that would cause duplicate display via ai:error IPC
+                // Pass markMessagesAsHidden so /context errors (auto-triggered) stay hidden
+                this.logError(sessionId, 'claude-code', new Error(commandError), 'slash_command_stderr', 'slash_command_error', this.markMessagesAsHidden);
+              }
+            }
             // Other user messages are internal - don't display
           } else if (chunk.type === 'summary') {
             // Handle summary messages from Claude Code
@@ -1280,7 +1301,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               const errorMessage = summary;
 
               // Log error to database (as 'output' since errors are provider responses)
-              this.logError(sessionId, 'claude-code', new Error(errorMessage), 'summary_chunk', 'authentication_error');
+              this.logError(sessionId, 'claude-code', new Error(errorMessage), 'summary_chunk', 'authentication_error', this.markMessagesAsHidden);
 
               // Yield error to UI with isAuthError flag for structured detection
               yield {
@@ -1317,7 +1338,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             if (chunk.error || chunk.isAuthenticating === false) {
               const errorMessage = chunk.error || 'Authentication required';
               console.error('[CLAUDE-CODE] Auth status error:', errorMessage);
-              this.logError(sessionId, 'claude-code', new Error(errorMessage), 'auth_status_chunk', 'authentication_error');
+              this.logError(sessionId, 'claude-code', new Error(errorMessage), 'auth_status_chunk', 'authentication_error', this.markMessagesAsHidden);
               yield {
                 type: 'error',
                 error: errorMessage,
@@ -1405,6 +1426,24 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         console.error('[CLAUDE-CODE] Error during iteration:', iterError);
         console.error('[CLAUDE-CODE] Error stack:', (iterError as Error).stack);
         throw iterError;
+      }
+
+      // Check if this was a slash command that returned no output
+      // This helps users understand when a command doesn't exist or failed silently
+      if (isSlashCommand && fullContent.trim().length === 0 && toolCallCount === 0) {
+        // Extract the command name from the message for the error message
+        const commandMatch = message.trimStart().match(/^\/(\S+)/);
+        const commandName = commandMatch ? commandMatch[1] : 'unknown';
+
+        const errorMessage = `The command "/${commandName}" did not produce any output. This command may not exist or may have failed silently. Try typing "/" to see available commands.`;
+        console.error(`[CLAUDE-CODE] Slash command /${commandName} returned no output`);
+
+        // Log error to database for persistence
+        // The logError call saves the message to the database and emits 'message:logged'
+        // which triggers a session reload in the UI, displaying the error
+        // Do NOT yield an error chunk here - that would cause duplicate display via ai:error IPC
+        // Pass markMessagesAsHidden so /context errors (auto-triggered) stay hidden
+        this.logError(sessionId, 'claude-code', new Error(errorMessage), 'slash_command', 'slash_command_error', this.markMessagesAsHidden);
       }
 
       // Send completion event
@@ -1511,7 +1550,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           console.error(`[CLAUDE-CODE] CRITICAL: Cannot log error - sessionId is undefined!`);
         } else {
           console.error(`[CLAUDE-CODE] Logging error to database for session:`, sessionId);
-          this.logError(sessionId, 'claude-code', error, 'catch_block', 'exception');
+          this.logError(sessionId, 'claude-code', error, 'catch_block', 'exception', this.markMessagesAsHidden);
         }
 
         yield {

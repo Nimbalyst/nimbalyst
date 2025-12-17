@@ -226,13 +226,15 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
   /**
    * Log an error to the database
    * Helper method to reduce duplication across provider implementations
+   * @param hidden - If true, marks the error message as hidden (won't appear in UI)
    */
   protected logError(
     sessionId: string | undefined,
     providerName: string,
     error: Error,
     source: string,
-    errorType: string = 'api_error'
+    errorType: string = 'api_error',
+    hidden: boolean = false
   ): void {
     if (!sessionId) return;
 
@@ -251,6 +253,6 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
       isAuthError,
       errorType,
       errorName: error.name
-    });
+    }, hidden);
   }
 }
