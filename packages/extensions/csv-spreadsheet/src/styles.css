@@ -1,0 +1,194 @@
+/**
+ * CSV Spreadsheet Extension Styles
+ * Uses CSS variables from Nimbalyst theme system
+ */
+
+/* Main container */
+.spreadsheet-editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background-color: var(--surface-primary);
+  color: var(--text-primary);
+  overflow: hidden;
+}
+
+/* Formula Bar */
+.formula-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background-color: var(--surface-secondary);
+  border-bottom: 1px solid var(--border-primary);
+  min-height: 36px;
+}
+
+.formula-bar-cell-ref {
+  font-family: monospace;
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 48px;
+  padding: 4px 8px;
+  background-color: var(--surface-tertiary);
+  border-radius: 4px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.formula-bar-fx {
+  font-family: monospace;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--primary-color);
+  min-width: 20px;
+}
+
+.formula-bar-input {
+  flex: 1;
+  padding: 6px 10px;
+  font-family: monospace;
+  font-size: 13px;
+  background-color: var(--surface-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  color: var(--text-primary);
+  outline: none;
+}
+
+.formula-bar-input:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb, 59, 130, 246), 0.2);
+}
+
+.formula-bar-input:disabled {
+  background-color: var(--surface-secondary);
+  color: var(--text-tertiary);
+  cursor: not-allowed;
+}
+
+.formula-bar-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+/* Toolbar */
+.spreadsheet-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  background-color: var(--surface-primary);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.toolbar-group {
+  display: flex;
+  gap: 4px;
+}
+
+.toolbar-separator {
+  width: 1px;
+  height: 24px;
+  background-color: var(--border-primary);
+  margin: 0 8px;
+}
+
+.toolbar-button {
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  background-color: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.toolbar-button:hover:not(:disabled) {
+  background-color: var(--surface-hover);
+}
+
+.toolbar-button:active:not(:disabled) {
+  background-color: var(--surface-tertiary);
+}
+
+.toolbar-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.toolbar-button.active {
+  background-color: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+/* Grid Container */
+.spreadsheet-grid-container {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+/* RevoGrid Theme Overrides */
+.spreadsheet-editor revo-grid {
+  --revo-bg-color: var(--surface-primary);
+  --revo-row-odd-color: var(--surface-primary);
+  --revo-row-even-color: var(--surface-secondary);
+  --revo-header-bg-color: var(--surface-secondary);
+  --revo-border-color: var(--border-primary);
+  --revo-text-color: var(--text-primary);
+  --revo-header-text-color: var(--text-secondary);
+  --revo-selected-bg-color: rgba(var(--primary-color-rgb, 59, 130, 246), 0.15);
+  --revo-focus-bg-color: rgba(var(--primary-color-rgb, 59, 130, 246), 0.25);
+}
+
+/* Dark theme overrides */
+[data-theme="dark"] .spreadsheet-editor revo-grid,
+[data-theme="crystal-dark"] .spreadsheet-editor revo-grid {
+  --revo-bg-color: var(--surface-primary);
+  --revo-row-odd-color: var(--surface-primary);
+  --revo-row-even-color: var(--surface-secondary);
+  --revo-header-bg-color: var(--surface-secondary);
+  --revo-border-color: var(--border-primary);
+  --revo-text-color: var(--text-primary);
+  --revo-header-text-color: var(--text-secondary);
+}
+
+/* Cell content styling */
+.spreadsheet-editor revogr-cell {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+}
+
+/* Error cells */
+.spreadsheet-editor .cell-error {
+  color: #ef4444;
+  font-style: italic;
+}
+
+/* Formula cells (computed values) */
+.spreadsheet-editor .cell-formula {
+  color: var(--text-primary);
+}
+
+/* Scrollbar styling */
+.spreadsheet-grid-container::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.spreadsheet-grid-container::-webkit-scrollbar-track {
+  background-color: var(--surface-secondary);
+}
+
+.spreadsheet-grid-container::-webkit-scrollbar-thumb {
+  background-color: var(--border-primary);
+  border-radius: 5px;
+}
+
+.spreadsheet-grid-container::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-tertiary);
+}

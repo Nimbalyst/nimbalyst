@@ -1,0 +1,34 @@
+{
+  "id": "com.nimbalyst.csv-spreadsheet",
+  "name": "CSV Spreadsheet",
+  "version": "1.0.0",
+  "description": "Edit CSV files with a spreadsheet interface and formula support",
+  "author": "Nimbalyst",
+  "main": "dist/index.js",
+  "styles": "dist/index.css",
+  "apiVersion": "1.0.0",
+  "permissions": {
+    "filesystem": true
+  },
+  "contributions": {
+    "customEditors": [
+      {
+        "filePatterns": ["*.csv", "*.tsv"],
+        "displayName": "Spreadsheet Editor",
+        "component": "SpreadsheetEditor"
+      }
+    ],
+    "fileIcons": {
+      "*.csv": "table",
+      "*.tsv": "table"
+    },
+    "newFileMenu": [
+      {
+        "extension": ".csv",
+        "displayName": "CSV Spreadsheet",
+        "icon": "table",
+        "defaultContent": "Column A,Column B,Column C\n,,\n,,\n,,"
+      }
+    ]
+  }
+}
