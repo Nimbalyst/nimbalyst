@@ -40,6 +40,11 @@
   overflow-x: auto;
 }
 
+/* Reset token backgrounds - prevent boxes from default Prism theme */
+.markdown-content .token {
+  background: none !important;
+}
+
 /* Syntax highlighting token colors using CSS variables */
 .markdown-content .token.comment,
 .markdown-content .token.prolog,

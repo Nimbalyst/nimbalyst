@@ -18,11 +18,26 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
   // Custom theme for syntax highlighting using CSS variables
   const customStyle: React.CSSProperties = {
     backgroundColor: 'var(--surface-tertiary)',
-    padding: '1rem',
-    borderRadius: '0.5rem',
-    fontSize: '0.875rem',
+    padding: '0.75rem',
+    borderRadius: '0.375rem',
+    fontSize: '0.8125rem',
     lineHeight: '1.5',
-    overflow: 'auto'
+    overflow: 'auto',
+    margin: '0.5rem 0'
+  };
+
+  // Lighter styling for single-line code blocks
+  const inlineBlockStyle: React.CSSProperties = {
+    backgroundColor: 'var(--surface-tertiary)',
+    padding: '0.25rem 0.5rem',
+    borderRadius: '0.25rem',
+    fontSize: '0.8125rem',
+    lineHeight: '1.4',
+    overflowX: 'auto',
+    overflowY: 'hidden',
+    display: 'block',
+    maxWidth: '100%',
+    whiteSpace: 'pre'
   };
 
   return (
@@ -45,27 +60,66 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
           code({ node, inline, className, children, ...props }: any) {
             const match = /language-(\w+)/.exec(className || '');
             const language = match ? match[1] : '';
+            const codeString = String(children).replace(/\n$/, '');
+            const isSingleLine = !codeString.includes('\n');
 
-            return !inline && language ? (
-              <SyntaxHighlighter
-                style={{} as any} // We'll use CSS variables for theming
-                customStyle={customStyle}
-                language={language}
-                PreTag="div"
-                {...props}
-              >
-                {String(children).replace(/\n$/, '')}
-              </SyntaxHighlighter>
-            ) : (
+            // True inline code (backticks in text)
+            if (inline) {
+              return (
+                <code
+                  className={className}
+                  style={{
+                    backgroundColor: 'var(--surface-tertiary)',
+                    padding: '0.125rem 0.375rem',
+                    borderRadius: '0.25rem',
+                    fontSize: '0.875em',
+                    fontFamily: 'var(--font-mono, monospace)',
+                    color: 'var(--text-primary)'
+                  }}
+                  {...props}
+                >
+                  {children}
+                </code>
+              );
+            }
+
+            // Code block with language - use syntax highlighting
+            if (language) {
+              return (
+                <SyntaxHighlighter
+                  style={{} as any} // We'll use CSS variables for theming
+                  customStyle={isSingleLine ? inlineBlockStyle : customStyle}
+                  language={language}
+                  PreTag="div"
+                  codeTagProps={{
+                    style: {
+                      fontFamily: 'var(--font-mono, monospace)',
+                      fontSize: 'inherit',
+                      background: 'none'
+                    }
+                  }}
+                  {...props}
+                >
+                  {codeString}
+                </SyntaxHighlighter>
+              );
+            }
+
+            // Code block without language - style as block but simpler
+            return (
               <code
                 className={className}
                 style={{
+                  display: 'block',
                   backgroundColor: 'var(--surface-tertiary)',
-                  padding: '0.125rem 0.375rem',
+                  padding: isSingleLine ? '0.25rem 0.5rem' : '0.75rem',
                   borderRadius: '0.25rem',
-                  fontSize: '0.875em',
+                  fontSize: '0.8125rem',
                   fontFamily: 'var(--font-mono, monospace)',
-                  color: 'var(--text-primary)'
+                  color: 'var(--text-primary)',
+                  whiteSpace: 'pre-wrap',
+                  overflowX: 'auto',
+                  margin: '0.5rem 0'
                 }}
                 {...props}
               >
@@ -73,6 +127,8 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
               </code>
             );
           },
+          // Remove default pre wrapper - we handle styling in code component
+          pre: ({ children }) => <>{children}</>,
           // Headings
           h1: ({ children }) => (
             <h1 style={{
