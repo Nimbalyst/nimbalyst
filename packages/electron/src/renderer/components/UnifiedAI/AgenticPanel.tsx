@@ -717,11 +717,17 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // Close tab when session is archived (without deleting the session data)
   const closeArchivedSession = useCallback((sessionId: string) => {
     setSessionTabs(prev => {
-      const filtered = prev.filter(tab => tab.id !== sessionId);
+      const validTabs = prev.filter(tab => tab != null);
+      const closingIndex = validTabs.findIndex(tab => tab.id === sessionId);
+      const filtered = validTabs.filter(tab => tab.id !== sessionId);
+
       if (activeTabId === sessionId && filtered.length > 0) {
-        setActiveTabId(filtered[0].id);
+        // Navigate to the tab to the left, or the first tab if closing the leftmost
+        const newIndex = Math.max(0, closingIndex - 1);
+        const newActiveTab = filtered[newIndex];
+        setActiveTabId(newActiveTab.id);
         if (onSessionChange) {
-          onSessionChange(filtered[0].id, filtered[0].name);
+          onSessionChange(newActiveTab.id, newActiveTab.name);
         }
       } else if (activeTabId === sessionId && filtered.length === 0) {
         setActiveTabId(null);
@@ -2130,15 +2136,21 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   }, [onSessionChange, markSessionAsRead, sessionTabs]);
 
   const handleTabClose = useCallback((tabId: string) => {
-    const closingTab = sessionTabs.filter(t => t != null).find(t => t.id === tabId);
+    const validTabs = sessionTabs.filter(t => t != null);
+    const closingTab = validTabs.find(t => t.id === tabId);
     if (closingTab) {
       setClosedSessions(prev => [closingTab, ...prev].slice(0, MAX_CLOSED_SESSION_HISTORY));
     }
 
     setSessionTabs(prev => {
-      const filtered = prev.filter(t => t != null && t.id !== tabId);
+      const validPrev = prev.filter(t => t != null);
+      const closingIndex = validPrev.findIndex(t => t.id === tabId);
+      const filtered = validPrev.filter(t => t.id !== tabId);
+
       if (activeTabId === tabId && filtered.length > 0) {
-        const newActiveTab = filtered[filtered.length - 1];
+        // Navigate to the tab to the left, or the first tab if closing the leftmost
+        const newIndex = Math.max(0, closingIndex - 1);
+        const newActiveTab = filtered[newIndex];
         setActiveTabId(newActiveTab.id);
         if (onSessionChange) {
           onSessionChange(newActiveTab.id, newActiveTab.name);
