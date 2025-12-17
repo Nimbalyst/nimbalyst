@@ -39,12 +39,27 @@ All events include `$session_id` property automatically. Dev users are marked wi
 | --- | --- | --- | --- |
 | `theme_changed` | `ApplicationMenu.ts:848, 877, 906, 937` | User selects theme from Window > Theme menu | `theme` (light/dark/crystal-dark/system) |
 
+### Navigation & Editor Mode
+
+| Event Name | File(s) | Trigger | Properties |
+| --- | --- | --- | --- |
+| `content_mode_switched` | `NavigationGutter.tsx:111` | User switches between Files and Agent modes via navigation gutter | `fromMode` (files/agent/settings)<br/>`toMode` (files/agent/settings) |
+| `editor_type_opened` | `TabEditor.tsx:180` | User opens a file in an editor tab | `editorType` (markdown/monaco/image/mockup/datamodel/custom)<br/>`fileExtension`<br/>`hasMermaid` (boolean, for markdown)<br/>`hasDataModel` (boolean, for markdown) |
+| `markdown_view_mode_switched` | `TabEditor.tsx:1556, 1606` | User switches between rich text (lexical) and raw markdown (monaco) view modes | `fromMode` (lexical/monaco)<br/>`toMode` (lexical/monaco) |
+
+### File History
+
+| Event Name | File(s) | Trigger | Properties |
+| --- | --- | --- | --- |
+| `file_history_opened` | `HistoryDialog.tsx:103` | User opens the file history dialog (Cmd+Y) | `fileType` (markdown/code/image) |
+| `file_history_restored` | `HistoryDialog.tsx:260` | User restores a previous version from history | `fileType` (markdown/code/image) |
+
 ### AI Chat & Sessions
 
 | Event Name | File(s) | Trigger | Properties |
 | --- | --- | --- | --- |
 | `create_ai_session` | `AIService.ts:455` | User creates new AI chat session | `provider` |
-| `ai_message_sent` | `AIService.ts:1436` | User sends message in AI chat | `provider`<br/>`hasDocumentContext`<br/>`hasAttachments`<br/>`usedSlashCommand` (optional)<br/>`slashCommandName` (optional)<br/>`slashCommandPackageId` (optional) |
+| `ai_message_sent` | `AIService.ts:1286` | User sends message in AI chat | `provider`<br/>`hasDocumentContext`<br/>`hasAttachments`<br/>`contentMode` (files/agent/unknown)<br/>`usedSlashCommand` (optional)<br/>`slashCommandName` (optional)<br/>`slashCommandPackageId` (optional) |
 | `ai_response_received` | `AIService.ts:1092, 1326` | AI provider returns response | `provider`<br/>`responseType` (text/tool_use/error)<br/>`toolsUsed` |
 | `ai_response_streamed` | `AIService.ts:1100` | AI response finishes streaming | `provider`<br/>`chunkCount` (0-9, 10-49, 50-99, 100+)<br/>`totalLength` (0-99, 100-499, 500-999, 1000+) |
 | `ai_stream_interrupted` | `AIService.ts:1024, 1483` | AI streaming stops prematurely | `provider`<br/>`chunksReceived`<br/>`reason` (error/user_cancel) |
@@ -146,11 +161,13 @@ All events include `$session_id` property automatically. Dev users are marked wi
 
 ## Event Summary Statistics
 
-- **Total Events**: 59 unique event names
+- **Total Events**: 64 unique event names
 - **Main Process Events**: 39 (via AnalyticsService)
-- **Renderer Process Events**: 20 (via usePostHog hook)
+- **Renderer Process Events**: 25 (via usePostHog hook)
 - **File Operations**: 7 events
 - **Workspace Operations**: 4 events
+- **Navigation & Editor Mode**: 3 events
+- **File History**: 2 events
 - **AI-Related**: 20 events
 - **Extensions**: 1 event
 - **Onboarding**: 8 events

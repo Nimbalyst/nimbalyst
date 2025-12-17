@@ -1,4 +1,5 @@
 import React from 'react';
+import { usePostHog } from 'posthog-js/react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import './NavigationGutter.css';
 import type { ContentMode } from '../../types/WindowModeTypes';
@@ -45,6 +46,7 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
   bottomPanel,
   workspacePath,
 }) => {
+  const posthog = usePostHog();
   // Content mode buttons - primary navigation (top)
   const contentModeButtonsTop: NavButton[] = [
     {
@@ -104,6 +106,13 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
     // });
 
     if (button.contentMode) {
+      // Track mode switch analytics
+      if (button.contentMode !== contentMode) {
+        posthog?.capture('content_mode_switched', {
+          fromMode: contentMode,
+          toMode: button.contentMode,
+        });
+      }
       // console.log('[NavigationGutter] Changing content mode from', contentMode, 'to', button.contentMode);
       onContentModeChange(button.contentMode);
     } else if (button.onClick) {

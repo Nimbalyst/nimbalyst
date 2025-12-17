@@ -1888,7 +1888,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           workspacePath,  // CRITICAL: Add workspacePath for MCP tool routing
           sessionType,  // Include sessionType for MCP tool availability
           attachments: attachments.length > 0 ? attachments : undefined,
-          queuedPromptId  // For deduplication in main process
+          queuedPromptId,  // For deduplication in main process
+          contentMode: mode === 'agent' ? 'agent' : 'files'  // For analytics tracking
         };
 
         // IMPORTANT: Refresh mockup annotations from window at send time
@@ -1912,10 +1913,10 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           hasMockupDrawing: !!contextToSend.mockupDrawing
         });
       } else if (attachments.length > 0) {
-        contextToSend = { attachments, sessionType, workspacePath, queuedPromptId };  // Include workspacePath even without document
+        contextToSend = { attachments, sessionType, workspacePath, queuedPromptId, contentMode: mode === 'agent' ? 'agent' : 'files' };  // Include workspacePath even without document
       } else {
         // Even without document context or attachments, pass sessionType and workspacePath
-        contextToSend = { sessionType, workspacePath, queuedPromptId };  // Include workspacePath for routing
+        contextToSend = { sessionType, workspacePath, queuedPromptId, contentMode: mode === 'agent' ? 'agent' : 'files' };  // Include workspacePath for routing
       }
 
       await window.electronAPI.aiSendMessage(

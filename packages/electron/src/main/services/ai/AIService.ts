@@ -1282,12 +1282,14 @@ export class AIService {
 
       // Track ai_message_sent analytics event
       const slashCommandInfo = detectNimbalystSlashCommand(message, workspacePath);
+      const contentMode = (documentContext as any)?.contentMode;
       this.analytics.sendEvent('ai_message_sent', {
         provider: session.provider,
         hasDocumentContext: !!documentContext,
         hasAttachments: !!(attachments && attachments.length > 0),
         attachmentCount: attachments?.length || 0,
         messageLength: bucketMessageLength(message.length),
+        contentMode: contentMode || 'unknown',
         // Slash command tracking - only included if a Nimbalyst package command was used
         ...(slashCommandInfo && {
           usedSlashCommand: true,

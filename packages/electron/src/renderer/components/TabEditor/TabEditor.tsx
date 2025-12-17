@@ -12,6 +12,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import { usePostHog } from 'posthog-js/react';
 import type { ConfigTheme, TextReplacement } from 'rexical';
 import {
   StravuEditor,
@@ -93,6 +94,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                                                       onOpenSessionInChat,
                                                       workspaceId,
                                                     }) => {
+  const posthog = usePostHog();
+
   // Subscribe to custom editor registry changes to re-evaluate file type
   // when extensions finish loading (handles race condition on startup)
   const [registryVersion, setRegistryVersion] = useState(0);
@@ -152,6 +155,51 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const [conflictDialogContent, setConflictDialogContent] = useState<string>('');
   const [showMonacoDiffBar, setShowMonacoDiffBar] = useState(false); // For Monaco diff approval bar
   const [isEditorReady, setIsEditorReady] = useState(false); // Track when editor is mounted and ready
+
+  // Track editor type usage when file is opened
+  const hasTrackedOpenRef = useRef<string | null>(null);
+  useEffect(() => {
+    // Only track once per file path when it becomes active
+    if (isActive && isEditorReady && hasTrackedOpenRef.current !== filePath) {
+      hasTrackedOpenRef.current = filePath;
+
+      // Determine the editor type for tracking
+      let editorType = 'monaco'; // default for code files
+      let hasMermaid = false;
+      let hasDataModel = false;
+
+      if (isMarkdown) {
+        editorType = 'markdown';
+        // Check if markdown contains Mermaid diagrams
+        if (initialContent.includes('```mermaid') || initialContent.includes('~~~mermaid')) {
+          hasMermaid = true;
+        }
+        // Check if markdown contains DataModel references
+        if (initialContent.includes('```datamodel') || initialContent.includes('datamodel:')) {
+          hasDataModel = true;
+        }
+      } else if (isImage) {
+        editorType = 'image';
+      } else if (isCustom) {
+        // Check for specific custom editor types
+        const ext = filePath.toLowerCase();
+        if (ext.endsWith('.mockup.html')) {
+          editorType = 'mockup';
+        } else if (ext.endsWith('.datamodel.json') || ext.endsWith('.datamodel')) {
+          editorType = 'datamodel';
+        } else {
+          editorType = 'custom';
+        }
+      }
+
+      posthog?.capture('editor_type_opened', {
+        editorType,
+        fileExtension: filePath.substring(filePath.lastIndexOf('.')).toLowerCase(),
+        hasMermaid,
+        hasDataModel,
+      });
+    }
+  }, [isActive, isEditorReady, filePath, isMarkdown, isImage, isCustom, posthog, initialContent]);
 
   // Refs for stable access in timers/callbacks
   const contentRef = useRef(content);
@@ -1519,6 +1567,11 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                     const currentContent = getContentFnRef.current();
                     setContent(currentContent);
                   }
+                  // Track markdown view mode switch
+                  posthog?.capture('markdown_view_mode_switched', {
+                    fromMode: 'lexical',
+                    toMode: 'monaco',
+                  });
                   setMarkdownViewMode('monaco');
                   setViewModeVersion(v => v + 1);
                 },
@@ -1564,6 +1617,11 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                       const currentContent = getContentFnRef.current();
                       setContent(currentContent);
                     }
+                    // Track markdown view mode switch
+                    posthog?.capture('markdown_view_mode_switched', {
+                      fromMode: 'monaco',
+                      toMode: 'lexical',
+                    });
                     setMarkdownViewMode('lexical');
                     setViewModeVersion(v => v + 1);
                   }}

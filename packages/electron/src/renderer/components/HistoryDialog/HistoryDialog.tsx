@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import { usePostHog } from 'posthog-js/react';
 import { useHistory } from '../../hooks/useHistory';
 import { DiffPreviewEditor, type DiffNavigationState } from './DiffPreviewEditor';
 import { TextDiffViewer, type TextDiffNavigationState } from './TextDiffViewer';
@@ -28,6 +29,7 @@ const getSnapshotId = (snapshot: { timestamp: string; baseMarkdownHash: string }
 };
 
 export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'light' }: HistoryDialogProps) {
+  const posthog = usePostHog();
   const { snapshots, loading, refreshSnapshots, loadSnapshot, deleteSnapshot } = useHistory(filePath);
   const [selectedVersions, setSelectedVersions] = useState<VersionSelection[]>([]);
   const [previewContent, setPreviewContent] = useState<string>('');
@@ -97,8 +99,12 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
   useEffect(() => {
     if (isOpen && filePath) {
       refreshSnapshots();
+      // Track file history dialog opened
+      posthog?.capture('file_history_opened', {
+        fileType,
+      });
     }
-  }, [isOpen, filePath, refreshSnapshots]);
+  }, [isOpen, filePath, refreshSnapshots, posthog, fileType]);
 
   useEffect(() => {
     // Reset selection when dialog opens/closes
@@ -244,12 +250,16 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
   };
 
   const handleRestore = () => {
-    console.log('[HistoryDialog] handleRestore called', { 
-      hasPreviewContent: !!previewContent, 
+    console.log('[HistoryDialog] handleRestore called', {
+      hasPreviewContent: !!previewContent,
       hasOnRestore: !!onRestore,
-      contentLength: previewContent?.length 
+      contentLength: previewContent?.length
     });
     if (previewContent && onRestore) {
+      // Track file history restore
+      posthog?.capture('file_history_restored', {
+        fileType,
+      });
       onRestore(previewContent);
       onClose();
     } else {
