@@ -113,8 +113,9 @@ function createDataModelScreenshotCapture() {
     store.getState().loadFromFile(data);
 
     // Create a fresh container for each capture
-    // React Flow needs the container to have real dimensions, so we position it
-    // off-screen but still rendered (using clip instead of display:none or left:-9999px)
+    // React Flow needs the container to have real dimensions
+    // Position it at 0,0 but behind everything (z-index: -9999) so it's invisible
+    // but html2canvas can still capture it
     const headlessContainer = document.createElement('div');
     headlessContainer.id = 'datamodel-headless-container-' + Date.now();
     headlessContainer.style.cssText = `
@@ -125,8 +126,7 @@ function createDataModelScreenshotCapture() {
       height: 800px;
       overflow: hidden;
       pointer-events: none;
-      z-index: -1;
-      opacity: 0;
+      z-index: -9999;
     `;
     document.body.appendChild(headlessContainer);
 
@@ -177,13 +177,6 @@ function createDataModelScreenshotCapture() {
                 reject(new Error('Could not find React Flow element'));
                 return;
               }
-
-              // Make container briefly visible for capture
-              headlessContainer.style.opacity = '1';
-              headlessContainer.style.zIndex = '99999';
-
-              // Wait a frame for the visibility change to take effect
-              await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
               const base64Data = await captureDataModelCanvas(canvasElement);
 

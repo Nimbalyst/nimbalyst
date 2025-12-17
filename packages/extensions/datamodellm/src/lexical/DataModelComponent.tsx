@@ -23,13 +23,14 @@ import {
   type BaseSelection,
 } from 'lexical';
 import * as React from 'react';
-import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   getDataModelPlatformService,
   hasDataModelPlatformService,
 } from './DataModelPlatformService';
 import { $isDataModelNode } from './DataModelNode';
+import { useDocumentPath } from '@nimbalyst/editor-context';
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
@@ -336,41 +337,114 @@ export default function DataModelComponent({
   const [selection, setSelection] = useState<BaseSelection | null>(null);
   const [editor] = useLexicalComposerContext();
   const isEditable = useLexicalEditable();
-  const [resolvedScreenshotSrc, setResolvedScreenshotSrc] = useState<
+  const [resolvedScreenshotSrcOverride, setResolvedScreenshotSrcOverride] = useState<
     string | null
   >(null);
   const [isLoadError, setIsLoadError] = useState(false);
+  const [isRefreshingScreenshot, setIsRefreshingScreenshot] = useState(false);
+  const screenshotRefreshCheckedRef = useRef(false);
 
-  // Resolve the screenshot path to an absolute URL
-  useEffect(() => {
-    // Empty screenshot path means still loading
+  // Get document path from context - stable per-editor instance
+  const { documentPath, documentDir } = useDocumentPath();
+
+  // Compute resolved screenshot path
+  const resolvedScreenshotSrc = useMemo((): string | null => {
     if (!screenshotPath) {
-      setResolvedScreenshotSrc(null);
+      return null;
+    }
+
+    // If there's an override (from cache-busting after refresh), use it
+    if (resolvedScreenshotSrcOverride) {
+      return resolvedScreenshotSrcOverride;
+    }
+
+    // If it's already an absolute URL, use as-is
+    if (screenshotPath.match(/^(https?|file|data):/)) {
+      return screenshotPath;
+    }
+
+    // Resolve relative path using document directory from context
+    if (documentDir) {
+      const absolutePath = documentDir + '/' + screenshotPath;
+      return 'file://' + absolutePath;
+    }
+
+    // No document path available yet - return null to show loading state
+    return null;
+  }, [screenshotPath, resolvedScreenshotSrcOverride, documentDir]);
+
+  // Check if screenshot needs refresh (source file newer than screenshot by >5 seconds)
+  useEffect(() => {
+    // Only check once per mount
+    if (screenshotRefreshCheckedRef.current) {
       return;
     }
 
-    if (
-      typeof window !== 'undefined' &&
-      (window as any).__currentDocumentPath
-    ) {
-      const documentPath = (window as any).__currentDocumentPath;
+    if (!hasDataModelPlatformService() || !screenshotPath || !dataModelPath || !documentPath) {
+      return;
+    }
 
-      // If it's already an absolute URL, use as-is
-      if (screenshotPath.match(/^(https?|file|data):/)) {
-        setResolvedScreenshotSrc(screenshotPath);
-        return;
+    const checkAndRefreshScreenshot = async () => {
+      screenshotRefreshCheckedRef.current = true;
+
+      const service = getDataModelPlatformService();
+
+      // Resolve absolute paths using document path from context
+      let absoluteDataModelPath = dataModelPath;
+      let absoluteScreenshotPath = screenshotPath;
+
+      if (!dataModelPath.startsWith('/')) {
+        absoluteDataModelPath = service.resolveRelativePath(dataModelPath, documentPath);
       }
 
-      // Resolve relative path from document directory
-      const lastSlash = documentPath.lastIndexOf('/');
-      const documentDir =
-        lastSlash >= 0 ? documentPath.substring(0, lastSlash) : '';
-      const absolutePath = documentDir + '/' + screenshotPath;
-      setResolvedScreenshotSrc('file://' + absolutePath);
-    } else {
-      setResolvedScreenshotSrc(screenshotPath);
-    }
-  }, [screenshotPath]);
+      if (!screenshotPath.startsWith('/') && !screenshotPath.match(/^(https?|file|data):/)) {
+        absoluteScreenshotPath = service.resolveRelativePath(screenshotPath, documentPath);
+      }
+
+      try {
+        // Check if both files exist
+        const [sourceExists, screenshotExists] = await Promise.all([
+          service.fileExists(absoluteDataModelPath),
+          service.fileExists(absoluteScreenshotPath),
+        ]);
+
+        if (!sourceExists) {
+          return;
+        }
+
+        // If screenshot doesn't exist, we need to create it
+        if (!screenshotExists) {
+          setIsRefreshingScreenshot(true);
+          await service.captureScreenshot(absoluteDataModelPath, absoluteScreenshotPath);
+          // Force reload by updating the src with a cache-busting query
+          setResolvedScreenshotSrcOverride('file://' + absoluteScreenshotPath + '?t=' + Date.now());
+          setIsRefreshingScreenshot(false);
+          return;
+        }
+
+        // Get modification times
+        const [sourceModTime, screenshotModTime] = await Promise.all([
+          service.getFileModifiedTime(absoluteDataModelPath),
+          service.getFileModifiedTime(absoluteScreenshotPath),
+        ]);
+
+        // If source is more than 5 seconds newer than screenshot, refresh
+        const REFRESH_THRESHOLD_MS = 5000;
+        if (sourceModTime > screenshotModTime + REFRESH_THRESHOLD_MS) {
+          setIsRefreshingScreenshot(true);
+          await service.captureScreenshot(absoluteDataModelPath, absoluteScreenshotPath);
+          // Force reload by updating the src with a cache-busting query
+          setResolvedScreenshotSrcOverride('file://' + absoluteScreenshotPath + '?t=' + Date.now());
+          setIsRefreshingScreenshot(false);
+        }
+      } catch (error) {
+        console.error('[DataModelComponent] Failed to check/refresh screenshot:', error);
+        setIsRefreshingScreenshot(false);
+      }
+    };
+
+    checkAndRefreshScreenshot();
+  }, [dataModelPath, screenshotPath, documentPath]);
 
   // Handle click selection
   const onClick = useCallback(
@@ -431,20 +505,15 @@ export default function DataModelComponent({
 
       const service = getDataModelPlatformService();
 
-      // Resolve the data model path using the platform service
+      // Resolve the data model path using document path from context
       let absoluteDataModelPath = dataModelPath;
-      if (
-        typeof window !== 'undefined' &&
-        (window as any).__currentDocumentPath &&
-        !dataModelPath.startsWith('/')
-      ) {
-        const documentPath = (window as any).__currentDocumentPath;
+      if (documentPath && !dataModelPath.startsWith('/')) {
         absoluteDataModelPath = service.resolveRelativePath(dataModelPath, documentPath);
       }
 
       service.openDataModelEditor(absoluteDataModelPath);
     },
-    [dataModelPath],
+    [dataModelPath, documentPath],
   );
 
   // Handle resize
@@ -524,18 +593,26 @@ export default function DataModelComponent({
             <span className="datamodel-error-hint">Click Edit to open the data model</span>
           </div>
         ) : (
-          <img
-            ref={imageRef}
-            className={`datamodel-image ${isFocused ? 'focused' : ''}`}
-            src={resolvedScreenshotSrc}
-            alt={altText}
-            style={{
-              width: width !== 'inherit' ? width : undefined,
-              height: height !== 'inherit' ? height : undefined,
-            }}
-            onError={() => setIsLoadError(true)}
-            draggable={false}
-          />
+          <>
+            <img
+              ref={imageRef}
+              className={`datamodel-image ${isFocused ? 'focused' : ''} ${isRefreshingScreenshot ? 'refreshing' : ''}`}
+              src={resolvedScreenshotSrc}
+              alt={altText}
+              style={{
+                width: width !== 'inherit' ? width : undefined,
+                height: height !== 'inherit' ? height : undefined,
+              }}
+              onError={() => setIsLoadError(true)}
+              draggable={false}
+            />
+            {isRefreshingScreenshot && (
+              <div className="datamodel-refresh-overlay">
+                <span className="datamodel-spinner" />
+                Updating screenshot...
+              </div>
+            )}
+          </>
         )}
 
         {showEditButton && (

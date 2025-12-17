@@ -102,3 +102,5 @@ export * from './extensions';
 // Services
 export { screenshotService } from './services/ScreenshotService';
 export type { ScreenshotCapability } from './services/ScreenshotService';
+// Editor context
+export { DocumentPathProvider, useDocumentPath } from './DocumentPathContext';

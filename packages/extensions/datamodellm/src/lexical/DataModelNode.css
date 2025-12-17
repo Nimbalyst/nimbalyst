@@ -27,6 +27,27 @@
   cursor: grab;
 }
 
+.datamodel-image.refreshing {
+  opacity: 0.5;
+}
+
+.datamodel-refresh-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background-color: rgba(255, 255, 255, 0.8);
+  border-radius: 4px;
+  color: var(--text-secondary, #6b7280);
+  font-size: 13px;
+}
+
 .datamodel-loading,
 .datamodel-error {
   display: flex;

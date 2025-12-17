@@ -82,17 +82,17 @@ function StravuEditorInner({config}: {config: EditorConfig}): JSX.Element {
             data-theme={theme}
         >
             <RuntimeSettingsProvider>
-                    <LexicalComposer initialConfig={initialConfig}>
-                        <SharedHistoryContext>
-                            <TableContext>
-                                <ToolbarContext>
-                                    <div className="editor-shell">
-                                        <Editor config={config}/>
-                                    </div>
-                                </ToolbarContext>
-                            </TableContext>
-                        </SharedHistoryContext>
-                    </LexicalComposer>
+                <LexicalComposer initialConfig={initialConfig}>
+                    <SharedHistoryContext>
+                        <TableContext>
+                            <ToolbarContext>
+                                <div className="editor-shell">
+                                    <Editor config={config}/>
+                                </div>
+                            </ToolbarContext>
+                        </TableContext>
+                    </SharedHistoryContext>
+                </LexicalComposer>
             </RuntimeSettingsProvider>
         </div>
     );

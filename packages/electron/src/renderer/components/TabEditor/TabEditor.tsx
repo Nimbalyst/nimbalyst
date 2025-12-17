@@ -14,6 +14,7 @@
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { usePostHog } from 'posthog-js/react';
 import type { ConfigTheme, TextReplacement } from 'rexical';
+import { DocumentPathProvider } from '@nimbalyst/runtime';
 import {
   StravuEditor,
   $convertFromEnhancedMarkdownString,
@@ -588,7 +589,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         // console.log(`[TabEditor] Skipping autosave - not dirty`);
         return;
       }
-      
+
       // Skip if not enough time has passed since last change (debounce)
       if (Date.now() - lastChangeTimeRef.current < autosaveDebounce) {
         console.log(`[TabEditor] Skipping autosave - debounce not elapsed`);
@@ -1530,74 +1531,75 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             />
           ) : isMarkdown && markdownViewMode === 'lexical' ? (
               <div className="tab-editor-wrapper" style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
-
-              <StravuEditor
-              key={`${filePath}-lexical-v${viewModeVersion}`}
-              config={{
-                initialContent: content,
-                theme,
-                onContentChange: handleContentChange,
-                onGetContent: (getContentFn) => {
-                  getContentFnRef.current = getContentFn;
-                  if (onGetContentReady) {
-                    onGetContentReady(getContentFn);
-                  }
-                  // Now that we have getContentFn, expose the manual save function
-                  if (onManualSaveReady) {
-                    onManualSaveReady(handleManualSave);
-                  }
-                  // Sync content once when editor is ready to ensure DocumentHeaderContainer
-                  // detects frontmatter on initial load
-                  if (!hasInitialContentSyncRef.current) {
-                    hasInitialContentSyncRef.current = true;
-                    const currentContent = getContentFn();
-                    setContent(currentContent);
-                  }
-                },
-                onEditorReady: (editor) => {
-                  editorRef.current = editor;
-                  setIsEditorReady(true);
-                  // Force FixedTabHeaderRegistry to re-evaluate after editor remounts
-                  // This ensures DiffApprovalBar appears when switching back from Monaco mode
-                  setTimeout(() => {
-                    FixedTabHeaderRegistry.getInstance().notifyChange();
-                  }, 150);
-                },
-                onSaveRequest: handleManualSave,
-                onViewHistory,
-                onRenameDocument,
-                onSwitchToAgentMode,
-              onOpenSessionInChat,
-                onToggleMarkdownMode: () => {
-                  // Get current content from Lexical editor before switching
-                  if (getContentFnRef.current) {
-                    const currentContent = getContentFnRef.current();
-                    setContent(currentContent);
-                  }
+              <DocumentPathProvider documentPath={filePath}>
+                <StravuEditor
+                  key={`${filePath}-lexical-v${viewModeVersion}`}
+                  config={{
+                    initialContent: content,
+                    theme,
+                    onContentChange: handleContentChange,
+                    onGetContent: (getContentFn) => {
+                      getContentFnRef.current = getContentFn;
+                      if (onGetContentReady) {
+                        onGetContentReady(getContentFn);
+                      }
+                      // Now that we have getContentFn, expose the manual save function
+                      if (onManualSaveReady) {
+                        onManualSaveReady(handleManualSave);
+                      }
+                      // Sync content once when editor is ready to ensure DocumentHeaderContainer
+                      // detects frontmatter on initial load
+                      if (!hasInitialContentSyncRef.current) {
+                        hasInitialContentSyncRef.current = true;
+                        const currentContent = getContentFn();
+                        setContent(currentContent);
+                      }
+                    },
+                    onEditorReady: (editor) => {
+                      editorRef.current = editor;
+                      setIsEditorReady(true);
+                      // Force FixedTabHeaderRegistry to re-evaluate after editor remounts
+                      // This ensures DiffApprovalBar appears when switching back from Monaco mode
+                      setTimeout(() => {
+                        FixedTabHeaderRegistry.getInstance().notifyChange();
+                      }, 150);
+                    },
+                    onSaveRequest: handleManualSave,
+                    onViewHistory,
+                    onRenameDocument,
+                    onSwitchToAgentMode,
+                    onOpenSessionInChat,
+                    onToggleMarkdownMode: () => {
+                      // Get current content from Lexical editor before switching
+                      if (getContentFnRef.current) {
+                        const currentContent = getContentFnRef.current();
+                        setContent(currentContent);
+                      }
                   // Track markdown view mode switch
                   posthog?.capture('markdown_view_mode_switched', {
                     fromMode: 'lexical',
                     toMode: 'monaco',
                   });
-                  setMarkdownViewMode('monaco');
-                  setViewModeVersion(v => v + 1);
-                },
-                filePath,
-                workspaceId,
-                onImageDoubleClick: handleImageDoubleClick,
-                onImageDragStart: handleImageDragStart,
-                textReplacements: isActive ? textReplacements : undefined,
-                documentHeader: (
-                  <DocumentHeaderContainer
-                    filePath={filePath}
-                    fileName={fileName}
-                    content={content}
-                    onContentChange={handleDocumentHeaderContentChange}
-                    editor={editorRef.current}
-                  />
-                ),
-              }}
-            />
+                      setMarkdownViewMode('monaco');
+                      setViewModeVersion(v => v + 1);
+                    },
+                    filePath,
+                    workspaceId,
+                    onImageDoubleClick: handleImageDoubleClick,
+                    onImageDragStart: handleImageDragStart,
+                    textReplacements: isActive ? textReplacements : undefined,
+                    documentHeader: (
+                      <DocumentHeaderContainer
+                        filePath={filePath}
+                        fileName={fileName}
+                        content={content}
+                        onContentChange={handleDocumentHeaderContentChange}
+                        editor={editorRef.current}
+                      />
+                    ),
+                  }}
+                />
+              </DocumentPathProvider>
               </div>
           ) : isMarkdown && markdownViewMode === 'monaco' ? (
             <>

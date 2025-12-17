@@ -30,8 +30,8 @@ import * as lexicalMarkdown from '@lexical/markdown';
 // Import runtime UI components that extensions can use
 import { MaterialSymbol } from '@nimbalyst/runtime/ui/icons/MaterialSymbol';
 
-// Import screenshot service for extensions to register capabilities
-import { screenshotService } from '@nimbalyst/runtime';
+// Import screenshot service and document path context from runtime
+import { screenshotService, useDocumentPath } from '@nimbalyst/runtime';
 
 // Import DataModel platform service for datamodellm extension
 import { DataModelPlatformServiceImpl } from './DataModelPlatformServiceImpl';
@@ -214,6 +214,8 @@ export class ExtensionPlatformServiceImpl implements ExtensionPlatformService {
       '@lexical/react/useLexicalNodeSelection': lexicalReactNodeSelection,
       '@lexical/utils': lexicalUtils,
       '@lexical/markdown': lexicalMarkdown,
+      // Document path context for extensions
+      '@nimbalyst/editor-context': { useDocumentPath },
       // Runtime UI components
       '@nimbalyst/runtime/ui/icons/MaterialSymbol': { MaterialSymbol },
       // Core services for extensions
@@ -438,6 +440,15 @@ export class ExtensionPlatformServiceImpl implements ExtensionPlatformService {
       (_match, namedImports, modulePath) => {
         const converted = convertAsToColon(namedImports);
         return `const {${converted}} = window.__nimbalyst_extensions["${modulePath}"]`;
+      }
+    );
+
+    // Handle: import { X } from '@nimbalyst/editor-context'
+    transformed = transformed.replace(
+      /import\s+{([^}]+)}\s+from\s+['"]@nimbalyst\/editor-context['"]/g,
+      (_match, namedImports) => {
+        const converted = convertAsToColon(namedImports);
+        return `const {${converted}} = window.__nimbalyst_extensions["@nimbalyst/editor-context"]`;
       }
     );
 

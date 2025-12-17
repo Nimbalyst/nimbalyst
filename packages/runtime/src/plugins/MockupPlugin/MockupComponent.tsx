@@ -31,6 +31,7 @@ import {
   hasMockupPlatformService,
 } from './MockupPlatformService';
 import { $isMockupNode } from './MockupNode';
+import { useDocumentPath } from '../../DocumentPathContext';
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
@@ -337,41 +338,32 @@ export default function MockupComponent({
   const [selection, setSelection] = useState<BaseSelection | null>(null);
   const [editor] = useLexicalComposerContext();
   const isEditable = useLexicalEditable();
-  const [resolvedScreenshotSrc, setResolvedScreenshotSrc] = useState<
-    string | null
-  >(null);
   const [isLoadError, setIsLoadError] = useState(false);
 
-  // Resolve the screenshot path to an absolute URL
-  useEffect(() => {
+  // Get document path from context - stable per-editor instance
+  const { documentPath, documentDir } = useDocumentPath();
+
+  // Compute resolved screenshot path using document path from context
+  const resolvedScreenshotSrc = React.useMemo((): string | null => {
     // Empty screenshot path means still loading
     if (!screenshotPath) {
-      setResolvedScreenshotSrc(null);
-      return;
+      return null;
     }
 
-    if (
-      typeof window !== 'undefined' &&
-      (window as any).__currentDocumentPath
-    ) {
-      const documentPath = (window as any).__currentDocumentPath;
+    // If it's already an absolute URL, use as-is
+    if (screenshotPath.match(/^(https?|file|data):/)) {
+      return screenshotPath;
+    }
 
-      // If it's already an absolute URL, use as-is
-      if (screenshotPath.match(/^(https?|file|data):/)) {
-        setResolvedScreenshotSrc(screenshotPath);
-        return;
-      }
-
-      // Resolve relative path from document directory
-      const lastSlash = documentPath.lastIndexOf('/');
-      const documentDir =
-        lastSlash >= 0 ? documentPath.substring(0, lastSlash) : '';
+    // Resolve relative path using document directory from context
+    if (documentDir) {
       const absolutePath = documentDir + '/' + screenshotPath;
-      setResolvedScreenshotSrc('file://' + absolutePath);
-    } else {
-      setResolvedScreenshotSrc(screenshotPath);
+      return 'file://' + absolutePath;
     }
-  }, [screenshotPath]);
+
+    // No document path available yet
+    return null;
+  }, [screenshotPath, documentDir]);
 
   // Handle click selection
   const onClick = useCallback(
@@ -432,20 +424,15 @@ export default function MockupComponent({
 
       const service = getMockupPlatformService();
 
-      // Resolve the mockup path using the platform service
+      // Resolve the mockup path using document path from context
       let absoluteMockupPath = mockupPath;
-      if (
-        typeof window !== 'undefined' &&
-        (window as any).__currentDocumentPath &&
-        !mockupPath.startsWith('/')
-      ) {
-        const documentPath = (window as any).__currentDocumentPath;
+      if (documentPath && !mockupPath.startsWith('/')) {
         absoluteMockupPath = service.resolveRelativePath(mockupPath, documentPath);
       }
 
       service.openMockupEditor(absoluteMockupPath);
     },
-    [mockupPath],
+    [mockupPath, documentPath],
   );
 
   // Handle resize

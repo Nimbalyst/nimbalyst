@@ -161,7 +161,7 @@ generator client {
           const timeout = setTimeout(() => {
             ipcMain.removeHandler('screenshot:result-' + requestId);
             resolve({ success: false, error: 'Screenshot request timed out' });
-          }, 15000); // 15 second timeout for headless render
+          }, 30000); // 30 second timeout for headless render
 
           // Set up one-time handler for result
           const handler = (_event: Electron.IpcMainInvokeEvent, payload: {

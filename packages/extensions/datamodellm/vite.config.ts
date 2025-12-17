@@ -27,6 +27,7 @@ export default defineConfig({
         'zustand',
         'html2canvas',
         /^@nimbalyst\/runtime/,
+        '@nimbalyst/editor-context',
         // Lexical must be externalized to use the host's instance
         'lexical',
         /^@lexical\//,
