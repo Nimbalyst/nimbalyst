@@ -60,11 +60,19 @@ export function ClaudeCodePanel({
     config.authMethod as AuthMethod || 'login'
   );
   const [isCheckingClaudeWindowsStatus, setIsCheckingClaudeWindowsStatus] = useState(true);
-  const [claudeCodeWindowsStatus, setClaudeCodeWindowsStatus] = useState<ClaudeForWindowsInstallation | null>({isPlatformWindows: true});
+  const [claudeCodeWindowsStatus, setClaudeCodeWindowsStatus] = useState<ClaudeForWindowsInstallation | null>(null);
   const posthog = usePostHog();
 
+  // Detect Windows platform using navigator.platform (client-side, no IPC needed)
+  const isWindowsPlatform = navigator.platform === 'Win32';
+
   useEffect(() => {
-    checkClaudeCodeWindowsInstallation();
+    // Only check Windows installation status on Windows
+    if (isWindowsPlatform) {
+      checkClaudeCodeWindowsInstallation();
+    } else {
+      setIsCheckingClaudeWindowsStatus(false);
+    }
     checkLoginStatus();
   }, []);
 
@@ -96,14 +104,10 @@ export function ClaudeCodePanel({
   };
 
   function isClaudeCodeWindowsReady(): boolean {
-    if (claudeCodeWindowsStatus?.isPlatformWindows) {
-      return Boolean(claudeCodeWindowsStatus.claudeCodeVersion);
+    if (isWindowsPlatform) {
+      return Boolean(claudeCodeWindowsStatus?.claudeCodeVersion);
     }
     return true;
-  }
-
-  function isWindowsPlatform(): boolean {
-    return claudeCodeWindowsStatus?.isPlatformWindows || false;
   }
 
   const handleLogin = async () => {
@@ -156,7 +160,7 @@ export function ClaudeCodePanel({
         </label>
       </div>
 
-      { isWindowsPlatform() && isCheckingClaudeWindowsStatus && (
+      { isWindowsPlatform && isCheckingClaudeWindowsStatus && (
         <>
           <div className="installation-status installing">
             <div className="installation-status-row">
@@ -168,7 +172,7 @@ export function ClaudeCodePanel({
       { !isCheckingClaudeWindowsStatus && (
         <>
           <div className="provider-panel-section">
-            { isWindowsPlatform() ? (
+            { isWindowsPlatform ? (
               <>
                 <h4 className="provider-panel-section-title">Claude Code for Windows Installation</h4>
                 <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '12px', lineHeight: '1.4' }}>

@@ -854,6 +854,9 @@ export default function App() {
     // Only show in workspace mode windows
     if (!workspaceMode) return;
 
+    // Only run on Windows
+    if (navigator.platform !== 'Win32') return;
+
     // Wait for feature walkthrough and onboarding to be closed first
     if (isFeatureWalkthroughOpen || isOnboardingOpen) return;
 
