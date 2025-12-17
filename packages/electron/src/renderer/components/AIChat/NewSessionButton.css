@@ -122,8 +122,25 @@
   text-align: left;
 }
 
-.new-session-option:hover {
+.new-session-option:hover:not(.disabled) {
   background: var(--surface-hover);
+}
+
+.new-session-option.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.new-session-option.disabled:hover {
+  background: transparent;
+}
+
+.new-session-option.disabled .new-session-option-name {
+  color: var(--text-tertiary);
+}
+
+.new-session-option.disabled .disabled-icon {
+  color: var(--text-tertiary);
 }
 
 .new-session-option.selected {

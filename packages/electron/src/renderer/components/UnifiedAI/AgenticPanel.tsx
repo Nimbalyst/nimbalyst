@@ -2487,6 +2487,14 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             onAIModeChange={(newMode) => handleModeChange(activeTab.id, newMode)}
             currentModel={activeTab.model || activeTab.sessionData.model || 'claude-code'}
             onModelChange={(newModel) => handleModelChange(activeTab.id, newModel)}
+            sessionHasMessages={(activeTab.sessionData.messages?.length ?? 0) > 0}
+            currentProviderType={
+              activeTab.sessionData.provider === 'claude-code' || activeTab.sessionData.provider === 'openai-codex'
+                ? 'agent'
+                : activeTab.sessionData.provider
+                  ? 'model'
+                  : null
+            }
             isArchived={activeTab.isArchived}
             onCloseAndArchive={handleCloseAndArchive}
             onUnarchive={handleUnarchive}
@@ -2597,6 +2605,14 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                 onAIModeChange={(newMode) => handleModeChange(tab.id, newMode)}
                 currentModel={tab.model || tab.sessionData.model || 'claude-code'}
                 onModelChange={(newModel) => handleModelChange(tab.id, newModel)}
+                sessionHasMessages={(tab.sessionData.messages?.length ?? 0) > 0}
+                currentProviderType={
+                  tab.sessionData.provider === 'claude-code' || tab.sessionData.provider === 'openai-codex'
+                    ? 'agent'
+                    : tab.sessionData.provider
+                      ? 'model'
+                      : null
+                }
                 isArchived={tab.isArchived}
                 onCloseAndArchive={handleCloseAndArchive}
                 onUnarchive={handleUnarchive}

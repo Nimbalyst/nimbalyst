@@ -64,6 +64,8 @@ export interface AISessionViewProps {
   // Model selection
   currentModel?: string;
   onModelChange?: (modelId: string) => void;
+  sessionHasMessages?: boolean;  // Whether current session has any messages
+  currentProviderType?: 'agent' | 'model' | null;  // Type of current session's provider
 
   // Archive state and actions
   isArchived?: boolean;
@@ -236,6 +238,8 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
   onAIModeChange,
   currentModel,
   onModelChange,
+  sessionHasMessages,
+  currentProviderType,
   isArchived,
   onCloseAndArchive,
   onUnarchive
@@ -616,6 +620,8 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
         onModeChange={onAIModeChange}
         currentModel={currentModel}
         onModelChange={onModelChange}
+        sessionHasMessages={sessionHasMessages}
+        currentProviderType={currentProviderType}
         tokenUsage={sessionData.tokenUsage}
         provider={sessionData.provider}
         onQueue={handleQueue}

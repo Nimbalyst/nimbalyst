@@ -55,6 +55,8 @@ interface AIInputProps {
   // Model selection support
   currentModel?: string;
   onModelChange?: (modelId: string) => void;
+  sessionHasMessages?: boolean;  // Whether current session has any messages
+  currentProviderType?: 'agent' | 'model' | null;  // Type of current session's provider
 
   // Token usage display support (for Claude Code)
   tokenUsage?: {
@@ -112,6 +114,8 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
     onModeChange,
     currentModel,
     onModelChange,
+    sessionHasMessages,
+    currentProviderType,
     tokenUsage,
     provider,
     onQueue,
@@ -820,7 +824,14 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
           }}>
             {onModeChange && provider === 'claude-code' && <ModeTag mode={mode} onModeChange={onModeChange} />}
 
-            {onModelChange && currentModel && <ModelSelector currentModel={currentModel} onModelChange={onModelChange} />}
+            {onModelChange && currentModel && (
+              <ModelSelector
+                currentModel={currentModel}
+                onModelChange={onModelChange}
+                sessionHasMessages={sessionHasMessages}
+                currentProviderType={currentProviderType}
+              />
+            )}
             {/* Show token usage for all providers - displays "--" if no data yet */}
             <ContextUsageDisplay
               inputTokens={tokenUsage?.inputTokens || 0}

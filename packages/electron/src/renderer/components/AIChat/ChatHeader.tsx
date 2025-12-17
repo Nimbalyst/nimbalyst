@@ -76,6 +76,21 @@ export function ChatHeader({
   const displayModel = getCurrentSessionModel();
   const modelInfo = parseModelInfo(displayModel || undefined);
 
+  // Get current session for type switching check
+  const currentSession = currentSessionId
+    ? sessions.find(s => s.id === currentSessionId)
+    : null;
+
+  // Check if current session has any messages
+  const sessionHasMessages = (currentSession?.messages?.length ?? 0) > 0;
+
+  // Determine provider type (agent vs model/SDK)
+  const getProviderType = (provider?: string): 'agent' | 'model' | null => {
+    if (!provider) return null;
+    return (provider === 'claude-code' || provider === 'openai-codex') ? 'agent' : 'model';
+  };
+  const currentProviderType = getProviderType(currentSession?.provider);
+
   // Get provider class name for styling
   const getProviderClass = (providerId?: string) => {
     if (!providerId) return '';
@@ -176,6 +191,8 @@ export function ChatHeader({
           onOpenSettings={onOpenSettings}
           disabled={isLoading}
           hasUnsavedInput={hasUnsavedInput}
+          sessionHasMessages={sessionHasMessages}
+          currentProviderType={currentProviderType}
         />
       </div>
     </div>

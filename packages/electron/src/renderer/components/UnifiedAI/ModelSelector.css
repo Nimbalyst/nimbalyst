@@ -105,8 +105,25 @@
   text-align: left;
 }
 
-.model-selector-option:hover {
+.model-selector-option:hover:not(.disabled) {
   background: var(--surface-hover);
+}
+
+.model-selector-option.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.model-selector-option.disabled:hover {
+  background: transparent;
+}
+
+.model-selector-option.disabled .model-selector-option-name {
+  color: var(--text-tertiary);
+}
+
+.model-selector-option.disabled .disabled-icon {
+  color: var(--text-tertiary);
 }
 
 .model-selector-option.selected {

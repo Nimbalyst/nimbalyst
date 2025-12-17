@@ -9,12 +9,16 @@ interface Model {
   provider: string;
 }
 
+type ProviderType = 'agent' | 'model';
+
 interface NewSessionButtonProps {
   currentModel: string;  // Full provider:model ID
   onNewSession: (modelId: string) => void;  // Creates new session with specified model
   onOpenSettings?: () => void;  // Open AI settings
   disabled?: boolean;
   hasUnsavedInput?: boolean;  // Whether there's text in the input field
+  sessionHasMessages?: boolean;  // Whether current session has any messages
+  currentProviderType?: ProviderType | null;  // Type of current session's provider
 }
 
 export function NewSessionButton({
@@ -22,7 +26,9 @@ export function NewSessionButton({
   onNewSession,
   onOpenSettings,
   disabled = false,
-  hasUnsavedInput = false
+  hasUnsavedInput = false,
+  sessionHasMessages = false,
+  currentProviderType = null
 }: NewSessionButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [models, setModels] = useState<Record<string, Model[]>>({});
@@ -128,6 +134,18 @@ export function NewSessionButton({
     return modelParts.join(':') || currentModel;
   };
 
+  // Helper to determine if a provider is an agent type
+  const getProviderType = (provider: string): ProviderType => {
+    return (provider === 'claude-code' || provider === 'openai-codex') ? 'agent' : 'model';
+  };
+
+  // Check if switching to a provider type is disabled (session has messages and would switch types)
+  const isTypeSwitchDisabled = (targetProvider: string): boolean => {
+    if (!sessionHasMessages || !currentProviderType) return false;
+    const targetType = getProviderType(targetProvider);
+    return targetType !== currentProviderType;
+  };
+
   // Group providers by type (agents vs models)
   const groupedProviders = Object.entries(models).reduce((acc, [provider, providerModels]) => {
     const isAgent = provider === 'claude-code' || provider === 'openai-codex';
@@ -192,12 +210,15 @@ export function NewSessionButton({
                       </div>
                       {providerModels.map(model => {
                         const isCurrent = model.id === currentModel;
+                        const isDisabled = isTypeSwitchDisabled(provider);
+                        const disabledTooltip = 'Start a new session to switch between Agent and SDK modes';
                         return (
                           <button
                             key={model.id}
-                            className={`new-session-option ${isCurrent ? 'selected' : ''}`}
-                            onClick={() => handleModelSelect(model.id)}
-                            title={isCurrent ? 'Start new conversation' : `Switch to ${model.name}`}
+                            className={`new-session-option ${isCurrent ? 'selected' : ''} ${isDisabled ? 'disabled' : ''}`}
+                            onClick={() => !isDisabled && handleModelSelect(model.id)}
+                            title={isDisabled ? disabledTooltip : (isCurrent ? 'Start new conversation' : `Switch to ${model.name}`)}
+                            aria-disabled={isDisabled}
                           >
                             <div className="new-session-option-info">
                               <div className="new-session-option-name">
@@ -207,7 +228,9 @@ export function NewSessionButton({
                                 )}
                               </div>
                             </div>
-                            {isCurrent ? (
+                            {isDisabled ? (
+                              <MaterialSymbol icon="block" size={16} className="new-session-option-icon disabled-icon" />
+                            ) : isCurrent ? (
                               <MaterialSymbol icon="refresh" size={16} className="new-session-option-icon" />
                             ) : (
                               <MaterialSymbol icon="swap_horiz" size={16} className="new-session-option-icon" />
@@ -235,12 +258,15 @@ export function NewSessionButton({
                       </div>
                       {providerModels.map(model => {
                         const isCurrent = model.id === currentModel;
+                        const isDisabled = isTypeSwitchDisabled(provider);
+                        const disabledTooltip = 'Start a new session to switch between Agent and SDK modes';
                         return (
                           <button
                             key={model.id}
-                            className={`new-session-option ${isCurrent ? 'selected' : ''}`}
-                            onClick={() => handleModelSelect(model.id)}
-                            title={isCurrent ? 'Start new conversation' : `Switch to ${model.name}`}
+                            className={`new-session-option ${isCurrent ? 'selected' : ''} ${isDisabled ? 'disabled' : ''}`}
+                            onClick={() => !isDisabled && handleModelSelect(model.id)}
+                            title={isDisabled ? disabledTooltip : (isCurrent ? 'Start new conversation' : `Switch to ${model.name}`)}
+                            aria-disabled={isDisabled}
                           >
                             <div className="new-session-option-info">
                               <div className="new-session-option-name">
@@ -250,7 +276,9 @@ export function NewSessionButton({
                                 )}
                               </div>
                             </div>
-                            {isCurrent ? (
+                            {isDisabled ? (
+                              <MaterialSymbol icon="block" size={16} className="new-session-option-icon disabled-icon" />
+                            ) : isCurrent ? (
                               <MaterialSymbol icon="refresh" size={16} className="new-session-option-icon" />
                             ) : (
                               <MaterialSymbol icon="swap_horiz" size={16} className="new-session-option-icon" />

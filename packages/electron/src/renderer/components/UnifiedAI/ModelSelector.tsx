@@ -9,12 +9,21 @@ interface Model {
   provider: string;
 }
 
+type ProviderType = 'agent' | 'model';
+
 interface ModelSelectorProps {
   currentModel: string;  // Full provider:model ID
   onModelChange: (modelId: string) => void;
+  sessionHasMessages?: boolean;  // Whether current session has any messages
+  currentProviderType?: ProviderType | null;  // Type of current session's provider
 }
 
-export function ModelSelector({ currentModel, onModelChange }: ModelSelectorProps) {
+export function ModelSelector({
+  currentModel,
+  onModelChange,
+  sessionHasMessages = false,
+  currentProviderType = null
+}: ModelSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [models, setModels] = useState<Record<string, Model[]>>({});
   const [loading, setLoading] = useState(false);
@@ -92,6 +101,18 @@ export function ModelSelector({ currentModel, onModelChange }: ModelSelectorProp
     }
   };
 
+  // Helper to determine if a provider is an agent type
+  const getProviderType = (provider: string): ProviderType => {
+    return (provider === 'claude-code' || provider === 'openai-codex') ? 'agent' : 'model';
+  };
+
+  // Check if switching to a provider type is disabled (session has messages and would switch types)
+  const isTypeSwitchDisabled = (targetProvider: string): boolean => {
+    if (!sessionHasMessages || !currentProviderType) return false;
+    const targetType = getProviderType(targetProvider);
+    return targetType !== currentProviderType;
+  };
+
   // Group providers by type (agents vs models)
   const groupedProviders = Object.entries(models).reduce((acc, [provider, providerModels]) => {
     const isAgent = provider === 'claude-code' || provider === 'openai-codex';
@@ -133,14 +154,22 @@ export function ModelSelector({ currentModel, onModelChange }: ModelSelectorProp
                       </div>
                       {providerModels.map(model => {
                         const isCurrent = model.id === currentModel;
+                        const isDisabled = isTypeSwitchDisabled(provider);
+                        const disabledTooltip = 'Start a new session to switch between Agent and SDK modes';
                         return (
                           <button
                             key={model.id}
-                            className={`model-selector-option ${isCurrent ? 'selected' : ''}`}
-                            onClick={() => handleModelSelect(model.id)}
+                            className={`model-selector-option ${isCurrent ? 'selected' : ''} ${isDisabled ? 'disabled' : ''}`}
+                            onClick={() => !isDisabled && handleModelSelect(model.id)}
+                            title={isDisabled ? disabledTooltip : undefined}
+                            aria-disabled={isDisabled}
                           >
                             <span className="model-selector-option-name">{model.name}</span>
-                            {isCurrent && <MaterialSymbol icon="check" size={14} />}
+                            {isDisabled ? (
+                              <MaterialSymbol icon="block" size={14} className="disabled-icon" />
+                            ) : isCurrent ? (
+                              <MaterialSymbol icon="check" size={14} />
+                            ) : null}
                           </button>
                         );
                       })}
@@ -164,14 +193,22 @@ export function ModelSelector({ currentModel, onModelChange }: ModelSelectorProp
                       </div>
                       {providerModels.map(model => {
                         const isCurrent = model.id === currentModel;
+                        const isDisabled = isTypeSwitchDisabled(provider);
+                        const disabledTooltip = 'Start a new session to switch between Agent and SDK modes';
                         return (
                           <button
                             key={model.id}
-                            className={`model-selector-option ${isCurrent ? 'selected' : ''}`}
-                            onClick={() => handleModelSelect(model.id)}
+                            className={`model-selector-option ${isCurrent ? 'selected' : ''} ${isDisabled ? 'disabled' : ''}`}
+                            onClick={() => !isDisabled && handleModelSelect(model.id)}
+                            title={isDisabled ? disabledTooltip : undefined}
+                            aria-disabled={isDisabled}
                           >
                             <span className="model-selector-option-name">{model.name}</span>
-                            {isCurrent && <MaterialSymbol icon="check" size={14} />}
+                            {isDisabled ? (
+                              <MaterialSymbol icon="block" size={14} className="disabled-icon" />
+                            ) : isCurrent ? (
+                              <MaterialSymbol icon="check" size={14} />
+                            ) : null}
                           </button>
                         );
                       })}
