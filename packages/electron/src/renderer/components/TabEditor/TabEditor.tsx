@@ -716,18 +716,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         //   editorPreview: currentContent.substring(0, 100),
         // });
 
-        // CRITICAL: Check if this is content we just saved
-        // If the disk content matches what we last saved, this is definitely our own save
-        // Don't reload even if the user has typed more since then
-        const contentMatchesLastSave = newContent === lastSavedContentRef.current;
-
-        if (contentMatchesLastSave) {
-          console.log('[TabEditor] Skipping - disk content matches last saved content');
-          processingFileChangeRef.current = false;
-          return;
-        }
-
-        // CRITICAL: Check for pending AI edit tags FIRST before applying time-based heuristic
+        // CRITICAL: Check for pending AI edit tags FIRST before other heuristics
         // We need to process AI edits even if they happen shortly after a save
         let pendingTags: any[] = [];
         try {
@@ -740,8 +729,25 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           logger.ui.error(`[TabEditor] Failed to check for pending tags:`, error);
         }
 
+        // For custom editors with pending AI tags, skip the "matches last saved" check
+        // because the AI edit IS the new content that needs to be shown
+        const hasPendingAIEditForCustomEditor = isCustom && pendingTags.length > 0;
+
+        // CRITICAL: Check if this is content we just saved
+        // If the disk content matches what we last saved, this is definitely our own save
+        // Don't reload even if the user has typed more since then
+        // BUT: Skip this check for custom editors with pending AI edits
+        const contentMatchesLastSave = newContent === lastSavedContentRef.current;
+
+        if (contentMatchesLastSave && !hasPendingAIEditForCustomEditor) {
+          // console.log('[TabEditor] Skipping - disk content matches last saved content');
+          processingFileChangeRef.current = false;
+          return;
+        }
+
         // If there are unreviewed pending AI edit tags, apply diff mode (skip conflict dialog)
-        if (pendingTags && pendingTags.length > 0) {
+        // NOTE: Custom editors don't support diff mode - they just reload the content directly
+        if (pendingTags && pendingTags.length > 0 && !isCustom) {
           // Get the baseline for diff comparison
           // This will be the latest incremental-approval tag if it exists, otherwise the pre-edit tag
           const baseline = await window.electronAPI.invoke('history:get-diff-baseline', data.path);
@@ -910,10 +916,11 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           return;
         }
 
-        // No pending AI edit tags - apply time-based heuristic to avoid reloading after own save
+        // Apply time-based heuristic to avoid reloading after own save
+        // BUT: Skip this for custom editors with pending AI edits (they need to reload)
         const timeSinceLastSave = lastSaveTimeRef.current ? Date.now() - lastSaveTimeRef.current : Infinity;
-        if (timeSinceLastSave < 2000) {
-          console.log(`[TabEditor] Skipping - recent save (${timeSinceLastSave}ms ago) and no pending AI edits`);
+        if (timeSinceLastSave < 2000 && !hasPendingAIEditForCustomEditor) {
+          // console.log(`[TabEditor] Skipping - recent save (${timeSinceLastSave}ms ago)`);
           processingFileChangeRef.current = false;
           return;
         }
