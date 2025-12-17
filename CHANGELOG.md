@@ -19,6 +19,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.48.12] - 2025-12-17
+
+
+### Added
+- Mouse back/forward buttons now navigate between tabs
+- Analytics tracking for editor and navigation events
+
+### Changed
+- Prevent switching between SDK and Agent modes (prevents session corruption)
+- Clarification added to developer dropdown
+- Reduced logging output
+
+### Fixed
+- Images now display correctly in all tabs
+- DataModelNode and MockupNode screenshots now work correctly in all tabs
+- Windows-only Claude Code checks no longer run on macOS/Linux
+- DataModelLM editor now auto-reloads when AI edits .prisma files
+- Token counting now works correctly with Claude Agent SDK 0.1.62
+- Token counts display correctly for Claude Code sessions
+- Resized prompt input box
+
 ## [0.48.11] - 2025-12-16
 
 
