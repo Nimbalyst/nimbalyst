@@ -1,44 +1,46 @@
-# Nimbalyst v0.47.2 Release Notes
+# Nimbalyst v0.48.13 Release Notes
 
-This release includes significant improvements to Nimbalyst. We've added a mockup editor, code editor, enhanced performance, and ease of use.  
+## New Features
 
-## **Mockups: Visual Planning with AI**
-We've added a powerful new way to plan features visually:
-- **Create .mockup.html files** that render as interactive wireframes. Use the `/mockup` command to generate visual plans
-- **Draw annotations directly on mockups** (circles, arrows, highlights)
-- **AI can see your annotations** and iterate on designs with you
-- **Drop your mockups into a document** type /mockup in a document to insert a mockup
 
-## **Coding with Nimbalyst and Claude Code**
-We've added a bunch of features for developers to code better with
-- **Code Editor** edit your code and see red/green diffs to accept or reject
-- **Git status icons** in the file tree show modified/untracked files at a glance
-- **Spec-kit and BMAD support** via a few bug fixes to / commands
+### AI Improvements
+- Claude model selection: Choose between Opus 4.5, Opus 4, Sonnet 4, and more
+- Session archiving with multi-select support
+- Large text pastes automatically become attachments to keep transcripts clean
+- Slash command suggestions displayed in empty chat sessions
+- Memory mode for quick context addition
 
-## **Performance & Polish**
-We've made significant improvements to everyday usage:
-- **Virtualized AI transcripts** for smooth scrolling in long sessions
-- **Lazy-loaded session tabs** so the app starts fast even with many open sessions
-- **Better search results** in both project search and slash commands (best matches first)
-- **@mention supports CamelCase** **search** so you can more rapidly find matching files
 
-## **Quality of Life Improvements**
-Small things that make a big difference:
-- **Quit warning** when you have an active AI session running
-- **TypeScript files** now show a distinct TS icon
-- **Message timestamps** show the date when not from today
-- **Click to enlarge** image attachments in AI chat
-- **Escape key** closes the attachment viewer
+### Editor Enhancements
+- DataModelLM: Visual data model schema editor with AI integration, auto-layout and export to DDL, JSON, DBML
+- Git status icons in file tree showing modified/untracked files
+- File tree filtering for modified files and by file type
+- Multi-select files in file tree
+- Mouse back/forward buttons navigate between tabs
+- Cmd+Shift+T reopens last closed tab
+- Native spell check with correction suggestions
 
-## **Bug Fixes**
-We squashed a bunch of annoying bugs:
-- Mermaid diagrams no longer show "\[object Object\]" errors
-- Table menus position correctly when scrolled
-- @ typeahead menu positions correctly when scrolled
-- AI input stays focused when switching modes or tabs
-- Token usage bar now shows actual usage instead of appearing full
-- Fixed bug that was preventing some files from opening consistently
 
-This release represents over 40 internal releases of continuous improvement. Thank you to our alpha testers for their feedback and bug reports.
+### File & History
+- Folder History dialog to browse and restore deleted files
+- Document links now export as standard markdown and support fuzzy search
+- File context menu opens files in system default application
+- @ mentions in AI chat support CamelCase search for file matching
 
-For the complete technical changelog, see [CHANGELOG.md](CHANGELOG.md).
+
+## Improvements
+
+- Auto-updater uses subtle toast instead of intrusive popup window (you'll see this in the next release)
+- Session list shows relative dates ("2 hours ago") instead of timestamps
+- Window title shows AI session name when in agent mode
+- Unified settings view with project-level AI provider overrides
+- Improved mockup annotations styling
+
+
+## Fixed
+
+- Images display correctly in all tabs
+- Mermaid diagrams error handling improved
+- Table action menu and context menu position correctly when scrolled
+- Mockup images load correctly when reopening documents
+- One failing editor tab no longer breaks the entire app
