@@ -17,6 +17,7 @@ import { aiToolService } from './services/AIToolService';
 import { editorRegistry } from '@nimbalyst/runtime/ai/EditorRegistry';
 import { WorkspaceWelcome } from './components/WorkspaceWelcome.tsx';
 import { QuickOpen } from './components/QuickOpen';
+import { SessionQuickOpen } from './components/SessionQuickOpen';
 import { AgentCommandPalette } from './components/AgentCommandPalette';
 import { ConfirmDialog } from './components/ConfirmDialog/ConfirmDialog';
 import { DiscordInvitation } from './components/DiscordInvitation/DiscordInvitation';
@@ -191,6 +192,7 @@ export default function App() {
   const [workspaceName, setWorkspaceName] = useState<string | null>(null);
   // NOTE: fileTree, sidebarWidth, isNewFileDialogOpen, newFileDirectory, isHistoryDialogOpen moved to EditorMode
   const [isQuickOpenVisible, setIsQuickOpenVisible] = useState(false);
+  const [isSessionQuickOpenVisible, setIsSessionQuickOpenVisible] = useState(false);
   const [isAgentPaletteVisible, setIsAgentPaletteVisible] = useState(false);
   // NOTE: isAIChatCollapsed, aiChatWidth moved to EditorMode for workspace mode
   // These are kept for potential single-file mode or agent mode use
@@ -1004,14 +1006,6 @@ export default function App() {
         setActiveMode('agent');
         return;
       }
-      // Cmd+L for Plans mode
-      if ((e.metaKey || e.ctrlKey) && e.key === 'l') {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        setActiveMode('plan');
-        return;
-      }
       // Cmd+O (Mac) or Ctrl+O (Windows/Linux) for Quick Open
       if ((e.metaKey || e.ctrlKey) && e.key === 'o') {
         e.preventDefault();
@@ -1019,6 +1013,16 @@ export default function App() {
         e.stopImmediatePropagation();
         if (workspaceMode) {
           setIsQuickOpenVisible(true);
+        }
+        return;
+      }
+      // Cmd+L (Mac) or Ctrl+L (Windows/Linux) for Session Quick Open
+      if ((e.metaKey || e.ctrlKey) && e.key === 'l') {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        if (workspaceMode) {
+          setIsSessionQuickOpenVisible(true);
         }
         return;
       }
@@ -1115,6 +1119,19 @@ export default function App() {
     // Delegate to EditorMode's file selection handler
     if (editorModeRef.current) {
       await editorModeRef.current.selectFile(filePath);
+    }
+  }, [activeMode]);
+
+  // Handle SessionQuickOpen session selection - switches to agent mode and opens session
+  const handleSessionQuickOpenSelect = useCallback(async (sessionId: string) => {
+    // Switch to agent mode
+    if (activeMode !== 'agent') {
+      setActiveMode('agent');
+    }
+
+    // Open session in AgenticPanel
+    if (agenticPanelRef.current) {
+      await agenticPanelRef.current.openSessionInTab(sessionId);
     }
   }, [activeMode]);
 
@@ -1602,6 +1619,12 @@ export default function App() {
             workspacePath={workspacePath}
             currentFilePath={currentFilePath}
             onFileSelect={handleQuickOpenFileSelect}
+          />
+          <SessionQuickOpen
+            isOpen={isSessionQuickOpenVisible}
+            onClose={() => setIsSessionQuickOpenVisible(false)}
+            workspacePath={workspacePath}
+            onSessionSelect={handleSessionQuickOpenSelect}
           />
           <AgentCommandPalette
             isOpen={isAgentPaletteVisible}
