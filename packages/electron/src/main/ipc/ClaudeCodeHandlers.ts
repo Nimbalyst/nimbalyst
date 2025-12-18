@@ -139,7 +139,10 @@ end tell`;
         };
       } else if (platform === 'win32') {
         // Windows: Use start command to open a new cmd window
-        const claudeCodePath = path.join(os.homedir(), '.local', 'bin', 'claude.exe');
+        const claudeCodePath = findWindowsClaudeExecutable();
+        if (!claudeCodePath) {
+          throw new Error('Claude Code executable not found. Please install Claude Code using the native installer or npm.');
+        }
         // TODO: On windows only, require access to a working claude installation because the Windows console
         //  host is unable to provide a proper TTY raw mode required by Ink-based CLIs when running in Electron-NodeJS.
         spawn('cmd', ['/c', 'start', '"Claude Code Authentication"', 'cmd', '/k', `"${claudeCodePath}" setup-token`], {
@@ -222,7 +225,10 @@ end tell`;
         };
       } else if (platform === 'win32') {
         // Windows: Use start command to open a new cmd window
-        const claudeCodePath = path.join(os.homedir(), '.local', 'bin', 'claude.exe');
+        const claudeCodePath = findWindowsClaudeExecutable();
+        if (!claudeCodePath) {
+          throw new Error('Claude Code executable not found. Please install Claude Code using the native installer or npm.');
+        }
         // TODO: On windows only, require access to a working claude installation because the Windows console
         //  host is unable to provide a proper TTY raw mode required by Ink-based CLIs when running in Electron-NodeJS.
         spawn('cmd', ['/c', 'start', '"Claude Code Logout"', 'cmd', '/k', `"${claudeCodePath}"`], {
@@ -280,6 +286,37 @@ end tell`;
     dismissClaudeCodeWindowsWarning();
     return { success: true };
   });
+}
+
+/**
+ * Find the Claude Code executable on Windows
+ * Checks native installer location and npm global location
+ */
+function findWindowsClaudeExecutable(): string | null {
+  // Check native installer location first
+  const nativePath = path.join(os.homedir(), '.local', 'bin', 'claude.exe');
+  if (fs.existsSync(nativePath)) {
+    log.info('[ClaudeCodeHandlers] Found Claude at native path:', nativePath);
+    return nativePath;
+  }
+
+  // Check npm global bin directory (where claude.cmd is installed)
+  const appData = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
+  const npmCmdPath = path.join(appData, 'npm', 'claude.cmd');
+  if (fs.existsSync(npmCmdPath)) {
+    log.info('[ClaudeCodeHandlers] Found Claude at npm path:', npmCmdPath);
+    return npmCmdPath;
+  }
+
+  // Fallback: check the homedir variant
+  const npmCmdPathAlt = path.join(os.homedir(), 'AppData', 'Roaming', 'npm', 'claude.cmd');
+  if (fs.existsSync(npmCmdPathAlt)) {
+    log.info('[ClaudeCodeHandlers] Found Claude at npm alt path:', npmCmdPathAlt);
+    return npmCmdPathAlt;
+  }
+
+  log.error('[ClaudeCodeHandlers] Claude executable not found in any known location');
+  return null;
 }
 
 /**

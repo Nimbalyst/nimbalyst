@@ -35,8 +35,12 @@ export function setupClaudeCodeEnvironment(): NodeJS.ProcessEnv {
 
     // Windows PATH - preserve existing and add common locations
     const pathSeparator = ';';
+    const appData = env.APPDATA || path.join(homedir, 'AppData', 'Roaming');
     const commonPaths = [
       env.PATH || '',
+      path.join(appData, 'npm'),  // npm global bin directory
+      path.join(homedir, 'AppData', 'Roaming', 'npm'),  // fallback npm path
+      path.join(homedir, '.local', 'bin'),  // native installer location
       path.join(homedir, 'AppData', 'Local', 'Programs'),
       'C:\\Program Files\\nodejs',
       'C:\\Program Files (x86)\\nodejs',

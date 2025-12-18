@@ -216,21 +216,57 @@ export class CLIManager {
       return { isPlatformWindows: false };
     }
     const {gitVersion} = await this.checkGitInstallation();
-    const claudeSearchPaths = [
+
+    // Check for claude executable in common locations
+    const claudeExePaths = [
       path.join(os.homedir(), '.local', 'bin', 'claude.exe'), // native installer places it here
       'claude.exe' // an older installation may be on the path
-    ]
+    ];
 
-    for (const claudePath of claudeSearchPaths) {
+    for (const claudePath of claudeExePaths) {
       try {
         await fs.access(claudePath, fsSync.constants.X_OK);
         // Found it, get version
         const claudeCodeVersion = execSync(`"${claudePath}" --version`, { encoding: 'utf8' }).trim();
-        return { isPlatformWindows:true, gitVersion, claudeCodeVersion }
+        return { isPlatformWindows: true, gitVersion, claudeCodeVersion };
       } catch (e) {
         // continue searching
       }
     }
+
+    // Check for npm global installation (both old and new package names)
+    // npm global on Windows is typically at %APPDATA%\npm\node_modules\
+    const npmGlobalPaths = [
+      path.join(process.env.APPDATA || '', 'npm', 'node_modules', '@anthropic-ai', 'claude-agent-sdk'),
+      path.join(process.env.APPDATA || '', 'npm', 'node_modules', '@anthropic-ai', 'claude-code'),
+      path.join(os.homedir(), 'AppData', 'Roaming', 'npm', 'node_modules', '@anthropic-ai', 'claude-agent-sdk'),
+      path.join(os.homedir(), 'AppData', 'Roaming', 'npm', 'node_modules', '@anthropic-ai', 'claude-code'),
+    ];
+
+    // Also try to get the dynamic npm root
+    try {
+      const globalNpmRoot = execSync('npm root -g', { encoding: 'utf8' }).trim();
+      if (globalNpmRoot) {
+        npmGlobalPaths.unshift(path.join(globalNpmRoot, '@anthropic-ai', 'claude-agent-sdk'));
+        npmGlobalPaths.unshift(path.join(globalNpmRoot, '@anthropic-ai', 'claude-code'));
+      }
+    } catch (e) {
+      // Ignore error, will use fallback paths
+    }
+
+    for (const packagePath of npmGlobalPaths) {
+      try {
+        const packageJsonPath = path.join(packagePath, 'package.json');
+        await fs.access(packageJsonPath, fsSync.constants.R_OK);
+        // Found it, get version from package.json
+        const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf-8'));
+        const claudeCodeVersion = packageJson.version || 'unknown';
+        return { isPlatformWindows: true, gitVersion, claudeCodeVersion };
+      } catch (e) {
+        // continue searching
+      }
+    }
+
     return { isPlatformWindows: true, gitVersion };
   }
 

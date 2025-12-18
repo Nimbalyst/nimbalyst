@@ -1,4 +1,6 @@
 import { spawn } from 'child_process';
+import * as os from 'os';
+import * as path from 'path';
 import { logger } from '../utils/logger';
 
 export interface ClaudeCodeStatus {
@@ -74,6 +76,33 @@ export class ClaudeCodeDetector {
   }
 
   /**
+   * Get enhanced PATH that includes common Claude Code installation locations
+   */
+  private getEnhancedPath(): string {
+    const currentPath = process.env.PATH || '';
+    const additionalPaths: string[] = [];
+
+    if (process.platform === 'win32') {
+      // Windows: npm global bin is in %APPDATA%\npm
+      const appData = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
+      additionalPaths.push(path.join(appData, 'npm'));
+      // Also check user profile path variant
+      additionalPaths.push(path.join(os.homedir(), 'AppData', 'Roaming', 'npm'));
+      // Native installer location
+      additionalPaths.push(path.join(os.homedir(), '.local', 'bin'));
+    } else {
+      // macOS/Linux: ~/.local/bin for native installs
+      additionalPaths.push(path.join(os.homedir(), '.local', 'bin'));
+      // npm global paths
+      additionalPaths.push(path.join(os.homedir(), '.npm-global', 'bin'));
+      additionalPaths.push('/usr/local/bin');
+    }
+
+    const separator = process.platform === 'win32' ? ';' : ':';
+    return [...additionalPaths, currentPath].join(separator);
+  }
+
+  /**
    * Check if the user has Claude Code CLI installed globally
    */
   private async checkInstallation(): Promise<{ installed: boolean; version?: string }> {
@@ -82,10 +111,12 @@ export class ClaudeCodeDetector {
         // Try to run: claude --version
         logger.main.info('[ClaudeCodeDetector] Checking for Claude Code CLI installation...');
 
-        // Include ~/.local/bin in PATH for native installs
+        const enhancedPath = this.getEnhancedPath();
+        logger.main.info('[ClaudeCodeDetector] Using PATH:', enhancedPath);
+
         const env = {
           ...process.env,
-          PATH: `${process.env.HOME}/.local/bin:${process.env.PATH}`,
+          PATH: enhancedPath,
         };
 
         const childProcess = spawn('claude', ['--version'], {
@@ -142,11 +173,10 @@ export class ClaudeCodeDetector {
       try {
         logger.main.info('[ClaudeCodeDetector] Checking login status with claude -p status...');
 
-        // Include ~/.local/bin in PATH for native installs
-        // Set TERM and other vars to indicate non-interactive mode
+        // Use enhanced PATH and set vars to indicate non-interactive mode
         const env = {
           ...process.env,
-          PATH: `${process.env.HOME}/.local/bin:${process.env.PATH}`,
+          PATH: this.getEnhancedPath(),
           TERM: 'dumb', // Indicate non-interactive terminal
           CI: 'true',   // Some CLIs use this to detect non-interactive mode
         };
