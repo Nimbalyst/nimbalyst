@@ -10,6 +10,7 @@ import type { CustomEditorProps } from '../types';
 import { MonacoCodeEditor } from '../../MonacoCodeEditor';
 import { logger } from '../../../utils/logger';
 import { captureMockupComposite } from './screenshotUtils';
+import { renderMockupHtml } from './mockupDomUtils';
 
 type ViewMode = 'preview' | 'source';
 
@@ -355,14 +356,8 @@ export const MockupViewer: React.FC<CustomEditorProps> = ({
   // Update iframe when content changes or when switching back to preview mode
   useEffect(() => {
     if (viewMode === 'preview' && iframeRef.current && content) {
-      try {
-        const iframeDoc = iframeRef.current.contentDocument;
-        if (iframeDoc) {
-          iframeDoc.open();
-          iframeDoc.write(content);
-          iframeDoc.close();
-
-          // Inject highlight styles
+      renderMockupHtml(iframeRef.current, content, {
+        onAfterRender: (iframeDoc) => {
           const style = iframeDoc.createElement('style');
           style.textContent = `
             .nimbalyst-selected {
@@ -372,16 +367,11 @@ export const MockupViewer: React.FC<CustomEditorProps> = ({
             }
           `;
           iframeDoc.head.appendChild(style);
-
-          // Add click listener for element selection
           iframeDoc.addEventListener('click', handleElementClick as any);
         }
-      } catch (err) {
-        logger.ui.error('[MockupViewer] Failed to update iframe:', err);
-      }
+      });
     }
 
-    // Cleanup function to remove click listener
     return () => {
       const iframeDoc = iframeRef.current?.contentDocument;
       if (iframeDoc) {

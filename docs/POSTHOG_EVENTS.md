@@ -66,8 +66,8 @@ All events include `$session_id` property automatically. Dev users are marked wi
 | `ai_request_failed` | `AIService.ts:1319` | AI API request fails | `provider`<br/>`errorType` (network/auth/timeout/rate_limit/overloaded/unknown)<br/>`retryAttempt` |
 | `ai_session_resumed` | `AIService.ts:2016` | User intentionally opens session from history (not app startup, tab switching, or session reload) | `provider`<br/>`messageCount` (0, 1, 2-4, 5-9, 10+)<br/>`ageInDays` (today/1-day/2-6-days/1-4-weeks/1-3-months/3-months-plus) |
 | `cancel_ai_request` | `AIService.ts:1491` | User cancels active AI request | `provider` |
-| `ai_diff_accepted` | `DiffApprovalBar.tsx:315, 436` | User accepts diff or all diffs | `acceptType` (partial/all)<br/>`replacementCount` |
-| `ai_diff_rejected` | `DiffApprovalBar.tsx:380, 450` | User rejects diff or all diffs | `rejectType` (partial/all)<br/>`replacementCount` |
+| `ai_diff_accepted` | `DiffApprovalBar.tsx:315, 436`<br/>`TabEditor.tsx:1382` | User accepts diff or all diffs (markdown/code/mockup) | `acceptType` (partial/all)<br/>`replacementCount`<br/>`fileType` (mockup, optional) |
+| `ai_diff_rejected` | `DiffApprovalBar.tsx:380, 450`<br/>`TabEditor.tsx:1442` | User rejects diff or all diffs (markdown/code/mockup) | `rejectType` (partial/all)<br/>`replacementCount`<br/>`fileType` (mockup, optional) |
 
 ### Claude Code (MCP)
 

@@ -33,6 +33,7 @@ import { FixedTabHeaderContainer, FixedTabHeaderRegistry } from '@nimbalyst/runt
 import { MonacoCodeEditor } from '../MonacoCodeEditor';
 import { MonacoDiffApprovalBar } from '../MonacoDiffApprovalBar';
 import { ImageViewer } from '../ImageViewer';
+import { MockupDiffViewer } from '../CustomEditors/MockupEditor/MockupDiffViewer';
 import { getFileType } from '../../utils/fileTypeDetector';
 import { customEditorRegistry } from '../CustomEditors';
 import { logger } from '../../utils/logger';
@@ -141,6 +142,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const isMarkdown = fileType === 'markdown';
   const isImage = fileType === 'image';
   const isCustom = fileType === 'custom';
+  const isMockupFile = isCustom && filePath.toLowerCase().endsWith('.mockup.html');
 
   // View mode state for markdown files (lexical = rich text editor, monaco = raw markdown)
   const [markdownViewMode, setMarkdownViewMode] = useState<'lexical' | 'monaco'>('lexical');
@@ -156,6 +158,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const [conflictDialogContent, setConflictDialogContent] = useState<string>('');
   const [showMonacoDiffBar, setShowMonacoDiffBar] = useState(false); // For Monaco diff approval bar
   const [isEditorReady, setIsEditorReady] = useState(false); // Track when editor is mounted and ready
+  const [mockupDiffData, setMockupDiffData] = useState<{ oldContent: string; newContent: string } | null>(null);
+  const [mockupDiffAction, setMockupDiffAction] = useState<'idle' | 'accept' | 'reject'>('idle');
 
   // Track editor type usage when file is opened
   const hasTrackedOpenRef = useRef<string | null>(null);
@@ -201,6 +205,15 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       });
     }
   }, [isActive, isEditorReady, filePath, isMarkdown, isImage, isCustom, posthog, initialContent]);
+
+  // Track current file path to abort operations when switching files
+  const currentFilePathRef = useRef(filePath);
+
+  useEffect(() => {
+    currentFilePathRef.current = filePath;
+    setMockupDiffData(null);
+    setMockupDiffAction('idle');
+  }, [filePath]);
 
   // Refs for stable access in timers/callbacks
   const contentRef = useRef(content);
@@ -255,7 +268,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     if (hasCheckedForPendingTagsRef.current) return;
     if (!window.electronAPI?.history) return;
     // Wait for editor to be ready before checking pending diffs
-    if (!isEditorReady || !editorRef.current) return;
+    if (!isEditorReady) return;
+    if (!editorRef.current && !isMockupFile) return;
 
     hasCheckedForPendingTagsRef.current = true;
     // Reset the flag for this file
@@ -299,6 +313,17 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
         // If content differs, apply the diff
         if (oldContent !== newContent) {
+          if (isMockupFile) {
+            setMockupDiffData({ oldContent, newContent });
+            setContent(oldContent);
+            contentRef.current = oldContent;
+            initialContentRef.current = oldContent;
+            setIsDirty(false);
+            isDirtyRef.current = false;
+            onDirtyChange?.(false);
+            return;
+          }
+
           // For code files, use Monaco diff mode
           if (!isMarkdown) {
             logger.ui.info(`[TabEditor] Applying Monaco diff mode for code file on mount`);
@@ -349,7 +374,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     };
 
     checkAndApplyPendingDiffs();
-  }, [filePath, isMarkdown, isEditorReady]); // Wait for editor to be ready before checking pending diffs
+  }, [filePath, isMarkdown, isEditorReady, isMockupFile, onDirtyChange]); // Wait for editor to be ready before checking pending diffs
 
 
   // Helper: Save file with history snapshot
@@ -747,8 +772,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         }
 
         // If there are unreviewed pending AI edit tags, apply diff mode (skip conflict dialog)
-        // NOTE: Custom editors don't support diff mode - they just reload the content directly
-        if (pendingTags && pendingTags.length > 0 && !isCustom) {
+        const supportsMockupDiff = isCustom && isMockupFile;
+        if (pendingTags && pendingTags.length > 0 && (!isCustom || supportsMockupDiff)) {
           // Get the baseline for diff comparison
           // This will be the latest incremental-approval tag if it exists, otherwise the pre-edit tag
           const baseline = await window.electronAPI.invoke('history:get-diff-baseline', data.path);
@@ -771,7 +796,24 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           const alreadyInDiffMode = pendingAIEditTagRef.current?.tagId === pendingTags[0].id;
           console.log(`[TabEditor] Pending tag found. alreadyInDiffMode: ${alreadyInDiffMode}, current tagId: ${pendingAIEditTagRef.current?.tagId}, pending tagId: ${pendingTags[0].id}`);
 
-          if (alreadyInDiffMode) {
+          const tagInfo = {
+            tagId: pendingTags[0].id,
+            sessionId: pendingTags[0].sessionId,
+            filePath: data.path
+          };
+
+          if (isMockupFile) {
+            diffUpdatePromise = (async () => {
+              pendingAIEditTagRef.current = tagInfo;
+              setMockupDiffData({ oldContent, newContent });
+              setContent(oldContent);
+              contentRef.current = oldContent;
+              initialContentRef.current = oldContent;
+              setIsDirty(false);
+              isDirtyRef.current = false;
+              onDirtyChange?.(false);
+            })();
+          } else if (alreadyInDiffMode) {
             // CRITICAL: Check if the disk content actually changed
             // If the new content matches what we're already showing, skip the reload
             // This prevents flashing when switching tabs or during saves
@@ -896,11 +938,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
                   // CRITICAL FIX RC7: Store tag info ONLY after successful diff application
                   // This ensures pendingAIEditTagRef is synchronized with actual editor state
-                  pendingAIEditTagRef.current = {
-                    tagId: pendingTags[0].id,
-                    sessionId: pendingTags[0].sessionId,
-                    filePath: data.path
-                  };
+                  pendingAIEditTagRef.current = tagInfo;
                 }
               } catch (error) {
                 logger.ui.error(`[TabEditor] Failed to apply AI diff:`, error);
@@ -1307,6 +1345,127 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   }, []);
 
   // Monaco diff mode accept/reject handlers
+  const handleMockupDiffAccept = useCallback(async () => {
+    if (!mockupDiffData || !pendingAIEditTagRef.current) {
+      logger.ui.warn('[TabEditor] Cannot accept mockup diff - missing data or tag');
+      return;
+    }
+
+    const operationFilePath = filePath;
+    setMockupDiffAction('accept');
+
+    try {
+      const newContent = mockupDiffData.newContent;
+      await window.electronAPI.saveFile(newContent, operationFilePath);
+
+      // Check if file path changed during async operation - if so, abort
+      if (currentFilePathRef.current !== operationFilePath) {
+        logger.ui.info('[TabEditor] Mockup diff accept aborted - file path changed');
+        return;
+      }
+
+      if (window.electronAPI.history) {
+        await window.electronAPI.history.updateTagStatus(
+          operationFilePath,
+          pendingAIEditTagRef.current.tagId,
+          'reviewed'
+        );
+      }
+
+      // Final check before applying state changes
+      if (currentFilePathRef.current !== operationFilePath) {
+        logger.ui.info('[TabEditor] Mockup diff accept aborted - file path changed');
+        return;
+      }
+
+      // Track analytics event for accepting mockup diff
+      posthog?.capture('ai_diff_accepted', {
+        acceptType: 'all',
+        replacementCount: 1,
+        fileType: 'mockup'
+      });
+
+      pendingAIEditTagRef.current = null;
+      setMockupDiffData(null);
+      setContent(newContent);
+      contentRef.current = newContent;
+      initialContentRef.current = newContent;
+      setLastSavedContent(newContent);
+      lastSavedContentRef.current = newContent;
+      setIsDirty(false);
+      isDirtyRef.current = false;
+      onDirtyChange?.(false);
+    } catch (error) {
+      logger.ui.error('[TabEditor] Error accepting mockup diff:', error);
+    } finally {
+      // Only reset action if we're still on the same file
+      if (currentFilePathRef.current === operationFilePath) {
+        setMockupDiffAction('idle');
+      }
+    }
+  }, [mockupDiffData, filePath, onDirtyChange, posthog]);
+
+  const handleMockupDiffReject = useCallback(async () => {
+    if (!mockupDiffData || !pendingAIEditTagRef.current) {
+      logger.ui.warn('[TabEditor] Cannot reject mockup diff - missing data or tag');
+      return;
+    }
+
+    const operationFilePath = filePath;
+    setMockupDiffAction('reject');
+
+    try {
+      const oldContent = mockupDiffData.oldContent;
+      await window.electronAPI.saveFile(oldContent, operationFilePath);
+
+      // Check if file path changed during async operation - if so, abort
+      if (currentFilePathRef.current !== operationFilePath) {
+        logger.ui.info('[TabEditor] Mockup diff reject aborted - file path changed');
+        return;
+      }
+
+      if (window.electronAPI.history) {
+        await window.electronAPI.history.updateTagStatus(
+          operationFilePath,
+          pendingAIEditTagRef.current.tagId,
+          'reviewed'
+        );
+      }
+
+      // Final check before applying state changes
+      if (currentFilePathRef.current !== operationFilePath) {
+        logger.ui.info('[TabEditor] Mockup diff reject aborted - file path changed');
+        return;
+      }
+
+      // Track analytics event for rejecting mockup diff
+      posthog?.capture('ai_diff_rejected', {
+        rejectType: 'all',
+        replacementCount: 1,
+        fileType: 'mockup'
+      });
+
+      pendingAIEditTagRef.current = null;
+      setMockupDiffData(null);
+      setContent(oldContent);
+      contentRef.current = oldContent;
+      initialContentRef.current = oldContent;
+      setLastSavedContent(oldContent);
+      lastSavedContentRef.current = oldContent;
+      setIsDirty(false);
+      isDirtyRef.current = false;
+      onDirtyChange?.(false);
+    } catch (error) {
+      logger.ui.error('[TabEditor] Error rejecting mockup diff:', error);
+    } finally {
+      // Only reset action if we're still on the same file
+      if (currentFilePathRef.current === operationFilePath) {
+        setMockupDiffAction('idle');
+      }
+    }
+  }, [mockupDiffData, filePath, onDirtyChange, posthog]);
+
+  // Monaco diff mode accept/reject handlers
   const handleMonacoDiffAccept = useCallback(async () => {
     console.log('[TabEditor] !!!!! handleMonacoDiffAccept CALLED !!!!!');
     console.log('[TabEditor] editorRef.current:', !!editorRef.current);
@@ -1461,6 +1620,20 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           editor={editorRef.current}
         />
           {isCustom ? (() => {
+            if (isMockupFile && mockupDiffData) {
+              return (
+                <MockupDiffViewer
+                  originalHtml={mockupDiffData.oldContent}
+                  updatedHtml={mockupDiffData.newContent}
+                  fileName={fileName}
+                  onAccept={handleMockupDiffAccept}
+                  onReject={handleMockupDiffReject}
+                  isAccepting={mockupDiffAction === 'accept'}
+                  isRejecting={mockupDiffAction === 'reject'}
+                />
+              );
+            }
+
             // Render custom editor if one is registered for this file type
             // Check for compound extensions like .mockup.html
             const lastDot = filePath.lastIndexOf('.');
@@ -1487,7 +1660,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                   key={filePath}
                   filePath={filePath}
                   fileName={fileName}
-                  initialContent={initialContent}
+                  initialContent={content}
                   theme={theme}
                   isActive={isActive}
                   workspaceId={workspaceId}

@@ -1,0 +1,273 @@
+.mockup-diff-viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--surface-primary);
+}
+
+.mockup-diff-heading {
+  padding: 20px 16px 8px;
+  border-bottom: 1px solid var(--border-secondary, var(--border-primary));
+  background: var(--surface-primary);
+}
+
+.mockup-diff-heading-label {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.mockup-diff-heading p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.mockup-diff-toolbar {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-primary);
+  gap: 12px;
+}
+
+.mockup-diff-title {
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+  color: var(--text-secondary);
+  gap: 8px;
+}
+
+.mockup-diff-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  display: inline-flex;
+}
+
+.mockup-diff-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.mockup-diff-actions button {
+  padding: 6px 16px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.mockup-diff-actions button.reject {
+  border-color: var(--border-primary);
+  background: var(--surface-primary);
+  color: var(--text-primary);
+}
+
+.mockup-diff-actions button.accept {
+  background: var(--accent-primary);
+  color: #fff;
+}
+
+.mockup-diff-actions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.mockup-diff-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #111;
+}
+
+.mockup-diff-slider-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  gap: 12px;
+}
+
+.mockup-diff-slider-stage {
+  position: relative;
+  flex: 1;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #000;
+  cursor: ew-resize;
+}
+
+.mockup-diff-slider-stage iframe {
+  position: absolute;
+  inset: 0;
+  border: none;
+  width: 100%;
+  height: 100%;
+}
+
+.mockup-diff-slider-before {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-right: 1px solid rgba(255, 255, 255, 0.5);
+  pointer-events: none;
+}
+
+.mockup-diff-slider-before iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.mockup-diff-slider-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.8);
+  pointer-events: auto;
+  cursor: ew-resize;
+  z-index: 6;
+}
+
+.mockup-diff-slider-handle-bar {
+  position: absolute;
+  top: 50%;
+  left: -10px;
+  width: 20px;
+  height: 40px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 999px;
+  transform: translateY(-50%);
+}
+
+.mockup-diff-slider-stage.dragging .mockup-diff-slider-handle,
+.mockup-diff-slider-stage.dragging {
+  cursor: grabbing;
+}
+
+.mockup-diff-slider-label {
+  position: absolute;
+  top: 12px;
+  padding: 4px 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  z-index: 6;
+}
+
+.mockup-diff-slider-label.before {
+  left: 16px;
+}
+
+.mockup-diff-slider-label.after {
+  right: 16px;
+}
+
+.mockup-diff-slider-hint {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  pointer-events: none;
+  z-index: 6;
+}
+
+.mockup-diff-slider-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  cursor: ew-resize;
+}
+
+.mockup-diff-panels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  flex: 1;
+  padding: 16px;
+}
+
+.mockup-diff-panel {
+  display: flex;
+  flex-direction: column;
+  background: #000;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.mockup-diff-panel-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  padding: 8px 12px;
+}
+
+.mockup-diff-panel iframe {
+  flex: 1;
+  border: none;
+  width: 100%;
+}
+
+.mockup-diff-toggle-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  gap: 12px;
+}
+
+.mockup-diff-toggle-frame {
+  flex: 1;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #000;
+  position: relative;
+}
+
+.mockup-diff-toggle-frame iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.mockup-diff-toggle-frame iframe.active {
+  opacity: 1;
+  z-index: 1;
+}
+
+.mockup-diff-toggle-button {
+  align-self: flex-start;
+  padding: 6px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--border-primary);
+  background: var(--surface-primary);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.mockup-diff-toggle-button:hover {
+  background: var(--surface-secondary);
+}
