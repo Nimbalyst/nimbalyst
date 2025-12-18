@@ -317,6 +317,27 @@ export class ExtensionPlatformServiceImpl implements ExtensionPlatformService {
       '/* react-dom side effect import removed */'
     );
 
+    // Handle: import 'react-dom/client' (side-effect only)
+    transformed = transformed.replace(
+      /import\s+['"]react-dom\/client['"]\s*;?/g,
+      '/* react-dom/client side effect import removed */'
+    );
+
+    // Handle: import X from 'react-dom/client'
+    transformed = transformed.replace(
+      /import\s+(\w+)\s+from\s+['"]react-dom\/client['"]/g,
+      'const $1 = window.__nimbalyst_extensions["react-dom/client"]'
+    );
+
+    // Handle: import { X as Y } from 'react-dom/client'
+    transformed = transformed.replace(
+      /import\s+{([^}]+)}\s+from\s+['"]react-dom\/client['"]/g,
+      (_match, namedImports) => {
+        const converted = convertAsToColon(namedImports);
+        return `const {${converted}} = window.__nimbalyst_extensions["react-dom/client"]`;
+      }
+    );
+
     // Handle: import X from 'react-dom'
     transformed = transformed.replace(
       /import\s+(\w+)\s+from\s+['"]react-dom['"]/g,
