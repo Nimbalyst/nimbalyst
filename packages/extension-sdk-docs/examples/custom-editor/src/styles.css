@@ -1,0 +1,154 @@
+/**
+ * JSON Viewer Styles
+ *
+ * Uses CSS variables for theme compatibility.
+ */
+
+.json-viewer {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-primary);
+  color: var(--text-primary);
+}
+
+.json-viewer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--surface-secondary);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.json-viewer-title {
+  font-weight: 500;
+  font-size: 13px;
+}
+
+.json-viewer-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.json-viewer-actions button {
+  padding: 4px 12px;
+  font-size: 12px;
+  background: var(--surface-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.json-viewer-actions button:hover {
+  background: var(--surface-hover);
+}
+
+.json-viewer-content {
+  flex: 1;
+  overflow: auto;
+  padding: 12px;
+  font-family: 'SF Mono', Menlo, Monaco, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.json-viewer-node {
+  /* Nodes handle their own indentation */
+}
+
+.json-viewer-row {
+  display: flex;
+  align-items: center;
+  padding: 2px 0;
+  cursor: default;
+}
+
+.json-viewer-row:hover {
+  background: var(--surface-hover);
+  border-radius: 3px;
+}
+
+.json-viewer-toggle {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  margin-right: 4px;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.json-viewer-toggle:hover {
+  color: var(--text-primary);
+}
+
+.json-viewer-key {
+  color: var(--primary-color);
+}
+
+.json-viewer-string {
+  color: #22863a;
+}
+
+.json-viewer-number {
+  color: #005cc5;
+}
+
+.json-viewer-boolean {
+  color: #d73a49;
+}
+
+.json-viewer-null {
+  color: #6a737d;
+  font-style: italic;
+}
+
+.json-viewer-preview {
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.json-viewer-children {
+  /* Children are indented by their depth */
+}
+
+.json-viewer-edit-input {
+  padding: 2px 4px;
+  font-family: inherit;
+  font-size: inherit;
+  background: var(--surface-secondary);
+  border: 1px solid var(--primary-color);
+  border-radius: 3px;
+  color: var(--text-primary);
+  outline: none;
+}
+
+.json-viewer-error {
+  padding: 16px;
+  color: #d73a49;
+  background: rgba(215, 58, 73, 0.1);
+  border-radius: 4px;
+}
+
+/* Dark theme adjustments */
+[data-theme="dark"] .json-viewer-string,
+[data-theme="crystal-dark"] .json-viewer-string {
+  color: #85e89d;
+}
+
+[data-theme="dark"] .json-viewer-number,
+[data-theme="crystal-dark"] .json-viewer-number {
+  color: #79b8ff;
+}
+
+[data-theme="dark"] .json-viewer-boolean,
+[data-theme="crystal-dark"] .json-viewer-boolean {
+  color: #f97583;
+}

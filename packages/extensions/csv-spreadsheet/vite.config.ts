@@ -1,58 +1,19 @@
-import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
+import { createExtensionConfig, mergeExtensionConfig } from '@nimbalyst/extension-sdk/vite';
 
-export default defineConfig({
+const baseConfig = createExtensionConfig({
+  entry: './src/index.tsx',
   plugins: [
     react({
       jsxRuntime: 'automatic',
       jsxImportSource: 'react',
     }),
   ],
-  define: {
-    'process.env.NODE_ENV': JSON.stringify('production'),
-  },
-  mode: 'production',
-  build: {
-    lib: {
-      entry: resolve(__dirname, 'src/index.tsx'),
-      name: 'CSVSpreadsheetExtension',
-      formats: ['es'],
-      fileName: 'index',
-    },
-    rollupOptions: {
-      // Externalize ONLY libraries that must be singletons (React, Lexical)
-      // Extensions should bundle their own utility libraries for version independence
-      external: [
-        'react',
-        'react-dom',
-        'react/jsx-runtime',
-        'react/jsx-dev-runtime',
-        /^@nimbalyst\/runtime/,
-        '@nimbalyst/editor-context',
-      ],
-      // NOTE: zustand is bundled by the extension
-      output: {
-        // CRITICAL: Inline all chunks into a single file
-        // Extensions are loaded via blob URLs which don't support relative imports
-        inlineDynamicImports: true,
-        globals: {
-          react: 'React',
-          'react-dom': 'ReactDOM',
-          'react/jsx-runtime': 'jsxRuntime',
-        },
-        assetFileNames: (assetInfo) => {
-          if (assetInfo.name === 'style.css') {
-            return 'index.css';
-          }
-          return assetInfo.name || 'asset';
-        },
-      },
-    },
-    outDir: 'dist',
-    emptyOutDir: true,
-    sourcemap: false, // Disable sourcemaps for smaller output
-  },
+  sourcemap: false,
+});
+
+export default mergeExtensionConfig(baseConfig, {
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),

@@ -65,6 +65,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   // Session naming MCP server port (injected from electron main process)
   private static sessionNamingServerPort: number | null = null;
 
+  // Extension dev MCP server port (injected from electron main process)
+  // Provides tools for building, installing, and reloading extensions
+  private static extensionDevServerPort: number | null = null;
+
   // MCP config loader (injected from electron main process)
   // Returns merged user + workspace MCP servers
   private static mcpConfigLoader: ((workspacePath?: string) => Promise<Record<string, any>>) | null = null;
@@ -93,6 +97,14 @@ export class ClaudeCodeProvider extends BaseAIProvider {
    */
   public static setSessionNamingServerPort(port: number | null): void {
     ClaudeCodeProvider.sessionNamingServerPort = port;
+  }
+
+  /**
+   * Set the extension dev MCP server port (called from electron main process)
+   * This provides build, install, reload, and uninstall tools for extension development
+   */
+  public static setExtensionDevServerPort(port: number | null): void {
+    ClaudeCodeProvider.extensionDevServerPort = port;
   }
 
   /**
@@ -1716,6 +1728,17 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         url: `http://127.0.0.1:${ClaudeCodeProvider.sessionNamingServerPort}/mcp?sessionId=${encodeURIComponent(sessionId)}`
       };
       console.log('[CLAUDE-CODE] Session naming MCP server configured on port', ClaudeCodeProvider.sessionNamingServerPort, 'for session', sessionId);
+    }
+
+    // Include extension dev MCP server if it's started (provides build, install, reload tools)
+    if (ClaudeCodeProvider.extensionDevServerPort !== null) {
+      const params = workspacePath ? `?workspacePath=${encodeURIComponent(workspacePath)}` : '';
+      config['nimbalyst-extension-dev'] = {
+        type: 'sse',
+        transport: 'sse',
+        url: `http://127.0.0.1:${ClaudeCodeProvider.extensionDevServerPort}/mcp${params}`
+      };
+      console.log('[CLAUDE-CODE] Extension dev MCP server configured on port', ClaudeCodeProvider.extensionDevServerPort);
     }
 
     // Load user and workspace MCP servers using the injected loader (if available)

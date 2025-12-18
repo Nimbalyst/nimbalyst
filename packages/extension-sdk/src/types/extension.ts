@@ -46,6 +46,26 @@ export interface ExtensionPermissions {
 
   /** Can access clipboard */
   clipboard?: boolean;
+
+  /** Can register AI tools */
+  ai?: boolean;
+}
+
+/**
+ * New file menu contribution.
+ */
+export interface NewFileMenuContribution {
+  /** File extension with dot (e.g., '.csv') */
+  extension: string;
+
+  /** Name shown in menu */
+  displayName: string;
+
+  /** Material icon name */
+  icon: string;
+
+  /** Initial file content */
+  defaultContent: string;
 }
 
 export interface ExtensionContributions {
@@ -55,8 +75,11 @@ export interface ExtensionContributions {
   /** Custom file icons */
   fileIcons?: FileIconContribution[];
 
-  /** AI tools the extension provides */
-  aiTools?: AIToolContribution[];
+  /** AI tools the extension provides (list of tool names) */
+  aiTools?: string[];
+
+  /** Entries to add to the New File menu */
+  newFileMenu?: NewFileMenuContribution[];
 
   /** Lexical nodes the extension contributes */
   lexicalNodes?: LexicalNodeContribution[];
@@ -87,17 +110,6 @@ export interface FileIconContribution {
   color?: string;
 }
 
-export interface AIToolContribution {
-  /** Tool name (used in AI function calling) */
-  name: string;
-
-  /** Description for the AI */
-  description: string;
-
-  /** JSON schema for tool parameters */
-  parameters?: Record<string, unknown>;
-}
-
 export interface LexicalNodeContribution {
   /** Node type identifier */
   type: string;
@@ -110,11 +122,20 @@ export interface LexicalNodeContribution {
 }
 
 export interface SlashCommandContribution {
-  /** Command name (without slash) */
-  name: string;
+  /** Unique command ID (namespaced, e.g., "myext.do-something") */
+  id: string;
 
-  /** Description shown in autocomplete */
-  description: string;
+  /** Display title in the "/" menu */
+  title: string;
+
+  /** Optional description */
+  description?: string;
+
+  /** Material icon name */
+  icon?: string;
+
+  /** Search keywords */
+  keywords?: string[];
 
   /** Handler function name exported from extension */
   handler: string;
@@ -170,4 +191,79 @@ export interface AIToolDefinition {
 
   /** Handler function */
   handler: (params: Record<string, unknown>) => Promise<unknown>;
+}
+
+/**
+ * Context passed to the activate function.
+ */
+export interface ExtensionContext {
+  /** Absolute path to the extension's installation directory */
+  extensionPath: string;
+}
+
+/**
+ * Context passed to AI tool handlers.
+ */
+export interface ToolContext {
+  /** Path to the currently open file (may be undefined) */
+  filePath?: string;
+
+  /** Content of the currently open file (may be undefined) */
+  fileContent?: string;
+
+  /** Path to extension installation directory */
+  extensionPath: string;
+}
+
+/**
+ * Result returned from AI tool handlers.
+ */
+export type ToolResult = ToolSuccessResult | ToolErrorResult;
+
+export interface ToolSuccessResult {
+  /** Any data to return to Claude */
+  [key: string]: unknown;
+
+  /** If present, updates the file content */
+  newContent?: string;
+}
+
+export interface ToolErrorResult {
+  error: string;
+}
+
+/**
+ * Full AI tool definition with typed handler.
+ * This is the recommended type to use when defining tools.
+ */
+export interface ExtensionAITool {
+  /** Unique name (use prefix.action format, e.g., 'csv.get_schema') */
+  name: string;
+
+  /** Description for Claude to understand when to use it */
+  description: string;
+
+  /** JSON Schema for input parameters */
+  inputSchema: {
+    type: 'object';
+    properties: Record<string, JsonSchemaProperty>;
+    required?: string[];
+  };
+
+  /** Handler function */
+  handler: (
+    args: Record<string, unknown>,
+    context: ToolContext
+  ) => Promise<ToolResult>;
+}
+
+/**
+ * JSON Schema property definition for tool input schemas.
+ */
+export interface JsonSchemaProperty {
+  type: 'string' | 'number' | 'boolean' | 'array' | 'object';
+  description?: string;
+  enum?: string[];
+  items?: JsonSchemaProperty;
+  properties?: Record<string, JsonSchemaProperty>;
 }

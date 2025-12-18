@@ -43,6 +43,27 @@ import { KeyboardShortcuts } from './KeyboardShortcuts';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { FeatureTrackingService } from '../services/analytics/FeatureTrackingService';
 
+// Get the path to the Extension SDK documentation
+function getExtensionSDKDocsPath(): string | null {
+    // In development: use the source folder
+    // __dirname is packages/electron/out/main
+    if (process.env.NODE_ENV === 'development' || !app.isPackaged) {
+        // Go up to packages/electron, then to packages/extension-sdk-docs
+        const devPath = path.join(__dirname, '..', '..', '..', 'extension-sdk-docs');
+        if (existsSync(devPath)) {
+            return devPath;
+        }
+    }
+
+    // In production: use bundled resources
+    const resourcesPath = path.join(process.resourcesPath, 'extension-sdk-docs');
+    if (existsSync(resourcesPath)) {
+        return resourcesPath;
+    }
+
+    return null;
+}
+
 // Create window list menu items
 function createWindowListMenu(): any[] {
     const menuItems: any[] = [];
@@ -1313,6 +1334,26 @@ export async function createApplicationMenu() {
                     }
                 },
                 {
+                    label: 'Extension SDK Documentation',
+                    click: async () => {
+                        AnalyticsService.getInstance().sendEvent('help_accessed', {
+                            helpType: 'extension_sdk_docs',
+                            context: 'menu',
+                        });
+                        const sdkDocsPath = getExtensionSDKDocsPath();
+                        if (sdkDocsPath) {
+                            // Open as a workspace window
+                            addToRecentItems('workspaces', sdkDocsPath, 'Extension SDK Docs');
+                            createWindow(false, true, sdkDocsPath);
+                        } else {
+                            dialog.showErrorBox(
+                                'SDK Documentation Not Found',
+                                'The Extension SDK documentation could not be found. Please reinstall Nimbalyst.'
+                            );
+                        }
+                    }
+                },
+                {
                     label: 'Keyboard Shortcuts',
                     accelerator: 'CmdOrCtrl+/',
                     click: async () => {
@@ -1370,6 +1411,26 @@ export async function createApplicationMenu() {
                             context: 'menu',
                         });
                         shell.openExternal('https://docs.nimbalyst.com/');
+                    }
+                },
+                {
+                    label: 'Extension SDK Documentation',
+                    click: async () => {
+                        AnalyticsService.getInstance().sendEvent('help_accessed', {
+                            helpType: 'extension_sdk_docs',
+                            context: 'menu',
+                        });
+                        const sdkDocsPath = getExtensionSDKDocsPath();
+                        if (sdkDocsPath) {
+                            // Open as a workspace window
+                            addToRecentItems('workspaces', sdkDocsPath, 'Extension SDK Docs');
+                            createWindow(false, true, sdkDocsPath);
+                        } else {
+                            dialog.showErrorBox(
+                                'SDK Documentation Not Found',
+                                'The Extension SDK documentation could not be found. Please reinstall Nimbalyst.'
+                            );
+                        }
                     }
                 },
                 {

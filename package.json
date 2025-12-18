@@ -61,6 +61,7 @@
     "packages/rexical",
     "packages/collabv3",
     "packages/capacitor",
+    "packages/extension-sdk",
     "packages/extensions/*"
   ],
   "dependencies": {
