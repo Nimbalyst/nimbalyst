@@ -1,8 +1,46 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import './MarkdownRenderer.css';
+
+// Wrapper for any element that might overflow horizontally
+const OverflowWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [wordWrap, setWordWrap] = useState(false);
+  const [isOverflowing, setIsOverflowing] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const checkOverflow = () => {
+      if (contentRef.current) {
+        const el = contentRef.current;
+        setIsOverflowing(el.scrollWidth > el.clientWidth + 1);
+      }
+    };
+
+    checkOverflow();
+    window.addEventListener('resize', checkOverflow);
+    return () => window.removeEventListener('resize', checkOverflow);
+  }, [children]);
+
+  return (
+    <div className={`overflow-wrapper ${wordWrap ? 'word-wrap-enabled' : ''}`}>
+      <div ref={contentRef} className="overflow-content">
+        {children}
+      </div>
+      {(isOverflowing || wordWrap) && (
+        <label className="wrap-toggle">
+          <input
+            type="checkbox"
+            checked={wordWrap}
+            onChange={(e) => setWordWrap(e.target.checked)}
+          />
+          <span>Wrap</span>
+        </label>
+      )}
+    </div>
+  );
+};
 
 interface MarkdownRendererProps {
   content: string;
@@ -15,31 +53,6 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
   isUser = false,
   isSystemMessage = false
 }) => {
-  // Custom theme for syntax highlighting using CSS variables
-  const customStyle: React.CSSProperties = {
-    backgroundColor: 'var(--surface-tertiary)',
-    padding: '0.75rem',
-    borderRadius: '0.375rem',
-    fontSize: '0.8125rem',
-    lineHeight: '1.5',
-    overflow: 'auto',
-    margin: '0.5rem 0'
-  };
-
-  // Lighter styling for single-line code blocks
-  const inlineBlockStyle: React.CSSProperties = {
-    backgroundColor: 'var(--surface-tertiary)',
-    padding: '0.25rem 0.5rem',
-    borderRadius: '0.25rem',
-    fontSize: '0.8125rem',
-    lineHeight: '1.4',
-    overflowX: 'auto',
-    overflowY: 'hidden',
-    display: 'block',
-    maxWidth: '100%',
-    whiteSpace: 'pre'
-  };
-
   return (
     <div
       className="markdown-content"
@@ -83,48 +96,55 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
               );
             }
 
+            const codeStyle: React.CSSProperties = {
+              backgroundColor: 'var(--surface-tertiary)',
+              padding: isSingleLine ? '0.25rem 0.5rem' : '0.75rem',
+              borderRadius: isSingleLine ? '0.25rem' : '0.375rem',
+              fontSize: '0.8125rem',
+              lineHeight: isSingleLine ? '1.4' : '1.5',
+              margin: isSingleLine ? 0 : '0.5rem 0'
+            };
+
             // Code block with language - use syntax highlighting
             if (language) {
               return (
-                <SyntaxHighlighter
-                  style={{} as any} // We'll use CSS variables for theming
-                  customStyle={isSingleLine ? inlineBlockStyle : customStyle}
-                  language={language}
-                  PreTag="div"
-                  codeTagProps={{
-                    style: {
-                      fontFamily: 'var(--font-mono, monospace)',
-                      fontSize: 'inherit',
-                      background: 'none'
-                    }
-                  }}
-                  {...props}
-                >
-                  {codeString}
-                </SyntaxHighlighter>
+                <OverflowWrapper>
+                  <SyntaxHighlighter
+                    style={{} as any}
+                    customStyle={codeStyle}
+                    language={language}
+                    PreTag="div"
+                    codeTagProps={{
+                      style: {
+                        fontFamily: 'var(--font-mono, monospace)',
+                        fontSize: 'inherit',
+                        background: 'none'
+                      }
+                    }}
+                    {...props}
+                  >
+                    {codeString}
+                  </SyntaxHighlighter>
+                </OverflowWrapper>
               );
             }
 
-            // Code block without language - style as block but simpler
+            // Code block without language
             return (
-              <code
-                className={className}
-                style={{
-                  display: 'block',
-                  backgroundColor: 'var(--surface-tertiary)',
-                  padding: isSingleLine ? '0.25rem 0.5rem' : '0.75rem',
-                  borderRadius: '0.25rem',
-                  fontSize: '0.8125rem',
-                  fontFamily: 'var(--font-mono, monospace)',
-                  color: 'var(--text-primary)',
-                  whiteSpace: 'pre-wrap',
-                  overflowX: 'auto',
-                  margin: '0.5rem 0'
-                }}
-                {...props}
-              >
-                {children}
-              </code>
+              <OverflowWrapper>
+                <code
+                  className={className}
+                  style={{
+                    display: 'block',
+                    ...codeStyle,
+                    fontFamily: 'var(--font-mono, monospace)',
+                    color: 'var(--text-primary)'
+                  }}
+                  {...props}
+                >
+                  {children}
+                </code>
+              </OverflowWrapper>
             );
           },
           // Remove default pre wrapper - we handle styling in code component

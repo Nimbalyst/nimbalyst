@@ -8,6 +8,63 @@
   overflow-wrap: break-word;
 }
 
+/* Overflow wrapper for code blocks */
+.overflow-wrapper {
+  position: relative;
+}
+
+.overflow-content {
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.overflow-wrapper.word-wrap-enabled .overflow-content {
+  overflow-x: visible;
+}
+
+.overflow-wrapper.word-wrap-enabled .overflow-content code,
+.overflow-wrapper.word-wrap-enabled .overflow-content pre,
+.overflow-wrapper.word-wrap-enabled .overflow-content div {
+  white-space: pre-wrap !important;
+  word-break: break-word !important;
+  overflow-wrap: break-word !important;
+}
+
+.wrap-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  font-size: 0.6875rem;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  user-select: none;
+  background: var(--surface-secondary);
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.overflow-wrapper:hover .wrap-toggle {
+  opacity: 1;
+}
+
+.wrap-toggle input[type="checkbox"] {
+  width: 0.75rem;
+  height: 0.75rem;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--accent-primary);
+}
+
+.wrap-toggle span {
+  line-height: 1;
+}
+
 /* Remove default margins for first and last children */
 .markdown-content > *:first-child {
   margin-top: 0;
