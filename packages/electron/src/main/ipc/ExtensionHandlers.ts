@@ -727,5 +727,137 @@ export function registerExtensionHandlers(): void {
     }
   });
 
+  // ============================================================================
+  // Extension Development Kit (EDK) - Hot-loading handlers
+  // ============================================================================
+
+  // Install an extension from a specific path (for development)
+  // This creates a symlink in the user extensions directory pointing to the dev extension
+  ipcMain.handle('extensions:dev-install', async (_event, extensionPath: string) => {
+    try {
+      const normalizedPath = path.resolve(extensionPath);
+      const manifestPath = path.join(normalizedPath, 'manifest.json');
+
+      // Verify manifest exists
+      try {
+        await fs.access(manifestPath);
+      } catch {
+        return { success: false, error: `No manifest.json found at ${normalizedPath}` };
+      }
+
+      // Read manifest to get extension ID
+      const manifestContent = await fs.readFile(manifestPath, 'utf-8');
+      const manifest = JSON.parse(manifestContent);
+      const extensionId = manifest.id;
+
+      if (!extensionId) {
+        return { success: false, error: 'manifest.json missing required "id" field' };
+      }
+
+      // Create symlink in user extensions directory
+      const userExtDir = await getUserExtensionsDirectory();
+      const symlinkPath = path.join(userExtDir, path.basename(normalizedPath));
+
+      // Remove existing symlink if present
+      try {
+        const stat = await fs.lstat(symlinkPath);
+        if (stat.isSymbolicLink() || stat.isDirectory()) {
+          await fs.rm(symlinkPath, { recursive: true, force: true });
+        }
+      } catch {
+        // Doesn't exist, that's fine
+      }
+
+      // Create symlink
+      await fs.symlink(normalizedPath, symlinkPath, 'junction');
+      logger.main.info(`[ExtensionHandlers] Created dev extension symlink: ${symlinkPath} -> ${normalizedPath}`);
+
+      return { success: true, extensionId, symlinkPath };
+    } catch (error) {
+      logger.main.error('[ExtensionHandlers] Failed to install dev extension:', error);
+      return { success: false, error: String(error) };
+    }
+  });
+
+  // Uninstall a dev extension (remove symlink and notify renderers)
+  ipcMain.handle('extensions:dev-uninstall', async (_event, extensionId: string) => {
+    try {
+      const userExtDir = await getUserExtensionsDirectory();
+
+      // Find the extension directory (could be a symlink)
+      const entries = await fs.readdir(userExtDir, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const entryPath = path.join(userExtDir, entry.name);
+
+        // Check if this entry matches the extension ID
+        const manifestPath = path.join(entryPath, 'manifest.json');
+        try {
+          const manifestContent = await fs.readFile(manifestPath, 'utf-8');
+          const manifest = JSON.parse(manifestContent);
+
+          if (manifest.id === extensionId) {
+            // Found it - remove the symlink/directory
+            await fs.rm(entryPath, { recursive: true, force: true });
+            logger.main.info(`[ExtensionHandlers] Removed dev extension: ${extensionId} at ${entryPath}`);
+            return { success: true };
+          }
+        } catch {
+          // Not a valid extension directory, skip
+        }
+      }
+
+      return { success: false, error: `Extension ${extensionId} not found in user extensions` };
+    } catch (error) {
+      logger.main.error('[ExtensionHandlers] Failed to uninstall dev extension:', error);
+      return { success: false, error: String(error) };
+    }
+  });
+
+  // Notify all renderer processes to reload an extension
+  // The renderers will unload the old version and load the new one
+  ipcMain.handle('extensions:dev-reload', async (_event, extensionId: string, extensionPath: string) => {
+    try {
+      const { BrowserWindow } = await import('electron');
+      const windows = BrowserWindow.getAllWindows();
+
+      logger.main.info(`[ExtensionHandlers] Broadcasting extension reload: ${extensionId} from ${extensionPath}`);
+
+      // Broadcast reload message to all renderer windows
+      for (const win of windows) {
+        if (!win.isDestroyed()) {
+          win.webContents.send('extension:dev-reload', { extensionId, extensionPath });
+        }
+      }
+
+      return { success: true };
+    } catch (error) {
+      logger.main.error('[ExtensionHandlers] Failed to broadcast extension reload:', error);
+      return { success: false, error: String(error) };
+    }
+  });
+
+  // Notify all renderer processes to unload an extension
+  ipcMain.handle('extensions:dev-unload', async (_event, extensionId: string) => {
+    try {
+      const { BrowserWindow } = await import('electron');
+      const windows = BrowserWindow.getAllWindows();
+
+      logger.main.info(`[ExtensionHandlers] Broadcasting extension unload: ${extensionId}`);
+
+      // Broadcast unload message to all renderer windows
+      for (const win of windows) {
+        if (!win.isDestroyed()) {
+          win.webContents.send('extension:dev-unload', { extensionId });
+        }
+      }
+
+      return { success: true };
+    } catch (error) {
+      logger.main.error('[ExtensionHandlers] Failed to broadcast extension unload:', error);
+      return { success: false, error: String(error) };
+    }
+  });
+
   logger.main.info('[ExtensionHandlers] Extension handlers registered');
 }

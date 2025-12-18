@@ -813,6 +813,85 @@ export class ExtensionLoader {
       await this.unloadExtension(id);
     }
   }
+
+  /**
+   * Load an extension from a specific path.
+   * This is used for development hot-loading where the extension
+   * may not be in the standard extensions directory.
+   *
+   * If the extension is already loaded, it will be unloaded first.
+   */
+  async loadExtensionFromPath(extensionPath: string): Promise<ExtensionLoadResult> {
+    const platformService = getExtensionPlatformService();
+
+    try {
+      // Read and validate manifest
+      const manifestPath = platformService.resolvePath(extensionPath, 'manifest.json');
+      const exists = await platformService.fileExists(manifestPath);
+
+      if (!exists) {
+        return {
+          success: false,
+          error: `No manifest.json found at ${extensionPath}`,
+          manifestPath: extensionPath,
+        };
+      }
+
+      const manifestContent = await platformService.readFile(manifestPath);
+      const manifestJson = JSON.parse(manifestContent);
+      const validationResult = validateManifest(manifestJson, manifestPath);
+
+      if ('error' in validationResult) {
+        return {
+          success: false,
+          error: validationResult.error,
+          manifestPath: extensionPath,
+        };
+      }
+
+      const manifest = validationResult;
+
+      // If already loaded, unload first
+      if (this.loadedExtensions.has(manifest.id)) {
+        console.info(`[ExtensionLoader] Unloading existing extension ${manifest.id} before reload`);
+        await this.unloadExtension(manifest.id);
+      }
+
+      // Create discovered extension object and load
+      const discovered: DiscoveredExtension = {
+        path: extensionPath,
+        manifest,
+      };
+
+      return await this.loadExtension(discovered);
+    } catch (error) {
+      return {
+        success: false,
+        error: `Failed to load extension from ${extensionPath}: ${error}`,
+        manifestPath: extensionPath,
+      };
+    }
+  }
+
+  /**
+   * Reload an extension by ID.
+   * The extension must already be loaded (so we know its path).
+   * Unloads and reloads the extension from its original path.
+   */
+  async reloadExtension(extensionId: string): Promise<ExtensionLoadResult> {
+    const loaded = this.loadedExtensions.get(extensionId);
+    if (!loaded) {
+      return {
+        success: false,
+        error: `Extension ${extensionId} is not loaded`,
+      };
+    }
+
+    const extensionPath = loaded.context.extensionPath;
+    console.info(`[ExtensionLoader] Reloading extension ${extensionId} from ${extensionPath}`);
+
+    return await this.loadExtensionFromPath(extensionPath);
+  }
 }
 
 // ============================================================================

@@ -15,16 +15,21 @@ import {
   setEnabledStateProvider,
   setConfigurationServiceProvider,
   screenshotService,
+  getExtensionLoader,
 } from '@nimbalyst/runtime';
 import { ExtensionPlatformServiceImpl } from '../services/ExtensionPlatformServiceImpl';
 import { initializeExtensionEditorBridge } from '../extensions/ExtensionEditorBridge';
 import { initializeExtensionPluginBridge } from '../extensions/ExtensionPluginBridge';
+import { syncExtensionEditors } from '../extensions/ExtensionEditorBridge';
 
 // Track workspace path for MCP tool registration
 let currentWorkspacePath: string | null = null;
 
 // Track if screenshot IPC listener is set up
 let screenshotListenerSetup = false;
+
+// Track if extension dev listeners are set up
+let extensionDevListenersSetup = false;
 
 /**
  * Set up IPC listener for screenshot capture requests from main process.
@@ -65,6 +70,59 @@ function setupScreenshotIPCListener(): void {
   });
 
   console.log('[ExtensionSystem] Screenshot IPC listener set up');
+}
+
+/**
+ * Set up IPC listeners for extension development hot-loading.
+ * These receive messages from the main process to reload/unload extensions.
+ */
+function setupExtensionDevListeners(): void {
+  if (extensionDevListenersSetup) return;
+  extensionDevListenersSetup = true;
+
+  const electronAPI = (window as any).electronAPI;
+  if (!electronAPI?.extensions?.onDevReload || !electronAPI?.extensions?.onDevUnload) {
+    console.warn('[ExtensionSystem] Extension dev API not available');
+    return;
+  }
+
+  // Listen for extension reload requests
+  electronAPI.extensions.onDevReload(async (data: { extensionId: string; extensionPath: string }) => {
+    console.log(`[ExtensionSystem] Received dev-reload request for ${data.extensionId} from ${data.extensionPath}`);
+
+    try {
+      const loader = getExtensionLoader();
+      const result = await loader.loadExtensionFromPath(data.extensionPath);
+
+      if (result.success) {
+        console.log(`[ExtensionSystem] Successfully reloaded extension ${data.extensionId}`);
+        // The ExtensionLoader notifies listeners, which triggers syncExtensionEditors
+        // But we'll call it explicitly to ensure the bridges are updated
+        syncExtensionEditors();
+      } else {
+        console.error(`[ExtensionSystem] Failed to reload extension ${data.extensionId}: ${result.error}`);
+      }
+    } catch (error) {
+      console.error(`[ExtensionSystem] Error reloading extension ${data.extensionId}:`, error);
+    }
+  });
+
+  // Listen for extension unload requests
+  electronAPI.extensions.onDevUnload(async (data: { extensionId: string }) => {
+    console.log(`[ExtensionSystem] Received dev-unload request for ${data.extensionId}`);
+
+    try {
+      const loader = getExtensionLoader();
+      await loader.unloadExtension(data.extensionId);
+      console.log(`[ExtensionSystem] Successfully unloaded extension ${data.extensionId}`);
+      // The ExtensionLoader notifies listeners, which triggers syncExtensionEditors
+      syncExtensionEditors();
+    } catch (error) {
+      console.error(`[ExtensionSystem] Error unloading extension ${data.extensionId}:`, error);
+    }
+  });
+
+  console.log('[ExtensionSystem] Extension dev IPC listeners set up');
 }
 
 /**
@@ -109,14 +167,10 @@ export async function registerExtensionSystem(): Promise<void> {
   // Discover and load extensions
   // This will scan the extensions directory and load any valid extensions
   try {
-    // console.log('[ExtensionSystem] Starting extension initialization...');
     await initializeExtensions();
-    // console.log('[ExtensionSystem] Extensions initialized');
 
     // Initialize the bridge to register custom editors from extensions
-    // console.log('[ExtensionSystem] Initializing editor bridge...');
     initializeExtensionEditorBridge();
-    // console.log('[ExtensionSystem] Editor bridge initialized');
 
     // Initialize the plugin bridge to register slash commands, nodes, and transformers
     // console.log('[ExtensionSystem] Initializing plugin bridge...');
@@ -125,6 +179,9 @@ export async function registerExtensionSystem(): Promise<void> {
 
     // Set up IPC listener for screenshot capture requests
     setupScreenshotIPCListener();
+
+    // Set up IPC listeners for extension development hot-loading
+    setupExtensionDevListeners();
 
     // Initialize the AI tools bridge to register extension tools with the tool registry
     initializeExtensionAIToolsBridge();

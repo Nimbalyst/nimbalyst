@@ -84,6 +84,7 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
   const [osNotificationsEnabled, setOSNotificationsEnabled] = useState(false);
   const [releaseChannel, setReleaseChannel] = useState<'stable' | 'alpha'>('stable');
   const [analyticsEnabled, setAnalyticsEnabled] = useState(true);
+  const [extensionDevToolsEnabled, setExtensionDevToolsEnabled] = useState(false);
   const [syncConfig, setSyncConfig] = useState<SyncConfig>({
     enabled: false,
     serverUrl: '',
@@ -170,6 +171,10 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
       // Load analytics setting
       const analyticsEnabledSetting = await window.electronAPI.invoke('analytics:is-enabled');
       setAnalyticsEnabled(analyticsEnabledSetting);
+
+      // Load extension dev tools setting
+      const extensionDevToolsEnabledSetting = await window.electronAPI.extensionDevTools.isEnabled();
+      setExtensionDevToolsEnabled(extensionDevToolsEnabledSetting);
 
       // Load sync config
       const syncConfigSetting = await window.electronAPI.invoke('sync:get-config');
@@ -496,6 +501,12 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
           onAnalyticsEnabledChange={async (value) => {
             setAnalyticsEnabled(value);
             await window.electronAPI.invoke('analytics:set-enabled', value);
+            debouncedSave();
+          }}
+          extensionDevToolsEnabled={extensionDevToolsEnabled}
+          onExtensionDevToolsEnabledChange={async (value) => {
+            setExtensionDevToolsEnabled(value);
+            await window.electronAPI.extensionDevTools.setEnabled(value);
             debouncedSave();
           }}
         />;

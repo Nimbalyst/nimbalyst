@@ -621,6 +621,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('extensions:set-config', extensionId, key, value, scope, workspacePath),
     setConfigBulk: (extensionId: string, configuration: Record<string, unknown>, scope?: 'user' | 'workspace', workspacePath?: string) =>
       ipcRenderer.invoke('extensions:set-config-bulk', extensionId, configuration, scope, workspacePath),
+
+    // Extension Development Kit (EDK) - Hot-loading API
+    devInstall: (extensionPath: string) =>
+      ipcRenderer.invoke('extensions:dev-install', extensionPath) as Promise<{ success: boolean; extensionId?: string; symlinkPath?: string; error?: string }>,
+    devUninstall: (extensionId: string) =>
+      ipcRenderer.invoke('extensions:dev-uninstall', extensionId) as Promise<{ success: boolean; error?: string }>,
+    devReload: (extensionId: string, extensionPath: string) =>
+      ipcRenderer.invoke('extensions:dev-reload', extensionId, extensionPath) as Promise<{ success: boolean; error?: string }>,
+    devUnload: (extensionId: string) =>
+      ipcRenderer.invoke('extensions:dev-unload', extensionId) as Promise<{ success: boolean; error?: string }>,
+
+    // Listen for hot-reload messages from main process
+    onDevReload: (callback: (data: { extensionId: string; extensionPath: string }) => void) => {
+      const handler = (_event: any, data: any) => callback(data);
+      ipcRenderer.on('extension:dev-reload', handler);
+      return () => ipcRenderer.removeListener('extension:dev-reload', handler);
+    },
+    onDevUnload: (callback: (data: { extensionId: string }) => void) => {
+      const handler = (_event: any, data: any) => callback(data);
+      ipcRenderer.on('extension:dev-unload', handler);
+      return () => ipcRenderer.removeListener('extension:dev-unload', handler);
+    },
   },
 
   // Claude Code API
@@ -628,6 +650,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getSettings: () => ipcRenderer.invoke('claudeCode:get-settings') as Promise<{ projectCommandsEnabled: boolean; userCommandsEnabled: boolean }>,
     setProjectCommandsEnabled: (enabled: boolean) => ipcRenderer.invoke('claudeCode:set-project-commands-enabled', enabled),
     setUserCommandsEnabled: (enabled: boolean) => ipcRenderer.invoke('claudeCode:set-user-commands-enabled', enabled),
+  },
+
+  // Extension Development Kit (EDK) API
+  extensionDevTools: {
+    isEnabled: () => ipcRenderer.invoke('extensionDevTools:is-enabled') as Promise<boolean>,
+    setEnabled: (enabled: boolean) => ipcRenderer.invoke('extensionDevTools:set-enabled', enabled) as Promise<void>,
   },
 
   // Generic IPC methods for services that need them

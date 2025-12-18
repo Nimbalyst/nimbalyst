@@ -68,6 +68,8 @@ interface AppStoreSchema {
     // Enable user-level commands (~/.claude/commands/)
     userCommandsEnabled?: boolean;
   };
+  // Extension Development Kit (EDK) - enables MCP tools for building/reloading extensions
+  extensionDevToolsEnabled?: boolean;
   // Session Sync (optional device sync)
   sessionSync?: {
     enabled: boolean;
@@ -972,6 +974,15 @@ export function setClaudeCodeProjectCommandsEnabled(enabled: boolean): void {
 export function setClaudeCodeUserCommandsEnabled(enabled: boolean): void {
   const current = appStore.get('claudeCode', {});
   appStore.set('claudeCode', { ...current, userCommandsEnabled: enabled });
+}
+
+// Extension Development Kit (EDK) Settings
+export function isExtensionDevToolsEnabled(): boolean {
+  return appStore.get('extensionDevToolsEnabled', false); // Default to disabled
+}
+
+export function setExtensionDevToolsEnabled(enabled: boolean): void {
+  appStore.set('extensionDevToolsEnabled', enabled);
 }
 
 export function getExtensionConfiguration(extensionId: string): Record<string, unknown> {

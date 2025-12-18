@@ -50,6 +50,7 @@ import { detectFileWorkspace, suggestWorkspaceForFile } from './utils/workspaceD
 import { cliManager } from './services/CLIManager';
 import { registerWorkspaceWindow, registerExtensionTools, shutdownHttpServer, startMcpHttpServer, updateDocumentState } from './mcp/httpServer';
 import { SessionNamingService } from './services/SessionNamingService';
+import { ExtensionDevService } from './services/ExtensionDevService';
 import { MockupScreenshotService } from './services/MockupScreenshotService';
 import { registerMockupHandlers } from './ipc/MockupHandlers';
 import { registerDataModelHandlers } from './ipc/DataModelHandlers';
@@ -485,6 +486,15 @@ app.whenReady().then(async () => {
         // logger.mcp.info('Session naming MCP server started');
     } catch (error) {
         logger.mcp.error('Failed to start session naming MCP server:', error);
+    }
+
+    // Start extension dev MCP server (for Extension Developer Kit)
+    try {
+        const extensionDevService = ExtensionDevService.getInstance();
+        await extensionDevService.start();
+        logger.mcp.info('Extension dev MCP server started');
+    } catch (error) {
+        logger.mcp.error('Failed to start extension dev MCP server:', error);
     }
 
     // Set up IPC handler to update document state for MCP
@@ -1043,6 +1053,17 @@ app.on('before-quit', async (event) => {
                 fs.appendFileSync(debugLog, `[QUIT] Error closing session naming MCP server: ${error}\n`);
             } catch (e) {}
         }
+    }
+
+    try {
+        // Shutdown extension dev MCP server
+        const extensionDevService = ExtensionDevService.getInstance();
+        const shutdownPromise = extensionDevService.shutdown();
+        const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 500));
+        await Promise.race([shutdownPromise, timeoutPromise]);
+        console.log('[QUIT] Extension dev MCP server shutdown complete');
+    } catch (error) {
+        console.error('[QUIT] Error closing extension dev MCP server:', error);
     }
 
     try {

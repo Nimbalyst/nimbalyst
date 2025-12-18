@@ -268,6 +268,12 @@ interface ElectronAPI {
     setUserCommandsEnabled: (enabled: boolean) => Promise<void>;
   };
 
+  // Extension Development Kit (EDK) API
+  extensionDevTools: {
+    isEnabled: () => Promise<boolean>;
+    setEnabled: (enabled: boolean) => Promise<void>;
+  };
+
   // Open external links
   openExternal: (url: string) => Promise<void>;
 

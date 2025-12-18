@@ -9,6 +9,8 @@ interface AdvancedPanelProps {
   onReleaseChannelChange: (value: 'stable' | 'alpha') => void;
   analyticsEnabled: boolean;
   onAnalyticsEnabledChange: (value: boolean) => void;
+  extensionDevToolsEnabled: boolean;
+  onExtensionDevToolsEnabledChange: (value: boolean) => void;
 }
 
 export function AdvancedPanel({
@@ -19,7 +21,9 @@ export function AdvancedPanel({
   releaseChannel,
   onReleaseChannelChange,
   analyticsEnabled,
-  onAnalyticsEnabledChange
+  onAnalyticsEnabledChange,
+  extensionDevToolsEnabled,
+  onExtensionDevToolsEnabledChange
 }: AdvancedPanelProps) {
   const isDevelopment = import.meta.env.DEV;
   const [showReleaseChannel, setShowReleaseChannel] = useState(false);
@@ -92,6 +96,32 @@ export function AdvancedPanel({
               <span className="setting-name">Send Anonymous Usage Data</span>
               <span className="setting-description">
                 Help improve Nimbalyst by sending anonymous usage data. No prompts, content, or personal information is ever collected.
+              </span>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div className="provider-panel-section">
+        <h4 className="provider-panel-section-title">Extension Development</h4>
+        <p className="provider-panel-hint">
+          Tools for building and testing Nimbalyst extensions.
+        </p>
+
+        <div className="setting-item">
+          <label className="setting-label">
+            <input
+              type="checkbox"
+              checked={extensionDevToolsEnabled}
+              onChange={(e) => onExtensionDevToolsEnabledChange(e.target.checked)}
+              className="setting-checkbox"
+            />
+            <div className="setting-text">
+              <span className="setting-name">Enable Extension Dev Tools</span>
+              <span className="setting-description">
+                Enables MCP tools for building, installing, and hot-reloading extensions during development.
+                When enabled, Claude Code can use extension_build, extension_install, extension_reload, and
+                extension_uninstall tools to develop extensions in real-time.
               </span>
             </div>
           </label>

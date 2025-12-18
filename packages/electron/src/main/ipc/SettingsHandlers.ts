@@ -1,6 +1,6 @@
 import { ipcMain, BrowserWindow } from 'electron';
 import * as os from 'os';
-import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel, getRecentItems, getDefaultAIModel, setDefaultAIModel, isAnalyticsEnabled, setAnalyticsEnabled, isMockupLMEnabled, setMockupLMEnabled, getSessionSyncConfig, setSessionSyncConfig, SessionSyncConfig } from '../utils/store';
+import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel, getRecentItems, getDefaultAIModel, setDefaultAIModel, isAnalyticsEnabled, setAnalyticsEnabled, isMockupLMEnabled, setMockupLMEnabled, getSessionSyncConfig, setSessionSyncConfig, SessionSyncConfig, isExtensionDevToolsEnabled, setExtensionDevToolsEnabled } from '../utils/store';
 import { logger } from '../utils/logger';
 import { SoundNotificationService } from '../services/SoundNotificationService';
 import { autoUpdaterService } from '../services/autoUpdater';
@@ -206,6 +206,26 @@ export function registerSettingsHandlers() {
         const { setClaudeCodeUserCommandsEnabled } = await import('../utils/store');
         setClaudeCodeUserCommandsEnabled(enabled);
         logger.store.info(`[SettingsHandlers] Claude Code user commands ${enabled ? 'enabled' : 'disabled'}`);
+    });
+
+    // Extension Development Kit (EDK) settings
+    ipcMain.handle('extensionDevTools:is-enabled', () => {
+        return isExtensionDevToolsEnabled();
+    });
+
+    ipcMain.handle('extensionDevTools:set-enabled', async (_event, enabled: boolean) => {
+        setExtensionDevToolsEnabled(enabled);
+        logger.store.info(`[SettingsHandlers] Extension dev tools ${enabled ? 'enabled' : 'disabled'}`);
+
+        // Start or stop the ExtensionDevService based on the new setting
+        const { ExtensionDevService } = await import('../services/ExtensionDevService');
+        const service = ExtensionDevService.getInstance();
+
+        if (enabled) {
+            await service.start();
+        } else {
+            await service.shutdown();
+        }
     });
 
     // Session sync settings
