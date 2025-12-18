@@ -55,6 +55,8 @@ export interface CustomToolWidgetProps {
   onToggle: () => void;
   /** Workspace path for resolving relative paths */
   workspacePath?: string;
+  /** Optional: Read a file from the filesystem (for loading persisted output files) */
+  readFile?: (filePath: string) => Promise<{ success: boolean; content?: string; error?: string }>;
 }
 
 /**

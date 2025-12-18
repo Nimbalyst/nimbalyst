@@ -95,6 +95,25 @@ interface TranscriptSectionProps {
   onCommandSelect: (command: string) => void;
 }
 
+// Helper to read files from the main process (for persisted output files)
+const readFile = async (filePath: string): Promise<{ success: boolean; content?: string; error?: string }> => {
+  try {
+    const result = await window.electronAPI.readFileContent(filePath);
+    if (!result) {
+      return { success: false, error: 'No response from file reader' };
+    }
+    if (!result.success) {
+      return { success: false, error: result.error || 'Failed to read file' };
+    }
+    return { success: true, content: result.content };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to read file'
+    };
+  }
+};
+
 const TranscriptSectionComponent: React.FC<TranscriptSectionProps> = ({
   sessionId,
   sessionData,
@@ -163,6 +182,7 @@ const TranscriptSectionComponent: React.FC<TranscriptSectionProps> = ({
           isArchived={isArchived}
           onCloseAndArchive={onCloseAndArchive}
           onUnarchive={onUnarchive}
+          readFile={readFile}
         />
       </div>
 

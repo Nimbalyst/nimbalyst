@@ -28,6 +28,8 @@ interface RichTranscriptViewProps {
   workspacePath?: string;
   /** Optional: render additional content in the empty state (e.g., command suggestions) */
   renderEmptyExtra?: () => React.ReactNode;
+  /** Optional: Read a file from the filesystem (for custom widgets that need to load persisted files) */
+  readFile?: (filePath: string) => Promise<{ success: boolean; content?: string; error?: string }>;
 }
 
 const defaultSettings: TranscriptSettings = {
@@ -225,7 +227,7 @@ const extractEditsFromToolMessage = (message: Message): any[] => {
 export const RichTranscriptView = React.forwardRef<
   { scrollToMessage: (index: number) => void },
   RichTranscriptViewProps
->(({ sessionId, sessionStatus, isProcessing, messages, provider, settings: propsSettings, onSettingsChange, showSettings, documentContext, workspacePath, renderEmptyExtra }, ref) => {
+>(({ sessionId, sessionStatus, isProcessing, messages, provider, settings: propsSettings, onSettingsChange, showSettings, documentContext, workspacePath, renderEmptyExtra, readFile }, ref) => {
   const [collapsedMessages, setCollapsedMessages] = useState<Set<number>>(new Set());
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -499,6 +501,7 @@ export const RichTranscriptView = React.forwardRef<
             isExpanded={isExpanded}
             onToggle={() => toggleToolExpand(toolId)}
             workspacePath={workspacePath}
+            readFile={readFile}
           />
         </div>
       );

@@ -38,6 +38,8 @@ interface AgentTranscriptPanelProps {
   onCloseAndArchive?: () => void;
   /** Optional callback to unarchive the session */
   onUnarchive?: () => void;
+  /** Optional: Read a file from the filesystem (for custom widgets that need to load persisted files) */
+  readFile?: (filePath: string) => Promise<{ success: boolean; content?: string; error?: string }>;
 }
 
 export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
@@ -55,7 +57,8 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
   renderEmptyExtra,
   isArchived,
   onCloseAndArchive,
-  onUnarchive
+  onUnarchive,
+  readFile
 }) => {
   // Use prop if provided, otherwise fall back to sessionData.workspacePath
   const effectiveWorkspacePath = workspacePathProp || sessionData.workspacePath;
@@ -241,6 +244,7 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
           documentContext={sessionData.documentContext}
           workspacePath={effectiveWorkspacePath}
           renderEmptyExtra={renderEmptyExtra}
+          readFile={readFile}
         />
 
         {/* Floating Actions - hidden if hideSidebar is true */}
