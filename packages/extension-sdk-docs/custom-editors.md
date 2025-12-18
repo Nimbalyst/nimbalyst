@@ -6,60 +6,105 @@ Custom editors are the most powerful extension type. They let you create entirel
 
 When a user opens a file, Nimbalyst checks if any extension has registered a custom editor for that file type. If found, your React component is rendered instead of the default editor.
 
-Your component receives:
-- `content` - The file's current content as a string
-- `filePath` - Absolute path to the file
-- `onChange` - Callback to notify Nimbalyst when content changes
+Your component receives props from Nimbalyst including the file content, path, theme, and callbacks for managing dirty state and content retrieval.
 
 ## Editor Component Interface
 
 ```typescript
 interface CustomEditorProps {
-  // The file content as a string
-  content: string;
-
-  // Absolute path to the file being edited
+  /** Absolute path to the file being edited */
   filePath: string;
 
-  // Call this when the user makes changes
-  // Nimbalyst will mark the file as dirty and handle saving
-  onChange: (newContent: string) => void;
+  /** File name (basename) */
+  fileName: string;
 
-  // Optional: Extension context with path info
-  context?: {
-    extensionPath: string;
-  };
+  /** Initial file content (may be empty for binary files) */
+  initialContent: string;
+
+  /** Current theme: 'light' | 'dark' | 'crystal-dark' */
+  theme: 'light' | 'dark' | 'crystal-dark';
+
+  /** Whether this editor tab is currently active/focused */
+  isActive: boolean;
+
+  /** Workspace path (if in a workspace) */
+  workspaceId?: string;
+
+  /**
+   * Called when the editor content changes.
+   * This triggers dirty state tracking and autosave.
+   */
+  onContentChange?: () => void;
+
+  /**
+   * Called to update the dirty state.
+   * @param isDirty - Whether the editor has unsaved changes
+   */
+  onDirtyChange?: (isDirty: boolean) => void;
+
+  /**
+   * Register a function that returns the current editor content.
+   * This is called by the host when saving.
+   *
+   * IMPORTANT: For read-only editors (like PDF viewer), do NOT call this.
+   * Calling it with a function that returns '' will cause file corruption.
+   */
+  onGetContentReady?: (getContentFn: () => string) => void;
+
+  /** Called when user requests to view file history */
+  onViewHistory?: () => void;
+
+  /** Called when user requests to rename the document */
+  onRenameDocument?: () => void;
 }
 ```
 
 ## Basic Editor Structure
 
 ```tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import type { CustomEditorProps } from '@nimbalyst/extension-sdk';
 
-interface MyEditorProps {
-  content: string;
-  filePath: string;
-  onChange: (content: string) => void;
-}
-
-export function MyEditor({ content, filePath, onChange }: MyEditorProps) {
+export function MyEditor({
+  initialContent,
+  filePath,
+  fileName,
+  theme,
+  isActive,
+  onContentChange,
+  onDirtyChange,
+  onGetContentReady,
+}: CustomEditorProps) {
   // Parse the file content into your internal data structure
-  const [data, setData] = useState(() => parseContent(content));
+  const [data, setData] = useState(() => parseContent(initialContent));
+  const dataRef = useRef(data);
+
+  // Keep ref in sync for the getContent callback
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
+
+  // Register the content getter for saving
+  useEffect(() => {
+    if (onGetContentReady) {
+      onGetContentReady(() => serializeContent(dataRef.current));
+    }
+  }, [onGetContentReady]);
 
   // Re-parse when file is reloaded from disk
   useEffect(() => {
-    setData(parseContent(content));
-  }, [content]);
+    setData(parseContent(initialContent));
+  }, [initialContent]);
 
   // Handle user edits
-  const handleEdit = (newData: MyDataType) => {
+  const handleEdit = useCallback((newData: MyDataType) => {
     setData(newData);
-    onChange(serializeContent(newData)); // Convert back to string
-  };
+    onDirtyChange?.(true);    // Mark as dirty
+    onContentChange?.();      // Trigger autosave timer
+  }, [onDirtyChange, onContentChange]);
 
   return (
-    <div className="my-editor">
+    <div className="my-editor" data-theme={theme}>
       {/* Your editor UI */}
     </div>
   );
@@ -73,6 +118,26 @@ function serializeContent(data: MyDataType): string {
   // Convert data structure back to file content
 }
 ```
+
+## Key Concepts
+
+### Content Management
+
+Unlike simpler editor patterns, Nimbalyst uses a **pull-based** content model:
+
+1. **Initial content**: You receive `initialContent` once when the editor mounts
+2. **Dirty tracking**: Call `onDirtyChange(true)` when the user makes changes
+3. **Content retrieval**: Register a getter via `onGetContentReady` that returns current content
+4. **Saving**: When the user saves, Nimbalyst calls your getter to retrieve the content
+
+This pattern allows editors to maintain complex internal state without constantly serializing to a string.
+
+### Why not just `onChange(content)`?
+
+The pull-based model is more efficient for complex editors:
+- Spreadsheets with thousands of cells don't serialize on every keystroke
+- Diagram editors can maintain rich object graphs internally
+- Binary format editors only serialize when actually saving
 
 ## Registering the Editor
 

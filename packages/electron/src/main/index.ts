@@ -45,7 +45,7 @@ import { registerMCPConfigHandlers } from './ipc/MCPConfigHandlers';
 import { MCPConfigService } from './services/MCPConfigService';
 import { registerDatabaseBrowserHandlers } from './ipc/DatabaseBrowserHandlers';
 import { AIService } from './services/ai/AIService';
-import { detectFileWorkspace, suggestWorkspaceForFile } from './utils/workspaceDetection';
+import { detectFileWorkspace, suggestWorkspaceForFile, getAdditionalDirectoriesForWorkspace } from './utils/workspaceDetection';
 // import { AgentService } from './services/agents/AgentService';
 import { cliManager } from './services/CLIManager';
 import { registerWorkspaceWindow, registerExtensionTools, shutdownHttpServer, startMcpHttpServer, updateDocumentState } from './mcp/httpServer';
@@ -447,6 +447,10 @@ app.whenReady().then(async () => {
         const { getClaudeCodeSettings } = await import('./utils/store');
         return getClaudeCodeSettings();
     });
+
+    // Inject additional directories loader
+    // This allows Claude to access SDK docs when working on extension projects
+    ClaudeCodeProvider.setAdditionalDirectoriesLoader(getAdditionalDirectoriesForWorkspace);
 
     registerMockupHandlers();
     registerDataModelHandlers();

@@ -81,6 +81,11 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   // Returns settings for project/user commands
   private static claudeCodeSettingsLoader: (() => Promise<{ projectCommandsEnabled: boolean; userCommandsEnabled: boolean }>) | null = null;
 
+  // Additional directories loader (injected from electron main process)
+  // Returns additional directories Claude should have access to based on workspace context
+  // (e.g., SDK docs when working on an extension project)
+  private static additionalDirectoriesLoader: ((workspacePath: string) => string[]) | null = null;
+
   static readonly DEFAULT_MODEL = 'claude-code:sonnet';
 
   /**
@@ -131,6 +136,15 @@ export class ClaudeCodeProvider extends BaseAIProvider {
    */
   public static setClaudeCodeSettingsLoader(loader: (() => Promise<{ projectCommandsEnabled: boolean; userCommandsEnabled: boolean }>) | null): void {
     ClaudeCodeProvider.claudeCodeSettingsLoader = loader;
+  }
+
+  /**
+   * Set the additional directories loader function (called from electron main process)
+   * This allows the runtime package to get additional directories Claude should have access to
+   * based on workspace context (e.g., SDK docs when working on an extension project)
+   */
+  public static setAdditionalDirectoriesLoader(loader: ((workspacePath: string) => string[]) | null): void {
+    ClaudeCodeProvider.additionalDirectoriesLoader = loader;
   }
 
   async initialize(config: ProviderConfig): Promise<void> {
@@ -380,6 +394,21 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         } catch (error) {
           console.warn('[CLAUDE-CODE] Failed to load extension plugins:', error);
           // Continue without extension plugins
+        }
+      }
+
+      // Add additional directories based on workspace context
+      // (e.g., SDK docs when working on an extension project)
+      if (ClaudeCodeProvider.additionalDirectoriesLoader) {
+        try {
+          const additionalDirs = ClaudeCodeProvider.additionalDirectoriesLoader(workspacePath);
+          if (additionalDirs.length > 0) {
+            options.additionalDirectories = additionalDirs;
+            console.log(`[CLAUDE-CODE] Added ${additionalDirs.length} additional directory(ies):`, additionalDirs);
+          }
+        } catch (error) {
+          console.warn('[CLAUDE-CODE] Failed to load additional directories:', error);
+          // Continue without additional directories
         }
       }
 

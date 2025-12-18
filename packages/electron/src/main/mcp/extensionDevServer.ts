@@ -447,82 +447,91 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
                 };
               }
 
-              if (!reloadExtensionFn) {
-                // Fall back to rebuild + reinstall
-                console.log(`[Extension Dev MCP] Reloading extension ${extensionId} via rebuild + reinstall`);
+              const normalizedPath = path.resolve(extensionPath);
 
-                const normalizedPath = path.resolve(extensionPath);
+              // Step 1: Always rebuild first
+              console.log(`[Extension Dev MCP] Rebuilding extension ${extensionId} at ${normalizedPath}`);
+              const buildResult = await runBuild(normalizedPath);
+              if (!buildResult.success) {
+                return {
+                  content: [{
+                    type: 'text',
+                    text: `Rebuild failed!\n\nStdout:\n${buildResult.stdout}\n\nStderr:\n${buildResult.stderr}`
+                  }],
+                  isError: true
+                };
+              }
 
-                // Step 1: Build
-                const buildResult = await runBuild(normalizedPath);
-                if (!buildResult.success) {
+              // Step 2: Reload the extension in the running app
+              if (reloadExtensionFn) {
+                try {
+                  const result = await reloadExtensionFn(extensionId, normalizedPath);
+                  if (result.success) {
+                    return {
+                      content: [{
+                        type: 'text',
+                        text: `Extension ${extensionId} rebuilt and reloaded successfully!\n\nBuild output:\n${buildResult.stdout}`
+                      }],
+                      isError: false
+                    };
+                  } else {
+                    return {
+                      content: [{
+                        type: 'text',
+                        text: `Build succeeded but reload failed: ${result.error}\n\nBuild output:\n${buildResult.stdout}`
+                      }],
+                      isError: true
+                    };
+                  }
+                } catch (error) {
+                  const errorMessage = error instanceof Error ? error.message : 'Unknown error';
                   return {
                     content: [{
                       type: 'text',
-                      text: `Rebuild failed!\n\nStdout:\n${buildResult.stdout}\n\nStderr:\n${buildResult.stderr}`
+                      text: `Build succeeded but reload error: ${errorMessage}\n\nBuild output:\n${buildResult.stdout}`
                     }],
                     isError: true
                   };
                 }
+              }
 
-                // Step 2: Reinstall
-                if (installExtensionFn) {
-                  try {
-                    const installResult = await installExtensionFn(normalizedPath);
-                    if (installResult.success) {
-                      return {
-                        content: [{
-                          type: 'text',
-                          text: `Extension reloaded successfully!\n\nBuild output:\n${buildResult.stdout}`
-                        }],
-                        isError: false
-                      };
-                    } else {
-                      return {
-                        content: [{
-                          type: 'text',
-                          text: `Build succeeded but reinstall failed: ${installResult.error}`
-                        }],
-                        isError: true
-                      };
-                    }
-                  } catch (error) {
-                    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+              // Fallback: use install function if reload not available
+              if (installExtensionFn) {
+                try {
+                  const installResult = await installExtensionFn(normalizedPath);
+                  if (installResult.success) {
                     return {
-                      content: [{ type: 'text', text: `Build succeeded but reinstall error: ${errorMessage}` }],
+                      content: [{
+                        type: 'text',
+                        text: `Extension rebuilt and reinstalled successfully!\n\nBuild output:\n${buildResult.stdout}`
+                      }],
+                      isError: false
+                    };
+                  } else {
+                    return {
+                      content: [{
+                        type: 'text',
+                        text: `Build succeeded but reinstall failed: ${installResult.error}\n\nBuild output:\n${buildResult.stdout}`
+                      }],
                       isError: true
                     };
                   }
-                }
-
-                return {
-                  content: [{ type: 'text', text: 'Error: Extension management service not initialized' }],
-                  isError: true
-                };
-              }
-
-              // Use dedicated reload function if available
-              try {
-                const normalizedPath = path.resolve(extensionPath);
-                const result = await reloadExtensionFn(extensionId, normalizedPath);
-                if (result.success) {
+                } catch (error) {
+                  const errorMessage = error instanceof Error ? error.message : 'Unknown error';
                   return {
-                    content: [{ type: 'text', text: `Extension ${extensionId} reloaded successfully!` }],
-                    isError: false
-                  };
-                } else {
-                  return {
-                    content: [{ type: 'text', text: `Reload failed: ${result.error}` }],
+                    content: [{
+                      type: 'text',
+                      text: `Build succeeded but reinstall error: ${errorMessage}\n\nBuild output:\n${buildResult.stdout}`
+                    }],
                     isError: true
                   };
                 }
-              } catch (error) {
-                const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-                return {
-                  content: [{ type: 'text', text: `Reload error: ${errorMessage}` }],
-                  isError: true
-                };
               }
+
+              return {
+                content: [{ type: 'text', text: 'Error: Extension management service not initialized' }],
+                isError: true
+              };
             }
 
             case 'extension_uninstall': {

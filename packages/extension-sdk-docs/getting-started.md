@@ -121,26 +121,41 @@ export function deactivate() {
 Create `src/HelloEditor.tsx`:
 
 ```tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import type { CustomEditorProps } from '@nimbalyst/extension-sdk';
 
-interface HelloEditorProps {
-  content: string;
-  filePath: string;
-  onChange: (content: string) => void;
-}
+export function HelloEditor({
+  initialContent,
+  filePath,
+  onContentChange,
+  onDirtyChange,
+  onGetContentReady,
+}: CustomEditorProps) {
+  const [text, setText] = useState(initialContent);
+  const textRef = useRef(text);
 
-export function HelloEditor({ content, filePath, onChange }: HelloEditorProps) {
-  const [text, setText] = useState(content);
-
-  // Update local state when content prop changes (file reload)
+  // Keep ref in sync for the content getter
   useEffect(() => {
-    setText(content);
-  }, [content]);
+    textRef.current = text;
+  }, [text]);
+
+  // Register content getter - Nimbalyst calls this when saving
+  useEffect(() => {
+    if (onGetContentReady) {
+      onGetContentReady(() => textRef.current);
+    }
+  }, [onGetContentReady]);
+
+  // Update local state when file is reloaded from disk
+  useEffect(() => {
+    setText(initialContent);
+  }, [initialContent]);
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newText = e.target.value;
     setText(newText);
-    onChange(newText); // Notify Nimbalyst of changes
+    onDirtyChange?.(true);   // Show dirty indicator on tab
+    onContentChange?.();     // Trigger autosave timer
   };
 
   return (
@@ -173,6 +188,12 @@ export function HelloEditor({ content, filePath, onChange }: HelloEditorProps) {
   );
 }
 ```
+
+**Key points:**
+- Use `initialContent` (not `content`) for the initial file content
+- Register a content getter via `onGetContentReady` - Nimbalyst calls this when saving
+- Call `onDirtyChange(true)` to show the dirty indicator on the tab
+- Call `onContentChange()` to trigger the autosave timer
 
 ## Step 8: Add Build Script
 

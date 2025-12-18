@@ -1,0 +1,14 @@
+{
+  "name": "@nimbalyst/extension-dev-kit",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build"
+  },
+  "devDependencies": {
+    "@nimbalyst/extension-sdk": "*",
+    "typescript": "^5.0.0",
+    "vite": "^5.0.0"
+  }
+}

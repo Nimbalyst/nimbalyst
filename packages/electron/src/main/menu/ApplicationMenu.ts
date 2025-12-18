@@ -43,26 +43,8 @@ import { KeyboardShortcuts } from './KeyboardShortcuts';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { FeatureTrackingService } from '../services/analytics/FeatureTrackingService';
 
-// Get the path to the Extension SDK documentation
-function getExtensionSDKDocsPath(): string | null {
-    // In development: use the source folder
-    // __dirname is packages/electron/out/main
-    if (process.env.NODE_ENV === 'development' || !app.isPackaged) {
-        // Go up to packages/electron, then to packages/extension-sdk-docs
-        const devPath = path.join(__dirname, '..', '..', '..', 'extension-sdk-docs');
-        if (existsSync(devPath)) {
-            return devPath;
-        }
-    }
-
-    // In production: use bundled resources
-    const resourcesPath = path.join(process.resourcesPath, 'extension-sdk-docs');
-    if (existsSync(resourcesPath)) {
-        return resourcesPath;
-    }
-
-    return null;
-}
+// Import shared SDK docs path function
+import { getExtensionSDKDocsPath } from '../utils/workspaceDetection';
 
 // Create window list menu items
 function createWindowListMenu(): any[] {
