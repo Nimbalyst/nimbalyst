@@ -245,6 +245,17 @@ export class ExtensionLoader {
             }
             seenIds.add(validationResult.id);
 
+            // Check if extension should be visible for the current release channel
+            const isVisible = await platformService.isExtensionVisibleForChannel(
+              validationResult.requiredReleaseChannel
+            );
+            if (!isVisible) {
+              console.info(
+                `[ExtensionLoader] Skipping extension ${validationResult.id} (requires ${validationResult.requiredReleaseChannel} channel)`
+              );
+              continue;
+            }
+
             discovered.push({
               path: extensionPath,
               manifest: validationResult,

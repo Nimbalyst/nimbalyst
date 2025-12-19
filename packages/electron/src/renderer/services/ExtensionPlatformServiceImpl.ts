@@ -526,4 +526,18 @@ export class ExtensionPlatformServiceImpl implements ExtensionPlatformService {
 
     return electronAPI.invoke('extensions:find-files', dirPath, pattern);
   }
+
+  /**
+   * Check if an extension should be visible based on its required release channel.
+   * Extensions with requiredReleaseChannel: 'alpha' are only visible to alpha users.
+   */
+  async isExtensionVisibleForChannel(requiredChannel: string | undefined): Promise<boolean> {
+    const electronAPI = (window as any).electronAPI;
+    if (!electronAPI) {
+      // If we can't check, default to visible (fail open)
+      return true;
+    }
+
+    return electronAPI.invoke('extensions:is-visible-for-channel', requiredChannel);
+  }
 }

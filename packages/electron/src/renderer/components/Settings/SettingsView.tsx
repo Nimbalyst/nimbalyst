@@ -78,6 +78,7 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
   // Ref to track if we need to save (for debounce)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pendingSaveRef = useRef(false);
+  const performSaveRef = useRef<() => Promise<void>>();
   const [aiDebugLogging, setAiDebugLogging] = useState(false);
   const [completionSoundEnabled, setCompletionSoundEnabled] = useState(false);
   const [completionSoundType, setCompletionSoundType] = useState<'chime' | 'bell' | 'pop' | 'none'>('chime');
@@ -306,7 +307,11 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
     }
   }, [apiKeys, providers, showToolCalls, aiDebugLogging, completionSoundEnabled, completionSoundType, osNotificationsEnabled, releaseChannel, syncConfig]);
 
+  // Keep the ref in sync with performSave so debounced calls use the latest version
+  performSaveRef.current = performSave;
+
   // Debounced save - call this when settings change
+  // Uses a ref to avoid stale closure issues with the timeout
   const debouncedSave = useCallback(() => {
     pendingSaveRef.current = true;
 
@@ -316,10 +321,11 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
     }
 
     // Set new timeout - 500ms debounce
+    // Use ref to always call the latest performSave
     saveTimeoutRef.current = setTimeout(() => {
-      performSave();
+      performSaveRef.current?.();
     }, 500);
-  }, [performSave]);
+  }, []);
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -328,11 +334,11 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
         clearTimeout(saveTimeoutRef.current);
         // Save immediately on unmount if there are pending changes
         if (pendingSaveRef.current) {
-          performSave();
+          performSaveRef.current?.();
         }
       }
     };
-  }, [performSave]);
+  }, []);
 
   // Build provider status for sidebar
   const providerStatus = Object.fromEntries(

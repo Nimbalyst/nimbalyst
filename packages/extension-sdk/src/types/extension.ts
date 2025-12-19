@@ -35,6 +35,13 @@ export interface ExtensionManifest {
 
   /** What the extension contributes to Nimbalyst */
   contributions?: ExtensionContributions;
+
+  /**
+   * Minimum release channel required to see/use this extension.
+   * - 'stable': Available to all users (default if not specified)
+   * - 'alpha': Only visible to users on the alpha release channel
+   */
+  requiredReleaseChannel?: 'stable' | 'alpha';
 }
 
 export interface ExtensionPermissions {

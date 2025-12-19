@@ -25,8 +25,35 @@ import {
   getWorkspaceExtensionConfiguration,
   setWorkspaceExtensionConfiguration,
   setWorkspaceExtensionConfigurationBulk,
+  getReleaseChannel,
 } from '../utils/store';
 import { registerFileExtension, clearRegisteredExtensions } from '../extensions/RegisteredFileTypes';
+import type { ReleaseChannel } from '../utils/store';
+
+/**
+ * Check if an extension should be visible for the current release channel.
+ * Extensions with requiredReleaseChannel: 'alpha' are only visible to alpha users.
+ * Extensions without this field or with 'stable' are visible to everyone.
+ */
+function isExtensionVisibleForChannel(
+  manifest: { requiredReleaseChannel?: ReleaseChannel },
+  currentChannel: ReleaseChannel
+): boolean {
+  const requiredChannel = manifest.requiredReleaseChannel;
+
+  // No requirement or 'stable' requirement = visible to everyone
+  if (!requiredChannel || requiredChannel === 'stable') {
+    return true;
+  }
+
+  // 'alpha' requirement = only visible to alpha users
+  if (requiredChannel === 'alpha') {
+    return currentChannel === 'alpha';
+  }
+
+  // Unknown channel requirement = default to visible (fail open)
+  return true;
+}
 
 /**
  * Initialize extension file type registry.
@@ -39,6 +66,7 @@ export async function initializeExtensionFileTypes(): Promise<void> {
     clearRegisteredExtensions();
 
     const extensionDirs = await getAllExtensionDirectories();
+    const currentChannel = getReleaseChannel();
 
     for (const extensionsDir of extensionDirs) {
       let subdirs;
@@ -67,6 +95,12 @@ export async function initializeExtensionFileTypes(): Promise<void> {
         try {
           const manifestContent = await fs.readFile(manifestPath, 'utf-8');
           const manifest = JSON.parse(manifestContent);
+
+          // Skip extensions that require a different release channel
+          if (!isExtensionVisibleForChannel(manifest, currentChannel)) {
+            logger.main.debug(`[ExtensionHandlers] Skipping extension ${manifest.id} (requires ${manifest.requiredReleaseChannel} channel)`);
+            continue;
+          }
 
           // Register file patterns from customEditors
           if (manifest.contributions?.customEditors) {
@@ -186,6 +220,7 @@ export async function getExtensionPluginCommands(): Promise<ExtensionPluginComma
   try {
     const commands: ExtensionPluginCommand[] = [];
     const seenExtensionIds = new Set<string>();
+    const currentChannel = getReleaseChannel();
 
     // Scan all extension directories
     const extensionDirs = await getAllExtensionDirectories();
@@ -224,6 +259,11 @@ export async function getExtensionPluginCommands(): Promise<ExtensionPluginComma
             continue;
           }
           seenExtensionIds.add(extensionId);
+
+          // Skip extensions that require a different release channel
+          if (!isExtensionVisibleForChannel(manifest, currentChannel)) {
+            continue;
+          }
 
           // Check if extension is enabled
           if (!getExtensionEnabled(extensionId)) {
@@ -288,7 +328,8 @@ export async function getExtensionPluginCommands(): Promise<ExtensionPluginComma
 async function scanDirectoryForClaudePlugins(
   extensionsDir: string,
   plugins: Array<{ type: 'local'; path: string }>,
-  seenExtensionIds: Set<string>
+  seenExtensionIds: Set<string>,
+  currentChannel: ReleaseChannel
 ): Promise<void> {
   let subdirs;
   try {
@@ -328,6 +369,12 @@ async function scanDirectoryForClaudePlugins(
         continue;
       }
       seenExtensionIds.add(extensionId);
+
+      // Skip extensions that require a different release channel
+      if (!isExtensionVisibleForChannel(manifest, currentChannel)) {
+        logger.main.debug(`[ExtensionHandlers] Skipping extension ${extensionId} (requires ${manifest.requiredReleaseChannel} channel)`);
+        continue;
+      }
 
       const isEnabled = getExtensionEnabled(extensionId);
       if (!isEnabled) {
@@ -385,11 +432,12 @@ export async function getClaudePluginPaths(): Promise<Array<{ type: 'local'; pat
   try {
     const plugins: Array<{ type: 'local'; path: string }> = [];
     const seenExtensionIds = new Set<string>();
+    const currentChannel = getReleaseChannel();
 
     // Scan all extension directories (user first, then built-in)
     const extensionDirs = await getAllExtensionDirectories();
     for (const extensionsDir of extensionDirs) {
-      await scanDirectoryForClaudePlugins(extensionsDir, plugins, seenExtensionIds);
+      await scanDirectoryForClaudePlugins(extensionsDir, plugins, seenExtensionIds, currentChannel);
     }
 
     return plugins;
@@ -490,6 +538,12 @@ export function registerExtensionHandlers(): void {
     }
   });
 
+  // Check if an extension should be visible based on its required release channel
+  ipcMain.handle('extensions:is-visible-for-channel', (_event, requiredChannel: string | undefined) => {
+    const currentChannel = getReleaseChannel();
+    return isExtensionVisibleForChannel({ requiredReleaseChannel: requiredChannel as ReleaseChannel | undefined }, currentChannel);
+  });
+
   // Find files matching a glob pattern
   ipcMain.handle(
     'extensions:find-files',
@@ -541,6 +595,7 @@ export function registerExtensionHandlers(): void {
   // Get list of installed extensions (for settings UI)
   // Scans both user extensions and built-in extensions directories.
   // User extensions take priority over built-in extensions with the same ID.
+  // Extensions with requiredReleaseChannel are filtered based on user's release channel.
   ipcMain.handle('extensions:list-installed', async () => {
     try {
       const extensions: Array<{
@@ -550,6 +605,7 @@ export function registerExtensionHandlers(): void {
         isBuiltin: boolean;
       }> = [];
       const seenExtensionIds = new Set<string>();
+      const currentChannel = getReleaseChannel();
 
       // Clear previously registered file types
       clearRegisteredExtensions();
@@ -595,6 +651,12 @@ export function registerExtensionHandlers(): void {
               continue;
             }
             seenExtensionIds.add(extensionId);
+
+            // Skip extensions that require a different release channel
+            if (!isExtensionVisibleForChannel(manifest, currentChannel)) {
+              logger.main.debug(`[ExtensionHandlers] Skipping extension ${extensionId} from list (requires ${manifest.requiredReleaseChannel} channel)`);
+              continue;
+            }
 
             // Register file patterns from customEditors
             if (manifest.contributions?.customEditors) {

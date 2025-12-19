@@ -86,6 +86,14 @@ export interface ExtensionPlatformService {
    * @returns Array of absolute file paths
    */
   findFiles(dirPath: string, pattern: string): Promise<string[]>;
+
+  /**
+   * Check if an extension should be visible based on its required release channel.
+   * Extensions with requiredReleaseChannel: 'alpha' are only visible to alpha users.
+   * @param requiredChannel - The channel required by the extension (undefined means 'stable')
+   * @returns true if the extension should be visible, false otherwise
+   */
+  isExtensionVisibleForChannel(requiredChannel: string | undefined): Promise<boolean>;
 }
 
 // ============================================================================
