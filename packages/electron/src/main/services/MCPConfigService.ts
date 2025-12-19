@@ -16,6 +16,8 @@ import { logger } from '../utils/logger';
 export class MCPConfigService {
   private userConfigPath: string;
 
+  private CONNECTION_TIMEOUT_MS = 20000;
+
   constructor() {
 
     // Claude Code stores user-level MCP config in ~/.config/claude/mcp.json (Linux/macOS)
@@ -261,7 +263,7 @@ export class MCPConfigService {
           'Cache-Control': 'no-cache',
           ...headers
         },
-        signal: AbortSignal.timeout(5000)
+        signal: AbortSignal.timeout(this.CONNECTION_TIMEOUT_MS)
       });
 
       // Check for authentication errors (401/403) - these indicate auth issues
@@ -331,8 +333,8 @@ export class MCPConfigService {
         let errorOutput = '';
         const timeout = setTimeout(() => {
           child.kill();
-          resolve({ success: false, error: 'Connection timeout (5s)' });
-        }, 5000);
+          resolve({ success: false, error: 'Connection timeout (20s)' });
+        }, this.CONNECTION_TIMEOUT_MS);
 
         child.stdout?.on('data', (data) => {
           output += data.toString();
