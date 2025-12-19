@@ -82,7 +82,7 @@ Each extension lives in its own subdirectory with a `manifest.json` file.
 The extension system is implemented across these files:
 
 | File | Purpose |
-|------|---------|
+| --- | --- |
 | `packages/runtime/src/extensions/types.ts` | TypeScript type definitions |
 | `packages/runtime/src/extensions/ExtensionLoader.ts` | Discovery, loading, lifecycle |
 | `packages/runtime/src/extensions/ExtensionPlatformService.ts` | Platform abstraction interface |
@@ -196,6 +196,121 @@ window.__nimbalyst_extensions = {
   zustand: zustand,
   '@xyflow/react': xyflowReact,
 };
+```
+
+## Module Loading and Bundling
+
+Extensions are loaded as ES modules at runtime. Understanding the bundling requirements is critical for extensions to work correctly in both development and production builds.
+
+### JSX Runtime Considerations
+
+**Critical:** Extensions must be built in **production mode** to work correctly in production Nimbalyst builds.
+
+The issue: React's JSX transform has two variants:
+- **Development**: Uses `jsxDEV` from `react/jsx-dev-runtime`
+- **Production**: Uses `jsx` from `react/jsx-runtime`
+
+In production builds of the host app, `jsxDEV` is `undefined`. If an extension is built in development mode, it will import `jsxDEV` and crash at runtime with cryptic errors like "T is not a function" in decorator methods.
+
+**Required vite.config.ts settings:**
+
+```typescript
+export default defineConfig({
+  plugins: [
+    react({
+      jsxRuntime: 'automatic',
+      jsxImportSource: 'react',
+    }),
+  ],
+  define: {
+    'process.env.NODE_ENV': JSON.stringify('production'),
+  },
+  mode: 'production',  // Critical: ensures jsx-runtime, not jsx-dev-runtime
+  build: {
+    lib: {
+      entry: resolve(__dirname, 'src/index.tsx'),
+      formats: ['es'],
+      fileName: () => 'index.js',
+    },
+    rollupOptions: {
+      external: [
+        'react',
+        'react-dom',
+        'react-dom/client',
+        'react/jsx-runtime',
+        'react/jsx-dev-runtime',
+        'zustand',
+        '@xyflow/react',
+        // ... other host-provided dependencies
+      ],
+    },
+  },
+});
+```
+
+### Host Dependency Exposure
+
+The host exposes dependencies using **namespace imports** to prevent tree-shaking:
+
+```typescript
+// ExtensionPlatformServiceImpl.ts
+import * as React from 'react';
+import * as jsxRuntime from 'react/jsx-runtime';
+import * as jsxDevRuntime from 'react/jsx-dev-runtime';
+
+window.__nimbalyst_extensions = {
+  react: React,
+  'react/jsx-runtime': jsxRuntime,
+  'react/jsx-dev-runtime': jsxDevRuntime,  // Fallback for dev builds
+  // ...
+};
+```
+
+Using `import * as` instead of named imports (`import { jsx }`) ensures the entire module is included regardless of tree-shaking optimizations in the host build.
+
+### Extension Loading Sequence
+
+1. **Discovery**: Extension manifests are scanned from the extensions directory
+2. **Node Registration**: Extensions that contribute Lexical nodes must be loaded before the editor mounts
+3. **Module Execution**: Extension bundles are loaded via dynamic `import()`
+4. **Activation**: The extension's `activate()` function is called with the context
+
+**Important:** The host app guards editor rendering until extensions are loaded:
+
+```typescript
+// App.tsx
+const [extensionsReady, setExtensionsReady] = useState(false);
+
+useEffect(() => {
+  registerExtensionSystem()
+    .finally(() => setExtensionsReady(true));
+}, []);
+
+if (!extensionsReady) {
+  return <div style={{ height: '100vh' }} />;
+}
+```
+
+This ensures Lexical nodes contributed by extensions are registered before the editor attempts to deserialize documents that may contain them.
+
+### Common Bundling Issues
+
+| Problem | Symptom | Solution |
+| --- | --- | --- |
+| Wrong JSX runtime | "T is not a function" or undefined errors in `decorate` | Set `mode: 'production'` in vite config |
+| Missing external | "Cannot find module 'react'" | Add to `rollupOptions.external` |
+| Tree-shaken exports | Host module missing expected exports | Use `import * as` namespace imports |
+| Node not registered | "Attempted to create node X that was not configured" | Ensure extension loads before editor mounts |
+| CSS variables missing | Unstyled or broken themes | Use host CSS variables, not hardcoded colors |
+
+### Verifying Extension Bundles
+
+After building, verify the extension imports from `react/jsx-runtime` (not `jsx-dev-runtime`):
+
+```bash
+head -5 dist/index.js
+# Should show: import { jsx as _, jsxs as X } from "react/jsx-runtime";
+# NOT: import { jsxDEV } from "react/jsx-dev-runtime";
 ```
 
 ## Future Work

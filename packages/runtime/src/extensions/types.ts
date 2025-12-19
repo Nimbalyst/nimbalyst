@@ -389,8 +389,18 @@ export interface ExtensionAITool {
   /** Human-readable description shown to AI */
   description: string;
 
-  /** JSON Schema for tool parameters */
-  parameters: JSONSchema;
+  /**
+   * JSON Schema for tool parameters.
+   * Use either 'inputSchema' (preferred, matches MCP convention) or 'parameters'.
+   */
+  inputSchema?: JSONSchema;
+
+  /**
+   * JSON Schema for tool parameters (legacy field name).
+   * Prefer 'inputSchema' for new tools.
+   * @deprecated Use inputSchema instead
+   */
+  parameters?: JSONSchema;
 
   /**
    * Tool scope - determines when the tool is available:

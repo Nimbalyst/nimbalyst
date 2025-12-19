@@ -91,13 +91,17 @@ export function getMCPToolDefinitions(): MCPToolDefinition[] {
         ? (tool.editorFilePatterns || extensionFilePatterns)
         : undefined;
 
+      // Support both 'parameters' and 'inputSchema' field names
+      // Also handle missing schema gracefully
+      const schema = tool.parameters || (tool as any).inputSchema || { type: 'object', properties: {} };
+
       tools.push({
         name: namespacedName,
         description: tool.description,
         inputSchema: {
           type: 'object',
-          properties: tool.parameters.properties || {},
-          required: tool.parameters.required,
+          properties: schema.properties || {},
+          required: schema.required,
         },
         extensionId: extension.manifest.id,
         scope,
@@ -156,13 +160,17 @@ function convertExtensionTool(
     ? tool.name
     : `${extensionId.split('.').pop()}.${tool.name}`;
 
+  // Support both 'parameters' and 'inputSchema' field names
+  // Also handle missing schema gracefully
+  const schema = tool.parameters || (tool as any).inputSchema || { type: 'object', properties: {} };
+
   return {
     name: namespacedName,
     description: tool.description,
     parameters: {
       type: 'object',
-      properties: tool.parameters.properties || {},
-      required: tool.parameters.required,
+      properties: schema.properties || {},
+      required: schema.required,
     },
     source: 'runtime',
     handler: async (args: Record<string, unknown>) => {

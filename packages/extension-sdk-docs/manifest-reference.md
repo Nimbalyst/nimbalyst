@@ -170,7 +170,7 @@ export const components = {
 
 ### aiTools
 
-Declare AI tools your extension provides:
+Declare AI tools your extension provides. **This is an array of tool name strings, NOT objects.**
 
 ```json
 "contributions": {
@@ -182,7 +182,36 @@ Declare AI tools your extension provides:
 }
 ```
 
-These must match the `name` field of tools in your `aiTools` export.
+**IMPORTANT:** The manifest only lists tool names as strings. The actual tool definitions (with descriptions, input schemas, and handlers) go in your TypeScript code:
+
+```typescript
+// src/aiTools.ts - Tool definitions with full details
+export const aiTools: ExtensionAITool[] = [
+  {
+    name: 'csv.get_schema',
+    description: 'Get the column names and types from the CSV',
+    inputSchema: { type: 'object', properties: {} },
+    handler: async (args, context) => { /* ... */ }
+  }
+];
+
+// src/index.ts - Export the tools
+export { aiTools } from './aiTools';
+```
+
+**Common mistake:** Don't put objects in the manifest:
+
+```json
+// WRONG - will cause runtime errors!
+"aiTools": [
+  { "name": "csv.get_schema", "description": "..." }
+]
+
+// CORRECT - just the tool names
+"aiTools": [
+  "csv.get_schema"
+]
+```
 
 ### newFileMenu
 

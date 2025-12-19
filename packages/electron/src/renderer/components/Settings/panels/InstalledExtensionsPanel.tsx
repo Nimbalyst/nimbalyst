@@ -383,10 +383,28 @@ export const InstalledExtensionsPanel: React.FC<InstalledExtensionsPanelProps> =
                                 AI Tools ({ext.manifest.contributions.aiTools.length})
                               </div>
                               <div className="package-commands">
-                                {ext.manifest.contributions.aiTools.map((tool, idx) => (
-                                  <span key={idx} className="package-command">{tool}</span>
-                                ))}
+                                {ext.manifest.contributions.aiTools.map((tool, idx) => {
+                                  // Handle both correct format (string) and incorrect format (object)
+                                  if (typeof tool === 'string') {
+                                    return <span key={idx} className="package-command">{tool}</span>;
+                                  } else if (tool && typeof tool === 'object' && 'name' in tool) {
+                                    // Show warning for incorrect format
+                                    return (
+                                      <span key={idx} className="package-command package-command-warning" title="Manifest error: aiTools should be strings, not objects. See SDK docs.">
+                                        {(tool as { name: string }).name}
+                                        <span className="material-symbols-outlined" style={{ fontSize: '14px', marginLeft: '4px', color: 'var(--warning-color, #f59e0b)' }}>warning</span>
+                                      </span>
+                                    );
+                                  }
+                                  return <span key={idx} className="package-command">Invalid tool format</span>;
+                                })}
                               </div>
+                              {ext.manifest.contributions.aiTools.some(tool => typeof tool !== 'string') && (
+                                <div className="extension-manifest-warning">
+                                  <span className="material-symbols-outlined">warning</span>
+                                  <span>Manifest format error: <code>aiTools</code> should be an array of strings (tool names), not objects. See the Extension SDK documentation.</span>
+                                </div>
+                              )}
                             </div>
                           )}
 

@@ -500,13 +500,46 @@
 }
 
 .package-command {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
   padding: 4px 10px;
   background: var(--surface-tertiary);
   border-radius: 4px;
   font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
   font-size: 12px;
   color: var(--text-primary);
+}
+
+.package-command-warning {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.extension-manifest-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.extension-manifest-warning .material-symbols-outlined {
+  font-size: 16px;
+  color: #f59e0b;
+  flex-shrink: 0;
+}
+
+.extension-manifest-warning code {
+  background: var(--surface-tertiary);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+  font-size: 11px;
 }
 
 .package-schemas {

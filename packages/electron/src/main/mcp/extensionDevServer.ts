@@ -25,6 +25,247 @@ import { spawn } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 
+// ============================================================================
+// Manifest Validation
+// ============================================================================
+
+interface ManifestWarning {
+  field: string;
+  message: string;
+  severity: 'error' | 'warning';
+}
+
+/**
+ * Validate extension manifest and return warnings/errors
+ */
+function validateManifest(manifestPath: string): { valid: boolean; warnings: ManifestWarning[] } {
+  const warnings: ManifestWarning[] = [];
+
+  try {
+    const content = fs.readFileSync(manifestPath, 'utf8');
+    const manifest = JSON.parse(content);
+
+    // Required fields
+    if (!manifest.id) {
+      warnings.push({ field: 'id', message: 'Missing required field "id"', severity: 'error' });
+    } else if (!manifest.id.includes('.')) {
+      warnings.push({ field: 'id', message: 'Extension id should use reverse domain notation (e.g., "com.example.my-extension")', severity: 'warning' });
+    }
+
+    if (!manifest.name) {
+      warnings.push({ field: 'name', message: 'Missing required field "name"', severity: 'error' });
+    }
+
+    if (!manifest.version) {
+      warnings.push({ field: 'version', message: 'Missing required field "version"', severity: 'error' });
+    }
+
+    if (!manifest.main) {
+      warnings.push({ field: 'main', message: 'Missing required field "main"', severity: 'error' });
+    }
+
+    if (!manifest.apiVersion) {
+      warnings.push({ field: 'apiVersion', message: 'Missing required field "apiVersion"', severity: 'warning' });
+    }
+
+    // Validate contributions
+    if (manifest.contributions) {
+      // Validate aiTools - must be array of strings, not objects
+      if (manifest.contributions.aiTools && Array.isArray(manifest.contributions.aiTools)) {
+        const invalidTools = manifest.contributions.aiTools.filter(
+          (tool: unknown) => typeof tool !== 'string'
+        );
+        if (invalidTools.length > 0) {
+          warnings.push({
+            field: 'contributions.aiTools',
+            message: `aiTools must be an array of strings (tool names), not objects. Found ${invalidTools.length} object(s). The tool definitions with descriptions belong in your TypeScript code, not the manifest. See: https://docs.nimbalyst.com/extensions/manifest-reference#aitools`,
+            severity: 'error'
+          });
+        }
+      }
+
+      // Validate customEditors
+      if (manifest.contributions.customEditors && Array.isArray(manifest.contributions.customEditors)) {
+        manifest.contributions.customEditors.forEach((editor: any, idx: number) => {
+          if (!editor.filePatterns || !Array.isArray(editor.filePatterns)) {
+            warnings.push({
+              field: `contributions.customEditors[${idx}].filePatterns`,
+              message: 'customEditor must have a "filePatterns" array',
+              severity: 'error'
+            });
+          }
+          if (!editor.displayName) {
+            warnings.push({
+              field: `contributions.customEditors[${idx}].displayName`,
+              message: 'customEditor must have a "displayName"',
+              severity: 'error'
+            });
+          }
+          if (!editor.component) {
+            warnings.push({
+              field: `contributions.customEditors[${idx}].component`,
+              message: 'customEditor must have a "component" name',
+              severity: 'error'
+            });
+          }
+        });
+      }
+
+      // Validate newFileMenu
+      if (manifest.contributions.newFileMenu && Array.isArray(manifest.contributions.newFileMenu)) {
+        manifest.contributions.newFileMenu.forEach((item: any, idx: number) => {
+          if (!item.extension) {
+            warnings.push({
+              field: `contributions.newFileMenu[${idx}].extension`,
+              message: 'newFileMenu item must have an "extension" field',
+              severity: 'error'
+            });
+          }
+          if (!item.displayName) {
+            warnings.push({
+              field: `contributions.newFileMenu[${idx}].displayName`,
+              message: 'newFileMenu item must have a "displayName" (not "label")',
+              severity: 'error'
+            });
+          }
+          if (item.label && !item.displayName) {
+            warnings.push({
+              field: `contributions.newFileMenu[${idx}]`,
+              message: 'newFileMenu uses "displayName", not "label". Please rename the field.',
+              severity: 'error'
+            });
+          }
+          if (!item.icon) {
+            warnings.push({
+              field: `contributions.newFileMenu[${idx}].icon`,
+              message: 'newFileMenu item must have an "icon" field (Material icon name)',
+              severity: 'error'
+            });
+          }
+        });
+      }
+    }
+
+    const hasErrors = warnings.some(w => w.severity === 'error');
+    return { valid: !hasErrors, warnings };
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      warnings.push({ field: 'manifest.json', message: `Invalid JSON: ${error.message}`, severity: 'error' });
+    } else {
+      warnings.push({ field: 'manifest.json', message: `Failed to read manifest: ${error}`, severity: 'error' });
+    }
+    return { valid: false, warnings };
+  }
+}
+
+/**
+ * Validate the built extension output for common issues
+ */
+function validateBuiltExtension(extensionPath: string, manifestPath: string): ManifestWarning[] {
+  const warnings: ManifestWarning[] = [];
+
+  try {
+    const manifestContent = fs.readFileSync(manifestPath, 'utf8');
+    const manifest = JSON.parse(manifestContent);
+
+    // Check if extension has customEditors - if so, verify components export exists
+    if (manifest.contributions?.customEditors?.length > 0 && manifest.main) {
+      const mainPath = path.join(extensionPath, manifest.main);
+
+      if (fs.existsSync(mainPath)) {
+        const mainContent = fs.readFileSync(mainPath, 'utf8');
+
+        // Check for components export at the END of the built output
+        // Vite/Rollup puts exports at the end: "export { X as components }" or "export { components }"
+        // Get the last 500 chars to check exports section
+        const exportSection = mainContent.slice(-500);
+
+        // Look for "components" in the export statement
+        // Patterns: "as components", "components }" (named export), "components:" (object property)
+        const hasComponentsExport =
+          /export\s*\{[^}]*\bcomponents\b[^}]*\}/.test(exportSection) ||
+          /exports\.components\s*=/.test(mainContent) ||
+          /export\s+const\s+components\s*=/.test(mainContent);
+
+        if (!hasComponentsExport) {
+          const componentNames = manifest.contributions.customEditors.map((e: any) => e.component).join(', ');
+          warnings.push({
+            field: 'src/index.ts',
+            message: `Extension has customEditors but no "components" export found in the built output.\n\nYour entry point (src/index.ts) must export a "components" object that maps component names to React components:\n\nexport const components = {\n  ${componentNames}: YourComponentFunction,\n};\n\nThe keys must match the "component" field in manifest.json contributions.customEditors[].component.\n\nYou are currently only exporting the component directly (e.g., "export { ${componentNames} }") but Nimbalyst requires a "components" object wrapper.`,
+            severity: 'error'
+          });
+        } else {
+          // Check if specific component names are in the export section
+          for (const editor of manifest.contributions.customEditors) {
+            if (editor.component && !exportSection.includes(editor.component)) {
+              warnings.push({
+                field: `contributions.customEditors`,
+                message: `Component "${editor.component}" referenced in manifest but not found in the export section. Make sure to export it in the components object.`,
+                severity: 'warning'
+              });
+            }
+          }
+        }
+      }
+    }
+
+    // Check if extension has aiTools - if so, verify aiTools export exists
+    if (manifest.contributions?.aiTools?.length > 0 && manifest.main) {
+      const mainPath = path.join(extensionPath, manifest.main);
+
+      if (fs.existsSync(mainPath)) {
+        const mainContent = fs.readFileSync(mainPath, 'utf8');
+
+        // Check for aiTools export
+        const hasAiToolsExport =
+          mainContent.includes('aiTools') &&
+          (mainContent.includes('export') || mainContent.includes('exports'));
+
+        if (!hasAiToolsExport) {
+          warnings.push({
+            field: 'src/index.ts',
+            message: `Extension declares aiTools in manifest but no "aiTools" export found in built output. Your entry point must export an aiTools array. Example:\n\nexport const aiTools: ExtensionAITool[] = [...];`,
+            severity: 'error'
+          });
+        }
+      }
+    }
+  } catch (error) {
+    // Don't fail validation if we can't check the built output
+    console.warn('[Extension Dev MCP] Could not validate built output:', error);
+  }
+
+  return warnings;
+}
+
+/**
+ * Format manifest warnings for display
+ */
+function formatManifestWarnings(warnings: ManifestWarning[]): string {
+  if (warnings.length === 0) return '';
+
+  const errors = warnings.filter(w => w.severity === 'error');
+  const warns = warnings.filter(w => w.severity === 'warning');
+
+  let result = '\n\n--- Manifest Validation ---\n';
+
+  if (errors.length > 0) {
+    result += `\nERRORS (${errors.length}):\n`;
+    errors.forEach(e => {
+      result += `  - [${e.field}] ${e.message}\n`;
+    });
+  }
+
+  if (warns.length > 0) {
+    result += `\nWARNINGS (${warns.length}):\n`;
+    warns.forEach(w => {
+      result += `  - [${w.field}] ${w.message}\n`;
+    });
+  }
+
+  return result;
+}
+
 // Store active SSE transports
 interface TransportMetadata {
   transport: SSEServerTransport;
@@ -405,6 +646,25 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
                 };
               }
 
+              // Validate manifest before installing
+              const validation = validateManifest(manifestPath);
+
+              // Also validate built output for required exports
+              const builtValidation = validateBuiltExtension(normalizedPath, manifestPath);
+              const allWarnings = [...validation.warnings, ...builtValidation];
+              const validationOutput = formatManifestWarnings(allWarnings);
+
+              const hasErrors = allWarnings.some(w => w.severity === 'error');
+              if (hasErrors) {
+                return {
+                  content: [{
+                    type: 'text',
+                    text: `Installation blocked due to errors.${validationOutput}\n\nPlease fix these errors and try again.`
+                  }],
+                  isError: true
+                };
+              }
+
               console.log(`[Extension Dev MCP] Installing extension from: ${normalizedPath}`);
 
               try {
@@ -414,7 +674,7 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
                   return {
                     content: [{
                       type: 'text',
-                      text: `Extension installed successfully!\n\nExtension ID: ${result.extensionId}`
+                      text: `Extension installed successfully!\n\nExtension ID: ${result.extensionId}${validationOutput}`
                     }],
                     isError: false
                   };
@@ -422,7 +682,7 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
                   return {
                     content: [{
                       type: 'text',
-                      text: `Installation failed: ${result.error}`
+                      text: `Installation failed: ${result.error}${validationOutput}`
                     }],
                     isError: true
                   };
@@ -430,7 +690,7 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
               } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : 'Unknown error';
                 return {
-                  content: [{ type: 'text', text: `Installation error: ${errorMessage}` }],
+                  content: [{ type: 'text', text: `Installation error: ${errorMessage}${validationOutput}` }],
                   isError: true
                 };
               }
@@ -448,6 +708,7 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
               }
 
               const normalizedPath = path.resolve(extensionPath);
+              const manifestPath = path.join(normalizedPath, 'manifest.json');
 
               // Step 1: Always rebuild first
               console.log(`[Extension Dev MCP] Rebuilding extension ${extensionId} at ${normalizedPath}`);
@@ -462,7 +723,26 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
                 };
               }
 
-              // Step 2: Reload the extension in the running app
+              // Step 2: Validate manifest after build
+              const validation = validateManifest(manifestPath);
+
+              // Step 2b: Validate built output (check for required exports)
+              const builtValidation = validateBuiltExtension(normalizedPath, manifestPath);
+              const allWarnings = [...validation.warnings, ...builtValidation];
+              const validationOutput = formatManifestWarnings(allWarnings);
+
+              const hasErrors = allWarnings.some(w => w.severity === 'error');
+              if (hasErrors) {
+                return {
+                  content: [{
+                    type: 'text',
+                    text: `Build succeeded but extension has errors.${validationOutput}\n\nPlease fix these errors and reload again.\n\nBuild output:\n${buildResult.stdout}`
+                  }],
+                  isError: true
+                };
+              }
+
+              // Step 3: Reload the extension in the running app
               if (reloadExtensionFn) {
                 try {
                   const result = await reloadExtensionFn(extensionId, normalizedPath);
@@ -470,7 +750,7 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
                     return {
                       content: [{
                         type: 'text',
-                        text: `Extension ${extensionId} rebuilt and reloaded successfully!\n\nBuild output:\n${buildResult.stdout}`
+                        text: `Extension ${extensionId} rebuilt and reloaded successfully!${validationOutput}\n\nBuild output:\n${buildResult.stdout}`
                       }],
                       isError: false
                     };
@@ -478,7 +758,7 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
                     return {
                       content: [{
                         type: 'text',
-                        text: `Build succeeded but reload failed: ${result.error}\n\nBuild output:\n${buildResult.stdout}`
+                        text: `Build succeeded but reload failed: ${result.error}${validationOutput}\n\nBuild output:\n${buildResult.stdout}`
                       }],
                       isError: true
                     };
@@ -488,7 +768,7 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
                   return {
                     content: [{
                       type: 'text',
-                      text: `Build succeeded but reload error: ${errorMessage}\n\nBuild output:\n${buildResult.stdout}`
+                      text: `Build succeeded but reload error: ${errorMessage}${validationOutput}\n\nBuild output:\n${buildResult.stdout}`
                     }],
                     isError: true
                   };
@@ -503,7 +783,7 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
                     return {
                       content: [{
                         type: 'text',
-                        text: `Extension rebuilt and reinstalled successfully!\n\nBuild output:\n${buildResult.stdout}`
+                        text: `Extension rebuilt and reinstalled successfully!${validationOutput}\n\nBuild output:\n${buildResult.stdout}`
                       }],
                       isError: false
                     };
@@ -511,7 +791,7 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
                     return {
                       content: [{
                         type: 'text',
-                        text: `Build succeeded but reinstall failed: ${installResult.error}\n\nBuild output:\n${buildResult.stdout}`
+                        text: `Build succeeded but reinstall failed: ${installResult.error}${validationOutput}\n\nBuild output:\n${buildResult.stdout}`
                       }],
                       isError: true
                     };
@@ -521,7 +801,7 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
                   return {
                     content: [{
                       type: 'text',
-                      text: `Build succeeded but reinstall error: ${errorMessage}\n\nBuild output:\n${buildResult.stdout}`
+                      text: `Build succeeded but reinstall error: ${errorMessage}${validationOutput}\n\nBuild output:\n${buildResult.stdout}`
                     }],
                     isError: true
                   };
