@@ -1,0 +1,188 @@
+.ask-user-question-confirmation {
+  margin: 12px 16px;
+  padding: 16px;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  max-height: 400px;
+}
+
+.ask-user-question-confirmation-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+.ask-user-question-confirmation-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary-color);
+}
+
+.ask-user-question-confirmation-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+/* Questions container - scrollable */
+.ask-user-question-confirmation-questions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Question card */
+.ask-user-question-confirmation-card {
+  background: var(--surface-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.ask-user-question-confirmation-question-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.ask-user-question-confirmation-chip {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--primary-color);
+  background-color: color-mix(in srgb, var(--primary-color) 12%, transparent);
+  padding: 2px 8px;
+  border-radius: 9999px;
+}
+
+.ask-user-question-confirmation-multi-hint {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.ask-user-question-confirmation-question-text {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.5;
+  margin-bottom: 10px;
+}
+
+/* Options */
+.ask-user-question-confirmation-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ask-user-question-confirmation-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border-primary);
+  background-color: var(--surface-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ask-user-question-confirmation-option:hover {
+  border-color: var(--primary-color);
+  background-color: color-mix(in srgb, var(--primary-color) 5%, var(--surface-secondary));
+}
+
+.ask-user-question-confirmation-option--selected {
+  border-color: var(--primary-color);
+  background-color: color-mix(in srgb, var(--primary-color) 8%, var(--surface-secondary));
+}
+
+.ask-user-question-confirmation-option input[type="radio"],
+.ask-user-question-confirmation-option input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  margin-top: 2px;
+  flex-shrink: 0;
+  accent-color: var(--primary-color);
+  cursor: pointer;
+}
+
+.ask-user-question-confirmation-option-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.ask-user-question-confirmation-option-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+.ask-user-question-confirmation-option-description {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+/* Actions */
+.ask-user-question-confirmation-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.ask-user-question-confirmation-button {
+  flex: 1;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+.ask-user-question-confirmation-button:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.ask-user-question-confirmation-button:active:not(:disabled) {
+  opacity: 0.8;
+}
+
+.ask-user-question-confirmation-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ask-user-question-confirmation-button-primary {
+  background: var(--primary-color);
+  color: white;
+}
+
+.ask-user-question-confirmation-button-secondary {
+  background: var(--surface-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
+}
+
+.ask-user-question-confirmation-button-secondary:hover {
+  background: var(--surface-hover);
+}

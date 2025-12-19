@@ -58,6 +58,19 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     reject: (error: Error) => void;
   }> = new Map();
 
+  // AskUserQuestion tool - stores pending question resolvers
+  // When Claude calls AskUserQuestion, we block until the UI provides answers via IPC
+  private pendingAskUserQuestions: Map<string, {
+    resolve: (answers: Record<string, string>) => void;
+    reject: (error: Error) => void;
+    questions: Array<{
+      question: string;
+      header: string;
+      options: Array<{ label: string; description: string }>;
+      multiSelect: boolean;
+    }>;
+  }> = new Map();
+
   // Shared MCP server port (injected from electron main process)
   // This server provides multiple tools: applyDiff, streamContent, capture_mockup_screenshot
   private static mcpServerPort: number | null = null;
@@ -364,7 +377,12 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         cwd: workspacePath,
         abortController: this.abortController,
         model: this.resolveModelVariant(),
-        permissionMode: 'bypassPermissions',
+        // Use 'default' permission mode so canUseTool fires for AskUserQuestion
+        // We auto-approve all other tools in canUseTool to maintain bypass behavior
+        permissionMode: 'default',
+        // canUseTool callback handles permission requests
+        // Auto-approves everything except AskUserQuestion which needs user input
+        canUseTool: this.createCanUseToolHandler(sessionId),
         // PHASE 3: PreToolUse hook for tagging "before" state
         // PostToolUse hook for triggering file watcher (no snapshot creation)
         hooks: {
@@ -1733,6 +1751,45 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     this.pendingExitPlanModeConfirmations.clear();
   }
 
+  /**
+   * Resolve a pending AskUserQuestion request with user's answers
+   * Called by IPC handler when renderer provides answers
+   */
+  public resolveAskUserQuestion(questionId: string, answers: Record<string, string>): void {
+    const pending = this.pendingAskUserQuestions.get(questionId);
+    if (pending) {
+      pending.resolve(answers);
+      this.pendingAskUserQuestions.delete(questionId);
+      // Debug logging - uncomment if needed
+      // console.log(`[CLAUDE-CODE] AskUserQuestion resolved for ID: ${questionId}`);
+    } else {
+      console.warn(`[CLAUDE-CODE] No pending AskUserQuestion found for questionId: ${questionId}`);
+    }
+  }
+
+  /**
+   * Reject a pending AskUserQuestion request (e.g., on cancel/abort)
+   */
+  public rejectAskUserQuestion(questionId: string, error: Error): void {
+    const pending = this.pendingAskUserQuestions.get(questionId);
+    if (pending) {
+      pending.reject(error);
+      this.pendingAskUserQuestions.delete(questionId);
+      // Debug logging - uncomment if needed
+      // console.log(`[CLAUDE-CODE] AskUserQuestion rejected for ID: ${questionId}`);
+    }
+  }
+
+  /**
+   * Reject all pending AskUserQuestion requests (e.g., on abort)
+   */
+  public rejectAllPendingQuestions(): void {
+    for (const [questionId, pending] of this.pendingAskUserQuestions) {
+      pending.reject(new Error('Request aborted'));
+    }
+    this.pendingAskUserQuestions.clear();
+  }
+
   private async getMcpServersConfig(sessionId?: string, workspacePath?: string) {
     // Load MCP servers from user config (~/.config/claude/mcp.json) and workspace config (.mcp.json)
     // and merge with built-in Nimbalyst MCP servers
@@ -1866,6 +1923,107 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // Variable not set and no default - return original
       return `\${${varName}}`;
     });
+  }
+
+  /**
+   * Create canUseTool handler for permission requests.
+   * Auto-approves all tools except AskUserQuestion which needs user input.
+   * This allows us to use 'default' permission mode while maintaining bypass behavior for other tools.
+   */
+  private createCanUseToolHandler(sessionId?: string) {
+    return async (
+      toolName: string,
+      input: any,
+      options: { signal: AbortSignal; suggestions?: any[] }
+    ): Promise<{ behavior: 'allow' | 'deny'; updatedInput?: any; message?: string }> => {
+      // Auto-approve all tools except AskUserQuestion
+      if (toolName !== 'AskUserQuestion') {
+        return {
+          behavior: 'allow',
+          updatedInput: input
+        };
+      }
+
+      // Handle AskUserQuestion - need to get user input
+      // Debug logging - uncomment if needed
+      // console.log('[CLAUDE-CODE] AskUserQuestion tool invoked, waiting for user answers');
+
+      const questions = input?.questions || [];
+      if (questions.length === 0) {
+        console.warn('[CLAUDE-CODE] AskUserQuestion called with no questions');
+        return {
+          behavior: 'allow',
+          updatedInput: {
+            ...input,
+            answers: {}
+          }
+        };
+      }
+
+      // Generate unique ID for this question set
+      const questionId = `ask-${sessionId || 'unknown'}-${Date.now()}`;
+
+      // Create promise that will be resolved when user provides answers
+      const answersPromise = new Promise<Record<string, string>>((resolve, reject) => {
+        this.pendingAskUserQuestions.set(questionId, {
+          resolve,
+          reject,
+          questions
+        });
+
+        // Set up abort handler
+        if (options.signal) {
+          options.signal.addEventListener('abort', () => {
+            this.pendingAskUserQuestions.delete(questionId);
+            reject(new Error('Request aborted'));
+          }, { once: true });
+        }
+      });
+
+      // Emit event to notify renderer to show question UI
+      // The widget will be rendered when the tool_use block is processed
+      // We store the questionId so the widget knows which pending question to resolve
+      this.emit('askUserQuestion:pending', {
+        questionId,
+        sessionId,
+        questions,
+        timestamp: Date.now()
+      });
+
+      try {
+        // Wait for user to provide answers
+        const answers = await answersPromise;
+
+        // Debug logging - uncomment if needed
+        // console.log('[CLAUDE-CODE] AskUserQuestion answered:', answers);
+
+        // Emit event with answers so UI can update the tool call display
+        this.emit('askUserQuestion:answered', {
+          questionId,
+          sessionId,
+          questions,
+          answers,
+          timestamp: Date.now()
+        });
+
+        // Return with answers populated
+        return {
+          behavior: 'allow',
+          updatedInput: {
+            ...input,
+            answers
+          }
+        };
+      } catch (error) {
+        console.error('[CLAUDE-CODE] AskUserQuestion failed:', error);
+
+        // On abort/error, deny the tool use
+        return {
+          behavior: 'deny',
+          message: error instanceof Error ? error.message : 'Question cancelled'
+        };
+      }
+    };
   }
 
   /**

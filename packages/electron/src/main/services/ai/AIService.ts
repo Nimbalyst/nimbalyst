@@ -1264,6 +1264,22 @@ export class AIService {
       provider.removeAllListeners('exitPlanMode:confirm');
       provider.on('exitPlanMode:confirm', onExitPlanModeConfirm);
 
+      // Listen for AskUserQuestion requests and forward to renderer
+      const onAskUserQuestion = (data: { questionId: string; sessionId: string; questions: any[]; timestamp: number }) => {
+        logger.main.info('[AIService] AskUserQuestion requested:', data.questionId);
+        event.sender.send('ai:askUserQuestion', data);
+      };
+      provider.removeAllListeners('askUserQuestion:pending');
+      provider.on('askUserQuestion:pending', onAskUserQuestion);
+
+      // Listen for AskUserQuestion answers and forward to renderer to update tool call display
+      const onAskUserQuestionAnswered = (data: { questionId: string; sessionId: string; questions: any[]; answers: Record<string, string>; timestamp: number }) => {
+        logger.main.info('[AIService] AskUserQuestion answered:', data.questionId);
+        event.sender.send('ai:askUserQuestionAnswered', data);
+      };
+      provider.removeAllListeners('askUserQuestion:answered');
+      provider.on('askUserQuestion:answered', onAskUserQuestionAnswered);
+
       // Track user @ mentions in the message
       try {
         await sessionFileTracker.trackUserMessage(
@@ -2226,6 +2242,90 @@ export class AIService {
       } else {
         logger.main.warn(`[AIService] Provider does not support ExitPlanMode confirmation: ${session.provider}`);
         return { success: false, error: 'Provider does not support ExitPlanMode confirmation' };
+      }
+    });
+
+    // Handle AskUserQuestion answer response from renderer
+    // Used when Claude's AskUserQuestion tool needs user input
+    ipcMain.handle('claude-code:answer-question', async (event, { questionId, answers }: { questionId: string; answers: Record<string, string> }) => {
+      logger.main.info(`[AIService] AskUserQuestion answer received: questionId=${questionId}`);
+
+      // Extract sessionId from questionId (format: ask-{sessionId}-{timestamp})
+      const sessionIdMatch = questionId.match(/^ask-(.+)-\d+$/);
+      if (!sessionIdMatch) {
+        logger.main.warn(`[AIService] Invalid questionId format: ${questionId}`);
+        return { success: false, error: 'Invalid question ID format' };
+      }
+
+      const sessionId = sessionIdMatch[1];
+      if (sessionId === 'unknown') {
+        logger.main.warn(`[AIService] Unknown session for question: ${questionId}`);
+        return { success: false, error: 'Unknown session' };
+      }
+
+      // Find the session and its provider
+      const session = await this.sessionManager.loadSession(sessionId);
+      if (!session) {
+        logger.main.warn(`[AIService] Session not found for AskUserQuestion: ${sessionId}`);
+        return { success: false, error: 'Session not found' };
+      }
+
+      const provider = ProviderFactory.getProvider(session.provider as AIProviderType, sessionId);
+      if (!provider) {
+        logger.main.warn(`[AIService] Provider not found for AskUserQuestion: ${sessionId}`);
+        return { success: false, error: 'Provider not found' };
+      }
+
+      // Check if this is a ClaudeCodeProvider with the resolve method
+      if (typeof (provider as any).resolveAskUserQuestion === 'function') {
+        (provider as any).resolveAskUserQuestion(questionId, answers);
+        return { success: true };
+      } else {
+        logger.main.warn(`[AIService] Provider does not support AskUserQuestion: ${session.provider}`);
+        return { success: false, error: 'Provider does not support AskUserQuestion' };
+      }
+    });
+
+    // Handle AskUserQuestion cancel from renderer
+    // Rejects the pending promise and aborts the AI request
+    ipcMain.handle('claude-code:cancel-question', async (event, { questionId }: { questionId: string }) => {
+      logger.main.info(`[AIService] AskUserQuestion cancel received: questionId=${questionId}`);
+
+      // Extract sessionId from questionId (format: ask-{sessionId}-{timestamp})
+      const sessionIdMatch = questionId.match(/^ask-(.+)-\d+$/);
+      if (!sessionIdMatch) {
+        logger.main.warn(`[AIService] Invalid questionId format: ${questionId}`);
+        return { success: false, error: 'Invalid question ID format' };
+      }
+
+      const sessionId = sessionIdMatch[1];
+      if (sessionId === 'unknown') {
+        logger.main.warn(`[AIService] Unknown session for question: ${questionId}`);
+        return { success: false, error: 'Unknown session' };
+      }
+
+      // Find the session and its provider
+      const session = await this.sessionManager.loadSession(sessionId);
+      if (!session) {
+        logger.main.warn(`[AIService] Session not found for AskUserQuestion cancel: ${sessionId}`);
+        return { success: false, error: 'Session not found' };
+      }
+
+      const provider = ProviderFactory.getProvider(session.provider as AIProviderType, sessionId);
+      if (!provider) {
+        logger.main.warn(`[AIService] Provider not found for AskUserQuestion cancel: ${sessionId}`);
+        return { success: false, error: 'Provider not found' };
+      }
+
+      // Check if this is a ClaudeCodeProvider with the reject method
+      if (typeof (provider as any).rejectAskUserQuestion === 'function') {
+        (provider as any).rejectAskUserQuestion(questionId, new Error('User cancelled'));
+        // Also abort the provider to stop the AI request
+        provider.abort();
+        return { success: true };
+      } else {
+        logger.main.warn(`[AIService] Provider does not support AskUserQuestion cancel: ${session.provider}`);
+        return { success: false, error: 'Provider does not support AskUserQuestion cancel' };
       }
     });
 

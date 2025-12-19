@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useImperativeHandle, forwardRef, useEffect, useState } from 'react';
-import { AgentTranscriptPanel, TodoItem, FileEditSummary } from '@nimbalyst/runtime';
+import { AgentTranscriptPanel, TodoItem, FileEditSummary, storeAskUserQuestionAnswers } from '@nimbalyst/runtime';
 import type { SessionData, ChatAttachment } from '@nimbalyst/runtime/ai/server/types';
 import { AIInput, AIInputRef } from './AIInput';
 import { PromptQueueList } from './PromptQueueList';
@@ -7,6 +7,7 @@ import { FileGutter } from '../AIChat/FileGutter';
 import type { TypeaheadOption } from '../Typeahead/GenericTypeahead';
 import type { AIMode } from './ModeTag';
 import { ExitPlanModeConfirmation, ExitPlanModeConfirmationData } from './ExitPlanModeConfirmation';
+import { AskUserQuestionConfirmation, AskUserQuestionData } from './AskUserQuestionConfirmation';
 import { SlashCommandSuggestions } from './SlashCommandSuggestions';
 
 interface Todo {
@@ -268,6 +269,7 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
   const [todos, setTodos] = useState<Todo[]>([]);
   const [queuedPrompts, setQueuedPrompts] = useState<any[]>([]);
   const [pendingExitPlanConfirmation, setPendingExitPlanConfirmation] = useState<ExitPlanModeConfirmationData | null>(null);
+  const [pendingAskUserQuestion, setPendingAskUserQuestion] = useState<AskUserQuestionData | null>(null);
 
   // Listen for ExitPlanMode confirmation requests for this session
   useEffect(() => {
@@ -281,6 +283,47 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
     };
 
     const cleanup = window.electronAPI.on('ai:exitPlanModeConfirm', handleExitPlanModeConfirm);
+    return () => {
+      cleanup?.();
+    };
+  }, [sessionId]);
+
+  // Listen for AskUserQuestion requests for this session
+  useEffect(() => {
+    const handleAskUserQuestion = (data: AskUserQuestionData) => {
+      // Only show questions for this session
+      if (data.sessionId === sessionId) {
+        // Prevent duplicate events from resetting the component state
+        // Check if we already have a pending question with the same ID
+        setPendingAskUserQuestion(prev => {
+          if (prev && prev.questionId === data.questionId) {
+            // Same question already pending, don't reset state
+            return prev;
+          }
+          return data;
+        });
+      }
+    };
+
+    const cleanup = window.electronAPI.on('ai:askUserQuestion', handleAskUserQuestion);
+    return () => {
+      cleanup?.();
+    };
+  }, [sessionId]);
+
+  // Listen for AskUserQuestion answered events to store answers for widget display
+  useEffect(() => {
+    const handleAskUserQuestionAnswered = (data: { questionId: string; sessionId: string; answers: Record<string, string> }) => {
+      // Only process for this session
+      if (data.sessionId === sessionId) {
+        // Debug logging - uncomment if needed
+        // console.log(`[AISessionView] AskUserQuestion answered for session ${sessionId}:`, data.questionId);
+        // Store answers so widget can display them
+        storeAskUserQuestionAnswers(data.answers);
+      }
+    };
+
+    const cleanup = window.electronAPI.on('ai:askUserQuestionAnswered', handleAskUserQuestionAnswered);
     return () => {
       cleanup?.();
     };
@@ -310,6 +353,35 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
       setPendingExitPlanConfirmation(null);
     } catch (error) {
       console.error('[AISessionView] Failed to send ExitPlanMode denial:', error);
+    }
+  }, []);
+
+  // Handle AskUserQuestion answer submission
+  const handleAskUserQuestionSubmit = useCallback(async (questionId: string, confirmSessionId: string, answers: Record<string, string>) => {
+    // Debug logging - uncomment if needed
+    // console.log(`[AISessionView] User submitted answers for ${questionId}:`, answers);
+    try {
+      // Store answers in global store so the widget can display them
+      storeAskUserQuestionAnswers(answers);
+
+      await window.electronAPI.invoke('claude-code:answer-question', { questionId, answers });
+      setPendingAskUserQuestion(null);
+    } catch (error) {
+      console.error('[AISessionView] Failed to submit AskUserQuestion answers:', error);
+    }
+  }, []);
+
+  const handleAskUserQuestionCancel = useCallback(async (questionId: string, confirmSessionId: string) => {
+    // Debug logging - uncomment if needed
+    // console.log(`[AISessionView] User cancelled AskUserQuestion: ${questionId}`);
+    try {
+      // Reject the pending promise and abort the AI request
+      await window.electronAPI.invoke('claude-code:cancel-question', { questionId });
+      setPendingAskUserQuestion(null);
+    } catch (error) {
+      console.error('[AISessionView] Failed to cancel AskUserQuestion:', error);
+      // Still clear the UI even if the cancel fails
+      setPendingAskUserQuestion(null);
     }
   }, []);
 
@@ -608,6 +680,16 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
           data={pendingExitPlanConfirmation}
           onApprove={handleExitPlanModeApprove}
           onDeny={handleExitPlanModeDeny}
+        />
+      )}
+
+      {/* AskUserQuestion confirmation - shown when agent asks clarifying questions */}
+      {pendingAskUserQuestion && (
+        <AskUserQuestionConfirmation
+          key={pendingAskUserQuestion.questionId}
+          data={pendingAskUserQuestion}
+          onSubmit={handleAskUserQuestionSubmit}
+          onCancel={handleAskUserQuestionCancel}
         />
       )}
 

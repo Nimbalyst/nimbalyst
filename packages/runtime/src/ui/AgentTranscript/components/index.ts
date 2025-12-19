@@ -6,3 +6,4 @@ export { FileEditsSidebar } from './FileEditsSidebar';
 export { TodosSidebar } from './TodosSidebar';
 export { LoginRequiredWidget } from './LoginRequiredWidget';
 export { PromptsMenuButton, FloatingTranscriptActions } from './FloatingTranscriptActions';
+export { storeAskUserQuestionAnswers } from './CustomToolWidgets';

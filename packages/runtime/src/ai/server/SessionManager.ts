@@ -230,6 +230,11 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
                   }
                 } else if (block.type === 'tool_use') {
                   // Tool call - create tool message with sub-agent metadata
+                  // Skip if we already have a tool with this ID (deduplication)
+                  if (block.id && allToolMessages.has(block.id)) {
+                    continue;
+                  }
+
                   const isTaskAgent = block.name === 'Task';
                   const parentToolId = parentToolMap.get(block.id);
 

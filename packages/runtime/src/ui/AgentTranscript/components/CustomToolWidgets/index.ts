@@ -42,6 +42,7 @@ import type { Message } from '../../../../ai/server/types';
 
 // Re-export widgets
 export { MockupScreenshotWidget } from './MockupScreenshotWidget';
+export { AskUserQuestionWidget, storeAskUserQuestionAnswers } from './AskUserQuestionWidget';
 
 /**
  * Props passed to custom tool widgets
@@ -71,6 +72,7 @@ export type CustomToolWidgetRegistry = Record<string, CustomToolWidgetComponent>
 
 // Import custom widgets
 import { MockupScreenshotWidget } from './MockupScreenshotWidget';
+import { AskUserQuestionWidget } from './AskUserQuestionWidget';
 
 /**
  * Registry of custom tool widgets
@@ -85,6 +87,9 @@ export const CUSTOM_TOOL_WIDGETS: CustomToolWidgetRegistry = {
   // Mockup screenshot capture tool
   'capture_mockup_screenshot': MockupScreenshotWidget,
   'mcp__nimbalyst__capture_mockup_screenshot': MockupScreenshotWidget,
+
+  // AskUserQuestion tool - displays questions from Claude for user input
+  'AskUserQuestion': AskUserQuestionWidget,
 };
 
 /**
