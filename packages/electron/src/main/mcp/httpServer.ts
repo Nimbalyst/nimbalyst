@@ -7,9 +7,111 @@ import {
   McpError
 } from '@modelcontextprotocol/sdk/types.js';
 import { createServer, IncomingMessage, ServerResponse } from 'http';
-import { BrowserWindow, ipcMain } from 'electron';
+import { BrowserWindow, ipcMain, nativeImage } from 'electron';
 import { parse as parseUrl } from 'url';
 import { MockupScreenshotService } from '../services/MockupScreenshotService';
+
+/**
+ * Compress a base64 image to JPEG if it exceeds 0.28 MB.
+ * Uses progressive JPEG quality reduction and image resizing to meet the target size.
+ *
+ * This is a workaround for a Claude Code bug where large base64 images cause issues.
+ * See: https://discord.com/channels/1072196207201501266/1451693213931933846
+ *
+ * @param base64Data - The base64-encoded image data (without data URL prefix)
+ * @param mimeType - The original MIME type of the image
+ * @returns Object containing the (possibly compressed) base64 data and updated MIME type
+ */
+const MAX_IMAGE_SIZE_BYTES = 0.28 * 1024 * 1024; // 0.28 MB
+function compressImageIfNeeded(
+  base64Data: string,
+  mimeType: string
+): { data: string; mimeType: string; wasCompressed: boolean } {
+  // Calculate actual byte size from base64 (base64 inflates by ~33%)
+  const byteSize = Math.floor((base64Data.length * 3) / 4);
+  const byteSizeMB = byteSize / 1024 / 1024;
+  const maxSizeMB = MAX_IMAGE_SIZE_BYTES / 1024 / 1024;
+
+  console.log(`[MCP Server] Image size check: ${byteSizeMB.toFixed(3)} MB (limit: ${maxSizeMB.toFixed(3)} MB)`);
+
+  if (byteSize <= MAX_IMAGE_SIZE_BYTES) {
+    console.log(`[MCP Server] Image under limit, no compression needed`);
+    return { data: base64Data, mimeType, wasCompressed: false };
+  }
+
+  console.log(`[MCP Server] Image size ${byteSizeMB.toFixed(2)} MB exceeds limit of ${maxSizeMB.toFixed(2)} MB, compressing to JPEG...`);
+
+  try {
+    // Create nativeImage from base64 PNG
+    const buffer = Buffer.from(base64Data, 'base64');
+    console.log(`[MCP Server] Created buffer of ${buffer.length} bytes`);
+
+    const image = nativeImage.createFromBuffer(buffer);
+
+    if (image.isEmpty()) {
+      console.warn('[MCP Server] Failed to create image from base64 (image is empty), returning original');
+      return { data: base64Data, mimeType, wasCompressed: false };
+    }
+
+    const originalSize = image.getSize();
+    console.log(`[MCP Server] Image dimensions: ${originalSize.width}x${originalSize.height}`);
+
+    // Quality levels to try
+    const qualities = [85, 70, 55, 40, 30, 20];
+    // Scale factors to try if quality reduction isn't enough
+    const scaleFactors = [1.0, 0.75, 0.5, 0.35, 0.25];
+
+    for (const scale of scaleFactors) {
+      // Resize image if scale < 1.0
+      let workingImage = image;
+      if (scale < 1.0) {
+        const newWidth = Math.round(originalSize.width * scale);
+        const newHeight = Math.round(originalSize.height * scale);
+        console.log(`[MCP Server] Resizing to ${scale * 100}%: ${newWidth}x${newHeight}`);
+        workingImage = image.resize({ width: newWidth, height: newHeight, quality: 'better' });
+      }
+
+      for (const quality of qualities) {
+        const jpegBuffer = workingImage.toJPEG(quality);
+        const compressedSize = jpegBuffer.length;
+        const compressedSizeMB = compressedSize / 1024 / 1024;
+
+        if (scale === 1.0) {
+          console.log(`[MCP Server] JPEG quality ${quality}: ${compressedSizeMB.toFixed(3)} MB`);
+        } else {
+          console.log(`[MCP Server] Scale ${scale * 100}%, quality ${quality}: ${compressedSizeMB.toFixed(3)} MB`);
+        }
+
+        if (compressedSize <= MAX_IMAGE_SIZE_BYTES) {
+          const jpegBase64 = jpegBuffer.toString('base64');
+          const finalSize = workingImage.getSize();
+          console.log(`[MCP Server] SUCCESS: Compressed to ${compressedSizeMB.toFixed(3)} MB (${finalSize.width}x${finalSize.height}, quality ${quality})`);
+          return { data: jpegBase64, mimeType: 'image/jpeg', wasCompressed: true };
+        }
+      }
+    }
+
+    // If even smallest scale and lowest quality doesn't fit, use smallest anyway
+    const smallestScale = scaleFactors[scaleFactors.length - 1];
+    const lowestQuality = qualities[qualities.length - 1];
+    const smallWidth = Math.round(originalSize.width * smallestScale);
+    const smallHeight = Math.round(originalSize.height * smallestScale);
+    const smallestImage = image.resize({ width: smallWidth, height: smallHeight, quality: 'better' });
+    const smallestBuffer = smallestImage.toJPEG(lowestQuality);
+    const smallestSizeMB = smallestBuffer.length / 1024 / 1024;
+
+    console.log(`[MCP Server] WARNING: Even smallest (${smallWidth}x${smallHeight}, quality ${lowestQuality}) is ${smallestSizeMB.toFixed(3)} MB, exceeds limit but using anyway`);
+
+    return {
+      data: smallestBuffer.toString('base64'),
+      mimeType: 'image/jpeg',
+      wasCompressed: true
+    };
+  } catch (error) {
+    console.error('[MCP Server] Failed to compress image:', error);
+    return { data: base64Data, mimeType, wasCompressed: false };
+  }
+}
 
 // Store document state PER SESSION to avoid cross-window contamination
 const documentStateBySession = new Map<string, any>();
@@ -752,13 +854,23 @@ async function tryCreateServer(port: number): Promise<any> {
 
               console.log(`[MCP Server] Captured screenshot for ${filePath}`);
 
+              // Compress image if needed to work around Claude bug with large images
+              // See: https://discord.com/channels/1072196207201501266/1451693213931933846
+              const compressed = compressImageIfNeeded(
+                result.imageBase64!,
+                result.mimeType || 'image/png'
+              );
+
+              const finalSizeBytes = Math.floor((compressed.data.length * 3) / 4);
+              console.log(`[MCP Server] Returning image inline in tool call: ${(finalSizeBytes / 1024 / 1024).toFixed(3)} MB, mimeType: ${compressed.mimeType}, wasCompressed: ${compressed.wasCompressed}`);
+
               // Return the image as base64-encoded content
               return {
                 content: [
                   {
                     type: 'image',
-                    data: result.imageBase64!,
-                    mimeType: result.mimeType || 'image/png'
+                    data: compressed.data,
+                    mimeType: compressed.mimeType
                   }
                 ],
                 isError: false

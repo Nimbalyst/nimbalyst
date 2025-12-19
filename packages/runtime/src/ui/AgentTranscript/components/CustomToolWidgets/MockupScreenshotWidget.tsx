@@ -306,6 +306,14 @@ export const MockupScreenshotWidget: React.FC<CustomToolWidgetProps> = ({
   const inlineImageData = extractImageData(tool.result);
   const imageData = inlineImageData || persistedImageData;
 
+  // Log image source and size for debugging
+  if (imageData) {
+    const source = inlineImageData ? 'inline' : 'file-system';
+    const sizeBytes = Math.floor((imageData.imageBase64.length * 3) / 4);
+    const sizeMB = (sizeBytes / 1024 / 1024).toFixed(2);
+    console.log(`[MockupScreenshotWidget] Image loaded: ${sizeMB} MB, source: ${source}, mimeType: ${imageData.mimeType}`);
+  }
+
   const hasError = isToolError(tool.result, message);
   const errorMessage = extractErrorMessage(tool.result, message) || persistedLoadError;
 
