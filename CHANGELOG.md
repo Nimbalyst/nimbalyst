@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.49.1] - 2025-12-19
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Mockup images sent to Claude Code are now compressed and lower resolution to work around SDK display bug
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.49.0] - 2025-12-19
 
 
