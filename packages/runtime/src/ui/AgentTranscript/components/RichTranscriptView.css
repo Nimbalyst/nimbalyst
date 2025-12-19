@@ -230,7 +230,7 @@
 /* Copy button container - positioned top-right of message content */
 .rich-transcript-message-copy-action {
   position: absolute;
-  top: 0;
+  top: -0.25rem;
   right: 0;
   opacity: 0;
   transition: opacity 0.15s ease-in-out;

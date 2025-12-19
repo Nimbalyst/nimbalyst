@@ -833,22 +833,20 @@ export const RichTranscriptView = React.forwardRef<
                         )}
 
                         <div className={`rich-transcript-message-content ${isNewGroup ? '' : 'no-indent'}`}>
-                          {/* Copy button for assistant messages - shows on hover */}
-                          {!isUser && (
-                            <div className="rich-transcript-message-copy-action">
-                              <button
-                                onClick={() => copyMessageContent(message, index)}
-                                className={`rich-transcript-copy-button ${copiedMessageIndex === index ? 'copied' : ''}`}
-                                title="Copy as Markdown"
-                              >
-                                {copiedMessageIndex === index ? (
-                                  <MaterialSymbol icon="check" size={16} />
-                                ) : (
-                                  <MaterialSymbol icon="content_copy" size={16} />
-                                )}
-                              </button>
-                            </div>
-                          )}
+                          {/* Copy button - shows on hover */}
+                          <div className="rich-transcript-message-copy-action">
+                            <button
+                              onClick={() => copyMessageContent(message, index)}
+                              className={`rich-transcript-copy-button ${copiedMessageIndex === index ? 'copied' : ''}`}
+                              title="Copy as Markdown"
+                            >
+                              {copiedMessageIndex === index ? (
+                                <MaterialSymbol icon="check" size={16} />
+                              ) : (
+                                <MaterialSymbol icon="content_copy" size={16} />
+                              )}
+                            </button>
+                          </div>
                           <MessageSegment
                             message={message}
                             isUser={isUser}
