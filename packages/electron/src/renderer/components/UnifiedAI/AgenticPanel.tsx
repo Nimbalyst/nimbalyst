@@ -44,6 +44,7 @@ export interface AgenticPanelProps {
   onSessionChange?: (sessionId: string | null, sessionName?: string) => void;
   onContentModeChange?: (mode: string) => void; // Switch to files mode when opening a document
   onFileOpen?: (filePath: string) => Promise<void>; // Canonical file opening function from App
+  onOpenQuickSearch?: () => void; // Callback for opening session quick search (Cmd+L)
 }
 
 interface SessionTab {
@@ -114,7 +115,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   isActive = true,
   onSessionChange,
   onContentModeChange,
-  onFileOpen
+  onFileOpen,
+  onOpenQuickSearch
 }: AgenticPanelProps, ref) {
   // Session state
   const [sessionTabs, setSessionTabs] = useState<SessionTab[]>([]);
@@ -2564,6 +2566,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             onSessionArchive={closeArchivedSession}
             onNewSession={() => createNewSession()}
             onImportSessions={handleOpenImportDialog}
+            onOpenQuickSearch={onOpenQuickSearch}
             collapsedGroups={collapsedGroups}
             onCollapsedGroupsChange={setCollapsedGroups}
             refreshTrigger={sessionHistoryRefreshTrigger}

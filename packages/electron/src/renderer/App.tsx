@@ -1569,6 +1569,7 @@ export default function App() {
                   onSessionChange={handleSessionChange}
                   onFileOpen={handleWorkspaceFileSelect}
                   isActive={activeMode === 'agent'}
+                  onOpenQuickSearch={() => setIsSessionQuickOpenVisible(true)}
                 />
               ) : (
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>

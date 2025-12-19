@@ -3,6 +3,7 @@ import { CollapsibleGroup } from './CollapsibleGroup';
 import { SessionListItem } from './SessionListItem';
 import { groupSessionsByTime, TimeGroupKey } from '../../utils/dateFormatting';
 import { getFileName } from '../../utils/pathUtils';
+import { KeyboardShortcuts, getShortcutDisplay } from '../../../shared/KeyboardShortcuts';
 import './SessionHistory.css';
 
 interface SessionItem {
@@ -32,6 +33,7 @@ interface SessionHistoryProps {
   onSessionArchive?: (sessionId: string) => void; // Callback when session is archived (to close tab)
   onNewSession?: () => void;
   onImportSessions?: () => void; // Callback for opening import dialog
+  onOpenQuickSearch?: () => void; // Callback for opening session quick search (Cmd+L)
   collapsedGroups: string[];
   onCollapsedGroupsChange: (groups: string[]) => void;
   refreshTrigger?: number; // Optional trigger to force refresh
@@ -64,6 +66,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   onSessionArchive,
   onNewSession,
   onImportSessions,
+  onOpenQuickSearch,
   collapsedGroups,
   onCollapsedGroupsChange,
   refreshTrigger
@@ -478,6 +481,20 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
             <div className="session-history-header-path">{workspacePath}</div>
           </div>
           <div className="session-history-header-buttons">
+            {onOpenQuickSearch && (
+              <button
+                className="session-history-search-button"
+                data-testid="session-quick-search-button"
+                onClick={onOpenQuickSearch}
+                title={`Search sessions (${getShortcutDisplay(KeyboardShortcuts.window.sessionQuickOpen)})`}
+                aria-label="Search sessions"
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.5"/>
+                  <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+              </button>
+            )}
             {onImportSessions && (
               <button
                 className="session-history-import-button"
@@ -648,6 +665,20 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
           <div className="session-history-header-path">{workspacePath}</div>
         </div>
         <div className="session-history-header-buttons">
+          {onOpenQuickSearch && (
+            <button
+              className="session-history-search-button"
+              data-testid="session-quick-search-button"
+              onClick={onOpenQuickSearch}
+              title={`Search sessions (${getShortcutDisplay(KeyboardShortcuts.window.sessionQuickOpen)})`}
+              aria-label="Search sessions"
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.5"/>
+                <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+            </button>
+          )}
           {onImportSessions && (
             <button
               className="session-history-import-button"
