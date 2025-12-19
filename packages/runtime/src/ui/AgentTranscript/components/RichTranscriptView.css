@@ -227,6 +227,57 @@
   gap: 0.25rem;
 }
 
+/* Copy button container - positioned top-right of message content */
+.rich-transcript-message-copy-action {
+  position: absolute;
+  top: 0;
+  right: 0;
+  opacity: 0;
+  transition: opacity 0.15s ease-in-out;
+  z-index: 1;
+}
+
+/* Show copy button on message content hover */
+.rich-transcript-message-content:hover .rich-transcript-message-copy-action {
+  opacity: 1;
+}
+
+/* Keep button visible when it shows the "copied" checkmark */
+.rich-transcript-message-copy-action:has(.copied) {
+  opacity: 1;
+}
+
+.rich-transcript-copy-button {
+  padding: 0.375rem;
+  border-radius: 0.375rem;
+  background-color: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rich-transcript-copy-button:hover {
+  background-color: var(--surface-hover);
+  border-color: var(--border-hover, var(--border-primary));
+}
+
+.rich-transcript-copy-button svg {
+  width: 1rem;
+  height: 1rem;
+  color: var(--text-tertiary);
+}
+
+.rich-transcript-copy-button:hover svg {
+  color: var(--text-secondary);
+}
+
+.rich-transcript-copy-button.copied svg {
+  color: var(--success-color);
+}
+
 .rich-transcript-action-button {
   padding: 0.25rem;
   border-radius: 0.375rem;
@@ -481,6 +532,7 @@
 
 .rich-transcript-message-content {
   margin-left: 1.5rem;
+  position: relative;
 }
 
 .rich-transcript-message-content.no-indent {
