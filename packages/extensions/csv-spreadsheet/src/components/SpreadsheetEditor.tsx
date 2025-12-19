@@ -261,6 +261,11 @@ export function SpreadsheetEditor({
     [store, selectedCell]
   );
 
+  const handleToggleHeaders = useCallback(() => {
+    store.getState().toggleHeaders();
+    forceUpdate((n) => n + 1);
+  }, [store]);
+
   return (
     <div className="spreadsheet-editor" data-theme={theme}>
       <FormulaBar
@@ -280,7 +285,9 @@ export function SpreadsheetEditor({
         onDeleteColumn={handleDeleteColumn}
         onSortAsc={() => handleSort('asc')}
         onSortDesc={() => handleSort('desc')}
+        onToggleHeaders={handleToggleHeaders}
         hasSelection={!!selectedCell}
+        hasHeaders={data.hasHeaders}
         sortConfig={sortConfig}
       />
       <div className="spreadsheet-grid-container">

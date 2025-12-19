@@ -252,6 +252,27 @@ export function createSpreadsheetStore() {
       onDirtyChange?.(true);
     },
 
+    // Toggle header row designation
+    toggleHeaders: () => {
+      const state = get();
+      const newData = { ...state.data };
+      newData.hasHeaders = !newData.hasHeaders;
+
+      // Update headers array based on new state
+      if (newData.hasHeaders && newData.rows.length > 0) {
+        newData.headers = newData.rows[0].map(cell => cell.raw);
+      } else {
+        newData.headers = undefined;
+      }
+
+      set({
+        data: newData,
+        isDirty: true,
+      });
+
+      onDirtyChange?.(true);
+    },
+
     // Mark as clean
     markClean: () => {
       set({ isDirty: false });

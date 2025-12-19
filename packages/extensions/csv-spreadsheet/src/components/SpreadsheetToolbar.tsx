@@ -13,7 +13,9 @@ interface SpreadsheetToolbarProps {
   onDeleteColumn: () => void;
   onSortAsc: () => void;
   onSortDesc: () => void;
+  onToggleHeaders: () => void;
   hasSelection: boolean;
+  hasHeaders: boolean;
   sortConfig: SortConfig | null;
 }
 
@@ -24,11 +26,25 @@ export function SpreadsheetToolbar({
   onDeleteColumn,
   onSortAsc,
   onSortDesc,
+  onToggleHeaders,
   hasSelection,
+  hasHeaders,
   sortConfig,
 }: SpreadsheetToolbarProps) {
   return (
     <div className="spreadsheet-toolbar">
+      <div className="toolbar-group">
+        <button
+          className={`toolbar-button ${hasHeaders ? 'active' : ''}`}
+          onClick={onToggleHeaders}
+          title={hasHeaders ? 'First row is header (click to toggle)' : 'Treat first row as header'}
+        >
+          Header Row
+        </button>
+      </div>
+
+      <div className="toolbar-separator" />
+
       <div className="toolbar-group">
         <button
           className="toolbar-button"

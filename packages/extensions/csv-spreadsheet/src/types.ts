@@ -3,6 +3,13 @@
  */
 
 /**
+ * Metadata stored in CSV comment header
+ */
+export interface CSVMetadata {
+  hasHeaders: boolean;
+}
+
+/**
  * Represents a single cell value
  * Can be a raw value or a formula (starting with =)
  */
@@ -103,6 +110,8 @@ export interface SpreadsheetActions {
   deleteColumn: (index: number) => void;
   /** Sort by column */
   sortByColumn: (columnIndex: number, direction: SortDirection) => void;
+  /** Toggle header row designation */
+  toggleHeaders: () => void;
   /** Mark as clean (after save) */
   markClean: () => void;
   /** Set dirty callbacks */

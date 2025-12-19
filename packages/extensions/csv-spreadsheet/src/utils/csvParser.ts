@@ -3,7 +3,38 @@
  */
 
 import Papa from 'papaparse';
-import type { SpreadsheetData, Cell } from '../types';
+import type { SpreadsheetData, Cell, CSVMetadata } from '../types';
+
+/** Comment prefix for nimbalyst metadata */
+const METADATA_PREFIX = '# nimbalyst:';
+
+/**
+ * Parse metadata from CSV content (first line comment)
+ */
+export function parseMetadata(content: string): { metadata: CSVMetadata | null; contentWithoutMetadata: string } {
+  const lines = content.split('\n');
+  const firstLine = lines[0]?.trim() || '';
+
+  if (firstLine.startsWith(METADATA_PREFIX)) {
+    try {
+      const jsonStr = firstLine.slice(METADATA_PREFIX.length).trim();
+      const metadata = JSON.parse(jsonStr) as CSVMetadata;
+      const contentWithoutMetadata = lines.slice(1).join('\n');
+      return { metadata, contentWithoutMetadata };
+    } catch (e) {
+      console.warn('[CSV] Failed to parse metadata comment:', e);
+    }
+  }
+
+  return { metadata: null, contentWithoutMetadata: content };
+}
+
+/**
+ * Serialize metadata to comment line
+ */
+export function serializeMetadata(metadata: CSVMetadata): string {
+  return `${METADATA_PREFIX} ${JSON.stringify(metadata)}`;
+}
 
 /**
  * Detect the delimiter used in a CSV file
@@ -18,10 +49,13 @@ export function detectDelimiter(content: string): ',' | '\t' {
 /**
  * Parse CSV content into SpreadsheetData
  */
-export function parseCSV(content: string): { data: SpreadsheetData; delimiter: ',' | '\t' } {
-  const delimiter = detectDelimiter(content);
+export function parseCSV(content: string): { data: SpreadsheetData; delimiter: ',' | '\t'; metadata: CSVMetadata | null } {
+  // Extract metadata from comment if present
+  const { metadata, contentWithoutMetadata } = parseMetadata(content);
 
-  const result = Papa.parse<string[]>(content, {
+  const delimiter = detectDelimiter(contentWithoutMetadata);
+
+  const result = Papa.parse<string[]>(contentWithoutMetadata, {
     delimiter,
     skipEmptyLines: false,
     header: false,
@@ -59,11 +93,17 @@ export function parseCSV(content: string): { data: SpreadsheetData; delimiter: '
     row.map(value => createCell(value))
   );
 
-  // Check if first row looks like headers (non-numeric, non-empty strings)
-  const hasHeaders = rows.length > 1 &&
-    rows[0].every(cell =>
-      cell.raw !== '' && isNaN(parseFloat(cell.raw))
-    );
+  // Use metadata hasHeaders if present, otherwise auto-detect
+  let hasHeaders: boolean;
+  if (metadata !== null) {
+    hasHeaders = metadata.hasHeaders;
+  } else {
+    // Auto-detect: first row looks like headers if non-numeric, non-empty strings
+    hasHeaders = rows.length > 1 &&
+      rows[0].every(cell =>
+        cell.raw !== '' && isNaN(parseFloat(cell.raw))
+      );
+  }
 
   return {
     data: {
@@ -73,6 +113,7 @@ export function parseCSV(content: string): { data: SpreadsheetData; delimiter: '
       hasHeaders,
     },
     delimiter,
+    metadata,
   };
 }
 
@@ -109,7 +150,7 @@ export function createCell(value: string): Cell {
 /**
  * Serialize SpreadsheetData back to CSV format
  */
-export function serializeToCSV(data: SpreadsheetData, delimiter: ',' | '\t' = ','): string {
+export function serializeToCSV(data: SpreadsheetData, delimiter: ',' | '\t' = ',', includeMetadata: boolean = true): string {
   const rows = data.rows.map(row =>
     row.map(cell => {
       // Always save the raw value (including formulas)
@@ -124,7 +165,15 @@ export function serializeToCSV(data: SpreadsheetData, delimiter: ',' | '\t' = ',
     })
   );
 
-  return rows.map(row => row.join(delimiter)).join('\n');
+  const csvContent = rows.map(row => row.join(delimiter)).join('\n');
+
+  // Prepend metadata comment if requested
+  if (includeMetadata) {
+    const metadata: CSVMetadata = { hasHeaders: data.hasHeaders };
+    return `${serializeMetadata(metadata)}\n${csvContent}`;
+  }
+
+  return csvContent;
 }
 
 /**
