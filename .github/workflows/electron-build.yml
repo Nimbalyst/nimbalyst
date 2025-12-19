@@ -169,6 +169,30 @@ jobs:
             npm run build:linux
           fi
         shell: bash
+
+      # Decode Digicert Client Certificate from base64 secret (windows only)
+      - name: Decode Digicert Client Certificate (Windows Only)
+        if: matrix.os == 'windows-latest'
+        env:
+          DIGICERT_CLIENT_CERT_BASE64: ${{ secrets.DIGICERT_CLIENT_CERT_BASE64 }}
+        run: |
+          # Decode certificate
+          [System.Convert]::FromBase64String($env:DIGICERT_CLIENT_CERT_BASE64) | Set-Content -Path $env:RUNNER_TEMP_DIR\digicert_client_cert.p12 -Encoding Byte
+        shell: powershell
+
+      # Sign with Digicert Software Trust Manager (Windows Only)
+      - name: Setup Digicert Software Trust Manager (Windows Only)
+        if: matrix.os == 'windows-latest'
+        uses: digicert/code-signing-software-trust-action@v1
+        with:
+          simple-signing-mode: true
+          input: "packages/electron/release/Nimbalyst-Windows.exe"
+          keypair-alias: ${{ secrets.DIGICERT_KEYPAIR_ALIAS }}
+        env:
+          SM_HOST: "https://clientauth.one.digicert.com"
+          SM_API_KEY: ${{ secrets.DIGICERT_CLIENT_API_TOKEN }}
+          SM_CLIENT_CERT_FILE: ${{ env.RUNNER_TEMP_DIR }}\digicert_client_cert.p12
+          SM_CLIENT_CERT_PASSWORD: ${{ secrets.DIGICERT_CLIENT_CERT_PW }}
       
       # Generate update metadata files
       - name: Generate update metadata
