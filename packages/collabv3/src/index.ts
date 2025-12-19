@@ -579,13 +579,16 @@ async function handleAuthRoutes(
     const callbackUrl = showTokens
       ? `${url.origin}/auth/callback?showTokens=1`
       : `${url.origin}/auth/callback`;
-    const publicToken = env.STYTCH_PROJECT_ID.replace('project-', 'public-token-');
+
+    if (!env.STYTCH_PUBLIC_TOKEN) {
+      return new Response('Stytch public token not configured', { status: 500 });
+    }
 
     // Note: We need the public token, not project ID, for OAuth start
     // The public token should be passed as a query param or stored in env
     // For now, construct the OAuth URL that Stytch expects
     const oauthUrl = new URL(`${apiBase}/public/oauth/google/start`);
-    oauthUrl.searchParams.set('public_token', env.STYTCH_PUBLIC_TOKEN || publicToken);
+    oauthUrl.searchParams.set('public_token', env.STYTCH_PUBLIC_TOKEN);
     oauthUrl.searchParams.set('login_redirect_url', callbackUrl);
     oauthUrl.searchParams.set('signup_redirect_url', callbackUrl);
 

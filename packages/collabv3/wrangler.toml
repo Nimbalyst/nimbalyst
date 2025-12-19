@@ -84,3 +84,4 @@ new_sqlite_classes = ["SessionRoom", "IndexRoom"]
 ENVIRONMENT = "production"
 STYTCH_PROJECT_ID = "project-live-bc85edd6-90a8-43a0-b9e3-1315bbed6650"
 ALLOWED_ORIGINS = "https://app.nimbalyst.com,https://nimbalyst.com,capacitor://localhost"
+STYTCH_PUBLIC_TOKEN = "public-token-live-28108ebb-471e-4366-89fe-77d0e0d4a270"
