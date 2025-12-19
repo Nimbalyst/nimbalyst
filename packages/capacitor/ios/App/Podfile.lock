@@ -6,7 +6,7 @@ PODS:
   - CapacitorBrowser (7.0.3):
     - Capacitor
   - CapacitorCordova (7.4.4)
-  - CapacitorMlkitBarcodeScanning (7.4.0):
+  - CapacitorMlkitBarcodeScanning (7.5.0):
     - Capacitor
     - GoogleMLKit/BarcodeScanning (= 7.0.0)
   - CapacitorPreferences (7.0.3):
@@ -107,7 +107,7 @@ SPEC CHECKSUMS:
   CapacitorApp: 63b237168fc869e758481dba283315a85743ee78
   CapacitorBrowser: b98aa3db018a2ce4c68242d27e596c344f3b81b3
   CapacitorCordova: bf648a636f3c153f652d312ae145fb508b6ffced
-  CapacitorMlkitBarcodeScanning: 2d4d1420f3989d6c3a3c21dac796ebb5cad499de
+  CapacitorMlkitBarcodeScanning: afd6fc431b550026a2c052e11ab2b71c7ae30011
   CapacitorPreferences: 913eef88272c13eb6445b21e51fe8ef6635412cc
   CapacitorSecureStoragePlugin: 50de0808ad398aa401e00f9e58adf88c77cb3c25
   GoogleDataTransport: aae35b7ea0c09004c3797d53c8c41f66f219d6a7
