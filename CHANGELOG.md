@@ -5,6 +5,7 @@ All notable changes to Nimbalyst will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
 ## [Unreleased]
 
 ### Added
@@ -18,6 +19,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 <!-- Removed features go here -->
+
+## [0.49.0] - 2025-12-19
+
+
+### Added
+- Claude can ask clarifying questions during agentic sessions (AskUserQuestion tool support)
+- CSV spreadsheet extension with formula support
+- PDF viewer with text selection and fit-to-width zoom
+- Extension Developer Kit with MCP tools for hot-reloading extensions
+- Cmd+L shortcut to quickly search and open AI sessions
+- Extension SDK documentation with examples
+- CSV spreadsheet header row toggle with persistent settings
+- Copy button for AI responses and user messages in agent transcript
+- Visual diff viewer for AI-generated mockup changes
+- Optional word wrap for inline code blocks in AI chat
+
+### Changed
+- Alpha-only extensions are now hidden from stable channel users
+- Extension dev tools now validate manifests before install/reload
+- extension_reload now rebuilds before hot-reloading
+- Extensions now bundle their own utility libraries
+
+### Fixed
+- Increase MCP connection timeout to 20 seconds for slower server startups
+- Move extensionsReady state declaration to the top of the App component
+- Update @anthropic-ai/claude-agent-sdk to version 0.1.73
+- Update @anthropic-ai/claude-agent-sdk to version 0.1.72
+- Add Stytch public token configuration for OAuth integration in sync server
+- Update CapacitorMlkitBarcodeScanning to version 7.5.0
+- CSV spreadsheet extension now loads correctly
+- Session quick open now shows all sessions and filters instantly
+- Closing AI session now navigates to adjacent tab instead of first tab
+- Windows Claude Code installation via npm now detected correctly
+- Mockup image viewing when image is on disk instead of returned in tool call
+- Code block rendering in AI chat
 
 ## [0.48.13] - 2025-12-17
 
