@@ -98,6 +98,10 @@ export default function App() {
   // console.log('[APP RENDER]', new Date().toISOString(), 'App component rendering');
   logger.ui.info('App component rendering');
 
+   // IMPORTANT: This state must be declared before the useEffect that uses it
+  // and before any conditional early returns (workspace-manager, usage-report, etc.)
+  const [extensionsReady, setExtensionsReady] = useState(false);
+
   // Register custom editors and extensions based on settings
   useEffect(() => {
     const registerCustomEditors = async () => {
@@ -186,7 +190,7 @@ export default function App() {
   const tabStatesRef = useRef<Map<string, { isDirty: boolean }>>(new Map());  // Track tab dirty states without re-renders
   const tabsRef = useRef<any>(null);  // Reference to current tabs object for use in intervals only
   const [isInitializing, setIsInitializing] = useState(true);
-  const [extensionsReady, setExtensionsReady] = useState(false);
+  // NOTE: extensionsReady state moved to top of component (before early returns)
   const [workspaceMode, setWorkspaceMode] = useState(false);
   const [workspacePath, setWorkspacePath] = useState<string | null>(null);
   const [workspaceName, setWorkspaceName] = useState<string | null>(null);
