@@ -126,6 +126,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const [typeaheadMatch, setTypeaheadMatch] = useState<TriggerMatch | null>(null);
     const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+    const [selectedOption, setSelectedOption] = useState<TypeaheadOption | null>(null);
     const [cursorPosition, setCursorPosition] = useState(0);
     const [slashCommandOptions, setSlashCommandOptions] = useState<TypeaheadOption[]>([]);
     const [allSlashCommands, setAllSlashCommands] = useState<any[]>([]);
@@ -357,6 +358,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
 
     // Filter and sort slash commands based on query
     const filterSlashCommands = useCallback((query: string) => {
+      const hasQuery = query.length > 0;
       const filtered = allSlashCommands
         .map(cmd => ({
           cmd,
@@ -374,7 +376,10 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
             label,
             description: cmd.description || `Execute ${cmd.name} command`,
             icon: getCommandIcon(cmd),
-            section: cmd.source === 'builtin' ? 'Built-in Commands' :
+            // Only show sections when there's no filter query (full list)
+            // When filtering, we want pure relevance-based ordering without section grouping
+            section: hasQuery ? undefined :
+                     cmd.source === 'builtin' ? 'Built-in Commands' :
                      cmd.source === 'project' ? 'Project Commands' :
                      cmd.source === 'plugin' ? 'Extension Commands' : 'User Commands',
             data: cmd
@@ -425,6 +430,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
       } else {
         setTypeaheadMatch(null);
         setSelectedIndex(null);
+        setSelectedOption(null);
       }
     }, [value, cursorPosition, onFileMentionSearch, filterSlashCommands, enableSlashCommands, fileMentionOptions.length]);
 
@@ -497,6 +503,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
 
       setTypeaheadMatch(null);
       setSelectedIndex(null);
+      setSelectedOption(null);
     }, [typeaheadMatch, value, onChange, onFileMentionSelect]);
 
     const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -524,8 +531,9 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
 
         if (e.key === 'Enter' || e.key === 'Tab') {
           e.preventDefault();
-          if (selectedIndex !== null && currentOptions[selectedIndex]) {
-            handleTypeaheadSelect(currentOptions[selectedIndex]);
+          // Use selectedOption which is kept in sync with visual order by GenericTypeahead
+          if (selectedOption) {
+            handleTypeaheadSelect(selectedOption);
           }
           return;
         }
@@ -534,6 +542,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
           e.preventDefault();
           setTypeaheadMatch(null);
           setSelectedIndex(null);
+          setSelectedOption(null);
           return;
         }
       }
@@ -923,10 +932,12 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
             options={typeaheadMatch.trigger === '@' ? fileMentionOptions : slashCommandOptions}
             selectedIndex={selectedIndex}
             onSelectedIndexChange={setSelectedIndex}
+            onSelectedOptionChange={setSelectedOption}
             onSelect={handleTypeaheadSelect}
             onClose={() => {
               setTypeaheadMatch(null);
               setSelectedIndex(null);
+              setSelectedOption(null);
             }}
             cursorPosition={cursorPosition}
             maxHeight={500}

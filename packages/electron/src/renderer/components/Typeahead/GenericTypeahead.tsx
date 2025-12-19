@@ -20,9 +20,12 @@ interface GenericTypeaheadProps {
   // Options to display
   options: TypeaheadOption[];
 
-  // Currently selected index
+  // Currently selected index (in visual order after grouping/sorting)
   selectedIndex: number | null;
   onSelectedIndexChange: (index: number | null) => void;
+
+  // Called when the selected option changes (provides the actual option at visual index)
+  onSelectedOptionChange?: (option: TypeaheadOption | null) => void;
 
   // Selection handler
   onSelect: (option: TypeaheadOption) => void;
@@ -45,6 +48,7 @@ export function GenericTypeahead({
   options,
   selectedIndex,
   onSelectedIndexChange,
+  onSelectedOptionChange,
   onSelect,
   onClose,
   cursorPosition,
@@ -168,11 +172,14 @@ export function GenericTypeahead({
     onSelect(option);
   }, [onSelect]);
 
-  // Group options by section
-  const groupedOptions = React.useMemo(() => {
+  // Group options by section and create flat ordered list for navigation
+  const { groupedOptions, flatOrderedOptions } = React.useMemo(() => {
     const hasSections = options.some(opt => opt.section);
     if (!hasSections) {
-      return [{ section: null, options }];
+      return {
+        groupedOptions: [{ section: null as string | null, options }],
+        flatOrderedOptions: options
+      };
     }
 
     const groups: Record<string, TypeaheadOption[]> = {};
@@ -184,10 +191,26 @@ export function GenericTypeahead({
       groups[section].push(opt);
     });
 
-    return Object.entries(groups)
+    const sorted = Object.entries(groups)
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([section, opts]) => ({ section, options: opts }));
+      .map(([section, opts]) => ({ section: section as string | null, options: opts }));
+
+    // Create flat array in visual order for navigation
+    const flatOrdered = sorted.flatMap(group => group.options);
+
+    return {
+      groupedOptions: sorted,
+      flatOrderedOptions: flatOrdered
+    };
   }, [options]);
+
+  // Notify parent of the currently selected option (in visual order)
+  useEffect(() => {
+    if (onSelectedOptionChange) {
+      const selectedOption = selectedIndex !== null ? flatOrderedOptions[selectedIndex] : null;
+      onSelectedOptionChange(selectedOption ?? null);
+    }
+  }, [selectedIndex, flatOrderedOptions, onSelectedOptionChange]);
 
   if (options.length === 0) {
     return null;
@@ -214,20 +237,20 @@ export function GenericTypeahead({
             {section && (
               <div className="generic-typeahead-section-header">{section}</div>
             )}
-            {sectionOptions.map((option, optionIndex) => {
-              // Calculate flat index across all options
-              const flatIndex = options.findIndex(opt => opt.id === option.id);
-              const isSelected = selectedIndex === flatIndex;
+            {sectionOptions.map((option) => {
+              // Calculate visual index based on flat ordered list (matches navigation order)
+              const visualIndex = flatOrderedOptions.findIndex(opt => opt.id === option.id);
+              const isSelected = selectedIndex === visualIndex;
 
               return (
                 <div
                   key={option.id}
-                  data-option-index={flatIndex}
+                  data-option-index={visualIndex}
                   className={`generic-typeahead-option ${
                     isSelected ? 'selected' : ''
                   } ${option.disabled ? 'disabled' : ''}`}
-                  onClick={() => handleOptionClick(option, flatIndex)}
-                  onMouseEnter={() => onSelectedIndexChange(flatIndex)}
+                  onClick={() => handleOptionClick(option, visualIndex)}
+                  onMouseEnter={() => onSelectedIndexChange(visualIndex)}
                 >
                   {option.icon && (
                     typeof option.icon === 'string' ? (
