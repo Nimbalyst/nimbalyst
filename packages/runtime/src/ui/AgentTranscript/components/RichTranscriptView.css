@@ -406,6 +406,27 @@
   color: var(--text-quaternary, var(--text-tertiary));
 }
 
+.rich-transcript-edit-card__open-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0;
+  border: none;
+  border-radius: 0.25rem;
+  background-color: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.rich-transcript-edit-card__open-button:hover {
+  background-color: var(--surface-hover);
+  color: var(--text-primary);
+}
+
 .rich-transcript-edit-card__status {
   font-size: 0.7rem;
   font-weight: 600;

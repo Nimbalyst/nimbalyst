@@ -9,6 +9,7 @@ interface EditToolResultCardProps {
   toolMessage: Message;
   edits: any[];
   workspacePath?: string;
+  onOpenFile?: (filePath: string) => void;
 }
 
 const resolveEditFilePath = (edit: any, toolMessage: Message): string | undefined => {
@@ -39,7 +40,7 @@ const truncateInstruction = (text: string, maxLength = 320) => {
   return `${text.slice(0, maxLength - 1)}…`;
 };
 
-export const EditToolResultCard: React.FC<EditToolResultCardProps> = ({ toolMessage, edits, workspacePath }) => {
+export const EditToolResultCard: React.FC<EditToolResultCardProps> = ({ toolMessage, edits, workspacePath, onOpenFile }) => {
   const tool = toolMessage.toolCall;
   if (!tool || edits.length === 0) {
     return null;
@@ -54,6 +55,12 @@ export const EditToolResultCard: React.FC<EditToolResultCardProps> = ({ toolMess
   const statusLabel = toolMessage.isError ? 'Failed' : 'Applied';
   const statusClass = toolMessage.isError ? 'error' : 'success';
   const editCountLabel = edits.length === 1 ? '1 edit' : `${edits.length} edits`;
+
+  const handleOpenFile = () => {
+    if (firstEditPath && onOpenFile) {
+      onOpenFile(firstEditPath);
+    }
+  };
 
   return (
     <div className="rich-transcript-edit-card">
@@ -74,6 +81,16 @@ export const EditToolResultCard: React.FC<EditToolResultCardProps> = ({ toolMess
             {instruction && <span>Instruction</span>}
           </div>
         </div>
+        {firstEditPath && onOpenFile && (
+          <button
+            className="rich-transcript-edit-card__open-button"
+            onClick={handleOpenFile}
+            title="Open file"
+            aria-label="Open file"
+          >
+            <MaterialSymbol icon="open_in_new" size={14} />
+          </button>
+        )}
         <span className={`rich-transcript-edit-card__status rich-transcript-edit-card__status--${statusClass}`}>
           {statusLabel}
         </span>

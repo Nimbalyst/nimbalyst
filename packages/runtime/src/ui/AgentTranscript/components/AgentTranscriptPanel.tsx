@@ -245,6 +245,7 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
           workspacePath={effectiveWorkspacePath}
           renderEmptyExtra={renderEmptyExtra}
           readFile={readFile}
+          onOpenFile={onFileClick}
         />
 
         {/* Floating Actions - hidden if hideSidebar is true */}
