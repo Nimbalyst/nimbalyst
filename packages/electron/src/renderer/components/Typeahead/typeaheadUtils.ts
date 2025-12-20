@@ -59,8 +59,9 @@ export function extractTriggerMatch(
     // Extract query from trigger to cursor
     const query = textBeforeCursor.substring(lastTriggerIndex + trigger.length);
 
-    // Query shouldn't contain whitespace (that would end the mention)
-    if (/\s/.test(query)) {
+    // Query ends on double-space (intentional break) or newline
+    // Single spaces are allowed to support files with spaces in names
+    if (/\s{2}|[\n\r]/.test(query)) {
       continue;
     }
 
