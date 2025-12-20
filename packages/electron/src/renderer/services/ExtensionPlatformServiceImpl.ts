@@ -282,8 +282,9 @@ export class ExtensionPlatformServiceImpl implements ExtensionPlatformService {
 
     // Handle: import defaultExport, { named1, named2 as alias } from 'react'
     // This is the most complex pattern - default + named imports
+        // Note: Use [\w$]+ to match identifiers that include $ (like $t from minification)
     transformed = transformed.replace(
-      /import\s+(\w+)\s*,\s*{([^}]+)}\s+from\s+['"]react['"]/g,
+      /import\s+([\w$]+)\s*,\s*{([^}]+)}\s+from\s+['"]react['"]/g,
       (_match, defaultExport, namedImports) => {
         const converted = convertAsToColon(namedImports);
         return `const ${defaultExport} = window.__nimbalyst_extensions.react; const {${converted}} = window.__nimbalyst_extensions.react`;
@@ -292,13 +293,13 @@ export class ExtensionPlatformServiceImpl implements ExtensionPlatformService {
 
     // Handle: import defaultExport from 'react'
     transformed = transformed.replace(
-      /import\s+(\w+)\s+from\s+['"]react['"]/g,
+      /import\s+([\w$]+)\s+from\s+['"]react['"]/g,
       'const $1 = window.__nimbalyst_extensions.react'
     );
 
     // Handle: import * as X from 'react'
     transformed = transformed.replace(
-      /import\s+\*\s+as\s+(\w+)\s+from\s+['"]react['"]/g,
+      /import\s+\*\s+as\s+([\w$]+)\s+from\s+['"]react['"]/g,
       'const $1 = window.__nimbalyst_extensions.react'
     );
 
@@ -325,7 +326,7 @@ export class ExtensionPlatformServiceImpl implements ExtensionPlatformService {
 
     // Handle: import X from 'react-dom/client'
     transformed = transformed.replace(
-      /import\s+(\w+)\s+from\s+['"]react-dom\/client['"]/g,
+      /import\s+([\w$]+)\s+from\s+['"]react-dom\/client['"]/g,
       'const $1 = window.__nimbalyst_extensions["react-dom/client"]'
     );
 
@@ -340,7 +341,7 @@ export class ExtensionPlatformServiceImpl implements ExtensionPlatformService {
 
     // Handle: import X from 'react-dom'
     transformed = transformed.replace(
-      /import\s+(\w+)\s+from\s+['"]react-dom['"]/g,
+      /import\s+([\w$]+)\s+from\s+['"]react-dom['"]/g,
       'const $1 = window.__nimbalyst_extensions["react-dom"]'
     );
 
@@ -385,7 +386,7 @@ export class ExtensionPlatformServiceImpl implements ExtensionPlatformService {
 
     // Handle: import * as X from 'lexical'
     transformed = transformed.replace(
-      /import\s+\*\s+as\s+(\w+)\s+from\s+['"]lexical['"]/g,
+      /import\s+\*\s+as\s+([\w$]+)\s+from\s+['"]lexical['"]/g,
       'const $1 = window.__nimbalyst_extensions.lexical'
     );
 
