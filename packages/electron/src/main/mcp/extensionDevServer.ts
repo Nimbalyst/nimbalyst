@@ -9,6 +9,7 @@
  * - extension:install - Install a built extension into the running Nimbalyst
  * - extension:reload - Hot reload an extension (rebuild + reinstall)
  * - extension:uninstall - Remove an extension from the running instance
+ * - restart_nimbalyst - Restart the Nimbalyst application (only when user explicitly requests)
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -563,6 +564,15 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
                   },
                   required: ['extensionId']
                 }
+              },
+              {
+                name: 'restart_nimbalyst',
+                description: 'Restart the Nimbalyst application. Only use this tool when the user explicitly asks you to restart Nimbalyst. This will close all windows and relaunch the app.',
+                inputSchema: {
+                  type: 'object',
+                  properties: {},
+                  required: []
+                }
               }
             ]
           };
@@ -854,6 +864,23 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
                   isError: true
                 };
               }
+            }
+
+            case 'restart_nimbalyst': {
+              console.log('[Extension Dev MCP] Restarting Nimbalyst...');
+
+              // Import app dynamically to avoid circular dependencies
+              const { app } = await import('electron');
+
+              // Use relaunch to restart the app
+              app.relaunch();
+              app.exit(0);
+
+              // This return won't actually be sent since the app exits
+              return {
+                content: [{ type: 'text', text: 'Restarting Nimbalyst...' }],
+                isError: false
+              };
             }
 
             default:
