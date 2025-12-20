@@ -219,6 +219,11 @@ export default defineConfig({
         if (fs.existsSync(onboardingDir)) {
           targets.push({ src: toPosix(resolve(onboardingDir, '*')), dest: 'onboarding', overwrite: true });
         }
+        // Copy es-module-shims for extension loading (enables dynamic import maps)
+        const esModuleShims = resolve(__dirname, '../../node_modules/es-module-shims/dist/es-module-shims.js');
+        if (fs.existsSync(esModuleShims)) {
+          targets.push({ src: toPosix(esModuleShims), dest: '', overwrite: true });
+        }
         return viteStaticCopy({ targets });
       })()
     ].filter(Boolean),

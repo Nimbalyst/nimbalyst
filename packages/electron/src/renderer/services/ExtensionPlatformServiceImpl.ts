@@ -3,7 +3,10 @@
  *
  * This implementation runs in the renderer process and uses IPC
  * to communicate with the main process for file operations.
- * Module loading uses dynamic import() with file:// URLs.
+ *
+ * Module loading uses es-module-shims with import maps to resolve bare
+ * specifiers (like 'react') to the host's bundled dependencies. This is
+ * more robust than regex-based transformation of minified code.
  */
 
 import type { ExtensionPlatformService, ExtensionModule } from '@nimbalyst/runtime';
@@ -18,7 +21,6 @@ import * as jsxRuntime from 'react/jsx-runtime';
 import * as jsxDevRuntime from 'react/jsx-dev-runtime';
 
 // PDF.js and virtua are shared for the pdf-viewer extension
-// These are accessed directly from __nimbalyst_extensions rather than ES imports
 import * as pdfjsLib from 'pdfjs-dist';
 import * as virtua from 'virtua';
 
@@ -39,8 +41,17 @@ import { screenshotService, useDocumentPath } from '@nimbalyst/runtime';
 // Import DataModel platform service for datamodellm extension
 import { DataModelPlatformServiceImpl } from './DataModelPlatformServiceImpl';
 
+// Declare importShim global from es-module-shims
+declare global {
+  function importShim(specifier: string): Promise<any>;
+  namespace importShim {
+    function addImportMap(map: { imports: Record<string, string> }): void;
+  }
+}
+
 export class ExtensionPlatformServiceImpl implements ExtensionPlatformService {
   private static instance: ExtensionPlatformServiceImpl | null = null;
+  private importMapInitialized = false;
 
   private constructor() {}
 
@@ -49,6 +60,94 @@ export class ExtensionPlatformServiceImpl implements ExtensionPlatformService {
       ExtensionPlatformServiceImpl.instance = new ExtensionPlatformServiceImpl();
     }
     return ExtensionPlatformServiceImpl.instance;
+  }
+
+  /**
+   * Initialize the import map for extension loading.
+   *
+   * This creates blob URLs for each host dependency and registers them
+   * in an import map so that extensions can use bare specifiers like
+   * `import React from 'react'` without any build-time or runtime transformation.
+   */
+  private initializeImportMap(): void {
+    if (this.importMapInitialized) return;
+
+    // Create wrapper modules that re-export from window.__nimbalyst_extensions
+    // We still use the window object as the source of truth, but now extensions
+    // can import using standard ES module syntax
+    this.exposeHostDependencies();
+
+    const imports: Record<string, string> = {};
+
+    // Helper to create a blob URL for a module that re-exports from window
+    const createModuleUrl = (key: string, moduleExports: any): string => {
+      // Generate export statements for all properties
+      const exportNames = Object.keys(moduleExports).filter(
+        (name) => name !== 'default' && name !== '__esModule'
+      );
+
+      const code = `
+// Host dependency: ${key}
+const __mod = window.__nimbalyst_extensions["${key}"];
+export default __mod;
+${exportNames.map((name) => `export const ${name} = __mod?.${name};`).join('\n')}
+`;
+      const blob = new Blob([code], { type: 'application/javascript' });
+      return URL.createObjectURL(blob);
+    };
+
+    // Get the shimmed jsx-dev-runtime (created in exposeHostDependencies)
+    const w = window as any;
+    const deps = w.__nimbalyst_extensions;
+
+    // Register all host dependencies
+    imports['react'] = createModuleUrl('react', deps.react);
+    imports['react-dom'] = createModuleUrl('react-dom', deps['react-dom']);
+    imports['react-dom/client'] = createModuleUrl('react-dom/client', deps['react-dom/client']);
+    imports['react/jsx-runtime'] = createModuleUrl('react/jsx-runtime', deps['react/jsx-runtime']);
+    imports['react/jsx-dev-runtime'] = createModuleUrl('react/jsx-dev-runtime', deps['react/jsx-dev-runtime']);
+
+    imports['lexical'] = createModuleUrl('lexical', deps.lexical);
+    imports['@lexical/react/LexicalComposerContext'] = createModuleUrl(
+      '@lexical/react/LexicalComposerContext',
+      deps['@lexical/react/LexicalComposerContext']
+    );
+    imports['@lexical/react/useLexicalEditable'] = createModuleUrl(
+      '@lexical/react/useLexicalEditable',
+      deps['@lexical/react/useLexicalEditable']
+    );
+    imports['@lexical/react/useLexicalNodeSelection'] = createModuleUrl(
+      '@lexical/react/useLexicalNodeSelection',
+      deps['@lexical/react/useLexicalNodeSelection']
+    );
+    imports['@lexical/utils'] = createModuleUrl('@lexical/utils', deps['@lexical/utils']);
+    imports['@lexical/markdown'] = createModuleUrl('@lexical/markdown', deps['@lexical/markdown']);
+
+    imports['pdfjs-dist'] = createModuleUrl('pdfjs-dist', deps['pdfjs-dist']);
+    imports['virtua'] = createModuleUrl('virtua', deps.virtua);
+
+    imports['@nimbalyst/editor-context'] = createModuleUrl(
+      '@nimbalyst/editor-context',
+      deps['@nimbalyst/editor-context']
+    );
+    imports['@nimbalyst/runtime/ui/icons/MaterialSymbol'] = createModuleUrl(
+      '@nimbalyst/runtime/ui/icons/MaterialSymbol',
+      deps['@nimbalyst/runtime/ui/icons/MaterialSymbol']
+    );
+    imports['@nimbalyst/screenshot-service'] = createModuleUrl(
+      '@nimbalyst/screenshot-service',
+      deps['@nimbalyst/screenshot-service']
+    );
+    imports['@nimbalyst/datamodel-platform-service'] = createModuleUrl(
+      '@nimbalyst/datamodel-platform-service',
+      deps['@nimbalyst/datamodel-platform-service']
+    );
+
+    // Register the import map with es-module-shims
+    importShim.addImportMap({ imports });
+
+    console.log('[ExtensionPlatformService] Import map initialized with', Object.keys(imports).length, 'entries');
+    this.importMapInitialized = true;
   }
 
   /**
@@ -126,37 +225,28 @@ export class ExtensionPlatformServiceImpl implements ExtensionPlatformService {
   /**
    * Load a JavaScript module from the given path.
    *
-   * Extensions are bundled as ES modules with externals for React, Zustand, etc.
-   * We load them by reading the JS content and creating a blob URL, after
-   * transforming the external imports to use the host's dependencies.
+   * Extensions are bundled as ES modules with externals for React, Lexical, etc.
+   * We use es-module-shims with an import map to resolve bare specifiers.
+   * This is more robust than regex-based transformation of minified code.
    */
   async loadModule(modulePath: string): Promise<ExtensionModule> {
     try {
       console.log('[ExtensionPlatformService] Loading module:', modulePath);
 
+      // Initialize import map on first load
+      this.initializeImportMap();
+
       // Read the module source
       const source = await this.readFile(modulePath);
-      // console.log('[ExtensionPlatformService] Module source loaded, length:', source.length);
 
-      // Ensure host dependencies are available globally
-      this.exposeHostDependencies();
-
-      // Transform the imports to use our provided modules
-      const transformedSource = this.transformImports(source);
-
-      // Create blob URL
-      const blob = new Blob([transformedSource], { type: 'application/javascript' });
+      // Create blob URL - NO transformation needed!
+      // The import map handles bare specifier resolution
+      const blob = new Blob([source], { type: 'application/javascript' });
       const blobUrl = URL.createObjectURL(blob);
 
       try {
-        // Dynamic import the blob URL
-        // console.log('[ExtensionPlatformService] Importing blob URL...');
-        const module = await import(/* @vite-ignore */ blobUrl);
-        // console.log('[ExtensionPlatformService] Module loaded:', Object.keys(module));
-
-        // Debug: Check for aiTools in module
-        // console.log('[ExtensionPlatformService] module.aiTools:', module.aiTools);
-        // console.log('[ExtensionPlatformService] module.default?.aiTools:', module.default?.aiTools);
+        // Use importShim which respects our import map
+        const module = await importShim(blobUrl);
 
         // Normalize to ExtensionModule interface
         const extensionModule: ExtensionModule = {
@@ -164,19 +254,12 @@ export class ExtensionPlatformServiceImpl implements ExtensionPlatformService {
           deactivate: module.deactivate || module.default?.deactivate,
           components: module.components || module.default?.components || {},
           aiTools: module.aiTools || module.default?.aiTools || [],
-          // Lexical integration
           nodes: module.nodes || module.default?.nodes || {},
           transformers: module.transformers || module.default?.transformers || {},
           hostComponents: module.hostComponents || module.default?.hostComponents || {},
           slashCommandHandlers: module.slashCommandHandlers || module.default?.slashCommandHandlers || {},
         };
 
-        // console.log('[ExtensionPlatformService] Extension module components:', Object.keys(extensionModule.components || {}));
-        // console.log('[ExtensionPlatformService] Extension module aiTools count:', extensionModule.aiTools?.length ?? 0);
-        // console.log('[ExtensionPlatformService] Extension module nodes:', Object.keys(extensionModule.nodes || {}));
-        // console.log('[ExtensionPlatformService] Extension module transformers:', Object.keys(extensionModule.transformers || {}));
-        // console.log('[ExtensionPlatformService] Extension module hostComponents:', Object.keys(extensionModule.hostComponents || {}));
-        // console.log('[ExtensionPlatformService] Extension module slashCommandHandlers:', Object.keys(extensionModule.slashCommandHandlers || {}));
         return extensionModule;
       } finally {
         // Clean up blob URL
@@ -258,224 +341,6 @@ export class ExtensionPlatformServiceImpl implements ExtensionPlatformService {
     };
 
     console.log('[ExtensionPlatformService] Host dependencies exposed');
-  }
-
-  /**
-   * Transform ES module imports to use the host's dependencies.
-   * This is necessary because blob URLs can't resolve bare module imports.
-   */
-  private transformImports(source: string): string {
-    // The extension is bundled with externals, so it has imports like:
-    // import React, { useState, useEffect } from 'react'
-    // import { create } from 'zustand'
-    //
-    // We transform these to use the globally exposed dependencies.
-
-    let transformed = source;
-
-    // Helper to convert "X as Y" to "X: Y" for destructuring
-    // ES import syntax uses "as", but destructuring uses ":"
-    // Note: JavaScript identifiers can include $ and _, so we use a broader pattern
-    const convertAsToColon = (imports: string): string => {
-      return imports.replace(/([\w$]+)\s+as\s+([\w$]+)/g, '$1: $2');
-    };
-
-    // Handle: import defaultExport, { named1, named2 as alias } from 'react'
-    // This is the most complex pattern - default + named imports
-        // Note: Use [\w$]+ to match identifiers that include $ (like $t from minification)
-    transformed = transformed.replace(
-      /import\s+([\w$]+)\s*,\s*{([^}]+)}\s+from\s+['"]react['"]/g,
-      (_match, defaultExport, namedImports) => {
-        const converted = convertAsToColon(namedImports);
-        return `const ${defaultExport} = window.__nimbalyst_extensions.react; const {${converted}} = window.__nimbalyst_extensions.react`;
-      }
-    );
-
-    // Handle: import defaultExport from 'react'
-    transformed = transformed.replace(
-      /import\s+([\w$]+)\s+from\s+['"]react['"]/g,
-      'const $1 = window.__nimbalyst_extensions.react'
-    );
-
-    // Handle: import * as X from 'react'
-    transformed = transformed.replace(
-      /import\s+\*\s+as\s+([\w$]+)\s+from\s+['"]react['"]/g,
-      'const $1 = window.__nimbalyst_extensions.react'
-    );
-
-    // Handle: import { X, Y as Z } from 'react'
-    transformed = transformed.replace(
-      /import\s+{([^}]+)}\s+from\s+['"]react['"]/g,
-      (_match, namedImports) => {
-        const converted = convertAsToColon(namedImports);
-        return `const {${converted}} = window.__nimbalyst_extensions.react`;
-      }
-    );
-
-    // Handle: import 'react-dom' (side-effect only)
-    transformed = transformed.replace(
-      /import\s+['"]react-dom['"]\s*;?/g,
-      '/* react-dom side effect import removed */'
-    );
-
-    // Handle: import 'react-dom/client' (side-effect only)
-    transformed = transformed.replace(
-      /import\s+['"]react-dom\/client['"]\s*;?/g,
-      '/* react-dom/client side effect import removed */'
-    );
-
-    // Handle: import X from 'react-dom/client'
-    transformed = transformed.replace(
-      /import\s+([\w$]+)\s+from\s+['"]react-dom\/client['"]/g,
-      'const $1 = window.__nimbalyst_extensions["react-dom/client"]'
-    );
-
-    // Handle: import { X as Y } from 'react-dom/client'
-    transformed = transformed.replace(
-      /import\s+{([^}]+)}\s+from\s+['"]react-dom\/client['"]/g,
-      (_match, namedImports) => {
-        const converted = convertAsToColon(namedImports);
-        return `const {${converted}} = window.__nimbalyst_extensions["react-dom/client"]`;
-      }
-    );
-
-    // Handle: import X from 'react-dom'
-    transformed = transformed.replace(
-      /import\s+([\w$]+)\s+from\s+['"]react-dom['"]/g,
-      'const $1 = window.__nimbalyst_extensions["react-dom"]'
-    );
-
-    // Handle: import { X as Y } from 'react-dom'
-    transformed = transformed.replace(
-      /import\s+{([^}]+)}\s+from\s+['"]react-dom['"]/g,
-      (_match, namedImports) => {
-        const converted = convertAsToColon(namedImports);
-        return `const {${converted}} = window.__nimbalyst_extensions["react-dom"]`;
-      }
-    );
-
-    // Handle: import { X as Y } from 'react/jsx-runtime'
-    transformed = transformed.replace(
-      /import\s+{([^}]+)}\s+from\s+['"]react\/jsx-runtime['"]/g,
-      (_match, namedImports) => {
-        const converted = convertAsToColon(namedImports);
-        return `const {${converted}} = window.__nimbalyst_extensions["react/jsx-runtime"]`;
-      }
-    );
-
-    // Handle: import { X as Y } from 'react/jsx-dev-runtime'
-    transformed = transformed.replace(
-      /import\s+{([^}]+)}\s+from\s+['"]react\/jsx-dev-runtime['"]/g,
-      (_match, namedImports) => {
-        const converted = convertAsToColon(namedImports);
-        return `const {${converted}} = window.__nimbalyst_extensions["react/jsx-dev-runtime"]`;
-      }
-    );
-
-    // NOTE: zustand, html2canvas, pdfjs-dist, virtua are NOT shared
-    // Extensions should bundle these themselves for version independence
-
-    // Handle: import { X } from 'lexical'
-    transformed = transformed.replace(
-      /import\s+{([^}]+)}\s+from\s+['"]lexical['"]/g,
-      (_match, namedImports) => {
-        const converted = convertAsToColon(namedImports);
-        return `const {${converted}} = window.__nimbalyst_extensions.lexical`;
-      }
-    );
-
-    // Handle: import * as X from 'lexical'
-    transformed = transformed.replace(
-      /import\s+\*\s+as\s+([\w$]+)\s+from\s+['"]lexical['"]/g,
-      'const $1 = window.__nimbalyst_extensions.lexical'
-    );
-
-    // Handle: import { X } from '@lexical/react/LexicalComposerContext'
-    transformed = transformed.replace(
-      /import\s+{([^}]+)}\s+from\s+['"]@lexical\/react\/LexicalComposerContext['"]/g,
-      (_match, namedImports) => {
-        const converted = convertAsToColon(namedImports);
-        return `const {${converted}} = window.__nimbalyst_extensions["@lexical/react/LexicalComposerContext"]`;
-      }
-    );
-
-    // Handle: import { X } from '@lexical/react/useLexicalEditable'
-    transformed = transformed.replace(
-      /import\s+{([^}]+)}\s+from\s+['"]@lexical\/react\/useLexicalEditable['"]/g,
-      (_match, namedImports) => {
-        const converted = convertAsToColon(namedImports);
-        return `const {${converted}} = window.__nimbalyst_extensions["@lexical/react/useLexicalEditable"]`;
-      }
-    );
-
-    // Handle: import { X } from '@lexical/react/useLexicalNodeSelection'
-    transformed = transformed.replace(
-      /import\s+{([^}]+)}\s+from\s+['"]@lexical\/react\/useLexicalNodeSelection['"]/g,
-      (_match, namedImports) => {
-        const converted = convertAsToColon(namedImports);
-        return `const {${converted}} = window.__nimbalyst_extensions["@lexical/react/useLexicalNodeSelection"]`;
-      }
-    );
-
-    // Handle: import { X } from '@lexical/utils'
-    transformed = transformed.replace(
-      /import\s+{([^}]+)}\s+from\s+['"]@lexical\/utils['"]/g,
-      (_match, namedImports) => {
-        const converted = convertAsToColon(namedImports);
-        return `const {${converted}} = window.__nimbalyst_extensions["@lexical/utils"]`;
-      }
-    );
-
-    // Handle: import { X } from '@lexical/markdown'
-    transformed = transformed.replace(
-      /import\s+{([^}]+)}\s+from\s+['"]@lexical\/markdown['"]/g,
-      (_match, namedImports) => {
-        const converted = convertAsToColon(namedImports);
-        return `const {${converted}} = window.__nimbalyst_extensions["@lexical/markdown"]`;
-      }
-    );
-
-    // Handle: import type { X } from 'lexical' - remove type-only imports
-    transformed = transformed.replace(
-      /import\s+type\s+{[^}]+}\s+from\s+['"]lexical['"]\s*;?/g,
-      '/* type import removed */'
-    );
-
-    // Handle: import type { X } from '@lexical/*' - remove type-only imports
-    transformed = transformed.replace(
-      /import\s+type\s+{[^}]+}\s+from\s+['"]@lexical\/[^'"]+['"]\s*;?/g,
-      '/* type import removed */'
-    );
-
-    // Handle: import { X } from '@nimbalyst/runtime/ui/icons/MaterialSymbol'
-    transformed = transformed.replace(
-      /import\s+{([^}]+)}\s+from\s+['"]@nimbalyst\/runtime\/ui\/icons\/MaterialSymbol['"]/g,
-      (_match, namedImports) => {
-        const converted = convertAsToColon(namedImports);
-        return `const {${converted}} = window.__nimbalyst_extensions["@nimbalyst/runtime/ui/icons/MaterialSymbol"]`;
-      }
-    );
-
-    // Generic handler for any @nimbalyst/runtime/* imports
-    // This catches any other runtime imports we might add in the future
-    transformed = transformed.replace(
-      /import\s+{([^}]+)}\s+from\s+['"](@nimbalyst\/runtime[^'"]+)['"]/g,
-      (_match, namedImports, modulePath) => {
-        const converted = convertAsToColon(namedImports);
-        return `const {${converted}} = window.__nimbalyst_extensions["${modulePath}"]`;
-      }
-    );
-
-    // Handle: import { X } from '@nimbalyst/editor-context'
-    transformed = transformed.replace(
-      /import\s+{([^}]+)}\s+from\s+['"]@nimbalyst\/editor-context['"]/g,
-      (_match, namedImports) => {
-        const converted = convertAsToColon(namedImports);
-        return `const {${converted}} = window.__nimbalyst_extensions["@nimbalyst/editor-context"]`;
-      }
-    );
-
-    return transformed;
   }
 
   /**

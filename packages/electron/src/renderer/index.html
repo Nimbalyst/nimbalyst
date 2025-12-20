@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Nimbalyst</title>
 
+    <!-- es-module-shims: enables dynamic import maps for extension loading -->
+    <!-- Must be loaded before any module scripts. Provides importShim() and importShim.addImportMap() -->
+    <!-- shimMode enables addImportMap() for dynamic import map registration -->
+    <script>window.esmsInitOptions = { shimMode: true };</script>
+    <script async src="./es-module-shims.js"></script>
+
     <script>
         // Determine theme FIRST, before any CSS - using SYNC API to prevent flash
         // IMPORTANT: getThemeSync() resolves 'system' to actual theme, so we get 'light' or 'dark' directly
