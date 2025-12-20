@@ -107,45 +107,45 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
 
             // Code block with language - use syntax highlighting
             if (language) {
-              return (
-                <OverflowWrapper>
-                  <SyntaxHighlighter
-                    style={{} as any}
-                    customStyle={codeStyle}
-                    language={language}
-                    PreTag="div"
-                    codeTagProps={{
-                      style: {
-                        fontFamily: 'var(--font-mono, monospace)',
-                        fontSize: 'inherit',
-                        background: 'none'
-                      }
-                    }}
-                    {...props}
-                  >
-                    {codeString}
-                  </SyntaxHighlighter>
-                </OverflowWrapper>
-              );
-            }
-
-            // Code block without language
-            return (
-              <OverflowWrapper>
-                <code
-                  className={className}
-                  style={{
-                    display: 'block',
-                    ...codeStyle,
-                    fontFamily: 'var(--font-mono, monospace)',
-                    color: 'var(--text-primary)'
+              const syntaxBlock = (
+                <SyntaxHighlighter
+                  style={{} as any}
+                  customStyle={codeStyle}
+                  language={language}
+                  PreTag="div"
+                  codeTagProps={{
+                    style: {
+                      fontFamily: 'var(--font-mono, monospace)',
+                      fontSize: 'inherit',
+                      background: 'none'
+                    }
                   }}
                   {...props}
                 >
-                  {children}
-                </code>
-              </OverflowWrapper>
+                  {codeString}
+                </SyntaxHighlighter>
+              );
+              // Only wrap multi-line blocks with OverflowWrapper
+              return isSingleLine ? syntaxBlock : <OverflowWrapper>{syntaxBlock}</OverflowWrapper>;
+            }
+
+            // Code block without language
+            const codeBlock = (
+              <code
+                className={className}
+                style={{
+                  display: isSingleLine ? 'inline-block' : 'block',
+                  ...codeStyle,
+                  fontFamily: 'var(--font-mono, monospace)',
+                  color: 'var(--text-primary)'
+                }}
+                {...props}
+              >
+                {children}
+              </code>
             );
+            // Only wrap multi-line blocks with OverflowWrapper
+            return isSingleLine ? codeBlock : <OverflowWrapper>{codeBlock}</OverflowWrapper>;
           },
           // Remove default pre wrapper - we handle styling in code component
           pre: ({ children }) => <>{children}</>,
