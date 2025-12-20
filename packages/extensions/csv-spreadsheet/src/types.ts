@@ -71,6 +71,19 @@ export interface SortConfig {
 }
 
 /**
+ * Clipboard data for copy/paste operations
+ */
+export interface ClipboardData {
+  /** The copied cell value */
+  value: string;
+  /** Source cell position */
+  sourceRow: number;
+  sourceCol: number;
+  /** Whether this was a cut operation */
+  isCut: boolean;
+}
+
+/**
  * Spreadsheet store state
  */
 export interface SpreadsheetState {
@@ -86,6 +99,8 @@ export interface SpreadsheetState {
   filePath: string;
   /** Original file delimiter (comma or tab) */
   delimiter: ',' | '\t';
+  /** Internal clipboard for cut/copy/paste */
+  clipboard: ClipboardData | null;
 }
 
 /**
@@ -112,6 +127,22 @@ export interface SpreadsheetActions {
   sortByColumn: (columnIndex: number, direction: SortDirection) => void;
   /** Toggle header row designation */
   toggleHeaders: () => void;
+  /** Copy selected cell to clipboard */
+  copyCell: () => void;
+  /** Cut selected cell to clipboard */
+  cutCell: () => void;
+  /** Paste from clipboard to selected cell */
+  pasteCell: () => void;
+  /** Clear selected cell contents */
+  clearCell: () => void;
+  /** Insert row above selected cell */
+  insertRowAbove: () => void;
+  /** Insert row below selected cell */
+  insertRowBelow: () => void;
+  /** Insert column to left of selected cell */
+  insertColumnLeft: () => void;
+  /** Insert column to right of selected cell */
+  insertColumnRight: () => void;
   /** Mark as clean (after save) */
   markClean: () => void;
   /** Set dirty callbacks */

@@ -50,6 +50,7 @@ export function createSpreadsheetStore() {
     sortConfig: null,
     filePath: '',
     delimiter: ',',
+    clipboard: null,
 
     // Load from CSV content
     loadFromCSV: (content: string, filePath: string) => {
@@ -271,6 +272,131 @@ export function createSpreadsheetStore() {
       });
 
       onDirtyChange?.(true);
+    },
+
+    // Copy selected cell to clipboard
+    copyCell: () => {
+      const state = get();
+      if (!state.selectedCell) return;
+
+      const { row, col } = state.selectedCell;
+      const cell = state.data.rows[row]?.[col];
+      if (!cell) return;
+
+      set({
+        clipboard: {
+          value: cell.raw,
+          sourceRow: row,
+          sourceCol: col,
+          isCut: false,
+        },
+      });
+    },
+
+    // Cut selected cell to clipboard
+    cutCell: () => {
+      const state = get();
+      if (!state.selectedCell) return;
+
+      const { row, col } = state.selectedCell;
+      const cell = state.data.rows[row]?.[col];
+      if (!cell) return;
+
+      set({
+        clipboard: {
+          value: cell.raw,
+          sourceRow: row,
+          sourceCol: col,
+          isCut: true,
+        },
+      });
+    },
+
+    // Paste from clipboard to selected cell
+    pasteCell: () => {
+      const state = get();
+      if (!state.selectedCell || !state.clipboard) return;
+
+      const { row, col } = state.selectedCell;
+      const { value, sourceRow, sourceCol, isCut } = state.clipboard;
+
+      // Update target cell
+      const newData = { ...state.data };
+      newData.rows = [...newData.rows];
+      newData.rows[row] = [...newData.rows[row]];
+
+      const cell = createCell(value);
+      if (isFormula(value)) {
+        const { value: computed, error } = evaluateFormula(value, newData, row, col);
+        cell.computed = computed;
+        cell.error = error;
+      }
+      newData.rows[row][col] = cell;
+
+      // If cut, clear the source cell
+      if (isCut && (sourceRow !== row || sourceCol !== col)) {
+        newData.rows[sourceRow] = [...newData.rows[sourceRow]];
+        newData.rows[sourceRow][sourceCol] = { raw: '', computed: '' };
+      }
+
+      const recalculated = recalculateFormulas(newData);
+
+      set({
+        data: recalculated,
+        isDirty: true,
+        clipboard: isCut ? null : state.clipboard,
+      });
+
+      onDirtyChange?.(true);
+    },
+
+    // Clear selected cell contents
+    clearCell: () => {
+      const state = get();
+      if (!state.selectedCell) return;
+
+      const { row, col } = state.selectedCell;
+      const newData = { ...state.data };
+      newData.rows = [...newData.rows];
+      newData.rows[row] = [...newData.rows[row]];
+      newData.rows[row][col] = { raw: '', computed: '' };
+
+      const recalculated = recalculateFormulas(newData);
+
+      set({
+        data: recalculated,
+        isDirty: true,
+      });
+
+      onDirtyChange?.(true);
+    },
+
+    // Insert row above selected cell
+    insertRowAbove: () => {
+      const state = get();
+      if (!state.selectedCell) return;
+      get().addRow(state.selectedCell.row);
+    },
+
+    // Insert row below selected cell
+    insertRowBelow: () => {
+      const state = get();
+      if (!state.selectedCell) return;
+      get().addRow(state.selectedCell.row + 1);
+    },
+
+    // Insert column to left of selected cell
+    insertColumnLeft: () => {
+      const state = get();
+      if (!state.selectedCell) return;
+      get().addColumn(state.selectedCell.col);
+    },
+
+    // Insert column to right of selected cell
+    insertColumnRight: () => {
+      const state = get();
+      if (!state.selectedCell) return;
+      get().addColumn(state.selectedCell.col + 1);
     },
 
     // Mark as clean

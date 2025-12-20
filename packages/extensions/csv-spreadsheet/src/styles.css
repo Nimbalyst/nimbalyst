@@ -192,3 +192,47 @@
 .spreadsheet-grid-container::-webkit-scrollbar-thumb:hover {
   background-color: var(--text-tertiary);
 }
+
+/* Context Menu */
+.context-menu {
+  position: absolute;
+  z-index: 1000;
+  min-width: 160px;
+  padding: 4px 0;
+  background-color: var(--surface-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  font-size: 13px;
+}
+
+.context-menu-item {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background-color 0.1s ease;
+}
+
+.context-menu-item:hover:not(:disabled) {
+  background-color: var(--surface-hover);
+}
+
+.context-menu-item:active:not(:disabled) {
+  background-color: var(--surface-tertiary);
+}
+
+.context-menu-item.disabled {
+  color: var(--text-tertiary);
+  cursor: not-allowed;
+}
+
+.context-menu-separator {
+  height: 1px;
+  margin: 4px 0;
+  background-color: var(--border-primary);
+}

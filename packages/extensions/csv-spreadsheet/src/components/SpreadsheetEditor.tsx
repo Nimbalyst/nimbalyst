@@ -13,6 +13,7 @@ import { columnIndexToLetter, generateColumnHeaders } from '../utils/csvParser';
 import { isFormula } from '../utils/formulaEngine';
 import { SpreadsheetToolbar } from './SpreadsheetToolbar';
 import { FormulaBar } from './FormulaBar';
+import { ContextMenu, type ContextMenuItem } from './ContextMenu';
 import { registerEditorStore, unregisterEditorStore } from '../aiTools';
 
 /**
@@ -81,6 +82,10 @@ export function SpreadsheetEditor({
 
   // Track selected cell for formula bar
   const [selectedCell, setSelectedCell] = useState<{ row: number; col: number } | null>(null);
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const gridContainerRef = useRef<HTMLDivElement>(null);
 
   // Load initial content
   useEffect(() => {
@@ -266,6 +271,120 @@ export function SpreadsheetEditor({
     forceUpdate((n) => n + 1);
   }, [store]);
 
+  // Context menu handler
+  const handleContextMenu = useCallback((event: React.MouseEvent) => {
+    event.preventDefault();
+    const container = gridContainerRef.current;
+    if (!container) return;
+
+    const rect = container.getBoundingClientRect();
+    setContextMenu({
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    });
+  }, []);
+
+  const handleCloseContextMenu = useCallback(() => {
+    setContextMenu(null);
+  }, []);
+
+  // Build context menu items
+  const contextMenuItems = useMemo((): ContextMenuItem[] => {
+    const s = store.getState();
+    const hasClipboard = !!s.clipboard;
+
+    return [
+      {
+        label: 'Cut',
+        action: () => {
+          store.getState().cutCell();
+          forceUpdate((n) => n + 1);
+        },
+        disabled: !selectedCell,
+      },
+      {
+        label: 'Copy',
+        action: () => {
+          store.getState().copyCell();
+          forceUpdate((n) => n + 1);
+        },
+        disabled: !selectedCell,
+      },
+      {
+        label: 'Paste',
+        action: () => {
+          store.getState().pasteCell();
+          forceUpdate((n) => n + 1);
+        },
+        disabled: !selectedCell || !hasClipboard,
+      },
+      {
+        label: 'Clear',
+        action: () => {
+          store.getState().clearCell();
+          forceUpdate((n) => n + 1);
+        },
+        disabled: !selectedCell,
+      },
+      { label: '', action: () => {}, separator: true },
+      {
+        label: 'Insert Row Above',
+        action: () => {
+          store.getState().insertRowAbove();
+          forceUpdate((n) => n + 1);
+        },
+        disabled: !selectedCell,
+      },
+      {
+        label: 'Insert Row Below',
+        action: () => {
+          store.getState().insertRowBelow();
+          forceUpdate((n) => n + 1);
+        },
+        disabled: !selectedCell,
+      },
+      {
+        label: 'Delete Row',
+        action: () => {
+          if (selectedCell) {
+            store.getState().deleteRow(selectedCell.row);
+            setSelectedCell(null);
+            forceUpdate((n) => n + 1);
+          }
+        },
+        disabled: !selectedCell,
+      },
+      { label: '', action: () => {}, separator: true },
+      {
+        label: 'Insert Column Left',
+        action: () => {
+          store.getState().insertColumnLeft();
+          forceUpdate((n) => n + 1);
+        },
+        disabled: !selectedCell,
+      },
+      {
+        label: 'Insert Column Right',
+        action: () => {
+          store.getState().insertColumnRight();
+          forceUpdate((n) => n + 1);
+        },
+        disabled: !selectedCell,
+      },
+      {
+        label: 'Delete Column',
+        action: () => {
+          if (selectedCell) {
+            store.getState().deleteColumn(selectedCell.col);
+            setSelectedCell(null);
+            forceUpdate((n) => n + 1);
+          }
+        },
+        disabled: !selectedCell,
+      },
+    ];
+  }, [store, selectedCell]);
+
   return (
     <div className="spreadsheet-editor" data-theme={theme}>
       <FormulaBar
@@ -290,7 +409,11 @@ export function SpreadsheetEditor({
         hasHeaders={data.hasHeaders}
         sortConfig={sortConfig}
       />
-      <div className="spreadsheet-grid-container">
+      <div
+        ref={gridContainerRef}
+        className="spreadsheet-grid-container"
+        onContextMenu={handleContextMenu}
+      >
         <RevoGrid
           columns={columns}
           source={source}
@@ -301,6 +424,14 @@ export function SpreadsheetEditor({
           onAfteredit={handleAfterEdit}
           onBeforefocuslost={handleFocusCell}
         />
+        {contextMenu && (
+          <ContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            items={contextMenuItems}
+            onClose={handleCloseContextMenu}
+          />
+        )}
       </div>
     </div>
   );
