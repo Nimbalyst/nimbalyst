@@ -21,6 +21,11 @@ interface BackupMetadata {
     size: number;
     verified: boolean;
   } | null;
+  oldestBackup: {
+    timestamp: string;
+    size: number;
+    verified: boolean;
+  } | null;
   lastBackupAttempt: string | null;
   lastSuccessfulBackup: string | null;
 }
@@ -41,6 +46,7 @@ export class DatabaseBackupService {
     this.metadata = {
       currentBackup: null,
       previousBackup: null,
+      oldestBackup: null,
       lastBackupAttempt: null,
       lastSuccessfulBackup: null
     };
@@ -60,7 +66,9 @@ export class DatabaseBackupService {
       logger.main.info('[Backup Service] Initialized', {
         backupDir: this.backupDir,
         hasCurrentBackup: !!this.metadata.currentBackup,
-        hasPreviousBackup: !!this.metadata.previousBackup
+        hasPreviousBackup: !!this.metadata.previousBackup,
+        hasOldestBackup: !!this.metadata.oldestBackup,
+        currentSizeMB: this.metadata.currentBackup ? (this.metadata.currentBackup.size / 1024 / 1024).toFixed(1) : null
       });
     } catch (error) {
       logger.main.error('[Backup Service] Failed to initialize:', error);
@@ -172,8 +180,14 @@ export class DatabaseBackupService {
 
   /**
    * Verify that a backup is valid by attempting to open it with PGlite
+   * Also checks data integrity (session/history counts)
    */
-  private async verifyBackup(backupPath: string): Promise<boolean> {
+  private async verifyBackup(backupPath: string): Promise<{
+    valid: boolean;
+    hasData?: boolean;
+    sessionCount?: number;
+    historyCount?: number;
+  }> {
     try {
       logger.main.info('[Backup Service] Verifying backup:', backupPath);
 
@@ -182,15 +196,24 @@ export class DatabaseBackupService {
       const result = await this.dbWorker.verifyBackup(backupPath);
 
       if (result.valid) {
-        logger.main.info('[Backup Service] Backup verification successful');
-        return true;
+        logger.main.info('[Backup Service] Backup verification successful', {
+          hasData: result.hasData,
+          sessionCount: result.sessionCount,
+          historyCount: result.historyCount
+        });
+        return {
+          valid: true,
+          hasData: result.hasData,
+          sessionCount: result.sessionCount,
+          historyCount: result.historyCount
+        };
       } else {
         logger.main.error('[Backup Service] Backup verification failed:', result.error);
-        return false;
+        return { valid: false };
       }
     } catch (error) {
       logger.main.error('[Backup Service] Backup verification error:', error);
-      return false;
+      return { valid: false };
     }
   }
 
@@ -228,22 +251,39 @@ export class DatabaseBackupService {
       const backupSize = await this.getDirectorySize(tempBackupPath);
 
       // Verify the backup
-      const isValid = await this.verifyBackup(tempBackupPath);
+      const verification = await this.verifyBackup(tempBackupPath);
 
-      if (!isValid) {
+      if (!verification.valid) {
         // Verification failed - clean up temp backup
         await fs.rm(tempBackupPath, { recursive: true, force: true });
         return { success: false, error: 'Backup verification failed' };
       }
 
-      // Verification succeeded - rotate backups
-      await this.rotateBackups(tempBackupPath, timestamp, backupSize);
+      // Additional data integrity check: if current backup has data but new one doesn't,
+      // this is suspicious and we should log a warning
+      const currentHasData = this.metadata.currentBackup && this.metadata.currentBackup.size > 50 * 1024 * 1024;
+      if (currentHasData && !verification.hasData) {
+        logger.main.warn('[Backup Service] New backup has no data but current backup does - will rely on size check', {
+          newSessionCount: verification.sessionCount,
+          newHistoryCount: verification.historyCount
+        });
+      }
 
-      this.metadata.lastSuccessfulBackup = timestamp;
-      await this.saveMetadata();
+      // Verification succeeded - rotate backups (may be rejected if size is suspicious)
+      const rotated = await this.rotateBackups(tempBackupPath, timestamp, backupSize);
 
-      logger.main.info('[Backup Service] Backup created successfully');
-      return { success: true };
+      if (rotated) {
+        this.metadata.lastSuccessfulBackup = timestamp;
+        await this.saveMetadata();
+        logger.main.info('[Backup Service] Backup created and rotated successfully');
+        return { success: true };
+      } else {
+        // Rotation was rejected due to suspicious size - this is actually a success
+        // for protecting data, but we should log it
+        await this.saveMetadata();
+        logger.main.info('[Backup Service] Backup rejected due to suspicious size - existing backups preserved');
+        return { success: true }; // Return success since we protected the data
+      }
 
     } catch (error: any) {
       logger.main.error('[Backup Service] Failed to create backup:', error);
@@ -253,20 +293,52 @@ export class DatabaseBackupService {
   }
 
   /**
-   * Rotate backups: previous -> delete, current -> previous, new -> current
+   * Rotate backups: oldest -> delete, previous -> oldest, current -> previous, new -> current
+   *
+   * CRITICAL: Size-aware rotation to prevent data loss
+   * If new backup is significantly smaller than current, we reject it to avoid
+   * replacing a valid large backup with a corrupted/empty small one.
    */
   private async rotateBackups(
     newBackupPath: string,
     timestamp: string,
     size: number
-  ): Promise<void> {
+  ): Promise<boolean> {
     const currentPath = path.join(this.backupDir, 'pglite-db.backup-current');
     const previousPath = path.join(this.backupDir, 'pglite-db.backup-previous');
+    const oldestPath = path.join(this.backupDir, 'pglite-db.backup-oldest');
 
-    // Delete previous backup if it exists
+    // Size-aware rotation check: Don't replace large backups with small ones
+    const currentSize = this.metadata.currentBackup?.size ?? 0;
+    if (currentSize > 0) {
+      const sizeRatio = size / currentSize;
+
+      // If new backup is less than 50% of current size, it's suspicious
+      if (sizeRatio < 0.5) {
+        logger.main.warn('[Backup Service] New backup is suspiciously smaller than current - rejecting rotation', {
+          newSize: size,
+          currentSize,
+          ratio: sizeRatio.toFixed(2),
+          newSizeMB: (size / 1024 / 1024).toFixed(1),
+          currentSizeMB: (currentSize / 1024 / 1024).toFixed(1)
+        });
+        // Clean up the rejected backup
+        await fs.rm(newBackupPath, { recursive: true, force: true });
+        return false;
+      }
+    }
+
+    // Delete oldest backup if it exists
+    if (fsSync.existsSync(oldestPath)) {
+      logger.main.info('[Backup Service] Deleting oldest backup');
+      await fs.rm(oldestPath, { recursive: true, force: true });
+    }
+
+    // Move previous to oldest if it exists
     if (fsSync.existsSync(previousPath)) {
-      logger.main.info('[Backup Service] Deleting previous backup');
-      await fs.rm(previousPath, { recursive: true, force: true });
+      logger.main.info('[Backup Service] Moving previous backup to oldest');
+      await fs.rename(previousPath, oldestPath);
+      this.metadata.oldestBackup = this.metadata.previousBackup;
     }
 
     // Move current to previous if it exists
@@ -285,6 +357,8 @@ export class DatabaseBackupService {
       size,
       verified: true
     };
+
+    return true;
   }
 
   /**
@@ -293,6 +367,7 @@ export class DatabaseBackupService {
   async restoreFromBackup(): Promise<{ success: boolean; error?: string; source?: string }> {
     const currentPath = path.join(this.backupDir, 'pglite-db.backup-current');
     const previousPath = path.join(this.backupDir, 'pglite-db.backup-previous');
+    const oldestPath = path.join(this.backupDir, 'pglite-db.backup-oldest');
 
     // Try current backup first
     if (fsSync.existsSync(currentPath)) {
@@ -312,6 +387,15 @@ export class DatabaseBackupService {
       }
     }
 
+    // Fall back to oldest backup
+    if (fsSync.existsSync(oldestPath)) {
+      logger.main.info('[Backup Service] Attempting restore from oldest backup');
+      const result = await this.restoreFromPath(oldestPath, 'oldest');
+      if (result.success) {
+        return result;
+      }
+    }
+
     return { success: false, error: 'No valid backups available' };
   }
 
@@ -324,10 +408,16 @@ export class DatabaseBackupService {
   ): Promise<{ success: boolean; error?: string; source?: string }> {
     try {
       // Verify backup before restoring
-      const isValid = await this.verifyBackup(backupPath);
-      if (!isValid) {
+      const verification = await this.verifyBackup(backupPath);
+      if (!verification.valid) {
         return { success: false, error: `${source} backup verification failed` };
       }
+
+      logger.main.info(`[Backup Service] Verified ${source} backup before restore`, {
+        hasData: verification.hasData,
+        sessionCount: verification.sessionCount,
+        historyCount: verification.historyCount
+      });
 
       // Close the database before restoring
       logger.main.info('[Backup Service] Closing database for restore');
@@ -363,8 +453,9 @@ export class DatabaseBackupService {
   hasBackups(): boolean {
     const currentPath = path.join(this.backupDir, 'pglite-db.backup-current');
     const previousPath = path.join(this.backupDir, 'pglite-db.backup-previous');
+    const oldestPath = path.join(this.backupDir, 'pglite-db.backup-oldest');
 
-    return fsSync.existsSync(currentPath) || fsSync.existsSync(previousPath);
+    return fsSync.existsSync(currentPath) || fsSync.existsSync(previousPath) || fsSync.existsSync(oldestPath);
   }
 
   /**

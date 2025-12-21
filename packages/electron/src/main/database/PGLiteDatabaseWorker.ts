@@ -447,8 +447,15 @@ export class PGLiteDatabaseWorker {
 
   /**
    * Verify a backup database
+   * Returns validity status plus data integrity info (session/history counts)
    */
-  async verifyBackup(backupPath: string): Promise<{ valid: boolean; error?: string }> {
+  async verifyBackup(backupPath: string): Promise<{
+    valid: boolean;
+    error?: string;
+    hasData?: boolean;
+    sessionCount?: number;
+    historyCount?: number;
+  }> {
     return await this.sendMessage('verifyBackup', { backupPath });
   }
 

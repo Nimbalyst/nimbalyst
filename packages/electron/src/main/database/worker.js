@@ -650,15 +650,41 @@ class PGLiteWorker {
       // Execute a simple query to verify it works
       await testDb.query('SELECT 1');
 
+      // Check data counts in key tables for integrity verification
+      let sessionCount = 0;
+      let historyCount = 0;
+      try {
+        const countResult = await testDb.query(`
+          SELECT
+            (SELECT COUNT(*) FROM ai_sessions) as sessions,
+            (SELECT COUNT(*) FROM document_history) as history
+        `);
+        if (countResult.rows && countResult.rows[0]) {
+          sessionCount = parseInt(countResult.rows[0].sessions) || 0;
+          historyCount = parseInt(countResult.rows[0].history) || 0;
+        }
+      } catch (countError) {
+        // Tables might not exist yet - that's okay for a fresh database
+        console.log('[PGLite Worker] Could not count records (tables may not exist):', countError.message);
+      }
+
       // Close cleanly
       await testDb.close();
 
-      console.log('[PGLite Worker] Backup verification successful');
+      console.log('[PGLite Worker] Backup verification successful', {
+        sessionCount,
+        historyCount
+      });
 
       return {
         id: message.id,
         success: true,
-        data: { valid: true }
+        data: {
+          valid: true,
+          sessionCount,
+          historyCount,
+          hasData: sessionCount > 0 || historyCount > 0
+        }
       };
     } catch (error) {
       console.error('[PGLite Worker] Backup verification failed:', error);
