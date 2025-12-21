@@ -109,10 +109,19 @@ export class PermissionService {
    * Get or create a permission engine for a workspace
    */
   private getEngine(workspacePath: string): PermissionEngine {
+    const workspaceName = workspacePath.split('/').pop() || workspacePath;
     let engine = this.engines.get(workspacePath);
     if (!engine) {
       const stored = getAgentPermissions(workspacePath);
-      logger.agentSecurity.info('[PermissionService] Loading permissions for workspace:', workspacePath, 'stored:', stored ? { isTrusted: stored.isTrusted, mode: stored.permissionMode } : 'none');
+      logger.agentSecurity.info(`[PermissionService:${workspaceName}] Loading permissions:`, {
+        workspace: workspacePath,
+        stored: stored ? {
+          isTrusted: stored.isTrusted,
+          mode: stored.permissionMode,
+          additionalDirectories: stored.additionalDirectories?.map(d => d.path) || [],
+          allowedUrlPatterns: stored.allowedUrlPatterns?.map(u => u.pattern) || [],
+        } : 'none',
+      });
       const permissions = toWorkspacePermissions(stored);
       engine = new PermissionEngine(workspacePath, permissions);
       this.engines.set(workspacePath, engine);
@@ -124,8 +133,15 @@ export class PermissionService {
    * Save engine permissions to store
    */
   private saveEngine(workspacePath: string, engine: PermissionEngine): void {
+    const workspaceName = workspacePath.split('/').pop() || workspacePath;
     const permissions = engine.getWorkspacePermissions();
-    logger.agentSecurity.info('[PermissionService] Saving permissions for workspace:', workspacePath, 'isTrusted:', permissions.isTrusted, 'mode:', permissions.permissionMode);
+    logger.agentSecurity.info(`[PermissionService:${workspaceName}] Saving permissions:`, {
+      workspace: workspacePath,
+      isTrusted: permissions.isTrusted,
+      mode: permissions.permissionMode,
+      additionalDirectories: permissions.additionalDirectories.map(d => d.path),
+      allowedUrlPatterns: permissions.allowedUrlPatterns.map(u => u.pattern),
+    });
     saveAgentPermissions(workspacePath, toAgentPermissions(permissions));
   }
 
@@ -142,7 +158,11 @@ export class PermissionService {
     decision: 'allow' | 'deny' | 'ask';
     request?: PermissionRequest;
   }> {
-    logger.agentSecurity.info('[PermissionService] evaluateCommand:', {
+    // Extract workspace name for clearer logs
+    const workspaceName = workspacePath.split('/').pop() || workspacePath;
+
+    logger.agentSecurity.info(`[PermissionService:${workspaceName}] evaluateCommand:`, {
+      workspace: workspacePath,
       toolName,
       toolDescription: toolDescription.slice(0, 100),
     });
@@ -157,23 +177,34 @@ export class PermissionService {
       displayName: e.action.displayName,
       decision: e.decision,
       reason: e.reason,
+      outsidePaths: e.outsidePaths,
     }));
 
-    logger.agentSecurity.info('[PermissionService] evaluation:', {
+    logger.agentSecurity.info(`[PermissionService:${workspaceName}] evaluation:`, {
+      workspace: workspacePath,
       overallDecision: evaluation.overallDecision,
       isTrusted: engine.isWorkspaceTrusted(),
       permissionMode: engine.getPermissionMode(),
       allowedPatterns: engine.getAllowedPatterns().map(p => p.pattern),
+      additionalDirectories: engine.getAdditionalDirectories().map(d => d.path),
       actions: actionDetails,
     });
 
     if (evaluation.overallDecision === 'allow') {
-      logger.agentSecurity.info('[PermissionService] ALLOWED:', { toolName, reason: actionDetails[0]?.reason });
+      logger.agentSecurity.info(`[PermissionService:${workspaceName}] ALLOWED:`, {
+        workspace: workspacePath,
+        toolName,
+        reason: actionDetails[0]?.reason,
+      });
       return { decision: 'allow' };
     }
 
     if (evaluation.overallDecision === 'deny') {
-      logger.agentSecurity.info('[PermissionService] DENIED:', { toolName, reason: actionDetails[0]?.reason });
+      logger.agentSecurity.info(`[PermissionService:${workspaceName}] DENIED:`, {
+        workspace: workspacePath,
+        toolName,
+        reason: actionDetails[0]?.reason,
+      });
       return { decision: 'deny' };
     }
 
@@ -182,12 +213,14 @@ export class PermissionService {
     if (request) {
       // Store the pending request so we can look it up when user responds
       this.pendingRequests.set(request.id, { workspacePath, sessionId, request });
-      logger.agentSecurity.info('[PermissionService] ASKING user for approval:', {
+      logger.agentSecurity.info(`[PermissionService:${workspaceName}] ASKING user for approval:`, {
+        workspace: workspacePath,
         requestId: request.id,
         toolName: request.toolName,
         patterns: request.actionsNeedingApproval.map(a => ({
           pattern: a.action.pattern,
           displayName: a.action.displayName,
+          outsidePaths: a.outsidePaths,
         })),
       });
     }
@@ -206,7 +239,10 @@ export class PermissionService {
     requestId: string,
     response: { decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' }
   ): void {
-    logger.agentSecurity.info('[PermissionService] applyPermissionResponse:', {
+    const workspaceName = workspacePath.split('/').pop() || workspacePath;
+
+    logger.agentSecurity.info(`[PermissionService:${workspaceName}] applyPermissionResponse:`, {
+      workspace: workspacePath,
       requestId,
       decision: response.decision,
       scope: response.scope,
@@ -215,16 +251,19 @@ export class PermissionService {
     // Look up the pending request
     const pending = this.pendingRequests.get(requestId);
     if (!pending) {
-      logger.agentSecurity.warn(`[PermissionService] No pending request found for requestId: ${requestId}`);
+      logger.agentSecurity.warn(`[PermissionService:${workspaceName}] No pending request found for requestId: ${requestId}`);
       return;
     }
+
+    const pendingWorkspaceName = pending.workspacePath.split('/').pop() || pending.workspacePath;
 
     // Log what pattern is being saved
     const patterns = pending.request.actionsNeedingApproval.map(a => ({
       pattern: a.action.pattern,
       displayName: a.action.displayName,
     }));
-    logger.agentSecurity.info('[PermissionService] Applying response to patterns:', {
+    logger.agentSecurity.info(`[PermissionService:${pendingWorkspaceName}] Applying response to patterns:`, {
+      workspace: pending.workspacePath,
       patterns,
       decision: response.decision,
       scope: response.scope,
@@ -245,14 +284,16 @@ export class PermissionService {
 
     // Save to persistent storage if scope is 'always'
     if (response.scope === 'always') {
-      logger.agentSecurity.info('[PermissionService] Saving patterns permanently (scope=always):', {
+      logger.agentSecurity.info(`[PermissionService:${pendingWorkspaceName}] Saving patterns permanently (scope=always):`, {
+        workspace: pending.workspacePath,
         patterns: patterns.map(p => p.pattern),
       });
       this.saveEngine(pending.workspacePath, engine);
 
       // Verify what was saved
       const savedPatterns = engine.getAllowedPatterns();
-      logger.agentSecurity.info('[PermissionService] Saved allowed patterns:', {
+      logger.agentSecurity.info(`[PermissionService:${pendingWorkspaceName}] Saved allowed patterns:`, {
+        workspace: pending.workspacePath,
         patterns: savedPatterns.map(p => ({ pattern: p.pattern, displayName: p.displayName })),
       });
     }
@@ -445,9 +486,20 @@ export class PermissionService {
    * Add an allowed URL pattern
    */
   public addAllowedUrlPattern(workspacePath: string, pattern: string, description: string): void {
+    const workspaceName = workspacePath.split('/').pop() || workspacePath;
     const engine = this.getEngine(workspacePath);
+    logger.agentSecurity.info(`[PermissionService:${workspaceName}] addAllowedUrlPattern:`, {
+      workspace: workspacePath,
+      pattern,
+      description,
+      existingPatterns: engine.getAllowedUrlPatterns().map(p => p.pattern),
+    });
     engine.addAllowedUrlPattern(pattern, description);
     this.saveEngine(workspacePath, engine);
+    logger.agentSecurity.info(`[PermissionService:${workspaceName}] addAllowedUrlPattern done:`, {
+      workspace: workspacePath,
+      newPatterns: engine.getAllowedUrlPatterns().map(p => p.pattern),
+    });
   }
 
   /**
@@ -463,8 +515,17 @@ export class PermissionService {
    * Check if a URL is allowed
    */
   public isUrlAllowed(workspacePath: string, url: string): boolean {
+    const workspaceName = workspacePath.split('/').pop() || workspacePath;
     const engine = this.getEngine(workspacePath);
-    return engine.isUrlAllowed(url);
+    const patterns = engine.getAllowedUrlPatterns();
+    const result = engine.isUrlAllowed(url);
+    logger.agentSecurity.info(`[PermissionService:${workspaceName}] isUrlAllowed:`, {
+      workspace: workspacePath,
+      url,
+      patterns: patterns.map(p => p.pattern),
+      result,
+    });
+    return result;
   }
 
   /**

@@ -50,18 +50,19 @@ describe('commandParser', () => {
       ]);
     });
 
-    it('should preserve quoted strings (quotes stripped by shell-quote)', () => {
-      // shell-quote correctly parses quoted strings as single tokens,
-      // then strips the quotes (matching real shell behavior)
+    it('should preserve quoted strings with special characters', () => {
+      // splitCompoundCommand re-quotes arguments that contain special characters
+      // to preserve them when the command is re-parsed
       expect(splitCompoundCommand('echo "hello && world" && ls')).toEqual([
-        'echo hello && world', // The && inside quotes is part of the argument, not an operator
+        'echo "hello && world"', // The && inside quotes is preserved by re-quoting
         'ls',
       ]);
     });
 
-    it('should preserve single-quoted strings (quotes stripped by shell-quote)', () => {
+    it('should preserve single-quoted strings with special characters', () => {
+      // Single quotes are converted to double quotes in the output
       expect(splitCompoundCommand("echo 'hello && world' && ls")).toEqual([
-        'echo hello && world',
+        'echo "hello && world"', // Re-quoted with double quotes
         'ls',
       ]);
     });

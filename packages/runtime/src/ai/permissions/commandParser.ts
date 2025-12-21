@@ -123,6 +123,18 @@ function isString(entry: ParseEntry): entry is string {
 }
 
 /**
+ * Quote an argument if it contains spaces or special characters
+ */
+function quoteArgIfNeeded(arg: string): string {
+  // If the argument contains spaces or shell special characters, quote it
+  if (/[\s"'\\$`!]/.test(arg)) {
+    // Use double quotes and escape any double quotes inside
+    return `"${arg.replace(/"/g, '\\"')}"`;
+  }
+  return arg;
+}
+
+/**
  * Split a command string by shell operators using shell-quote
  * Returns individual command segments separated by &&, ||, ;, |
  */
@@ -143,7 +155,7 @@ export function splitCompoundCommand(command: string): string[] {
       if (['&&', '||', ';', '|'].includes(op)) {
         // Command boundary - save current command
         if (currentArgs.length > 0) {
-          commands.push(currentArgs.join(' '));
+          commands.push(currentArgs.map(quoteArgIfNeeded).join(' '));
           currentArgs = [];
         }
       } else if (op === 'glob') {
@@ -161,7 +173,7 @@ export function splitCompoundCommand(command: string): string[] {
 
   // Don't forget the last command
   if (currentArgs.length > 0) {
-    commands.push(currentArgs.join(' '));
+    commands.push(currentArgs.map(quoteArgIfNeeded).join(' '));
   }
 
   return commands;

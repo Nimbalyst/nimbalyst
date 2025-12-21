@@ -469,6 +469,24 @@ app.whenReady().then(async () => {
       });
     }
 
+    // Inject URL permission checker for WebFetch/WebSearch
+    // This allows the runtime to check if URLs match allowed patterns
+    ClaudeCodeProvider.setUrlPermissionChecker((workspacePath, url) => {
+      return permissionService.isUrlAllowed(workspacePath, url);
+    });
+
+    // Inject URL pattern saver for WebFetch "Always" approvals
+    // This saves hostname patterns when user approves with "Always"
+    ClaudeCodeProvider.setUrlPatternSaver((workspacePath, pattern, description) => {
+      permissionService.addAllowedUrlPattern(workspacePath, pattern, description);
+    });
+
+    // Inject additional directory saver for file access "Always" approvals
+    // This saves directories when user approves access outside workspace with "Always"
+    ClaudeCodeProvider.setAdditionalDirectorySaver((workspacePath, directory, canWrite) => {
+      permissionService.addAdditionalDirectory(workspacePath, directory, canWrite);
+    });
+
     registerMockupHandlers();
     registerDataModelHandlers();
     registerExtensionHandlers();

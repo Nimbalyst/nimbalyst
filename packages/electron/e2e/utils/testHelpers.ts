@@ -108,6 +108,27 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   caseToggle: '[data-testid="case-toggle"]',
   regexToggle: '[data-testid="regex-toggle"]',
   matchCounter: '[data-testid="match-counter"]',
+
+  // Trust/Permissions
+  trustIndicator: '.trust-indicator',
+  trustIndicatorTrusted: '.trust-indicator.trusted',
+  trustIndicatorUntrusted: '.trust-indicator.untrusted',
+  trustMenu: '.trust-menu',
+  trustToast: '.project-trust-toast',
+  trustToastOverlay: '.project-trust-toast-overlay',
+  trustToastOption: '.project-trust-toast-option',
+  trustToastSmartPermissions: '.project-trust-toast-option:has-text("Smart Permissions")',
+  trustToastAlwaysAllow: '.project-trust-toast-option:has-text("Always Allow")',
+
+  // Permission confirmation (inline tool permission request)
+  permissionConfirmation: '.tool-permission-confirmation',
+  permissionConfirmationTitle: '.tool-permission-confirmation-title',
+  permissionConfirmationCommand: '.tool-permission-confirmation-current-action-command',
+  permissionConfirmationDenyButton: '.tool-permission-confirmation-button--deny',
+  permissionConfirmationAllowOnceButton: '.tool-permission-confirmation-button--once',
+  permissionConfirmationAllowSessionButton: '.tool-permission-confirmation-button--session',
+  permissionConfirmationAllowAlwaysButton: '.tool-permission-confirmation-button--always',
+  permissionConfirmationWarning: '.tool-permission-confirmation-warning',
 };
 
 /**
@@ -621,4 +642,67 @@ export function getTabByFileName(page: Page, fileName: string) {
 export async function isTabVisible(page: Page, fileName: string): Promise<boolean> {
   const tab = getTabByFileName(page, fileName);
   return await tab.isVisible().catch(() => false);
+}
+
+/**
+ * Trust workspace with Smart Permissions mode via the trust toast
+ * Use this at the start of tests that need a trusted workspace
+ */
+export async function trustWorkspaceSmartPermissions(page: Page): Promise<void> {
+  const trustToast = page.locator(PLAYWRIGHT_TEST_SELECTORS.trustToast);
+
+  // Wait for toast to appear (it shows for new untrusted workspaces)
+  const isVisible = await trustToast.isVisible().catch(() => false);
+  if (!isVisible) {
+    // Toast may have already been dismissed or workspace already trusted
+    return;
+  }
+
+  // Click Smart Permissions option
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.trustToastSmartPermissions).click();
+  await page.waitForTimeout(500);
+
+  // Wait for toast to dismiss
+  await expect(trustToast).not.toBeVisible({ timeout: 3000 });
+}
+
+/**
+ * Trust workspace with Always Allow mode via the trust toast
+ * Use this at the start of tests that need unrestricted agent access
+ */
+export async function trustWorkspaceAlwaysAllow(page: Page): Promise<void> {
+  const trustToast = page.locator(PLAYWRIGHT_TEST_SELECTORS.trustToast);
+
+  // Wait for toast to appear (it shows for new untrusted workspaces)
+  const isVisible = await trustToast.isVisible().catch(() => false);
+  if (!isVisible) {
+    // Toast may have already been dismissed or workspace already trusted
+    return;
+  }
+
+  // Click Always Allow option
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.trustToastAlwaysAllow).click();
+  await page.waitForTimeout(500);
+
+  // Wait for toast to dismiss
+  await expect(trustToast).not.toBeVisible({ timeout: 3000 });
+}
+
+/**
+ * Dismiss trust toast without trusting (click outside)
+ */
+export async function dismissTrustToast(page: Page): Promise<void> {
+  const trustToast = page.locator(PLAYWRIGHT_TEST_SELECTORS.trustToast);
+
+  const isVisible = await trustToast.isVisible().catch(() => false);
+  if (!isVisible) {
+    return;
+  }
+
+  // Click outside the toast on the overlay
+  const overlay = page.locator(PLAYWRIGHT_TEST_SELECTORS.trustToastOverlay);
+  await overlay.click({ position: { x: 10, y: 10 } });
+  await page.waitForTimeout(500);
+
+  await expect(trustToast).not.toBeVisible({ timeout: 3000 });
 }

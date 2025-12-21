@@ -441,6 +441,7 @@ describe('permissionEngine', () => {
         trustedAt: 5000,
         permissionMode: 'ask',
         additionalDirectories: [{ path: '/external/docs', canWrite: false, addedAt: 4000 }],
+        allowedUrlPatterns: [{ pattern: 'https://api.example.com/*', description: 'Example API', addedAt: 6000 }],
       };
 
       const serialized = serializeWorkspacePermissions(permissions);
@@ -455,6 +456,7 @@ describe('permissionEngine', () => {
         trustedAt: 5000,
         permissionMode: 'ask',
         additionalDirectories: [{ path: '/external/docs', canWrite: false, addedAt: 4000 }],
+        allowedUrlPatterns: [{ pattern: 'https://api.example.com/*', description: 'Example API', addedAt: 6000 }],
       });
     });
 
@@ -492,6 +494,7 @@ describe('permissionEngine', () => {
         trustedAt: undefined,
         permissionMode: 'ask',
         additionalDirectories: [],
+        allowedUrlPatterns: [],
       });
     });
 
@@ -662,7 +665,7 @@ describe('permissionEngine', () => {
       const engine = createTrustedEngine();
       const evaluation = engine.evaluateTool('Read', 'read src/index.ts', sessionId);
       expect(evaluation.overallDecision).toBe('ask');
-      expect(evaluation.evaluations[0].action.pattern).toBe('read:relative');
+      expect(evaluation.evaluations[0].action.pattern).toBe('read');
     });
 
     it('should evaluate Write tool as potentially destructive', () => {
@@ -692,7 +695,7 @@ describe('permissionEngine', () => {
 
     it('should allow previously approved tool patterns', () => {
       const engine = createTrustedEngine();
-      engine.allowPatternAlways('read:relative', 'Read relative file');
+      engine.allowPatternAlways('read', 'Read files');
 
       const evaluation = engine.evaluateTool('Read', 'read src/index.ts', sessionId);
       expect(evaluation.overallDecision).toBe('allow');
@@ -700,7 +703,7 @@ describe('permissionEngine', () => {
 
     it('should deny previously denied tool patterns', () => {
       const engine = createTrustedEngine();
-      engine.denyPatternAlways('write:relative', 'Write relative file');
+      engine.denyPatternAlways('write', 'Write files');
 
       const evaluation = engine.evaluateTool('Write', 'write src/file.ts', sessionId);
       expect(evaluation.overallDecision).toBe('deny');
@@ -710,6 +713,208 @@ describe('permissionEngine', () => {
       const engine = createTrustedEngine();
       const evaluation = engine.evaluateTool('Read', 'read /etc/passwd', sessionId);
       expect(evaluation.evaluations[0].outsidePaths.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('URL patterns', () => {
+    it('should start with no allowed URL patterns', () => {
+      const engine = createTrustedEngine();
+      expect(engine.getAllowedUrlPatterns()).toEqual([]);
+    });
+
+    it('should add URL patterns', () => {
+      const engine = createTrustedEngine();
+      engine.addAllowedUrlPattern('example.com', 'Example domain');
+
+      const patterns = engine.getAllowedUrlPatterns();
+      expect(patterns).toHaveLength(1);
+      expect(patterns[0].pattern).toBe('example.com');
+      expect(patterns[0].description).toBe('Example domain');
+    });
+
+    it('should not add duplicate URL patterns', () => {
+      const engine = createTrustedEngine();
+      engine.addAllowedUrlPattern('example.com', 'First');
+      engine.addAllowedUrlPattern('example.com', 'Second');
+
+      const patterns = engine.getAllowedUrlPatterns();
+      expect(patterns).toHaveLength(1);
+    });
+
+    it('should remove URL patterns', () => {
+      const engine = createTrustedEngine();
+      engine.addAllowedUrlPattern('example.com', 'Example');
+      engine.addAllowedUrlPattern('test.com', 'Test');
+
+      engine.removeAllowedUrlPattern('example.com');
+
+      const patterns = engine.getAllowedUrlPatterns();
+      expect(patterns).toHaveLength(1);
+      expect(patterns[0].pattern).toBe('test.com');
+    });
+
+    it('should check if URL is allowed - exact hostname match', () => {
+      const engine = createTrustedEngine();
+      engine.addAllowedUrlPattern('example.com', 'Example');
+
+      expect(engine.isUrlAllowed('https://example.com')).toBe(true);
+      expect(engine.isUrlAllowed('https://example.com/path')).toBe(true);
+      expect(engine.isUrlAllowed('https://other.com')).toBe(false);
+    });
+
+    it('should check if URL is allowed - wildcard subdomain', () => {
+      const engine = createTrustedEngine();
+      engine.addAllowedUrlPattern('*.example.com', 'Example subdomains');
+
+      expect(engine.isUrlAllowed('https://api.example.com')).toBe(true);
+      expect(engine.isUrlAllowed('https://www.example.com/path')).toBe(true);
+      expect(engine.isUrlAllowed('https://example.com')).toBe(true);
+      expect(engine.isUrlAllowed('https://notexample.com')).toBe(false);
+      // Should NOT match evil.example.com.attacker.com
+      expect(engine.isUrlAllowed('https://evil.example.com.attacker.com')).toBe(false);
+    });
+
+    it('should check if URL is allowed - path wildcard', () => {
+      const engine = createTrustedEngine();
+      engine.addAllowedUrlPattern('https://api.example.com/*', 'API paths');
+
+      expect(engine.isUrlAllowed('https://api.example.com/v1/users')).toBe(true);
+      expect(engine.isUrlAllowed('https://api.example.com/')).toBe(true);
+      expect(engine.isUrlAllowed('https://other.example.com/v1')).toBe(false);
+    });
+
+    it('should preserve URL patterns in getWorkspacePermissions', () => {
+      const engine = createTrustedEngine();
+      engine.addAllowedUrlPattern('example.com', 'Example');
+      engine.addAllowedUrlPattern('test.com', 'Test');
+
+      const perms = engine.getWorkspacePermissions();
+      expect(perms.allowedUrlPatterns).toHaveLength(2);
+      expect(perms.allowedUrlPatterns.map(u => u.pattern)).toContain('example.com');
+      expect(perms.allowedUrlPatterns.map(u => u.pattern)).toContain('test.com');
+    });
+
+    it('should load URL patterns from initial permissions', () => {
+      const engine = new PermissionEngine(workspacePath, {
+        ...DEFAULT_WORKSPACE_PERMISSIONS,
+        isTrusted: true,
+        allowedUrlPatterns: [
+          { pattern: 'saved.com', description: 'Saved', addedAt: Date.now() },
+        ],
+      });
+
+      expect(engine.isUrlAllowed('https://saved.com')).toBe(true);
+      expect(engine.isUrlAllowed('https://notsaved.com')).toBe(false);
+    });
+  });
+
+  describe('additional directories for outside paths', () => {
+    it('should allow read commands to additional directories', () => {
+      const engine = createTrustedEngine();
+      engine.addAdditionalDirectory('/external/logs', false);
+
+      // Read-only command to additional directory should be allowed
+      const evaluation = engine.evaluateCommand('cat /external/logs/app.log', sessionId);
+      expect(evaluation.overallDecision).toBe('allow');
+    });
+
+    it('should ask for write commands to read-only additional directories', () => {
+      const engine = createTrustedEngine();
+      engine.addAdditionalDirectory('/external/logs', false); // read-only
+
+      // Write command should still ask (canWrite is false)
+      const evaluation = engine.evaluateCommand('echo test > /external/logs/new.log', sessionId);
+      expect(evaluation.overallDecision).toBe('ask');
+    });
+
+    it('should allow paths within additional directories', () => {
+      const engine = createTrustedEngine();
+      engine.addAdditionalDirectory('/external/data', false);
+
+      // Subdirectory should be allowed
+      const evaluation = engine.evaluateCommand('ls /external/data/subdir', sessionId);
+      expect(evaluation.overallDecision).toBe('allow');
+    });
+
+    it('should not allow paths outside additional directories', () => {
+      const engine = createTrustedEngine();
+      engine.addAdditionalDirectory('/external/data', false);
+
+      // Different directory should still ask
+      const evaluation = engine.evaluateCommand('ls /external/other', sessionId);
+      expect(evaluation.overallDecision).toBe('ask');
+      expect(evaluation.evaluations[0].outsidePaths).toContain('/external/other');
+    });
+
+    it('should handle paths with spaces in additional directories', () => {
+      const engine = createTrustedEngine();
+      engine.addAdditionalDirectory('/Users/test/Library/Application Support/MyApp', false);
+
+      const evaluation = engine.evaluateCommand('cat "/Users/test/Library/Application Support/MyApp/config.json"', sessionId);
+      expect(evaluation.overallDecision).toBe('allow');
+    });
+
+    it('should preserve additional directories in getWorkspacePermissions', () => {
+      const engine = createTrustedEngine();
+      engine.addAdditionalDirectory('/external/docs', false);
+      engine.addAdditionalDirectory('/external/shared', true);
+
+      const perms = engine.getWorkspacePermissions();
+      expect(perms.additionalDirectories).toHaveLength(2);
+      expect(perms.additionalDirectories.find(d => d.path === '/external/docs')?.canWrite).toBe(false);
+      expect(perms.additionalDirectories.find(d => d.path === '/external/shared')?.canWrite).toBe(true);
+    });
+  });
+
+  describe('serialization with URL patterns', () => {
+    it('should serialize URL patterns', () => {
+      const permissions: WorkspacePermissions = {
+        ...DEFAULT_WORKSPACE_PERMISSIONS,
+        isTrusted: true,
+        allowedUrlPatterns: [
+          { pattern: 'example.com', description: 'Example', addedAt: 1000 },
+          { pattern: '*.github.com', description: 'GitHub', addedAt: 2000 },
+        ],
+      };
+
+      const serialized = serializeWorkspacePermissions(permissions);
+
+      expect(serialized.allowedUrlPatterns).toHaveLength(2);
+      expect(serialized.allowedUrlPatterns![0].pattern).toBe('example.com');
+      expect(serialized.allowedUrlPatterns![1].pattern).toBe('*.github.com');
+    });
+
+    it('should deserialize URL patterns', () => {
+      const data = {
+        allowedPatterns: [],
+        deniedPatterns: [],
+        isTrusted: true,
+        permissionMode: 'ask',
+        additionalDirectories: [],
+        allowedUrlPatterns: [
+          { pattern: 'example.com', description: 'Example', addedAt: 1000 },
+        ],
+      };
+
+      const permissions = deserializeWorkspacePermissions(data);
+
+      expect(permissions.allowedUrlPatterns).toHaveLength(1);
+      expect(permissions.allowedUrlPatterns[0].pattern).toBe('example.com');
+    });
+
+    it('should handle missing allowedUrlPatterns in deserialization', () => {
+      const data = {
+        allowedPatterns: [],
+        deniedPatterns: [],
+        isTrusted: true,
+        permissionMode: 'ask',
+        additionalDirectories: [],
+        // No allowedUrlPatterns field
+      };
+
+      const permissions = deserializeWorkspacePermissions(data);
+
+      expect(permissions.allowedUrlPatterns).toEqual([]);
     });
   });
 });

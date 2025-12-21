@@ -132,6 +132,29 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   // Only enabled in dev mode for reviewing agent security checks
   private static securityLogger: ((message: string, data?: any) => void) | null = null;
 
+  // URL permission checker (injected from electron main process)
+  // Checks if a URL matches allowed patterns for WebFetch/WebSearch
+  private static urlPermissionChecker: ((
+    workspacePath: string,
+    url: string
+  ) => boolean) | null = null;
+
+  // URL pattern saver (injected from electron main process)
+  // Saves a URL pattern when user approves WebFetch with "Always"
+  private static urlPatternSaver: ((
+    workspacePath: string,
+    url: string,
+    description: string
+  ) => void) | null = null;
+
+  // Additional directory saver (injected from electron main process)
+  // Saves a directory when user approves file access outside workspace with "Always"
+  private static additionalDirectorySaver: ((
+    workspacePath: string,
+    directory: string,
+    canWrite: boolean
+  ) => void) | null = null;
+
   static readonly DEFAULT_MODEL = 'claude-code:sonnet';
 
   /**
@@ -217,6 +240,41 @@ export class ClaudeCodeProvider extends BaseAIProvider {
    */
   public static setSecurityLogger(logger: ((message: string, data?: any) => void) | null): void {
     ClaudeCodeProvider.securityLogger = logger;
+  }
+
+  /**
+   * Set the URL permission checker function (called from electron main process)
+   * This allows checking if URLs match allowed patterns for WebFetch/WebSearch
+   */
+  public static setUrlPermissionChecker(checker: ((
+    workspacePath: string,
+    url: string
+  ) => boolean) | null): void {
+    ClaudeCodeProvider.urlPermissionChecker = checker;
+  }
+
+  /**
+   * Set the URL pattern saver function (called from electron main process)
+   * This saves URL patterns when user approves WebFetch with "Always"
+   */
+  public static setUrlPatternSaver(saver: ((
+    workspacePath: string,
+    url: string,
+    description: string
+  ) => void) | null): void {
+    ClaudeCodeProvider.urlPatternSaver = saver;
+  }
+
+  /**
+   * Set the additional directory saver function (called from electron main process)
+   * This saves directories when user approves file access outside workspace with "Always"
+   */
+  public static setAdditionalDirectorySaver(saver: ((
+    workspacePath: string,
+    directory: string,
+    canWrite: boolean
+  ) => void) | null): void {
+    ClaudeCodeProvider.additionalDirectorySaver = saver;
   }
 
   /**
@@ -2202,14 +2260,113 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                   scope: response.scope,
                 });
 
-                // Apply the permission response via the handler
-                if (ClaudeCodeProvider.permissionResponseHandler) {
-                  ClaudeCodeProvider.permissionResponseHandler(
-                    workspacePath,
-                    sessionId,
-                    requestId,
-                    response
-                  );
+                // For WebFetch with "always" approval, save the URL pattern instead of generic pattern
+                if (toolName === 'WebFetch' && response.decision === 'allow' && response.scope === 'always') {
+                  const url = input?.url;
+                  if (url && ClaudeCodeProvider.urlPatternSaver) {
+                    try {
+                      // Extract hostname for the pattern
+                      const parsedUrl = new URL(url);
+                      const hostname = parsedUrl.hostname;
+                      ClaudeCodeProvider.urlPatternSaver(
+                        workspacePath,
+                        hostname,
+                        `Allow fetching from ${hostname}`
+                      );
+                      this.logSecurity('[canUseTool] Saved URL pattern:', { hostname });
+                    } catch (urlError) {
+                      this.logSecurity('[canUseTool] Failed to parse URL for pattern:', { url, error: urlError });
+                    }
+                  }
+                } else if (response.decision === 'allow' && response.scope === 'always' && ClaudeCodeProvider.additionalDirectorySaver) {
+                  // For file operations with "always" approval, save the directory if path is outside workspace
+                  const path = require('path');
+                  let filePath: string | undefined;
+                  let isWriteOperation = false;
+                  let isReadOnlyBashCommand = false;
+
+                  // Extract file path based on tool type
+                  if (toolName === 'Read') {
+                    filePath = input?.file_path;
+                  } else if (toolName === 'Grep') {
+                    filePath = input?.path;
+                  } else if (toolName === 'Glob') {
+                    filePath = input?.path;
+                  } else if (toolName === 'Edit' || toolName === 'Write' || toolName === 'MultiEdit') {
+                    filePath = input?.file_path;
+                    isWriteOperation = true;
+                  } else if (toolName === 'Bash') {
+                    // For Bash, check if this is a read-only command accessing outside paths
+                    // Look in actionsNeedingApproval since that's where evaluations are stored
+                    const actionsNeedingApproval = result?.request?.actionsNeedingApproval || [];
+                    const firstAction = actionsNeedingApproval[0];
+                    const outsidePaths = firstAction?.outsidePaths || [];
+                    const isReadOnly = firstAction?.isReadOnly;
+
+                    if (outsidePaths.length > 0) {
+                      // Save the first outside path's directory
+                      filePath = outsidePaths[0];
+                      // Check if this is a read-only command (find, grep, ls, cat, etc.)
+                      isReadOnlyBashCommand = isReadOnly === true;
+                    }
+                  }
+
+                  let savedDirectory = false;
+                  if (filePath && workspacePath) {
+                    // Check if path is outside workspace
+                    const normalizedPath = path.resolve(filePath);
+                    const normalizedWorkspace = path.resolve(workspacePath);
+                    if (!normalizedPath.startsWith(normalizedWorkspace)) {
+                      // Extract directory from path (or use path itself if it's a directory)
+                      const fs = require('fs');
+                      let directory: string;
+                      try {
+                        // Check if the path is a directory
+                        const stats = fs.statSync(normalizedPath);
+                        directory = stats.isDirectory() ? normalizedPath : path.dirname(normalizedPath);
+                      } catch {
+                        // Path doesn't exist yet or can't be accessed, use dirname
+                        directory = path.dirname(normalizedPath);
+                      }
+
+                      ClaudeCodeProvider.additionalDirectorySaver(
+                        workspacePath,
+                        directory,
+                        isWriteOperation
+                      );
+                      savedDirectory = true;
+                      this.logSecurity('[canUseTool] Saved additional directory:', {
+                        directory,
+                        canWrite: isWriteOperation,
+                        isReadOnlyBashCommand
+                      });
+                    }
+                  }
+
+                  // For read-only bash commands that access outside directories,
+                  // DON'T save the command pattern (like bash:find) - only the directory matters
+                  // This prevents asking for bash:find, bash:grep, bash:ls etc. separately
+                  if (!(toolName === 'Bash' && isReadOnlyBashCommand && savedDirectory)) {
+                    // Apply the permission response for pattern saving
+                    if (ClaudeCodeProvider.permissionResponseHandler) {
+                      ClaudeCodeProvider.permissionResponseHandler(
+                        workspacePath,
+                        sessionId,
+                        requestId,
+                        response
+                      );
+                    }
+                  }
+                } else {
+                  // Apply the permission response via the handler for non-WebFetch tools
+                  if (ClaudeCodeProvider.permissionResponseHandler) {
+                    ClaudeCodeProvider.permissionResponseHandler(
+                      workspacePath,
+                      sessionId,
+                      requestId,
+                      response
+                    );
+                  }
                 }
 
                 // Emit event so UI can update
@@ -2425,6 +2582,51 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             }
           };
         }
+      }
+
+      // WebFetch/WebSearch: Check URL against allowed patterns
+      // The SDK may auto-allow these, but we want to check URL patterns first
+      if (toolName === 'WebFetch' || toolName === 'WebSearch') {
+        const url = toolName === 'WebFetch' ? toolInput?.url : null;
+
+        // For WebFetch, check if URL matches allowed patterns
+        if (toolName === 'WebFetch' && url && workspacePath) {
+          if (ClaudeCodeProvider.urlPermissionChecker) {
+            const isAllowed = ClaudeCodeProvider.urlPermissionChecker(workspacePath, url);
+            this.logSecurity(`[PreToolUse] WebFetch URL check:`, {
+              url,
+              isAllowed,
+            });
+
+            if (isAllowed) {
+              // URL matches an allowed pattern - let it through
+              return {};
+            }
+          }
+
+          // URL not in allowed list - force ask
+          this.logSecurity(`[PreToolUse] WebFetch URL not allowed, forcing ask:`, { url });
+          return {
+            hookSpecificOutput: {
+              hookEventName: 'PreToolUse' as const,
+              permissionDecision: 'ask' as const
+            }
+          };
+        }
+
+        // WebSearch always needs approval (no URL pattern matching for searches)
+        if (toolName === 'WebSearch') {
+          this.logSecurity(`[PreToolUse] WebSearch forcing ask:`, { query: toolInput?.query });
+          return {
+            hookSpecificOutput: {
+              hookEventName: 'PreToolUse' as const,
+              permissionDecision: 'ask' as const
+            }
+          };
+        }
+
+        // No URL or workspace - let SDK handle it
+        return {};
       }
 
       // Handle non-file-editing tools (except ExitPlanMode which is handled above)

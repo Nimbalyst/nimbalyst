@@ -437,6 +437,9 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
       additionalDirectories: Array.isArray(raw.agentPermissions.additionalDirectories)
         ? raw.agentPermissions.additionalDirectories.map((d: any) => ({ ...d }))
         : [],
+      allowedUrlPatterns: Array.isArray(raw.agentPermissions.allowedUrlPatterns)
+        ? raw.agentPermissions.allowedUrlPatterns.map((u: any) => ({ ...u }))
+        : [],
     } : undefined,
     lastUpdated: raw.lastUpdated ?? raw.updated_at ?? Date.now(),
   };
@@ -507,14 +510,7 @@ function cloneWorkspaceState(state: WorkspaceState): WorkspaceState {
           ])
         )
       : undefined,
-    agentPermissions: state.agentPermissions ? {
-      allowedPatterns: state.agentPermissions.allowedPatterns.map(r => ({ ...r })),
-      deniedPatterns: state.agentPermissions.deniedPatterns.map(r => ({ ...r })),
-      isTrusted: state.agentPermissions.isTrusted,
-      trustedAt: state.agentPermissions.trustedAt,
-      permissionMode: state.agentPermissions.permissionMode,
-      additionalDirectories: state.agentPermissions.additionalDirectories.map(d => ({ ...d })),
-    } : undefined,
+    agentPermissions: state.agentPermissions ? structuredClone(state.agentPermissions) : undefined,
     lastUpdated: state.lastUpdated,
   };
 }
@@ -1150,14 +1146,9 @@ export function getAgentPermissions(workspacePath: string): AgentPermissions | u
 
 export function saveAgentPermissions(workspacePath: string, permissions: AgentPermissions): void {
   updateWorkspaceState(workspacePath, (state) => {
-    state.agentPermissions = {
-      allowedPatterns: permissions.allowedPatterns.map((r) => ({ ...r })),
-      deniedPatterns: permissions.deniedPatterns.map((r) => ({ ...r })),
-      isTrusted: permissions.isTrusted,
-      trustedAt: permissions.trustedAt,
-      permissionMode: permissions.permissionMode,
-      additionalDirectories: permissions.additionalDirectories.map((d) => ({ ...d })),
-    };
+    // Use structuredClone to deep copy the entire permissions object
+    // This ensures all fields are preserved without manual mapping
+    state.agentPermissions = structuredClone(permissions);
   });
 }
 

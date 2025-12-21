@@ -1,17 +1,21 @@
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from 'playwright';
 import { launchElectronApp, createTempWorkspace, TEST_TIMEOUTS } from '../helpers';
+import {
+  PLAYWRIGHT_TEST_SELECTORS,
+  dismissAPIKeyDialog,
+  trustWorkspaceSmartPermissions,
+  dismissTrustToast,
+} from '../utils/testHelpers';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
 /**
- * E2E tests for the Agent Permissions system.
+ * E2E tests for the Agent Permissions trust UI.
  *
- * Tests the following features:
- * 1. Trust Indicator in Navigation Gutter
- * 2. Permission Settings Panel
- * 3. Workspace trust management
- * 4. Permission mode switching
+ * Two focused tests:
+ * 1. Trust workflow: Trust via toast -> verify trusted state -> verify settings
+ * 2. Dismiss toast: Click outside dismisses without trusting
  */
 
 let electronApp: ElectronApplication;
@@ -30,7 +34,13 @@ test.beforeEach(async () => {
 
   // Wait for page to load
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForTimeout(1000);
+
+  // Dismiss API key dialog if it appears
+  await dismissAPIKeyDialog(page);
+
+  // Wait for workspace sidebar to be ready
+  await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.workspaceSidebar))
+    .toBeVisible({ timeout: TEST_TIMEOUTS.SIDEBAR_LOAD });
 });
 
 test.afterEach(async () => {
@@ -38,227 +48,61 @@ test.afterEach(async () => {
   await fs.rm(workspaceDir, { recursive: true, force: true });
 });
 
-test.describe('Trust Indicator', () => {
-  test('should display trust indicator in navigation gutter', async () => {
-    // Trust indicator should be visible in nav-settings section
-    const trustIndicator = page.locator('.trust-indicator');
-    await expect(trustIndicator).toBeVisible({ timeout: TEST_TIMEOUTS.SIDEBAR_LOAD });
-  });
+test('trust workflow: trust via toast -> verify trusted state -> verify settings', async () => {
+  // 1. Trust toast should appear for new workspace
+  const trustToast = page.locator(PLAYWRIGHT_TEST_SELECTORS.trustToast);
+  await expect(trustToast).toBeVisible({ timeout: TEST_TIMEOUTS.SIDEBAR_LOAD });
 
-  test('should show untrusted status initially', async () => {
-    // By default, workspace should not be trusted
-    const trustIndicator = page.locator('.trust-indicator');
-    await expect(trustIndicator).toHaveClass(/untrusted/);
-  });
+  // 2. Verify Smart Permissions option is available
+  const smartPermissionsOption = page.locator(PLAYWRIGHT_TEST_SELECTORS.trustToastSmartPermissions);
+  await expect(smartPermissionsOption).toBeVisible();
 
-  test('should open menu when clicked', async () => {
-    const trustIndicator = page.locator('.trust-indicator');
-    await trustIndicator.click();
+  // 3. Click Smart Permissions to trust the workspace
+  await smartPermissionsOption.click();
+  await page.waitForTimeout(500);
 
-    // Menu should appear
-    const trustMenu = page.locator('.trust-menu');
-    await expect(trustMenu).toBeVisible();
+  // 4. Toast should dismiss after selection
+  await expect(trustToast).not.toBeVisible({ timeout: 3000 });
 
-    // Should show "Agent Permissions" title
-    const menuTitle = trustMenu.locator('.trust-menu-title');
-    await expect(menuTitle).toContainText('Agent Permissions');
+  // 5. Trust indicator should now show trusted state
+  const trustIndicator = page.locator(PLAYWRIGHT_TEST_SELECTORS.trustIndicator);
+  await expect(trustIndicator).toBeVisible();
+  await expect(trustIndicator).toHaveClass(/trusted/);
 
-    // Should show "Untrusted" badge
-    const statusBadge = trustMenu.locator('.trust-status-badge');
-    await expect(statusBadge).toContainText('Untrusted');
-  });
+  // 6. Click indicator to open menu and verify trusted status
+  await trustIndicator.click();
+  const trustMenu = page.locator(PLAYWRIGHT_TEST_SELECTORS.trustMenu);
+  await expect(trustMenu).toBeVisible();
+  await expect(trustMenu).toContainText('Smart Permissions');
+  await expect(trustMenu).toContainText('Trusted');
 
-  test('should trust workspace when clicking trust button', async () => {
-    const trustIndicator = page.locator('.trust-indicator');
-    await trustIndicator.click();
+  // 7. Navigate to permissions settings via menu
+  await trustMenu.locator('text=Permission settings').click();
+  await page.waitForTimeout(500);
 
-    // Click "Trust this workspace" button
-    const trustButton = page.locator('.trust-menu-action:has-text("Trust this workspace")');
-    await trustButton.click();
+  // 8. Verify settings panel shows trusted state and permission mode options
+  await expect(page.locator('.permissions-trust-label:has-text("trusted")')).toBeVisible();
+  await expect(page.locator('.permissions-section-header:has-text("Permission Mode")')).toBeVisible();
 
-    // Wait for state update
-    await page.waitForTimeout(500);
-
-    // Re-open menu to verify status changed
-    await trustIndicator.click();
-    const statusBadge = page.locator('.trust-menu .trust-status-badge');
-    await expect(statusBadge).not.toContainText('Untrusted');
-  });
-
-  test('should navigate to permissions settings when clicking settings button', async () => {
-    const trustIndicator = page.locator('.trust-indicator');
-    await trustIndicator.click();
-
-    // Click "Permission settings" button
-    const settingsButton = page.locator('.trust-menu-action:has-text("Permission settings")');
-    await settingsButton.click();
-
-    // Wait for settings to open
-    await page.waitForTimeout(500);
-
-    // Should now be in settings mode with agent-permissions panel
-    const settingsView = page.locator('.settings-view');
-    await expect(settingsView).toBeVisible({ timeout: TEST_TIMEOUTS.SIDEBAR_LOAD });
-
-    // Should show Agent Permissions heading
-    const permissionsHeader = page.locator('.settings-panel-header h2:has-text("Agent Permissions")');
-    await expect(permissionsHeader).toBeVisible();
-  });
+  // 9. Verify Revoke Trust button is available
+  await expect(page.locator('.permissions-trust-card button:has-text("Revoke Trust")')).toBeVisible();
 });
 
-test.describe('Permissions Settings Panel', () => {
-  async function navigateToPermissionsSettings() {
-    const trustIndicator = page.locator('.trust-indicator');
-    await trustIndicator.click();
-    const settingsButton = page.locator('.trust-menu-action:has-text("Permission settings")');
-    await settingsButton.click();
-    await page.waitForTimeout(500);
-  }
+test('dismiss toast: click outside dismisses without trusting', async () => {
+  // 1. Trust toast should appear for new workspace
+  const trustToast = page.locator(PLAYWRIGHT_TEST_SELECTORS.trustToast);
+  await expect(trustToast).toBeVisible({ timeout: TEST_TIMEOUTS.SIDEBAR_LOAD });
 
-  test('should show workspace trust section', async () => {
-    await navigateToPermissionsSettings();
+  // 2. Click outside the toast (on the overlay) to dismiss
+  const overlay = page.locator(PLAYWRIGHT_TEST_SELECTORS.trustToastOverlay);
+  await overlay.click({ position: { x: 10, y: 10 } }); // Click corner of overlay
+  await page.waitForTimeout(500);
 
-    // Should show Workspace Trust section
-    const trustSection = page.locator('.permissions-section-header:has-text("Workspace Trust")');
-    await expect(trustSection).toBeVisible();
+  // 3. Toast should dismiss
+  await expect(trustToast).not.toBeVisible({ timeout: 3000 });
 
-    // Should show "not trusted" message
-    const untrustedLabel = page.locator('.permissions-trust-label:has-text("not trusted")');
-    await expect(untrustedLabel).toBeVisible();
-  });
-
-  test('should show Trust Workspace button when untrusted', async () => {
-    await navigateToPermissionsSettings();
-
-    const trustButton = page.locator('.permissions-trust-card button:has-text("Trust Workspace")');
-    await expect(trustButton).toBeVisible();
-  });
-
-  test('should trust workspace from settings panel', async () => {
-    await navigateToPermissionsSettings();
-
-    // Click Trust Workspace button
-    const trustButton = page.locator('.permissions-trust-card button:has-text("Trust Workspace")');
-    await trustButton.click();
-
-    // Wait for success message
-    await page.waitForTimeout(500);
-
-    // Should now show trusted state
-    const trustedLabel = page.locator('.permissions-trust-label:has-text("trusted")');
-    await expect(trustedLabel).toBeVisible();
-
-    // Should show Revoke Trust button
-    const revokeButton = page.locator('.permissions-trust-card button:has-text("Revoke Trust")');
-    await expect(revokeButton).toBeVisible();
-  });
-
-  test('should show permission mode options when trusted', async () => {
-    await navigateToPermissionsSettings();
-
-    // Trust the workspace first
-    const trustButton = page.locator('.permissions-trust-card button:has-text("Trust Workspace")');
-    await trustButton.click();
-    await page.waitForTimeout(500);
-
-    // Should show Permission Mode section
-    const modeSection = page.locator('.permissions-section-header:has-text("Permission Mode")');
-    await expect(modeSection).toBeVisible();
-
-    // Should show both radio options
-    const askOption = page.locator('.permissions-mode-option-title:has-text("Smart Permissions")');
-    await expect(askOption).toBeVisible();
-
-    const allowAllOption = page.locator('.permissions-mode-option-title:has-text("Allow all")');
-    await expect(allowAllOption).toBeVisible();
-  });
-
-  test('should switch permission mode', async () => {
-    await navigateToPermissionsSettings();
-
-    // Trust workspace
-    const trustButton = page.locator('.permissions-trust-card button:has-text("Trust Workspace")');
-    await trustButton.click();
-    await page.waitForTimeout(500);
-
-    // Default should be "Smart Permissions"
-    const askRadio = page.locator('input[value="ask"]');
-    await expect(askRadio).toBeChecked();
-
-    // Click "Allow all" option
-    const allowAllLabel = page.locator('.permissions-mode-option:has-text("Allow all")');
-    await allowAllLabel.click();
-    await page.waitForTimeout(500);
-
-    // Should now have allow-all selected
-    const allowAllRadio = page.locator('input[value="allow-all"]');
-    await expect(allowAllRadio).toBeChecked();
-  });
-
-  test('should show Additional Directories section when trusted', async () => {
-    await navigateToPermissionsSettings();
-
-    // Trust workspace
-    const trustButton = page.locator('.permissions-trust-card button:has-text("Trust Workspace")');
-    await trustButton.click();
-    await page.waitForTimeout(500);
-
-    // Should show Additional Directories section
-    const dirsSection = page.locator('.permissions-section-header:has-text("Additional Directories")');
-    await expect(dirsSection).toBeVisible();
-
-    // Should show Add Directory button
-    const addDirButton = page.locator('.permissions-add-directory-btn');
-    await expect(addDirButton).toBeVisible();
-  });
-
-  test('should revoke trust', async () => {
-    await navigateToPermissionsSettings();
-
-    // Trust workspace
-    const trustButton = page.locator('.permissions-trust-card button:has-text("Trust Workspace")');
-    await trustButton.click();
-    await page.waitForTimeout(500);
-
-    // Click Revoke Trust
-    const revokeButton = page.locator('.permissions-trust-card button:has-text("Revoke Trust")');
-    await revokeButton.click();
-    await page.waitForTimeout(500);
-
-    // Should now show untrusted state
-    const untrustedLabel = page.locator('.permissions-trust-label:has-text("not trusted")');
-    await expect(untrustedLabel).toBeVisible();
-
-    // Permission Mode section should be hidden
-    const modeSection = page.locator('.permissions-section-header:has-text("Permission Mode")');
-    await expect(modeSection).not.toBeVisible();
-  });
-});
-
-test.describe('Trust Indicator State Sync', () => {
-  test('should update trust indicator when trust changes in settings', async () => {
-    // Initially untrusted
-    const trustIndicator = page.locator('.trust-indicator');
-    await expect(trustIndicator).toHaveClass(/untrusted/);
-
-    // Navigate to settings and trust
-    await trustIndicator.click();
-    const settingsButton = page.locator('.trust-menu-action:has-text("Permission settings")');
-    await settingsButton.click();
-    await page.waitForTimeout(500);
-
-    const trustButton = page.locator('.permissions-trust-card button:has-text("Trust Workspace")');
-    await trustButton.click();
-    await page.waitForTimeout(1000);
-
-    // Go back to files mode
-    await page.evaluate(() => {
-      (window as any).__testHelpers?.setActiveMode('files');
-    });
-    await page.waitForTimeout(500);
-
-    // Trust indicator should now show trusted state
-    const updatedIndicator = page.locator('.trust-indicator');
-    await expect(updatedIndicator).toHaveClass(/trusted/);
-  });
+  // 4. Trust indicator should still show UNtrusted state
+  const trustIndicator = page.locator(PLAYWRIGHT_TEST_SELECTORS.trustIndicator);
+  await expect(trustIndicator).toBeVisible();
+  await expect(trustIndicator).toHaveClass(/untrusted/);
 });

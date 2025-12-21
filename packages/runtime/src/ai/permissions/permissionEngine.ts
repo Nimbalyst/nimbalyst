@@ -121,6 +121,8 @@ export interface ActionEvaluation {
   isDestructive: boolean;
   /** Whether this action is risky */
   isRisky: boolean;
+  /** Whether this is a read-only command (ls, cat, grep, find, etc.) */
+  isReadOnly: boolean;
   /** Warnings about this action */
   warnings: string[];
   /** Paths that are outside the workspace */
@@ -548,13 +550,18 @@ export class PermissionEngine {
     const command = action.command;
     const pattern = action.pattern;
 
-    // Check paths
-    const pathCheck = checkCommandPaths(action.referencedPaths, this.workspacePath);
+    // Check paths (including additional directories)
+    const pathCheck = checkCommandPaths(
+      action.referencedPaths,
+      this.workspacePath,
+      this.workspacePermissions.additionalDirectories
+    );
 
     // Get pattern info
     const isDestructive = isDestructiveCommand(command) || action.isDestructive;
     const isRisky = isRiskyCommand(command);
     const warnings = getCommandWarnings(command);
+    const isReadOnly = isReadOnlyAllowed(action);
 
     // Build the evaluation result (we'll set decision and reason below)
     const evaluation: ActionEvaluation = {
@@ -563,6 +570,7 @@ export class PermissionEngine {
       reason: '',
       isDestructive,
       isRisky,
+      isReadOnly,
       warnings,
       outsidePaths: pathCheck.outsidePaths,
       sensitivePaths: pathCheck.sensitivePaths,
@@ -726,7 +734,11 @@ export class PermissionEngine {
 
     // Extract any paths from the description for path checking
     const paths = this.extractPathsFromDescription(toolDescription);
-    const pathCheck = checkCommandPaths(paths, this.workspacePath);
+    const pathCheck = checkCommandPaths(
+      paths,
+      this.workspacePath,
+      this.workspacePermissions.additionalDirectories
+    );
 
     // Create a synthetic action for the tool
     const action: ParsedAction = {
@@ -820,12 +832,22 @@ export class PermissionEngine {
     const paths: string[] = [];
 
     // Match common path patterns
-    // Note: For absolute paths, we require them to be at word boundary (start or after whitespace)
-    // to avoid matching "/index.ts" from "src/index.ts"
+    // Supports both quoted and unquoted paths
+    // For quoted paths: matches content between quotes
+    // For unquoted paths: stops at whitespace
     const pathPatterns = [
-      /(?:read|write|edit|fetch|glob|grep)\s+([^\s]+)/gi,
-      /(?:^|\s)(\/[^\s]+)/g,  // Absolute paths (at start or after whitespace)
-      /(?:^|\s)([a-zA-Z]:\\[^\s]+)/g,  // Windows paths (at start or after whitespace)
+      // Quoted paths after command words (handles spaces in paths)
+      /(?:read|write|edit|fetch|glob|grep)\s+"([^"]+)"/gi,
+      /(?:read|write|edit|fetch|glob|grep)\s+'([^']+)'/gi,
+      // Unquoted paths after command words
+      /(?:read|write|edit|fetch|glob|grep)\s+([^\s"']+)/gi,
+      // Quoted absolute paths
+      /"(\/[^"]+)"/g,
+      /'(\/[^']+)'/g,
+      // Unquoted absolute paths (at start or after whitespace)
+      /(?:^|\s)(\/[^\s"']+)/g,
+      // Windows paths
+      /(?:^|\s)([a-zA-Z]:\\[^\s"']+)/g,
     ];
 
     for (const pattern of pathPatterns) {

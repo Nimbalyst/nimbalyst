@@ -47,14 +47,34 @@ export function resolvePath(inputPath: string, basePath: string): string {
 }
 
 /**
- * Check if a path is within the workspace directory
+ * Check if a path is within a given directory
+ */
+export function isPathWithinDirectory(
+  inputPath: string,
+  directoryPath: string,
+  basePath?: string
+): boolean {
+  if (!inputPath || !directoryPath) {
+    return false;
+  }
+
+  const normalizedDirectory = normalizePath(directoryPath);
+  const resolvedPath = basePath ? resolvePath(inputPath, basePath) : normalizePath(inputPath);
+
+  // Check if path starts with directory (is within it)
+  return resolvedPath.startsWith(normalizedDirectory + '/') || resolvedPath === normalizedDirectory;
+}
+
+/**
+ * Check if a path is within the workspace directory or any additional directories
  *
  * This uses pure path manipulation - doesn't follow symlinks or check if files exist.
  * For symlink safety, use isPathWithinWorkspaceStrict which actually resolves symlinks.
  */
 export function isPathWithinWorkspace(
   inputPath: string,
-  workspacePath: string
+  workspacePath: string,
+  additionalDirectories?: Array<{ path: string; canWrite: boolean }>
 ): boolean {
   if (!inputPath || !workspacePath) {
     return false;
@@ -63,22 +83,21 @@ export function isPathWithinWorkspace(
   const normalizedWorkspace = normalizePath(workspacePath);
   const resolvedPath = resolvePath(inputPath, workspacePath);
 
-  // Check if the resolved path starts with the workspace path
-  // Need to ensure we're checking directory boundaries, not just string prefix
-  // e.g., /home/user/project should not match /home/user/project-other
+  // Check if within workspace
+  if (resolvedPath.startsWith(normalizedWorkspace + '/') || resolvedPath === normalizedWorkspace) {
+    return true;
+  }
 
-  // Ensure workspace path ends with separator for proper prefix matching
-  const workspacePrefix = normalizedWorkspace.endsWith(path.sep)
-    ? normalizedWorkspace
-    : normalizedWorkspace + path.sep;
+  // Check if within any additional directories
+  if (additionalDirectories) {
+    for (const dir of additionalDirectories) {
+      if (isPathWithinDirectory(resolvedPath, dir.path)) {
+        return true;
+      }
+    }
+  }
 
-  // Path is within workspace if:
-  // 1. It equals the workspace exactly, or
-  // 2. It starts with workspace + separator
-  return (
-    resolvedPath === normalizedWorkspace ||
-    resolvedPath.startsWith(workspacePrefix)
-  );
+  return false;
 }
 
 /**
@@ -254,14 +273,32 @@ export function comprehensivePathCheck(
  */
 export function checkCommandPaths(
   paths: string[],
-  workspacePath: string
+  workspacePath: string,
+  additionalDirectories?: Array<{ path: string; canWrite: boolean }>
 ): {
   allAllowed: boolean;
   outsidePaths: string[];
   sensitivePaths: string[];
   checks: ComprehensivePathCheck[];
 } {
-  const checks = paths.map((p) => comprehensivePathCheck(p, workspacePath));
+  const checks = paths.map((p) => {
+    const check = comprehensivePathCheck(p, workspacePath);
+
+    // If path is outside workspace, check if it's within an additional directory
+    if (!check.withinWorkspace && additionalDirectories) {
+      for (const dir of additionalDirectories) {
+        if (isPathWithinDirectory(check.path, dir.path)) {
+          // Path is within an additional directory - update the check
+          check.withinWorkspace = true;
+          check.allowed = !check.isSensitive;
+          check.warnings = check.warnings.filter(w => !w.includes('outside the workspace'));
+          break;
+        }
+      }
+    }
+
+    return check;
+  });
 
   return {
     allAllowed: checks.every((c) => c.allowed),
