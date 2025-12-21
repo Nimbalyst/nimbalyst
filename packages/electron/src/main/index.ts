@@ -25,6 +25,7 @@ import { registerSlashCommandHandlers } from './ipc/SlashCommandHandlers';
 import { registerClaudeCodeHandlers } from './ipc/ClaudeCodeHandlers';
 import { initializeClaudeCodeSessionHandlers } from './ipc/ClaudeCodeSessionHandlers';
 import { registerNotificationHandlers } from './ipc/NotificationHandlers';
+import { registerPermissionHandlers } from './ipc/PermissionHandlers';
 import { registerGitStatusHandlers } from './ipc/GitStatusHandlers';
 import { registerProjectSelectionHandlers } from './ipc/ProjectSelectionHandlers';
 import { registerUsageAnalyticsHandlers } from './ipc/UsageAnalyticsHandlers';
@@ -66,6 +67,7 @@ import { initializeDatabase } from './database/initialize';
 import { AnalyticsService } from "./services/analytics/AnalyticsService.ts";
 import { registerAnalyticsHandlers } from "./ipc/AnalyticsHandlers.ts";
 import { shutdownStytchAuth, handleAuthCallback } from './services/StytchAuthService';
+import { getPermissionService } from './services/PermissionService';
 
 // CRITICAL: Hide dock icon when running as background Node process
 // This prevents Terminal icon from appearing when Claude Code spawns child processes
@@ -424,6 +426,7 @@ app.whenReady().then(async () => {
     initializeClaudeCodeSessionHandlers();  // Initialize Claude Code session import
     registerAnalyticsHandlers();
     registerNotificationHandlers();
+    registerPermissionHandlers();
     registerGitStatusHandlers();
     registerMCPConfigHandlers();
     registerDatabaseBrowserHandlers();
@@ -451,6 +454,20 @@ app.whenReady().then(async () => {
     // Inject additional directories loader
     // This allows Claude to access SDK docs when working on extension projects
     ClaudeCodeProvider.setAdditionalDirectoriesLoader(getAdditionalDirectoriesForWorkspace);
+
+    // Inject permission handlers for Bash command approval
+    // This allows the runtime package to evaluate Bash permissions
+    const permissionService = getPermissionService();
+    ClaudeCodeProvider.setPermissionHandler(permissionService.getPermissionHandler());
+    ClaudeCodeProvider.setPermissionResponseHandler(permissionService.getPermissionResponseHandler());
+
+    // Inject security logger for agent permission checks (dev mode only)
+    // This allows reviewing all permission decisions in the AGENT-SECURITY log
+    if (process.env.NODE_ENV === 'development') {
+      ClaudeCodeProvider.setSecurityLogger((message, data) => {
+        logger.agentSecurity.info(message, data);
+      });
+    }
 
     registerMockupHandlers();
     registerDataModelHandlers();

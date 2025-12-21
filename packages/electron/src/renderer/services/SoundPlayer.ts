@@ -38,10 +38,50 @@ export class SoundPlayer {
         // console.log('[SoundPlayer] Playing pop');
         await this.playPop();
         break;
+      case 'alert':
+        // console.log('[SoundPlayer] Playing alert');
+        await this.playAlert();
+        break;
       case 'none':
         // Do nothing
         break;
     }
+  }
+
+  /**
+   * Play an alert sound for permission requests - more attention-grabbing
+   */
+  private async playAlert(): Promise<void> {
+    if (!this.audioContext) return;
+
+    const ctx = this.audioContext;
+    const now = ctx.currentTime;
+
+    // Two-tone alert sound (like a doorbell or notification)
+    const tones = [
+      { freq: 880, start: 0, duration: 0.15 },
+      { freq: 660, start: 0.15, duration: 0.15 },
+      { freq: 880, start: 0.35, duration: 0.15 },
+    ];
+
+    tones.forEach(({ freq, start, duration }) => {
+      const oscillator = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(freq, now + start);
+
+      gainNode.gain.setValueAtTime(0, now + start);
+      gainNode.gain.linearRampToValueAtTime(0.2, now + start + 0.02);
+      gainNode.gain.setValueAtTime(0.2, now + start + duration - 0.02);
+      gainNode.gain.linearRampToValueAtTime(0, now + start + duration);
+
+      oscillator.connect(gainNode);
+      gainNode.connect(ctx.destination);
+
+      oscillator.start(now + start);
+      oscillator.stop(now + start + duration);
+    });
   }
 
   private async playChime(): Promise<void> {

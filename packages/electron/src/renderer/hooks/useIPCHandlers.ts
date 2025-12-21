@@ -1109,8 +1109,17 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       });
     };
 
+    // Handle permission request sound playback from main process
+    const handlePlayPermissionSound = () => {
+      const soundPlayer = getSoundPlayer();
+      soundPlayer.playSound('alert').catch(err => {
+        console.error('Failed to play permission sound:', err);
+      });
+    };
+
     if (window.electronAPI?.on) {
       cleanupFns.push(window.electronAPI.on('play-completion-sound', handlePlayCompletionSound));
+      cleanupFns.push(window.electronAPI.on('play-permission-sound', handlePlayPermissionSound));
     }
 
     // Clean up listeners when dependencies change

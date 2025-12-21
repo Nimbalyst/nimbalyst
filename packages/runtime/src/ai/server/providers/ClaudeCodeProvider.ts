@@ -71,6 +71,14 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     }>;
   }> = new Map();
 
+  // Tool permission requests - stores pending permission resolvers
+  // When a tool requires approval, we block until the UI provides a response via IPC
+  private pendingToolPermissions: Map<string, {
+    resolve: (response: { decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' }) => void;
+    reject: (error: Error) => void;
+    request: any; // PermissionRequest
+  }> = new Map();
+
   // Shared MCP server port (injected from electron main process)
   // This server provides multiple tools: applyDiff, streamContent, capture_mockup_screenshot
   private static mcpServerPort: number | null = null;
@@ -98,6 +106,31 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   // Returns additional directories Claude should have access to based on workspace context
   // (e.g., SDK docs when working on an extension project)
   private static additionalDirectoriesLoader: ((workspacePath: string) => string[]) | null = null;
+
+  // Permission handler (injected from electron main process)
+  // Evaluates whether a Bash command should be allowed, denied, or requires user approval
+  private static permissionHandler: ((
+    workspacePath: string,
+    sessionId: string,
+    toolName: string,
+    command: string
+  ) => Promise<{
+    decision: 'allow' | 'deny' | 'ask';
+    request?: any; // PermissionRequest if decision is 'ask'
+  }>) | null = null;
+
+  // Permission response handler (injected from electron main process)
+  // Called when user responds to a permission request
+  private static permissionResponseHandler: ((
+    workspacePath: string,
+    sessionId: string,
+    requestId: string,
+    response: { decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' }
+  ) => void) | null = null;
+
+  // Security logging callback (injected from electron main process)
+  // Only enabled in dev mode for reviewing agent security checks
+  private static securityLogger: ((message: string, data?: any) => void) | null = null;
 
   static readonly DEFAULT_MODEL = 'claude-code:sonnet';
 
@@ -158,6 +191,55 @@ export class ClaudeCodeProvider extends BaseAIProvider {
    */
   public static setAdditionalDirectoriesLoader(loader: ((workspacePath: string) => string[]) | null): void {
     ClaudeCodeProvider.additionalDirectoriesLoader = loader;
+  }
+
+  /**
+   * Set the permission handler function (called from electron main process)
+   * This allows the runtime package to evaluate Bash command permissions
+   * without directly depending on electron code
+   */
+  public static setPermissionHandler(handler: ((
+    workspacePath: string,
+    sessionId: string,
+    toolName: string,
+    command: string
+  ) => Promise<{
+    decision: 'allow' | 'deny' | 'ask';
+    request?: any;
+  }>) | null): void {
+    ClaudeCodeProvider.permissionHandler = handler;
+  }
+
+  /**
+   * Set the security logger function (called from electron main process)
+   * This allows agent security checks to be logged to the dedicated AGENT_SECURITY log
+   * Only enabled in dev mode for reviewing permission decisions
+   */
+  public static setSecurityLogger(logger: ((message: string, data?: any) => void) | null): void {
+    ClaudeCodeProvider.securityLogger = logger;
+  }
+
+  /**
+   * Log a security-related message (only if security logger is configured)
+   */
+  private logSecurity(message: string, data?: any): void {
+    if (ClaudeCodeProvider.securityLogger) {
+      ClaudeCodeProvider.securityLogger(message, data);
+    }
+  }
+
+  /**
+   * Set the permission response handler function (called from electron main process)
+   * This allows the runtime package to apply permission responses
+   * without directly depending on electron code
+   */
+  public static setPermissionResponseHandler(handler: ((
+    workspacePath: string,
+    sessionId: string,
+    requestId: string,
+    response: { decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' }
+  ) => void) | null): void {
+    ClaudeCodeProvider.permissionResponseHandler = handler;
   }
 
   async initialize(config: ProviderConfig): Promise<void> {
@@ -377,12 +459,12 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         cwd: workspacePath,
         abortController: this.abortController,
         model: this.resolveModelVariant(),
-        // Use 'default' permission mode so canUseTool fires for AskUserQuestion
-        // We auto-approve all other tools in canUseTool to maintain bypass behavior
+        // Use 'default' permission mode so canUseTool fires for AskUserQuestion and Bash
+        // We auto-approve most tools in canUseTool, but check permissions for Bash
         permissionMode: 'default',
         // canUseTool callback handles permission requests
-        // Auto-approves everything except AskUserQuestion which needs user input
-        canUseTool: this.createCanUseToolHandler(sessionId),
+        // Auto-approves most tools, but checks Bash commands and blocks on AskUserQuestion
+        canUseTool: this.createCanUseToolHandler(sessionId, workspacePath),
         // PHASE 3: PreToolUse hook for tagging "before" state
         // PostToolUse hook for triggering file watcher (no snapshot creation)
         hooks: {
@@ -454,20 +536,20 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         allowedList = DEFAULT_PLANNING_TOOLS;
       } else if ((this.config as any)?.allowedTools) {
         allowedList = (this.config as any).allowedTools as string[];
-      } else {
-        // Default to full tool access in agent mode
-        allowedList = ['*'];
       }
+      // NOTE: In agent mode, we intentionally do NOT set allowedTools.
+      // Setting allowedTools: ['*'] would cause all tools to match the "Allow Rules"
+      // in the SDK permission flow, bypassing our canUseTool callback.
+      // By not setting allowedTools, tools flow through to canUseTool where our
+      // PermissionEngine can evaluate them properly.
 
       if (allowedList) {
         (options as any).allowedTools = allowedList;
         // Workaround for SDK bug: also pass all disallowed tools explicitly
-        if (!(allowedList.length === 1 && allowedList[0] === '*')) {
-          const disallowed = SDK_NATIVE_TOOLS.filter(t => !allowedList!.includes(t));
-          (options as any).disallowedTools = disallowed;
-          // Some builds expect 'blockedTools' instead
-          (options as any).blockedTools = disallowed;
-        }
+        const disallowed = SDK_NATIVE_TOOLS.filter(t => !allowedList!.includes(t));
+        (options as any).disallowedTools = disallowed;
+        // Some builds expect 'blockedTools' instead
+        (options as any).blockedTools = disallowed;
       }
 
       // console.log('[CLAUDE-CODE] Options built without API key (Claude Code manages auth internally)');
@@ -1790,6 +1872,45 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     this.pendingAskUserQuestions.clear();
   }
 
+  /**
+   * Resolve a pending Bash permission request with user's response
+   * Called by IPC handler when renderer provides a permission response
+   */
+  public resolveToolPermission(
+    requestId: string,
+    response: { decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' }
+  ): void {
+    const pending = this.pendingToolPermissions.get(requestId);
+    if (pending) {
+      pending.resolve(response);
+      this.pendingToolPermissions.delete(requestId);
+      // console.log(`[CLAUDE-CODE] Tool permission resolved for ID: ${requestId}`);
+    } else {
+      console.warn(`[CLAUDE-CODE] No pending tool permission found for requestId: ${requestId}`);
+    }
+  }
+
+  /**
+   * Reject a pending tool permission request (e.g., on cancel/abort)
+   */
+  public rejectToolPermission(requestId: string, error: Error): void {
+    const pending = this.pendingToolPermissions.get(requestId);
+    if (pending) {
+      pending.reject(error);
+      this.pendingToolPermissions.delete(requestId);
+    }
+  }
+
+  /**
+   * Reject all pending tool permission requests (e.g., on abort)
+   */
+  public rejectAllPendingPermissions(): void {
+    for (const [requestId, pending] of this.pendingToolPermissions) {
+      pending.reject(new Error('Request aborted'));
+    }
+    this.pendingToolPermissions.clear();
+  }
+
   private async getMcpServersConfig(sessionId?: string, workspacePath?: string) {
     // Load MCP servers from user config (~/.config/claude/mcp.json) and workspace config (.mcp.json)
     // and merge with built-in Nimbalyst MCP servers
@@ -1926,17 +2047,207 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   }
 
   /**
-   * Create canUseTool handler for permission requests.
-   * Auto-approves all tools except AskUserQuestion which needs user input.
-   * This allows us to use 'default' permission mode while maintaining bypass behavior for other tools.
+   * Build a human-readable description of a tool call for permission checking.
+   * For Bash, the command itself is used. For other tools, we create a descriptive string.
    */
-  private createCanUseToolHandler(sessionId?: string) {
+  private buildToolDescription(toolName: string, input: any): string {
+    switch (toolName) {
+      case 'Read':
+        return input?.file_path ? `read ${input.file_path}` : '';
+      case 'Write':
+        return input?.file_path ? `write ${input.file_path}` : '';
+      case 'Edit':
+        return input?.file_path ? `edit ${input.file_path}` : '';
+      case 'MultiEdit':
+        return input?.edits?.length ? `multi-edit ${input.edits.length} files` : '';
+      case 'Glob':
+        return input?.pattern ? `glob ${input.pattern}` : '';
+      case 'Grep':
+        return input?.pattern ? `grep ${input.pattern}` : '';
+      case 'Task':
+        return input?.description || input?.prompt?.slice(0, 50) || 'spawn task';
+      case 'WebFetch':
+        return input?.url ? `fetch ${input.url}` : '';
+      case 'WebSearch':
+        return input?.query ? `search "${input.query}"` : '';
+      case 'TodoWrite':
+        return 'update todos';
+      case 'KillShell':
+        return input?.shell_id ? `kill shell ${input.shell_id}` : '';
+      case 'MCPSearch':
+        return input?.query ? `search MCP tools: ${input.query}` : '';
+      default:
+        // For MCP tools (mcp__*) and other unknown tools, create a generic description
+        if (toolName.startsWith('mcp__')) {
+          const parts = toolName.split('__');
+          const serverName = parts[1] || 'unknown';
+          const mcpToolName = parts[2] || 'unknown';
+          return `${serverName}:${mcpToolName}`;
+        }
+        // For completely unknown tools, just return the tool name
+        return toolName;
+    }
+  }
+
+  /**
+   * Create canUseTool handler for permission requests.
+   * Checks ALL tool calls against permission engine and handles AskUserQuestion.
+   * This allows us to use 'default' permission mode while requiring user approval for tools.
+   */
+  private createCanUseToolHandler(sessionId?: string, workspacePath?: string) {
     return async (
       toolName: string,
       input: any,
       options: { signal: AbortSignal; suggestions?: any[] }
     ): Promise<{ behavior: 'allow' | 'deny'; updatedInput?: any; message?: string }> => {
-      // Auto-approve all tools except AskUserQuestion
+      // Log all tool permission checks
+      this.logSecurity('[canUseTool] Tool call received:', {
+        toolName,
+        hasPermissionHandler: !!ClaudeCodeProvider.permissionHandler,
+      });
+
+      // Internal Nimbalyst MCP tools that should always be allowed without permission prompts
+      // Only include non-destructive tools here - editing tools (applyDiff, streamContent)
+      // should go through normal permission flow
+      const internalMcpTools = [
+        'mcp__nimbalyst-session-naming__name_session',
+        'mcp__nimbalyst-mcp__capture_mockup_screenshot',
+      ];
+
+      if (internalMcpTools.includes(toolName)) {
+        this.logSecurity('[canUseTool] Auto-allowing internal MCP tool:', { toolName });
+        return { behavior: 'allow', updatedInput: input };
+      }
+
+      // Check tool calls against permission engine (skip AskUserQuestion - handled separately)
+      if (toolName !== 'AskUserQuestion' && workspacePath && sessionId && ClaudeCodeProvider.permissionHandler) {
+        // Build a description of the tool call for permission checking
+        // For Bash, use the command; for other tools, create a descriptive string
+        let toolDescription: string;
+        if (toolName === 'Bash') {
+          toolDescription = input?.command || '';
+        } else {
+          // For non-Bash tools, create a description like "Edit file.ts" or "Write /path/to/file"
+          toolDescription = this.buildToolDescription(toolName, input);
+        }
+
+        if (toolDescription) {
+          this.logSecurity('[canUseTool] Checking permission:', {
+            toolName,
+            toolDescription: toolDescription.slice(0, 100),
+          });
+
+          try {
+            const result = await ClaudeCodeProvider.permissionHandler(
+              workspacePath,
+              sessionId,
+              toolName,
+              toolDescription
+            );
+
+            this.logSecurity('[canUseTool] Permission result:', {
+              toolName,
+              decision: result.decision,
+              hasRequest: !!result.request,
+            });
+
+            if (result.decision === 'allow') {
+              return { behavior: 'allow', updatedInput: input };
+            }
+
+            if (result.decision === 'deny') {
+              return {
+                behavior: 'deny',
+                message: 'Tool call denied by permission settings'
+              };
+            }
+
+            // decision === 'ask' - need user approval
+            if (result.request) {
+              const requestId = result.request.id;
+
+              // Create promise that will be resolved when user responds
+              const responsePromise = new Promise<{ decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' }>((resolve, reject) => {
+                this.pendingToolPermissions.set(requestId, {
+                  resolve,
+                  reject,
+                  request: result.request
+                });
+
+                // Set up abort handler
+                if (options.signal) {
+                  options.signal.addEventListener('abort', () => {
+                    this.pendingToolPermissions.delete(requestId);
+                    reject(new Error('Request aborted'));
+                  }, { once: true });
+                }
+              });
+
+              // Emit event to notify renderer to show permission UI
+              this.emit('toolPermission:pending', {
+                requestId,
+                sessionId,
+                workspacePath,
+                request: result.request,
+                timestamp: Date.now()
+              });
+
+              try {
+                // Wait for user to respond
+                const response = await responsePromise;
+
+                this.logSecurity('[canUseTool] User response received:', {
+                  toolName,
+                  decision: response.decision,
+                  scope: response.scope,
+                });
+
+                // Apply the permission response via the handler
+                if (ClaudeCodeProvider.permissionResponseHandler) {
+                  ClaudeCodeProvider.permissionResponseHandler(
+                    workspacePath,
+                    sessionId,
+                    requestId,
+                    response
+                  );
+                }
+
+                // Emit event so UI can update
+                this.emit('toolPermission:resolved', {
+                  requestId,
+                  sessionId,
+                  response,
+                  timestamp: Date.now()
+                });
+
+                if (response.decision === 'allow') {
+                  return { behavior: 'allow', updatedInput: input };
+                } else {
+                  return {
+                    behavior: 'deny',
+                    message: 'Tool call denied by user'
+                  };
+                }
+              } catch (error) {
+                this.logSecurity('[canUseTool] Permission request failed:', {
+                  toolName,
+                  error: error instanceof Error ? error.message : 'Unknown error',
+                });
+                // On abort/error, deny the tool use
+                return {
+                  behavior: 'deny',
+                  message: error instanceof Error ? error.message : 'Permission request cancelled'
+                };
+              }
+            }
+          } catch (error) {
+            console.error('[CLAUDE-CODE] Permission check failed:', error);
+            // On error, fall through to allow (fail open for now)
+          }
+        }
+      }
+
+      // Auto-approve if permission handler didn't deny or ask
       if (toolName !== 'AskUserQuestion') {
         return {
           behavior: 'allow',
@@ -2117,14 +2428,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       }
 
       // Handle non-file-editing tools (except ExitPlanMode which is handled above)
+      // Return empty object to let the request continue through permission flow to canUseTool
       if (toolName !== 'Edit' && toolName !== 'Write' && toolName !== 'MultiEdit') {
-        // console.log(`[CLAUDE-CODE] PreToolUse: Not a file editing tool, allowing`);
-        return {
-          hookSpecificOutput: {
-            hookEventName: 'PreToolUse' as const,
-            permissionDecision: 'allow' as const
-          }
-        };
+        // console.log(`[CLAUDE-CODE] PreToolUse: Not a file editing tool, deferring to canUseTool`);
+        return {};
       }
 
       try {
@@ -2195,13 +2502,9 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         // Don't block the edit if tagging fails
       }
 
-      // Always return 'allow' to let the edit proceed
-      return {
-        hookSpecificOutput: {
-          hookEventName: 'PreToolUse' as const,
-          permissionDecision: 'allow' as const
-        }
-      };
+      // Return empty object to let the request continue through permission flow to canUseTool
+      // This allows our permission engine to check workspace trust and ask for approval
+      return {};
     };
   }
 

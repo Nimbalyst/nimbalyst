@@ -3,6 +3,7 @@ import { MaterialSymbol, getProviderIcon } from '@nimbalyst/runtime';
 
 export type SettingsCategory =
   | 'tool-packages'
+  | 'agent-permissions'
   | 'claude-code'
   | 'claude'
   | 'openai'
@@ -127,6 +128,11 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
           name: 'Tool Packages',
           icon: <MaterialSymbol icon="package_2" size={16} />,
           badge: totalPackageCount > 0 ? `${installedPackageCount}/${totalPackageCount}` : undefined,
+        },
+        {
+          id: 'agent-permissions',
+          name: 'Agent Permissions',
+          icon: <MaterialSymbol icon="shield" size={16} />,
         },
       ],
     },

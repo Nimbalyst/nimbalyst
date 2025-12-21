@@ -6,6 +6,7 @@ import type { ContentMode } from '../../types/WindowModeTypes';
 import { KeyboardShortcuts, getShortcutDisplay } from '../../../shared/KeyboardShortcuts';
 import { ThemeToggleButton } from '../ThemeToggleButton/ThemeToggleButton';
 import { SyncStatusButton } from '../SyncStatusButton/SyncStatusButton';
+import { TrustIndicator } from '../TrustIndicator';
 
 export type NavigationMode = 'planning' | 'coding';
 export type SidebarView = 'files' | 'plans' | 'settings';
@@ -17,6 +18,7 @@ interface NavigationGutterProps {
   onContentModeChange: (mode: ContentMode) => void;
   onOpenHistory?: () => void;
   onOpenSettings?: () => void;
+  onOpenPermissions?: () => void;
   onTogglePlansPanel?: () => void;
   onToggleBugsPanel?: () => void;
   onToggleTasksPanel?: () => void;
@@ -39,6 +41,7 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
   onContentModeChange,
   onOpenHistory,
   onOpenSettings,
+  onOpenPermissions,
   onTogglePlansPanel,
   onToggleBugsPanel,
   onToggleTasksPanel,
@@ -213,6 +216,12 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
 
       {/* Settings (bottom) */}
       <div className="nav-section nav-settings">
+
+        {/* Trust Indicator - Shows agent trust status */}
+        <TrustIndicator
+          workspacePath={workspacePath}
+          onOpenSettings={onOpenPermissions || (() => {})}
+        />
 
         {/* Sync Status - Above Theme Toggle */}
         <SyncStatusButton

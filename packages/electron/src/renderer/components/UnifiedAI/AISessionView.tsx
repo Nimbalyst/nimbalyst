@@ -8,6 +8,7 @@ import type { TypeaheadOption } from '../Typeahead/GenericTypeahead';
 import type { AIMode } from './ModeTag';
 import { ExitPlanModeConfirmation, ExitPlanModeConfirmationData } from './ExitPlanModeConfirmation';
 import { AskUserQuestionConfirmation, AskUserQuestionData } from './AskUserQuestionConfirmation';
+import { ToolPermissionConfirmation, ToolPermissionData } from './ToolPermissionConfirmation';
 import { SlashCommandSuggestions } from './SlashCommandSuggestions';
 
 interface Todo {
@@ -270,6 +271,7 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
   const [queuedPrompts, setQueuedPrompts] = useState<any[]>([]);
   const [pendingExitPlanConfirmation, setPendingExitPlanConfirmation] = useState<ExitPlanModeConfirmationData | null>(null);
   const [pendingAskUserQuestion, setPendingAskUserQuestion] = useState<AskUserQuestionData | null>(null);
+  const [pendingToolPermission, setPendingToolPermission] = useState<ToolPermissionData | null>(null);
 
   // Listen for ExitPlanMode confirmation requests for this session
   useEffect(() => {
@@ -382,6 +384,58 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
       console.error('[AISessionView] Failed to cancel AskUserQuestion:', error);
       // Still clear the UI even if the cancel fails
       setPendingAskUserQuestion(null);
+    }
+  }, []);
+
+  // Listen for tool permission requests for this session
+  useEffect(() => {
+    const handleToolPermission = (data: ToolPermissionData) => {
+      // Only show permission request for this session
+      if (data.sessionId === sessionId) {
+        // Prevent duplicate events from resetting the component state
+        setPendingToolPermission(prev => {
+          if (prev && prev.requestId === data.requestId) {
+            return prev;
+          }
+          return data;
+        });
+      }
+    };
+
+    const cleanup = window.electronAPI.on('ai:toolPermission', handleToolPermission);
+    return () => {
+      cleanup?.();
+    };
+  }, [sessionId]);
+
+  // Handle tool permission response
+  const handleToolPermissionSubmit = useCallback(async (
+    requestId: string,
+    confirmSessionId: string,
+    response: { decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' }
+  ) => {
+    try {
+      await window.electronAPI.invoke('claude-code:answer-tool-permission', {
+        requestId,
+        sessionId: confirmSessionId,
+        response
+      });
+      setPendingToolPermission(null);
+    } catch (error) {
+      console.error('[AISessionView] Failed to submit tool permission response:', error);
+    }
+  }, []);
+
+  const handleToolPermissionCancel = useCallback(async (requestId: string, confirmSessionId: string) => {
+    try {
+      await window.electronAPI.invoke('claude-code:cancel-tool-permission', {
+        requestId,
+        sessionId: confirmSessionId
+      });
+      setPendingToolPermission(null);
+    } catch (error) {
+      console.error('[AISessionView] Failed to cancel tool permission:', error);
+      setPendingToolPermission(null);
     }
   }, []);
 
@@ -690,6 +744,16 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
           data={pendingAskUserQuestion}
           onSubmit={handleAskUserQuestionSubmit}
           onCancel={handleAskUserQuestionCancel}
+        />
+      )}
+
+      {/* Tool permission confirmation - shown when a tool requires user approval */}
+      {pendingToolPermission && (
+        <ToolPermissionConfirmation
+          key={pendingToolPermission.requestId}
+          data={pendingToolPermission}
+          onSubmit={handleToolPermissionSubmit}
+          onCancel={handleToolPermissionCancel}
         />
       )}
 

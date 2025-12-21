@@ -1,0 +1,373 @@
+# Agent Permissions System
+
+This document describes Nimbalyst's permission system for AI agent tool calls. The system provides fine-grained control over what actions the AI agent can perform in your projects.
+
+## Overview
+
+When an AI agent runs in Nimbalyst, it can execute various tools: reading files, writing code, running bash commands, making web requests, and more. The permission system ensures users maintain control over these operations while minimizing friction for trusted workflows.
+
+### Key Design Principles
+
+1. **Trust is per-project** - Each workspace has its own trust status and permission settings
+2. **Patterns, not individual calls** - Approve tool patterns once, remembered forever (not just for the session)
+3. **Read-only by default** - Safe read operations are auto-approved within the workspace
+4. **Workspace-scoped by default** - The agent cannot read or write files outside the project unless you explicitly grant access
+5. **Fine-grained bash control** - The system understands command structure (allow `npm test` but block `rm -rf`)
+6. **URL pattern matching** - Control which domains the agent can access
+
+## Permission Modes
+
+When you first open a project with the AI agent, you'll see a trust dialog with two options:
+
+### Ask for Approval (Recommended)
+
+- Read-only tools are auto-approved (file reads, `git status`, `npm list`, etc.)
+- Writing tools prompt for approval on first use
+- When approving, you choose the scope:
+  - **Just this time** - One-time approval, won't be remembered
+  - **For this session** - Allowed until you close the project
+  - **Always in this project** - Permanently remembered for this project
+- All approved patterns can be managed in **Settings > Agent Permissions**
+
+### Always Allow (Risky)
+
+- All tools run without prompting
+- Useful for fully trusted projects where you want maximum speed
+- Denied patterns are still respected
+
+## What Gets Auto-Approved
+
+In "Ask for Approval" mode, these operations are automatically allowed when they only access files within the workspace:
+
+### Read-only Bash Commands
+- `ls`, `cat`, `head`, `tail`, `less`, `more`
+- `find`, `grep`, `rg`, `ag`
+- `wc`, `diff`, `file`, `stat`
+- `pwd`, `which`, `whereis`, `type`
+- `env`, `printenv`, `echo`
+
+### Git Read-only Commands
+- `status`, `log`, `diff`, `show`, `branch`
+- `remote`, `tag`, `stash list`, `config --get`
+- `rev-parse`, `ls-files`, `ls-tree`
+
+### NPM Read-only Commands
+- `list`, `ls`, `outdated`, `view`, `info`, `search`
+
+### File Tools
+- `Read` - Reading files within workspace
+- `Glob` - Finding files by pattern
+- `Grep` - Searching file contents
+
+## Permission Patterns
+
+The system generates patterns for tool calls that can be allowed or denied:
+
+### Bash Command Patterns
+```
+bash:ls           # ls command
+bash:npm:test     # npm test
+bash:npm:run:*    # any npm run script
+bash:git:push     # git push
+```
+
+### Tool Patterns
+```
+edit:relative     # Edit files with relative paths
+write:relative    # Write files with relative paths
+read              # Read tool
+```
+
+### Examples
+
+When you approve "npm test", the pattern `bash:npm:test` is saved. Next time the agent runs `npm test`, it's automatically allowed.
+
+When you approve "git push origin main", the pattern `bash:git:push` is saved, allowing future `git push` commands.
+
+## Path Controls
+
+By default, the agent is **sandboxed to your project directory**. It cannot read or write files outside the workspace root.
+
+### What Happens When Agent Tries to Access Outside Files
+
+- **Read outside workspace** - Requires approval (will ask)
+- **Write outside workspace** - Requires approval (will ask)
+- **Sensitive paths** (e.g., `~/.ssh`, `~/.aws`, `/etc`) - Always blocked
+
+### Why This Matters
+
+Even read access to files outside your project can be dangerous:
+- A malicious prompt could exfiltrate secrets from `~/.aws/credentials`
+- Reading other project directories could leak proprietary code
+- System files could reveal information about your environment
+
+The agent will ask before accessing any path outside the project, giving you a chance to review.
+
+## Additional Directories
+
+If you need the agent to access files outside the workspace, you can explicitly grant access:
+
+1. Open Settings > Agent Permissions
+2. Click "Add Directory"
+3. Choose between:
+  - **Read** - Agent can read files but not modify
+  - **Write** - Agent can read and write files
+
+This is useful for:
+- Shared configuration directories
+- Monorepo setups where you want to reference other packages
+- External dependency directories
+
+## URL Patterns
+
+Control which domains the agent can fetch or curl:
+
+### Pattern Syntax
+
+| Pattern | Matches |
+| --- | --- |
+| `github.com` | Exact match only |
+| `*.github.com` | Any subdomain (api.github.com, raw.github.com) |
+| `https://api.example.com/*` | Any path on that URL |
+| `*.anthropic.com` | docs.anthropic.com, api.anthropic.com, etc. |
+
+### Adding URL Patterns
+
+1. Open Settings > Agent Permissions
+2. Scroll to "Allowed URL Patterns"
+3. Click "Add URL Pattern"
+4. Enter the pattern and optional description
+
+## Managing Approved Patterns
+
+All patterns you've approved (or denied) are saved and can be managed:
+
+1. Click the **shield icon** in the navigation gutter
+2. Select **"Permission settings"**
+3. Or go to **Settings > Agent Permissions**
+
+From here you can:
+- **View all allowed patterns** - See every command pattern you've approved
+- **View all denied patterns** - See patterns you've blocked
+- **Remove patterns** - Click the trash icon to remove any pattern
+- **Reset to defaults** - Clear all patterns and start fresh
+
+This is especially useful when:
+- You accidentally approved something you shouldn't have
+- You want to tighten security after a period of "Allow All"
+- You're debugging why certain commands are/aren't being allowed
+
+## Architecture
+
+### Components
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Renderer Process                         │
+├─────────────────────────────────────────────────────────────┤
+│  ProjectTrustToast    - First-time trust dialog             │
+│  TrustIndicator       - Nav gutter status icon              │
+│  ProjectPermissionsPanel - Full settings UI                 │
+│  ToolPermissionConfirmation - Inline approval dialog        │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              │ IPC
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                      Main Process                            │
+├─────────────────────────────────────────────────────────────┤
+│  PermissionService    - Singleton managing all permissions  │
+│  PermissionHandlers   - IPC handlers for renderer           │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Runtime Package                           │
+├─────────────────────────────────────────────────────────────┤
+│  PermissionEngine     - Core evaluation logic               │
+│  commandParser        - Bash command parsing                │
+│  directoryScope       - Path validation                     │
+│  dangerousPatterns    - Risk detection                      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Data Flow
+
+1. **Agent requests tool** → Claude Code SDK calls `canUseTool` callback
+2. **PermissionService.evaluateCommand()** → Parses command, checks patterns
+3. **Decision returned**:
+  - `allow` - Tool executes immediately
+  - `deny` - Tool blocked, agent notified
+  - `ask` - UI shows approval dialog
+4. **User responds** → Pattern saved if "always" selected
+5. **Tool executes or blocks** based on response
+
+### Storage
+
+Permissions are stored per-workspace in `workspace-settings.json`:
+
+```json
+{
+  "agentPermissions": {
+    "isTrusted": true,
+    "trustedAt": 1703001234567,
+    "permissionMode": "ask",
+    "allowedPatterns": [
+      {
+        "pattern": "bash:npm:test",
+        "displayName": "npm test",
+        "addedAt": 1703001234567
+      }
+    ],
+    "deniedPatterns": [],
+    "additionalDirectories": [
+      {
+        "path": "/Users/dev/shared-config",
+        "canWrite": false,
+        "addedAt": 1703001234567
+      }
+    ],
+    "allowedUrlPatterns": [
+      {
+        "pattern": "*.github.com",
+        "description": "GitHub API access",
+        "addedAt": 1703001234567
+      }
+    ]
+  }
+}
+```
+
+## Integration with Claude Code SDK
+
+The permission system integrates with the Claude Code SDK through two mechanisms:
+
+### PreToolUse Hook
+
+Returns empty object `{}` to let requests flow through to `canUseTool`. This allows the permission engine to evaluate all tool calls.
+
+```typescript
+// In ClaudeCodeProvider.ts
+createPreToolUseHook() {
+  return async (event) => {
+    // Tag files for history before edits
+    // ...
+    // Return {} to continue to canUseTool
+    return {};
+  };
+}
+```
+
+### canUseTool Callback
+
+Called by the SDK when a tool needs permission. This is where the PermissionEngine evaluates the request:
+
+```typescript
+canUseTool: async ({ toolName, input }) => {
+  const evaluation = permissionService.evaluateCommand(
+    workspacePath,
+    toolName,
+    getToolDescription(toolName, input),
+    sessionId
+  );
+
+  if (evaluation.overallDecision === 'allow') {
+    return true;
+  }
+  if (evaluation.overallDecision === 'deny') {
+    return false;
+  }
+  // 'ask' - show UI and wait for response
+  return await showPermissionDialog(evaluation);
+}
+```
+
+### Important: SDK Configuration
+
+To ensure `canUseTool` is called, do NOT set `allowedTools: ['*']` in agent mode. This would bypass the permission flow entirely.
+
+## UI Components
+
+### ProjectTrustToast
+
+Modal dialog shown when opening an untrusted project. User must choose a permission mode before the agent can operate.
+
+**Features:**
+- Clear explanation of trust implications
+- Two options: "Smart Permissions" and "Always Allow"
+- Highlights benefits of Smart Permissions (permanent patterns, fine-grained control)
+- Link to advanced settings
+
+### TrustIndicator
+
+Small icon in the navigation gutter showing current trust status:
+
+| Icon | Status |
+| --- | --- |
+| Shield with checkmark | Trusted, Ask mode |
+| Plain shield | Trusted, Allow-all mode |
+| Shield with question | Not trusted |
+
+**Click actions:**
+- Shows dropdown with current status
+- "Change permission mode" - Reopens trust dialog
+- "Permission settings" - Opens full settings panel
+
+### ToolPermissionConfirmation
+
+Inline dialog shown in the agent panel when a tool needs approval:
+
+- Shows tool name and description
+- Pattern to approve
+- Options: "Just this time", "For this session", "Always in this project"
+- Deny/Allow buttons
+
+## Security Considerations
+
+### Path Validation
+
+All file paths are validated against:
+1. Workspace root directory
+2. Additional allowed directories
+3. Sensitive path blocklist (e.g., `~/.ssh`, `~/.aws`)
+
+### Destructive Command Detection
+
+Commands are analyzed for destructive patterns:
+- `rm -rf`, `rm -r`
+- File overwrite operations
+- Database drop commands
+- System modification commands
+
+These are flagged with warnings even if the pattern is allowed.
+
+### URL Validation
+
+Web requests are checked against:
+1. Allowed URL patterns
+2. Blocked domains (if configured)
+
+## Testing
+
+E2E tests are located in `packages/electron/e2e/permissions/`:
+
+```bash
+# Run permission tests
+npx playwright test e2e/permissions/
+```
+
+Test coverage includes:
+- Trust indicator visibility and states
+- Permission mode switching
+- Pattern allow/deny persistence
+- Additional directory management
+- URL pattern matching
+
+## Future Enhancements
+
+- [ ] Global permission presets (share settings across projects)
+- [ ] Import/export permission configurations
+- [ ] Permission audit log
+- [ ] Time-limited approvals
+- [ ] Team-shared permission policies

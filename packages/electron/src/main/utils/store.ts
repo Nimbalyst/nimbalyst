@@ -157,6 +157,67 @@ export interface SessionHistoryLayout {
   collapsedGroups: string[];
 }
 
+/**
+ * Agent permission rule for storing allowed/denied patterns
+ */
+export interface AgentPermissionRule {
+  /** Pattern identifier, e.g., 'git:push', 'npm:run:build' */
+  pattern: string;
+  /** Human-readable display name */
+  displayName: string;
+  /** Timestamp when this rule was added */
+  addedAt: number;
+}
+
+/**
+ * Permission mode for the workspace
+ */
+export type AgentPermissionMode = 'ask' | 'allow-all';
+
+/**
+ * An additional directory the agent has access to outside the workspace
+ */
+export interface AgentAdditionalDirectory {
+  /** The absolute path to the directory */
+  path: string;
+  /** Whether the agent can write to this directory */
+  canWrite: boolean;
+  /** When this directory was added */
+  addedAt: number;
+}
+
+/**
+ * A URL pattern that the agent is allowed to access
+ */
+export interface AgentAllowedUrlPattern {
+  /** The URL pattern (e.g., "*.github.com", "api.example.com", "https://docs.anthropic.com/*") */
+  pattern: string;
+  /** Human-readable description */
+  description: string;
+  /** When this pattern was added */
+  addedAt: number;
+}
+
+/**
+ * Agent permissions stored per workspace
+ */
+export interface AgentPermissions {
+  /** Patterns that are always allowed in this workspace */
+  allowedPatterns: AgentPermissionRule[];
+  /** Patterns that are always denied in this workspace */
+  deniedPatterns: AgentPermissionRule[];
+  /** Whether the workspace is trusted for agent operations */
+  isTrusted: boolean;
+  /** Timestamp when trust was granted */
+  trustedAt?: number;
+  /** Permission mode: 'ask' prompts for each command, 'allow-all' auto-approves */
+  permissionMode: AgentPermissionMode;
+  /** Additional directories outside workspace that the agent can access */
+  additionalDirectories: AgentAdditionalDirectory[];
+  /** URL patterns the agent is allowed to fetch/access */
+  allowedUrlPatterns: AgentAllowedUrlPattern[];
+}
+
 export interface AgenticCodingWindowState {
   bounds?: { width: number; height: number; x?: number; y?: number };
   devToolsOpen?: boolean;
@@ -205,6 +266,8 @@ export interface WorkspaceState {
   aiProviderOverrides?: AIProviderOverrides;
   // Extension configuration for this project (extensionId -> key -> value)
   extensionConfiguration?: Record<string, Record<string, unknown>>;
+  // Agent permissions for this project (allowed/denied patterns, trust status)
+  agentPermissions?: AgentPermissions;
   lastUpdated: number;
 }
 
@@ -282,6 +345,7 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
       fileTreeFilter: undefined,
       showFileIcons: undefined,
       aiProviderOverrides: undefined,
+      agentPermissions: undefined,
       lastUpdated: Date.now(),
     };
   }
@@ -360,6 +424,20 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
     showFileIcons: raw.showFileIcons ?? undefined,
     aiProviderOverrides: raw.aiProviderOverrides ? { ...raw.aiProviderOverrides } : undefined,
     extensionConfiguration: raw.extensionConfiguration ? { ...raw.extensionConfiguration } : undefined,
+    agentPermissions: raw.agentPermissions ? {
+      allowedPatterns: Array.isArray(raw.agentPermissions.allowedPatterns)
+        ? raw.agentPermissions.allowedPatterns.map((r: any) => ({ ...r }))
+        : [],
+      deniedPatterns: Array.isArray(raw.agentPermissions.deniedPatterns)
+        ? raw.agentPermissions.deniedPatterns.map((r: any) => ({ ...r }))
+        : [],
+      isTrusted: Boolean(raw.agentPermissions.isTrusted),
+      trustedAt: raw.agentPermissions.trustedAt,
+      permissionMode: raw.agentPermissions.permissionMode ?? 'ask',
+      additionalDirectories: Array.isArray(raw.agentPermissions.additionalDirectories)
+        ? raw.agentPermissions.additionalDirectories.map((d: any) => ({ ...d }))
+        : [],
+    } : undefined,
     lastUpdated: raw.lastUpdated ?? raw.updated_at ?? Date.now(),
   };
 }
@@ -429,6 +507,14 @@ function cloneWorkspaceState(state: WorkspaceState): WorkspaceState {
           ])
         )
       : undefined,
+    agentPermissions: state.agentPermissions ? {
+      allowedPatterns: state.agentPermissions.allowedPatterns.map(r => ({ ...r })),
+      deniedPatterns: state.agentPermissions.deniedPatterns.map(r => ({ ...r })),
+      isTrusted: state.agentPermissions.isTrusted,
+      trustedAt: state.agentPermissions.trustedAt,
+      permissionMode: state.agentPermissions.permissionMode,
+      additionalDirectories: state.agentPermissions.additionalDirectories.map(d => ({ ...d })),
+    } : undefined,
     lastUpdated: state.lastUpdated,
   };
 }
@@ -1054,5 +1140,131 @@ export function setWorkspaceExtensionConfigurationBulk(
       state.extensionConfiguration = {};
     }
     state.extensionConfiguration[extensionId] = { ...configuration };
+  });
+}
+
+// Agent Permission State Management
+export function getAgentPermissions(workspacePath: string): AgentPermissions | undefined {
+  return getWorkspaceState(workspacePath).agentPermissions;
+}
+
+export function saveAgentPermissions(workspacePath: string, permissions: AgentPermissions): void {
+  updateWorkspaceState(workspacePath, (state) => {
+    state.agentPermissions = {
+      allowedPatterns: permissions.allowedPatterns.map((r) => ({ ...r })),
+      deniedPatterns: permissions.deniedPatterns.map((r) => ({ ...r })),
+      isTrusted: permissions.isTrusted,
+      trustedAt: permissions.trustedAt,
+      permissionMode: permissions.permissionMode,
+      additionalDirectories: permissions.additionalDirectories.map((d) => ({ ...d })),
+    };
+  });
+}
+
+export function isWorkspaceTrusted(workspacePath: string): boolean {
+  return getWorkspaceState(workspacePath).agentPermissions?.isTrusted ?? false;
+}
+
+export function setWorkspaceTrusted(workspacePath: string, trusted: boolean): void {
+  updateWorkspaceState(workspacePath, (state) => {
+    if (!state.agentPermissions) {
+      state.agentPermissions = {
+        allowedPatterns: [],
+        deniedPatterns: [],
+        isTrusted: trusted,
+        trustedAt: trusted ? Date.now() : undefined,
+        permissionMode: 'ask',
+        additionalDirectories: [],
+        allowedUrlPatterns: [],
+      };
+    } else {
+      state.agentPermissions.isTrusted = trusted;
+      state.agentPermissions.trustedAt = trusted ? Date.now() : undefined;
+    }
+  });
+}
+
+export function addAllowedPattern(
+  workspacePath: string,
+  pattern: string,
+  displayName: string
+): void {
+  updateWorkspaceState(workspacePath, (state) => {
+    if (!state.agentPermissions) {
+      state.agentPermissions = {
+        allowedPatterns: [],
+        deniedPatterns: [],
+        isTrusted: false,
+        permissionMode: 'ask',
+        additionalDirectories: [],
+        allowedUrlPatterns: [],
+      };
+    }
+    // Remove from denied if present
+    state.agentPermissions.deniedPatterns = state.agentPermissions.deniedPatterns.filter(
+      (r) => r.pattern !== pattern
+    );
+    // Add to allowed if not present
+    if (!state.agentPermissions.allowedPatterns.some((r) => r.pattern === pattern)) {
+      state.agentPermissions.allowedPatterns.push({
+        pattern,
+        displayName,
+        addedAt: Date.now(),
+      });
+    }
+  });
+}
+
+export function addDeniedPattern(
+  workspacePath: string,
+  pattern: string,
+  displayName: string
+): void {
+  updateWorkspaceState(workspacePath, (state) => {
+    if (!state.agentPermissions) {
+      state.agentPermissions = {
+        allowedPatterns: [],
+        deniedPatterns: [],
+        isTrusted: false,
+        permissionMode: 'ask',
+        additionalDirectories: [],
+        allowedUrlPatterns: [],
+      };
+    }
+    // Remove from allowed if present
+    state.agentPermissions.allowedPatterns = state.agentPermissions.allowedPatterns.filter(
+      (r) => r.pattern !== pattern
+    );
+    // Add to denied if not present
+    if (!state.agentPermissions.deniedPatterns.some((r) => r.pattern === pattern)) {
+      state.agentPermissions.deniedPatterns.push({
+        pattern,
+        displayName,
+        addedAt: Date.now(),
+      });
+    }
+  });
+}
+
+export function removeAgentPermissionRule(workspacePath: string, pattern: string): void {
+  updateWorkspaceState(workspacePath, (state) => {
+    if (state.agentPermissions) {
+      state.agentPermissions.allowedPatterns = state.agentPermissions.allowedPatterns.filter(
+        (r) => r.pattern !== pattern
+      );
+      state.agentPermissions.deniedPatterns = state.agentPermissions.deniedPatterns.filter(
+        (r) => r.pattern !== pattern
+      );
+    }
+  });
+}
+
+export function resetAgentPermissions(workspacePath: string): void {
+  updateWorkspaceState(workspacePath, (state) => {
+    if (state.agentPermissions) {
+      state.agentPermissions.allowedPatterns = [];
+      state.agentPermissions.deniedPatterns = [];
+      // Keep trust status
+    }
   });
 }

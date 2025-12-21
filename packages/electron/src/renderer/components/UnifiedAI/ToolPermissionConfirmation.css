@@ -1,0 +1,228 @@
+.tool-permission-confirmation {
+  margin: 12px 16px;
+  padding: 16px;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tool-permission-confirmation--destructive {
+  border-color: var(--error-color, #ef4444);
+  background: color-mix(in srgb, var(--error-color, #ef4444) 5%, var(--surface-secondary));
+}
+
+.tool-permission-confirmation-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tool-permission-confirmation-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary-color);
+}
+
+.tool-permission-confirmation-icon--destructive {
+  color: var(--error-color, #ef4444);
+}
+
+.tool-permission-confirmation-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+/* Current action display - what the agent wants to do NOW */
+.tool-permission-confirmation-current-action {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tool-permission-confirmation-current-action-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.tool-permission-confirmation-current-action-command {
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  padding: 8px 10px;
+  overflow-x: auto;
+}
+
+.tool-permission-confirmation-current-action-command code {
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', 'Fira Mono', 'Droid Sans Mono', 'Source Code Pro', monospace;
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Legacy command display - kept for backwards compatibility */
+.tool-permission-confirmation-command {
+  background: var(--surface-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  padding: 10px 12px;
+  overflow-x: auto;
+}
+
+.tool-permission-confirmation-command code {
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', 'Fira Mono', 'Droid Sans Mono', 'Source Code Pro', monospace;
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Warnings */
+.tool-permission-confirmation-warnings {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tool-permission-confirmation-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--warning-color, #f59e0b);
+}
+
+.tool-permission-confirmation-warning svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* Patterns */
+.tool-permission-confirmation-patterns {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tool-permission-confirmation-patterns-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.tool-permission-confirmation-patterns-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tool-permission-confirmation-pattern {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  background: var(--surface-tertiary);
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border-primary);
+}
+
+.tool-permission-confirmation-pattern--destructive {
+  color: var(--error-color, #ef4444);
+  background: color-mix(in srgb, var(--error-color, #ef4444) 10%, var(--surface-tertiary));
+  border-color: var(--error-color, #ef4444);
+}
+
+/* Grouped sections - command+buttons together */
+.tool-permission-confirmation-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--surface-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+}
+
+/* Actions row - buttons within a group */
+.tool-permission-confirmation-actions-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Legacy actions - four button layout (kept for backwards compatibility) */
+.tool-permission-confirmation-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.tool-permission-confirmation-button {
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+  white-space: nowrap;
+}
+
+.tool-permission-confirmation-button:hover {
+  opacity: 0.9;
+}
+
+.tool-permission-confirmation-button:active {
+  opacity: 0.8;
+}
+
+/* Deny button */
+.tool-permission-confirmation-button--deny {
+  background: var(--surface-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
+}
+
+.tool-permission-confirmation-button--deny:hover {
+  background: var(--surface-hover);
+}
+
+/* Allow Once - most subtle */
+.tool-permission-confirmation-button--once {
+  background: var(--surface-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
+}
+
+.tool-permission-confirmation-button--once:hover {
+  background: var(--surface-hover);
+  border-color: var(--primary-color);
+}
+
+/* Allow Session - medium emphasis */
+.tool-permission-confirmation-button--session {
+  background: color-mix(in srgb, var(--primary-color) 15%, var(--surface-tertiary));
+  color: var(--primary-color);
+  border: 1px solid var(--primary-color);
+}
+
+.tool-permission-confirmation-button--session:hover {
+  background: color-mix(in srgb, var(--primary-color) 25%, var(--surface-tertiary));
+}
+
+/* Allow Always - strongest emphasis */
+.tool-permission-confirmation-button--always {
+  background: var(--primary-color);
+  color: white;
+}
+
+.tool-permission-confirmation-button--always:hover {
+  opacity: 0.9;
+}

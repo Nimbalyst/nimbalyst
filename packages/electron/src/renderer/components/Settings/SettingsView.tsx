@@ -15,6 +15,7 @@ import { NotificationsPanel } from '../GlobalSettings/panels/NotificationsPanel'
 import { MCPServersPanel } from '../GlobalSettings/panels/MCPServersPanel';
 import { SyncPanel, type SyncConfig } from '../GlobalSettings/panels/SyncPanel';
 import { ToolPackagesPanel } from './panels/ToolPackagesPanel';
+import { ProjectPermissionsPanel } from './panels/ProjectPermissionsPanel';
 import { ProviderOverrideWrapper } from './panels/ProviderOverrideWrapper';
 import { InstalledExtensionsPanel } from './panels/InstalledExtensionsPanel';
 
@@ -100,7 +101,7 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
   const [totalPackageCount, setTotalPackageCount] = useState(0);
 
   // Valid categories for each scope
-  const projectCategories: SettingsCategory[] = ['tool-packages', 'installed-extensions', 'mcp-servers', 'claude-code', 'claude', 'openai', 'openai-codex', 'lmstudio'];
+  const projectCategories: SettingsCategory[] = ['tool-packages', 'agent-permissions', 'installed-extensions', 'mcp-servers', 'claude-code', 'claude', 'openai', 'openai-codex', 'lmstudio'];
   const userCategories: SettingsCategory[] = ['claude-code', 'claude', 'openai', 'openai-codex', 'lmstudio', 'sync', 'notifications', 'advanced', 'installed-extensions', 'mcp-servers'];
 
   // When initialCategory/initialScope props change, update state (for deep linking)
@@ -363,6 +364,15 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
       );
     }
 
+    if (selectedCategory === 'agent-permissions' && workspacePath) {
+      return (
+        <ProjectPermissionsPanel
+          workspacePath={workspacePath}
+          workspaceName={workspaceName || 'Project'}
+        />
+      );
+    }
+
     // Provider panels
     const commonProps = {
       config: providers[selectedCategory] || { enabled: false, testStatus: 'idle' },
@@ -582,7 +592,7 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
   };
 
   // Categories that are only available in project scope
-  const projectOnlyCategories: SettingsCategory[] = ['tool-packages'];
+  const projectOnlyCategories: SettingsCategory[] = ['tool-packages', 'agent-permissions'];
 
   // Handle scope changes - preserve selected category when possible
   const handleScopeChange = (newScope: SettingsScope) => {

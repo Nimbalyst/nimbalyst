@@ -111,6 +111,10 @@
     "./plugins/TrackerPlugin/models": {
       "import": "./dist/plugins/TrackerPlugin/models/index.js",
       "types": "./dist/plugins/TrackerPlugin/models/index.d.ts"
+    },
+    "./ai/permissions": {
+      "import": "./dist/ai/permissions/index.js",
+      "types": "./dist/ai/permissions/index.d.ts"
     }
   },
   "files": [
@@ -125,6 +129,7 @@
     "@anthropic-ai/sdk": "^0.71.2",
     "@excalidraw/excalidraw": "0.17.6",
     "@types/react-syntax-highlighter": "^15.5.13",
+    "@types/shell-quote": "^1.7.5",
     "esbuild": "0.25.10",
     "openai": "^4.104.0",
     "posthog-js": "^1.280.1",
@@ -132,8 +137,10 @@
     "react-syntax-highlighter": "^15.5.0",
     "remark-gfm": "^4.0.1",
     "rexical": "file:../rexical",
+    "shell-quote": "^1.8.3",
     "vite": "7.1.12",
     "y-websocket": "^1.5.4",
+    "yaml": "^2.8.2",
     "yjs": ">=13.5.42"
   },
   "peerDependencies": {

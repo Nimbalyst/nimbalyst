@@ -45,6 +45,37 @@ export class SoundNotificationService {
     targetWindow.webContents.send('play-completion-sound', soundType);
   }
 
+  /**
+   * Play a permission request sound to alert the user that the agent needs approval.
+   * Only plays when app is backgrounded.
+   */
+  public playPermissionSound(workspacePath: string): void {
+    // Check if any window is visible and focused - skip if app is in foreground
+    const allWindows = BrowserWindow.getAllWindows();
+    const hasVisibleFocusedWindow = allWindows.some(win => win.isVisible() && win.isFocused());
+    if (hasVisibleFocusedWindow) {
+      // App is in foreground, skip the sound
+      return;
+    }
+
+    // REQUIRED: workspacePath must be provided
+    if (!workspacePath) {
+      console.warn('[SoundNotification] workspacePath is required for permission sound');
+      return;
+    }
+
+    // Find window by workspace path
+    const targetWindow = findWindowByWorkspace(workspacePath);
+
+    if (!targetWindow || targetWindow.isDestroyed()) {
+      console.warn('[SoundNotification] No window found for workspace:', workspacePath);
+      return;
+    }
+
+    // Send permission sound playback request to renderer
+    targetWindow.webContents.send('play-permission-sound');
+  }
+
   public testSound(soundType: CompletionSoundType, windowId?: number): void {
     console.log(`[SoundNotification] Testing sound: ${soundType}`);
 

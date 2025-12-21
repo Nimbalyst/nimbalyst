@@ -1,0 +1,120 @@
+# Docker command checks
+# Patterns for detecting significant container operations
+
+# Destructive operations
+- id: docker:system-prune
+  pattern: 'docker\s+system\s+prune'
+  description: "Remove unused Docker data"
+  severity: destructive
+  category: docker
+
+- id: docker:volume-prune
+  pattern: 'docker\s+volume\s+prune'
+  description: "Remove unused volumes"
+  severity: destructive
+  category: docker
+
+- id: docker:image-prune
+  pattern: 'docker\s+image\s+prune'
+  description: "Remove unused images"
+  severity: destructive
+  category: docker
+
+- id: docker:container-prune
+  pattern: 'docker\s+container\s+prune'
+  description: "Remove stopped containers"
+  severity: destructive
+  category: docker
+
+- id: docker:rm-force
+  pattern: 'docker\s+rm\s+(-f|--force)'
+  description: "Force remove container"
+  severity: destructive
+  category: docker
+
+- id: docker:rmi-force
+  pattern: 'docker\s+rmi\s+(-f|--force)'
+  description: "Force remove image"
+  severity: destructive
+  category: docker
+
+- id: docker:volume-rm
+  pattern: 'docker\s+volume\s+rm'
+  description: "Remove volume"
+  severity: destructive
+  category: docker
+
+# Risky operations
+- id: docker:rm
+  pattern: 'docker\s+rm\s+'
+  description: "Remove container"
+  severity: risky
+  category: docker
+
+- id: docker:rmi
+  pattern: 'docker\s+rmi\s+'
+  description: "Remove image"
+  severity: risky
+  category: docker
+
+- id: docker:stop
+  pattern: 'docker\s+stop\s+'
+  description: "Stop container"
+  severity: risky
+  category: docker
+
+- id: docker:kill
+  pattern: 'docker\s+kill\s+'
+  description: "Kill container"
+  severity: risky
+  category: docker
+
+# Significant operations
+- id: docker:run
+  pattern: 'docker\s+run'
+  description: "Run container"
+  severity: significant
+  category: docker
+
+- id: docker:exec
+  pattern: 'docker\s+exec'
+  description: "Execute command in container"
+  severity: significant
+  category: docker
+
+- id: docker:build
+  pattern: 'docker\s+build'
+  description: "Build image"
+  severity: significant
+  category: docker
+
+- id: docker:push
+  pattern: 'docker\s+push'
+  description: "Push image to registry"
+  severity: significant
+  category: docker
+
+- id: docker:pull
+  pattern: 'docker\s+pull'
+  description: "Pull image from registry"
+  severity: safe
+  category: docker
+
+# Docker Compose
+- id: docker:compose-down
+  pattern: 'docker(-|\s)compose\s+down'
+  description: "Stop and remove containers"
+  severity: risky
+  category: docker
+
+- id: docker:compose-down-volumes
+  pattern: 'docker(-|\s)compose\s+down\s+(-v|--volumes)'
+  description: "Stop containers and remove volumes"
+  severity: destructive
+  category: docker
+
+- id: docker:compose-rm
+  pattern: 'docker(-|\s)compose\s+rm'
+  description: "Remove stopped containers"
+  severity: risky
+  category: docker

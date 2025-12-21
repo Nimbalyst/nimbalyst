@@ -1,0 +1,152 @@
+# NPM/Yarn/PNPM command checks
+# Patterns for detecting significant package manager operations
+
+# Publishing (highly significant)
+- id: npm:publish
+  pattern: 'npm\s+publish'
+  description: "Publish package to npm registry"
+  severity: destructive
+  category: npm
+
+- id: yarn:publish
+  pattern: 'yarn\s+publish'
+  description: "Publish package to npm registry"
+  severity: destructive
+  category: npm
+
+- id: pnpm:publish
+  pattern: 'pnpm\s+publish'
+  description: "Publish package to npm registry"
+  severity: destructive
+  category: npm
+
+# Unpublish (destructive)
+- id: npm:unpublish
+  pattern: 'npm\s+unpublish'
+  description: "Remove package from npm registry"
+  severity: destructive
+  category: npm
+
+# Deprecate
+- id: npm:deprecate
+  pattern: 'npm\s+deprecate'
+  description: "Deprecate a package version"
+  severity: risky
+  category: npm
+
+# Install operations (modifies node_modules)
+- id: npm:install
+  pattern: 'npm\s+(install|i)(\s|$)'
+  description: "Install dependencies"
+  severity: significant
+  category: npm
+
+- id: yarn:add
+  pattern: 'yarn\s+add'
+  description: "Add dependencies"
+  severity: significant
+  category: npm
+
+- id: pnpm:add
+  pattern: 'pnpm\s+add'
+  description: "Add dependencies"
+  severity: significant
+  category: npm
+
+- id: pnpm:install
+  pattern: 'pnpm\s+install'
+  description: "Install dependencies"
+  severity: significant
+  category: npm
+
+# Uninstall
+- id: npm:uninstall
+  pattern: 'npm\s+(uninstall|remove|rm|un)'
+  description: "Remove dependencies"
+  severity: significant
+  category: npm
+
+- id: yarn:remove
+  pattern: 'yarn\s+remove'
+  description: "Remove dependencies"
+  severity: significant
+  category: npm
+
+# Global installs (affects system)
+- id: npm:install-global
+  pattern: 'npm\s+(install|i)\s+(-g|--global)'
+  description: "Install package globally"
+  severity: risky
+  category: npm
+
+- id: yarn:global-add
+  pattern: 'yarn\s+global\s+add'
+  description: "Install package globally"
+  severity: risky
+  category: npm
+
+# Run scripts (can do anything)
+- id: npm:run
+  pattern: 'npm\s+run'
+  description: "Run npm script"
+  severity: significant
+  category: npm
+
+- id: yarn:run
+  pattern: 'yarn\s+run'
+  description: "Run yarn script"
+  severity: significant
+  category: npm
+
+- id: yarn:script
+  pattern: 'yarn\s+[a-z]+'
+  description: "Run yarn script"
+  severity: significant
+  category: npm
+
+# npx (executes arbitrary packages)
+- id: npx:execute
+  pattern: 'npx\s+'
+  description: "Execute npm package"
+  severity: significant
+  category: npm
+
+# Cache operations
+- id: npm:cache-clean
+  pattern: 'npm\s+cache\s+clean'
+  description: "Clear npm cache"
+  severity: risky
+  category: npm
+
+# Audit fix (modifies packages)
+- id: npm:audit-fix
+  pattern: 'npm\s+audit\s+fix'
+  description: "Automatically fix vulnerabilities"
+  severity: significant
+  category: npm
+
+- id: npm:audit-fix-force
+  pattern: 'npm\s+audit\s+fix\s+--force'
+  description: "Force fix vulnerabilities (may break things)"
+  severity: risky
+  category: npm
+
+# Update operations
+- id: npm:update
+  pattern: 'npm\s+update'
+  description: "Update dependencies"
+  severity: significant
+  category: npm
+
+- id: yarn:upgrade
+  pattern: 'yarn\s+upgrade'
+  description: "Upgrade dependencies"
+  severity: significant
+  category: npm
+
+# Link (modifies global symlinks)
+- id: npm:link
+  pattern: 'npm\s+link'
+  description: "Create symlink to package"
+  severity: risky
+  category: npm

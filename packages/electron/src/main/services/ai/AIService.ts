@@ -1280,6 +1280,35 @@ export class AIService {
       provider.removeAllListeners('askUserQuestion:answered');
       provider.on('askUserQuestion:answered', onAskUserQuestionAnswered);
 
+      // Listen for tool permission requests and forward to renderer
+      const onToolPermissionPending = (data: { requestId: string; sessionId: string; workspacePath: string; request: any; timestamp: number }) => {
+        logger.main.info('[AIService] Tool permission requested:', data.requestId);
+        event.sender.send('ai:toolPermission', data);
+
+        // Show OS notification if app is backgrounded
+        const toolName = data.request?.toolName || 'Agent';
+        notificationService.showNotification({
+          title: 'Permission Required',
+          body: `${toolName} needs your approval to continue`,
+          sessionId: data.sessionId,
+          workspacePath: data.workspacePath,
+        });
+
+        // Play permission request sound
+        const soundService = SoundNotificationService.getInstance();
+        soundService.playPermissionSound(data.workspacePath);
+      };
+      provider.removeAllListeners('toolPermission:pending');
+      provider.on('toolPermission:pending', onToolPermissionPending);
+
+      // Listen for tool permission resolved and forward to renderer
+      const onToolPermissionResolved = (data: { requestId: string; sessionId: string; response: any; timestamp: number }) => {
+        logger.main.info('[AIService] Tool permission resolved:', data.requestId);
+        event.sender.send('ai:toolPermissionResolved', data);
+      };
+      provider.removeAllListeners('toolPermission:resolved');
+      provider.on('toolPermission:resolved', onToolPermissionResolved);
+
       // Track user @ mentions in the message
       try {
         await sessionFileTracker.trackUserMessage(
@@ -2326,6 +2355,88 @@ export class AIService {
       } else {
         logger.main.warn(`[AIService] Provider does not support AskUserQuestion cancel: ${session.provider}`);
         return { success: false, error: 'Provider does not support AskUserQuestion cancel' };
+      }
+    });
+
+    // Handle tool permission response from renderer
+    // Used when a tool requires user approval
+    ipcMain.handle('claude-code:answer-tool-permission', async (event, {
+      requestId,
+      sessionId,
+      response
+    }: {
+      requestId: string;
+      sessionId: string;
+      response: { decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' }
+    }) => {
+      logger.main.info(`[AIService] Tool permission response received: requestId=${requestId}, decision=${response.decision}, scope=${response.scope}`);
+
+      if (sessionId === 'unknown') {
+        logger.main.warn(`[AIService] Unknown session for tool permission: ${requestId}`);
+        return { success: false, error: 'Unknown session' };
+      }
+
+      // Find the session and its provider
+      const session = await this.sessionManager.loadSession(sessionId);
+      if (!session) {
+        logger.main.warn(`[AIService] Session not found for tool permission: ${sessionId}`);
+        return { success: false, error: 'Session not found' };
+      }
+
+      const provider = ProviderFactory.getProvider(session.provider as AIProviderType, sessionId);
+      if (!provider) {
+        logger.main.warn(`[AIService] Provider not found for tool permission: ${sessionId}`);
+        return { success: false, error: 'Provider not found' };
+      }
+
+      // Check if this is a ClaudeCodeProvider with the resolve method
+      if (typeof (provider as any).resolveToolPermission === 'function') {
+        (provider as any).resolveToolPermission(requestId, response);
+        return { success: true };
+      } else {
+        logger.main.warn(`[AIService] Provider does not support tool permission: ${session.provider}`);
+        return { success: false, error: 'Provider does not support tool permission' };
+      }
+    });
+
+    // Handle tool permission cancel from renderer
+    // Rejects the pending promise and aborts the AI request
+    ipcMain.handle('claude-code:cancel-tool-permission', async (event, {
+      requestId,
+      sessionId
+    }: {
+      requestId: string;
+      sessionId: string;
+    }) => {
+      logger.main.info(`[AIService] Tool permission cancel received: requestId=${requestId}`);
+
+      if (sessionId === 'unknown') {
+        logger.main.warn(`[AIService] Unknown session for tool permission cancel: ${requestId}`);
+        return { success: false, error: 'Unknown session' };
+      }
+
+      // Find the session and its provider
+      const session = await this.sessionManager.loadSession(sessionId);
+      if (!session) {
+        logger.main.warn(`[AIService] Session not found for tool permission cancel: ${sessionId}`);
+        return { success: false, error: 'Session not found' };
+      }
+
+      const provider = ProviderFactory.getProvider(session.provider as AIProviderType, sessionId);
+      if (!provider) {
+        logger.main.warn(`[AIService] Provider not found for tool permission cancel: ${sessionId}`);
+        return { success: false, error: 'Provider not found' };
+      }
+
+      // Check if this is a ClaudeCodeProvider with the reject method
+      if (typeof (provider as any).rejectToolPermission === 'function') {
+        (provider as any).rejectToolPermission(requestId, new Error('User cancelled'));
+        // Also abort the provider to stop the AI request
+        provider.abort();
+        return { success: true };
+      } else {
+        logger.main.warn(`[AIService] Provider does not support tool permission cancel: ${session.provider}`);
+        return { success: false, error: 'Provider does not support tool permission cancel' };
       }
     });
 

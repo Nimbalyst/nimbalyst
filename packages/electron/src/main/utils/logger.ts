@@ -14,12 +14,12 @@ export enum LogComponent {
   FILE_TREE = 'FILE_TREE',
   FILE = 'FILE',
   AUTOSAVE = 'AUTOSAVE',
-  
+
   // Window management
   WINDOW = 'WINDOW',
   SESSION = 'SESSION',
   MENU = 'MENU',
-  
+
   // AI services
   AI = 'AI',
   AI_CLAUDE = 'AI_CLAUDE',
@@ -28,6 +28,9 @@ export enum LogComponent {
   AI_OPENAI = 'AI_OPENAI',
   AI_SESSION = 'AI_SESSION',
   API = 'API',
+
+  // Agent security (dev mode only - for reviewing permission checks)
+  AGENT_SECURITY = 'AGENT_SECURITY',
   
   // Renderer specific
   STREAMING = 'STREAMING',
@@ -197,7 +200,13 @@ const defaultConfig: LoggerConfig = {
       enabled: true,
       level: LogLevel.INFO
     },
-    
+
+    // Agent security (dev mode only - for reviewing all permission checks)
+    [LogComponent.AGENT_SECURITY]: {
+      enabled: process.env.NODE_ENV === 'development',
+      level: LogLevel.DEBUG
+    },
+
     // General
     [LogComponent.MAIN]: {
       enabled: true,
@@ -341,7 +350,10 @@ export const logger = {
   store: createComponentLogger(LogComponent.STORE),
   save: createComponentLogger(LogComponent.SAVE),
   analytics: createComponentLogger(LogComponent.ANALYTICS),
-  
+
+  // Agent security (dev mode only - for reviewing all permission checks)
+  agentSecurity: createComponentLogger(LogComponent.AGENT_SECURITY),
+
   // General
   main: createComponentLogger(LogComponent.MAIN),
   renderer: createComponentLogger(LogComponent.RENDERER),

@@ -1,0 +1,168 @@
+# System command checks
+# Patterns for detecting dangerous system-level operations
+
+# System control
+- id: system:reboot
+  pattern: 'reboot(\s|$)'
+  description: "Reboot the system"
+  severity: destructive
+  category: system
+
+- id: system:shutdown
+  pattern: 'shutdown(\s|$)'
+  description: "Shutdown the system"
+  severity: destructive
+  category: system
+
+- id: system:halt
+  pattern: 'halt(\s|$)'
+  description: "Halt the system"
+  severity: destructive
+  category: system
+
+- id: system:poweroff
+  pattern: 'poweroff(\s|$)'
+  description: "Power off the system"
+  severity: destructive
+  category: system
+
+- id: system:init
+  pattern: 'init\s+[0-6]'
+  description: "Change system runlevel"
+  severity: destructive
+  category: system
+
+# Process control
+- id: system:kill-all
+  pattern: 'killall\s+'
+  description: "Kill processes by name"
+  severity: risky
+  category: system
+
+- id: system:pkill
+  pattern: 'pkill\s+'
+  description: "Kill processes by pattern"
+  severity: risky
+  category: system
+
+- id: system:kill-9
+  pattern: 'kill\s+-9'
+  description: "Force kill process"
+  severity: risky
+  category: system
+
+# Cron
+- id: system:crontab-remove
+  pattern: 'crontab\s+-r'
+  description: "Remove all cron jobs"
+  severity: destructive
+  category: system
+
+- id: system:crontab-edit
+  pattern: 'crontab\s+-e'
+  description: "Edit cron jobs"
+  severity: risky
+  category: system
+
+# Service management
+- id: system:systemctl-stop
+  pattern: 'systemctl\s+stop'
+  description: "Stop a system service"
+  severity: risky
+  category: system
+
+- id: system:systemctl-disable
+  pattern: 'systemctl\s+disable'
+  description: "Disable a system service"
+  severity: risky
+  category: system
+
+- id: system:service-stop
+  pattern: 'service\s+\w+\s+stop'
+  description: "Stop a service"
+  severity: risky
+  category: system
+
+# Dangerous shell constructs
+- id: system:fork-bomb
+  pattern: ':\(\)\{\s*:\|:&\s*\};:'
+  description: "Fork bomb - will crash the system"
+  severity: destructive
+  category: system
+
+- id: system:history-pipe-bash
+  pattern: 'history.*\|.*(bash|sh)($|\s)'
+  description: "Re-execute all history commands"
+  severity: destructive
+  category: system
+
+# Network
+- id: system:iptables-flush
+  pattern: 'iptables\s+-F'
+  description: "Flush all firewall rules"
+  severity: destructive
+  category: system
+
+- id: system:ufw-disable
+  pattern: 'ufw\s+disable'
+  description: "Disable firewall"
+  severity: risky
+  category: system
+
+# User management
+- id: system:userdel
+  pattern: 'userdel\s+'
+  description: "Delete a user"
+  severity: destructive
+  category: system
+
+- id: system:passwd
+  pattern: 'passwd\s+'
+  description: "Change password"
+  severity: risky
+  category: system
+
+# Sudo/root
+- id: system:sudo-su
+  pattern: 'sudo\s+su'
+  description: "Switch to root user"
+  severity: risky
+  category: system
+
+- id: system:sudo-bash
+  pattern: 'sudo\s+(bash|sh|zsh)'
+  description: "Open root shell"
+  severity: risky
+  category: system
+
+# Environment
+- id: system:export-path
+  pattern: 'export\s+PATH='
+  description: "Modify PATH environment variable"
+  severity: risky
+  category: system
+
+- id: system:source-untrusted
+  pattern: 'source\s+/tmp/'
+  description: "Source script from /tmp"
+  severity: destructive
+  category: system
+
+- id: system:eval
+  pattern: 'eval\s+'
+  description: "Evaluate arbitrary code"
+  severity: risky
+  category: system
+
+# Download and execute
+- id: system:curl-pipe-bash
+  pattern: 'curl.*\|.*(bash|sh)'
+  description: "Download and execute script"
+  severity: destructive
+  category: system
+
+- id: system:wget-pipe-bash
+  pattern: 'wget.*\|.*(bash|sh)'
+  description: "Download and execute script"
+  severity: destructive
+  category: system

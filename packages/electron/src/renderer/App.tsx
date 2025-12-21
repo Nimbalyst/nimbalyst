@@ -55,6 +55,7 @@ import { MockupPickerMenuHost } from './components/MockupPickerMenu';
 import { ExtensionHostComponents } from './components/ExtensionHostComponents';
 import { ClaudeCommandsToast } from './components/ClaudeCommandsToast';
 import { UpdateToast } from './components/UpdateToast';
+import { ProjectTrustToast } from './components/ProjectTrustToast';
 import OnboardingService from './services/OnboardingService';
 import './WorkspaceWelcome.css';
 
@@ -1477,6 +1478,13 @@ export default function App() {
         onOpenSettings={() => {
           setActiveMode('settings');
         }}
+        onOpenPermissions={() => {
+          // Deep link to agent permissions settings
+          setSettingsInitialCategory('agent-permissions');
+          setSettingsInitialScope('project');
+          setSettingsKey(k => k + 1); // Force SettingsView remount
+          setTimeout(() => setActiveMode('settings'), 0);
+        }}
       />
 
       {/* Right: Main content area + Bottom Panel */}
@@ -1760,6 +1768,15 @@ export default function App() {
       <MockupPickerMenuHost />
       <ExtensionHostComponents />
       <UpdateToast />
+      <ProjectTrustToast
+        workspacePath={workspacePath}
+        onOpenSettings={() => {
+          setSettingsInitialCategory('agent-permissions');
+          setSettingsInitialScope('project');
+          setSettingsKey(k => k + 1);
+          setTimeout(() => setActiveMode('settings'), 0);
+        }}
+      />
     </div>
   );
 }
