@@ -10,6 +10,7 @@
   "scripts": {
     "start": "electron-vite preview",
     "dev": "npm run build:worker && electron-vite dev",
+    "dev:loop": "./scripts/dev-loop.sh",
     "build": "cross-env NODE_OPTIONS='--max-old-space-size=8192' electron-vite build && npm run build:worker",
     "build:worker": "node build/build-worker.js",
     "lint": "eslint src/",

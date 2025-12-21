@@ -835,6 +835,21 @@ app.on('before-quit', async (event) => {
         return;
     }
 
+    // Check if this is a programmatic restart request (from MCP restart_nimbalyst tool)
+    const restartSignalPath = path.join(app.getAppPath(), '.restart-requested');
+    if (fs.existsSync(restartSignalPath)) {
+        console.log('[QUIT] Restart signal detected, saving session state before restart');
+        // Save session state so the session is restored after restart
+        try {
+            await saveSessionState();
+            console.log('[QUIT] Session state saved for restart');
+        } catch (error) {
+            console.error('[QUIT] Error saving session state for restart:', error);
+        }
+        // Don't delete the file here - dev-loop.sh needs it to know to restart
+        return;
+    }
+
     // Check for active AI sessions before proceeding
     if (hasActiveStreamingSessions()) {
         event.preventDefault();

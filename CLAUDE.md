@@ -113,9 +113,9 @@ The Electron app supports notarized distribution for macOS:
 
 The Electron app has multiple log outputs:
 
-### Main Process Logs (electron-log)
-- **Location**: `~/Library/Logs/@nimbalyst/electron/main.log` (macOS)
-- **View live**: `tail -f ~/Library/Logs/@nimbalyst/electron/main.log`
+### Main Process Logs
+- **Location**: `~/Library/Application Support/@nimbalyst/electron/logs/main.log` (macOS)
+- **View live**: `tail -f ~/Library/Application\ Support/@nimbalyst/electron/logs/main.log`
 - **What's logged**: Main process events, AI service, sync operations, file operations
 - **Categories**: `(MAIN)`, `(AI)`, `(API)`, `(SYNC)`, etc.
 
@@ -128,13 +128,13 @@ The Electron app has multiple log outputs:
 ### Quick Debug Commands
 ```bash
 # Watch main process logs live
-tail -f ~/Library/Logs/@nimbalyst/electron/main.log
+tail -f ~/Library/Application\ Support/@nimbalyst/electron/logs/main.log
 
 # Search for specific events
-grep "queuedPrompts\|index_broadcast" ~/Library/Logs/@nimbalyst/electron/main.log | tail -50
+grep "queuedPrompts\|index_broadcast" ~/Library/Application\ Support/@nimbalyst/electron/logs/main.log | tail -50
 
 # Watch sync-related logs
-tail -f ~/Library/Logs/@nimbalyst/electron/main.log | grep -E "CollabV3|Sync"
+tail -f ~/Library/Application\ Support/@nimbalyst/electron/logs/main.log | grep -E "CollabV3|Sync"
 ```
 
 ## Theme Support

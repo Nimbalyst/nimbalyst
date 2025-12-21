@@ -869,18 +869,41 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
             case 'restart_nimbalyst': {
               console.log('[Extension Dev MCP] Restarting Nimbalyst...');
 
-              // Import app dynamically to avoid circular dependencies
               const { app } = await import('electron');
 
-              // Use relaunch to restart the app
-              app.relaunch();
-              app.exit(0);
+              // Check if we're in dev mode (electron-vite spawns both vite and electron)
+              const isDev = process.env.NODE_ENV === 'development' || !!process.env.ELECTRON_RENDERER_URL;
 
-              // This return won't actually be sent since the app exits
-              return {
-                content: [{ type: 'text', text: 'Restarting Nimbalyst...' }],
-                isError: false
-              };
+              if (isDev) {
+                // In dev mode, write a restart signal file and quit.
+                // The outer dev-loop.sh script watches for this file and restarts npm run dev.
+                // This avoids complex process killing and ensures clean restarts.
+                const workingDir = app.getAppPath();
+                const restartSignalPath = path.join(workingDir, '.restart-requested');
+
+                console.log(`[Extension Dev MCP] Dev mode restart: writing signal to ${restartSignalPath}`);
+
+                fs.writeFileSync(restartSignalPath, Date.now().toString(), 'utf8');
+
+                // Give the file a moment to be written, then quit
+                setTimeout(() => {
+                  app.quit();
+                }, 100);
+
+                return {
+                  content: [{ type: 'text', text: 'Restart requested. The dev server will relaunch shortly.' }],
+                  isError: false
+                };
+              } else {
+                // In production, use the standard relaunch mechanism
+                app.relaunch();
+                app.exit(0);
+
+                return {
+                  content: [{ type: 'text', text: 'Restarting Nimbalyst...' }],
+                  isError: false
+                };
+              }
             }
 
             default:
