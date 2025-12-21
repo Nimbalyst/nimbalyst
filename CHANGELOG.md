@@ -20,6 +20,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.49.2] - 2025-12-21
+
+
+### Added
+- Agent tool permission system with workspace trust levels
+- Add restart_nimbalyst tool to extension dev MCP server
+- CSV spreadsheet right-click context menu
+- Open file button on edit tool result cards in agent transcript
+- Search button in agent mode header for session quick search
+
+### Changed
+- Use es-module-shims for extension loading
+
+### Fixed
+- Database backups no longer overwrite good data with corrupted/empty backups
+- URL patterns and directory permissions now persist across restarts
+- File mentions now match files with spaces in names
+- Single-line code blocks now render inline in AI chat
+- Extensions with minified variable names now load correctly
+- Slash command menu arrow keys now navigate in visual order
+
 ## [0.49.1] - 2025-12-19
 
 
