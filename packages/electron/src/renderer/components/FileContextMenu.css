@@ -6,31 +6,33 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   padding: 4px;
   min-width: 200px;
+  max-height: calc(100vh - 20px);
+  overflow-y: auto;
   z-index: 10000;
   font-size: 13px;
   backdrop-filter: blur(10px);
 }
 
-.context-menu-item {
+.file-context-menu-item {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 12px;
+  padding: 6px 12px;
   border-radius: 4px;
   cursor: pointer;
   transition: background-color 0.1s;
   color: #1f2937;
 }
 
-.context-menu-item:hover {
+.file-context-menu-item:hover {
   background-color: #f3f4f6;
 }
 
-.context-menu-item-danger {
+.file-context-menu-item-danger {
   color: #dc2626;
 }
 
-.context-menu-item-danger:hover {
+.file-context-menu-item-danger:hover {
   background-color: #fee2e2;
 }
 
@@ -78,19 +80,19 @@
   background: #1a1a1a;
 }
 
-.dark-theme .context-menu-item {
+.dark-theme .file-context-menu-item {
   color: #ffffff;
 }
 
-.dark-theme .context-menu-item:hover {
+.dark-theme .file-context-menu-item:hover {
   background-color: #3a3a3a;
 }
 
-.dark-theme .context-menu-item-danger {
+.dark-theme .file-context-menu-item-danger {
   color: #ef4444;
 }
 
-.dark-theme .context-menu-item-danger:hover {
+.dark-theme .file-context-menu-item-danger:hover {
   background-color: rgba(239, 68, 68, 0.2);
 }
 
@@ -120,19 +122,19 @@
   background: #0F172A;
 }
 
-.crystal-dark-theme .context-menu-item {
+.crystal-dark-theme .file-context-menu-item {
   color: #F3F4F6;
 }
 
-.crystal-dark-theme .context-menu-item:hover {
+.crystal-dark-theme .file-context-menu-item:hover {
   background-color: #1F2837;
 }
 
-.crystal-dark-theme .context-menu-item-danger {
+.crystal-dark-theme .file-context-menu-item-danger {
   color: #EF4444;
 }
 
-.crystal-dark-theme .context-menu-item-danger:hover {
+.crystal-dark-theme .file-context-menu-item-danger:hover {
   background-color: rgba(239, 68, 68, 0.15);
 }
 
@@ -163,19 +165,19 @@
     background: #111827;
   }
   
-  html:not(.light-theme):not(.dark-theme):not(.crystal-dark-theme) .context-menu-item {
+  html:not(.light-theme):not(.dark-theme):not(.crystal-dark-theme) .file-context-menu-item {
     color: #e5e7eb;
   }
-  
-  html:not(.light-theme):not(.dark-theme):not(.crystal-dark-theme) .context-menu-item:hover {
+
+  html:not(.light-theme):not(.dark-theme):not(.crystal-dark-theme) .file-context-menu-item:hover {
     background-color: #1f2937;
   }
-  
-  html:not(.light-theme):not(.dark-theme):not(.crystal-dark-theme) .context-menu-item-danger {
+
+  html:not(.light-theme):not(.dark-theme):not(.crystal-dark-theme) .file-context-menu-item-danger {
     color: #ef4444;
   }
-  
-  html:not(.light-theme):not(.dark-theme):not(.crystal-dark-theme) .context-menu-item-danger:hover {
+
+  html:not(.light-theme):not(.dark-theme):not(.crystal-dark-theme) .file-context-menu-item-danger:hover {
     background-color: rgba(239, 68, 68, 0.15);
   }
   

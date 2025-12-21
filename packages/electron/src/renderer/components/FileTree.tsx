@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { MaterialSymbol, getFileIcon } from '@nimbalyst/runtime';
 import { FileContextMenu } from './FileContextMenu';
+import type { NewFileType, ExtensionFileType } from './NewFileMenu';
 
 interface FileTreeItem {
   name: string;
@@ -17,7 +18,7 @@ interface FileTreeProps {
   onFileSelect: (filePath: string) => void;
   level: number;
   showIcons?: boolean;
-  onNewFile?: (folderPath: string) => void;
+  onNewFile?: (folderPath: string, fileType: NewFileType) => void;
   onNewFolder?: (folderPath: string) => void;
   onRefreshFileTree?: () => void;
   onViewHistory?: (filePath: string) => void;
@@ -25,6 +26,10 @@ interface FileTreeProps {
   selectedFolder?: string | null;
   onFolderSelect?: (folderPath: string | null) => void;
   gitStatusMap?: Map<string, FileGitStatus>;
+  /** Whether mockup files are enabled */
+  mockupEnabled?: boolean;
+  /** Extension-contributed file types */
+  extensionFileTypes?: ExtensionFileType[];
   sharedDragState?: {
     draggedItem: FileTreeItem | null;
     setDraggedItem: (item: FileTreeItem | null) => void;
@@ -87,7 +92,7 @@ function getDirectoryGitStatus(
   return null;
 }
 
-export function FileTree({ items, currentFilePath, onFileSelect, level, showIcons = true, onNewFile, onNewFolder, onRefreshFileTree, onViewHistory, onViewWorkspaceHistory, selectedFolder, onFolderSelect, gitStatusMap, sharedDragState, sharedExpandedDirs, selectedPaths: selectedPathsProp, onSelectionChange, sharedSelectionState, rootItems: rootItemsProp }: FileTreeProps) {
+export function FileTree({ items, currentFilePath, onFileSelect, level, showIcons = true, onNewFile, onNewFolder, onRefreshFileTree, onViewHistory, onViewWorkspaceHistory, selectedFolder, onFolderSelect, gitStatusMap, mockupEnabled = false, extensionFileTypes = [], sharedDragState, sharedExpandedDirs, selectedPaths: selectedPathsProp, onSelectionChange, sharedSelectionState, rootItems: rootItemsProp }: FileTreeProps) {
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -615,6 +620,8 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
                     selectedFolder={selectedFolder}
                     onFolderSelect={onFolderSelect}
                     gitStatusMap={gitStatusMap}
+                    mockupEnabled={mockupEnabled}
+                    extensionFileTypes={extensionFileTypes}
                     onSelectionChange={onSelectionChange}
                     rootItems={rootItemsProp ?? (level === 0 ? items : undefined)}
                     sharedDragState={{
@@ -699,6 +706,8 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
           onViewHistory={onViewHistory}
           onViewWorkspaceHistory={onViewWorkspaceHistory}
           selectedPaths={selectedPaths}
+          mockupEnabled={mockupEnabled}
+          extensionFileTypes={extensionFileTypes}
         />
       )}
     </>

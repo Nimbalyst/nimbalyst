@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import './FileContextMenu.css';
+import type { NewFileType, ExtensionFileType } from './NewFileMenu';
 
 interface FileContextMenuProps {
   x: number;
@@ -14,11 +15,15 @@ interface FileContextMenuProps {
   onDeleteMultiple?: (filePaths: string[]) => void;
   onOpenInDefaultApp: (filePath: string) => void;
   onShowInFinder: (filePath: string) => void;
-  onNewFile?: (folderPath: string) => void;
+  onNewFile?: (folderPath: string, fileType: NewFileType) => void;
   onNewFolder?: (folderPath: string) => void;
   onViewHistory?: (filePath: string) => void;
   onViewWorkspaceHistory?: (folderPath: string) => void;
   selectedPaths?: Set<string>;
+  /** Whether mockup files are enabled */
+  mockupEnabled?: boolean;
+  /** Extension-contributed file types */
+  extensionFileTypes?: ExtensionFileType[];
 }
 
 export function FileContextMenu({
@@ -37,7 +42,9 @@ export function FileContextMenu({
   onNewFolder,
   onViewHistory,
   onViewWorkspaceHistory,
-  selectedPaths
+  selectedPaths,
+  mockupEnabled = false,
+  extensionFileTypes = []
 }: FileContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [isRenaming, setIsRenaming] = useState(false);
@@ -80,15 +87,26 @@ export function FileContextMenu({
       const rect = menuRef.current.getBoundingClientRect();
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
+      const padding = 10; // Minimum padding from viewport edges
 
       let newX = x;
       let newY = y;
 
-      if (x + rect.width > viewportWidth) {
+      // Horizontal: prefer right of cursor, flip left if needed, clamp to viewport
+      if (x + rect.width > viewportWidth - padding) {
         newX = x - rect.width;
       }
-      if (y + rect.height > viewportHeight) {
-        newY = y - rect.height;
+      if (newX < padding) {
+        newX = padding;
+      }
+
+      // Vertical: prefer below cursor, but clamp to viewport (don't flip above)
+      if (y + rect.height > viewportHeight - padding) {
+        // Try to show as much as possible, but don't go above viewport top
+        newY = Math.max(padding, viewportHeight - rect.height - padding);
+      }
+      if (newY < padding) {
+        newY = padding;
       }
 
       if (newX !== x || newY !== y) {
@@ -208,7 +226,7 @@ export function FileContextMenu({
         className="file-context-menu"
         style={{ left: adjustedPosition.x, top: adjustedPosition.y }}
       >
-        <div className="context-menu-item context-menu-item-danger" onClick={handleDelete}>
+        <div className="file-context-menu-item file-context-menu-item-danger" onClick={handleDelete}>
           <MaterialSymbol icon="delete" size={18} />
           <span>Delete {selectedPaths.size} Items</span>
         </div>
@@ -225,20 +243,42 @@ export function FileContextMenu({
       {fileType === 'directory' && (
         <>
           {onNewFile && (
-            <div className="context-menu-item" onClick={() => { onNewFile(filePath); onClose(); }}>
-              <MaterialSymbol icon="edit_square" size={18} />
-              <span>New File</span>
-            </div>
+            <>
+              <div className="file-context-menu-item" onClick={() => { onNewFile(filePath, 'markdown'); onClose(); }}>
+                <MaterialSymbol icon="description" size={18} />
+                <span>New Markdown File</span>
+              </div>
+              {mockupEnabled && (
+                <div className="file-context-menu-item" onClick={() => { onNewFile(filePath, 'mockup'); onClose(); }}>
+                  <MaterialSymbol icon="web" size={18} />
+                  <span>New Mockup</span>
+                </div>
+              )}
+              {extensionFileTypes.map((extType) => (
+                <div
+                  key={extType.extension}
+                  className="file-context-menu-item"
+                  onClick={() => { onNewFile(filePath, `ext:${extType.extension}`); onClose(); }}
+                >
+                  <MaterialSymbol icon={extType.icon} size={18} />
+                  <span>New {extType.displayName}</span>
+                </div>
+              ))}
+              <div className="file-context-menu-item" onClick={() => { onNewFile(filePath, 'any'); onClose(); }}>
+                <MaterialSymbol icon="note_add" size={18} />
+                <span>New File...</span>
+              </div>
+            </>
           )}
           {onNewFolder && (
-            <div className="context-menu-item" onClick={() => { onNewFolder(filePath); onClose(); }}>
+            <div className="file-context-menu-item" onClick={() => { onNewFolder(filePath); onClose(); }}>
               <MaterialSymbol icon="create_new_folder" size={18} />
               <span>New Folder</span>
             </div>
           )}
           {(onNewFile || onNewFolder) && <div className="context-menu-separator" />}
           {onViewWorkspaceHistory && (
-            <div className="context-menu-item" onClick={() => { onViewWorkspaceHistory(filePath); onClose(); }}>
+            <div className="file-context-menu-item" onClick={() => { onViewWorkspaceHistory(filePath); onClose(); }}>
               <MaterialSymbol icon="history" size={18} />
               <span>View Folder History...</span>
             </div>
@@ -248,12 +288,12 @@ export function FileContextMenu({
 
       {fileType === 'file' && (
         <>
-          <div className="context-menu-item" onClick={handleOpenInDefaultApp}>
+          <div className="file-context-menu-item" onClick={handleOpenInDefaultApp}>
             <MaterialSymbol icon="launch" size={18} />
             <span>Open in Default App</span>
           </div>
           {onViewHistory && (
-            <div className="context-menu-item" onClick={() => { onViewHistory(filePath); onClose(); }}>
+            <div className="file-context-menu-item" onClick={() => { onViewHistory(filePath); onClose(); }}>
               <MaterialSymbol icon="history" size={18} />
               <span>View History...</span>
             </div>
@@ -261,26 +301,26 @@ export function FileContextMenu({
         </>
       )}
 
-      <div className="context-menu-item" onClick={handleRenameClick}>
+      <div className="file-context-menu-item" onClick={handleRenameClick}>
         <MaterialSymbol icon="edit" size={18} />
         <span>Rename</span>
       </div>
 
       <div className="context-menu-separator" />
 
-      <div className="context-menu-item" onClick={handleShowInFinder}>
+      <div className="file-context-menu-item" onClick={handleShowInFinder}>
         <MaterialSymbol icon="folder_open" size={18} />
         <span>Show in Finder</span>
       </div>
 
-      <div className="context-menu-item" onClick={handleCopyPath}>
+      <div className="file-context-menu-item" onClick={handleCopyPath}>
         <MaterialSymbol icon="content_copy" size={18} />
         <span>Copy Path</span>
       </div>
 
       <div className="context-menu-separator" />
 
-      <div className="context-menu-item context-menu-item-danger" onClick={handleDelete}>
+      <div className="file-context-menu-item file-context-menu-item-danger" onClick={handleDelete}>
         <MaterialSymbol icon="delete" size={18} />
         <span>Delete</span>
       </div>

@@ -357,8 +357,9 @@ export function WorkspaceSidebar({
     }
   };
 
-  const handleNewFileInFolder = (folderPath: string) => {
+  const handleNewFileInFolder = (folderPath: string, fileType: NewFileType) => {
     setTargetFolder(folderPath);
+    setPendingFileType(fileType);
     setIsFileModalOpen(true);
   };
 
@@ -1067,6 +1068,8 @@ export function WorkspaceSidebar({
                 selectedFolder={selectedFolder}
                 onFolderSelect={handleSelectedFolderChange}
                 gitStatusMap={showGitStatus ? gitFileStatuses : undefined}
+                mockupEnabled={mockupEnabled}
+                extensionFileTypes={extensionFileTypes}
               />
             )}
             {isDragOverRoot && (
