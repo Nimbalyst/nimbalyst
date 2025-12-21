@@ -27,8 +27,9 @@ import {
   INCREMENTAL_APPROVAL_COMMAND,
   $hasDiffNodes
 } from 'rexical';
-import { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG, COMMAND_PRIORITY_LOW } from 'lexical';
+import { $getRoot, $getSelection, $isRangeSelection, SKIP_SCROLL_INTO_VIEW_TAG, COMMAND_PRIORITY_LOW } from 'lexical';
 import { DocumentHeaderContainer } from '@nimbalyst/runtime/plugins/TrackerPlugin/documentHeader';
+import { setTextSelection, clearTextSelection } from '../UnifiedAI/TextSelectionIndicator';
 import { FixedTabHeaderContainer, FixedTabHeaderRegistry } from '@nimbalyst/runtime/plugins/shared/fixedTabHeader';
 import { MonacoCodeEditor } from '../MonacoCodeEditor';
 import { MonacoDiffApprovalBar } from '../MonacoDiffApprovalBar';
@@ -254,6 +255,154 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   useEffect(() => {
     lastSavedContentRef.current = lastSavedContent;
   }, [lastSavedContent]);
+
+  // Clear Lexical editor selection when tab becomes inactive
+  // This ensures no stale visual selection when switching back to the tab
+  // Note: Monaco handles this internally via the isActive prop
+  useEffect(() => {
+    if (!isActive && isEditorReady && editorRef.current) {
+      // Clear Lexical editor selection
+      if (isMarkdown && markdownViewMode === 'lexical') {
+        const editor = editorRef.current;
+        if (editor?.update) {
+          editor.update(() => {
+            const selection = $getSelection();
+            if ($isRangeSelection(selection)) {
+              // Collapse selection to start (removes visual selection)
+              selection.anchor.set(selection.anchor.key, selection.anchor.offset, selection.anchor.type);
+              selection.focus.set(selection.anchor.key, selection.anchor.offset, selection.anchor.type);
+            }
+          }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
+        }
+      }
+    }
+  }, [isActive, isEditorReady, isMarkdown, markdownViewMode]);
+
+  // Track text selection for AI context
+  // This updates window globals when user selects text in the editor
+  // Important: We only UPDATE selection when user selects text, but we DON'T clear it
+  // when focus leaves the editor (so user can select text, then click into AI chat)
+  useEffect(() => {
+    // Clear selection when tab becomes inactive (switching to different file)
+    if (!isActive) {
+      clearTextSelection();
+      return undefined;
+    }
+
+    // Wait for editor to be ready
+    if (!isEditorReady || !editorRef.current) {
+      return undefined;
+    }
+
+    // Debounce timer for selection updates
+    let debounceTimer: NodeJS.Timeout | null = null;
+
+    // For Lexical editor (markdown in lexical mode)
+    if (isMarkdown && markdownViewMode === 'lexical') {
+      const editor = editorRef.current;
+      if (editor?.registerUpdateListener) {
+        // When tab becomes active, clear any stale selection state
+        // The Lexical SelectionAlwaysOnDisplay plugin may show a visual selection,
+        // but we want a clean slate - user must re-select to use "+ selection" feature
+        clearTextSelection();
+
+        const unregister = editor.registerUpdateListener(() => {
+          // Only update selection if the editor has focus
+          // This prevents clearing selection when user clicks into AI chat
+          const editorElement = editor.getRootElement();
+          const hasFocus = editorElement?.contains(document.activeElement) ||
+                           document.activeElement === editorElement;
+
+          if (!hasFocus) {
+            // Editor doesn't have focus - don't update selection state
+            return;
+          }
+
+          // Clear any pending debounce
+          if (debounceTimer) {
+            clearTimeout(debounceTimer);
+          }
+
+          // Debounce selection updates to reduce performance impact
+          debounceTimer = setTimeout(() => {
+            editor.getEditorState().read(() => {
+              const selection = $getSelection();
+              if ($isRangeSelection(selection) && !selection.isCollapsed()) {
+                const selectedText = selection.getTextContent();
+                if (selectedText && selectedText.trim().length > 0) {
+                  setTextSelection(selectedText, filePath);
+                } else {
+                  clearTextSelection();
+                }
+              } else {
+                // User clicked in editor without selection - clear it
+                clearTextSelection();
+              }
+            });
+          }, 150); // 150ms debounce
+        });
+        return () => {
+          if (debounceTimer) {
+            clearTimeout(debounceTimer);
+          }
+          unregister();
+          clearTextSelection();
+        };
+      }
+      return undefined;
+    }
+
+    // For Monaco editor (code files or markdown in monaco mode)
+    if (!isMarkdown || markdownViewMode === 'monaco') {
+      const monacoEditor = editorRef.current?.editor;
+      if (monacoEditor?.onDidChangeCursorSelection) {
+        // When tab becomes active, clear any stale selection state
+        clearTextSelection();
+
+        const disposable = monacoEditor.onDidChangeCursorSelection(() => {
+          // Only update selection if the editor has focus
+          const hasFocus = monacoEditor.hasTextFocus();
+
+          if (!hasFocus) {
+            // Editor doesn't have focus - don't update selection state
+            return;
+          }
+
+          // Clear any pending debounce
+          if (debounceTimer) {
+            clearTimeout(debounceTimer);
+          }
+
+          // Debounce selection updates to reduce performance impact
+          debounceTimer = setTimeout(() => {
+            const selection = monacoEditor.getSelection();
+            if (selection && !selection.isEmpty()) {
+              const model = monacoEditor.getModel();
+              if (model) {
+                const selectedText = model.getValueInRange(selection);
+                if (selectedText && selectedText.trim().length > 0) {
+                  setTextSelection(selectedText, filePath);
+                } else {
+                  clearTextSelection();
+                }
+              }
+            } else {
+              // User clicked in editor without selection - clear it
+              clearTextSelection();
+            }
+          }, 150); // 150ms debounce
+        });
+        return () => {
+          if (debounceTimer) {
+            clearTimeout(debounceTimer);
+          }
+          disposable.dispose();
+          clearTextSelection();
+        };
+      }
+    }
+    return undefined;
+  }, [isActive, isEditorReady, isMarkdown, markdownViewMode, filePath]);
 
   // CRITICAL FIX RC7: On component mount or file path change, check if there are pending AI edits
   // that should show diffs. This handles the case where a tab is closed and reopened.
@@ -1826,6 +1975,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                 fileName={fileName}
                 initialContent={content}
                 theme={theme}
+                isActive={isActive}
                 onContentChange={handleContentChange}
                 onGetContent={(getContentFn) => {
                   getContentFnRef.current = getContentFn;
@@ -1865,6 +2015,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                 fileName={fileName}
                 initialContent={initialContent}
                 theme={theme}
+                isActive={isActive}
                 onContentChange={handleContentChange}
                 onGetContent={(getContentFn) => {
                   getContentFnRef.current = getContentFn;

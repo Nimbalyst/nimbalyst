@@ -7,6 +7,7 @@ import { ModeTag, AIMode } from './ModeTag';
 import { ModelSelector } from './ModelSelector';
 import { ContextUsageDisplay } from './ContextUsageDisplay';
 import { MockupAnnotationIndicator } from './MockupAnnotationIndicator';
+import { TextSelectionIndicator } from './TextSelectionIndicator';
 import {
   MemoryPromptIndicator,
   MemorySaveButton,
@@ -818,6 +819,12 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
 
         {/* Mockup annotation indicator - shown when there are new annotations */}
         <MockupAnnotationIndicator
+          currentFilePath={currentFilePath}
+          lastUserMessageTimestamp={lastUserMessageTimestamp ?? null}
+        />
+
+        {/* Text selection indicator - shown when text is selected in the editor */}
+        <TextSelectionIndicator
           currentFilePath={currentFilePath}
           lastUserMessageTimestamp={lastUserMessageTimestamp ?? null}
         />

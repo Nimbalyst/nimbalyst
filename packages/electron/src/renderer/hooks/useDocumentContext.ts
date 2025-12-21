@@ -1,12 +1,17 @@
 import { useMemo } from 'react';
 import type { Tab } from './useTabs';
+import { getTextSelection } from '../components/UnifiedAI/TextSelectionIndicator';
 
 export interface DocumentContext {
   filePath: string;
   fileType: string;
   content: string;
   cursorPosition: undefined;
-  selection: undefined;
+  selection?: {
+    text: string;
+    filePath: string;
+    timestamp: number;
+  };
   getLatestContent: (() => string) | undefined;
   mockupSelection?: {
     selector: string;
@@ -15,6 +20,12 @@ export interface DocumentContext {
   };
   mockupDrawing?: string; // Data URL of drawing annotations
   mockupAnnotationTimestamp?: number | null; // Timestamp when annotations were created
+  textSelection?: {
+    text: string;
+    filePath: string;
+    timestamp: number;
+  };
+  textSelectionTimestamp?: number | null; // Timestamp when text was selected
 }
 
 interface UseDocumentContextProps {
@@ -84,7 +95,9 @@ export function useDocumentContext({ activeTab, getContentRef }: UseDocumentCont
         content: '',
         cursorPosition: undefined,
         selection: undefined,
-        getLatestContent: undefined
+        getLatestContent: undefined,
+        textSelection: undefined,
+        textSelectionTimestamp: undefined
       };
     }
 
@@ -103,16 +116,24 @@ export function useDocumentContext({ activeTab, getContentRef }: UseDocumentCont
       ? (window as any).__mockupAnnotationTimestamp
       : undefined;
 
+    // Get text selection for markdown/code files
+    const textSelectionData = getTextSelection();
+    const textSelection = textSelectionData && textSelectionData.filePath === (activeTab.filePath || '')
+      ? textSelectionData
+      : undefined;
+
     return {
       filePath: activeTab.filePath || '',
       fileType,
       content: getContentRef.current ? getContentRef.current() : '',
       cursorPosition: undefined, // TODO: Get from Lexical editor
-      selection: undefined, // TODO: Get selected text from Lexical
+      selection: textSelection, // Selected text from editor
       getLatestContent: getContentRef.current || undefined,
       mockupSelection,
       mockupDrawing,
-      mockupAnnotationTimestamp
+      mockupAnnotationTimestamp,
+      textSelection,
+      textSelectionTimestamp: textSelection?.timestamp ?? undefined
     };
   }, [activeTab, activeTab?.filePath, getContentRef.current]);
 }

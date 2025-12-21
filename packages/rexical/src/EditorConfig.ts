@@ -120,7 +120,7 @@ export const DEFAULT_EDITOR_CONFIG: EditorConfig = {
   editable: true,
   hasLinkAttributes: false,
   isCodeHighlighted: true,
-  selectionAlwaysOnDisplay: false,
+  selectionAlwaysOnDisplay: true,
   shouldPreserveNewLinesInMarkdown: true,
   showTreeView: false,
   showToolbar: false,

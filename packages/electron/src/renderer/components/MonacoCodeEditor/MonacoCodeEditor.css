@@ -28,3 +28,14 @@
 .monaco-code-editor .monaco-editor .margin {
   background-color: var(--surface-primary) !important;
 }
+
+/* Unfocused selection highlight - shows when editor loses focus */
+.monaco-unfocused-selection {
+  background-color: rgba(173, 214, 255, 0.4);
+}
+
+/* Dark theme variant */
+[data-theme="dark"] .monaco-unfocused-selection,
+[data-theme="crystal-dark"] .monaco-unfocused-selection {
+  background-color: rgba(81, 154, 186, 0.4);
+}

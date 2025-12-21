@@ -13,9 +13,20 @@ export interface DocumentContext {
   selection?:
     | string
     | {
+        text: string;
+        filePath: string;
+        timestamp: number;
+      }
+    | {
         start: { line: number; column: number };
         end: { line: number; column: number };
       };
+  textSelection?: {
+    text: string;
+    filePath: string;
+    timestamp: number;
+  };
+  textSelectionTimestamp?: number | null;
 }
 
 export interface ChatAttachment {

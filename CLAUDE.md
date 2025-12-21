@@ -88,6 +88,42 @@ Custom nodes extend Lexical's base functionality:
 - Theme system in `src/themes/` for consistent editor appearance
 - Responsive design with mobile considerations
 
+### State Management Patterns
+
+For ephemeral UI state that needs to be shared across React component boundaries (especially between editor and AI chat), the codebase uses window globals as a simple pub/sub mechanism.
+
+**Pattern:**
+- Store state on window: `(window as any).__featureName`
+- Notify via custom event: `window.dispatchEvent(new CustomEvent('event-name'))`
+- Subscribe with `useSyncExternalStore` for React 18 compatibility
+
+**Examples:**
+- **Text selection**: `__textSelectionText`, `__textSelectionFilePath`, `__textSelectionTimestamp`
+- **Mockup annotations**: `__mockupSelection`, `__mockupDrawing`, `__mockupAnnotationTimestamp`
+
+**Key implementation files:**
+- `TextSelectionIndicator.tsx`: Reference implementation showing subscribe/notify pattern
+- `TabEditor.tsx`: Example of updating state from editor (with debouncing)
+- `AgenticPanel.tsx`: Example of consuming state when sending messages
+- `useDocumentContext.ts`: Example of reading state for document context
+
+**Best practices:**
+- Use `useSyncExternalStore` for React subscriptions (not manual event listeners in useEffect)
+- Debounce high-frequency updates (e.g., selection changes on cursor movement)
+- Include timestamps to track when state was last updated
+- Clear state when switching tabs or closing relevant UI
+
+**When to use this pattern:**
+- State needs to cross major component boundaries (editor ↔ AI chat)
+- State is ephemeral and doesn't need persistence
+- React context would cause unnecessary re-renders
+- State updates are event-driven and asynchronous
+
+**When NOT to use:**
+- Persistent state (use IPC to main process instead)
+- State within a single component tree (use React state/context)
+- Complex state management (consider Redux or Zustand)
+
 ## Important File Patterns
 
 - Plugin files follow `src/plugins/[PluginName]Plugin/index.tsx`

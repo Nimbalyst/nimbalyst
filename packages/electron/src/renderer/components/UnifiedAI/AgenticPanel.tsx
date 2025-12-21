@@ -1909,6 +1909,22 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           contextToSend.mockupAnnotationTimestamp = (window as any).__mockupAnnotationTimestamp;
         }
 
+        // IMPORTANT: Refresh text selection from window at send time
+        // Similar to mockup annotations, the text selection may have changed
+        const textSelectionText = (window as any).__textSelectionText;
+        const textSelectionFilePath = (window as any).__textSelectionFilePath;
+        const textSelectionTimestamp = (window as any).__textSelectionTimestamp;
+        if (textSelectionText && textSelectionFilePath === contextToSend.filePath) {
+          contextToSend.textSelection = {
+            text: textSelectionText,
+            filePath: textSelectionFilePath,
+            timestamp: textSelectionTimestamp
+          };
+          contextToSend.textSelectionTimestamp = textSelectionTimestamp;
+          // Also set the selection field for backwards compatibility
+          contextToSend.selection = contextToSend.textSelection;
+        }
+
         // Debug log to verify filePath is included
         console.log('[AgenticPanel] Sending document context:', {
           hasFilePath: !!contextToSend.filePath,

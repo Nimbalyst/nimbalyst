@@ -24,15 +24,16 @@ The user needs to open a document first before you can help with editing.
 You can still answer questions, provide information, and have general conversations.`;
   }
 
-  let selectionPreview = '';
+  // Get the full selected text
+  let selectedText = '';
   const selection = (documentContext as any)?.selection;
-  if (typeof selection === 'string') {
-    selectionPreview = selection.slice(0, 100) + (selection.length > 100 ? '...' : '');
+  const textSelection = (documentContext as any)?.textSelection;
+  if (textSelection && typeof textSelection === 'object' && textSelection.text) {
+    selectedText = textSelection.text;
+  } else if (typeof selection === 'string') {
+    selectedText = selection;
   } else if (selection && typeof selection === 'object') {
-    const selectionText = (selection as any).text ?? (selection as any).content;
-    if (typeof selectionText === 'string') {
-      selectionPreview = selectionText.slice(0, 100) + (selectionText.length > 100 ? '...' : '');
-    }
+    selectedText = (selection as any).text ?? (selection as any).content ?? '';
   }
 
   const fileType = documentContext?.fileType || 'markdown';
@@ -48,7 +49,17 @@ You can still answer questions, provide information, and have general conversati
 File path: ${documentContext?.filePath || 'untitled'}
 File type: ${fileType}
 ${(documentContext as any)?.cursorPosition ? `Cursor position: Line ${(documentContext as any).cursorPosition.line}, Column ${(documentContext as any).cursorPosition.column}` : ''}
-${selectionPreview ? `Selected text: "${selectionPreview}"` : ''}
+${selectedText ? `
+📝 USER-SELECTED TEXT:
+The user has selected this text in the document:
+\`\`\`
+${selectedText}
+\`\`\`
+
+When the user refers to "this", "this text", "this section", "here", or asks to
+"revise this", "expand on this", "go into more detail", etc., they are referring
+to THIS selected text above. Focus your edits on this specific selection.
+` : ''}
 ${mockupSelection ? `
 🎯 SELECTED MOCKUP ELEMENT:
 The user has clicked on this element in the mockup preview:
@@ -280,15 +291,16 @@ You can still answer questions, provide information, and have general conversati
 `;
   }
 
-  let selectionPreview = '';
+  // Get the full selected text
+  let selectedText = '';
   const selection = (documentContext as any)?.selection;
-  if (typeof selection === 'string') {
-    selectionPreview = selection.slice(0, 100) + (selection.length > 100 ? '...' : '');
+  const textSelection = (documentContext as any)?.textSelection;
+  if (textSelection && typeof textSelection === 'object' && textSelection.text) {
+    selectedText = textSelection.text;
+  } else if (typeof selection === 'string') {
+    selectedText = selection;
   } else if (selection && typeof selection === 'object') {
-    const selectionText = (selection as any).text ?? (selection as any).content;
-    if (typeof selectionText === 'string') {
-      selectionPreview = selectionText.slice(0, 100) + (selectionText.length > 100 ? '...' : '');
-    }
+    selectedText = (selection as any).text ?? (selection as any).content ?? '';
   }
 
   return base + `
@@ -298,7 +310,17 @@ You can still answer questions, provide information, and have general conversati
 ═══════════════════════════════════════════════════════════
 File path: ${documentContext?.filePath || 'untitled'}
 ${(documentContext as any)?.cursorPosition ? `Cursor position: Line ${(documentContext as any).cursorPosition.line}, Column ${(documentContext as any).cursorPosition.column}` : ''}
-${selectionPreview ? `Selected text: "${selectionPreview}"` : ''}
+${selectedText ? `
+📝 USER-SELECTED TEXT:
+The user has selected this text in the document:
+\`\`\`
+${selectedText}
+\`\`\`
+
+When the user refers to "this", "this text", "this section", "here", or asks to
+"revise this", "expand on this", "go into more detail", etc., they are referring
+to THIS selected text above. Focus your edits on this specific selection.
+` : ''}
 
 **IMPORTANT**: When the user says "this file", "this document", "here", or "clean up",
 they are referring to THIS file above (${documentContext?.filePath || 'untitled'}),

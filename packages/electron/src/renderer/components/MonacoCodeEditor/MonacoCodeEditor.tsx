@@ -9,11 +9,14 @@
 
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import Editor, { DiffEditor, type OnMount } from '@monaco-editor/react';
-import type { editor as MonacoEditor } from 'monaco-editor';
+import type { editor as MonacoEditor, Selection } from 'monaco-editor';
 import type { Theme as ConfigTheme } from 'rexical';
 import { getMonacoTheme } from '../../utils/monacoThemeMapper';
 import { getMonacoLanguage } from '../../utils/fileTypeDetector';
 import './MonacoCodeEditor.css';
+
+// CSS class for unfocused selection highlight
+const UNFOCUSED_SELECTION_CLASS = 'monaco-unfocused-selection';
 
 export interface MonacoCodeEditorProps {
   // File info
@@ -25,6 +28,9 @@ export interface MonacoCodeEditorProps {
 
   // Theme
   theme: ConfigTheme;
+
+  // Whether this editor's tab is active
+  isActive?: boolean;
 
   // Callbacks matching StravuEditor interface
   onContentChange?: () => void;
@@ -42,6 +48,7 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   fileName,
   initialContent,
   theme,
+  isActive = true,
   onContentChange,
   onGetContent,
   onEditorReady,
@@ -54,6 +61,35 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
 
   // Diff mode state
   const [diffMode, setDiffMode] = useState<MonacoDiffModeConfig | null>(null);
+
+  // Track selection decorations for unfocused state
+  const selectionDecorationsRef = useRef<string[]>([]);
+  const lastSelectionRef = useRef<Selection | null>(null);
+
+  // Clear selection and decorations when tab becomes inactive
+  useEffect(() => {
+    if (!isActive && editorRef.current) {
+      // Clear decorations
+      if (selectionDecorationsRef.current.length > 0) {
+        selectionDecorationsRef.current = editorRef.current.deltaDecorations(
+          selectionDecorationsRef.current,
+          []
+        );
+      }
+      // Clear last selection ref
+      lastSelectionRef.current = null;
+      // Collapse selection to cursor position
+      const pos = editorRef.current.getPosition();
+      if (pos) {
+        editorRef.current.setSelection({
+          startLineNumber: pos.lineNumber,
+          startColumn: pos.column,
+          endLineNumber: pos.lineNumber,
+          endColumn: pos.column
+        });
+      }
+    }
+  }, [isActive]);
 
   // Get Monaco language from file extension
   const language = getMonacoLanguage(filePath);
@@ -254,6 +290,43 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
       // Notify parent of content change
       if (onContentChange) {
         onContentChange();
+      }
+    });
+
+    // Track selection changes to remember last selection
+    editor.onDidChangeCursorSelection(() => {
+      const selection = editor.getSelection();
+      if (selection && !selection.isEmpty()) {
+        lastSelectionRef.current = selection;
+      }
+    });
+
+    // Handle focus loss - show selection decoration
+    editor.onDidBlurEditorWidget(() => {
+      const selection = lastSelectionRef.current;
+      if (selection && !selection.isEmpty()) {
+        // Add decoration to show selection when unfocused
+        selectionDecorationsRef.current = editor.deltaDecorations(
+          selectionDecorationsRef.current,
+          [{
+            range: selection,
+            options: {
+              className: UNFOCUSED_SELECTION_CLASS,
+              isWholeLine: false,
+            }
+          }]
+        );
+      }
+    });
+
+    // Handle focus gain - remove selection decoration
+    editor.onDidFocusEditorWidget(() => {
+      // Remove unfocused selection decoration
+      if (selectionDecorationsRef.current.length > 0) {
+        selectionDecorationsRef.current = editor.deltaDecorations(
+          selectionDecorationsRef.current,
+          []
+        );
       }
     });
 
