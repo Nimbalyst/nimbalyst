@@ -744,6 +744,10 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // Close and archive session from the floating action button
   const handleCloseAndArchive = useCallback(async (sessionId: string) => {
     try {
+      // Get the session name before archiving for the toast message
+      const sessionTab = sessionTabsRef.current.find(tab => tab.id === sessionId);
+      const sessionName = sessionTab?.name || 'Session';
+
       // Archive the session in the database
       await window.electronAPI.invoke('sessions:update-metadata', sessionId, { isArchived: true });
 
@@ -754,7 +758,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       setSessionHistoryRefreshTrigger(prev => prev + 1);
 
       // Show success toast with undo action
-      errorNotificationService.showInfo('Session Archived', 'Session has been archived', {
+      errorNotificationService.showInfo('Session Archived', `"${sessionName}" has been archived`, {
         action: {
           label: 'Undo',
           onClick: async () => {
