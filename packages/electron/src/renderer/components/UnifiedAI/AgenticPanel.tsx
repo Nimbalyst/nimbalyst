@@ -1422,17 +1422,24 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         } else {
           // Process any queued prompts after stream completion
           // This handles prompts queued while the AI was processing (from local or mobile)
-          console.log('[AgenticPanel] Stream complete, checking for queued prompts:', data.sessionId);
+          console.log('[AgenticPanel] Stream complete, scheduling queue processing in 100ms:', data.sessionId);
           setTimeout(() => {
             const tab = sessionTabsRef.current.find(t => t.id === data.sessionId);
-            console.log('[AgenticPanel] Processing queue check:', {
+            console.log('[AgenticPanel] Queue processing timeout fired:', {
               sessionId: data.sessionId,
               tabFound: !!tab,
               processQueuedPromptsRefSet: !!processQueuedPromptsRef.current,
-              tabsCount: sessionTabsRef.current.length
+              tabsCount: sessionTabsRef.current.length,
+              tabIds: sessionTabsRef.current.map(t => t?.id)
             });
             if (tab && processQueuedPromptsRef.current) {
+              console.log('[AgenticPanel] Calling processQueuedPrompts for session:', data.sessionId);
               processQueuedPromptsRef.current(data.sessionId, tab);
+            } else {
+              console.warn('[AgenticPanel] Queue processing SKIPPED:', {
+                reason: !tab ? 'tab not found' : 'processQueuedPromptsRef not set',
+                sessionId: data.sessionId
+              });
             }
           }, 100);
         }
@@ -1959,7 +1966,11 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         next.delete(sessionId);
         return next;
       });
-
+      // Re-throw ONLY if this is a queued prompt send
+      // For normal sends, we show the error but don't propagate it
+      if (queuedPromptId) {
+        throw err;
+      }
     }
   }, [workspacePath, mode, documentContext, sessionTabs]);
 
@@ -2048,6 +2059,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     }>;
 
     if (!pendingPrompts || pendingPrompts.length === 0) {
+      console.log(`[AgenticPanel] processQueuedPrompts: no pending prompts found for session ${sessionId}`);
       return;
     }
 
@@ -2058,7 +2070,11 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       // ATOMIC CLAIM: Use database to atomically claim this prompt
       // The claim changes status from 'pending' to 'executing'
       // Only succeeds if status is still 'pending' - prevents duplicate execution
-      console.log(`[AgenticPanel] Attempting to claim prompt: ${queuedPrompt.id}`);
+      console.log(`[AgenticPanel] Attempting to claim prompt:`, {
+        promptId: queuedPrompt.id,
+        promptPreview: queuedPrompt.prompt.substring(0, 50),
+        sessionId
+      });
 
       const claimedPrompt = await window.electronAPI.invoke('ai:claimQueuedPrompt', sessionId, queuedPrompt.id) as {
         id: string;
@@ -2073,7 +2089,10 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         continue;
       }
 
-      console.log(`[AgenticPanel] Successfully claimed prompt: ${claimedPrompt.id}`);
+      console.log(`[AgenticPanel] Successfully claimed prompt:`, {
+        promptId: claimedPrompt.id,
+        promptPreview: claimedPrompt.prompt.substring(0, 50)
+      });
 
       // Notify the AISessionView to refresh its queue display
       // The prompt was claimed and will be executed, so remove it from the visible queue
@@ -2086,18 +2105,26 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
       try {
         // Send the message using the same flow as normal messages
+        console.log(`[AgenticPanel] About to send queued prompt via handleSendMessage:`, {
+          promptId: claimedPrompt.id,
+          sessionId,
+          promptLength: claimedPrompt.prompt.length
+        });
         await handleSendMessage(
           sessionId,
           claimedPrompt.prompt,
           claimedPrompt.attachments || [],
           claimedPrompt.id  // Pass for logging/tracking purposes
         );
+        console.log(`[AgenticPanel] handleSendMessage completed for queued prompt:`, claimedPrompt.id);
 
         // Wait for response to complete before processing next prompt
         // The sendingSessions state will clear when response finishes
+        console.log(`[AgenticPanel] Waiting for response to complete for prompt:`, claimedPrompt.id);
         await new Promise<void>(resolve => {
           const checkDone = () => {
             if (!sendingSessionsRef.current.has(sessionId)) {
+              console.log(`[AgenticPanel] Response completed for prompt:`, claimedPrompt.id);
               resolve();
             } else {
               setTimeout(checkDone, 500);
