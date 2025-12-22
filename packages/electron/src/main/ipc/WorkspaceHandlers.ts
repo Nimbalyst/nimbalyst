@@ -46,6 +46,46 @@ function getFileType(filePath: string): string {
 // Cache for quick open file searches
 const fileNameCaches = new Map<string, Array<{ path: string; name: string }>>();
 
+// Ripgrep arguments for searching common text file types
+// Used by both file name search (findWorkspaceFiles) and content search
+const QUICKOPEN_FILE_TYPE_ARGS = [
+    // Ripgrep built-in types
+    '--type', 'md',
+    '--type', 'ts',
+    '--type', 'js',
+    '--type', 'json',
+    '--type', 'css',
+    '--type', 'html',
+    '--type', 'py',
+    '--type', 'rust',
+    '--type', 'go',
+    '--type', 'java',
+    '--type', 'c',
+    '--type', 'cpp',
+    '--type', 'ruby',
+    '--type', 'php',
+    '--type', 'sh',
+    '--type', 'yaml',
+    '--type', 'xml',
+    '--type', 'sql',
+    // Additional extensions not covered by built-in types
+    '--glob', '*.txt',
+    '--glob', '*.csv',
+    '--glob', '*.env',
+    '--glob', '*.toml',
+    '--glob', '*.ini',
+    '--glob', '*.conf',
+    '--glob', '*.cfg',
+    '--glob', '*.mockup.html',
+    '--glob', '*.datamodel.json',
+    '--glob', '*.datamodel',
+    '--glob', '*.swift',
+    '--glob', '*.kt',
+    '--glob', '*.scala',
+    '--glob', '*.graphql',
+    '--glob', '*.prisma',
+];
+
 // Get the ripgrep binary path for the current platform
 function getRipgrepPath(): string {
     const platform = os.platform();
@@ -104,12 +144,13 @@ function getRipgrepPath(): string {
 }
 
 // Cross-platform file finder using ripgrep --files
-async function findMarkdownFiles(dir: string): Promise<string[]> {
+// Finds all text files suitable for QuickOpen (not just markdown)
+async function findWorkspaceFiles(dir: string): Promise<string[]> {
     const rgPath = getRipgrepPath();
 
     const rgArgs = [
         '--files',
-        '--type', 'md',
+        ...QUICKOPEN_FILE_TYPE_ARGS,
         ...RIPGREP_EXCLUDE_ARGS_ARRAY,
         dir
     ];
@@ -287,7 +328,7 @@ export function registerWorkspaceHandlers() {
     ipcMain.handle('build-quick-open-cache', async (event, workspacePath: string) => {
         try {
             // Use cross-platform Node.js file walking instead of Unix find command
-            const files = await findMarkdownFiles(workspacePath);
+            const files = await findWorkspaceFiles(workspacePath);
 
             const cache: Array<{ path: string; name: string }> = [];
             for (const file of files) {
@@ -344,7 +385,7 @@ export function registerWorkspaceHandlers() {
 
             const rgPath = getRipgrepPath();
             const rgArgs = [
-                '--type', 'md',
+                ...QUICKOPEN_FILE_TYPE_ARGS,
                 '-i',
                 '--json',
                 ...RIPGREP_EXCLUDE_ARGS_ARRAY,
@@ -411,7 +452,7 @@ export function registerWorkspaceHandlers() {
 
             // First, search file names using ripgrep --files
             try {
-                const allFiles = await findMarkdownFiles(workspacePath);
+                const allFiles = await findWorkspaceFiles(workspacePath);
                 const queryLower = trimmedQuery.toLowerCase();
                 const matchingFiles = allFiles
                     .filter(file => basename(file).toLowerCase().includes(queryLower))
@@ -558,19 +599,9 @@ export function registerWorkspaceHandlers() {
 
     // Update workspace state - takes partial update, merges atomically
     ipcMain.handle('workspace:update-state', async (event, workspacePath: string, updates: any) => {
-        const previousState = getWorkspaceState(workspacePath);
-        const result = updateWorkspaceState(workspacePath, (state) => {
+        return updateWorkspaceState(workspacePath, (state) => {
             Object.assign(state, updates);
         });
-
-        // Rebuild menu if activeMode changed (to update Cmd+N shortcut assignment)
-        if (updates.activeMode !== undefined && updates.activeMode !== previousState.activeMode) {
-            // Dynamically import to avoid circular dependency
-            const { createApplicationMenu } = await import('../menu/ApplicationMenu');
-            await createApplicationMenu();
-        }
-
-        return result;
     });
 
     // File operations for workspace files

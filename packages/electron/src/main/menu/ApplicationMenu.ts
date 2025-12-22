@@ -383,20 +383,6 @@ export async function createApplicationMenu() {
     const currentTheme = getTheme();
     const isDev = process.env.NODE_ENV !== 'production';
 
-    // Determine active mode from focused window's workspace state
-    let activeMode: string | undefined;
-    const focusedWindow = getFocusedWindow();
-    if (focusedWindow) {
-        const windowId = getWindowId(focusedWindow);
-        if (windowId !== null) {
-            const state = windowStates.get(windowId);
-            if (state?.mode === 'workspace' && state.workspacePath) {
-                const workspaceState = getWorkspaceState(state.workspacePath);
-                activeMode = workspaceState?.activeMode;
-            }
-        }
-    }
-
     const template: any[] = [
         {
             label: 'File',
@@ -404,7 +390,6 @@ export async function createApplicationMenu() {
                 {
                     id: 'file-new-file',
                     label: 'New File...',
-                    accelerator: activeMode !== 'agent' ? KeyboardShortcuts.file.newFile : undefined,
                     click: async () => {
                         const focusedWindow = getFocusedWindow();
 
@@ -436,7 +421,6 @@ export async function createApplicationMenu() {
                 {
                     id: 'file-new-session',
                     label: 'New Session...',
-                    accelerator: activeMode === 'agent' ? KeyboardShortcuts.file.newSession : undefined,
                     click: async () => {
                         const focusedWindow = getFocusedWindow();
 
@@ -450,6 +434,44 @@ export async function createApplicationMenu() {
                                     focusedWindow.webContents.send('agent-new-session');
                                 }
                             }
+                        }
+                    }
+                },
+                {
+                    // Hidden menu item that handles Cmd+N dynamically based on current mode
+                    id: 'file-new-dynamic',
+                    label: 'New',
+                    accelerator: KeyboardShortcuts.file.newFile,
+                    visible: false, // Hidden from menu - only provides the accelerator
+                    click: async () => {
+                        const focusedWindow = getFocusedWindow();
+                        if (!focusedWindow) {
+                            createWindow();
+                            return;
+                        }
+
+                        const windowId = getWindowId(focusedWindow);
+                        if (windowId === null) {
+                            createWindow();
+                            return;
+                        }
+
+                        const state = windowStates.get(windowId);
+                        if (state?.mode !== 'workspace' || !state.workspacePath) {
+                            createWindow();
+                            return;
+                        }
+
+                        // Check current mode at keypress time (not menu build time)
+                        const workspaceState = getWorkspaceState(state.workspacePath);
+                        const currentMode = workspaceState?.activeMode;
+
+                        if (currentMode === 'agent') {
+                            // In agent mode, create new AI session
+                            focusedWindow.webContents.send('agent-new-session');
+                        } else {
+                            // In files/plan/settings mode, create new file
+                            focusedWindow.webContents.send('file-new-in-workspace');
                         }
                     }
                 },
