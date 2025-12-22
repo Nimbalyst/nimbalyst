@@ -19,7 +19,7 @@
  *    flyout previews without requiring complex custom rendering
  */
 
-import React, {ReactNode, useEffect, useMemo, useRef, useState,} from 'react';
+import React, {ReactNode, useCallback, useEffect, useMemo, useRef, useState,} from 'react';
 import {
   $getSelection,
   $isRangeSelection,
@@ -587,6 +587,28 @@ import {
   }) => {
     const menuRef = useRef<HTMLDivElement>(null);
     const [position, setPosition] = useState<PositionResult | null>(null);
+    // Track whether mouse interaction is enabled.
+    // This prevents auto-selection when the menu opens under the cursor.
+    const [mouseInteractionEnabled, setMouseInteractionEnabled] = useState(false);
+
+    // Disable mouse interaction when menu opens, then enable after a brief delay
+    // This prevents the initial mouseenter from selecting the wrong item
+    useEffect(() => {
+      if (position) {
+        setMouseInteractionEnabled(false);
+        const timer = setTimeout(() => {
+          setMouseInteractionEnabled(true);
+        }, 100);
+        return () => clearTimeout(timer);
+      }
+    }, [position !== null]);
+
+    // Only allow hover selection after mouse interaction is enabled
+    const handleOptionMouseEnter = useCallback((index: number) => {
+      if (mouseInteractionEnabled) {
+        onSetSelectedIndex(index);
+      }
+    }, [mouseInteractionEnabled, onSetSelectedIndex]);
 
     // Group options by section
     const groupedOptions = useMemo(() => {
@@ -722,7 +744,7 @@ import {
                           option={option}
                           isSelected={selectedOption?.id === option.id}
                           onClick={() => option.type !== 'header' && onSelectOption(option)}
-                          onMouseEnter={() => option.type !== 'header' && flatIndex >= 0 && onSetSelectedIndex(flatIndex)}
+                          onMouseEnter={() => option.type !== 'header' && flatIndex >= 0 && handleOptionMouseEnter(flatIndex)}
                           className={optionClassName}
                           selectedClassName={selectedOptionClassName}
                         />
@@ -738,7 +760,7 @@ import {
                   option={option}
                   isSelected={selectedIndex === index}
                   onClick={() => option.type !== 'header' && onSelectOption(option)}
-                  onMouseEnter={() => option.type !== 'header' && onSetSelectedIndex(index)}
+                  onMouseEnter={() => option.type !== 'header' && handleOptionMouseEnter(index)}
                   className={optionClassName}
                   selectedClassName={selectedOptionClassName}
                 />
@@ -837,7 +859,7 @@ import {
                         option={option}
                         isSelected={selectedOption?.id === option.id}
                         onClick={() => option.type !== 'header' && onSelectOption(option)}
-                        onMouseEnter={() => option.type !== 'header' && flatIndex >= 0 && onSetSelectedIndex(flatIndex)}
+                        onMouseEnter={() => option.type !== 'header' && flatIndex >= 0 && handleOptionMouseEnter(flatIndex)}
                         className={optionClassName}
                         selectedClassName={selectedOptionClassName}
                       />
@@ -853,7 +875,7 @@ import {
                 option={option}
                 isSelected={selectedIndex === index}
                 onClick={() => option.type !== 'header' && onSelectOption(option)}
-                onMouseEnter={() => option.type !== 'header' && onSetSelectedIndex(index)}
+                onMouseEnter={() => option.type !== 'header' && handleOptionMouseEnter(index)}
                 className={optionClassName}
                 selectedClassName={selectedOptionClassName}
               />

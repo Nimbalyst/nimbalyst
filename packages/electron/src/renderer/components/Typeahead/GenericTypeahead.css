@@ -42,7 +42,6 @@
   transition: background-color 0.15s;
 }
 
-.generic-typeahead-option:hover,
 .generic-typeahead-option.selected {
   background: var(--surface-hover);
 }

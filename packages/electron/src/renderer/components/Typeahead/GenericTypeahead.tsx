@@ -61,6 +61,29 @@ export function GenericTypeahead({
   const [position, setPosition] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const [isPositioned, setIsPositioned] = useState(false);
 
+  // Track whether mouse interaction is enabled.
+  // This prevents auto-selection when the menu opens under the cursor.
+  const [mouseInteractionEnabled, setMouseInteractionEnabled] = useState(false);
+
+  // Disable mouse interaction when menu opens, then enable after a brief delay
+  // This prevents the initial mouseenter from selecting the wrong item
+  useEffect(() => {
+    if (isPositioned) {
+      setMouseInteractionEnabled(false);
+      const timer = setTimeout(() => {
+        setMouseInteractionEnabled(true);
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isPositioned]);
+
+  // Only allow hover selection after mouse interaction is enabled
+  const handleOptionMouseEnter = useCallback((index: number) => {
+    if (mouseInteractionEnabled) {
+      onSelectedIndexChange(index);
+    }
+  }, [mouseInteractionEnabled, onSelectedIndexChange]);
+
   // Calculate menu position based on cursor (viewport coordinates for portal)
   useEffect(() => {
     if (!anchorElement) return;
@@ -250,7 +273,7 @@ export function GenericTypeahead({
                     isSelected ? 'selected' : ''
                   } ${option.disabled ? 'disabled' : ''}`}
                   onClick={() => handleOptionClick(option, visualIndex)}
-                  onMouseEnter={() => onSelectedIndexChange(visualIndex)}
+                  onMouseEnter={() => handleOptionMouseEnter(visualIndex)}
                 >
                   {option.icon && (
                     typeof option.icon === 'string' ? (
