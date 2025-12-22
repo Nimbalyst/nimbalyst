@@ -108,15 +108,10 @@ export const TrustIndicator: React.FC<TrustIndicatorProps> = ({
   const handleChangeMode = async () => {
     if (!workspacePath) return;
 
-    // Revoke trust first, which will trigger the trust toast to reappear
-    try {
-      await window.electronAPI.invoke('permissions:revokeWorkspaceTrust', workspacePath);
-      setMenuOpen(false);
-      // Call the callback if provided
-      onChangeMode?.();
-    } catch (error) {
-      console.error('[TrustIndicator] Failed to revoke workspace trust:', error);
-    }
+    // Just close the menu and trigger the callback to show the toast
+    // Don't revoke trust - that happens only if user picks a new mode
+    setMenuOpen(false);
+    onChangeMode?.();
   };
 
   const getStatusIcon = (): string => {

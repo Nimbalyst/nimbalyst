@@ -19,6 +19,7 @@ interface NavigationGutterProps {
   onOpenHistory?: () => void;
   onOpenSettings?: () => void;
   onOpenPermissions?: () => void;
+  onChangeTrustMode?: () => void;
   onTogglePlansPanel?: () => void;
   onToggleBugsPanel?: () => void;
   onToggleTasksPanel?: () => void;
@@ -42,6 +43,7 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
   onOpenHistory,
   onOpenSettings,
   onOpenPermissions,
+  onChangeTrustMode,
   onTogglePlansPanel,
   onToggleBugsPanel,
   onToggleTasksPanel,
@@ -221,6 +223,7 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
         <TrustIndicator
           workspacePath={workspacePath}
           onOpenSettings={onOpenPermissions || (() => {})}
+          onChangeMode={onChangeTrustMode}
         />
 
         {/* Sync Status - Above Theme Toggle */}

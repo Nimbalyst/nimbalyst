@@ -4,6 +4,10 @@ import './ProjectTrustToast.css';
 interface ProjectTrustToastProps {
   workspacePath: string | null;
   onOpenSettings?: () => void;
+  /** Force the toast to show (e.g., when user wants to change permission mode) */
+  forceShow?: boolean;
+  /** Callback when toast is dismissed without making a choice */
+  onDismiss?: () => void;
 }
 
 type TrustChoice = 'ask' | 'allow-all';
@@ -15,10 +19,21 @@ type TrustChoice = 'ask' | 'allow-all';
 export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
   workspacePath,
   onOpenSettings,
+  forceShow = false,
+  onDismiss,
 }) => {
   const [isVisible, setIsVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isChangingMode, setIsChangingMode] = useState(false);
   const toastRef = useRef<HTMLDivElement>(null);
+
+  // Handle forceShow prop - show toast when parent wants to change mode
+  useEffect(() => {
+    if (forceShow && workspacePath) {
+      setIsChangingMode(true);
+      setIsVisible(true);
+    }
+  }, [forceShow, workspacePath]);
 
   // Check trust status when workspace changes
   useEffect(() => {
@@ -31,8 +46,8 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
       try {
         const status = await window.electronAPI.invoke('permissions:getWorkspacePermissions', workspacePath);
         console.log('[ProjectTrustToast] Trust status for', workspacePath, ':', status);
-        // Show toast if workspace is not trusted yet
-        if (!status.isTrusted) {
+        // Show toast if workspace is not trusted yet (but not if we're in change mode)
+        if (!status.isTrusted && !isChangingMode) {
           setIsVisible(true);
         }
       } catch (error) {
@@ -41,7 +56,7 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
     };
 
     checkTrustStatus();
-  }, [workspacePath]);
+  }, [workspacePath, isChangingMode]);
 
   // Listen for external trust changes (e.g., from settings or TrustIndicator)
   useEffect(() => {
@@ -67,6 +82,13 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
     };
   }, [workspacePath]);
 
+  // Handle dismissing the toast without making a choice
+  const handleDismiss = useCallback(() => {
+    setIsVisible(false);
+    setIsChangingMode(false);
+    onDismiss?.();
+  }, [onDismiss]);
+
   // Handle escape key to dismiss without changing settings
   useEffect(() => {
     if (!isVisible) return;
@@ -75,7 +97,7 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
       if (e.key === 'Escape') {
         e.preventDefault();
         e.stopPropagation();
-        setIsVisible(false);
+        handleDismiss();
       }
     };
 
@@ -83,15 +105,15 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isVisible]);
+  }, [isVisible, handleDismiss]);
 
   // Handle click outside to dismiss without changing settings
   const handleOverlayClick = useCallback((e: React.MouseEvent) => {
     // Only dismiss if clicking directly on the overlay, not the toast content
     if (e.target === e.currentTarget) {
-      setIsVisible(false);
+      handleDismiss();
     }
-  }, []);
+  }, [handleDismiss]);
 
   const handleChoice = useCallback(async (choice: TrustChoice) => {
     if (!workspacePath || isSubmitting) return;
@@ -103,17 +125,22 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
       await window.electronAPI.invoke('permissions:trustWorkspace', workspacePath);
       await window.electronAPI.invoke('permissions:setPermissionMode', workspacePath, choice);
       setIsVisible(false);
+      setIsChangingMode(false);
+      // Reset parent's forceShow state
+      onDismiss?.();
     } catch (error) {
       console.error('[ProjectTrustToast] Failed to set trust:', error);
     } finally {
       setIsSubmitting(false);
     }
-  }, [workspacePath, isSubmitting]);
+  }, [workspacePath, isSubmitting, onDismiss]);
 
   const handleOpenSettings = useCallback(() => {
     setIsVisible(false);
+    setIsChangingMode(false);
+    onDismiss?.();
     onOpenSettings?.();
-  }, [onOpenSettings]);
+  }, [onOpenSettings, onDismiss]);
 
   if (!isVisible || !workspacePath) {
     return null;

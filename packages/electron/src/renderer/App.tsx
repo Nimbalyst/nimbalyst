@@ -210,6 +210,8 @@ export default function App() {
   // Planning mode for AI sidebar (Claude Code safety). Default ON
   const [aiPlanningModeEnabled, setAIPlanningModeEnabled] = useState<boolean>(true);
   const [isApiKeyDialogOpen, setIsApiKeyDialogOpen] = useState(false);
+  // Force show trust toast (when user wants to change permission mode)
+  const [forceShowTrustToast, setForceShowTrustToast] = useState(false);
   const [sessionToLoad, setSessionToLoad] = useState<{ sessionId: string; workspacePath?: string } | null>(null);
   const [currentAISessionId, setCurrentAISessionId] = useState<string | null>(null);
   const [diffError, setDiffError] = useState<{ isOpen: boolean; title: string; message: string; details?: any }>({
@@ -1492,6 +1494,10 @@ export default function App() {
           setSettingsKey(k => k + 1); // Force SettingsView remount
           setTimeout(() => setActiveMode('settings'), 0);
         }}
+        onChangeTrustMode={() => {
+          // Show the trust toast so user can pick a new mode
+          setForceShowTrustToast(true);
+        }}
       />
 
       {/* Right: Main content area + Bottom Panel */}
@@ -1783,6 +1789,8 @@ export default function App() {
           setSettingsKey(k => k + 1);
           setTimeout(() => setActiveMode('settings'), 0);
         }}
+        forceShow={forceShowTrustToast}
+        onDismiss={() => setForceShowTrustToast(false)}
       />
     </div>
   );
