@@ -183,7 +183,7 @@ jobs:
       # Sign with Digicert Software Trust Manager (Windows Only)
       - name: Setup Digicert Software Trust Manager (Windows Only)
         if: matrix.os == 'windows-latest'
-        uses: digicert/code-signing-software-trust-action@v1
+        uses: digicert/code-signing-software-trust-action@v1.0.0
         with:
           simple-signing-mode: true
           input: "packages/electron/release/Nimbalyst-Windows.exe"
