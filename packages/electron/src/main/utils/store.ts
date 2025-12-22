@@ -244,6 +244,8 @@ export interface WorkspaceState {
   extensionConfiguration?: Record<string, Record<string, unknown>>;
   // Agent permissions for this project (allowed/denied patterns, trust status)
   agentPermissions?: AgentPermissions;
+  // Worktree session mode preferences (per agentic session)
+  agentWorktreeSessionModes?: Record<string, 'agent' | 'files'>;
   lastUpdated: number;
 }
 
@@ -344,6 +346,7 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
       showFileIcons: undefined,
       aiProviderOverrides: undefined,
       agentPermissions: undefined,
+      agentWorktreeSessionModes: {},
       lastUpdated: Date.now(),
     };
   }
@@ -432,6 +435,9 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
             ? 'bypass-all'
             : null,
     } : undefined,
+    agentWorktreeSessionModes: raw.agentWorktreeSessionModes
+      ? { ...raw.agentWorktreeSessionModes }
+      : undefined,
     lastUpdated: raw.lastUpdated ?? raw.updated_at ?? Date.now(),
   };
 }
@@ -503,6 +509,9 @@ function cloneWorkspaceState(state: WorkspaceState): WorkspaceState {
         )
       : undefined,
     agentPermissions: state.agentPermissions ? { permissionMode: state.agentPermissions.permissionMode } : undefined,
+    agentWorktreeSessionModes: state.agentWorktreeSessionModes
+      ? { ...state.agentWorktreeSessionModes }
+      : undefined,
     lastUpdated: state.lastUpdated,
   };
 }

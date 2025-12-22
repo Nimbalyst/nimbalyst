@@ -10,6 +10,8 @@ import { useFileMention } from '../../hooks/useFileMention';
 import type { TypeaheadOption } from '../Typeahead/GenericTypeahead';
 import type { AIMode } from './ModeTag';
 import { DiffTestDropdown } from "../AIChat/DiffTestDropdown.tsx";
+import WorktreeModeToggle, { WorktreeContentMode } from '../WorktreeMode/WorktreeModeToggle';
+import WorktreeFilesMode, { WorktreeFilesModeRef } from '../WorktreeMode/WorktreeFilesMode';
 import { getFileName } from '../../utils/pathUtils';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
 import { TerminalPanel } from '../Terminal/TerminalPanel';
@@ -160,6 +162,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   const [renamedSession, setRenamedSession] = useState<{ id: string; title: string } | null>(null);
   const [updatedSession, setUpdatedSession] = useState<{ id: string; timestamp: number } | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [worktreeSessionModes, setWorktreeSessionModes] = useState<Map<string, WorktreeContentMode>>(new Map());
+  const worktreeSessionModesRef = useRef(worktreeSessionModes);
 
   // Reload coordination for database-backed session state
   const reloadTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -180,6 +184,10 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
   // Session view refs for focusing input
   const sessionViewRefsRef = useRef<Map<string, React.RefObject<AISessionViewRef>>>(new Map());
+  const worktreeFilesModeRefsRef = useRef<Map<string, React.RefObject<WorktreeFilesModeRef>>>(new Map());
+
+  // Track pending WorktreeFilesMode mounts
+  const worktreeFilesModeReadyResolversRef = useRef<Map<string, () => void>>(new Map());
 
   // Initialization
   const initializedRef = useRef(false);
@@ -212,6 +220,10 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       setReleaseChannel(channel);
     });
   }, []);
+
+  useEffect(() => {
+    worktreeSessionModesRef.current = worktreeSessionModes;
+  }, [worktreeSessionModes]);
 
   // Focus input when panel becomes active (e.g., Cmd+K to switch to agent mode)
   // or when switching between session tabs
@@ -279,6 +291,51 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       refsMap.set(sessionId, createRef<AISessionViewRef>());
     }
     return refsMap.get(sessionId)!;
+  }, []);
+
+  const getWorktreeFilesModeRef = useCallback((sessionId: string) => {
+    const refsMap = worktreeFilesModeRefsRef.current;
+    if (!refsMap.has(sessionId)) {
+      refsMap.set(sessionId, createRef<WorktreeFilesModeRef>());
+    }
+    return refsMap.get(sessionId)!;
+  }, []);
+
+  // Handle WorktreeFilesMode mounted callback
+  const handleWorktreeFilesModeMounted = useCallback((sessionId: string) => {
+    const resolver = worktreeFilesModeReadyResolversRef.current.get(sessionId);
+    if (resolver) {
+      resolver();
+      worktreeFilesModeReadyResolversRef.current.delete(sessionId);
+    }
+  }, []);
+
+  // Wait for WorktreeFilesMode to mount
+  const waitForWorktreeFilesModeReady = useCallback((sessionId: string, timeoutMs = 5000): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      // Check if ref is already available
+      const existingRef = worktreeFilesModeRefsRef.current.get(sessionId);
+      if (existingRef?.current) {
+        resolve();
+        return;
+      }
+
+      // Set up promise resolver
+      worktreeFilesModeReadyResolversRef.current.set(sessionId, resolve);
+
+      // Set up timeout
+      const timeoutId = setTimeout(() => {
+        worktreeFilesModeReadyResolversRef.current.delete(sessionId);
+        reject(new Error(`WorktreeFilesMode mount timeout for session ${sessionId}`));
+      }, timeoutMs);
+
+      // Clean up timeout when resolved
+      const originalResolver = resolve;
+      worktreeFilesModeReadyResolversRef.current.set(sessionId, () => {
+        clearTimeout(timeoutId);
+        originalResolver();
+      });
+    });
   }, []);
 
   // Mark a session as read - called whenever a session becomes active
@@ -351,6 +408,35 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     };
     loadLayout();
   }, [workspacePath, mode]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadWorktreeModes = async () => {
+      if (!workspacePath || !window.electronAPI?.invoke) {
+        setWorktreeSessionModes(new Map());
+        return;
+      }
+      try {
+        const workspaceState = await window.electronAPI.invoke('workspace:get-state', workspacePath);
+        if (cancelled) return;
+        const savedModes = workspaceState?.agentWorktreeSessionModes;
+        if (savedModes) {
+          setWorktreeSessionModes(new Map(Object.entries(savedModes) as [string, WorktreeContentMode][]));
+        } else {
+          setWorktreeSessionModes(new Map());
+        }
+      } catch (err) {
+        console.error('[AgenticPanel] Failed to load worktree session modes:', err);
+        if (!cancelled) {
+          setWorktreeSessionModes(new Map());
+        }
+      }
+    };
+    loadWorktreeModes();
+    return () => {
+      cancelled = true;
+    };
+  }, [workspacePath]);
 
   // Save session history layout to workspace state when it changes (agent mode only)
   useEffect(() => {
@@ -1046,8 +1132,6 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     setLoading(true);
 
     try {
-      console.log('[AgenticPanel] Creating new worktree session');
-
       // Step 1: Create the worktree
       const worktreeResult = await window.electronAPI.worktreeCreate(workspacePath);
       if (!worktreeResult.success || !worktreeResult.worktree) {
@@ -1055,14 +1139,11 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       }
 
       const worktree = worktreeResult.worktree;
-      console.log('[AgenticPanel] Worktree created:', worktree.name, 'at', worktree.path);
 
       // Step 2: Create session with worktree association
       // Always use claude-code for worktree sessions
       const defaultModel = 'claude-code:sonnet';
       const provider = 'claude-code';
-
-      console.log(`[AgenticPanel] Creating worktree session with model: ${defaultModel}`);
 
       const session = await window.electronAPI.aiCreateSession(
         provider as 'claude' | 'claude-code' | 'openai' | 'lmstudio',
@@ -2604,6 +2685,73 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     });
   }, [sessionTabs, activeTabId, updateWindowTitle]);
 
+  const persistWorktreeModes = useCallback(async (modes: Map<string, WorktreeContentMode>) => {
+    if (!workspacePath || !window.electronAPI?.invoke) return;
+    try {
+      await window.electronAPI.invoke('workspace:update-state', workspacePath, {
+        agentWorktreeSessionModes: Object.fromEntries(modes)
+      });
+    } catch (err) {
+      console.error('[AgenticPanel] Failed to save worktree session modes:', err);
+    }
+  }, [workspacePath]);
+
+  const handleWorktreeModeChange = useCallback((sessionId: string, nextMode: WorktreeContentMode) => {
+    setWorktreeSessionModes(prev => {
+      const updated = new Map(prev);
+      updated.set(sessionId, nextMode);
+      persistWorktreeModes(updated);
+      return updated;
+    });
+  }, [persistWorktreeModes]);
+
+  // Handle file click - route to worktree editor if applicable
+  const handleFileClick = useCallback(async (sessionId: string, filePath: string) => {
+    const tab = sessionTabsRef.current.find(t => t.id === sessionId);
+    const isWorktreeSession = Boolean(tab?.sessionData.worktreeId && tab?.sessionData.worktreePath);
+
+    if (isWorktreeSession) {
+      const currentMode = worktreeSessionModesRef.current.get(sessionId) ?? 'agent';
+
+      // Switch to files mode if not already there
+      if (currentMode !== 'files') {
+        handleWorktreeModeChange(sessionId, 'files');
+      }
+
+      // Always wait for WorktreeFilesMode to be ready (even if already in files mode)
+      // The component might be mounting or the ref might not be set yet
+      const editorRef = worktreeFilesModeRefsRef.current.get(sessionId);
+      if (!editorRef?.current) {
+        try {
+          await waitForWorktreeFilesModeReady(sessionId);
+        } catch (err) {
+          console.error('[AgenticPanel] WorktreeFilesMode mount timeout:', err);
+          return;
+        }
+      }
+
+      // Now try to open the file
+      const finalEditorRef = worktreeFilesModeRefsRef.current.get(sessionId);
+      if (finalEditorRef?.current) {
+        finalEditorRef.current.openFile(filePath);
+        return;
+      } else {
+        console.error('[AgenticPanel] WorktreeFilesMode ref still not available after wait - this should not happen');
+      }
+    }
+
+    // Fallback to old files mode for non-worktree sessions
+    try {
+      if (onFileOpen) {
+        await onFileOpen(filePath);
+      } else {
+        console.error('[AgenticPanel] onFileOpen not provided - cannot open file');
+      }
+    } catch (err) {
+      console.error('[AgenticPanel] Failed to open file:', err);
+    }
+  }, [handleWorktreeModeChange, onFileOpen, waitForWorktreeFilesModeReady]);
+
   // Expose methods to parent via ref
   useImperativeHandle(ref, () => ({
     createNewSession,
@@ -2887,7 +3035,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             fileMentionOptions={fileMentionOptions}
             onFileMentionSearch={handleFileMentionSearch}
             onFileMentionSelect={handleFileMentionSelect}
-            onFileClick={handleFileClick}
+            onFileClick={(filePath) => handleFileClick(activeTab.id, filePath)}
             isLoading={processingSessions.has(activeTab.id)}
             aiMode={activeTab.mode || 'agent'}
             onAIModeChange={(newMode) => handleModeChange(activeTab.id, newMode)}
@@ -2935,6 +3083,10 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   }
 
   // Agent mode: multi-tab with session history
+  const activeAgentTab = activeTabId ? sessionTabs.find(tab => tab.id === activeTabId) : null;
+  const showWorktreeToggle = Boolean(activeAgentTab?.sessionData.worktreeId && activeAgentTab?.sessionData.worktreePath);
+  const activeAgentWorktreeMode: WorktreeContentMode = activeAgentTab ? (worktreeSessionModes.get(activeAgentTab.id) ?? 'agent') : 'agent';
+
   return (
     <div className="agentic-panel agentic-panel--agent" style={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--surface-primary)' }}>
       <ResizablePanel
@@ -2973,34 +3125,108 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         rightPanel={
           <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
             {/* Session Header */}
-            {activeTabId && (
+            {activeAgentTab && (
               <AgentSessionHeader
-                sessionData={sessionTabs.find(tab => tab.id === activeTabId)?.sessionData || null}
-                isProcessing={activeTabId ? processingSessions.has(activeTabId) : false}
+                sessionData={activeAgentTab.sessionData}
+                isProcessing={processingSessions.has(activeAgentTab.id)}
               />
             )}
 
+            {showWorktreeToggle && activeAgentTab && (
+              <div style={{ padding: '0 16px 8px' }}>
+                <WorktreeModeToggle
+                  mode={activeAgentWorktreeMode}
+                  onChange={(mode) => handleWorktreeModeChange(activeAgentTab.id, mode)}
+                />
+              </div>
+            )}
+
             {/* Session views */}
-            {sessionTabs.filter(tab => tab != null).map(tab => (
-              tab.sessionData.sessionType === 'terminal' ? (
-                <div
-                  key={tab.id}
-                  style={{
-                    flex: 1,
-                    display: tab.id === activeTabId ? 'flex' : 'none',
-                    flexDirection: 'column',
-                    height: '100%',
-                    overflow: 'hidden',
-                  }}
-                  data-testid={`terminal-session-${tab.id}`}
-                >
-                  <TerminalPanel
+            {sessionTabs.filter(tab => tab != null).map(tab => {
+              // Terminal sessions
+              if (tab.sessionData.sessionType === 'terminal') {
+                return (
+                  <div
+                    key={tab.id}
+                    style={{
+                      flex: 1,
+                      display: tab.id === activeTabId ? 'flex' : 'none',
+                      flexDirection: 'column',
+                      height: '100%',
+                      overflow: 'hidden',
+                    }}
+                    data-testid={`terminal-session-${tab.id}`}
+                  >
+                    <TerminalPanel
+                      sessionId={tab.id}
+                      workspacePath={workspacePath}
+                      isActive={tab.id === activeTabId}
+                    />
+                  </div>
+                );
+              }
+
+              const isWorktreeSession = Boolean(tab.sessionData.worktreeId && tab.sessionData.worktreePath);
+              const currentMode: WorktreeContentMode = worktreeSessionModes.get(tab.id) ?? 'agent';
+
+              // Always render WorktreeFilesMode for worktree sessions to preserve tab state
+              if (isWorktreeSession && tab.sessionData.worktreePath) {
+                return (
+                  <WorktreeFilesMode
+                    key={`worktree-${tab.id}`}
+                    ref={getWorktreeFilesModeRef(tab.id)}
                     sessionId={tab.id}
+                    sessionData={tab.sessionData}
+                    worktreePath={tab.sessionData.worktreePath}
                     workspacePath={workspacePath}
                     isActive={tab.id === activeTabId}
+                    mode={currentMode}
+                    onMounted={handleWorktreeFilesModeMounted}
+                    chatPanel={(
+                      <AISessionView
+                        key={`chat-${tab.id}`}
+                        ref={getSessionViewRef(tab.id)}
+                        sessionId={tab.id}
+                        sessionData={tab.sessionData}
+                        isActive={tab.id === activeTabId}
+                        mode="chat"
+                        workspacePath={workspacePath}
+                        documentContext={documentContext}
+                        draftInput={tab.draftInput}
+                        draftAttachments={tab.draftAttachments}
+                        onDraftInputChange={handleDraftInputChange}
+                        onDraftAttachmentsChange={handleDraftAttachmentsChange}
+                        onSendMessage={handleSendMessage}
+                        onCancelRequest={handleCancelRequest}
+                        onNavigateHistory={handleNavigateHistory}
+                        fileMentionOptions={fileMentionOptions}
+                        onFileMentionSearch={handleFileMentionSearch}
+                        onFileMentionSelect={handleFileMentionSelect}
+                        onFileClick={(filePath) => handleFileClick(tab.id, filePath)}
+                        isLoading={processingSessions.has(tab.id)}
+                        aiMode={tab.mode || 'agent'}
+                        onAIModeChange={(newMode) => handleModeChange(tab.id, newMode)}
+                        currentModel={tab.model || tab.sessionData.model || 'claude-code'}
+                        onModelChange={(newModel) => handleModelChange(tab.id, newModel)}
+                        sessionHasMessages={(tab.sessionData.messages?.length ?? 0) > 0}
+                        currentProviderType={
+                          tab.sessionData.provider === 'claude-code' || tab.sessionData.provider === 'openai-codex'
+                            ? 'agent'
+                            : tab.sessionData.provider
+                              ? 'model'
+                              : null
+                        }
+                        isArchived={tab.isArchived}
+                        onCloseAndArchive={handleCloseAndArchive}
+                        onUnarchive={handleUnarchive}
+                      />
+                    )}
                   />
-                </div>
-              ) : (
+                );
+              }
+
+              // Non-worktree sessions render standalone AISessionView
+              return (
                 <AISessionView
                   key={tab.id}
                   ref={getSessionViewRef(tab.id)}
@@ -3020,7 +3246,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                   fileMentionOptions={fileMentionOptions}
                   onFileMentionSearch={handleFileMentionSearch}
                   onFileMentionSelect={handleFileMentionSelect}
-                  onFileClick={handleFileClick}
+                  onFileClick={(filePath) => handleFileClick(tab.id, filePath)}
                   isLoading={processingSessions.has(tab.id)}
                   aiMode={tab.mode || 'agent'}
                   onAIModeChange={(newMode) => handleModeChange(tab.id, newMode)}
@@ -3038,8 +3264,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                   onCloseAndArchive={handleCloseAndArchive}
                   onUnarchive={handleUnarchive}
                 />
-              )
-            ))}
+              );
+            })}
 
             {/* Empty state */}
             {sessionTabs.length === 0 && (

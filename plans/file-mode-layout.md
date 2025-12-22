@@ -2,7 +2,7 @@
 planStatus:
   planId: plan-file-mode-layout
   title: Worktree File Mode Implementation
-  status: draft
+  status: in-development
   planType: feature
   priority: high
   owner: jordan
@@ -15,8 +15,10 @@ planStatus:
     - agent-view
     - file-mode
   created: "2025-12-22"
-  updated: "2025-12-22T00:00:00.000Z"
-  progress: 0
+  updated: "2025-12-22T01:00:00.000Z"
+  progress: 80
+  dueDate: ""
+  startDate: "2025-12-22"
 ---
 
 # Worktree File Mode Implementation
