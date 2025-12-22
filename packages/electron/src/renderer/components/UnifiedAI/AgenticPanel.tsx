@@ -3189,7 +3189,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                         sessionId={tab.id}
                         sessionData={tab.sessionData}
                         isActive={tab.id === activeTabId}
-                        mode="chat"
+                        mode={currentMode === 'agent' ? 'agent' : 'chat'}
                         workspacePath={workspacePath}
                         documentContext={documentContext}
                         draftInput={tab.draftInput}
