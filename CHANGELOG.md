@@ -20,6 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.49.4] - 2025-12-22
+
+
+### Added
+- Undo/redo support for CSV spreadsheet editor
+
+### Fixed
+- Tabs now reliably reopen when using Cmd+Shift+T
+- Resolve DigiCert code signing action reference
+
 ## [0.49.3] - 2025-12-22
 
 
