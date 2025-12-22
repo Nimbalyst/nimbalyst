@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.49.7] - 2025-12-22
+
+
+### Added
+- Extension dev mode indicator with restart button
+- New session button tooltip now shows Cmd+N shortcut
+- QuickOpen now searches all text file types
+
+### Changed
+- Remove obsolete permission mode setting from global settings
+
+### Fixed
+- URL permissions now persist correctly across AI sessions
+- Cmd+N now reliably triggers correct action based on current mode
+
 ## [0.49.6] - 2025-12-22
 
 
