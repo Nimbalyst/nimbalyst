@@ -12,6 +12,7 @@ export interface SessionListItem {
   sessionType?: string;
   mode?: SessionMode;
   workspaceId: string;
+  worktreeId?: string;  // ID of the associated worktree if this is a worktree session
   createdAt: number;
   updatedAt: number;
   messageCount?: number;
@@ -27,6 +28,8 @@ export interface CreateSessionPayload {
   title?: string;
   workspaceId: string;
   filePath?: string;
+  worktreeId?: string;  // ID of the associated worktree
+  worktreePath?: string;  // Path to the worktree directory
   providerConfig?: Record<string, unknown>;
   providerSessionId?: string;
   documentContext?: Record<string, unknown> | undefined;

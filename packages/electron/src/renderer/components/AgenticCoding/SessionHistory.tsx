@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { CollapsibleGroup } from './CollapsibleGroup';
 import { SessionListItem } from './SessionListItem';
+import { WorktreeSingle } from './WorktreeSingle';
 import { groupSessionsByTime, TimeGroupKey } from '../../utils/dateFormatting';
 import { getFileName } from '../../utils/pathUtils';
 import { KeyboardShortcuts, getShortcutDisplay } from '../../../shared/KeyboardShortcuts';
@@ -19,6 +20,23 @@ interface SessionItem {
   hasUnread?: boolean;
   hasPendingPrompt?: boolean;
   isArchived?: boolean;
+  worktree_id?: string | null; // Associated worktree ID if this is a worktree session
+}
+
+interface WorktreeData {
+  id: string;
+  name: string;
+  path: string;
+  branch: string;
+  base_branch?: string;
+}
+
+interface WorktreeWithStatus extends WorktreeData {
+  gitStatus?: {
+    ahead?: number;
+    behind?: number;
+    uncommitted?: boolean;
+  };
 }
 
 interface SessionHistoryProps {
@@ -36,6 +54,7 @@ interface SessionHistoryProps {
   onSessionRename?: (sessionId: string, newName: string) => void; // Callback when session is renamed
   onNewSession?: () => void;
   onNewTerminal?: () => void; // Callback for creating a new terminal session
+  onNewWorktreeSession?: () => void; // Callback for creating new worktree session
   onImportSessions?: () => void; // Callback for opening import dialog
   onOpenQuickSearch?: () => void; // Callback for opening session quick search (Cmd+L)
   collapsedGroups: string[];
@@ -43,6 +62,7 @@ interface SessionHistoryProps {
   sortOrder?: 'updated' | 'created'; // Sort order for sessions
   onSortOrderChange?: (sortOrder: 'updated' | 'created') => void; // Callback when sort order changes
   refreshTrigger?: number; // Optional trigger to force refresh
+  mode?: 'chat' | 'agent'; // Mode determines which sessions to show
 }
 
 // Generate a consistent color based on workspace path
@@ -59,6 +79,69 @@ function generateWorkspaceColor(path: string): string {
   return `hsl(${hue}, 65%, 55%)`;
 }
 
+// Component to render a worktree session with async data loading
+interface WorktreeSessionItemProps {
+  session: SessionItem;
+  worktreeId: string;
+  isActive: boolean;
+  onSessionSelect: (sessionId: string) => void;
+  fetchWorktreeData: (worktreeId: string) => Promise<WorktreeWithStatus | null>;
+}
+
+const WorktreeSessionItem: React.FC<WorktreeSessionItemProps> = ({
+  session,
+  worktreeId,
+  isActive,
+  onSessionSelect,
+  fetchWorktreeData
+}) => {
+  const [worktreeData, setWorktreeData] = useState<WorktreeWithStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadWorktreeData = async () => {
+      setLoading(true);
+      const data = await fetchWorktreeData(worktreeId);
+      if (mounted) {
+        setWorktreeData(data);
+        setLoading(false);
+      }
+    };
+
+    loadWorktreeData();
+
+    return () => {
+      mounted = false;
+    };
+  }, [worktreeId, fetchWorktreeData]);
+
+  // Show loading state or fallback if data not available
+  if (loading || !worktreeData) {
+    return (
+      <WorktreeSingle
+        session={session}
+        worktreeName={loading ? 'Loading...' : 'Unknown worktree'}
+        worktreePath=""
+        isActive={isActive}
+        onClick={() => onSessionSelect(session.id)}
+      />
+    );
+  }
+
+  return (
+    <WorktreeSingle
+      session={session}
+      worktreeName={worktreeData.name}
+      worktreePath={worktreeData.path}
+      gitStatus={worktreeData.gitStatus}
+      isActive={isActive}
+      onClick={() => onSessionSelect(session.id)}
+    />
+  );
+};
+
 const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   workspacePath,
   activeSessionId,
@@ -74,13 +157,15 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   onSessionRename,
   onNewSession,
   onNewTerminal,
+  onNewWorktreeSession,
   onImportSessions,
   onOpenQuickSearch,
   collapsedGroups,
   onCollapsedGroupsChange,
   sortOrder: controlledSortOrder,
   onSortOrderChange,
-  refreshTrigger
+  refreshTrigger,
+  mode = 'agent'
 }) => {
   const [allSessions, setAllSessions] = useState<SessionItem[]>([]); // All sessions from DB
   const [sessions, setSessions] = useState<SessionItem[]>([]); // Filtered sessions to display
@@ -97,6 +182,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   const [showArchived, setShowArchived] = useState(false);
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
   const [lastSelectedId, setLastSelectedId] = useState<string | null>(null); // For shift+click range selection
+  const [worktreeCache, setWorktreeCache] = useState<Map<string, WorktreeWithStatus>>(new Map()); // Cache worktree data
 
   // Track scroll position to restore after refresh
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -118,6 +204,57 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   // Extract workspace name from path
   const workspaceName = getFileName(workspacePath) || 'Workspace';
   const workspaceColor = generateWorkspaceColor(workspacePath);
+
+  // Fetch worktree data by ID (with caching)
+  const fetchWorktreeData = useCallback(async (worktreeId: string): Promise<WorktreeWithStatus | null> => {
+    // Check cache first
+    if (worktreeCache.has(worktreeId)) {
+      const cached = worktreeCache.get(worktreeId);
+      if (cached) {
+        return cached;
+      }
+    }
+
+    try {
+      // Fetch worktree from database
+      const result = await window.electronAPI.invoke('worktree:get', worktreeId);
+      if (!result.success || !result.worktree) {
+        console.error(`[SessionHistory] Worktree not found: ${worktreeId}`);
+        return null;
+      }
+
+      const worktreeData: WorktreeData = result.worktree;
+
+      // Fetch git status for the worktree
+      let gitStatus: { ahead?: number; behind?: number; uncommitted?: boolean } | undefined;
+      try {
+        const statusResult = await window.electronAPI.invoke('worktree:get-status', worktreeData.path);
+        if (statusResult.success && statusResult.status) {
+          gitStatus = {
+            ahead: statusResult.status.ahead,
+            behind: statusResult.status.behind,
+            uncommitted: statusResult.status.hasUncommittedChanges,
+          };
+        }
+      } catch (err) {
+        console.warn(`[SessionHistory] Failed to get git status for worktree ${worktreeId}:`, err);
+        // Continue without git status - it's not critical
+      }
+
+      const worktreeWithStatus: WorktreeWithStatus = {
+        ...worktreeData,
+        gitStatus,
+      };
+
+      // Cache the result
+      setWorktreeCache(prev => new Map(prev).set(worktreeId, worktreeWithStatus));
+
+      return worktreeWithStatus;
+    } catch (err) {
+      console.error(`[SessionHistory] Failed to fetch worktree data for ${worktreeId}:`, err);
+      return null;
+    }
+  }, [worktreeCache]);
 
   // Load all sessions from database (no search query)
   const loadAllSessions = useCallback(async () => {
@@ -145,7 +282,8 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
           messageCount: s.messageCount || 0,
           isProcessing: false,  // Will be updated by visual indicator effect
           hasUnread: false,     // Will be updated by visual indicator effect
-          isArchived: s.isArchived || false
+          isArchived: s.isArchived || false,
+          worktree_id: s.worktreeId || null
         }));
 
         // Merge incoming sessions with existing ones to preserve React keys and reduce flicker
@@ -227,7 +365,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       const result = await window.electronAPI.invoke('sessions:search', workspacePath, query.trim(), { includeArchived: showArchived });
 
       if (result.success && Array.isArray(result.sessions)) {
-        const searchResults = result.sessions.map((s: any) => ({
+        let searchResults = result.sessions.map((s: any) => ({
           id: s.id,
           title: s.title || s.name || 'Untitled Session',
           createdAt: s.createdAt,
@@ -238,8 +376,15 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
           messageCount: s.messageCount || 0,
           isProcessing: false,
           hasUnread: false,
-          isArchived: s.isArchived || false
+          isArchived: s.isArchived || false,
+          worktree_id: s.worktreeId || null
         }));
+
+        // Filter out worktree sessions in non-agent mode
+        if (mode !== 'agent') {
+          searchResults = searchResults.filter(session => !session.worktree_id);
+        }
+
         setSessions(searchResults);
       }
     } catch (err) {
@@ -248,7 +393,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     } finally {
       setIsSearching(false);
     }
-  }, [workspacePath, showArchived]);
+  }, [workspacePath, showArchived, mode]);
 
   // Load all sessions on mount and when refreshTrigger changes
   useEffect(() => {
@@ -260,19 +405,25 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     // Reset content search trigger when query changes
     setContentSearchTriggered(false);
 
+    // Filter out worktree sessions in non-agent mode
+    let sessionsToFilter = allSessions;
+    if (mode !== 'agent') {
+      sessionsToFilter = allSessions.filter(session => !session.worktree_id);
+    }
+
     if (!searchQuery.trim()) {
-      // No search query - show all sessions
-      setSessions(allSessions);
+      // No search query - show all sessions (filtered by mode)
+      setSessions(sessionsToFilter);
       return;
     }
 
     // Filter sessions by title in memory (case-insensitive)
     const query = searchQuery.toLowerCase();
-    const filtered = allSessions.filter(session =>
+    const filtered = sessionsToFilter.filter(session =>
       (session.title ?? '').toLowerCase().includes(query)
     );
     setSessions(filtered);
-  }, [searchQuery, allSessions]);
+  }, [searchQuery, allSessions, mode]);
 
   // Function to trigger content search (database query for message content)
   const searchMessageContents = useCallback(() => {
@@ -523,6 +674,24 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                 </svg>
               </button>
             )}
+            {onNewWorktreeSession && (
+              <button
+                className="session-history-worktree-button"
+                data-testid="new-worktree-session-button"
+                onClick={onNewWorktreeSession}
+                title="Create new git worktree session"
+                aria-label="Create new worktree session"
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M5 13v-2.5a1.5 1.5 0 0 1 1.5-1.5h3"/>
+                  <path d="M9.5 9V4.5"/>
+                  <circle cx="5" cy="4.5" r="1.5"/>
+                  <circle cx="9.5" cy="4.5" r="1.5"/>
+                  <path d="M5 6v2.5a1.5 1.5 0 0 0 1.5 1.5"/>
+                  <path d="M12 7v4M10 9h4"/>
+                </svg>
+              </button>
+            )}
             {onNewSession && (
               <button
                 className="session-history-new-button"
@@ -657,22 +826,66 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
             <h3 className="session-history-header-name">{workspaceName}</h3>
             <div className="session-history-header-path">{workspacePath}</div>
           </div>
-          {onNewSession && (
-            <button
-              className="session-history-new-button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onNewSession();
-              }}
-              title={`New session (${getShortcutDisplay(KeyboardShortcuts.file.newSession)})`}
-              aria-label="Create new session"
-              type="button"
-            >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-              </svg>
-            </button>
-          )}
+          <div className="session-history-header-buttons">
+            {onImportSessions && (
+              <button
+                className="session-history-import-button"
+                data-testid="import-sessions-button"
+                onClick={onImportSessions}
+                title="Import Claude Agent sessions"
+                aria-label="Import sessions"
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M13.5 8.5V12.5C13.5 13.0523 13.0523 13.5 12.5 13.5H3.5C2.94772 13.5 2.5 13.0523 2.5 12.5V8.5M8 2.5V10.5M8 10.5L5.5 8M8 10.5L10.5 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            )}
+            {onNewWorktreeSession && (
+              <button
+                className="session-history-worktree-button"
+                data-testid="new-worktree-session-button"
+                onClick={onNewWorktreeSession}
+                title="Create new git worktree session"
+                aria-label="Create new worktree session"
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M5 13v-2.5a1.5 1.5 0 0 1 1.5-1.5h3"/>
+                  <path d="M9.5 9V4.5"/>
+                  <circle cx="5" cy="4.5" r="1.5"/>
+                  <circle cx="9.5" cy="4.5" r="1.5"/>
+                  <path d="M5 6v2.5a1.5 1.5 0 0 0 1.5 1.5"/>
+                  <path d="M12 7v4M10 9h4"/>
+                </svg>
+              </button>
+            )}
+            {onNewSession && (
+              <button
+                className="session-history-new-button"
+                data-testid="new-session-button"
+                onClick={onNewSession}
+                title={`New session (${getShortcutDisplay(KeyboardShortcuts.file.newSession)})`}
+                aria-label="Create new session"
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+              </button>
+            )}
+            {onNewTerminal && (
+              <button
+                className="session-history-new-terminal-button"
+                data-testid="new-terminal-button"
+                onClick={() => onNewTerminal()}
+                title="New terminal"
+                aria-label="Create new terminal"
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M3 5L7 9L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M9 13H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+              </button>
+            )}
+          </div>
         </div>
         <div className="session-history-section-label">Agent Sessions</div>
         <div className="session-history-empty">
@@ -718,6 +931,24 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
             >
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M13.5 8.5V12.5C13.5 13.0523 13.0523 13.5 12.5 13.5H3.5C2.94772 13.5 2.5 13.0523 2.5 12.5V8.5M8 2.5V10.5M8 10.5L5.5 8M8 10.5L10.5 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          )}
+          {onNewWorktreeSession && (
+            <button
+              className="session-history-worktree-button"
+              data-testid="new-worktree-session-button"
+              onClick={onNewWorktreeSession}
+              title="Create new git worktree session"
+              aria-label="Create new worktree session"
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M5 13v-2.5a1.5 1.5 0 0 1 1.5-1.5h3"/>
+                <path d="M9.5 9V4.5"/>
+                <circle cx="5" cy="4.5" r="1.5"/>
+                <circle cx="9.5" cy="4.5" r="1.5"/>
+                <path d="M5 6v2.5a1.5 1.5 0 0 0 1.5 1.5"/>
+                <path d="M12 7v4M10 9h4"/>
               </svg>
             </button>
           )}
@@ -896,32 +1127,49 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                 onToggle={() => handleToggleGroup(groupKey)}
                 count={groupSessions.length}
               >
-                {groupSessions.map(session => (
-                  <SessionListItem
-                    key={session.id}
-                    id={session.id}
-                    title={session.title || 'Untitled Session'}
-                    createdAt={session.createdAt}
-                    updatedAt={session.updatedAt}
-                    isActive={session.id === activeSessionId}
-                    isLoaded={loadedSessionIds.includes(session.id)}
-                    isArchived={session.isArchived}
-                    isSelected={selectedSessionIds.has(session.id)}
-                    sortBy={sortBy}
-                    onClick={(e) => handleSessionClick(session.id, e)}
-                    onDelete={onSessionDelete ? () => handleDeleteSession(session.id) : undefined}
-                    onArchive={() => handleArchiveSession(session.id)}
-                    onUnarchive={() => handleUnarchiveSession(session.id)}
-                    onRename={onSessionRename ? (newName: string) => onSessionRename(session.id, newName) : undefined}
-                    provider={session.provider}
-                    model={session.model}
-                    messageCount={session.messageCount}
-                    isProcessing={session.isProcessing}
-                    hasUnread={session.hasUnread}
-                    hasPendingPrompt={session.hasPendingPrompt}
-                    sessionType={session.sessionType}
-                  />
-                ))}
+                {groupSessions.map(session => {
+                  // Check if this is a worktree session (defensive null check)
+                  if (session.worktree_id && typeof session.worktree_id === 'string') {
+                    return (
+                      <WorktreeSessionItem
+                        key={session.id}
+                        session={session}
+                        worktreeId={session.worktree_id}
+                        isActive={session.id === activeSessionId}
+                        onSessionSelect={onSessionSelect}
+                        fetchWorktreeData={fetchWorktreeData}
+                      />
+                    );
+                  }
+
+                  // Regular session - use SessionListItem
+                  return (
+                    <SessionListItem
+                      key={session.id}
+                      id={session.id}
+                      title={session.title || 'Untitled Session'}
+                      createdAt={session.createdAt}
+                      updatedAt={session.updatedAt}
+                      isActive={session.id === activeSessionId}
+                      isLoaded={loadedSessionIds.includes(session.id)}
+                      isArchived={session.isArchived}
+                      isSelected={selectedSessionIds.has(session.id)}
+                      sortBy={sortBy}
+                      onClick={(e) => handleSessionClick(session.id, e)}
+                      onDelete={onSessionDelete ? () => handleDeleteSession(session.id) : undefined}
+                      onArchive={() => handleArchiveSession(session.id)}
+                      onUnarchive={() => handleUnarchiveSession(session.id)}
+                      onRename={onSessionRename ? (newName: string) => onSessionRename(session.id, newName) : undefined}
+                      provider={session.provider}
+                      model={session.model}
+                      messageCount={session.messageCount}
+                      isProcessing={session.isProcessing}
+                      hasUnread={session.hasUnread}
+                      hasPendingPrompt={session.hasPendingPrompt}
+                      sessionType={session.sessionType}
+                    />
+                  );
+                })}
               </CollapsibleGroup>
             );
           })
@@ -957,6 +1205,7 @@ export const SessionHistory = React.memo(SessionHistoryComponent, (prevProps, ne
   if (prevProps.activeSessionId !== nextProps.activeSessionId) return false;
   if (prevProps.refreshTrigger !== nextProps.refreshTrigger) return false;
   if (prevProps.sortOrder !== nextProps.sortOrder) return false;
+  if (prevProps.mode !== nextProps.mode) return false;
 
   // Compare arrays by value
   if (!arraysEqual(prevProps.loadedSessionIds ?? [], nextProps.loadedSessionIds ?? [])) return false;

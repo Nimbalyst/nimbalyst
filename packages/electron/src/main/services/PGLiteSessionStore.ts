@@ -231,17 +231,18 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
 
       await db.query(
         `INSERT INTO ai_sessions (
-          id, workspace_id, file_path, provider, model, title, session_type, mode,
+          id, workspace_id, file_path, worktree_id, provider, model, title, session_type, mode,
           document_context, provider_config, provider_session_id, draft_input, metadata,
           has_been_named, created_at, updated_at
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8,
-          $9, $10, $11, $12, $13,
-          $14, $15, $16
+          $1, $2, $3, $4, $5, $6, $7, $8, $9,
+          $10, $11, $12, $13, $14,
+          $15, $16, $17
         )
         ON CONFLICT (id) DO UPDATE SET
           workspace_id = EXCLUDED.workspace_id,
           file_path = EXCLUDED.file_path,
+          worktree_id = EXCLUDED.worktree_id,
           provider = EXCLUDED.provider,
           model = EXCLUDED.model,
           title = EXCLUDED.title,
@@ -259,6 +260,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           payload.id,
           payload.workspaceId,
           payload.filePath ?? null,
+          (payload as any).worktreeId ?? null,
           payload.provider,
           payload.model ?? null,
           payload.title ?? 'New conversation',
@@ -329,9 +331,12 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
     async get(sessionId: string): Promise<ChatSession | null> {
       await ensureReady();
       const { rows } = await db.query<any>(
-        `SELECT *,
-         EXTRACT(EPOCH FROM last_read_timestamp) * 1000 AS last_read_ms
-         FROM ai_sessions WHERE id=$1 LIMIT 1`,
+        `SELECT s.*,
+         EXTRACT(EPOCH FROM s.last_read_timestamp) * 1000 AS last_read_ms,
+         w.path AS worktree_path
+         FROM ai_sessions s
+         LEFT JOIN worktrees w ON s.worktree_id = w.id
+         WHERE s.id=$1 LIMIT 1`,
         [sessionId]
       );
       const row = rows[0];
@@ -351,6 +356,8 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
         draftInput: row.draft_input ?? undefined,
         messages: [], // Messages are now stored in ai_agent_messages table
         workspacePath: row.workspace_id,
+        worktreeId: row.worktree_id ?? undefined,
+        worktreePath: row.worktree_path ?? undefined,
         createdAt: toMillis(row.created_at),
         updatedAt: toMillis(row.updated_at),
         metadata,
@@ -373,12 +380,12 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       const queryStart = performance.now();
       const { rows } = await db.query<any>(
         `SELECT s.id, s.provider, s.model, s.session_type, s.mode, s.title, s.workspace_id,
-                s.created_at, s.updated_at, s.is_archived, COUNT(m.id) as message_count
+                s.worktree_id, s.created_at, s.updated_at, s.is_archived, COUNT(m.id) as message_count
          FROM ai_sessions s
          LEFT JOIN ai_agent_messages m ON s.id = m.session_id AND m.direction = 'input' AND (m.hidden = FALSE OR m.hidden IS NULL)
          WHERE s.workspace_id=$1 ${archiveFilter}
          GROUP BY s.id, s.provider, s.model, s.session_type, s.mode, s.title, s.workspace_id,
-                  s.created_at, s.updated_at, s.is_archived
+                  s.worktree_id, s.created_at, s.updated_at, s.is_archived
          ORDER BY s.updated_at DESC`,
         [workspaceId]
       );
@@ -397,6 +404,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           mode: row.mode ?? undefined,
           title: row.title ?? undefined,
           workspaceId: row.workspace_id,
+          worktreeId: row.worktree_id ?? undefined,
           createdAt,
           updatedAt,
           messageCount,
@@ -430,6 +438,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
             s.mode,
             s.title,
             s.workspace_id,
+            s.worktree_id,
             s.created_at,
             s.updated_at,
             s.is_archived,
@@ -450,6 +459,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
             s.mode,
             s.title,
             s.workspace_id,
+            s.worktree_id,
             s.created_at,
             s.updated_at,
             s.is_archived,
@@ -460,7 +470,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
             AND to_tsvector('english', m.content) @@ to_tsquery('english', $2)
             ${archiveFilter}
           GROUP BY s.id, s.provider, s.model, s.session_type, s.mode, s.title, s.workspace_id,
-                   s.created_at, s.updated_at, s.is_archived
+                   s.worktree_id, s.created_at, s.updated_at, s.is_archived
         )
         SELECT
           sm.id,
@@ -470,6 +480,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           sm.mode,
           sm.title,
           sm.workspace_id,
+          sm.worktree_id,
           sm.created_at,
           sm.updated_at,
           sm.is_archived,
@@ -478,7 +489,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
         FROM session_matches sm
         LEFT JOIN ai_agent_messages m ON sm.id = m.session_id AND m.direction = 'input' AND (m.hidden = FALSE OR m.hidden IS NULL)
         GROUP BY sm.id, sm.provider, sm.model, sm.session_type, sm.mode, sm.title, sm.workspace_id,
-                 sm.created_at, sm.updated_at, sm.is_archived
+                 sm.worktree_id, sm.created_at, sm.updated_at, sm.is_archived
         ORDER BY max_rank DESC, sm.updated_at DESC`,
         [workspaceId, searchTerms]
       );
@@ -495,6 +506,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           mode: row.mode ?? undefined,
           title: row.title ?? undefined,
           workspaceId: row.workspace_id,
+          worktreeId: row.worktree_id ?? undefined,
           createdAt,
           updatedAt,
           messageCount,

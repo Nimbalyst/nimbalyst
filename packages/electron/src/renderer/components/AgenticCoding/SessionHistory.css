@@ -418,6 +418,7 @@
 
 .session-history-new-button,
 .session-history-new-terminal-button,
+.session-history-worktree-button,
 .session-history-import-button,
 .session-history-search-button {
   display: flex;
@@ -435,6 +436,7 @@
 
 .session-history-new-button:hover,
 .session-history-new-terminal-button:hover,
+.session-history-worktree-button:hover,
 .session-history-import-button:hover,
 .session-history-search-button:hover {
   background: var(--surface-hover);
@@ -443,6 +445,7 @@
 
 .session-history-new-button:active,
 .session-history-new-terminal-button:active,
+.session-history-worktree-button:active,
 .session-history-import-button:active,
 .session-history-search-button:active {
   background: var(--surface-tertiary);
@@ -450,6 +453,7 @@
 
 .session-history-new-button svg,
 .session-history-new-terminal-button svg,
+.session-history-worktree-button svg,
 .session-history-import-button svg,
 .session-history-search-button svg {
   display: block;

@@ -355,9 +355,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // AI operations (new unified interface)
   aiHasApiKey: () => ipcRenderer.invoke('ai:hasApiKey'),
   aiInitialize: (provider?: string, apiKey?: string) => ipcRenderer.invoke('ai:initialize', provider, apiKey),
-  aiCreateSession: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio', documentContext?: any, workspacePath?: string, modelId?: string, sessionType?: 'chat' | 'planning' | 'coding' | 'terminal') => {
-    console.log('[Preload] aiCreateSession called:', { provider, workspacePath, sessionType });
-    return ipcRenderer.invoke('ai:createSession', provider, documentContext, workspacePath, modelId, sessionType);
+  aiCreateSession: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio', documentContext?: any, workspacePath?: string, modelId?: string, sessionType?: 'chat' | 'planning' | 'coding' | 'terminal', worktreeId?: string) => {
+    console.log('[Preload] aiCreateSession called:', { provider, workspacePath, sessionType, worktreeId });
+    return ipcRenderer.invoke('ai:createSession', provider, documentContext, workspacePath, modelId, sessionType, worktreeId);
   },
   aiSendMessage: (message: string, documentContext?: any, sessionId?: string, workspacePath?: string) =>
     ipcRenderer.invoke('ai:sendMessage', message, documentContext, sessionId, workspacePath),
@@ -517,8 +517,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ai: {
     hasApiKey: () => ipcRenderer.invoke('ai:hasApiKey'),
     initialize: (provider?: string, apiKey?: string) => ipcRenderer.invoke('ai:initialize', provider, apiKey),
-    createSession: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio', documentContext?: any, workspacePath?: string, modelId?: string, sessionType?: 'chat' | 'planning' | 'coding' | 'terminal') =>
-      ipcRenderer.invoke('ai:createSession', provider, documentContext, workspacePath, modelId, sessionType),
+    createSession: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio', documentContext?: any, workspacePath?: string, modelId?: string, sessionType?: 'chat' | 'planning' | 'coding' | 'terminal', worktreeId?: string) =>
+      ipcRenderer.invoke('ai:createSession', provider, documentContext, workspacePath, modelId, sessionType, worktreeId),
     sendMessage: (message: string, documentContext?: any, sessionId?: string, workspacePath?: string) =>
       ipcRenderer.invoke('ai:sendMessage', message, documentContext, sessionId, workspacePath),
     getSessions: (workspacePath?: string) => ipcRenderer.invoke('ai:getSessions', workspacePath),
@@ -568,6 +568,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     loadVirtual: (virtualPath: string) => ipcRenderer.invoke('document-service:load-virtual', virtualPath)
   },
+
+  // Worktree operations
+  worktreeCreate: (workspacePath: string, name?: string) =>
+    ipcRenderer.invoke('worktree:create', workspacePath, name),
+  worktreeGetStatus: (worktreePath: string) =>
+    ipcRenderer.invoke('worktree:get-status', worktreePath),
+  worktreeDelete: (worktreeId: string, workspacePath: string) =>
+    ipcRenderer.invoke('worktree:delete', worktreeId, workspacePath),
+  worktreeList: (workspacePath: string) =>
+    ipcRenderer.invoke('worktree:list', workspacePath),
+  worktreeGet: (id: string) =>
+    ipcRenderer.invoke('worktree:get', id),
 
   // Open external links
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),

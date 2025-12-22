@@ -118,6 +118,10 @@ export interface SessionData {
   title?: string;
   draftInput?: string;
 
+  // Worktree association
+  worktreeId?: string;  // ID of the associated worktree
+  worktreePath?: string;  // Path to the worktree directory
+
   // Time tracking
   createdAt: number;  // Creation timestamp
   updatedAt: number;  // Last update timestamp

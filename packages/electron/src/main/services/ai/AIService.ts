@@ -883,6 +883,12 @@ export class AIService {
     return provider;
   }
 
+  /**
+   * Automatically runs the /context command for claude-code sessions to fetch accurate token usage.
+   * @param session The AI session
+   * @param workspacePath The workspace path to use (should be worktree path for worktree sessions)
+   * @param event The IPC event for sending updates
+   */
   private async runAutoContextCommand(
     session: SessionData,
     workspacePath: string,
@@ -1042,7 +1048,8 @@ export class AIService {
       documentContext?: DocumentContext,
       workspacePath?: string,
       modelId?: string,
-      sessionType?: 'chat' | 'planning' | 'coding' | 'terminal'
+      sessionType?: 'chat' | 'planning' | 'coding' | 'terminal',
+      worktreeId?: string
     ) => {
       // TODO: Debug logging - uncomment if needed
       // console.log('[AIService] ai:createSession called:', {
@@ -1050,8 +1057,26 @@ export class AIService {
       //   modelId,
       //   hasDocumentContext: !!documentContext,
       //   workspacePath,
-      //   sessionType
+      //   sessionType,
+      //   worktreeId
       // });
+
+      // If worktreeId is provided, fetch the worktree data to get its path
+      let worktreePath: string | undefined;
+      if (worktreeId) {
+        const { getDatabase } = await import('../../database/initialize');
+        const { createWorktreeStore } = await import('../WorktreeStore');
+        const db = getDatabase();
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        const worktreeStore = createWorktreeStore(db);
+        const worktree = await worktreeStore.get(worktreeId);
+        if (!worktree) {
+          throw new Error(`Worktree ${worktreeId} not found`);
+        }
+        worktreePath = worktree.path;
+      }
 
       // Check if provider is enabled for this workspace (considers project overrides)
       if (!this.isProviderEnabledForWorkspace(provider, workspacePath)) {
@@ -1117,14 +1142,17 @@ export class AIService {
         }
       }
 
-      // Create session
+      // Create session with worktree association
       const session = await this.sessionManager.createSession(
         provider,
         documentContext,
         workspacePath,
         providerConfig,
         model,
-        sessionType || 'chat' // Default to 'chat' if not specified
+        sessionType || 'chat', // Default to 'chat' if not specified
+        undefined, // mode
+        worktreeId,
+        worktreePath
       );
 
       // Track AI chat feature first use
@@ -1256,6 +1284,10 @@ export class AIService {
         console.error(`[AIService] CRITICAL ERROR: Requested session ${sessionId} but got session ${session.id}!`);
         throw new Error(`Session mismatch: requested ${sessionId} but got ${session.id}`);
       }
+
+      // CRITICAL: If session has a worktree, use its path instead of workspace path
+      // This ensures Claude Code runs in the worktree directory
+      const effectiveWorkspacePath = session.worktreePath || workspacePath;
 
       // Comprehensive logging of what we're sending to Claude
       // console.group('🤖 [AIService] Sending message to AI provider');
@@ -1441,7 +1473,7 @@ export class AIService {
         }
 
         // Register tool handler - targetFilePath will be determined dynamically per tool call
-        const toolHandler = this.createToolHandler(event.sender, documentContext, session.id, workspacePath);
+        const toolHandler = this.createToolHandler(event.sender, documentContext, session.id, effectiveWorkspacePath);
         provider.registerToolHandler(toolHandler);
       }
 
@@ -1454,7 +1486,7 @@ export class AIService {
       //   filePath: documentContext?.filePath,
       //   hasContext: !!documentContext
       // });
-      const toolHandler = this.createToolHandler(event.sender, documentContext, session.id, workspacePath);
+      const toolHandler = this.createToolHandler(event.sender, documentContext, session.id, effectiveWorkspacePath);
       provider.registerToolHandler(toolHandler);
 
       // Listen for message:logged events and forward to renderer to trigger UI updates
@@ -1524,7 +1556,7 @@ export class AIService {
       try {
         await sessionFileTracker.trackUserMessage(
           session.id,
-          workspacePath,
+          effectiveWorkspacePath,
           message,
           session.messages.length // Current message index
         );
@@ -1537,7 +1569,7 @@ export class AIService {
       }
 
       // Track ai_message_sent analytics event
-      const slashCommandInfo = detectNimbalystSlashCommand(message, workspacePath);
+      const slashCommandInfo = detectNimbalystSlashCommand(message, effectiveWorkspacePath);
       const contentMode = (documentContext as any)?.contentMode;
       this.analytics.sendEvent('ai_message_sent', {
         provider: session.provider,
@@ -1636,7 +1668,7 @@ export class AIService {
           const { updateDocumentState, registerWorkspaceWindow } = await import('../../mcp/httpServer');
           updateDocumentState({
             filePath: contextWithSession.filePath,
-            workspacePath: contextWithSession.workspacePath,
+            workspacePath: effectiveWorkspacePath,
             fileType: contextWithSession.fileType
           }, session.id);
 
@@ -1644,11 +1676,11 @@ export class AIService {
           const { BrowserWindow } = await import('electron');
           const window = BrowserWindow.fromWebContents(event.sender);
           if (window) {
-            registerWorkspaceWindow(contextWithSession.workspacePath, window.id);
+            registerWorkspaceWindow(effectiveWorkspacePath, window.id);
           }
         }
 
-        for await (const chunk of provider.sendMessage(messageToSend, contextWithSession, session.id, sessionMessages, workspacePath, attachments)) {
+        for await (const chunk of provider.sendMessage(messageToSend, contextWithSession, session.id, sessionMessages, effectiveWorkspacePath, attachments)) {
           if (!chunk) continue;
           chunkCount++;
 
@@ -2184,8 +2216,9 @@ export class AIService {
               // AUTO-FETCH CONTEXT USAGE: For claude-code provider, automatically send /context to get accurate token usage.
               // We defer awaiting the promise until after streaming completes so that queued prompts don't start early.
               // Skip if the response ended with an error (e.g., context overflow) to avoid showing the /context request to the user.
+              // CRITICAL: Use effectiveWorkspacePath so /context runs in the worktree directory for worktree sessions
               if (session.provider === 'claude-code' && !hadError) {
-                autoContextPromise = this.runAutoContextCommand(session, workspacePath, event);
+                autoContextPromise = this.runAutoContextCommand(session, effectiveWorkspacePath, event);
               } else if (session.provider === 'claude-code' && hadError) {
                 console.log('[AIService] Skipping auto /context due to error in response');
               }

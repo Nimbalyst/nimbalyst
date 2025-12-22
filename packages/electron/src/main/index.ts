@@ -32,6 +32,7 @@ import { registerPermissionHandlers } from './ipc/PermissionHandlers';
 import { registerGitStatusHandlers } from './ipc/GitStatusHandlers';
 import { registerProjectSelectionHandlers } from './ipc/ProjectSelectionHandlers';
 import { registerUsageAnalyticsHandlers } from './ipc/UsageAnalyticsHandlers';
+import { registerWorktreeHandlers } from './ipc/WorktreeHandlers';
 import {
     type AppTheme,
     dismissClaudeCodeWindowsWarning,
@@ -453,6 +454,7 @@ app.whenReady().then(async () => {
     registerNotificationHandlers();
     registerPermissionHandlers();
     registerGitStatusHandlers();
+    registerWorktreeHandlers();
     registerMCPConfigHandlers();
     registerDatabaseBrowserHandlers();
     registerTerminalHandlers();

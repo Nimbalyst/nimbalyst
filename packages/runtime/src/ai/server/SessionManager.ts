@@ -71,6 +71,9 @@ function sessionDataFromChatSession(session: ChatSession, fallbackWorkspace: str
     tokenUsage,
     metadata: session.metadata ?? {},
     isArchived: session.isArchived ?? false,
+    // Worktree fields - passed through from database query
+    worktreeId: (session as any).worktreeId ?? undefined,
+    worktreePath: (session as any).worktreePath ?? undefined,
   } satisfies SessionData;
 }
 
@@ -521,7 +524,9 @@ export class SessionManager {
     providerConfig?: any,
     model?: string,
     sessionType?: 'chat' | 'planning' | 'coding' | 'terminal',
-    mode?: 'planning' | 'agent'
+    mode?: 'planning' | 'agent',
+    worktreeId?: string,
+    worktreePath?: string
   ): Promise<SessionData> {
     // workspacePath is REQUIRED - sessions cannot exist outside of a workspace
     if (!workspacePath) {
@@ -541,6 +546,8 @@ export class SessionManager {
       title: 'New conversation',
       providerConfig,
       documentContext: documentContext ? { ...documentContext } : undefined,
+      worktreeId,
+      worktreePath,
     });
 
     const now = Date.now();
@@ -557,6 +564,8 @@ export class SessionManager {
       workspacePath: workspace,
       title: 'New conversation',
       providerConfig,
+      worktreeId,
+      worktreePath,
     };
 
     this.currentSession = session;

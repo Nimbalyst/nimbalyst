@@ -409,6 +409,65 @@ interface ElectronAPI {
     onExited: (callback: (data: { sessionId: string; exitCode: number }) => void) => () => void;
   };
 
+  // Worktree operations
+  worktreeCreate: (workspacePath: string, name?: string) => Promise<{
+    success: boolean;
+    error?: string;
+    worktree?: {
+      id: string;
+      name: string;
+      path: string;
+      branch: string;
+      baseBranch: string;
+      projectPath: string;
+      createdAt: number;
+      updatedAt?: number;
+    };
+  }>;
+  worktreeGetStatus: (worktreePath: string) => Promise<{
+    success: boolean;
+    error?: string;
+    status?: {
+      hasUncommittedChanges: boolean;
+      modifiedFileCount: number;
+      commitsAhead: number;
+      commitsBehind: number;
+      isMerged: boolean;
+    };
+  }>;
+  worktreeDelete: (worktreeId: string, workspacePath: string) => Promise<{
+    success: boolean;
+    error?: string;
+  }>;
+  worktreeList: (workspacePath: string) => Promise<{
+    success: boolean;
+    error?: string;
+    worktrees?: Array<{
+      id: string;
+      name: string;
+      path: string;
+      branch: string;
+      baseBranch: string;
+      projectPath: string;
+      createdAt: number;
+      updatedAt?: number;
+    }>;
+  }>;
+  worktreeGet: (id: string) => Promise<{
+    success: boolean;
+    error?: string;
+    worktree?: {
+      id: string;
+      name: string;
+      path: string;
+      branch: string;
+      baseBranch: string;
+      projectPath: string;
+      createdAt: number;
+      updatedAt?: number;
+    } | null;
+  }>;
+
   // Open external links
   openExternal: (url: string) => Promise<void>;
 

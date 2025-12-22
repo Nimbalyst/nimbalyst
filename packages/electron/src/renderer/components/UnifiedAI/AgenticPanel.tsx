@@ -5,8 +5,7 @@ import { SessionDropdown } from '../AIChat/SessionDropdown';
 import { SessionHistory } from '../AgenticCoding/SessionHistory';
 import { SessionImportDialog } from '../AgenticCoding/SessionImportDialog';
 import { ResizablePanel } from '../AgenticCoding/ResizablePanel';
-import { TabBar } from '../TabManager/TabBar';
-import type { Tab } from '../TabManager/TabManager';
+import { AgentSessionHeader } from '../AgenticCoding/AgentSessionHeader';
 import { useFileMention } from '../../hooks/useFileMention';
 import type { TypeaheadOption } from '../Typeahead/GenericTypeahead';
 import type { AIMode } from './ModeTag';
@@ -105,8 +104,8 @@ function stripSystemMessage(content: string): string {
  * Key features:
  * - Supports both 'chat' mode (sidebar) and 'agent' mode (full window)
  * - Manages session collection and active session
- * - Shows SessionHistory in agent mode (hidden in chat mode)
- * - Shows TabBar in agent mode (single session dropdown in chat mode)
+ * - Shows SessionHistory in agent mode (left nav for switching sessions)
+ * - Shows session header with title/worktree info in agent mode
  * - Coordinates session lifecycle (create, load, delete)
  * - Handles streaming state across all sessions
  * - Persists state to workspace
@@ -152,7 +151,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
   // Session history layout state (agent mode only)
   const [sessionHistoryWidth, setSessionHistoryWidth] = useState(240);
-  const [sessionHistoryCollapsed, setSessionHistoryCollapsed] = useState(mode === 'chat'); // Collapsed in chat mode
+  // IMPORTANT: SessionHistory must ALWAYS be visible in agent mode (never collapsed)
+  // Only collapse in chat mode
+  const [sessionHistoryCollapsed, setSessionHistoryCollapsed] = useState(mode === 'chat');
   const [collapsedGroups, setCollapsedGroups] = useState<string[]>([]);
   const [sortOrder, setSortOrder] = useState<'updated' | 'created'>('updated');
   const [sessionHistoryRefreshTrigger, setSessionHistoryRefreshTrigger] = useState(0);
@@ -338,7 +339,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         if (result?.sessionHistoryLayout) {
           const layout = result.sessionHistoryLayout;
           setSessionHistoryWidth(layout.width ?? 240);
-          setSessionHistoryCollapsed(layout.collapsed ?? false);
+          // CRITICAL: Never collapse SessionHistory in agent mode
+          // The panel must always be visible to show the "New Worktree" button
+          setSessionHistoryCollapsed(false);
           setCollapsedGroups(layout.collapsedGroups ?? []);
           setSortOrder(layout.sortOrder ?? 'updated');
         }
@@ -359,7 +362,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           agenticCodingWindowState: {
             sessionHistoryLayout: {
               width: sessionHistoryWidth,
-              collapsed: sessionHistoryCollapsed,
+              // Never save collapsed=true for agent mode - panel must always be visible
+              collapsed: false,
               collapsedGroups,
               sortOrder
             }
@@ -1036,6 +1040,102 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     }
   }, [sessionTabs, workspacePath, mode, loadSessions, updateWindowTitle, triggerSessionHistoryRefresh]);
 
+  // Create a new worktree session
+  const createNewWorktreeSession = useCallback(async () => {
+    // Set loading state to prevent UI interactions during creation
+    setLoading(true);
+
+    try {
+      console.log('[AgenticPanel] Creating new worktree session');
+
+      // Step 1: Create the worktree
+      const worktreeResult = await window.electronAPI.worktreeCreate(workspacePath);
+      if (!worktreeResult.success || !worktreeResult.worktree) {
+        throw new Error(worktreeResult.error || 'Failed to create worktree');
+      }
+
+      const worktree = worktreeResult.worktree;
+      console.log('[AgenticPanel] Worktree created:', worktree.name, 'at', worktree.path);
+
+      // Step 2: Create session with worktree association
+      // Always use claude-code for worktree sessions
+      const defaultModel = 'claude-code:sonnet';
+      const provider = 'claude-code';
+
+      console.log(`[AgenticPanel] Creating worktree session with model: ${defaultModel}`);
+
+      const session = await window.electronAPI.aiCreateSession(
+        provider as 'claude' | 'claude-code' | 'openai' | 'lmstudio',
+        undefined,
+        workspacePath,
+        defaultModel,
+        'coding',
+        worktree.id // Pass worktreeId
+      );
+
+      // Add metadata for worktree session
+      await window.electronAPI.invoke('sessions:update-session-metadata', session.id, {
+        sessionType: 'coding',
+        fileEdits: [],
+        todos: [],
+        worktreeId: worktree.id,
+        worktreePath: worktree.path,
+      });
+
+      const tabName = `Worktree: ${worktree.name}`;
+
+      // Wait for session to be fully loaded before switching
+      const sessionData = await window.electronAPI.aiLoadSession(session.id, workspacePath);
+      if (!sessionData) {
+        throw new Error('Failed to load newly created worktree session');
+      }
+
+      const newTab: SessionTab = {
+        id: sessionData.id,
+        name: tabName,
+        sessionData,
+        draftInput: sessionData.draftInput,
+        mode: 'agent',
+        model: defaultModel
+      };
+
+      if (mode === 'chat') {
+        setSessionTabs([newTab]);
+      } else {
+        setSessionTabs(prev => [...prev, newTab]);
+      }
+
+      // Wait for session to be fully created before switching to it
+      await new Promise(resolve => setTimeout(resolve, 100));
+      setActiveTabId(sessionData.id);
+
+      // Reload sessions to update the UI
+      await loadSessions();
+
+      // Trigger SessionHistory refresh
+      triggerSessionHistoryRefresh('new-session');
+
+      if (onSessionChange) {
+        onSessionChange(sessionData.id, tabName);
+      }
+
+      // Focus the input after UI updates
+      setTimeout(() => {
+        const ref = sessionViewRefsRef.current.get(sessionData.id);
+        ref?.current?.focusInput();
+      }, 100);
+
+      return sessionData;
+    } catch (error) {
+      console.error('[AgenticPanel] Failed to create worktree session:', error);
+      errorNotificationService.showError('Worktree Creation Failed', String(error));
+      throw error;
+    } finally {
+      // Always clear loading state
+      setLoading(false);
+    }
+  }, [workspacePath, mode, loadSessions, onSessionChange, triggerSessionHistoryRefresh, sessionTabs]);
+
   // Load or create initial session
   useEffect(() => {
     if (initializedRef.current) return;
@@ -1191,7 +1291,13 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           }
         } else if (mode === 'agent') {
           // In agent mode, create a session by default
-          await createNewSession(planDocumentPath);
+          try {
+            await createNewSession(planDocumentPath);
+          } catch (err) {
+            // Don't show error UI if initial session creation fails in agent mode
+            // User can manually create a session using "New Session" or "New Worktree" buttons
+            console.error('[AgenticPanel] Failed to create initial session in agent mode:', err);
+          }
         }
         // In chat mode, don't create a session automatically - wait for user
       } catch (err) {
@@ -2498,15 +2604,6 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     });
   }, [sessionTabs, activeTabId, updateWindowTitle]);
 
-  const handleTabReorder = useCallback((fromIndex: number, toIndex: number) => {
-    setSessionTabs(prev => {
-      const newTabs = [...prev.filter(t => t != null)];
-      const [movedTab] = newTabs.splice(fromIndex, 1);
-      newTabs.splice(toIndex, 0, movedTab);
-      return newTabs;
-    });
-  }, []);
-
   // Expose methods to parent via ref
   useImperativeHandle(ref, () => ({
     createNewSession,
@@ -2544,33 +2641,6 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       handleTabSelect(filtered[prevIndex].id);
     }
   }), [createNewSession, openSessionInTab, activeTabId, handleTabClose, sessionTabs, handleTabSelect, closedSessions]);
-
-  const handleTogglePin = useCallback((tabId: string) => {
-    setSessionTabs(prev => {
-      const filtered = prev.filter(t => t != null);
-      const tab = filtered.find(t => t.id === tabId);
-      if (!tab) return filtered;
-
-      const newIsPinned = !tab.isPinned;
-      const updatedTab = { ...tab, isPinned: newIsPinned };
-
-      let newTabs = filtered.map(t => t.id === tabId ? updatedTab : t);
-
-      if (newIsPinned) {
-        newTabs = newTabs.filter(t => t.id !== tabId);
-        const lastPinnedIndex = newTabs.findIndex(t => !t.isPinned);
-        const insertIndex = lastPinnedIndex === -1 ? newTabs.length : lastPinnedIndex;
-        newTabs.splice(insertIndex, 0, updatedTab);
-      } else {
-        newTabs = newTabs.filter(t => t.id !== tabId);
-        const firstUnpinnedIndex = newTabs.findIndex(t => !t.isPinned);
-        const insertIndex = firstUnpinnedIndex === -1 ? newTabs.length : firstUnpinnedIndex;
-        newTabs.splice(insertIndex, 0, updatedTab);
-      }
-
-      return newTabs;
-    });
-  }, []);
 
   const handleTabRename = useCallback(async (tabId: string, newName: string) => {
     // Update the tab name in sessionTabs
@@ -2724,22 +2794,6 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     return sessionTabs.filter(tab => tab != null).map(tab => tab.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadedSessionIdsKey]);
-
-  // Convert SessionTab to Tab format for TabBar
-  const convertToTabs = (sessionTabs: SessionTab[]): Tab[] => {
-    return sessionTabs.filter(tab => tab != null).map(tab => ({
-      id: tab.id,
-      filePath: `session://${tab.id}`,
-      fileName: tab.name,
-      content: '',
-      isDirty: false,
-      isPinned: tab.isPinned || false,
-      isVirtual: true,
-      isProcessing: processingSessions.has(tab.id),
-      // Only show unread for inactive tabs that aren't processing
-      hasUnread: tab.id !== activeTabId && !processingSessions.has(tab.id) && hasUnreadMessages(tab)
-    }));
-  };
 
   if (loading) {
     return (
@@ -2905,6 +2959,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             onSessionRename={handleTabRename}
             onNewSession={() => createNewSession()}
             onNewTerminal={releaseChannel === 'alpha' ? () => createNewTerminal() : undefined}
+            onNewWorktreeSession={createNewWorktreeSession}
             onImportSessions={handleOpenImportDialog}
             onOpenQuickSearch={onOpenQuickSearch}
             collapsedGroups={collapsedGroups}
@@ -2912,28 +2967,17 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             sortOrder={sortOrder}
             onSortOrderChange={setSortOrder}
             refreshTrigger={sessionHistoryRefreshTrigger}
+            mode={mode}
           />
         }
         rightPanel={
           <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-            {/* Tabs */}
-            {sessionTabs.length > 0 && (
-              <div className="ai-session-tabs-container">
-                <TabBar
-                tabs={convertToTabs(sessionTabs)}
-                activeTabId={activeTabId}
-                onTabSelect={handleTabSelect}
-                onTabClose={handleTabClose}
-                onNewTab={() => createNewSession()}
-                onTogglePin={handleTogglePin}
-                onTabReorder={handleTabReorder}
-                onReopenLastClosed={reopenLastClosedSession}
-                hasClosedTabs={closedSessions.length > 0}
-                onTabRename={handleTabRename}
-                allowRename={true}
-                isActive={isActive}
+            {/* Session Header */}
+            {activeTabId && (
+              <AgentSessionHeader
+                sessionData={sessionTabs.find(tab => tab.id === activeTabId)?.sessionData || null}
+                isProcessing={activeTabId ? processingSessions.has(activeTabId) : false}
               />
-              </div>
             )}
 
             {/* Session views */}

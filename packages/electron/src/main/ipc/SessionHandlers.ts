@@ -159,6 +159,7 @@ export async function registerSessionHandlers() {
                 sessionType: entry.sessionType || 'chat',
                 messageCount: entry.messageCount || 0,
                 isArchived: entry.isArchived || false,
+                worktreeId: entry.worktreeId,  // Include worktreeId from repository
                 metadata: {}
             }));
 
@@ -189,6 +190,7 @@ export async function registerSessionHandlers() {
                         sessionType: session.sessionType || 'chat',
                         messageCount: entry.messageCount || 0,
                         isArchived: entry.isArchived || false,
+                        worktreeId: session.worktreeId,  // Include worktreeId from session data
                         metadata: session.metadata || {}
                     });
                 }
