@@ -2614,14 +2614,109 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             this.logSecurity(`[PreToolUse] WARNING: No URL permission checker set!`);
           }
 
-          // URL not in allowed list - force ask
-          this.logSecurity(`[PreToolUse] WebFetch URL not allowed, forcing ask:`, { url });
-          return {
-            hookSpecificOutput: {
-              hookEventName: 'PreToolUse' as const,
-              permissionDecision: 'ask' as const
-            }
+          // URL not in allowed list - handle permission request directly in hook
+          this.logSecurity(`[PreToolUse] WebFetch URL not allowed, requesting permission:`, { url });
+
+          // Generate a unique request ID
+          const requestId = `perm-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+          // Create a permission request object
+          const permissionRequest = {
+            id: requestId,
+            toolName: 'WebFetch',
+            rawCommand: `fetch ${url}`,
+            actionsNeedingApproval: [{
+              action: {
+                pattern: `WebFetch:${url}`,
+                displayName: `Fetch ${url}`,
+              },
+              decision: 'ask' as const,
+              reason: 'URL not in allowed list',
+              warnings: [] as string[],
+              outsidePaths: [] as string[],
+              sensitivePaths: [] as string[],
+            }],
+            hasDestructiveActions: false,
+            createdAt: Date.now(),
           };
+
+          // Create promise that will be resolved when user responds
+          const responsePromise = new Promise<{ decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' }>((resolve, reject) => {
+            this.pendingToolPermissions.set(requestId, {
+              resolve,
+              reject,
+              request: permissionRequest
+            });
+
+            // Set up abort handler using the abort controller
+            if (this.abortController?.signal) {
+              this.abortController.signal.addEventListener('abort', () => {
+                this.pendingToolPermissions.delete(requestId);
+                reject(new Error('Request aborted'));
+              }, { once: true });
+            }
+          });
+
+          // Emit event to notify renderer to show permission UI
+          this.emit('toolPermission:pending', {
+            requestId,
+            sessionId,
+            workspacePath,
+            request: permissionRequest,
+            timestamp: Date.now()
+          });
+
+          try {
+            // Wait for user to respond
+            const response = await responsePromise;
+
+            this.logSecurity('[PreToolUse] WebFetch permission response received:', {
+              url,
+              decision: response.decision,
+              scope: response.scope,
+            });
+
+            if (response.decision === 'allow') {
+              // Save URL pattern if scope is 'always'
+              if (response.scope === 'always' && ClaudeCodeProvider.urlPatternSaver) {
+                try {
+                  const parsedUrl = new URL(url);
+                  const hostname = parsedUrl.hostname;
+                  ClaudeCodeProvider.urlPatternSaver(
+                    workspacePath,
+                    hostname,
+                    `Allow fetching from ${hostname}`
+                  );
+                  this.logSecurity('[PreToolUse] Saved URL pattern:', { hostname });
+                } catch (urlError) {
+                  this.logSecurity('[PreToolUse] Failed to parse URL for pattern:', { url, error: urlError });
+                }
+              }
+
+              return {
+                hookSpecificOutput: {
+                  hookEventName: 'PreToolUse' as const,
+                  permissionDecision: 'allow' as const
+                }
+              };
+            } else {
+              return {
+                hookSpecificOutput: {
+                  hookEventName: 'PreToolUse' as const,
+                  permissionDecision: 'deny' as const
+                }
+              };
+            }
+          } catch (error) {
+            this.logSecurity('[PreToolUse] WebFetch permission error:', { url, error });
+            // On error (e.g., abort), deny the request
+            return {
+              hookSpecificOutput: {
+                hookEventName: 'PreToolUse' as const,
+                permissionDecision: 'deny' as const
+              }
+            };
+          }
         } else if (toolName === 'WebFetch') {
           // Log why we're not checking
           this.logSecurity(`[PreToolUse] WebFetch skipping permission check:`, {
@@ -2632,13 +2727,92 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
         // WebSearch always needs approval (no URL pattern matching for searches)
         if (toolName === 'WebSearch') {
-          this.logSecurity(`[PreToolUse] WebSearch forcing ask:`, { query: toolInput?.query });
-          return {
-            hookSpecificOutput: {
-              hookEventName: 'PreToolUse' as const,
-              permissionDecision: 'ask' as const
-            }
+          const query = toolInput?.query;
+          this.logSecurity(`[PreToolUse] WebSearch requesting permission:`, { query });
+
+          // Generate a unique request ID
+          const requestId = `perm-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+          // Create a permission request object
+          const permissionRequest = {
+            id: requestId,
+            toolName: 'WebSearch',
+            rawCommand: `search "${query}"`,
+            actionsNeedingApproval: [{
+              action: {
+                pattern: `WebSearch:${query}`,
+                displayName: `Search: ${query}`,
+              },
+              decision: 'ask' as const,
+              reason: 'Web search requires approval',
+              warnings: [] as string[],
+              outsidePaths: [] as string[],
+              sensitivePaths: [] as string[],
+            }],
+            hasDestructiveActions: false,
+            createdAt: Date.now(),
           };
+
+          // Create promise that will be resolved when user responds
+          const responsePromise = new Promise<{ decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' }>((resolve, reject) => {
+            this.pendingToolPermissions.set(requestId, {
+              resolve,
+              reject,
+              request: permissionRequest
+            });
+
+            // Set up abort handler
+            if (this.abortController?.signal) {
+              this.abortController.signal.addEventListener('abort', () => {
+                this.pendingToolPermissions.delete(requestId);
+                reject(new Error('Request aborted'));
+              }, { once: true });
+            }
+          });
+
+          // Emit event to notify renderer to show permission UI
+          this.emit('toolPermission:pending', {
+            requestId,
+            sessionId,
+            workspacePath,
+            request: permissionRequest,
+            timestamp: Date.now()
+          });
+
+          try {
+            // Wait for user to respond
+            const response = await responsePromise;
+
+            this.logSecurity('[PreToolUse] WebSearch permission response received:', {
+              query,
+              decision: response.decision,
+              scope: response.scope,
+            });
+
+            if (response.decision === 'allow') {
+              return {
+                hookSpecificOutput: {
+                  hookEventName: 'PreToolUse' as const,
+                  permissionDecision: 'allow' as const
+                }
+              };
+            } else {
+              return {
+                hookSpecificOutput: {
+                  hookEventName: 'PreToolUse' as const,
+                  permissionDecision: 'deny' as const
+                }
+              };
+            }
+          } catch (error) {
+            this.logSecurity('[PreToolUse] WebSearch permission error:', { query, error });
+            return {
+              hookSpecificOutput: {
+                hookEventName: 'PreToolUse' as const,
+                permissionDecision: 'deny' as const
+              }
+            };
+          }
         }
 
         // No URL or workspace - let SDK handle it

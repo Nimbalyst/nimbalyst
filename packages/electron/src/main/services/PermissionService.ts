@@ -529,6 +529,52 @@ export class PermissionService {
   }
 
   /**
+   * Re-evaluate pending permission requests for a workspace/session.
+   * Returns request IDs that now evaluate to 'allow' (should be auto-resolved).
+   * This is called after a permission is granted to check if other pending requests
+   * now match the newly saved pattern.
+   */
+  public reEvaluatePendingRequests(
+    workspacePath: string,
+    sessionId: string
+  ): Array<{ requestId: string; toolName: string; toolDescription: string }> {
+    const workspaceName = workspacePath.split('/').pop() || workspacePath;
+    const autoApproved: Array<{ requestId: string; toolName: string; toolDescription: string }> = [];
+    const engine = this.getEngine(workspacePath);
+
+    for (const [requestId, pending] of this.pendingRequests) {
+      // Only check requests for the same workspace and session
+      if (pending.workspacePath !== workspacePath || pending.sessionId !== sessionId) {
+        continue;
+      }
+
+      // Re-evaluate this pending request against current engine state
+      const evaluation = engine.evaluateTool(
+        pending.request.toolName,
+        pending.request.rawCommand,
+        sessionId
+      );
+
+      if (evaluation.overallDecision === 'allow') {
+        logger.agentSecurity.info(`[PermissionService:${workspaceName}] Auto-approving pending request:`, {
+          requestId,
+          toolName: pending.request.toolName,
+          rawCommand: pending.request.rawCommand.slice(0, 100),
+        });
+        autoApproved.push({
+          requestId,
+          toolName: pending.request.toolName,
+          toolDescription: pending.request.rawCommand
+        });
+        // Remove from pending
+        this.pendingRequests.delete(requestId);
+      }
+    }
+
+    return autoApproved;
+  }
+
+  /**
    * Invalidate cached engine for a workspace (e.g., when settings change externally)
    */
   public invalidateCache(workspacePath: string): void {

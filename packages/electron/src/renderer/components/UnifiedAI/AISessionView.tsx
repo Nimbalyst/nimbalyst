@@ -274,7 +274,7 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
   const [queuedPrompts, setQueuedPrompts] = useState<any[]>([]);
   const [pendingExitPlanConfirmation, setPendingExitPlanConfirmation] = useState<ExitPlanModeConfirmationData | null>(null);
   const [pendingAskUserQuestion, setPendingAskUserQuestion] = useState<AskUserQuestionData | null>(null);
-  const [pendingToolPermission, setPendingToolPermission] = useState<ToolPermissionData | null>(null);
+  const [pendingToolPermissions, setPendingToolPermissions] = useState<ToolPermissionData[]>([]);
 
   // Listen for ExitPlanMode confirmation requests for this session
   useEffect(() => {
@@ -395,17 +395,33 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
     const handleToolPermission = (data: ToolPermissionData) => {
       // Only show permission request for this session
       if (data.sessionId === sessionId) {
-        // Prevent duplicate events from resetting the component state
-        setPendingToolPermission(prev => {
-          if (prev && prev.requestId === data.requestId) {
+        // Add to queue if not already present (prevents duplicate events)
+        setPendingToolPermissions(prev => {
+          if (prev.some(p => p.requestId === data.requestId)) {
             return prev;
           }
-          return data;
+          return [...prev, data];
         });
       }
     };
 
     const cleanup = window.electronAPI.on('ai:toolPermission', handleToolPermission);
+    return () => {
+      cleanup?.();
+    };
+  }, [sessionId]);
+
+  // Listen for tool permission resolved events (for auto-approved permissions)
+  useEffect(() => {
+    const handleToolPermissionResolved = (data: { requestId: string; sessionId: string; autoApproved?: boolean }) => {
+      // Only process for this session
+      if (data.sessionId === sessionId) {
+        // Remove the auto-approved request from the queue
+        setPendingToolPermissions(prev => prev.filter(p => p.requestId !== data.requestId));
+      }
+    };
+
+    const cleanup = window.electronAPI.on('ai:toolPermissionResolved', handleToolPermissionResolved);
     return () => {
       cleanup?.();
     };
@@ -423,7 +439,8 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
         sessionId: confirmSessionId,
         response
       });
-      setPendingToolPermission(null);
+      // Remove this request from the queue
+      setPendingToolPermissions(prev => prev.filter(p => p.requestId !== requestId));
     } catch (error) {
       console.error('[AISessionView] Failed to submit tool permission response:', error);
     }
@@ -435,10 +452,12 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
         requestId,
         sessionId: confirmSessionId
       });
-      setPendingToolPermission(null);
+      // Remove this request from the queue
+      setPendingToolPermissions(prev => prev.filter(p => p.requestId !== requestId));
     } catch (error) {
       console.error('[AISessionView] Failed to cancel tool permission:', error);
-      setPendingToolPermission(null);
+      // Still remove from queue even if cancel fails
+      setPendingToolPermissions(prev => prev.filter(p => p.requestId !== requestId));
     }
   }, []);
 
@@ -774,15 +793,15 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
         />
       )}
 
-      {/* Tool permission confirmation - shown when a tool requires user approval */}
-      {pendingToolPermission && (
+      {/* Tool permission confirmations - shown when tools require user approval */}
+      {pendingToolPermissions.map(permission => (
         <ToolPermissionConfirmation
-          key={pendingToolPermission.requestId}
-          data={pendingToolPermission}
+          key={permission.requestId}
+          data={permission}
           onSubmit={handleToolPermissionSubmit}
           onCancel={handleToolPermissionCancel}
         />
-      )}
+      ))}
 
       {/* Input area - separate so typing doesn't re-render transcript */}
       <AIInput
