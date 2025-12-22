@@ -495,60 +495,12 @@ async function tryCreateServer(port: number): Promise<any> {
         const currentDocState = states[states.length - 1];
         const currentFilePath = currentDocState?.filePath;
 
-        // Built-in tools
+        // Built-in tools exposed via MCP (for Claude Code / agent mode)
+        // NOTE: applyDiff and streamContent are intentionally NOT exposed here.
+        // They are only available through chat providers via direct IPC, not through
+        // Claude Code MCP. This was the original design - see commit af94ef47.
+        // The agent should use native Edit/Write tools with file-watcher diff approval.
         const builtInTools = [
-          {
-            name: 'applyDiff',
-            description: 'Apply text replacements to a markdown document. IMPORTANT: Only .md files can be modified. If no filePath is provided, applies to the currently active document.',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                filePath: {
-                  type: 'string',
-                  description: 'Optional absolute path to the markdown file (.md) to apply replacements to. If not provided, applies to the currently active document. MUST end in .md extension.'
-                },
-                replacements: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    properties: {
-                      oldText: { type: 'string' },
-                      newText: { type: 'string' }
-                    },
-                    required: ['oldText', 'newText']
-                  }
-                }
-              },
-              required: ['replacements']
-            }
-          },
-          {
-            name: 'streamContent',
-            description: 'Stream new content into the document at a specific position. Use this for inserting NEW content without replacing existing text.',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                content: {
-                  type: 'string',
-                  description: 'The content to insert into the document'
-                },
-                position: {
-                  type: 'string',
-                  enum: ['cursor', 'end', 'after-selection'],
-                  description: 'Where to insert the content. "cursor" inserts at current cursor position, "end" appends to end of document, "after-selection" inserts after selected text.'
-                },
-                insertAfter: {
-                  type: 'string',
-                  description: 'Optional: specific text to insert after. If provided, content will be inserted after the first occurrence of this text.'
-                },
-                filePath: {
-                  type: 'string',
-                  description: 'Optional: absolute path to the file to insert into. If not provided, uses the currently active document.'
-                }
-              },
-              required: ['content']
-            }
-          },
           {
             name: 'capture_mockup_screenshot',
             description: 'Capture a screenshot of a .mockup.html file. Returns the screenshot as a base64-encoded PNG image. If the file is open in the editor, the screenshot will include any user annotations (drawings, highlights). If the file is not open, it will be rendered in a headless window (without annotations).',
