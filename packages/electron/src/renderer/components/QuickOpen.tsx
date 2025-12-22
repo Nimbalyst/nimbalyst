@@ -380,7 +380,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
             ref={searchInputRef}
             type="text"
             className="quick-open-search"
-            placeholder="Search files by name..."
+            placeholder="Search files..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
