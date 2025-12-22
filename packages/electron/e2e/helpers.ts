@@ -128,9 +128,49 @@ export async function waitForAppReady(page: Page): Promise<void> {
   await page.waitForSelector('.workspace-sidebar', { timeout: TEST_TIMEOUTS.SIDEBAR_LOAD });
 }
 
+/**
+ * Dismiss the project trust toast if it appears.
+ * Clicks "Smart Permissions" (the recommended option) to trust the project.
+ * Safe to call even if the toast doesn't appear - will just return after timeout.
+ *
+ * @param page The Playwright page
+ * @param timeout How long to wait for the toast (default 2000ms)
+ */
+export async function dismissProjectTrustToast(page: Page, timeout = 2000): Promise<void> {
+  try {
+    // Wait for the trust toast to appear
+    const toast = page.locator('.project-trust-toast-overlay');
+    await toast.waitFor({ state: 'visible', timeout });
+
+    // Click the "Smart Permissions" button (first option, recommended)
+    const smartPermissionsBtn = page.locator('.project-trust-toast-option--primary');
+    await smartPermissionsBtn.click();
+
+    // Wait for the toast to disappear
+    await toast.waitFor({ state: 'hidden', timeout: 2000 });
+  } catch {
+    // Toast didn't appear or was already dismissed - that's fine
+  }
+}
+
 export async function waitForEditor(page: Page): Promise<void> {
   await page.waitForLoadState('domcontentloaded');
   await page.waitForSelector('[data-testid="editor"]', { timeout: TEST_TIMEOUTS.EDITOR_LOAD });
+}
+
+/**
+ * Set the release channel for the app.
+ * Useful for tests that need to use alpha-only extensions.
+ *
+ * @param page The Playwright page
+ * @param channel The release channel ('stable' or 'alpha')
+ */
+export async function setReleaseChannel(page: Page, channel: 'stable' | 'alpha'): Promise<void> {
+  await page.evaluate(async (ch) => {
+    await window.electronAPI.invoke('release-channel:set', ch);
+  }, channel);
+  // Wait for the setting to propagate
+  await page.waitForTimeout(100);
 }
 
 export function getKeyboardShortcut(key: string): string {

@@ -108,6 +108,7 @@ export function SpreadsheetEditor({
   filePath,
   initialContent,
   theme,
+  isActive,
   onContentChange,
   onDirtyChange,
   onGetContentReady,
@@ -119,9 +120,16 @@ export function SpreadsheetEditor({
     onContentChange,
   });
 
+  // Ref for the editor container (defined early for use in effects)
+  const editorRef = useRef<HTMLDivElement>(null);
+
   // Selection state (owned locally, updated from RevoGrid events)
   const [selectedCell, setSelectedCell] = useState<{ row: number; col: number } | null>(null);
   const [selectionRange, setSelectionRange] = useState<NormalizedSelectionRange | null>(null);
+
+  // Refs for capture handlers (updated immediately, not waiting for React re-render)
+  const selectedCellRef = useRef(selectedCell);
+  const selectionRangeRef = useRef(selectionRange);
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
@@ -164,6 +172,67 @@ export function SpreadsheetEditor({
     onReloadContent?.(handleReloadContent);
   }, [onReloadContent, handleReloadContent]);
 
+  // Selector for detecting dialogs/overlays
+  const DIALOG_SELECTOR = '[role="dialog"], .quick-open-modal, .command-palette, [class*="modal"], [class*="overlay"]:not(.spreadsheet-editor *)';
+
+  // Synchronous check for dialogs - used in keyboard handlers
+  const isDialogOpen = useCallback(() => {
+    return !!document.querySelector(DIALOG_SELECTOR);
+  }, []);
+
+  // Track whether a dialog/overlay is open to prevent RevoGrid from stealing focus (for inert attribute)
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  useEffect(() => {
+    // Watch for dialogs/overlays appearing in the DOM
+    const checkForDialogs = () => {
+      const hasDialog = !!document.querySelector(DIALOG_SELECTOR);
+      setDialogOpen(hasDialog);
+    };
+
+    // Use MutationObserver to detect when dialogs are added/removed
+    const observer = new MutationObserver(checkForDialogs);
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    // Initial check
+    checkForDialogs();
+
+    return () => observer.disconnect();
+  }, []);
+
+  // Block keyboard events from reaching RevoGrid when a dialog is open
+  // This uses a capture-phase listener on document to intercept events
+  // BEFORE they reach RevoGrid, using synchronous dialog detection
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    const blockKeyboardWhenDialogOpen = (event: KeyboardEvent) => {
+      // Check synchronously if a dialog is open
+      if (!document.querySelector(DIALOG_SELECTOR)) {
+        return; // No dialog, let event through
+      }
+
+      // If the event target is within the spreadsheet editor, stop it
+      const target = event.target as HTMLElement | null;
+      if (target && editor.contains(target)) {
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+      }
+    };
+
+    // Capture phase on document to intercept before RevoGrid
+    document.addEventListener('keydown', blockKeyboardWhenDialogOpen, true);
+    document.addEventListener('keypress', blockKeyboardWhenDialogOpen, true);
+    document.addEventListener('keyup', blockKeyboardWhenDialogOpen, true);
+
+    return () => {
+      document.removeEventListener('keydown', blockKeyboardWhenDialogOpen, true);
+      document.removeEventListener('keypress', blockKeyboardWhenDialogOpen, true);
+      document.removeEventListener('keyup', blockKeyboardWhenDialogOpen, true);
+    };
+  }, []);
+
   // Display dimensions (data + buffer)
   const displayColumnCount = spreadsheet.data.columnCount + DISPLAY_BUFFER_COLS;
 
@@ -176,6 +245,37 @@ export function SpreadsheetEditor({
   const source = useMemo(
     () => toGridSource(spreadsheet.data.rows, spreadsheet.data.columnCount, spreadsheet.data.headerRowCount || 0, displayColumnCount),
     [spreadsheet.data.rows, spreadsheet.data.columnCount, spreadsheet.data.headerRowCount, displayColumnCount]
+  );
+
+  // Handle before edit - inject raw value for formulas
+  const handleBeforeEdit = useCallback(
+    (event: RevoGridCustomEvent<{
+      rowIndex?: number;
+      colIndex?: number;
+      prop?: string;
+      val?: unknown;
+      model?: Record<string, unknown>;
+    } | null>) => {
+      if (!event.detail) return;
+
+      const { rowIndex, prop } = event.detail;
+      if (rowIndex === undefined || prop === undefined) return;
+
+      const colIndex = columnIndexToLetter(0) === prop ? 0 :
+        generateColumnHeaders(displayColumnCount).indexOf(prop);
+
+      if (colIndex < 0) return;
+
+      // Get the raw value (formula) from our data
+      const cell = spreadsheet.data.rows[rowIndex]?.[colIndex];
+      if (cell && cell.raw !== cell.computed) {
+        // Override the edit value with the raw formula
+        if (event.detail.model) {
+          event.detail.model[prop] = cell.raw;
+        }
+      }
+    },
+    [spreadsheet.data.rows, displayColumnCount]
   );
 
   // Handle cell edit
@@ -216,9 +316,16 @@ export function SpreadsheetEditor({
       if (!event.detail) return;
       const { rowIndex, colIndex } = event.detail;
 
-      console.log('[CSV] Setting selectedCell to:', { row: rowIndex, col: colIndex });
-      setSelectedCell({ row: rowIndex, col: colIndex });
-      setSelectionRange(normalizeRange(rowIndex, colIndex, rowIndex, colIndex));
+      const newCell = { row: rowIndex, col: colIndex };
+      const newRange = normalizeRange(rowIndex, colIndex, rowIndex, colIndex);
+
+      console.log('[CSV] Setting selectedCell to:', newCell);
+      setSelectedCell(newCell);
+      setSelectionRange(newRange);
+
+      // Update refs immediately
+      selectedCellRef.current = newCell;
+      selectionRangeRef.current = newRange;
     },
     []
   );
@@ -242,14 +349,28 @@ export function SpreadsheetEditor({
     (event: RevoGridCustomEvent<{
       type: string;
       area?: { x: number; y: number; x1: number; y1: number };
+      x?: number; y?: number; x1?: number; y1?: number;
     } | null>) => {
       console.log('[CSV] handleSetRange event:', event.detail);
-      if (!event.detail?.area) return;
-      const { x, y, x1, y1 } = event.detail.area;
+      if (!event.detail) return;
 
-      console.log('[CSV] Setting selectedCell from range to:', { row: y, col: x });
+      // RevoGrid sometimes puts coords in area, sometimes directly on detail
+      const x = event.detail.area?.x ?? event.detail.x;
+      const y = event.detail.area?.y ?? event.detail.y;
+      const x1 = event.detail.area?.x1 ?? event.detail.x1;
+      const y1 = event.detail.area?.y1 ?? event.detail.y1;
+
+      if (x === undefined || y === undefined || x1 === undefined || y1 === undefined) return;
+
+      const newRange = normalizeRange(y, x, y1, x1);
+      console.log('[CSV] Setting selection from range:', newRange);
+
       setSelectedCell({ row: y, col: x });
-      setSelectionRange(normalizeRange(y, x, y1, x1));
+      setSelectionRange(newRange);
+
+      // Update refs immediately so capture handlers have fresh values
+      selectedCellRef.current = { row: y, col: x };
+      selectionRangeRef.current = newRange;
     },
     []
   );
@@ -368,32 +489,51 @@ export function SpreadsheetEditor({
     setContextMenu(null);
   }, []);
 
-  // Ref for the editor container
-  const editorRef = useRef<HTMLDivElement>(null);
-
-  // Use a ref to track selected cell for the global handler
-  const selectedCellRef = useRef(selectedCell);
-  useEffect(() => {
-    selectedCellRef.current = selectedCell;
-  }, [selectedCell]);
-
   // Capture listener for Cmd+S and Cmd+V to intercept before RevoGrid
+  // Only handles keys when focus is within the spreadsheet editor
   useEffect(() => {
     const editor = editorRef.current;
     if (!editor) return;
 
     const handleCapture = (event: KeyboardEvent) => {
+      // Don't handle if a dialog is open or editor is inactive
+      // Use synchronous isDialogOpen() check instead of dialogOpen state
+      // because state updates are async and can miss the first keystroke
+      if (isDialogOpen() || !isActive) {
+        return;
+      }
+
+      // Only handle events that originated within this editor
+      const target = event.target as HTMLElement | null;
+      const isTargetInEditor = target && editor.contains(target);
+
+      // Also check active element for safety
+      const activeEl = document.activeElement as HTMLElement | null;
+      const isActiveInEditor = activeEl && editor.contains(activeEl);
+
+      // Ignore if the event didn't originate from this editor
+      if (!isTargetInEditor && !isActiveInEditor) {
+        return;
+      }
+
+      // Check if focus is on an input/textarea (could be editing a cell in RevoGrid, which is fine)
+      // But if it's an input outside of RevoGrid's cell editing, ignore
+      const isNonGridInput = (activeEl?.tagName === 'INPUT' || activeEl?.tagName === 'TEXTAREA') &&
+        !activeEl?.closest('revo-grid');
+
+      if (isNonGridInput) {
+        return;
+      }
+
       const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
       const cmdOrCtrl = isMac ? event.metaKey : event.ctrlKey;
 
       if (!cmdOrCtrl) return;
 
       const key = event.key.toLowerCase();
-      console.log('[CSV] Capture keydown:', key, 'meta:', event.metaKey, 'ctrl:', event.ctrlKey, 'selectedCell:', selectedCellRef.current);
 
       // Handle Cmd+S - dispatch to window for app save handler
       if (key === 's') {
-        console.log('[CSV] Cmd+S captured, dispatching to window');
         event.preventDefault();
         event.stopPropagation();
         window.dispatchEvent(new KeyboardEvent('keydown', {
@@ -406,37 +546,45 @@ export function SpreadsheetEditor({
         return;
       }
 
+      // Handle Cmd+C - copy
+      const currentSelection = selectionRangeRef.current;
+      if (key === 'c' && currentSelection) {
+        event.preventDefault();
+        event.stopPropagation();
+        spreadsheet.copySelection(currentSelection);
+        return;
+      }
+
+      // Handle Cmd+X - cut
+      if (key === 'x' && currentSelection) {
+        event.preventDefault();
+        event.stopPropagation();
+        spreadsheet.cutSelection(currentSelection);
+        return;
+      }
+
       // Handle Cmd+V - paste from system clipboard
       const currentCell = selectedCellRef.current;
       if (key === 'v') {
-        console.log('[CSV] Cmd+V captured, selectedCell:', currentCell);
         event.preventDefault();
         event.stopPropagation();
 
         if (!currentCell) {
-          console.log('[CSV] No cell selected, cannot paste');
           return;
         }
 
         navigator.clipboard.readText().then(text => {
-          console.log('[CSV] System clipboard text:', text ? `"${text.substring(0, 100)}..."` : '(empty)');
           if (text) {
-            console.log('[CSV] Calling pasteFromText');
             spreadsheet.pasteFromText(currentCell.row, currentCell.col, text);
-          } else {
-            console.log('[CSV] Calling pasteAtCell (internal clipboard)');
-            spreadsheet.pasteAtCell(currentCell.row, currentCell.col);
           }
-        }).catch((err) => {
-          console.log('[CSV] Clipboard access denied:', err);
-          spreadsheet.pasteAtCell(currentCell.row, currentCell.col);
+        }).catch(() => {
+          // Clipboard access denied - nothing to do
         });
         return;
       }
 
       // Handle Cmd+Z - undo
       if (key === 'z' && !event.shiftKey) {
-        console.log('[CSV] Cmd+Z captured, calling undo');
         event.preventDefault();
         event.stopPropagation();
         spreadsheet.undo();
@@ -445,7 +593,6 @@ export function SpreadsheetEditor({
 
       // Handle Cmd+Shift+Z - redo
       if (key === 'z' && event.shiftKey) {
-        console.log('[CSV] Cmd+Shift+Z captured, calling redo');
         event.preventDefault();
         event.stopPropagation();
         spreadsheet.redo();
@@ -458,11 +605,14 @@ export function SpreadsheetEditor({
     return () => {
       editor.removeEventListener('keydown', handleCapture, true);
     };
-  }, [spreadsheet]);
+  }, [spreadsheet, isActive, isDialogOpen]);
 
   // Handle keyboard shortcuts
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent) => {
+      // Don't handle keys if not active
+      if (!isActive) return;
+
       const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
       const cmdOrCtrl = isMac ? event.metaKey : event.ctrlKey;
 
@@ -499,21 +649,12 @@ export function SpreadsheetEditor({
           case 'v':
             if (!event.shiftKey && selectedCell) {
               event.preventDefault();
-              console.log('[CSV] Paste triggered, selectedCell:', selectedCell);
-              // Try system clipboard first, fall back to internal clipboard
               navigator.clipboard.readText().then(text => {
-                console.log('[CSV] System clipboard text:', text ? `"${text.substring(0, 100)}..."` : '(empty)');
                 if (text) {
-                  console.log('[CSV] Calling pasteFromText');
                   spreadsheet.pasteFromText(selectedCell.row, selectedCell.col, text);
-                } else {
-                  console.log('[CSV] Calling pasteAtCell (internal clipboard)');
-                  spreadsheet.pasteAtCell(selectedCell.row, selectedCell.col);
                 }
-              }).catch((err) => {
-                console.log('[CSV] Clipboard access denied:', err);
-                // Clipboard access denied, use internal clipboard
-                spreadsheet.pasteAtCell(selectedCell.row, selectedCell.col);
+              }).catch(() => {
+                // Clipboard access denied - nothing to do
               });
             }
             return;
@@ -548,7 +689,7 @@ export function SpreadsheetEditor({
         setSelectionRange(null);
       }
     },
-    [spreadsheet, selectedCell, selectionRange]
+    [spreadsheet, selectedCell, selectionRange, isActive]
   );
 
   // Build row header context menu items
@@ -621,7 +762,6 @@ export function SpreadsheetEditor({
 
   // Build context menu items
   const getContextMenuItems = useCallback((): ContextMenuItem[] => {
-    const hasClipboard = !!spreadsheet.clipboard;
     const hasSelection = !!selectedCell;
     const cellCount = selectionRange
       ? (selectionRange.endRow - selectionRange.startRow + 1) * (selectionRange.endCol - selectionRange.startCol + 1)
@@ -646,9 +786,17 @@ export function SpreadsheetEditor({
       {
         label: 'Paste',
         action: () => {
-          if (selectedCell) spreadsheet.pasteAtCell(selectedCell.row, selectedCell.col);
+          if (selectedCell) {
+            navigator.clipboard.readText().then(text => {
+              if (text) {
+                spreadsheet.pasteFromText(selectedCell.row, selectedCell.col, text);
+              }
+            }).catch(() => {
+              // Clipboard access denied
+            });
+          }
         },
-        disabled: !hasSelection || !hasClipboard,
+        disabled: !hasSelection,
       },
       {
         label: hasMultipleSelected ? `Clear (${cellCount} cells)` : 'Clear',
@@ -754,6 +902,9 @@ export function SpreadsheetEditor({
       <div
         ref={gridContainerRef}
         className="spreadsheet-grid-container"
+        // Use inert attribute to completely disable focus/interaction when dialog is open
+        {...(dialogOpen ? { inert: '' } : {})}
+        style={!isActive ? { pointerEvents: 'none' } : undefined}
         onContextMenu={handleContextMenu}
         onClick={(e) => {
           // Fallback: extract cell from click target
@@ -779,6 +930,7 @@ export function SpreadsheetEditor({
           autoSizeColumn={false}
           range={true}
           rowClass="_rowClass"
+          onBeforeeditstart={handleBeforeEdit}
           onAfteredit={handleAfterEdit}
           onAfterfocus={handleFocusCell}
           onSetrange={handleSetRange}
