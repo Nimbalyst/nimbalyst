@@ -513,7 +513,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
                 className="session-history-new-button"
                 data-testid="new-session-button"
                 onClick={() => onNewSession()}
-                title="Create new session"
+                title={`New session (${getShortcutDisplay(KeyboardShortcuts.file.newSession)})`}
                 aria-label="Create new session"
               >
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -597,7 +597,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
                 e.stopPropagation();
                 onNewSession();
               }}
-              title="Create new session"
+              title={`New session (${getShortcutDisplay(KeyboardShortcuts.file.newSession)})`}
               aria-label="Create new session"
               type="button"
             >
@@ -635,7 +635,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
                 e.stopPropagation();
                 onNewSession();
               }}
-              title="Create new session"
+              title={`New session (${getShortcutDisplay(KeyboardShortcuts.file.newSession)})`}
               aria-label="Create new session"
               type="button"
             >
@@ -697,7 +697,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
               className="session-history-new-button"
               data-testid="new-session-button"
               onClick={onNewSession}
-              title="Create new session"
+              title={`New session (${getShortcutDisplay(KeyboardShortcuts.file.newSession)})`}
               aria-label="Create new session"
             >
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
