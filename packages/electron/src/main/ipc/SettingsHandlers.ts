@@ -228,6 +228,40 @@ export function registerSettingsHandlers() {
         }
     });
 
+    // App restart (used by extension dev mode)
+    ipcMain.handle('app:restart', async () => {
+        const { app } = await import('electron');
+        const path = await import('path');
+        const fs = await import('fs');
+
+        // Check if we're in dev mode (electron-vite spawns both vite and electron)
+        const isDev = process.env.NODE_ENV === 'development' || !!process.env.ELECTRON_RENDERER_URL;
+
+        if (isDev) {
+            // In dev mode, write a restart signal file and quit.
+            // The outer dev-loop.sh script watches for this file and restarts npm run dev.
+            const workingDir = app.getAppPath();
+            const restartSignalPath = path.join(workingDir, '.restart-requested');
+
+            logger.store.info(`[app:restart] Dev mode restart: writing signal to ${restartSignalPath}`);
+
+            fs.writeFileSync(restartSignalPath, Date.now().toString(), 'utf8');
+
+            // Give the file a moment to be written, then quit
+            setTimeout(() => {
+                app.quit();
+            }, 100);
+
+            return { success: true, mode: 'dev' };
+        } else {
+            // In production, use the standard relaunch mechanism
+            app.relaunch();
+            app.exit(0);
+
+            return { success: true, mode: 'production' };
+        }
+    });
+
     // Session sync settings
     ipcMain.handle('sync:get-config', () => {
         return getSessionSyncConfig();

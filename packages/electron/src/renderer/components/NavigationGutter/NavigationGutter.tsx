@@ -7,6 +7,7 @@ import { KeyboardShortcuts, getShortcutDisplay } from '../../../shared/KeyboardS
 import { ThemeToggleButton } from '../ThemeToggleButton/ThemeToggleButton';
 import { SyncStatusButton } from '../SyncStatusButton/SyncStatusButton';
 import { TrustIndicator } from '../TrustIndicator';
+import { ExtensionDevIndicator } from '../ExtensionDevIndicator';
 
 export type NavigationMode = 'planning' | 'coding';
 export type SidebarView = 'files' | 'plans' | 'settings';
@@ -218,6 +219,11 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
 
       {/* Settings (bottom) */}
       <div className="nav-section nav-settings">
+
+        {/* Extension Dev Indicator - Shows when extension dev tools are enabled */}
+        <ExtensionDevIndicator
+          onOpenSettings={onOpenSettings}
+        />
 
         {/* Trust Indicator - Shows agent trust status */}
         <TrustIndicator
