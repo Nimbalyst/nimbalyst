@@ -359,6 +359,12 @@ packages/
 - **Auto-save**: Automatic saving on content changes and tab blur
 - **File Management**: Use toolbar buttons for file operations
 
+### Claude Commands
+
+The project includes custom Claude Code commands in `.claude/commands/` for common development tasks:
+
+- `/restart` - Restart the Nimbalyst Electron app (useful when working in AI agent mode)
+
 ## Troubleshooting
 
 ### LexicalComposerContext Error
