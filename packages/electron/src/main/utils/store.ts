@@ -1,5 +1,6 @@
 import Store from 'electron-store';
 import { existsSync } from 'fs';
+import * as path from 'path';
 import { RecentItem, SessionState, SessionWindow } from '../types';
 import { logger } from './logger';
 import type { OnboardingConfig } from '../../shared/types/workspace';
@@ -303,11 +304,15 @@ const DEFAULT_AI_PANEL_STATE: WorkspaceAIPanelState = {
   planningModeEnabled: true,
 };
 
-function workspaceKey(path: string): string {
-  if (!path) {
+function workspaceKey(workspacePath: string): string {
+  if (!workspacePath) {
     throw new Error('[store] workspacePath is required');
   }
-  const base64 = Buffer.from(path).toString('base64url');
+  // Normalize the path to ensure consistent storage keys:
+  // 1. Use path.normalize to handle . and .. segments
+  // 2. Remove trailing slashes to ensure consistent keys
+  const normalized = path.normalize(workspacePath).replace(/\/+$/, '');
+  const base64 = Buffer.from(normalized).toString('base64url');
   return `ws:${base64}`;
 }
 
