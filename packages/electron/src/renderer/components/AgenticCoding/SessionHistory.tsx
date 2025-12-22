@@ -679,7 +679,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                 className="session-history-worktree-button"
                 data-testid="new-worktree-session-button"
                 onClick={onNewWorktreeSession}
-                title="Create new git worktree session"
+                title="New Worktree: Create an isolated git branch for AI coding"
                 aria-label="Create new worktree session"
               >
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -845,7 +845,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                 className="session-history-worktree-button"
                 data-testid="new-worktree-session-button"
                 onClick={onNewWorktreeSession}
-                title="Create new git worktree session"
+                title="New Worktree: Create an isolated git branch for AI coding"
                 aria-label="Create new worktree session"
               >
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -939,7 +939,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
               className="session-history-worktree-button"
               data-testid="new-worktree-session-button"
               onClick={onNewWorktreeSession}
-              title="Create new git worktree session"
+              title="New Worktree: Create an isolated git branch for AI coding"
               aria-label="Create new worktree session"
             >
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
