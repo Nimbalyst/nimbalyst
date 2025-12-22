@@ -57,6 +57,7 @@
   color: var(--text-primary);
 }
 
+.prompt-queue-edit,
 .prompt-queue-cancel {
   flex-shrink: 0;
   width: 20px;
@@ -69,12 +70,17 @@
   border-radius: 4px;
   color: var(--text-secondary);
   cursor: pointer;
-  font-size: 18px;
+  font-size: 14px;
   line-height: 1;
   padding: 0;
   transition: all 0.15s ease;
 }
 
+.prompt-queue-cancel {
+  font-size: 18px;
+}
+
+.prompt-queue-edit:hover,
 .prompt-queue-cancel:hover {
   background: var(--surface-hover);
   color: var(--text-primary);

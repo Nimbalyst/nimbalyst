@@ -90,6 +90,7 @@ interface TranscriptSectionProps {
   onFileClick?: (filePath: string) => void;
   onTodoClick?: (todo: TodoItem) => void;
   onCancelQueuedPrompt: (id: string) => void;
+  onEditQueuedPrompt?: (id: string, prompt: string) => void;
   isArchived?: boolean;
   onCloseAndArchive?: () => void;
   onUnarchive?: () => void;
@@ -127,6 +128,7 @@ const TranscriptSectionComponent: React.FC<TranscriptSectionProps> = ({
   onFileClick,
   onTodoClick,
   onCancelQueuedPrompt,
+  onEditQueuedPrompt,
   isArchived,
   onCloseAndArchive,
   onUnarchive,
@@ -202,6 +204,7 @@ const TranscriptSectionComponent: React.FC<TranscriptSectionProps> = ({
       <PromptQueueList
         queue={queuedPrompts}
         onCancel={onCancelQueuedPrompt}
+        onEdit={onEditQueuedPrompt}
       />
     </>
   );
@@ -662,6 +665,29 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
     }
   }, []);
 
+  // Handle edit queued prompt (delete from queue and put back in input)
+  const handleEditQueuedPrompt = useCallback(async (id: string, prompt: string) => {
+    try {
+      // Delete from database
+      await window.electronAPI.invoke('ai:deleteQueuedPrompt', id);
+
+      // Update local state
+      setQueuedPrompts(prev => prev.filter(p => p.id !== id));
+
+      // Set input value
+      if (onDraftInputChange) {
+        onDraftInputChange(sessionId, prompt);
+      }
+
+      // Focus the input
+      inputRef.current?.focus();
+
+      console.log('[AISessionView] Editing queued prompt:', id);
+    } catch (error) {
+      console.error('[AISessionView] Failed to edit queued prompt:', error);
+    }
+  }, [sessionId, onDraftInputChange]);
+
   // Handle close and archive session
   const handleCloseAndArchive = useCallback(() => {
     if (onCloseAndArchive) {
@@ -721,6 +747,7 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
         onFileClick={handleFileClick}
         onTodoClick={handleTodoClick}
         onCancelQueuedPrompt={handleCancelQueuedPrompt}
+        onEditQueuedPrompt={handleEditQueuedPrompt}
         isArchived={isArchived}
         onCloseAndArchive={handleCloseAndArchive}
         onUnarchive={handleUnarchive}

@@ -10,12 +10,13 @@ export interface QueuedPrompt {
 interface PromptQueueListProps {
   queue: QueuedPrompt[];
   onCancel: (id: string) => void;
+  onEdit?: (id: string, prompt: string) => void;
 }
 
 /**
 - PromptQueueList - Displays queued prompts waiting to be processed
  */
-export function PromptQueueList({ queue, onCancel }: PromptQueueListProps) {
+export function PromptQueueList({ queue, onCancel, onEdit }: PromptQueueListProps) {
   if (queue.length === 0) {
     return null;
   }
@@ -30,6 +31,16 @@ export function PromptQueueList({ queue, onCancel }: PromptQueueListProps) {
           <div key={item.id} className="prompt-queue-item">
             <span className="prompt-queue-number">{index + 1}</span>
             <span className="prompt-queue-text">{item.prompt}</span>
+            {onEdit && (
+              <button
+                className="prompt-queue-edit"
+                onClick={() => onEdit(item.id, item.prompt)}
+                title="Edit this prompt"
+                type="button"
+              >
+                &#x270E;
+              </button>
+            )}
             <button
               className="prompt-queue-cancel"
               onClick={() => onCancel(item.id)}
