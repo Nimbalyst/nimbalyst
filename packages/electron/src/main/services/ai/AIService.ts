@@ -1363,6 +1363,7 @@ export class AIService {
         const toolCalls: any[] = [];
         const edits: any[] = [];  // Track edits for the assistant message
         let hasStreamingContent = false;  // Track if we used streamContent tool
+        let hadError = false;  // Track if an error occurred during the stream
         let firstChunkTime: number | undefined;
         let chunkCount = 0;
         let textChunks = 0;
@@ -1663,6 +1664,7 @@ export class AIService {
               break;
 
             case 'error':
+              hadError = true;  // Mark that an error occurred to skip auto /context
               if (isClaudeCode) {
                 console.error('[CLAUDE-CODE-SERVICE] ERROR FROM PROVIDER:', chunk.error || 'Unknown error');
                 console.error('[CLAUDE-CODE-SERVICE] Error context:', {
@@ -1907,7 +1909,8 @@ export class AIService {
 
               // AUTO-FETCH CONTEXT USAGE: For claude-code provider, automatically send /context to get accurate token usage.
               // We defer awaiting the promise until after streaming completes so that queued prompts don't start early.
-              if (session.provider === 'claude-code') {
+              // Skip if the response ended with an error (e.g., context overflow) to avoid showing the /context request to the user.
+              if (session.provider === 'claude-code' && !hadError) {
                 autoContextPromise = this.runAutoContextCommand(session, workspacePath, event);
               }
 
