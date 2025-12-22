@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.49.5] - 2025-12-22
+
+
+### Changed
+- Temporarily disable Windows code signing
+
 ## [0.49.4] - 2025-12-22
 
 
