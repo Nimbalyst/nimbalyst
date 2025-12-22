@@ -1,7 +1,7 @@
 ---
 planStatus:
   planId: plan-file-mode-layout
-  title: File Mode Layout Implementation
+  title: Worktree File Mode Implementation
   status: draft
   planType: feature
   priority: high
@@ -11,37 +11,90 @@ planStatus:
   tags:
     - ui
     - layout
+    - worktree
+    - agent-view
     - file-mode
-    - agent-sessions
   created: "2025-12-22"
   updated: "2025-12-22T00:00:00.000Z"
   progress: 0
 ---
 
-# File Mode Layout Implementation
+# Worktree File Mode Implementation
 
 ## Overview
 
-Implement the new Files Mode layout as shown in the `file-mode.mockup.html` and `file-mode-tree-panel.mockup.html` mockups. This layout introduces a unified interface where the Agent Sessions sidebar is always visible on the left, and a tabbed right panel provides access to both AI Chat and file browsing.
+Implement a "File Mode" sub-view within worktree sessions in the Agent view. This is NOT a separate top-level mode - it lives inside the existing Agent view (accessed via Cmd+K from NavigationGutter). When a user is working in a worktree session, they can toggle between "Agent" mode (full-screen chat) and "Files" mode (editor with file tabs + chat sidebar).
+
+The mockups are:
+- `agent-mode.mockup.html` - Agent sub-mode (chat-focused)
+- `file-mode.mockup.html` - Files sub-mode (editor-focused with chat in right panel)
+- `file-mode-tree-panel.mockup.html` - Files sub-mode with Files tab active in right panel
 
 ## Goals
 
-1. Create a unified layout where Agent Sessions are accessible from Files mode
-2. Add a tabbed right panel with Chat and Files tabs
+1. Add Agent/Files toggle within worktree sessions
+2. Files mode shows: file tabs + editor in center, Chat/Files tabbed panel on right
 3. Reuse existing FileTree component for the right panel Files tab
-4. Reuse existing AI chat components for the right panel Chat tab
-5. Maintain the existing file tabs + editor in the center area
+4. Reuse existing AI chat rendering for the right panel Chat tab
+5. Session sidebar on left remains consistent across both sub-modes
+
+## Context: Where This Lives
+
+```
+App.tsx
+  +-- NavigationGutter (left gutter with Files/Agent/Settings icons)
+  +-- main content area
+       +-- Files Mode (when gutter = Files) <-- NOT THIS
+       +-- Agent Mode (when gutter = Agent) <-- THIS IS WHERE WE'RE WORKING
+            +-- Session Sidebar (left, 280px)
+            +-- Worktree Session Content (center + right)
+                 +-- [Agent | Files] toggle header bar <-- NEW
+                 +-- Agent sub-mode: Full chat area + Files panel (right)
+                 +-- Files sub-mode: Editor tabs + Chat/Files panel (right) <-- NEW
+       +-- Settings Mode (when gutter = Settings)
+```
 
 ## Layout Description
 
-### ASCII Diagram
+### Agent Sub-Mode (existing, shown in agent-mode.mockup.html)
 
 ```
 +-----------------------------------------------------------------------------------+
-|  [close] [min] [max]          filename.md - project - Nimbalyst                   |
+|  [close] [min] [max]          Agent Mode - Nimbalyst                              |
 +-----------------------------------------------------------------------------------+
-|                    [   Agent   ] [  Files  ]                                      |
-|                    <--- mode toggle header bar --->                               |
+|                    [  Agent  ] [  Files  ]                                        |
+|                    <--- toggle bar (Agent active) --->                            |
++-----------------------------------------------------------------------------------+
+|                    |                                   |                          |
+|  Agent Sessions    |                                   |  Files                   |
+|  +--------------+  |  You: Can you help me implement...|  +------------------+   |
+|  | New Worktree |  |                                   |  | Edited (3)       |   |
+|  | New Session  |  |  Claude: I'll help you implement..|  |  oauth.config.ts |   |
+|  +--------------+  |                                   |  |  oauth.routes.ts |   |
+|                    |  You: Great, can you also add...  |  |  session.mid.ts  |   |
+|  +---------------+ |                                   |  +------------------+   |
+|  | auth-refactor | |  Claude: Absolutely! I'll add..   |  | Read (4)         |   |
+|  | (+12 -3)      | |                                   |  |  package.json    |   |
+|  +---------------+ |                                   |  |  auth.types.ts   |   |
+|   | Implement    | |                                   |  |  env.example     |   |
+|   | OAuth flow * | |                                   |  |  CLAUDE.md       |   |
+|   | Fix token    | |  +---------------------------+    |  +------------------+   |
+|   | refresh      | |  | [Ask AI...           ] [>]|    |                         |
+|  +---------------+ |  +---------------------------+    |                         |
+|                    |                                   |                         |
++--------------------+-----------------------------------+-------------------------+
+     280px                      flex: 1                         280px
+   (session sidebar)          (chat area)                   (files panel)
+```
+
+### Files Sub-Mode (new, shown in file-mode.mockup.html)
+
+```
++-----------------------------------------------------------------------------------+
+|  [close] [min] [max]          oauth.ts - auth-refactor - Nimbalyst                |
++-----------------------------------------------------------------------------------+
+|                    [  Agent  ] [  Files  ]                                        |
+|                    <--- toggle bar (Files active) --->                            |
 +-----------------------------------------------------------------------------------+
 |                    |                                   |                          |
 |  Agent Sessions    |  [oauth.ts] [auth.md] [session.ts]|   [Chat] [Files]    [>]  |
@@ -55,33 +108,26 @@ Implement the new Files Mode layout as shown in the `file-mode.mockup.html` and 
 |  | (+12 -3)      | |  |    ## Overview            |    |                         ||
 |  +---------------+ |  |    This document...       |    |  Claude: I'll add...    ||
 |   | Implement    | |  |                           |    |                         ||
-|   | OAuth flow   | |  |    ## Configuration       |    |                         ||
+|   | OAuth flow * | |  |    ## Configuration       |    |                         ||
 |   | Fix token    | |  |    Set up your OAuth...  |    |                         ||
 |   | refresh      | |  |                           |    |                         ||
-|  +---------------+ |  |                           |    |                         ||
-|                    |  |                           |    |                         ||
 |  +---------------+ |  |                           |    +-------------------------+|
-|  | db-migration  | |  |                           |    |  [Ask AI...        ] [>]||
-|  | (3 ahead)     | |  |                           |    +-------------------------+|
-|  +---------------+ |  +---------------------------+    |                          |
-|                    |                                   |                          |
-|  --- Sessions ---  |                                   |                          |
+|                    |  +---------------------------+    |  [Ask AI...        ] [>]||
+|  --- Sessions ---  |                                   +-------------------------+|
 |  | Dark mode     | |                                   |                          |
-|  | API docs      | |                                   |                          |
-|                    |                                   |                          |
 +--------------------+-----------------------------------+--------------------------+
      280px                        flex: 1                         320px
-     (left sidebar)               (center)                   (right panel)
+   (session sidebar)            (editor area)               (right panel)
 ```
 
-### When Files Tab is Active in Right Panel
+### Files Sub-Mode with Files Tab Active (file-mode-tree-panel.mockup.html)
 
 ```
 +-----------------------------------------------------------------------------------+
 |                    |                                   |                          |
 |  Agent Sessions    |  [oauth.ts] [session.ts]          |   [Chat] [Files]    [>]  |
 |                    |                                   +-------------------------+|
-|  (same as above)   |  +---------------------------+    |  FILES         [+][S][F] ||
+|  (same as above)   |  +---------------------------+    |  FILES         [+][S][F] |
 |                    |  |  import { OAuth2Client }  |    +-------------------------+|
 |                    |  |  from 'google-auth-lib';  |    |  nimbalyst-local        ||
 |                    |  |                           |    |   mockups               ||
@@ -95,166 +141,171 @@ Implement the new Files Mode layout as shown in the `file-mode.mockup.html` and 
 +--------------------+-----------------------------------+--------------------------+
 ```
 
-### Component Breakdown
+## Component Breakdown
 
-**Left Sidebar (280px) - Agent Sessions**
-- Header: "Agent Sessions" with New Worktree and New Session buttons
-- Search input for filtering sessions
-- Worktree groups (expandable with chevron)
-  - Worktree name + git status badge (+12 -3, 3 ahead, merged)
-  - Nested session items
-- Single-session worktrees (AI icon with worktree badge overlay)
-- Standalone sessions section with divider
-
-**Center Area (flex: 1) - Editor**
-- File tabs at top
-- Editor content below (reuse existing TabManager + TabContent)
-
-**Right Panel (320px) - Chat/Files Toggle**
-- Panel header with tabs: [Chat] [Files] and collapse button
-- **Chat Tab**: Session context bar + AI chat messages + input (reuse AgenticPanel in chat mode)
-- **Files Tab**: File panel header with toolbar + FileTree (reuse existing FileTree component)
-
-**Mode Header Bar (48px)**
+### Mode Toggle Header (48px)
+- Positioned below title bar, above content
 - Centered toggle: [Agent] [Files]
-- Agent button shows AI icon
-- Files button shows document icon
-- Active state has blue background
+- Agent button: clock/timer icon
+- Files button: document/lines icon
+- Active state: blue background, white text
+- Only visible when inside a worktree session
+
+### Left Sidebar (280px) - Session Sidebar
+- **Unchanged** from current AgenticPanel implementation
+- Header: "Agent Sessions" with New Worktree and New Session buttons
+- Search input
+- Worktree groups (expandable)
+- Single-session worktrees (AI icon with badge)
+- Standalone sessions section
+
+### Center Area - Agent Sub-Mode
+- Full-width chat conversation
+- Message history
+- Input area at bottom
+- **Reuse existing AgenticPanel chat rendering**
+
+### Center Area - Files Sub-Mode
+- File tabs at top (reuse existing TabManager)
+- Editor content below (reuse existing TabContent/editor instances)
+- Opens files from worktree directory
+
+### Right Panel - Agent Sub-Mode (280px)
+- "Files" panel showing Edited/Read files from session
+- **Existing behavior in AgenticPanel**
+
+### Right Panel - Files Sub-Mode (320px)
+- Tabbed interface: [Chat] [Files]
+- Collapse button on right
+- **Chat Tab**:
+  - Session context bar (session name + worktree)
+  - Condensed chat view (smaller messages)
+  - Input area at bottom
+- **Files Tab**:
+  - Header with toolbar: title + [edit][new][search][filter] buttons
+  - Filter dropdown (All Files, Markdown Only, Known Files, Uncommitted, Worktree Changes)
+  - File tree with git status badges (M/A)
+  - **Reuse existing FileTree component**
 
 ## Reuse Existing Components
 
 ### FileTree Component
 Location: `packages/electron/src/renderer/components/FileTree.tsx`
 
-The existing FileTree component should be reused for the right panel's Files tab. It already supports:
-- Hierarchical file display
-- Git status indicators (M for modified, A for added)
-- File icons
-- Expand/collapse folders
-- Click to open files
+Reuse for right panel Files tab:
+- Pass worktree directory as root
+- Enable git status badges
+- Handle file selection to open in center editor
 
-### AI Chat Components
-Location: `packages/electron/src/renderer/components/UnifiedAI/AgenticPanel.tsx`
+### FileTreeFilterMenu
+Location: `packages/electron/src/renderer/components/FileTreeFilterMenu.tsx`
 
-The existing AgenticPanel in "chat" mode should be reused for the right panel's Chat tab. It already supports:
-- Session management
-- Message history
-- AI response streaming
-- File mentions
+Reuse for filter dropdown in Files tab.
 
-### Session List Rendering
-The existing session list rendering from AgenticPanel should be extracted or adapted for the left sidebar. Key elements:
-- WorktreeGroup component (already exists)
-- WorktreeSingle component (already exists)
-- Session item rendering
-- Standalone sessions section
+### TabManager + TabContent
+Location: `packages/electron/src/renderer/components/TabManager/` and `TabContent/`
 
-### WorkspaceSidebar Features
-Location: `packages/electron/src/renderer/components/WorkspaceSidebar.tsx`
+Reuse for center editor area in Files sub-mode:
+- File tabs
+- Editor instances
+- Tab state management
 
-Features to reuse for the right panel Files tab:
-- FileTreeFilterMenu (filter dropdown)
-- NewFileMenu (new file/folder creation)
-- Icon toggle functionality
+### AgenticPanel Chat Components
+Location: `packages/electron/src/renderer/components/UnifiedAI/`
+
+Extract or adapt for right panel Chat tab:
+- Message rendering
+- Input area
+- Session context
+
+### Session Sidebar
+The existing session list in AgenticPanel should be extracted into a reusable component if not already.
 
 ## Implementation Plan
 
-### Phase 1: Layout Structure
+### Phase 1: Mode Toggle
 
-1.1. Create new `FileModeLayout.tsx` component
-- Three-column layout: sidebar | center | right-panel
-- CSS Grid or Flexbox for responsive sizing
-- Resize handles between columns (reuse existing resize logic from EditorMode)
+1.1. Create `WorktreeModeToggle.tsx` component
+- Horizontal bar with Agent/Files buttons
+- State: 'agent' | 'files'
+- Pass mode to parent via callback
 
-1.2. Create `ModeToggleHeader.tsx` component
-- Horizontal bar below title bar
-- Centered toggle with Agent/Files buttons
-- Communicate mode changes to parent via callback
+1.2. Add mode state to worktree session management
+- Track current mode per session
+- Persist mode preference
 
-1.3. Create `RightPanel.tsx` component
-- Tabbed interface: Chat | Files
+### Phase 2: Files Sub-Mode Layout
+
+2.1. Create `WorktreeFilesMode.tsx` component
+- Three-column layout: sidebar | editor | right-panel
+- Integrate existing TabManager + TabContent for center
+- Set worktree directory as working directory
+
+2.2. Create `WorktreeRightPanel.tsx` component
+- Tab bar: Chat | Files
 - Panel collapse button
-- State for active tab
 - Render Chat or Files content based on active tab
-
-### Phase 2: Left Sidebar - Sessions
-
-2.1. Extract session list from AgenticPanel
-- Create `SessionSidebar.tsx` component
-- Reuse existing WorktreeGroup, WorktreeSingle components
-- Add sidebar header with New Worktree and New Session buttons
-- Add search input for filtering sessions
-
-2.2. Wire up session selection
-- Clicking a session should update the active session
-- Active session drives what shows in Chat tab on right panel
 
 ### Phase 3: Right Panel - Chat Tab
 
-3.1. Integrate AgenticPanel in chat mode
-- Pass `mode="chat"` prop
-- Add session context bar showing current session name + worktree
-- Wire up to session selected in left sidebar
+3.1. Create `WorktreeChatTab.tsx` component
+- Session context bar
+- Condensed chat message display
+- Input area
+- Wire up to current session
 
 ### Phase 4: Right Panel - Files Tab
 
-4.1. Create `FilesPanelContent.tsx` component
-- Header with title "FILES" and toolbar buttons (edit, new file, search, filter)
-- Integrate existing FileTree component
-- Add filter dropdown (reuse FileTreeFilterMenu or adapt)
+4.1. Create `WorktreeFilesTab.tsx` component
+- Header with title and toolbar
+- Filter dropdown (adapt FileTreeFilterMenu)
+- FileTree component configured for worktree directory
+- Handle file selection to open in editor
 
-4.2. Wire up file selection
-- Clicking a file should open it in center editor
-- Maintain file tree state (expanded folders, scroll position)
+### Phase 5: Integration
 
-### Phase 5: Center Area - Editor
+5.1. Integrate mode toggle into AgenticPanel
+- Show toggle when session has worktree
+- Render Agent or Files sub-mode based on state
 
-5.1. Integrate existing TabManager and TabContent
-- Keep existing file tabs functionality
-- Keep existing editor instances
-- Wire up file opens from both left sidebar (session files) and right panel (file tree)
-
-### Phase 6: State Management
-
-6.1. Determine state structure
-- Active mode (Agent/Files)
-- Active session ID
-- Right panel active tab (Chat/Files)
-- Right panel collapsed state
-- Panel widths (for resize)
-
-6.2. Persist layout state
-- Save panel widths
-- Save collapsed state
-- Save active tab preference
+5.2. Wire up cross-component communication
+- File opens from Files tab update center editor
+- Chat messages work in both modes
+- Session changes update all areas
 
 ## File Structure
 
 ```
 packages/electron/src/renderer/components/
-  FileModeLayout/
-    FileModeLayout.tsx      # Main layout container
-    FileModeLayout.css
-    ModeToggleHeader.tsx    # Agent/Files toggle bar
-    ModeToggleHeader.css
-    RightPanel.tsx          # Chat/Files tabbed panel
-    RightPanel.css
-    FilesPanelContent.tsx   # Files tab content (wraps FileTree)
-    FilesPanelContent.css
-  SessionSidebar/
-    SessionSidebar.tsx      # Left sidebar with sessions
-    SessionSidebar.css
+  WorktreeMode/
+    WorktreeModeToggle.tsx      # Agent/Files toggle bar
+    WorktreeModeToggle.css
+    WorktreeFilesMode.tsx       # Files sub-mode container
+    WorktreeFilesMode.css
+    WorktreeRightPanel.tsx      # Right panel with Chat/Files tabs
+    WorktreeRightPanel.css
+    WorktreeChatTab.tsx         # Chat tab content
+    WorktreeChatTab.css
+    WorktreeFilesTab.tsx        # Files tab content (wraps FileTree)
+    WorktreeFilesTab.css
 ```
+
+## State Management
+
+- **Mode state**: 'agent' | 'files' - per session, persisted
+- **Right panel tab**: 'chat' | 'files' - per session
+- **Right panel collapsed**: boolean - per session
+- **Panel widths**: number - persisted globally or per session
 
 ## Acceptance Criteria
 
-1. Files mode shows three-column layout: Sessions | Editor | Right Panel
-2. Mode toggle switches between Agent and Files modes
-3. Left sidebar shows agent sessions grouped by worktree
-4. Right panel has Chat and Files tabs
-5. Chat tab shows AI conversation for selected session
-6. Files tab shows file tree with git status badges
+1. Worktree sessions show Agent/Files toggle in header
+2. Agent mode shows full-width chat (existing behavior)
+3. Files mode shows editor in center with file tabs
+4. Files mode right panel has Chat and Files tabs
+5. Chat tab shows condensed conversation for current session
+6. Files tab shows worktree file tree with git status
 7. Clicking files in right panel opens them in center editor
-8. Panel widths are resizable and persistent
-9. Right panel can be collapsed
-10. Existing FileTree and AgenticPanel components are reused, not duplicated
+8. Session sidebar remains visible and functional in both modes
+9. Mode preference persists per session
+10. Existing FileTree and chat components are reused, not duplicated
