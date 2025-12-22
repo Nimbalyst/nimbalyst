@@ -106,6 +106,8 @@ const WorktreeFilesMode = forwardRef<WorktreeFilesModeRef, WorktreeFilesModeProp
   const [filterMenuPosition, setFilterMenuPosition] = useState({ x: 0, y: 0 });
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
   const filterButtonRef = useRef<HTMLButtonElement>(null);
+  const mountedRef = useRef(false);
+  const pendingFileQueue = useRef<string[]>([]);
 
   const tabs = useTabs({
     workspacePath: worktreePath,
@@ -119,18 +121,24 @@ const WorktreeFilesMode = forwardRef<WorktreeFilesModeRef, WorktreeFilesModeProp
   const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!tabs.activeTab?.filePath) {
-      setActiveFilePath(null);
-    }
+    setActiveFilePath(tabs.activeTab?.filePath || null);
   }, [tabs.activeTab?.filePath]);
 
   const openFileInEditor = useCallback((filePath: string) => {
     console.log('[WorktreeFilesMode] openFileInEditor called with:', filePath);
     console.log('[WorktreeFilesMode] worktreePath:', worktreePath);
     console.log('[WorktreeFilesMode] workspacePath:', workspacePath);
+    console.log('[WorktreeFilesMode] mounted:', mountedRef.current);
 
     if (!filePath) {
       console.warn('[WorktreeFilesMode] Cannot open file: filePath is empty');
+      return;
+    }
+
+    // If component is not mounted yet, queue the file for later
+    if (!mountedRef.current) {
+      console.log('[WorktreeFilesMode] Component not mounted yet, queueing file:', filePath);
+      pendingFileQueue.current.push(filePath);
       return;
     }
 
@@ -175,10 +183,30 @@ const WorktreeFilesMode = forwardRef<WorktreeFilesModeRef, WorktreeFilesModeProp
 
   // Notify parent when component is mounted and ref is ready
   useEffect(() => {
+    // Mark component as mounted
+    mountedRef.current = true;
+
+    // Process any pending file opens that were queued before mount
+    if (pendingFileQueue.current.length > 0) {
+      console.log('[WorktreeFilesMode] Processing pending file queue:', pendingFileQueue.current);
+      const filesToOpen = [...pendingFileQueue.current];
+      pendingFileQueue.current = [];
+
+      // Open each file in the queue
+      filesToOpen.forEach(filePath => {
+        openFileInEditor(filePath);
+      });
+    }
+
     if (onMounted) {
       onMounted(sessionId);
     }
-  }, [onMounted, sessionId]);
+
+    // Cleanup: mark as unmounted when component unmounts
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [onMounted, sessionId, openFileInEditor]);
 
   const refreshFileTree = useCallback(async () => {
     if (!worktreePath || !window.electronAPI?.getFolderContents) return;
@@ -229,7 +257,17 @@ const WorktreeFilesMode = forwardRef<WorktreeFilesModeRef, WorktreeFilesModeProp
   }, [worktreePath, refreshFileTree]);
 
   const loadGitMetadata = useCallback(async () => {
-    if (!window.electronAPI?.invoke || !worktreePath) return;
+    // Early return if worktree path doesn't seem valid
+    if (!window.electronAPI?.invoke || !worktreePath || worktreePath === '/') return;
+
+    // Verify the path exists before making git operations
+    try {
+      const exists = await window.electronAPI.invoke('fs:exists', worktreePath);
+      if (!exists) return;
+    } catch {
+      return; // Path check failed, skip git operations
+    }
+
     try {
       const [repoResult, worktreeResult] = await Promise.all([
         window.electronAPI.invoke('git:is-repo', worktreePath),
@@ -249,10 +287,24 @@ const WorktreeFilesMode = forwardRef<WorktreeFilesModeRef, WorktreeFilesModeProp
   }, [loadGitMetadata]);
 
   const loadGitStatuses = useCallback(async () => {
-    if (!window.electronAPI?.invoke || !worktreePath) {
+    // Early return if worktree path doesn't seem valid
+    if (!window.electronAPI?.invoke || !worktreePath || worktreePath === '/') {
       setGitStatusMap(new Map());
       return;
     }
+
+    // Verify the path exists before making git operations
+    try {
+      const exists = await window.electronAPI.invoke('fs:exists', worktreePath);
+      if (!exists) {
+        setGitStatusMap(new Map());
+        return;
+      }
+    } catch {
+      setGitStatusMap(new Map());
+      return; // Path check failed, skip git operations
+    }
+
     try {
       const result = await window.electronAPI.invoke('git:get-all-file-statuses', worktreePath);
       if (result?.success && result.statuses) {
@@ -283,10 +335,25 @@ const WorktreeFilesMode = forwardRef<WorktreeFilesModeRef, WorktreeFilesModeProp
   }, [isGitRepo, loadGitStatuses]);
 
   const loadGitFilteredSets = useCallback(async () => {
-    if (!window.electronAPI?.invoke || !worktreePath) {
+    // Early return if worktree path doesn't seem valid
+    if (!window.electronAPI?.invoke || !worktreePath || worktreePath === '/') {
       setGitUncommittedPaths(new Set());
       setGitWorktreePaths(new Set());
       return;
+    }
+
+    // Verify the path exists before making git operations
+    try {
+      const exists = await window.electronAPI.invoke('fs:exists', worktreePath);
+      if (!exists) {
+        setGitUncommittedPaths(new Set());
+        setGitWorktreePaths(new Set());
+        return;
+      }
+    } catch {
+      setGitUncommittedPaths(new Set());
+      setGitWorktreePaths(new Set());
+      return; // Path check failed, skip git operations
     }
 
     if (isGitRepo) {
@@ -467,6 +534,7 @@ const WorktreeFilesMode = forwardRef<WorktreeFilesModeRef, WorktreeFilesModeProp
   if (mode === 'agent') {
     return (
       <div
+        key={`agent-mode-${sessionId}`}
         className="worktree-agent-mode"
         style={{ display: isActive ? 'flex' : 'none', width: '100%', height: '100%' }}
       >
@@ -478,6 +546,7 @@ const WorktreeFilesMode = forwardRef<WorktreeFilesModeRef, WorktreeFilesModeProp
   // When in files mode, show the full layout with editor and right panel
   return (
     <div
+      key={`files-mode-${sessionId}`}
       className="worktree-files-mode"
       style={{ display: isActive ? 'flex' : 'none' }}
     >
@@ -561,7 +630,7 @@ const WorktreeFilesMode = forwardRef<WorktreeFilesModeRef, WorktreeFilesModeProp
 
         <div className="worktree-right-panel-body">
           {rightPanelTab === 'chat' ? (
-            <div className="worktree-chat-panel">
+            <div key={`chat-panel-wrapper-${sessionId}`} className="worktree-chat-panel">
               {chatPanel}
             </div>
           ) : (

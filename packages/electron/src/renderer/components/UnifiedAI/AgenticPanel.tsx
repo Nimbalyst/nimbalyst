@@ -2726,6 +2726,10 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           await waitForWorktreeFilesModeReady(sessionId);
         } catch (err) {
           console.error('[AgenticPanel] WorktreeFilesMode mount timeout:', err);
+          errorNotificationService.showError(
+            'Failed to open file',
+            'The file editor could not be initialized. Please try again.'
+          );
           return;
         }
       }
@@ -2733,10 +2737,23 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       // Now try to open the file
       const finalEditorRef = worktreeFilesModeRefsRef.current.get(sessionId);
       if (finalEditorRef?.current) {
-        finalEditorRef.current.openFile(filePath);
+        try {
+          finalEditorRef.current.openFile(filePath);
+        } catch (err) {
+          console.error('[AgenticPanel] Failed to open file in worktree mode:', err);
+          errorNotificationService.showError(
+            'Failed to open file',
+            `Could not open ${getFileName(filePath)}. The file may not exist or may be inaccessible.`
+          );
+        }
         return;
       } else {
         console.error('[AgenticPanel] WorktreeFilesMode ref still not available after wait - this should not happen');
+        errorNotificationService.showError(
+          'Failed to open file',
+          'The file editor is not ready. Please try again in a moment.'
+        );
+        return;
       }
     }
 
@@ -2746,9 +2763,17 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         await onFileOpen(filePath);
       } else {
         console.error('[AgenticPanel] onFileOpen not provided - cannot open file');
+        errorNotificationService.showError(
+          'Failed to open file',
+          'File opening is not available. Please restart the application.'
+        );
       }
     } catch (err) {
       console.error('[AgenticPanel] Failed to open file:', err);
+      errorNotificationService.showError(
+        'Failed to open file',
+        `Could not open ${getFileName(filePath)}. The file may not exist or may be inaccessible.`
+      );
     }
   }, [handleWorktreeModeChange, onFileOpen, waitForWorktreeFilesModeReady]);
 
