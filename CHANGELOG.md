@@ -20,6 +20,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.49.6] - 2025-12-22
+
+
+### Added
+- Archive toast now shows session name
+- Context menu "New File..." now opens full file dialog
+- Add /restart command for quick app restart during development
+
+### Changed
+- Remove internal clipboard, use system clipboard only
+
+### Fixed
+- CSV editor no longer steals keyboard input from dialogs
+- Queued messages now send reliably with 5-second fallback
+- Auto /context command no longer runs after agent errors
+- Typeahead menus no longer auto-select item under cursor on open
+- Parallel tool permissions now queue instead of overwriting
+- Dismissing trust toast no longer revokes workspace trust
+- New File menu item now works when triggered from Agent mode
+
 ## [0.49.5] - 2025-12-22
 
 
