@@ -1,10 +1,11 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { FileTree, FileGitStatus } from './FileTree';
 import { InputModal } from './InputModal';
+import { NewFileDialog } from './NewFileDialog';
 import { PlansPanel } from './PlansPanel/PlansPanel';
 import { FileTreeFilterMenu, FileTreeFilter } from './FileTreeFilterMenu';
 import { NewFileMenu, NewFileType, ExtensionFileType, contributionToExtensionFileType } from './NewFileMenu';
-import { createInitialFileContent } from '../utils/fileUtils';
+import { createInitialFileContent, createMockupContent } from '../utils/fileUtils';
 import { getFileName } from '../utils/pathUtils';
 import { getExtensionLoader } from '@nimbalyst/runtime';
 import { KeyboardShortcuts, getShortcutDisplay } from '../../shared/KeyboardShortcuts';
@@ -137,6 +138,8 @@ export function WorkspaceSidebar({
   const [newFileMenuPosition, setNewFileMenuPosition] = useState({ x: 0, y: 0 });
   const [pendingFileType, setPendingFileType] = useState<NewFileType | null>(null);
   const [extensionFileTypes, setExtensionFileTypes] = useState<ExtensionFileType[]>([]);
+  const [isNewFileDialogOpen, setIsNewFileDialogOpen] = useState(false);
+  const [newFileDialogDirectory, setNewFileDialogDirectory] = useState<string | null>(null);
 
   // Load extension file type contributions
   useEffect(() => {
@@ -357,9 +360,66 @@ export function WorkspaceSidebar({
   };
 
   const handleNewFileInFolder = (folderPath: string, fileType: NewFileType) => {
-    setTargetFolder(folderPath);
-    setPendingFileType(fileType);
-    setIsFileModalOpen(true);
+    if (fileType === 'any') {
+      // For "New File..." open the full NewFileDialog with type selector
+      setNewFileDialogDirectory(folderPath);
+      setIsNewFileDialogOpen(true);
+    } else {
+      // For specific file types, use the simple InputModal
+      setTargetFolder(folderPath);
+      setPendingFileType(fileType);
+      setIsFileModalOpen(true);
+    }
+  };
+
+  // Handler for NewFileDialog file creation
+  const handleNewFileDialogCreate = async (fileName: string, fileType: NewFileType) => {
+    try {
+      const directory = newFileDialogDirectory || workspacePath;
+
+      // Determine full filename and content based on type
+      let fullFileName: string;
+      let content: string;
+
+      if (fileType === 'markdown') {
+        fullFileName = fileName.endsWith('.md') || fileName.endsWith('.markdown') ? fileName : `${fileName}.md`;
+        content = createInitialFileContent(fullFileName);
+      } else if (fileType === 'mockup') {
+        fullFileName = fileName.endsWith('.mockup.html') ? fileName : `${fileName}.mockup.html`;
+        content = createMockupContent();
+      } else if (fileType?.startsWith('ext:')) {
+        const extName = fileType.slice(4);
+        const extType = extensionFileTypes.find(e => e.extension === extName);
+        if (extType) {
+          fullFileName = fileName.endsWith(extName) ? fileName : `${fileName}${extName}`;
+          content = extType.defaultContent;
+        } else {
+          fullFileName = fileName;
+          content = '';
+        }
+      } else {
+        fullFileName = fileName;
+        content = createInitialFileContent(fullFileName);
+      }
+
+      const filePath = `${directory}/${fullFileName}`;
+      const result = await (window as any).electronAPI?.createFile?.(filePath, content);
+
+      if (result?.success) {
+        if (onRefreshFileTree) {
+          onRefreshFileTree();
+        }
+        onFileSelect(filePath);
+      } else {
+        alert('Failed to create file: ' + (result?.error || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Failed to create file:', error);
+      alert('Failed to create file: ' + error);
+    } finally {
+      setIsNewFileDialogOpen(false);
+      setNewFileDialogDirectory(null);
+    }
   };
 
   const handleNewFolderInFolder = (folderPath: string) => {
@@ -1148,6 +1208,20 @@ export function WorkspaceSidebar({
           setIsFolderModalOpen(false);
           setTargetFolder(null);
         }}
+      />
+
+      <NewFileDialog
+        isOpen={isNewFileDialogOpen}
+        onClose={() => {
+          setIsNewFileDialogOpen(false);
+          setNewFileDialogDirectory(null);
+        }}
+        currentDirectory={newFileDialogDirectory || workspacePath}
+        workspacePath={workspacePath}
+        onCreateFile={handleNewFileDialogCreate}
+        extensionFileTypes={extensionFileTypes}
+        fileTree={fileTree}
+        onDirectoryChange={setNewFileDialogDirectory}
       />
     </div>
   );
