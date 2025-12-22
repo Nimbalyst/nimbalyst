@@ -83,9 +83,13 @@ export function parseCSV(content: string): { data: SpreadsheetData; delimiter: '
     return row;
   });
 
-  // Convert to Cell format
-  const rows = normalizedRows.map(row =>
-    row.map(value => createCell(value))
+  // Convert to Cell format and evaluate formulas
+  const rows = normalizedRows.map((row, rowIndex) =>
+    row.map((value, colIndex) => {
+      const cell = createCell(value);
+      // Formula evaluation will happen in recalculateFormulas after data is fully built
+      return cell;
+    })
   );
 
   // Use metadata headerRowCount if present, otherwise use hasHeaders, otherwise auto-detect

@@ -5,7 +5,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import useUndoable from 'use-undoable';
-import type { SpreadsheetData, Cell, SortDirection, SortConfig, NormalizedSelectionRange, ClipboardData } from '../types';
+import type { SpreadsheetData, Cell, SortDirection, SortConfig, NormalizedSelectionRange } from '../types';
 import { parseCSV, serializeToCSV, createCell } from '../utils/csvParser';
 import { recalculateFormulas, isFormula, evaluateFormula } from '../utils/formulaEngine';
 
@@ -113,11 +113,9 @@ export interface UseSpreadsheetDataResult {
   setHeaderRowCount: (count: number) => void;
   toggleHeaders: () => void;
 
-  // Clipboard
-  clipboard: ClipboardData | null;
+  // Clipboard (uses system clipboard)
   copySelection: (selection: NormalizedSelectionRange) => void;
   cutSelection: (selection: NormalizedSelectionRange) => void;
-  pasteAtCell: (row: number, col: number) => void;
   pasteFromText: (row: number, col: number, text: string) => void;
   clearCells: (selection: NormalizedSelectionRange) => void;
 
@@ -137,19 +135,24 @@ export function useSpreadsheetData(
 ): UseSpreadsheetDataResult {
   const { onDirtyChange, onContentChange } = options;
 
-  // Parse initial content
-  const initialParse = useRef(parseCSV(initialContent || ''));
-  const [delimiter, setDelimiter] = useState<',' | '\t'>(initialParse.current.delimiter);
+  // Parse initial content and evaluate formulas
+  const initialParse = useRef(() => {
+    const parsed = parseCSV(initialContent || '');
+    // Evaluate formulas on the initial data
+    const dataWithFormulas = recalculateFormulas(parsed.data);
+    return { ...parsed, data: dataWithFormulas };
+  });
+  const parsedData = useRef(initialParse.current());
+  const [delimiter, setDelimiter] = useState<',' | '\t'>(parsedData.current.delimiter);
 
   // Main data state with undo/redo
   const [data, setData, { undo, redo, canUndo, canRedo, reset }] = useUndoable<SpreadsheetData>(
-    initialContent ? initialParse.current.data : createEmptySpreadsheet()
+    initialContent ? parsedData.current.data : createEmptySpreadsheet()
   );
 
   // Non-undoable state
   const [isDirty, setIsDirty] = useState(false);
   const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
-  const [clipboard, setClipboard] = useState<ClipboardData | null>(null);
 
   // Track dirty state changes and notify of content changes
   const markDirty = useCallback(() => {
@@ -165,6 +168,7 @@ export function useSpreadsheetData(
 
   // Update a cell (expands data if editing beyond current bounds)
   const updateCell = useCallback((row: number, col: number, value: string) => {
+    console.log('[CSV updateCell] Called with row:', row, 'col:', col, 'value:', JSON.stringify(value));
     setData(prev => {
       const newData = { ...prev };
 
@@ -371,131 +375,79 @@ export function useSpreadsheetData(
     markDirty();
   }, [setData, markDirty]);
 
-  // Copy selection to clipboard
-  const copySelection = useCallback((selection: NormalizedSelectionRange) => {
-    const values: string[][] = [];
-    for (let r = selection.startRow; r <= selection.endRow; r++) {
-      const row: string[] = [];
-      for (let c = selection.startCol; c <= selection.endCol; c++) {
-        const cell = data.rows[r]?.[c];
-        row.push(cell?.raw || '');
-      }
-      values.push(row);
-    }
-
-    setClipboard({
-      values,
-      sourceRange: selection,
-      isCut: false,
-    });
-  }, [data.rows]);
-
-  // Cut selection to clipboard
-  const cutSelection = useCallback((selection: NormalizedSelectionRange) => {
-    const values: string[][] = [];
-    for (let r = selection.startRow; r <= selection.endRow; r++) {
-      const row: string[] = [];
-      for (let c = selection.startCol; c <= selection.endCol; c++) {
-        const cell = data.rows[r]?.[c];
-        row.push(cell?.raw || '');
-      }
-      values.push(row);
-    }
-
-    setClipboard({
-      values,
-      sourceRange: selection,
-      isCut: true,
-    });
-  }, [data.rows]);
-
-  // Paste at cell
-  const pasteAtCell = useCallback((targetRow: number, targetCol: number) => {
-    if (!clipboard) return;
-
-    const { values, sourceRange, isCut } = clipboard;
-
+  // Clear cells in selection
+  const clearCells = useCallback((selection: NormalizedSelectionRange) => {
     setData(prev => {
       const newData = { ...prev };
+      newData.rows = prev.rows.map(row => [...row]);
 
-      // Calculate needed dimensions
-      const neededRows = targetRow + values.length;
-      const neededCols = targetCol + (values[0]?.length || 0);
-
-      // Expand rows if needed
-      if (neededRows > prev.rows.length) {
-        newData.rows = [...prev.rows];
-        for (let r = prev.rows.length; r < neededRows; r++) {
-          const newRow: Cell[] = [];
-          for (let c = 0; c < Math.max(prev.columnCount, neededCols); c++) {
-            newRow.push({ raw: '', computed: '' });
-          }
-          newData.rows.push(newRow);
-        }
-      } else {
-        newData.rows = prev.rows.map(row => [...row]);
-      }
-
-      // Expand columns if needed
-      if (neededCols > prev.columnCount) {
-        newData.columnCount = neededCols;
-        newData.rows = newData.rows.map(r => {
-          const newRow = [...r];
-          for (let c = r.length; c < neededCols; c++) {
-            newRow.push({ raw: '', computed: '' });
-          }
-          return newRow;
-        });
-      }
-
-      // Paste values
-      for (let r = 0; r < values.length; r++) {
-        const destRow = targetRow + r;
-
-        for (let c = 0; c < values[r].length; c++) {
-          const destCol = targetCol + c;
-
-          const value = values[r][c];
-          const cell = createCell(value);
-          if (isFormula(value)) {
-            const { value: computed, error } = evaluateFormula(value, newData, destRow, destCol);
-            cell.computed = computed;
-            cell.error = error;
-          }
-          newData.rows[destRow][destCol] = cell;
-        }
-      }
-
-      // Clear source cells if cut
-      if (isCut) {
-        const pasteRowEnd = targetRow + values.length - 1;
-        const pasteColEnd = targetCol + (values[0]?.length || 0) - 1;
-
-        for (let r = sourceRange.startRow; r <= sourceRange.endRow; r++) {
-          for (let c = sourceRange.startCol; c <= sourceRange.endCol; c++) {
-            const overlaps = r >= targetRow && r <= pasteRowEnd &&
-                             c >= targetCol && c <= pasteColEnd;
-
-            if (!overlaps && r < newData.rows.length && c < newData.columnCount) {
-              newData.rows[r][c] = { raw: '', computed: '' };
-            }
+      for (let r = selection.startRow; r <= selection.endRow; r++) {
+        for (let c = selection.startCol; c <= selection.endCol; c++) {
+          if (r < newData.rows.length && c < newData.columnCount) {
+            newData.rows[r][c] = { raw: '', computed: '' };
           }
         }
       }
 
       return recalculateFormulas(newData);
     });
-
-    if (isCut) {
-      setClipboard(null);
-    }
     markDirty();
-  }, [clipboard, setData, markDirty]);
+  }, [setData, markDirty]);
+
+  // Copy selection to system clipboard
+  const copySelection = useCallback((selection: NormalizedSelectionRange) => {
+    console.log('[CSV copySelection] Called with selection:', selection);
+    const values: string[][] = [];
+    for (let r = selection.startRow; r <= selection.endRow; r++) {
+      const row: string[] = [];
+      for (let c = selection.startCol; c <= selection.endCol; c++) {
+        const cell = data.rows[r]?.[c];
+        row.push(cell?.raw || '');
+      }
+      values.push(row);
+    }
+
+    console.log('[CSV copySelection] Copied values:', JSON.stringify(values));
+
+    // Copy to system clipboard as tab-delimited text
+    const text = values.map(row => row.join('\t')).join('\n');
+    navigator.clipboard.writeText(text).then(() => {
+      console.log('[CSV copySelection] Wrote to system clipboard:', text.length, 'chars');
+    }).catch(err => {
+      console.log('[CSV copySelection] Failed to write to system clipboard:', err);
+    });
+  }, [data.rows]);
+
+  // Cut selection - copy to clipboard and clear cells immediately
+  const cutSelection = useCallback((selection: NormalizedSelectionRange) => {
+    console.log('[CSV cutSelection] Called with selection:', selection);
+
+    // First copy the values
+    const values: string[][] = [];
+    for (let r = selection.startRow; r <= selection.endRow; r++) {
+      const row: string[] = [];
+      for (let c = selection.startCol; c <= selection.endCol; c++) {
+        const cell = data.rows[r]?.[c];
+        row.push(cell?.raw || '');
+      }
+      values.push(row);
+    }
+
+    // Copy to system clipboard
+    const text = values.map(row => row.join('\t')).join('\n');
+    navigator.clipboard.writeText(text).catch(err => {
+      console.log('[CSV cutSelection] Failed to write to system clipboard:', err);
+    });
+
+    // Clear the cells
+    clearCells(selection);
+  }, [data.rows, clearCells]);
 
   // Paste from text (system clipboard) - parses tab/newline delimited text
   const pasteFromText = useCallback((targetRow: number, targetCol: number, text: string) => {
     console.log('[CSV pasteFromText] Called with targetRow:', targetRow, 'targetCol:', targetCol);
     console.log('[CSV pasteFromText] Text length:', text.length);
+    console.log('[CSV pasteFromText] Raw text:', JSON.stringify(text));
 
     // Parse text as tab-delimited rows (Excel/Sheets format)
     const lines = text.split(/\r?\n/);
@@ -506,6 +458,7 @@ export function useSpreadsheetData(
       .map(line => line.split('\t'));
 
     console.log('[CSV pasteFromText] Parsed values:', values.length, 'rows, first row cols:', values[0]?.length);
+    console.log('[CSV pasteFromText] First few values:', JSON.stringify(values.slice(0, 3)));
 
     if (values.length === 0) {
       console.log('[CSV pasteFromText] No values to paste, returning');
@@ -571,25 +524,6 @@ export function useSpreadsheetData(
     markDirty();
   }, [setData, markDirty]);
 
-  // Clear cells in selection
-  const clearCells = useCallback((selection: NormalizedSelectionRange) => {
-    setData(prev => {
-      const newData = { ...prev };
-      newData.rows = prev.rows.map(row => [...row]);
-
-      for (let r = selection.startRow; r <= selection.endRow; r++) {
-        for (let c = selection.startCol; c <= selection.endCol; c++) {
-          if (r < newData.rows.length && c < newData.columnCount) {
-            newData.rows[r][c] = { raw: '', computed: '' };
-          }
-        }
-      }
-
-      return recalculateFormulas(newData);
-    });
-    markDirty();
-  }, [setData, markDirty]);
-
   // Serialize to CSV (trims empty trailing rows/columns)
   const toCSV = useCallback(() => {
     const trimmedData = trimEmptyRowsAndColumns(data);
@@ -603,7 +537,6 @@ export function useSpreadsheetData(
     reset(parsed.data);
     setIsDirty(false);
     setSortConfig(null);
-    setClipboard(null);
   }, [reset]);
 
   // Mark clean
@@ -631,10 +564,8 @@ export function useSpreadsheetData(
     setHeaderRowCount,
     toggleHeaders,
 
-    clipboard,
     copySelection,
     cutSelection,
-    pasteAtCell,
     pasteFromText,
     clearCells,
 

@@ -94,19 +94,6 @@ export interface NormalizedSelectionRange {
 }
 
 /**
- * Clipboard data for copy/paste operations
- * Supports both single cells and ranges
- */
-export interface ClipboardData {
-  /** 2D array of cell values (rows x cols) */
-  values: string[][];
-  /** Source range */
-  sourceRange: NormalizedSelectionRange;
-  /** Whether this was a cut operation */
-  isCut: boolean;
-}
-
-/**
  * Props for custom editor components (from Nimbalyst extension system)
  */
 export interface CustomEditorProps {
