@@ -163,6 +163,16 @@
   font-size: 13px;
 }
 
+/* Header row styling (row 0 when hasHeaders is enabled) */
+.spreadsheet-editor .header-row {
+  background-color: var(--surface-secondary) !important;
+  font-weight: 600;
+}
+
+.spreadsheet-editor .header-row revogr-cell {
+  font-weight: 600;
+}
+
 /* Error cells */
 .spreadsheet-editor .cell-error {
   color: #ef4444;

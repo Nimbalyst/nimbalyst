@@ -9,10 +9,10 @@
     "dev": "vite build --watch"
   },
   "dependencies": {
+    "@formulajs/formulajs": "^4.4.9",
     "@revolist/react-datagrid": "^4.19.4",
     "papaparse": "^5.4.1",
-    "@formulajs/formulajs": "^4.4.9",
-    "zustand": "^5.0.0"
+    "use-undoable": "^5.0.0"
   },
   "devDependencies": {
     "@nimbalyst/extension-sdk": "*",

@@ -17,6 +17,10 @@ interface SpreadsheetToolbarProps {
   hasSelection: boolean;
   hasHeaders: boolean;
   sortConfig: SortConfig | null;
+  canUndo: boolean;
+  canRedo: boolean;
+  onUndo: () => void;
+  onRedo: () => void;
 }
 
 export function SpreadsheetToolbar({
@@ -30,9 +34,34 @@ export function SpreadsheetToolbar({
   hasSelection,
   hasHeaders,
   sortConfig,
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
 }: SpreadsheetToolbarProps) {
   return (
     <div className="spreadsheet-toolbar">
+      <div className="toolbar-group">
+        <button
+          className="toolbar-button"
+          onClick={onUndo}
+          disabled={!canUndo}
+          title="Undo (Cmd+Z)"
+        >
+          Undo
+        </button>
+        <button
+          className="toolbar-button"
+          onClick={onRedo}
+          disabled={!canRedo}
+          title="Redo (Cmd+Shift+Z)"
+        >
+          Redo
+        </button>
+      </div>
+
+      <div className="toolbar-separator" />
+
       <div className="toolbar-group">
         <button
           className={`toolbar-button ${hasHeaders ? 'active' : ''}`}

@@ -67,11 +67,6 @@ export function parseCSV(content: string): { data: SpreadsheetData; delimiter: '
 
   const rawRows = result.data as string[][];
 
-  // Filter out completely empty trailing rows
-  while (rawRows.length > 0 && rawRows[rawRows.length - 1].every(cell => cell === '')) {
-    rawRows.pop();
-  }
-
   // Ensure we have at least one row
   if (rawRows.length === 0) {
     rawRows.push(['']);
@@ -93,17 +88,22 @@ export function parseCSV(content: string): { data: SpreadsheetData; delimiter: '
     row.map(value => createCell(value))
   );
 
-  // Use metadata hasHeaders if present, otherwise auto-detect
-  let hasHeaders: boolean;
-  if (metadata !== null) {
-    hasHeaders = metadata.hasHeaders;
+  // Use metadata headerRowCount if present, otherwise use hasHeaders, otherwise auto-detect
+  let headerRowCount: number;
+  if (metadata?.headerRowCount !== undefined) {
+    headerRowCount = metadata.headerRowCount;
+  } else if (metadata !== null) {
+    headerRowCount = metadata.hasHeaders ? 1 : 0;
   } else {
     // Auto-detect: first row looks like headers if non-numeric, non-empty strings
-    hasHeaders = rows.length > 1 &&
+    const looksLikeHeaders = rows.length > 1 &&
       rows[0].every(cell =>
         cell.raw !== '' && isNaN(parseFloat(cell.raw))
       );
+    headerRowCount = looksLikeHeaders ? 1 : 0;
   }
+
+  const hasHeaders = headerRowCount > 0;
 
   return {
     data: {
@@ -111,6 +111,7 @@ export function parseCSV(content: string): { data: SpreadsheetData; delimiter: '
       columnCount,
       headers: hasHeaders ? rows[0].map(cell => cell.raw) : undefined,
       hasHeaders,
+      headerRowCount,
     },
     delimiter,
     metadata,
@@ -169,7 +170,10 @@ export function serializeToCSV(data: SpreadsheetData, delimiter: ',' | '\t' = ',
 
   // Prepend metadata comment if requested
   if (includeMetadata) {
-    const metadata: CSVMetadata = { hasHeaders: data.hasHeaders };
+    const metadata: CSVMetadata = {
+      hasHeaders: data.hasHeaders,
+      headerRowCount: data.headerRowCount || (data.hasHeaders ? 1 : 0),
+    };
     return `${serializeMetadata(metadata)}\n${csvContent}`;
   }
 
