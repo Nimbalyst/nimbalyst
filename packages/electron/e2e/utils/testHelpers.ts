@@ -129,6 +129,23 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   permissionConfirmationAllowSessionButton: '.tool-permission-confirmation-button--session',
   permissionConfirmationAllowAlwaysButton: '.tool-permission-confirmation-button--always',
   permissionConfirmationWarning: '.tool-permission-confirmation-warning',
+
+  // Settings view
+  settingsView: '.settings-view',
+  settingsViewHeader: '.settings-view-header',
+  settingsViewTitle: '.settings-view-title',
+  settingsScopeTabUser: '.settings-scope-tab:has-text("User")',
+  settingsScopeTabProject: '.settings-scope-tab:has-text("Project")',
+  settingsSidebarItem: '.settings-category-item',
+  settingsSidebarItemAgentPermissions: '.settings-category-item:has-text("Agent Permissions")',
+  settingsPanelContent: '.settings-panel-content',
+  settingsPanelHeader: '.settings-panel-header',
+
+  // Agent Permissions panel
+  permissionsUrlList: '.permissions-url-list',
+  permissionsUrlItem: '.permissions-url-item',
+  permissionsUrlPattern: '.permissions-url-pattern',
+  permissionsEmptyState: '.permissions-empty-state',
 };
 
 /**
@@ -705,4 +722,43 @@ export async function dismissTrustToast(page: Page): Promise<void> {
   await page.waitForTimeout(500);
 
   await expect(trustToast).not.toBeVisible({ timeout: 3000 });
+}
+
+/**
+ * Open Agent Permissions settings panel via the Settings view
+ * Uses test helpers exposed on window to navigate to settings
+ */
+export async function openAgentPermissionsSettings(page: Page): Promise<void> {
+  // Use test helpers to navigate to settings view with Agent Permissions selected
+  await page.evaluate(() => {
+    const helpers = (window as any).__testHelpers;
+    if (helpers && helpers.openAgentPermissions) {
+      helpers.openAgentPermissions();
+    }
+  });
+
+  // Wait for settings view to be visible
+  await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.settingsView, { timeout: 5000 });
+  await page.waitForTimeout(500);
+
+  // Wait for panel content to load (permissions section header)
+  await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.settingsPanelContent)).toBeVisible({ timeout: 3000 });
+}
+
+/**
+ * Get allowed URL patterns from the Agent Permissions settings panel
+ */
+export async function getAllowedUrlPatterns(page: Page): Promise<string[]> {
+  const urlPatterns = page.locator(PLAYWRIGHT_TEST_SELECTORS.permissionsUrlPattern);
+  const count = await urlPatterns.count();
+
+  const patterns: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const text = await urlPatterns.nth(i).textContent();
+    if (text) {
+      patterns.push(text.trim());
+    }
+  }
+
+  return patterns;
 }

@@ -275,7 +275,14 @@ export default function App() {
         setSidebarView: (view: any) => setSidebarView(view),
         setActiveMode: (mode: any) => setActiveMode(mode),
         getActiveMode: () => activeMode,
-        getSidebarView: () => sidebarView
+        getSidebarView: () => sidebarView,
+        // Settings deep link helpers
+        openAgentPermissions: () => {
+          setSettingsInitialCategory('agent-permissions');
+          setSettingsInitialScope('project');
+          setSettingsKey(k => k + 1);
+          setTimeout(() => setActiveMode('settings'), 0);
+        },
       };
       console.log('[App] Test helpers exposed, DEV mode:', import.meta.env.DEV);
     }

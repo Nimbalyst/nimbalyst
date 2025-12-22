@@ -2589,6 +2589,12 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       if (toolName === 'WebFetch' || toolName === 'WebSearch') {
         const url = toolName === 'WebFetch' ? toolInput?.url : null;
 
+        this.logSecurity(`[PreToolUse] ${toolName} intercepted:`, {
+          url,
+          workspacePath,
+          hasUrlChecker: !!ClaudeCodeProvider.urlPermissionChecker,
+        });
+
         // For WebFetch, check if URL matches allowed patterns
         if (toolName === 'WebFetch' && url && workspacePath) {
           if (ClaudeCodeProvider.urlPermissionChecker) {
@@ -2600,8 +2606,11 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
             if (isAllowed) {
               // URL matches an allowed pattern - let it through
+              this.logSecurity(`[PreToolUse] WebFetch URL allowed, permitting:`, { url });
               return {};
             }
+          } else {
+            this.logSecurity(`[PreToolUse] WARNING: No URL permission checker set!`);
           }
 
           // URL not in allowed list - force ask
@@ -2612,6 +2621,12 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               permissionDecision: 'ask' as const
             }
           };
+        } else if (toolName === 'WebFetch') {
+          // Log why we're not checking
+          this.logSecurity(`[PreToolUse] WebFetch skipping permission check:`, {
+            hasUrl: !!url,
+            hasWorkspacePath: !!workspacePath,
+          });
         }
 
         // WebSearch always needs approval (no URL pattern matching for searches)
@@ -2626,6 +2641,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         }
 
         // No URL or workspace - let SDK handle it
+        this.logSecurity(`[PreToolUse] ${toolName} - no URL/workspace, deferring to SDK`);
         return {};
       }
 
