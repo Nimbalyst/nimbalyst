@@ -1,7 +1,25 @@
 ---
 description: Prepare and execute a release (patch/minor/major)
 ---
-Prepare a {{arg1}} release following this two-phase workflow:
+
+**Arguments**: `{{arg1}}`
+- First word: release type (patch, minor, major)
+- If second word is "auto": skip approval prompts and automatically push to private repo
+
+Prepare a release following this workflow:
+
+## AUTO MODE DETECTION
+
+If `{{arg1}}` contains "auto" (e.g., "patch auto"), run the entire Phase 1 without stopping for approval:
+1. Get commits since last release
+2. Generate release notes (both developer and public versions)
+3. Update CHANGELOG.md
+4. Run `./scripts/release.sh [type]` (extract just patch/minor/major from arg1)
+5. Push to private repo automatically
+6. Show the public release notes at the end for reference
+7. Provide link to GitHub Actions
+
+Otherwise, follow the interactive workflow below:
 
 ## PHASE 1: INTERNAL RELEASE
 
