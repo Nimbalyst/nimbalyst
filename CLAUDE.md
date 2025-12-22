@@ -277,6 +277,13 @@ The Electron app uses IPC (Inter-Process Communication) between main and rendere
 
 ## AI Features
 
+### AI Provider Types
+
+The application supports two categories of AI providers. See [AI_PROVIDER_TYPES.md](docs/AI_PROVIDER_TYPES.md) for detailed documentation.
+
+- **Agent Providers** (Claude Agent, OpenAI Codex): Full MCP support, file system access via tools, multi-file operations, session persistence
+- **Chat Providers** (Claude Chat, OpenAI, LM Studio): Direct API calls, files attached as context, faster responses, local model support
+
 ### AI Providers
 
 The application supports multiple AI providers, including two distinct ways to access Claude:

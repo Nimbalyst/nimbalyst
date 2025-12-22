@@ -140,7 +140,7 @@ export function ClaudeCodePanel({
       <div className="provider-panel-header">
         <h3 className="provider-panel-title">Claude Agent</h3>
         <p className="provider-panel-description">
-          CLI-based Claude with Model Context Protocol (MCP) support for advanced code editing.
+          Uses the same agent as Claude Code, with Model Context Protocol (MCP) support for advanced code editing.
           Provides tool use, file editing, and session resumption capabilities.
         </p>
       </div>

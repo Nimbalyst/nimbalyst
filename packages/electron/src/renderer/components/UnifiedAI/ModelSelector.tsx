@@ -92,7 +92,7 @@ export function ModelSelector({
 
   const getProviderLabel = (provider: string) => {
     switch (provider) {
-      case 'claude': return 'Claude SDK';
+      case 'claude': return 'Claude Chat';
       case 'claude-code': return 'Claude Agent';
       case 'openai': return 'OpenAI';
       case 'openai-codex': return 'OpenAI Codex';
@@ -155,7 +155,7 @@ export function ModelSelector({
                       {providerModels.map(model => {
                         const isCurrent = model.id === currentModel;
                         const isDisabled = isTypeSwitchDisabled(provider);
-                        const disabledTooltip = 'Start a new session to switch between Agent and SDK modes';
+                        const disabledTooltip = 'Start a new session to switch between Agent and Chat modes';
                         return (
                           <button
                             key={model.id}
@@ -194,7 +194,7 @@ export function ModelSelector({
                       {providerModels.map(model => {
                         const isCurrent = model.id === currentModel;
                         const isDisabled = isTypeSwitchDisabled(provider);
-                        const disabledTooltip = 'Start a new session to switch between Agent and SDK modes';
+                        const disabledTooltip = 'Start a new session to switch between Agent and Chat modes';
                         return (
                           <button
                             key={model.id}

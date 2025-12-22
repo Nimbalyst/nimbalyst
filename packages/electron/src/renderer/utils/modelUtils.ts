@@ -109,7 +109,7 @@ export function getProviderDisplayName(provider: string): string {
  */
 export function getProviderLabel(provider: string): string {
   switch (provider) {
-    case 'claude': return 'SDK';
+    case 'claude': return 'Chat';
     case 'claude-code': return 'CODE';
     case 'openai': return 'GPT';
     case 'lmstudio': return 'LOCAL';

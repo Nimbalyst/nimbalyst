@@ -84,7 +84,7 @@ export function ChatHeader({
   // Check if current session has any messages
   const sessionHasMessages = (currentSession?.messages?.length ?? 0) > 0;
 
-  // Determine provider type (agent vs model/SDK)
+  // Determine provider type (agent vs model/chat)
   const getProviderType = (provider?: string): 'agent' | 'model' | null => {
     if (!provider) return null;
     return (provider === 'claude-code' || provider === 'openai-codex') ? 'agent' : 'model';

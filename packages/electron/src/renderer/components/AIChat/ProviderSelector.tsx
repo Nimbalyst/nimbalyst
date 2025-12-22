@@ -37,7 +37,7 @@ export function ProviderSelector({
     },
     {
       id: 'claude' as const,
-      name: 'Claude SDK',
+      name: 'Claude Chat',
       description: 'Direct API',
       icon: 'api'
     },

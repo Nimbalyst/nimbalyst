@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { MaterialSymbol, getProviderIcon } from '@nimbalyst/runtime';
 
 export type SettingsCategory =
@@ -20,6 +21,7 @@ export type SettingsCategory =
 interface CategoryGroup {
   title: string;
   items: CategoryItem[];
+  infoTooltip?: string;
 }
 
 interface CategoryItem {
@@ -85,7 +87,12 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
       ],
     },
     {
-      title: 'AI Providers',
+      title: 'Agent Providers',
+      infoTooltip: `Agent providers have full MCP support with file system access, multi-file operations, and session persistence.
+
+Uses the same agent as Claude Code, and can use a Claude Code monthly plan from Anthropic.
+
+Best for complex coding tasks.`,
       items: [
         {
           id: 'claude-code',
@@ -94,8 +101,25 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
           statusDot: getStatusDot('claude-code'),
         },
         {
+          id: 'openai-codex',
+          name: 'OpenAI Codex',
+          icon: getProviderIcon('openai', { size: 16 }),
+          statusDot: getStatusDot('openai-codex'),
+          hidden: isProduction,
+        },
+      ],
+    },
+    {
+      title: 'Chat Providers',
+      infoTooltip: `Chat providers use direct API calls with files attached as context. Faster responses, simpler behavior.
+
+Includes local model support via LM Studio.
+
+Best for tasks that do not require deep code analysis.`,
+      items: [
+        {
           id: 'claude',
-          name: 'Claude API',
+          name: 'Claude Chat',
           icon: getProviderIcon('claude', { size: 16 }),
           statusDot: getStatusDot('claude'),
         },
@@ -104,13 +128,6 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
           name: 'OpenAI',
           icon: getProviderIcon('openai', { size: 16 }),
           statusDot: getStatusDot('openai'),
-        },
-        {
-          id: 'openai-codex',
-          name: 'OpenAI Codex',
-          icon: getProviderIcon('openai', { size: 16 }),
-          statusDot: getStatusDot('openai-codex'),
-          hidden: isProduction,
         },
         {
           id: 'lmstudio',
@@ -154,37 +171,76 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
   ];
 
   // Filter groups based on scope
-  // Project scope: Show Project group, AI Providers (for overrides), Extensions
-  // User scope: Show AI Providers, Application, Extensions (not Project)
+  // Project scope: Show Project group, Agent/Chat Providers (for overrides), Extensions
+  // User scope: Show Agent/Chat Providers, Application, Extensions (not Project)
   const filteredGroups = scope === 'project'
     ? [
         categoryGroups.find(g => g.title === 'Project')!,
-        categoryGroups.find(g => g.title === 'AI Providers')!,
+        categoryGroups.find(g => g.title === 'Agent Providers')!,
+        categoryGroups.find(g => g.title === 'Chat Providers')!,
         categoryGroups.find(g => g.title === 'Extensions')!,
       ].filter(Boolean)
     : categoryGroups.filter(g => g.title !== 'Project');
 
+  const [tooltip, setTooltip] = useState<{ text: string; top: number; left: number } | null>(null);
+
+  const handleTooltipEnter = (event: React.MouseEvent<HTMLSpanElement>, text: string) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setTooltip({
+      text,
+      top: rect.top + rect.height / 2,
+      left: rect.right + 12,
+    });
+  };
+
+  const handleTooltipLeave = () => {
+    setTooltip(null);
+  };
+
   return (
     <div className="settings-sidebar">
-      {filteredGroups.map((group) => (
-        <div key={group.title} className="settings-sidebar-group">
-          <div className="settings-sidebar-group-title">{group.title}</div>
-          {group.items
-            .filter((item) => !item.hidden)
-            .map((item) => (
-              <div
-                key={item.id}
-                className={`settings-sidebar-item ${selectedCategory === item.id ? 'active' : ''}`}
-                onClick={() => onSelectCategory(item.id)}
-              >
-                <span className="settings-sidebar-item-icon">{item.icon}</span>
-                <span className="settings-sidebar-item-name">{item.name}</span>
-                {item.badge && <span className="settings-sidebar-item-badge">{item.badge}</span>}
-                {item.statusDot && <span className={`settings-sidebar-item-status ${item.statusDot}`} />}
-              </div>
-            ))}
-        </div>
-      ))}
+      <div className="settings-sidebar-content">
+        {filteredGroups.map((group) => (
+          <div key={group.title} className="settings-sidebar-group">
+            <div className="settings-sidebar-group-title">
+              {group.title}
+              {group.infoTooltip && (
+                <span
+                  className="settings-sidebar-group-info"
+                  onMouseEnter={(event) => handleTooltipEnter(event, group.infoTooltip!)}
+                  onMouseLeave={handleTooltipLeave}
+                >
+                  <MaterialSymbol icon="info" size={14} />
+                </span>
+              )}
+            </div>
+            {group.items
+              .filter((item) => !item.hidden)
+              .map((item) => (
+                <div
+                  key={item.id}
+                  className={`settings-sidebar-item ${selectedCategory === item.id ? 'active' : ''}`}
+                  onClick={() => onSelectCategory(item.id)}
+                >
+                  <span className="settings-sidebar-item-icon">{item.icon}</span>
+                  <span className="settings-sidebar-item-name">{item.name}</span>
+                  {item.badge && <span className="settings-sidebar-item-badge">{item.badge}</span>}
+                  {item.statusDot && <span className={`settings-sidebar-item-status ${item.statusDot}`} />}
+                </div>
+              ))}
+          </div>
+        ))}
+      </div>
+      {tooltip &&
+        createPortal(
+          <div
+            className="settings-sidebar-tooltip"
+            style={{ top: `${tooltip.top}px`, left: `${tooltip.left}px` }}
+          >
+            {tooltip.text}
+          </div>,
+          document.body
+        )}
     </div>
   );
 };
