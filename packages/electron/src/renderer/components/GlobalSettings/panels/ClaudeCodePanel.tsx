@@ -523,18 +523,6 @@ export function ClaudeCodePanel({
                 <h4 className="provider-panel-section-title">MCP Configuration</h4>
                 <div className="cli-config-section">
                   <div className="cli-config-row">
-                    <span className="cli-config-label">Permission Mode:</span>
-                    <select
-                      className="cli-config-select"
-                      value={config.permissionMode || 'auto'}
-                      onChange={(e) => onConfigChange({ permissionMode: e.target.value })}
-                    >
-                      <option value="auto">Automatic</option>
-                      <option value="approve">Require Approval</option>
-                      <option value="bypass">Bypass (Dangerous)</option>
-                    </select>
-                  </div>
-                  <div className="cli-config-row">
                     <label className="cli-config-checkbox">
                       <input
                         type="checkbox"
