@@ -705,9 +705,11 @@ export class AIService {
 
     const sendAutoContextEvent = (phase: 'start' | 'end') => {
       try {
+        console.log(`[AIService] Sending ai:auto-context-${phase} event for session:`, session.id);
         event.sender.send(`ai:auto-context-${phase}`, {
           sessionId: session.id
         });
+        console.log(`[AIService] Successfully sent ai:auto-context-${phase} event`);
       } catch (err) {
         console.error('[AIService] Failed to send auto-context lifecycle event:', err);
       }
@@ -1912,6 +1914,8 @@ export class AIService {
               // Skip if the response ended with an error (e.g., context overflow) to avoid showing the /context request to the user.
               if (session.provider === 'claude-code' && !hadError) {
                 autoContextPromise = this.runAutoContextCommand(session, workspacePath, event);
+              } else if (session.provider === 'claude-code' && hadError) {
+                console.log('[AIService] Skipping auto /context due to error in response');
               }
 
               break;

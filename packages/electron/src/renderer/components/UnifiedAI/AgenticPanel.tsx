@@ -1423,6 +1423,19 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             sessionId: data.sessionId,
             trackedSessions: Array.from(globalAutoContextSessions)
           });
+
+          // FALLBACK: If auto-context-end doesn't fire within 5 seconds, process queue anyway
+          // This prevents queued prompts from getting stuck if auto-context fails or IPC is lost
+          setTimeout(() => {
+            if (globalAutoContextSessions.has(data.sessionId)) {
+              console.warn('[AgenticPanel] Auto-context timeout - processing queue as fallback:', data.sessionId);
+              globalAutoContextSessions.delete(data.sessionId);
+              const tab = sessionTabsRef.current.find(t => t.id === data.sessionId);
+              if (tab && processQueuedPromptsRef.current) {
+                processQueuedPromptsRef.current(data.sessionId, tab);
+              }
+            }
+          }, 5000);
         } else {
           // Process any queued prompts after stream completion
           // This handles prompts queued while the AI was processing (from local or mobile)
@@ -1573,6 +1586,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         trackedSessions: Array.from(globalAutoContextSessions)
       });
 
+      // Only process if this session was tracked as waiting for auto-context
+      // This prevents duplicate processing across multiple AgenticPanel instances
       if (!globalAutoContextSessions.has(data.sessionId)) {
         console.log('[AgenticPanel] Session not in globalAutoContextSessions, skipping queue processing');
         return;
@@ -1582,6 +1597,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       // Note: sendingSessions was already cleared in handleStreamResponse when isComplete was received
       // so the UI was ready for input immediately. We just deferred queued prompt processing.
       globalAutoContextSessions.delete(data.sessionId);
+
+      console.log('[AgenticPanel] Auto-context ended, processing queued prompts:', data.sessionId);
 
       // Process any queued prompts after auto-context completes
       setTimeout(() => {
