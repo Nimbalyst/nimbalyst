@@ -415,7 +415,12 @@ export async function createApplicationMenu() {
                                 const state = windowStates.get(windowId);
 
                                 if (state?.mode === 'workspace') {
-                                    focusedWindow.webContents.send('file-new-in-workspace');
+                                    // Switch to files mode first (in case we're in agent mode)
+                                    focusedWindow.webContents.send('set-content-mode', 'files');
+                                    // Small delay to let mode switch complete before opening dialog
+                                    setTimeout(() => {
+                                        focusedWindow.webContents.send('file-new-in-workspace');
+                                    }, 50);
                                 } else {
                                     // In document mode, create new window
                                     createWindow();
