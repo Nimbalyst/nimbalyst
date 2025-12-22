@@ -20,6 +20,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.49.3] - 2025-12-22
+
+
+### Added
+- Edit button for queued messages
+- Enhanced New File dialog with file type selection and folder picker
+- Folder context menu now shows all file type options inline
+- Text selection context automatically included in AI prompts
+
+### Changed
+- Clarified agent vs chat terminology in UI
+- Use DigiCert signing manager to sign Windows builds
+
+### Fixed
+- Settings panel content now scrolls properly
+- Queued prompts now properly fail instead of silently completing
+- Restart tool now preserves session state and works reliably in dev
+
+### Removed
+- Removed unused mockupEnabled feature flag
+
 ## [0.49.2] - 2025-12-21
 
 
