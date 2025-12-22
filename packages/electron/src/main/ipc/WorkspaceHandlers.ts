@@ -558,9 +558,19 @@ export function registerWorkspaceHandlers() {
 
     // Update workspace state - takes partial update, merges atomically
     ipcMain.handle('workspace:update-state', async (event, workspacePath: string, updates: any) => {
-        return updateWorkspaceState(workspacePath, (state) => {
+        const previousState = getWorkspaceState(workspacePath);
+        const result = updateWorkspaceState(workspacePath, (state) => {
             Object.assign(state, updates);
         });
+
+        // Rebuild menu if activeMode changed (to update Cmd+N shortcut assignment)
+        if (updates.activeMode !== undefined && updates.activeMode !== previousState.activeMode) {
+            // Dynamically import to avoid circular dependency
+            const { createApplicationMenu } = await import('../menu/ApplicationMenu');
+            await createApplicationMenu();
+        }
+
+        return result;
     });
 
     // File operations for workspace files

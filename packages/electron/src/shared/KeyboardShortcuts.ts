@@ -6,7 +6,8 @@
 export const KeyboardShortcuts = {
   // File Menu
   file: {
-    new: 'Cmd+N',
+    newFile: 'Cmd+N',
+    newSession: 'Cmd+N',
     newWindow: 'Cmd+Shift+N',
     open: 'Cmd+O',
     openFolder: 'Cmd+Shift+O',

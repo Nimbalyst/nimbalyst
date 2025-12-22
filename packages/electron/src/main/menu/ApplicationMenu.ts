@@ -383,14 +383,28 @@ export async function createApplicationMenu() {
     const currentTheme = getTheme();
     const isDev = process.env.NODE_ENV !== 'production';
 
+    // Determine active mode from focused window's workspace state
+    let activeMode: string | undefined;
+    const focusedWindow = getFocusedWindow();
+    if (focusedWindow) {
+        const windowId = getWindowId(focusedWindow);
+        if (windowId !== null) {
+            const state = windowStates.get(windowId);
+            if (state?.mode === 'workspace' && state.workspacePath) {
+                const workspaceState = getWorkspaceState(state.workspacePath);
+                activeMode = workspaceState?.activeMode;
+            }
+        }
+    }
+
     const template: any[] = [
         {
             label: 'File',
             submenu: [
                 {
-                    id: 'file-new', // Add ID for dynamic updates
-                    label: 'New',
-                    accelerator: KeyboardShortcuts.file.new,
+                    id: 'file-new-file',
+                    label: 'New File...',
+                    accelerator: activeMode !== 'agent' ? KeyboardShortcuts.file.newFile : undefined,
                     click: async () => {
                         const focusedWindow = getFocusedWindow();
 
@@ -401,39 +415,23 @@ export async function createApplicationMenu() {
                                 const state = windowStates.get(windowId);
 
                                 if (state?.mode === 'workspace') {
-                                    // In workspace mode, check activeMode to determine action
-                                    const workspacePath = state.workspacePath;
-                                    if (workspacePath) {
-                                        const workspaceState = getWorkspaceState(workspacePath);
-                                        const activeMode = workspaceState?.activeMode;
-
-                                        if (activeMode === 'agent') {
-                                            // In agent mode, create new AI session
-                                            focusedWindow.webContents.send('agent-new-session');
-                                        } else {
-                                            // In files/plan mode, create new file
-                                            focusedWindow.webContents.send('file-new-in-workspace');
-                                        }
-                                    } else {
-                                        // No workspace path, default to new file
-                                        focusedWindow.webContents.send('file-new-in-workspace');
-                                    }
+                                    focusedWindow.webContents.send('file-new-in-workspace');
                                 } else {
                                     // In document mode, create new window
                                     createWindow();
                                 }
                             } else {
-                                // Window not found in our map, create new window
                                 createWindow();
                             }
                         } else {
-                            // No focused window, create new window
                             createWindow();
                         }
                     }
                 },
                 {
-                    label: 'New Mockup',
+                    id: 'file-new-session',
+                    label: 'New Session...',
+                    accelerator: activeMode === 'agent' ? KeyboardShortcuts.file.newSession : undefined,
                     click: async () => {
                         const focusedWindow = getFocusedWindow();
 
@@ -444,10 +442,7 @@ export async function createApplicationMenu() {
                                 const state = windowStates.get(windowId);
 
                                 if (state?.mode === 'workspace' && state.workspacePath) {
-                                    // Send event to renderer to create a new mockup file
-                                    focusedWindow.webContents.send('file-new-mockup', {
-                                        workspacePath: state.workspacePath
-                                    });
+                                    focusedWindow.webContents.send('agent-new-session');
                                 }
                             }
                         }

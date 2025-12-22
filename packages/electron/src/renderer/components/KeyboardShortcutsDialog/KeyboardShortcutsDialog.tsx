@@ -22,7 +22,7 @@ export function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardShortcutsDi
     {
       title: 'File',
       shortcuts: [
-        { label: 'New', shortcut: KeyboardShortcuts.file.new },
+        { label: 'New File / New Session', shortcut: KeyboardShortcuts.file.newFile },
         { label: 'New Window', shortcut: KeyboardShortcuts.file.newWindow },
         { label: 'Open File', shortcut: KeyboardShortcuts.file.open },
         { label: 'Open Folder', shortcut: KeyboardShortcuts.file.openFolder },

@@ -4,10 +4,11 @@ import { useTabs, type TabData } from '../../hooks/useTabs';
 import { useTabNavigation } from '../../hooks/useTabNavigation';
 import { useDocumentContext } from '../../hooks/useDocumentContext';
 import { handleWorkspaceFileSelect as handleWorkspaceFileSelectUtil } from '../../utils/workspaceFileOperations';
-import { createInitialFileContent } from '../../utils/fileUtils';
+import { createInitialFileContent, createMockupContent } from '../../utils/fileUtils';
 import { getFileName } from '../../utils/pathUtils';
 import { aiToolService } from '../../services/AIToolService';
 import { editorRegistry } from '@nimbalyst/runtime/ai/EditorRegistry';
+import { getExtensionLoader } from '@nimbalyst/runtime';
 import { customEditorRegistry } from '../CustomEditors';
 import { WorkspaceSidebar } from '../WorkspaceSidebar';
 import { WorkspaceWelcome } from '../WorkspaceWelcome';
@@ -15,6 +16,8 @@ import { TabManager } from '../TabManager/TabManager';
 import { TabContent } from '../TabContent/TabContent';
 import { AIChat, type AIChatRef } from '../AIChat';
 import { NewFileDialog } from '../NewFileDialog';
+import type { NewFileType, ExtensionFileType } from '../NewFileMenu';
+import { contributionToExtensionFileType } from '../NewFileMenu';
 import { HistoryDialog } from '../HistoryDialog';
 import { WorkspaceHistoryDialog } from '../WorkspaceHistoryDialog';
 
@@ -82,6 +85,10 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
   const [isWorkspaceHistoryDialogOpen, setIsWorkspaceHistoryDialogOpen] = useState(false);
   const [workspaceHistoryPath, setWorkspaceHistoryPath] = useState<string | null>(null);
+
+  // Extension file types state
+  const [extensionFileTypes, setExtensionFileTypes] = useState<ExtensionFileType[]>([]);
+  const [mockupEnabled, setMockupEnabled] = useState(false);
 
   // AI Chat panel state
   const [isAIChatCollapsed, setIsAIChatCollapsed] = useState(false);
@@ -494,6 +501,39 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     return undefined;
   }, [workspacePath]);
 
+  // Load extension file type contributions
+  useEffect(() => {
+    const loader = getExtensionLoader();
+
+    const updateExtensionFileTypes = () => {
+      const contributions = loader.getNewFileMenuContributions();
+      const fileTypes = contributions.map(c => contributionToExtensionFileType(c.contribution));
+      setExtensionFileTypes(fileTypes);
+    };
+
+    // Initial load
+    updateExtensionFileTypes();
+
+    // Subscribe to changes
+    const unsubscribe = loader.subscribe(updateExtensionFileTypes);
+    return unsubscribe;
+  }, []);
+
+  // Load mockup enabled setting
+  useEffect(() => {
+    const loadMockupSetting = async () => {
+      try {
+        const settings = await window.electronAPI?.invoke?.('get-global-settings');
+        if (settings?.mockupFilesEnabled !== undefined) {
+          setMockupEnabled(settings.mockupFilesEnabled);
+        }
+      } catch (error) {
+        console.error('Error loading mockup setting:', error);
+      }
+    };
+    loadMockupSetting();
+  }, []);
+
   // Listen for file-new-in-workspace IPC event from menu (Cmd+N in files mode)
   useEffect(() => {
     if (!window.electronAPI?.onFileNewInWorkspace) return undefined;
@@ -595,15 +635,44 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     return undefined;
   }, [workspacePath, selectedFolderPath, handleWorkspaceFileSelect]);
 
-  // Handle new file creation
-  const handleNewFile = useCallback(async (fileName: string) => {
+  // Handle new file creation with file type support
+  const handleNewFile = useCallback(async (fileName: string, fileType: NewFileType) => {
     if (!workspacePath || !window.electronAPI) return;
 
     try {
       const directory = newFileDirectory || workspacePath;
-      const filePath = `${directory}/${fileName}`;
-      const content = createInitialFileContent(fileName);
 
+      // Determine full filename and content based on type
+      let fullFileName: string;
+      let content: string;
+
+      if (fileType === 'markdown') {
+        // Add .md extension if not present
+        fullFileName = fileName.endsWith('.md') || fileName.endsWith('.markdown') ? fileName : `${fileName}.md`;
+        content = createInitialFileContent(fullFileName);
+      } else if (fileType === 'mockup') {
+        // Add .mockup.html extension if not present
+        fullFileName = fileName.endsWith('.mockup.html') ? fileName : `${fileName}.mockup.html`;
+        content = createMockupContent();
+      } else if (fileType?.startsWith('ext:')) {
+        // Extension-provided file type
+        const extName = fileType.slice(4); // Remove 'ext:' prefix
+        const extType = extensionFileTypes.find(e => e.extension === extName);
+        if (extType) {
+          fullFileName = fileName.endsWith(extName) ? fileName : `${fileName}${extName}`;
+          content = extType.defaultContent;
+        } else {
+          // Fallback
+          fullFileName = fileName;
+          content = '';
+        }
+      } else {
+        // Any type - keep filename as-is
+        fullFileName = fileName;
+        content = createInitialFileContent(fullFileName);
+      }
+
+      const filePath = `${directory}/${fullFileName}`;
       await window.electronAPI.createFile(filePath, content);
 
       // Open the new file
@@ -614,7 +683,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     } catch (error) {
       console.error('Error creating new file:', error);
     }
-  }, [workspacePath, newFileDirectory, handleWorkspaceFileSelect]);
+  }, [workspacePath, newFileDirectory, handleWorkspaceFileSelect, extensionFileTypes]);
 
   // Handle file tree refresh
   const handleRefreshFileTree = useCallback(async () => {
@@ -823,6 +892,10 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
           currentDirectory={newFileDirectory || workspacePath}
           workspacePath={workspacePath}
           onCreateFile={handleNewFile}
+          mockupEnabled={mockupEnabled}
+          extensionFileTypes={extensionFileTypes}
+          fileTree={fileTree}
+          onDirectoryChange={setNewFileDirectory}
         />
       )}
 

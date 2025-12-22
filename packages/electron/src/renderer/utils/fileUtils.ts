@@ -64,3 +64,39 @@ export function createInitialFileContent(fileName: string): string {
   const title = formatFileNameAsTitle(fileName);
   return `# ${title}\n\n`;
 }
+
+/**
+ * Creates initial content for a new mockup file
+ *
+ * @returns Basic HTML mockup template
+ */
+export function createMockupContent(): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mockup</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>New Mockup</h1>
+        <p>Edit this mockup using the AI chat or edit the HTML directly.</p>
+    </div>
+</body>
+</html>`;
+}
