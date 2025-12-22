@@ -17,8 +17,6 @@ interface NewFileDialogProps {
   currentDirectory: string;
   workspacePath: string;
   onCreateFile: (fileName: string, fileType: NewFileType) => void;
-  /** Whether mockup files are enabled */
-  mockupEnabled?: boolean;
   /** Extension-contributed file types */
   extensionFileTypes?: ExtensionFileType[];
   /** File tree for folder selection */
@@ -33,7 +31,6 @@ export const NewFileDialog: React.FC<NewFileDialogProps> = ({
   currentDirectory,
   workspacePath,
   onCreateFile,
-  mockupEnabled = false,
   extensionFileTypes = [],
   fileTree = [],
   onDirectoryChange,
@@ -49,11 +46,8 @@ export const NewFileDialog: React.FC<NewFileDialogProps> = ({
   const fileTypeOptions = useMemo<FileTypeOption[]>(() => {
     const options: FileTypeOption[] = [
       { id: 'markdown', label: 'Markdown', icon: 'description', extension: '.md' },
+      { id: 'mockup', label: 'Mockup', icon: 'web', extension: '.mockup.html' },
     ];
-
-    if (mockupEnabled) {
-      options.push({ id: 'mockup', label: 'Mockup', icon: 'web', extension: '.mockup.html' });
-    }
 
     // Add extension-contributed types
     extensionFileTypes.forEach((extType) => {
@@ -70,7 +64,7 @@ export const NewFileDialog: React.FC<NewFileDialogProps> = ({
     options.push({ id: 'any', label: 'Other', icon: 'note_add', extension: '' });
 
     return options;
-  }, [mockupEnabled, extensionFileTypes]);
+  }, [extensionFileTypes]);
 
   // Get the currently selected file type option
   const currentFileType = useMemo(() => {

@@ -88,7 +88,6 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
 
   // Extension file types state
   const [extensionFileTypes, setExtensionFileTypes] = useState<ExtensionFileType[]>([]);
-  const [mockupEnabled, setMockupEnabled] = useState(false);
 
   // AI Chat panel state
   const [isAIChatCollapsed, setIsAIChatCollapsed] = useState(false);
@@ -519,21 +518,6 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     return unsubscribe;
   }, []);
 
-  // Load mockup enabled setting
-  useEffect(() => {
-    const loadMockupSetting = async () => {
-      try {
-        const settings = await window.electronAPI?.invoke?.('get-global-settings');
-        if (settings?.mockupFilesEnabled !== undefined) {
-          setMockupEnabled(settings.mockupFilesEnabled);
-        }
-      } catch (error) {
-        console.error('Error loading mockup setting:', error);
-      }
-    };
-    loadMockupSetting();
-  }, []);
-
   // Listen for file-new-in-workspace IPC event from menu (Cmd+N in files mode)
   useEffect(() => {
     if (!window.electronAPI?.onFileNewInWorkspace) return undefined;
@@ -892,7 +876,6 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
           currentDirectory={newFileDirectory || workspacePath}
           workspacePath={workspacePath}
           onCreateFile={handleNewFile}
-          mockupEnabled={mockupEnabled}
           extensionFileTypes={extensionFileTypes}
           fileTree={fileTree}
           onDirectoryChange={setNewFileDirectory}

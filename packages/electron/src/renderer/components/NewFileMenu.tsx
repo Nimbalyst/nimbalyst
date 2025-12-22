@@ -20,7 +20,6 @@ interface NewFileMenuProps {
   y: number;
   onSelect: (fileType: NewFileType) => void;
   onClose: () => void;
-  mockupEnabled?: boolean;
   /** Extension-contributed file types */
   extensionFileTypes?: ExtensionFileType[];
 }
@@ -30,7 +29,6 @@ export function NewFileMenu({
   y,
   onSelect,
   onClose,
-  mockupEnabled = false,
   extensionFileTypes = []
 }: NewFileMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -100,15 +98,13 @@ export function NewFileMenu({
         <span>New Markdown File</span>
       </div>
 
-      {mockupEnabled && (
-        <div
-          className="new-file-menu-item"
-          onClick={() => handleSelect('mockup')}
-        >
-          <MaterialSymbol icon="web" size={18} />
-          <span>New Mockup</span>
-        </div>
-      )}
+      <div
+        className="new-file-menu-item"
+        onClick={() => handleSelect('mockup')}
+      >
+        <MaterialSymbol icon="web" size={18} />
+        <span>New Mockup</span>
+      </div>
 
       {/* Extension-contributed file types */}
       {extensionFileTypes.map((extType) => (

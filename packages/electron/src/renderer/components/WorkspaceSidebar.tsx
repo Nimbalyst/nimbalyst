@@ -135,7 +135,6 @@ export function WorkspaceSidebar({
   const hasLoadedSettingsRef = useRef(false);
   const [showNewFileMenu, setShowNewFileMenu] = useState(false);
   const [newFileMenuPosition, setNewFileMenuPosition] = useState({ x: 0, y: 0 });
-  const [mockupEnabled, setMockupEnabled] = useState(false);
   const [pendingFileType, setPendingFileType] = useState<NewFileType | null>(null);
   const [extensionFileTypes, setExtensionFileTypes] = useState<ExtensionFileType[]>([]);
 
@@ -497,23 +496,6 @@ export function WorkspaceSidebar({
         setIsGitWorktree(false);
       });
   }, [workspacePath]);
-
-  // Check if mockup feature is enabled
-  useEffect(() => {
-    if (!window.electronAPI?.invoke) {
-      setMockupEnabled(false);
-      return;
-    }
-
-    window.electronAPI.invoke('mockupLM:is-enabled')
-      .then(result => {
-        setMockupEnabled(result === true);
-      })
-      .catch(error => {
-        console.error('Failed to check mockup enabled status:', error);
-        setMockupEnabled(false);
-      });
-  }, []);
 
   // Load git uncommitted files when filter is active
   const loadGitUncommittedFiles = useCallback(async () => {
@@ -1068,7 +1050,6 @@ export function WorkspaceSidebar({
                 selectedFolder={selectedFolder}
                 onFolderSelect={handleSelectedFolderChange}
                 gitStatusMap={showGitStatus ? gitFileStatuses : undefined}
-                mockupEnabled={mockupEnabled}
                 extensionFileTypes={extensionFileTypes}
               />
             )}
@@ -1106,7 +1087,6 @@ export function WorkspaceSidebar({
               y={newFileMenuPosition.y}
               onSelect={handleNewFileTypeSelect}
               onClose={() => setShowNewFileMenu(false)}
-              mockupEnabled={mockupEnabled}
               extensionFileTypes={extensionFileTypes}
             />
           )}

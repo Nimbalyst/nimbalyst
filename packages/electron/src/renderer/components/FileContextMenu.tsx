@@ -20,8 +20,6 @@ interface FileContextMenuProps {
   onViewHistory?: (filePath: string) => void;
   onViewWorkspaceHistory?: (folderPath: string) => void;
   selectedPaths?: Set<string>;
-  /** Whether mockup files are enabled */
-  mockupEnabled?: boolean;
   /** Extension-contributed file types */
   extensionFileTypes?: ExtensionFileType[];
 }
@@ -43,7 +41,6 @@ export function FileContextMenu({
   onViewHistory,
   onViewWorkspaceHistory,
   selectedPaths,
-  mockupEnabled = false,
   extensionFileTypes = []
 }: FileContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -248,12 +245,10 @@ export function FileContextMenu({
                 <MaterialSymbol icon="description" size={18} />
                 <span>New Markdown File</span>
               </div>
-              {mockupEnabled && (
-                <div className="file-context-menu-item" onClick={() => { onNewFile(filePath, 'mockup'); onClose(); }}>
-                  <MaterialSymbol icon="web" size={18} />
-                  <span>New Mockup</span>
-                </div>
-              )}
+              <div className="file-context-menu-item" onClick={() => { onNewFile(filePath, 'mockup'); onClose(); }}>
+                <MaterialSymbol icon="web" size={18} />
+                <span>New Mockup</span>
+              </div>
               {extensionFileTypes.map((extType) => (
                 <div
                   key={extType.extension}
