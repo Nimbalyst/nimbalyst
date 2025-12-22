@@ -101,6 +101,8 @@ const WorktreeFilesMode = forwardRef<WorktreeFilesModeRef, WorktreeFilesModeProp
   const [isGitWorktree, setIsGitWorktree] = useState(false);
   const [rightPanelTab, setRightPanelTab] = useState<'chat' | 'files'>('chat');
   const [panelCollapsed, setPanelCollapsed] = useState(false);
+  const [rightPanelWidth, setRightPanelWidth] = useState(320);
+  const isResizingRef = useRef(false);
   const [isNewFileModalOpen, setIsNewFileModalOpen] = useState(false);
   const [newFileDirectory, setNewFileDirectory] = useState<string | null>(null);
   const [filterMenuPosition, setFilterMenuPosition] = useState({ x: 0, y: 0 });
@@ -430,6 +432,40 @@ const WorktreeFilesMode = forwardRef<WorktreeFilesModeRef, WorktreeFilesModeProp
     loadSessionFileFilters();
   }, [loadSessionFileFilters]);
 
+  // Handle right panel resize
+  const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingRef.current = true;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, []);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizingRef.current) return;
+
+      // Calculate width from right edge of window
+      const newWidth = Math.min(Math.max(280, window.innerWidth - e.clientX), window.innerWidth * 0.6);
+      setRightPanelWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      if (!isResizingRef.current) return;
+
+      isResizingRef.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
+
   const filterFileTree = useCallback((items: FileTreeItem[], filter: FileTreeFilter): FileTreeItem[] => {
     const includeSpecialDirectory = (name: string) => SPECIAL_DIRECTORIES.includes(name);
 
@@ -585,7 +621,18 @@ const WorktreeFilesMode = forwardRef<WorktreeFilesModeRef, WorktreeFilesModeProp
         )}
       </div>
 
-      <div className={`worktree-files-right-panel ${rightPanelClassName}`}>
+      {/* Resize handle */}
+      <div
+        className={`worktree-resize-handle ${panelCollapsed ? 'is-hidden' : ''}`}
+        onMouseDown={handleResizeMouseDown}
+      >
+        <div className="worktree-resize-handle-inner" />
+      </div>
+
+      <div
+        className={`worktree-files-right-panel ${rightPanelClassName}`}
+        style={{ width: panelCollapsed ? 48 : rightPanelWidth }}
+      >
         <div className="worktree-right-panel-header">
           <div className="worktree-right-tabs">
             <button
