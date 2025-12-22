@@ -139,113 +139,85 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
   }, [tabs, tabOrder, activeTabId, onTabClose, onTabChange, MAX_CLOSED_TAB_HISTORY]);
 
   // Add a new tab
+  // NOTE: This function checks for existing tabs synchronously using the tabs Map from the closure.
+  // We cannot rely on mutating variables inside setTabs callbacks because React 18 batches state
+  // updates, which means the callback may be deferred and not execute before this function returns.
   const addTab = useCallback((filePath: string, content: string = '', switchToTab: boolean = true): string | null => {
     if (!enabled) {
       return null;
     }
 
-    // Use ref to store the tab ID that was created or found
-    let resultTabId: string | null = null;
-    let isNewTab = false;
-    let tabToCloseId: string | null = null;
-
-    // Check if tab already exists and add new tab in a single state update
-    setTabs(prev => {
-      // Check if tab already exists using the LATEST state
-      const existingTab = Array.from(prev.values()).find(tab => tab.filePath === filePath);
-      if (existingTab) {
-        // Tab exists in Map - tabOrder repair happens after setTabs if needed
-        resultTabId = existingTab.id;
-        if (switchToTab) {
-          setActiveTabId(existingTab.id);
-        }
-        return prev; // Return unchanged state
+    // Check if tab already exists SYNCHRONOUSLY using the closure's tabs Map
+    // This avoids the React 18 batching issue where setTabs callback is deferred
+    const existingTab = Array.from(tabs.values()).find(tab => tab.filePath === filePath);
+    if (existingTab) {
+      // Tab exists - just switch to it and repair tabOrder if needed
+      if (switchToTab) {
+        setActiveTabId(existingTab.id);
       }
-
-      // Check max tabs limit
-      if (prev.size >= maxTabs) {
-        console.warn('[useTabs] Max tabs check triggered:', { currentTabs: prev.size, maxTabs });
-        // Try to close an unpinned, saved tab
-        const unpinnedSavedTabs = Array.from(prev.values()).filter(
-          tab => !tab.isPinned && !tab.isDirty
-        );
-
-        if (unpinnedSavedTabs.length === 0) {
-          console.warn('Cannot add new tab: max tabs reached and all tabs are pinned or dirty');
-          resultTabId = null;
-          return prev; // Return unchanged state
-        }
-
-        // Mark tab for removal (will close it after state update)
-        tabToCloseId = unpinnedSavedTabs[0].id;
-      }
-
-      // Create new tab
-      const tabId = generateTabId();
-      const fileName = getFileName(filePath) || 'Untitled';
-
-      const newTab: TabData = {
-        id: tabId,
-        filePath,
-        fileName,
-        content,
-        isDirty: false,
-        isPinned: false,
-        lastSaved: new Date(),
-        contentHash: simpleHash(content),
-        contentLoadedAt: new Date()
-      };
-
-      resultTabId = tabId;
-      isNewTab = true;
-      // console.log('[useTabs] Creating new tab:', { tabId, fileName, filePath });
-      return new Map(prev).set(tabId, newTab);
-    });
-
-    // Close tab if we hit max limit (do this AFTER state update completes)
-    if (tabToCloseId) {
-      removeTab(tabToCloseId);
-    }
-
-    // Update tab order if we created a new tab
-    if (isNewTab && resultTabId) {
-      setTabOrder(prev => [...prev, resultTabId!]);
-    } else if (resultTabId && !isNewTab) {
-      // BUGFIX: Repair state corruption - tab exists in Map but might not be in tabOrder
-      // This can happen due to persistence issues or race conditions
+      // Repair state corruption - tab exists in Map but might not be in tabOrder
       setTabOrder(prev => {
-        if (!prev.includes(resultTabId!)) {
-          return [...prev, resultTabId!];
+        if (!prev.includes(existingTab.id)) {
+          return [...prev, existingTab.id];
         }
         return prev;
       });
+      return existingTab.id;
     }
 
-    // Only switch to the new tab if requested
-    if (switchToTab && resultTabId) {
-      setActiveTabId(resultTabId);
-      // console.log('[useTabs] Set activeTabId to:', resultTabId);
+    // Check max tabs limit (synchronously)
+    if (tabs.size >= maxTabs) {
+      // Try to close an unpinned, saved tab
+      const unpinnedSavedTabs = Array.from(tabs.values()).filter(
+        tab => !tab.isPinned && !tab.isDirty
+      );
+
+      if (unpinnedSavedTabs.length === 0) {
+        console.warn('Cannot add new tab: max tabs reached and all tabs are pinned or dirty');
+        return null;
+      }
+
+      // Close the tab to make room
+      removeTab(unpinnedSavedTabs[0].id);
     }
-    // console.log('[useTabs] About to check file watcher condition');
+
+    // Create new tab - generate ID synchronously so we can return it
+    const tabId = generateTabId();
+    const fileName = getFileName(filePath) || 'Untitled';
+
+    const newTab: TabData = {
+      id: tabId,
+      filePath,
+      fileName,
+      content,
+      isDirty: false,
+      isPinned: false,
+      lastSaved: new Date(),
+      contentHash: simpleHash(content),
+      contentLoadedAt: new Date()
+    };
+
+    // Add to tabs Map
+    setTabs(prev => new Map(prev).set(tabId, newTab));
+
+    // Add to tab order
+    setTabOrder(prev => [...prev, tabId]);
+
+    // Switch to new tab if requested
+    if (switchToTab) {
+      setActiveTabId(tabId);
+    }
 
     // Start watching the file for external changes (skip virtual files)
-    // Access window.electronAPI directly to avoid stale closure
     const electronAPI = (window as any).electronAPI;
-    // console.log('[useTabs] electronAPI exists?', !!electronAPI, 'filePath:', filePath);
-
     if (electronAPI && !filePath.startsWith('virtual://')) {
-      // console.log('[useTabs] Calling start-watching-file for:', filePath);
-      electronAPI.invoke('start-watching-file', filePath).then((result: any) => {
-        // console.log('[useTabs] start-watching-file result:', result);
-      }).catch((err: Error) => {
+      electronAPI.invoke('start-watching-file', filePath).catch((err: Error) => {
         console.error('[useTabs] Failed to start watching file:', err);
       });
-    } else {
-      // console.log('[useTabs] NOT calling start-watching-file - electronAPI:', !!electronAPI, 'isVirtual:', filePath.startsWith('virtual://'));
     }
 
-    return resultTabId;
-  }, [enabled, tabs, maxTabs, generateTabId, onTabChange, removeTab]);
+    return tabId;
+  }, [enabled, tabs, maxTabs, generateTabId, removeTab]);
 
   // Switch to a different tab
   const switchTab = useCallback((tabId: string, fromNavigation: boolean = false): void => {
