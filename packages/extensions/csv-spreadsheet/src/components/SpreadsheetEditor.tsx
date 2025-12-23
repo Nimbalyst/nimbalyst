@@ -156,6 +156,9 @@ export function SpreadsheetEditor({
   // Ref for the editor container (defined early for use in effects)
   const editorRef = useRef<HTMLDivElement>(null);
 
+  // Track timestamp of last blocked Cmd+key - used to block edit mode and input events
+  const lastCmdKeyBlockedRef = useRef(0);
+
   // Selection state (owned locally, updated from RevoGrid events)
   const [selectedCell, setSelectedCell] = useState<{ row: number; col: number } | null>(null);
   const [selectionRange, setSelectionRange] = useState<NormalizedSelectionRange | null>(null);
@@ -314,7 +317,7 @@ export function SpreadsheetEditor({
     return gridRowIndex + headerRowCount;
   }, [headerRowCount]);
 
-  // Handle before edit - inject raw value for formulas
+  // Handle before edit - inject raw value for formulas and BLOCK edit if Cmd is held
   const handleBeforeEdit = useCallback(
     (event: RevoGridCustomEvent<{
       rowIndex?: number;
@@ -324,6 +327,15 @@ export function SpreadsheetEditor({
       model?: Record<string, unknown>;
       type?: string;
     } | null>) => {
+      // CRITICAL: Block edit mode if triggered within 100ms of a Cmd+key press
+      // This prevents RevoGrid from opening edit mode when user presses Cmd+F, Cmd+K, etc.
+      const timeSinceBlock = Date.now() - lastCmdKeyBlockedRef.current;
+      if (timeSinceBlock < 100) {
+        console.log('[CSV] BLOCKING edit start - Cmd+key was pressed', timeSinceBlock, 'ms ago');
+        event.preventDefault();
+        return;
+      }
+
       if (!event.detail) return;
 
       const { rowIndex, prop, type } = event.detail;
@@ -717,44 +729,52 @@ export function SpreadsheetEditor({
 
   // Capture listener for Cmd+S and Cmd+V to intercept before RevoGrid
   // Only handles keys when focus is within the spreadsheet editor
+  // We add listeners at DOCUMENT level in capture phase to intercept before ANY element
   useEffect(() => {
     const editor = editorRef.current;
     if (!editor) return;
 
-    const handleCapture = (event: KeyboardEvent) => {
+    const handleKeydownCapture = (event: KeyboardEvent) => {
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const cmdOrCtrl = isMac ? event.metaKey : event.ctrlKey;
+
+      // Log Cmd+key presses for debugging
+      if (cmdOrCtrl) {
+        console.log('[CSV Keyboard] keydown capture:', {
+          key: event.key,
+          metaKey: event.metaKey,
+          ctrlKey: event.ctrlKey,
+          target: (event.target as HTMLElement)?.tagName,
+          targetClass: (event.target as HTMLElement)?.className,
+          isActive,
+          dialogOpen: isDialogOpen(),
+        });
+      }
+
       // Don't handle if a dialog is open or editor is inactive
       // Use synchronous isDialogOpen() check instead of dialogOpen state
       // because state updates are async and can miss the first keystroke
       if (isDialogOpen() || !isActive) {
+        console.log('[CSV Keyboard] Skipping - dialog open or inactive');
         return;
       }
 
-      // Only handle events that originated within this editor
-      const target = event.target as HTMLElement | null;
-      const isTargetInEditor = target && editor.contains(target);
-
-      // Also check active element for safety
+      // Check active element
       const activeEl = document.activeElement as HTMLElement | null;
-      const isActiveInEditor = activeEl && editor.contains(activeEl);
 
-      // Ignore if the event didn't originate from this editor
-      if (!isTargetInEditor && !isActiveInEditor) {
+      // If focus is on an input/textarea OUTSIDE of our editor entirely, skip
+      // (e.g., AI chat input, other tab's editor)
+      const isExternalInput = (activeEl?.tagName === 'INPUT' || activeEl?.tagName === 'TEXTAREA') &&
+        !editor.contains(activeEl);
+
+      if (isExternalInput) {
+        console.log('[CSV Keyboard] Skipping - external input');
         return;
       }
-
-      // Check if focus is on an input/textarea (could be editing a cell in RevoGrid, which is fine)
-      // But if it's an input outside of RevoGrid's cell editing, ignore
-      const isNonGridInput = (activeEl?.tagName === 'INPUT' || activeEl?.tagName === 'TEXTAREA') &&
-        !activeEl?.closest('revo-grid');
-
-      if (isNonGridInput) {
-        return;
-      }
-
-      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-      const cmdOrCtrl = isMac ? event.metaKey : event.ctrlKey;
 
       if (!cmdOrCtrl) return;
+
+      console.log('[CSV Keyboard] Processing Cmd+' + event.key, { isEditingCell: activeEl?.tagName === 'INPUT' && activeEl?.closest('revo-grid') });
 
       const key = event.key.toLowerCase();
 
@@ -762,6 +782,7 @@ export function SpreadsheetEditor({
       if (key === 's') {
         event.preventDefault();
         event.stopPropagation();
+        event.stopImmediatePropagation();
         window.dispatchEvent(new KeyboardEvent('keydown', {
           key: 's',
           code: 'KeyS',
@@ -772,28 +793,32 @@ export function SpreadsheetEditor({
         return;
       }
 
-      // Handle Cmd+C - copy
+      // Handle Cmd+C - copy (let browser handle in edit mode for partial cell selection)
       const currentSelection = selectionRangeRef.current;
-      if (key === 'c' && currentSelection) {
+      const isEditingCell = activeEl?.tagName === 'INPUT' && activeEl?.closest('revo-grid');
+      if (key === 'c' && currentSelection && !isEditingCell) {
         event.preventDefault();
         event.stopPropagation();
+        event.stopImmediatePropagation();
         spreadsheet.copySelection(currentSelection);
         return;
       }
 
-      // Handle Cmd+X - cut
-      if (key === 'x' && currentSelection) {
+      // Handle Cmd+X - cut (let browser handle in edit mode for partial cell selection)
+      if (key === 'x' && currentSelection && !isEditingCell) {
         event.preventDefault();
         event.stopPropagation();
+        event.stopImmediatePropagation();
         spreadsheet.cutSelection(currentSelection);
         return;
       }
 
-      // Handle Cmd+V - paste from system clipboard
+      // Handle Cmd+V - paste from system clipboard (let browser handle in edit mode)
       const currentCell = selectedCellRef.current;
-      if (key === 'v') {
+      if (key === 'v' && !isEditingCell) {
         event.preventDefault();
         event.stopPropagation();
+        event.stopImmediatePropagation();
 
         if (!currentCell) {
           return;
@@ -813,6 +838,7 @@ export function SpreadsheetEditor({
       if (key === 'z' && !event.shiftKey) {
         event.preventDefault();
         event.stopPropagation();
+        event.stopImmediatePropagation();
         spreadsheet.undo();
         return;
       }
@@ -821,15 +847,50 @@ export function SpreadsheetEditor({
       if (key === 'z' && event.shiftKey) {
         event.preventDefault();
         event.stopPropagation();
+        event.stopImmediatePropagation();
         spreadsheet.redo();
         return;
       }
+
+      // Record timestamp of Cmd+key for beforeeditstart and beforeinput handlers
+      // We DON'T block the keydown itself - let it propagate to Electron menus
+      // Instead, we block RevoGrid from entering edit mode via onBeforeeditstart
+      console.log('[CSV Keyboard] Recording Cmd+' + event.key + ' timestamp for edit blocking');
+      lastCmdKeyBlockedRef.current = Date.now();
     };
 
-    // Add to editor container in capture phase to intercept before RevoGrid
-    editor.addEventListener('keydown', handleCapture, true);
+    // Block ALL beforeinput events that immediately follow a Cmd+key press
+    // Use a timestamp to track when we last blocked a Cmd+key - block inputs within 100ms
+    const handleBeforeInput = (event: InputEvent) => {
+      // Only care about inputs inside the spreadsheet
+      const target = event.target as HTMLElement;
+      if (!editor.contains(target)) return;
+
+      const timeSinceBlock = Date.now() - lastCmdKeyBlockedRef.current;
+      console.log('[CSV Keyboard] beforeinput:', {
+        inputType: event.inputType,
+        data: event.data,
+        timeSinceBlock,
+        target: target?.tagName,
+      });
+
+      // Block ANY text input within 100ms of blocking a Cmd+key
+      // This catches the case where RevoGrid opens edit mode on Cmd+key
+      if (timeSinceBlock < 100 && event.inputType === 'insertText') {
+        console.log('[CSV Keyboard] BLOCKING beforeinput (within 100ms of Cmd+key)');
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+      }
+    };
+
+    // Add to DOCUMENT in capture phase to intercept BEFORE RevoGrid's internal input handlers
+    // This is necessary because RevoGrid's edit input elements have their own keydown handlers
+    document.addEventListener('keydown', handleKeydownCapture, true);
+    document.addEventListener('beforeinput', handleBeforeInput, true);
     return () => {
-      editor.removeEventListener('keydown', handleCapture, true);
+      document.removeEventListener('keydown', handleKeydownCapture, true);
+      document.removeEventListener('beforeinput', handleBeforeInput, true);
     };
   }, [spreadsheet, isActive, isDialogOpen]);
 
