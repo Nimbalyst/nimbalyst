@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.49.9] - 2025-12-23
+
+
+### Changed
+- Redesign project trust dialog with clearer permission choices
+
 ## [0.49.8] - 2025-12-23
 
 
