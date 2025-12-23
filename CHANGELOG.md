@@ -20,6 +20,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.49.10] - 2025-12-23
+
+
+### Added
+- Show dotfiles in file tree when "All Files" filter is selected
+
+### Fixed
+- Quick Open now finds all files including dotfiles and images
+- Session history spinner now animates during processing
+- WebSearch and WebFetch permission "Allow Always" now persists correctly
+
 ## [0.49.9] - 2025-12-23
 
 
