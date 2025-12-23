@@ -94,6 +94,14 @@ let memoryMonitorInterval: NodeJS.Timeout | null = null;
 // Track if app is quitting
 let isAppQuitting = false;
 
+// Track if app is restarting (to prevent session state from being overwritten during window close)
+let isAppRestarting = false;
+
+/** Check if the app is in a restart flow (session state already saved) */
+export function isRestarting(): boolean {
+    return isAppRestarting;
+}
+
 // Track app start time for memory monitoring
 const appStartTime = Date.now();
 
@@ -839,6 +847,8 @@ app.on('before-quit', async (event) => {
     const restartSignalPath = path.join(app.getAppPath(), '.restart-requested');
     if (fs.existsSync(restartSignalPath)) {
         console.log('[QUIT] Restart signal detected, saving session state before restart');
+        // Mark as restarting BEFORE saving to prevent window close handlers from overwriting
+        isAppRestarting = true;
         // Save session state so the session is restored after restart
         try {
             await saveSessionState();

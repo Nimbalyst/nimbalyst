@@ -47,8 +47,12 @@ export async function saveSessionState() {
         lastUpdated: Date.now()
     };
 
+    logger.session.info('[SAVE] Saving session state:', JSON.stringify(sessionState, null, 2));
     saveToStore(sessionState);
-    // logger.session.debug('Saved session state:', sessionState);
+
+    // Verify the save by reading it back
+    const verified = getSessionState();
+    logger.session.info('[SAVE] Verified session state:', JSON.stringify(verified, null, 2));
 }
 
 // Restore session state
@@ -63,11 +67,14 @@ export async function restoreSessionState(): Promise<boolean> {
 
     const sessionState = getSessionState();
 
+    logger.session.info('[RESTORE] Retrieved session state:', JSON.stringify(sessionState, null, 2));
+
     if (!sessionState || !sessionState.windows || sessionState.windows.length === 0) {
+        logger.session.info('[RESTORE] No session state to restore (empty or missing)');
         return false;
     }
 
-    logger.session.info(`Restoring session with ${sessionState.windows.length} window(s)`);
+    logger.session.info(`[RESTORE] Restoring session with ${sessionState.windows.length} window(s)`);
 
     // Sort windows by focus order - LOWEST first, HIGHEST last
     // Windows are shown in creation order, and macOS will naturally focus the last shown window

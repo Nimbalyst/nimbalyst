@@ -14,6 +14,7 @@ import { setFileSystemService, clearFileSystemService } from '@nimbalyst/runtime
 import { navigationHistoryService } from '../services/NavigationHistoryService';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { FeatureTrackingService } from '../services/analytics/FeatureTrackingService';
+import { ExtensionLogService } from '../services/ExtensionLogService';
 
 // Window management
 export const windows = new Map<number, BrowserWindow>();
@@ -252,9 +253,14 @@ export function createWindow(
         // Increase max listeners to avoid warning (we have multiple event handlers)
         window.webContents.setMaxListeners(20);
 
-        // Capture console messages from renderer (for debugging)
-        if (process.env.NODE_ENV !== 'production') {
-            window.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+        // Capture console messages from renderer for debugging and extension log capture
+        // Always capture for extension logs, but only emit to IPC in dev mode
+        window.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+            // Always send to extension log service for agent debugging
+            ExtensionLogService.getInstance().addRendererLog(level, message, line, sourceId);
+
+            // Only emit to main process file logging in dev mode
+            if (process.env.NODE_ENV !== 'production') {
                 const levelNames = ['verbose', 'info', 'warning', 'error'];
                 const levelName = levelNames[level] || 'unknown';
 
@@ -269,8 +275,8 @@ export function createWindow(
 
                 // Emit to IPC for file logging
                 ipcMain.emit('console-log', null, logData);
-            });
-        }
+            }
+        });
 
         // Handle window close with unsaved changes
         window.on('close', (event) => {
@@ -321,8 +327,15 @@ export function createWindow(
 
             // Save global session state (will not include this window since we removed it from windowStates)
             // This ensures closed windows are not restored on next launch
-            import('../session/SessionState').then(({ saveSessionState }) => {
-                saveSessionState();
+            // SKIP during restart - session state was already saved before windows close
+            import('../index').then(({ isRestarting }) => {
+                if (isRestarting()) {
+                    console.log('[MAIN] Skipping session save during restart (session already saved)');
+                    return;
+                }
+                import('../session/SessionState').then(({ saveSessionState }) => {
+                    saveSessionState();
+                });
             });
         });
 
