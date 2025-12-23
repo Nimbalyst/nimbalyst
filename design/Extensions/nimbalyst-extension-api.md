@@ -11,6 +11,8 @@ This document provides the TypeScript API definitions for the Nimbalyst Extensio
 | AI Tools | Implemented | Integrated with Claude Code MCP |
 | New File Menu | Implemented | Via `contributions.newFileMenu` |
 | File Icons | Implemented | Via `contributions.fileIcons` |
+| AI Diff Mode | Implemented | Via `diffState` prop and `CustomEditorCapabilities` |
+| Host Callbacks | Implemented | Via `onRegisterCallbacks` for structured communication |
 | Permissions | Partial | Declared but not fully enforced |
 | Commands | Not implemented | Planned |
 | Menu contributions | Not implemented | Planned |
@@ -200,6 +202,187 @@ interface CustomEditorComponentProps {
 
   /** Trigger document rename */
   onRenameDocument?: () => void;
+
+  // ============================================================================
+  // Advanced API (for editors that support AI diff mode)
+  // ============================================================================
+
+  /**
+   * Register host callbacks when editor mounts.
+   * Editors should call this once on mount with their implementation.
+   */
+  onRegisterCallbacks?: (callbacks: CustomEditorHostCallbacks) => void;
+
+  /**
+   * Called when editor unmounts - clean up host registration.
+   */
+  onUnregisterCallbacks?: () => void;
+
+  /**
+   * Diff mode state for editors that support diff visualization.
+   * Only provided if the editor declared supportsDiffMode capability.
+   * When active, the editor should show a visual diff between baseline and target.
+   */
+  diffState?: CustomEditorDiffState;
+
+  /**
+   * Called when user accepts the diff (keeps the AI's changes).
+   * Only relevant when diffState.isActive is true.
+   */
+  onAcceptDiff?: () => void;
+
+  /**
+   * Called when user rejects the diff (reverts to baseline).
+   * Only relevant when diffState.isActive is true.
+   */
+  onRejectDiff?: () => void;
+
+  /**
+   * Callback to reload content from disk.
+   * Called when file changes externally and editor should refresh.
+   */
+  onReloadContent?: (callback: (newContent: string) => void) => void;
+}
+```
+
+## AI Diff Mode Support
+
+Custom editors can opt-in to showing visual diffs when AI agents edit their files. This requires implementing a few additional interfaces.
+
+### Diff State
+
+When an AI agent edits a file, the host provides diff state to editors that support it:
+
+```typescript
+interface CustomEditorDiffState {
+  /** Whether diff mode is currently active */
+  isActive: boolean;
+
+  /** Pre-edit content (the baseline before AI changes) */
+  baseline: string;
+
+  /** AI's proposed content (what's now on disk) */
+  target: string;
+
+  /** History tag ID for tracking this diff */
+  tagId: string;
+
+  /** AI session ID that made the edit */
+  sessionId: string;
+}
+```
+
+### Editor Capabilities
+
+Editors declare their capabilities so the host knows what features to enable:
+
+```typescript
+interface CustomEditorCapabilities {
+  /** Can serialize content to/from string (default: true) */
+  supportsTextContent?: boolean;
+
+  /** Can handle binary data */
+  supportsBinaryContent?: boolean;
+
+  /** Can show before/after diff visualization */
+  supportsDiffMode?: boolean;
+
+  /** Can handle incremental content streaming */
+  supportsStreaming?: boolean;
+
+  /** Has internal undo/redo stack */
+  supportsUndo?: boolean;
+
+  /** Supports find/replace operations */
+  supportsSearch?: boolean;
+}
+```
+
+### Host Callbacks
+
+Editors register callbacks that the host uses to interact with them:
+
+```typescript
+interface CustomEditorHostCallbacks {
+  /** Report that the editor is fully loaded and ready */
+  reportReady: () => void;
+
+  /** Report an error during loading or operation */
+  reportError: (error: Error) => void;
+
+  /** Get current content for saving (replaces onGetContentReady pattern) */
+  getContent: () => string | null;
+
+  /** Get binary content for saving (for binary editors) */
+  getBinaryContent?: () => ArrayBuffer | null;
+
+  /** Report editor capabilities (call once on mount) */
+  reportCapabilities?: (capabilities: CustomEditorCapabilities) => void;
+}
+```
+
+### Example: Diff Mode Implementation
+
+Here's how a custom editor can implement diff mode support:
+
+```typescript
+function MyCustomEditor({
+  filePath,
+  initialContent,
+  diffState,
+  onAcceptDiff,
+  onRejectDiff,
+  onRegisterCallbacks,
+  onUnregisterCallbacks,
+  onGetContentReady,
+}: CustomEditorComponentProps) {
+  const [content, setContent] = useState(initialContent);
+
+  // Register with host on mount
+  useEffect(() => {
+    // Register capabilities and callbacks
+    onRegisterCallbacks?.({
+      reportReady: () => console.log('Editor ready'),
+      reportError: (error) => console.error('Editor error:', error),
+      getContent: () => content,
+      reportCapabilities: (caps) => {
+        // Tell host we support diff mode
+        caps({ supportsDiffMode: true, supportsTextContent: true });
+      },
+    });
+
+    // Also register content getter for legacy API
+    onGetContentReady?.(() => content);
+
+    return () => {
+      onUnregisterCallbacks?.();
+    };
+  }, [content, onRegisterCallbacks, onUnregisterCallbacks, onGetContentReady]);
+
+  // Render diff view when in diff mode
+  if (diffState?.isActive) {
+    return (
+      <div className="diff-view">
+        <div className="diff-header">
+          <span>AI made changes to this file</span>
+          <button onClick={onAcceptDiff}>Accept</button>
+          <button onClick={onRejectDiff}>Reject</button>
+        </div>
+        <DiffViewer
+          oldContent={diffState.baseline}
+          newContent={diffState.target}
+        />
+      </div>
+    );
+  }
+
+  // Normal editing view
+  return (
+    <MyEditorComponent
+      content={content}
+      onChange={setContent}
+    />
+  );
 }
 ```
 

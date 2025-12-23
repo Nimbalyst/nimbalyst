@@ -514,6 +514,12 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           } finally {
             setTimeout(() => {
               isApplyingDiffRef.current = false;
+
+              // Reset dirty state after diff application - user hasn't made any changes
+              // This prevents false-positive autosaves from WYSIWYG rendering differences
+              setIsDirty(false);
+              isDirtyRef.current = false;
+              onDirtyChange?.(false);
             }, 100);
           }
         }
@@ -757,6 +763,12 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     const timer = setInterval(async () => {
       // Log autosave check
       // console.log(`[TabEditor] Autosave timer fired for ${fileName}, isDirty=${isDirtyRef.current}, inDiffMode=${!!pendingAIEditTagRef.current}`);
+
+      // Skip if in diff mode - user should approve/reject AI changes first
+      // This prevents false-positive autosaves from WYSIWYG rendering differences
+      if (pendingAIEditTagRef.current) {
+        return;
+      }
 
       // Skip if not dirty
       if (!isDirtyRef.current) {
@@ -1016,6 +1028,12 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                     // Wait for DOM to fully render with CSS classes
                     await new Promise(resolve => setTimeout(resolve, 500));
                     isApplyingDiffRef.current = false;
+
+                    // Reset dirty state after diff application - user hasn't made any changes
+                    // This prevents false-positive autosaves from WYSIWYG rendering differences
+                    setIsDirty(false);
+                    isDirtyRef.current = false;
+                    onDirtyChange?.(false);
                   }
                 } else {
                   // Code files: Use Monaco's built-in diff editor
@@ -1075,6 +1093,12 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                       // Reset flag after a small delay to ensure content change handler has run
                       await new Promise(resolve => setTimeout(resolve, 100));
                       isApplyingDiffRef.current = false;
+
+                      // Reset dirty state after diff application - user hasn't made any changes
+                      // This prevents false-positive autosaves from WYSIWYG rendering differences
+                      setIsDirty(false);
+                      isDirtyRef.current = false;
+                      onDirtyChange?.(false);
                     }
                   } else {
                     // Code files: Use Monaco's built-in diff editor

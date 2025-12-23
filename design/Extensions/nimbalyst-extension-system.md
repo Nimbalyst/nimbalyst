@@ -30,6 +30,8 @@ The Nimbalyst Extension System is now partially implemented and functional. The 
 - **Extension Discovery & Loading**: Extensions are discovered from `~/Library/Application Support/@nimbalyst/electron/extensions/`
 - **Custom Editors**: Extensions can register custom editors for specific file types (e.g., `.prisma` files)
 - **AI Tools**: Extensions can expose AI tools that are integrated with Claude Code via MCP
+- **AI Diff Mode**: Custom editors can opt-in to showing visual diffs when AI agents edit their files
+- **Host Callbacks**: Structured callback interface for editor-host communication
 - **New File Menu**: Extensions can add items to the "New File" menu
 - **Theme Integration**: Extension CSS uses host CSS variables for theme compatibility
 - **Hot Reload**: Extensions can be reloaded without restarting the app
