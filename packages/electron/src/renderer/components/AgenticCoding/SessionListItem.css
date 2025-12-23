@@ -73,6 +73,19 @@
   opacity: 0.8;
 }
 
+.session-list-item-status.processing .material-symbols-outlined {
+  animation: session-list-item-spin 1s linear infinite;
+}
+
+@keyframes session-list-item-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .session-list-item-status.unread {
   opacity: 1;
 }
