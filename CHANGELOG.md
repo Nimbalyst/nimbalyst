@@ -20,6 +20,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.49.11] - 2025-12-23
+
+
+### Added
+- Beta badge to Smart Permissions option in trust toast
+
+### Changed
+- Simplify permission trust model and add Allow All WebFetches option
+
+### Fixed
+- Update button label from "Trust Project" to "Save"
+
 ## [0.49.10] - 2025-12-23
 
 
