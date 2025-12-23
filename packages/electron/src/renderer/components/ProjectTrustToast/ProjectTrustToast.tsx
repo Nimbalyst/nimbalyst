@@ -25,6 +25,7 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
   const [isVisible, setIsVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isChangingMode, setIsChangingMode] = useState(false);
+  const [selectedMode, setSelectedMode] = useState<TrustChoice>('ask');
   const toastRef = useRef<HTMLDivElement>(null);
 
   // Handle forceShow prop - show toast when parent wants to change mode
@@ -115,7 +116,7 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
     }
   }, [handleDismiss]);
 
-  const handleChoice = useCallback(async (choice: TrustChoice) => {
+  const handleSave = useCallback(async () => {
     if (!workspacePath || isSubmitting) return;
 
     setIsSubmitting(true);
@@ -123,7 +124,7 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
     try {
       // Trust the workspace with the selected permission mode
       await window.electronAPI.invoke('permissions:trustWorkspace', workspacePath);
-      await window.electronAPI.invoke('permissions:setPermissionMode', workspacePath, choice);
+      await window.electronAPI.invoke('permissions:setPermissionMode', workspacePath, selectedMode);
       setIsVisible(false);
       setIsChangingMode(false);
       // Reset parent's forceShow state
@@ -133,7 +134,14 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
     } finally {
       setIsSubmitting(false);
     }
-  }, [workspacePath, isSubmitting, onDismiss]);
+  }, [workspacePath, isSubmitting, selectedMode, onDismiss]);
+
+  const handleDontTrust = useCallback(() => {
+    // Just dismiss without trusting - the project remains untrusted
+    setIsVisible(false);
+    setIsChangingMode(false);
+    onDismiss?.();
+  }, [onDismiss]);
 
   const handleOpenSettings = useCallback(() => {
     setIsVisible(false);
@@ -152,7 +160,7 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
   return (
     <div className="project-trust-toast-overlay" onClick={handleOverlayClick}>
       <div className="project-trust-toast" ref={toastRef}>
-        {/* Header */}
+        {/* Header with Don't Trust button */}
         <div className="project-trust-toast-header">
           <span className="project-trust-toast-icon">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -165,6 +173,13 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
               This project wants to use the AI agent
             </p>
           </div>
+          <button
+            className="project-trust-toast-dont-trust"
+            onClick={handleDontTrust}
+            disabled={isSubmitting}
+          >
+            Don't Trust
+          </button>
         </div>
 
         {/* Warning */}
@@ -184,71 +199,95 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
           Choose how the agent handles tool calls in this project:
         </p>
 
-        {/* Options */}
-        <div className="project-trust-toast-options">
+        {/* Mode Toggle Buttons */}
+        <div className="project-trust-toast-mode-toggle">
           <button
-            className="project-trust-toast-option project-trust-toast-option--primary"
-            onClick={() => handleChoice('ask')}
+            className={`project-trust-toast-mode-btn ${selectedMode === 'ask' ? 'project-trust-toast-mode-btn--selected' : ''}`}
+            onClick={() => setSelectedMode('ask')}
             disabled={isSubmitting}
           >
-            <div className="project-trust-toast-option-header">
-              <span className="project-trust-toast-option-label">Smart Permissions</span>
-              <span className="project-trust-toast-option-badge">Recommended</span>
-            </div>
-            <span className="project-trust-toast-option-desc">
-              Safe operations auto-approved. New patterns remembered when you approve them.
-            </span>
+            <span className="project-trust-toast-mode-label">Smart Permissions</span>
+            <span className="project-trust-toast-mode-badge">Recommended</span>
           </button>
-
           <button
-            className="project-trust-toast-option project-trust-toast-option--danger"
-            onClick={() => handleChoice('allow-all')}
+            className={`project-trust-toast-mode-btn ${selectedMode === 'allow-all' ? 'project-trust-toast-mode-btn--selected project-trust-toast-mode-btn--danger' : ''}`}
+            onClick={() => setSelectedMode('allow-all')}
             disabled={isSubmitting}
           >
-            <div className="project-trust-toast-option-header">
-              <span className="project-trust-toast-option-label">Always Allow</span>
-              <span className="project-trust-toast-option-badge project-trust-toast-option-badge--danger">Risky</span>
-            </div>
-            <span className="project-trust-toast-option-desc">
-              Agent runs all tools without asking
-            </span>
+            <span className="project-trust-toast-mode-label">Always Allow</span>
+            {selectedMode === 'allow-all' && (
+              <span className="project-trust-toast-mode-badge project-trust-toast-mode-badge--danger">Risky</span>
+            )}
           </button>
         </div>
 
-        {/* Features highlight */}
-        <div className="project-trust-toast-features">
-          <div className="project-trust-toast-features-header">
-            With Smart Permissions, you can:
-          </div>
-          <ul className="project-trust-toast-features-list">
-            <li>
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                <path d="M13.5 4.5l-7 7-4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              <span><strong>Permanently allow</strong> specific tool patterns (not just for this session)</span>
-            </li>
-            <li>
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                <path d="M13.5 4.5l-7 7-4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              <span><strong>Fine-grained bash control</strong> - allow "npm test" but block "rm -rf"</span>
-            </li>
-            <li>
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                <path d="M13.5 4.5l-7 7-4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              <span><strong>Additional directories</strong> - grant access to folders outside the project</span>
-            </li>
-            <li>
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                <path d="M13.5 4.5l-7 7-4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              <span><strong>URL patterns</strong> - control which domains the agent can fetch</span>
-            </li>
-          </ul>
+        {/* Mode Details */}
+        <div className="project-trust-toast-mode-details">
+          {selectedMode === 'ask' ? (
+            <>
+              <p className="project-trust-toast-mode-summary">
+                Safe operations auto-approved. New patterns remembered when you approve them.
+              </p>
+              <ul className="project-trust-toast-features-list">
+                <li>
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                    <path d="M13.5 4.5l-7 7-4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  <span><strong>Permanently allow</strong> specific tool patterns (not just for this session)</span>
+                </li>
+                <li>
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                    <path d="M13.5 4.5l-7 7-4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  <span><strong>Fine-grained bash control</strong> - allow "npm test" but block "rm -rf"</span>
+                </li>
+                <li>
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                    <path d="M13.5 4.5l-7 7-4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  <span><strong>Additional directories</strong> - grant access to folders outside the project</span>
+                </li>
+                <li>
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                    <path d="M13.5 4.5l-7 7-4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  <span><strong>URL patterns</strong> - control which domains the agent can fetch</span>
+                </li>
+              </ul>
+            </>
+          ) : (
+            <>
+              <p className="project-trust-toast-mode-summary project-trust-toast-mode-summary--warning">
+                The agent will run all tools without asking for permission. This gives the AI full control over file operations, shell commands, and network requests.
+              </p>
+              <ul className="project-trust-toast-features-list project-trust-toast-features-list--warning">
+                <li>
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                    <path d="M8 5.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                    <path d="M8 11h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                  <span>All file read/write operations are automatically approved</span>
+                </li>
+                <li>
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                    <path d="M8 5.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                    <path d="M8 11h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                  <span>All shell commands run without confirmation</span>
+                </li>
+                <li>
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                    <path d="M8 5.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                    <path d="M8 11h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                  <span>Only use with projects you fully trust</span>
+                </li>
+              </ul>
+            </>
+          )}
         </div>
 
-        {/* Footer */}
+        {/* Footer with Save/Cancel buttons */}
         <div className="project-trust-toast-footer">
           <button
             className="project-trust-toast-settings-link"
@@ -256,6 +295,22 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
           >
             Advanced settings
           </button>
+          <div className="project-trust-toast-actions">
+            <button
+              className="project-trust-toast-cancel"
+              onClick={handleDismiss}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </button>
+            <button
+              className="project-trust-toast-save"
+              onClick={handleSave}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? 'Saving...' : 'Trust Project'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -59,6 +59,31 @@
   margin: 0;
 }
 
+/* Don't Trust button in header */
+.project-trust-toast-dont-trust {
+  background: none;
+  border: 1px solid var(--border-primary);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.project-trust-toast-dont-trust:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  border-color: var(--text-tertiary);
+}
+
+.project-trust-toast-dont-trust:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Warning */
 .project-trust-toast-warning {
   display: flex;
@@ -87,51 +112,53 @@
   margin: 0 0 12px 0;
 }
 
-/* Options */
-.project-trust-toast-options {
+/* Mode Toggle Buttons */
+.project-trust-toast-mode-toggle {
   display: flex;
-  flex-direction: column;
   gap: 8px;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
-.project-trust-toast-option {
+.project-trust-toast-mode-btn {
+  flex: 1;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  width: 100%;
-  padding: 14px 16px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
   border-radius: 8px;
   border: 1px solid var(--border-primary);
   background: var(--surface-secondary);
   cursor: pointer;
   transition: all 0.15s ease;
-  text-align: left;
 }
 
-.project-trust-toast-option:hover:not(:disabled) {
+.project-trust-toast-mode-btn:hover:not(:disabled):not(.project-trust-toast-mode-btn--selected) {
   background: var(--surface-hover);
 }
 
-.project-trust-toast-option:disabled {
+.project-trust-toast-mode-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
 
-.project-trust-toast-option-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
+.project-trust-toast-mode-btn--selected {
+  border-color: var(--primary-color);
+  background: color-mix(in srgb, var(--primary-color) 12%, var(--surface-secondary));
 }
 
-.project-trust-toast-option-label {
-  font-size: 15px;
+.project-trust-toast-mode-btn--selected.project-trust-toast-mode-btn--danger {
+  border-color: #ef4444;
+  background: color-mix(in srgb, #ef4444 12%, var(--surface-secondary));
+}
+
+.project-trust-toast-mode-label {
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
 }
 
-.project-trust-toast-option-badge {
+.project-trust-toast-mode-badge {
   font-size: 11px;
   font-weight: 500;
   padding: 2px 8px;
@@ -140,50 +167,31 @@
   color: var(--primary-color);
 }
 
-.project-trust-toast-option-badge--danger {
+.project-trust-toast-mode-badge--danger {
   background: color-mix(in srgb, #ef4444 15%, transparent);
   color: #ef4444;
 }
 
-.project-trust-toast-option-desc {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-/* Primary option (Ask for Approval) */
-.project-trust-toast-option--primary {
-  border-color: var(--primary-color);
-  background: color-mix(in srgb, var(--primary-color) 8%, var(--surface-secondary));
-}
-
-.project-trust-toast-option--primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--primary-color) 15%, var(--surface-secondary));
-}
-
-/* Danger option (Always Allow) */
-.project-trust-toast-option--danger {
-  border-color: var(--border-primary);
-}
-
-.project-trust-toast-option--danger:hover:not(:disabled) {
-  border-color: color-mix(in srgb, #ef4444 30%, var(--border-primary));
-}
-
-/* Features section */
-.project-trust-toast-features {
+/* Mode Details Section */
+.project-trust-toast-mode-details {
   background: var(--surface-secondary);
   border-radius: 8px;
-  padding: 14px 16px;
+  padding: 16px;
   margin-bottom: 16px;
 }
 
-.project-trust-toast-features-header {
+.project-trust-toast-mode-summary {
   font-size: 13px;
-  font-weight: 500;
   color: var(--text-secondary);
-  margin-bottom: 10px;
+  margin: 0 0 12px 0;
+  line-height: 1.5;
 }
 
+.project-trust-toast-mode-summary--warning {
+  color: #f59e0b;
+}
+
+/* Features list (inside mode details) */
 .project-trust-toast-features-list {
   list-style: none;
   margin: 0;
@@ -213,9 +221,15 @@
   font-weight: 500;
 }
 
+.project-trust-toast-features-list--warning li svg {
+  color: #f59e0b;
+}
+
 /* Footer */
 .project-trust-toast-footer {
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .project-trust-toast-settings-link {
@@ -232,4 +246,52 @@
 .project-trust-toast-settings-link:hover {
   color: var(--text-secondary);
   text-decoration: underline;
+}
+
+.project-trust-toast-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.project-trust-toast-cancel {
+  background: none;
+  border: 1px solid var(--border-primary);
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.project-trust-toast-cancel:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.project-trust-toast-cancel:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.project-trust-toast-save {
+  background: var(--primary-color);
+  border: none;
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.project-trust-toast-save:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.project-trust-toast-save:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
