@@ -25,6 +25,7 @@ import { parse as parseUrl } from 'url';
 import { spawn } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
+import { ExtensionLogService } from '../services/ExtensionLogService';
 
 // ============================================================================
 // Manifest Validation
@@ -415,6 +416,23 @@ async function runBuild(extensionPath: string): Promise<{ success: boolean; stdo
       return;
     }
 
+    // Try to get extension ID from manifest for log tagging
+    let extensionId: string | undefined;
+    const manifestPath = path.join(extensionPath, 'manifest.json');
+    try {
+      if (fs.existsSync(manifestPath)) {
+        const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+        extensionId = manifest.id;
+      }
+    } catch {
+      // Ignore manifest errors during build - they'll be caught in validation
+    }
+
+    const logService = ExtensionLogService.getInstance();
+
+    // Log build start
+    logService.addMainLog('info', `Starting build for extension: ${extensionId || extensionPath}`, extensionId);
+
     let stdout = '';
     let stderr = '';
 
@@ -425,22 +443,39 @@ async function runBuild(extensionPath: string): Promise<{ success: boolean; stdo
     });
 
     child.stdout.on('data', (data) => {
-      stdout += data.toString();
+      const chunk = data.toString();
+      stdout += chunk;
+      // Log build output as it comes in
+      if (extensionId) {
+        logService.addBuildLog(extensionId, chunk, false);
+      }
     });
 
     child.stderr.on('data', (data) => {
-      stderr += data.toString();
+      const chunk = data.toString();
+      stderr += chunk;
+      // Log build errors as they come in
+      if (extensionId) {
+        logService.addBuildLog(extensionId, chunk, true);
+      }
     });
 
     child.on('close', (code) => {
+      const success = code === 0;
+      logService.addMainLog(
+        success ? 'info' : 'error',
+        `Build ${success ? 'succeeded' : 'failed'} for extension: ${extensionId || extensionPath}`,
+        extensionId
+      );
       resolve({
-        success: code === 0,
+        success,
         stdout,
         stderr
       });
     });
 
     child.on('error', (error) => {
+      logService.addMainLog('error', `Build process error: ${error.message}`, extensionId);
       resolve({
         success: false,
         stdout,
@@ -451,6 +486,7 @@ async function runBuild(extensionPath: string): Promise<{ success: boolean; stdo
     // Timeout after 60 seconds
     setTimeout(() => {
       child.kill();
+      logService.addMainLog('error', 'Build timed out after 60 seconds', extensionId);
       resolve({
         success: false,
         stdout,
@@ -572,6 +608,47 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
                   type: 'object',
                   properties: {},
                   required: []
+                }
+              },
+              {
+                name: 'extension_get_logs',
+                description: 'Get recent logs from extension development. Includes console output from the renderer (extension code), main process logs, and build output. Use this to debug extension issues.',
+                inputSchema: {
+                  type: 'object',
+                  properties: {
+                    extensionId: {
+                      type: 'string',
+                      description: 'Filter logs to a specific extension ID (optional)'
+                    },
+                    lastSeconds: {
+                      type: 'number',
+                      description: 'Get logs from the last N seconds (default: 60, max: 300)'
+                    },
+                    logLevel: {
+                      type: 'string',
+                      enum: ['error', 'warn', 'info', 'debug', 'all'],
+                      description: 'Minimum log level to include (default: all)'
+                    },
+                    source: {
+                      type: 'string',
+                      enum: ['renderer', 'main', 'build', 'all'],
+                      description: 'Log source to filter (default: all)'
+                    }
+                  }
+                }
+              },
+              {
+                name: 'extension_get_status',
+                description: 'Get the current status of an installed extension, including whether it loaded successfully and what it contributes (custom editors, AI tools, etc.).',
+                inputSchema: {
+                  type: 'object',
+                  properties: {
+                    extensionId: {
+                      type: 'string',
+                      description: 'The extension ID to query'
+                    }
+                  },
+                  required: ['extensionId']
                 }
               }
             ]
@@ -906,6 +983,146 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
               }
             }
 
+            case 'extension_get_logs': {
+              const logService = ExtensionLogService.getInstance();
+
+              // Parse filter options
+              const extensionId = args?.extensionId as string | undefined;
+              let lastSeconds = args?.lastSeconds as number | undefined;
+              const logLevel = args?.logLevel as 'error' | 'warn' | 'info' | 'debug' | 'all' | undefined;
+              const source = args?.source as 'renderer' | 'main' | 'build' | 'all' | undefined;
+
+              // Validate and cap lastSeconds
+              if (lastSeconds !== undefined) {
+                lastSeconds = Math.min(Math.max(1, lastSeconds), 300);
+              }
+
+              const logs = logService.getLogs({
+                extensionId,
+                lastSeconds: lastSeconds || 60,
+                logLevel: logLevel || 'all',
+                source: source || 'all'
+              });
+
+              const stats = logService.getStats();
+              const formattedLogs = logService.formatLogsForResponse(logs);
+
+              // Build summary header
+              const filterDesc = [
+                extensionId ? `extension: ${extensionId}` : null,
+                `last ${lastSeconds || 60}s`,
+                logLevel && logLevel !== 'all' ? `level: ${logLevel}+` : null,
+                source && source !== 'all' ? `source: ${source}` : null
+              ].filter(Boolean).join(', ');
+
+              const header = `Extension Development Logs (${filterDesc})\n` +
+                `Found ${logs.length} log entries (buffer: ${stats.totalEntries}/${1000})\n` +
+                `Errors: ${stats.byLevel.error}, Warnings: ${stats.byLevel.warn}, ` +
+                `Info: ${stats.byLevel.info}, Debug: ${stats.byLevel.debug}\n` +
+                `---\n`;
+
+              return {
+                content: [{ type: 'text', text: header + formattedLogs }],
+                isError: false
+              };
+            }
+
+            case 'extension_get_status': {
+              const extensionId = args?.extensionId as string;
+
+              if (!extensionId) {
+                return {
+                  content: [{ type: 'text', text: 'Error: extensionId is required' }],
+                  isError: true
+                };
+              }
+
+              // Query extension status via IPC to renderer
+              // We need to send a message to all windows and collect responses
+              const { BrowserWindow } = await import('electron');
+              const windows = BrowserWindow.getAllWindows().filter(w => !w.isDestroyed());
+
+              if (windows.length === 0) {
+                return {
+                  content: [{ type: 'text', text: 'Error: No windows available to query extension status' }],
+                  isError: true
+                };
+              }
+
+              // Create a promise that resolves with extension status
+              return new Promise((resolve) => {
+                const timeout = setTimeout(() => {
+                  resolve({
+                    content: [{ type: 'text', text: `Extension ${extensionId}: Status query timed out. Extension may not be loaded.` }],
+                    isError: false
+                  });
+                }, 5000);
+
+                // Send query to first available window
+                const targetWindow = windows[0];
+
+                // Use a unique channel for the response
+                const responseChannel = `extension-status-response-${Date.now()}`;
+
+                const { ipcMain } = require('electron');
+                ipcMain.once(responseChannel, (_event: any, result: any) => {
+                  clearTimeout(timeout);
+
+                  if (!result || result.error) {
+                    resolve({
+                      content: [{ type: 'text', text: `Extension ${extensionId}: Not found or not loaded.\n${result?.error || ''}` }],
+                      isError: false
+                    });
+                    return;
+                  }
+
+                  // Format the status response
+                  const status = result.status || 'unknown';
+                  const contributions = result.contributions || {};
+                  const loadError = result.loadError;
+
+                  let response = `Extension: ${extensionId}\n`;
+                  response += `Status: ${status}\n`;
+
+                  if (loadError) {
+                    response += `Load Error: ${loadError}\n`;
+                  }
+
+                  if (contributions.customEditors?.length > 0) {
+                    response += `\nCustom Editors (${contributions.customEditors.length}):\n`;
+                    contributions.customEditors.forEach((editor: any) => {
+                      response += `  - ${editor.displayName} (${editor.filePatterns?.join(', ')})\n`;
+                    });
+                  }
+
+                  if (contributions.aiTools?.length > 0) {
+                    response += `\nAI Tools (${contributions.aiTools.length}):\n`;
+                    contributions.aiTools.forEach((tool: string) => {
+                      response += `  - ${tool}\n`;
+                    });
+                  }
+
+                  if (contributions.newFileMenu?.length > 0) {
+                    response += `\nNew File Menu Items (${contributions.newFileMenu.length}):\n`;
+                    contributions.newFileMenu.forEach((item: any) => {
+                      response += `  - ${item.displayName} (${item.extension})\n`;
+                    });
+                  }
+
+                  resolve({
+                    content: [{ type: 'text', text: response }],
+                    isError: false
+                  });
+                });
+
+                // Send query to renderer
+                targetWindow.webContents.send('extension:get-status', {
+                  extensionId,
+                  responseChannel
+                });
+              });
+            }
+
             default:
               throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
           }
@@ -918,12 +1135,12 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
           workspacePath
         });
 
-        console.log(`[Extension Dev MCP] New connection, workspace: ${workspacePath || 'none'}`);
+        // console.log(`[Extension Dev MCP] New connection, workspace: ${workspacePath || 'none'}`);
 
         // Connect server to transport
         server.connect(transport).then(() => {
           transport.onclose = () => {
-            console.log(`[Extension Dev MCP] Connection closed`);
+            // console.log(`[Extension Dev MCP] Connection closed`);
             activeTransports.delete(transport.sessionId);
           };
         }).catch(error => {

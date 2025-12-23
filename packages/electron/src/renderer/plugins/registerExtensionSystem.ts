@@ -31,6 +31,12 @@ let screenshotListenerSetup = false;
 // Track if extension dev listeners are set up
 let extensionDevListenersSetup = false;
 
+// Track if editor screenshot listener is set up
+let editorScreenshotListenerSetup = false;
+
+// Track if extension status listener is set up
+let extensionStatusListenerSetup = false;
+
 /**
  * Set up IPC listener for screenshot capture requests from main process.
  * Uses the generic screenshotService to route requests to the appropriate capability.
@@ -126,6 +132,162 @@ function setupExtensionDevListeners(): void {
 }
 
 /**
+ * Set up IPC listener for editor screenshot capture requests.
+ * Captures screenshots of any editor content (not just mockups).
+ */
+function setupEditorScreenshotListener(): void {
+  if (editorScreenshotListenerSetup) return;
+  editorScreenshotListenerSetup = true;
+
+  const electronAPI = (window as any).electronAPI;
+  if (!electronAPI?.on) {
+    console.warn('[ExtensionSystem] electronAPI.on not available for editor screenshot listener');
+    return;
+  }
+
+  electronAPI.on('editor:capture-screenshot', async (data: { requestId: string; filePath?: string; selector?: string }) => {
+    console.log(`[ExtensionSystem] Editor screenshot capture request:`, data);
+
+    try {
+      // Find the editor element to capture
+      let targetElement: HTMLElement | null = null;
+
+      if (data.selector) {
+        // Capture specific element if selector provided
+        targetElement = document.querySelector(data.selector);
+        if (!targetElement) {
+          throw new Error(`Element not found for selector: ${data.selector}`);
+        }
+      } else {
+        // Find the active editor container
+        // Try to find the multi-editor-instance that's active
+        targetElement = document.querySelector('.multi-editor-instance.active .editor-content');
+
+        // Fallback to the main editor area
+        if (!targetElement) {
+          targetElement = document.querySelector('.multi-editor-instance.active');
+        }
+
+        // Fallback to the tab editor content area
+        if (!targetElement) {
+          targetElement = document.querySelector('.tab-editor-content');
+        }
+
+        // Last resort - find any visible editor
+        if (!targetElement) {
+          targetElement = document.querySelector('.editor');
+        }
+      }
+
+      if (!targetElement) {
+        throw new Error('No editor element found to capture');
+      }
+
+      // Dynamically import html2canvas
+      const html2canvas = (await import('html2canvas')).default;
+
+      // Capture the element
+      const canvas = await html2canvas(targetElement, {
+        backgroundColor: null,
+        scale: 2, // Higher resolution
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+        windowWidth: targetElement.scrollWidth,
+        windowHeight: targetElement.scrollHeight,
+      });
+
+      // Convert to base64
+      const base64Data = canvas.toDataURL('image/png').split(',')[1];
+
+      console.log(`[ExtensionSystem] Editor screenshot captured successfully`);
+
+      // Send result back to main process - use send since main uses ipcMain.once
+      electronAPI.send(data.requestId, {
+        success: true,
+        imageBase64: base64Data,
+        mimeType: 'image/png'
+      });
+    } catch (error) {
+      console.error('[ExtensionSystem] Editor screenshot capture failed:', error);
+
+      // Send error result back to main process - use send since main uses ipcMain.once
+      electronAPI.send(data.requestId, {
+        success: false,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  console.log('[ExtensionSystem] Editor screenshot IPC listener set up');
+}
+
+/**
+ * Set up IPC listener for extension status queries.
+ * Returns information about loaded extensions including their contributions.
+ */
+function setupExtensionStatusListener(): void {
+  if (extensionStatusListenerSetup) return;
+  extensionStatusListenerSetup = true;
+
+  const electronAPI = (window as any).electronAPI;
+  if (!electronAPI?.on) {
+    console.warn('[ExtensionSystem] electronAPI.on not available for extension status listener');
+    return;
+  }
+
+  electronAPI.on('extension:get-status', async (data: { extensionId: string; responseChannel: string }) => {
+    console.log(`[ExtensionSystem] Extension status query for: ${data.extensionId}`);
+
+    try {
+      const loader = getExtensionLoader();
+      const extension = loader.getExtension(data.extensionId);
+
+      if (!extension) {
+        // Extension not found - use send instead of invoke since main uses ipcMain.once
+        electronAPI.send(data.responseChannel, {
+          error: 'Extension not found',
+          status: 'not_installed'
+        });
+        return;
+      }
+
+      // Get extension manifest for contributions info
+      const manifest = extension.manifest;
+      const contributions = {
+        customEditors: manifest.contributions?.customEditors || [],
+        aiTools: manifest.contributions?.aiTools || [],
+        newFileMenu: manifest.contributions?.newFileMenu || [],
+      };
+
+      // Extension is loaded if we found it
+      const status = extension.enabled ? 'loaded' : 'disabled';
+
+      // Use send instead of invoke since main uses ipcMain.once
+      electronAPI.send(data.responseChannel, {
+        status,
+        contributions,
+        manifest: {
+          id: manifest.id,
+          name: manifest.name,
+          version: manifest.version,
+          description: manifest.description,
+        }
+      });
+    } catch (error) {
+      console.error('[ExtensionSystem] Extension status query failed:', error);
+
+      electronAPI.send(data.responseChannel, {
+        error: error instanceof Error ? error.message : String(error),
+        status: 'error'
+      });
+    }
+  });
+
+  console.log('[ExtensionSystem] Extension status IPC listener set up');
+}
+
+/**
  * Set the workspace path for extension tool registration.
  * Should be called when workspace changes.
  */
@@ -182,6 +344,12 @@ export async function registerExtensionSystem(): Promise<void> {
 
     // Set up IPC listeners for extension development hot-loading
     setupExtensionDevListeners();
+
+    // Set up IPC listener for editor screenshot capture requests
+    setupEditorScreenshotListener();
+
+    // Set up IPC listener for extension status queries
+    setupExtensionStatusListener();
 
     // Initialize the AI tools bridge to register extension tools with the tool registry
     initializeExtensionAIToolsBridge();

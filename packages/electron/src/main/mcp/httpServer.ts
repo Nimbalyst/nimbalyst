@@ -514,6 +514,23 @@ async function tryCreateServer(port: number): Promise<any> {
               },
               required: ['file_path']
             }
+          },
+          {
+            name: 'capture_editor_screenshot',
+            description: 'Capture a screenshot of the current editor view. Works with any file type including custom editors from extensions, markdown, code, etc. Useful for visually verifying extension UI during development.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                file_path: {
+                  type: 'string',
+                  description: 'The absolute path to the file being edited (optional, uses active file if not specified)'
+                },
+                selector: {
+                  type: 'string',
+                  description: 'CSS selector to capture a specific element (optional, captures full editor area if not specified)'
+                }
+              }
+            }
           }
         ];
 
@@ -836,6 +853,139 @@ async function tryCreateServer(port: number): Promise<any> {
                   {
                     type: 'text',
                     text: `Error capturing screenshot: ${errorMessage}`
+                  }
+                ],
+                isError: true
+              };
+            }
+          }
+
+          case 'capture_editor_screenshot': {
+            let filePath = args?.file_path as string | undefined;
+            const selector = args?.selector as string | undefined;
+
+            console.log('[MCP Server] capture_editor_screenshot called with:', { filePath, selector, workspacePath });
+
+            // If no file path provided, try to get the active file from document state
+            if (!filePath) {
+              const states = Array.from(documentStateBySession.values());
+              const currentDocState = states[states.length - 1];
+              filePath = currentDocState?.filePath;
+            }
+
+            if (!filePath) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: 'Error: No file specified and no active file found. Please specify a file_path or ensure a file is open in the editor.'
+                  }
+                ],
+                isError: true
+              };
+            }
+
+            try {
+              // Find the window that has this file open
+              let targetWindow: BrowserWindow | null = null;
+
+              // Try to find by workspace path first
+              if (workspacePath) {
+                const windowId = workspaceToWindowMap.get(workspacePath);
+                if (windowId) {
+                  targetWindow = BrowserWindow.fromId(windowId);
+                }
+              }
+
+              // Fallback to any window that has the file open
+              if (!targetWindow) {
+                const allWindows = BrowserWindow.getAllWindows().filter(w => !w.isDestroyed());
+                if (allWindows.length > 0) {
+                  targetWindow = allWindows[0];
+                }
+              }
+
+              if (!targetWindow || targetWindow.isDestroyed()) {
+                return {
+                  content: [
+                    {
+                      type: 'text',
+                      text: 'Error: No window available to capture screenshot from'
+                    }
+                  ],
+                  isError: true
+                };
+              }
+
+              // Generate unique request ID
+              const requestId = `editor-screenshot-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+              // Create promise for the result
+              const result = await new Promise<{ success: boolean; imageBase64?: string; mimeType?: string; error?: string }>((resolve) => {
+                // Set timeout
+                const timeout = setTimeout(() => {
+                  ipcMain.removeAllListeners(requestId);
+                  resolve({
+                    success: false,
+                    error: 'Screenshot capture timed out'
+                  });
+                }, 10000);
+
+                ipcMain.once(requestId, (_event, captureResult) => {
+                  clearTimeout(timeout);
+                  resolve(captureResult);
+                });
+
+                // Send IPC message to renderer to capture screenshot
+                targetWindow!.webContents.send('editor:capture-screenshot', {
+                  requestId,
+                  filePath,
+                  selector
+                });
+              });
+
+              if (!result.success) {
+                return {
+                  content: [
+                    {
+                      type: 'text',
+                      text: `Error capturing editor screenshot: ${result.error || 'Unknown error'}`
+                    }
+                  ],
+                  isError: true
+                };
+              }
+
+              console.log(`[MCP Server] Captured editor screenshot for ${filePath}`);
+
+              // Compress image if needed (reuse mockup compression logic)
+              const compressed = compressImageIfNeeded(
+                result.imageBase64!,
+                result.mimeType || 'image/png'
+              );
+
+              const finalSizeBytes = Math.floor((compressed.data.length * 3) / 4);
+              console.log(`[MCP Server] Returning editor screenshot: ${(finalSizeBytes / 1024 / 1024).toFixed(3)} MB, mimeType: ${compressed.mimeType}, wasCompressed: ${compressed.wasCompressed}`);
+
+              return {
+                content: [
+                  {
+                    type: 'image',
+                    data: compressed.data,
+                    mimeType: compressed.mimeType
+                  }
+                ],
+                isError: false
+              };
+            } catch (error) {
+              console.error('[MCP Server] Failed to capture editor screenshot:', error);
+              const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: `Error capturing editor screenshot: ${errorMessage}`
                   }
                 ],
                 isError: true
