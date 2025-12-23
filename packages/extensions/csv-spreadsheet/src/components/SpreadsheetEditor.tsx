@@ -117,7 +117,6 @@ function generateColumns(columnCount: number): ColumnRegular[] {
     prop: letter,
     name: letter,
     size: 120,
-    sortable: true,
   }));
 }
 
@@ -175,6 +174,16 @@ export function SpreadsheetEditor({
     colIndex: number | null;
   } | null>(null);
   const gridContainerRef = useRef<HTMLDivElement>(null);
+  const revoGridRef = useRef<HTMLRevoGridElement | null>(null);
+
+  // Header drag selection state
+  const [headerDrag, setHeaderDrag] = useState<{
+    type: 'row' | 'column';
+    startIndex: number;
+    currentIndex: number;
+  } | null>(null);
+  const headerDragRef = useRef(headerDrag);
+  headerDragRef.current = headerDrag;
 
   // Register getContent function for saving
   const getContent = useCallback(() => {
@@ -475,30 +484,6 @@ export function SpreadsheetEditor({
     [selectedCell, spreadsheet]
   );
 
-  // Intercept RevoGrid's built-in sorting to use our sort logic
-  const handleBeforeSorting = useCallback(
-    (event: RevoGridCustomEvent<{
-      column?: { prop?: string };
-      order?: 'asc' | 'desc';
-    } | null>) => {
-      // Prevent RevoGrid's default sorting
-      event.preventDefault();
-
-      if (!event.detail) return;
-
-      const { column, order } = event.detail;
-      if (!column?.prop || !order) return;
-
-      // Find the column index from the prop (column letter)
-      const colIndex = generateColumnHeaders(displayColumnCount).indexOf(column.prop);
-      if (colIndex >= 0) {
-        console.log(`[CSV] Column header sort: column ${column.prop} (index ${colIndex}), direction ${order}`);
-        spreadsheet.sortByColumn(colIndex, order);
-      }
-    },
-    [spreadsheet, displayColumnCount]
-  );
-
   // Context menu handler
   const handleContextMenu = useCallback((event: React.MouseEvent) => {
     event.preventDefault();
@@ -577,6 +562,158 @@ export function SpreadsheetEditor({
   const handleCloseContextMenu = useCallback(() => {
     setContextMenu(null);
   }, []);
+
+  // Helper to get column index from a column header element
+  const getColumnIndexFromHeader = useCallback((target: HTMLElement): number | null => {
+    // Column headers have data-rgcol attribute
+    const headerCell = target.closest('[data-rgcol]') as HTMLElement | null;
+    if (headerCell && headerCell.closest('revogr-header')) {
+      const colIndex = parseInt(headerCell.dataset.rgcol || '', 10);
+      if (!isNaN(colIndex)) return colIndex;
+    }
+    return null;
+  }, []);
+
+  // Helper to get row index from a row header element
+  const getRowIndexFromHeader = useCallback((target: HTMLElement): number | null => {
+    // Row headers are in .rowHeaders area and have data-rgrow but no data-rgcol
+    const rowHeaderArea = target.closest('.rowHeaders');
+    if (rowHeaderArea) {
+      const cell = target.closest('[data-rgrow]') as HTMLElement | null;
+      if (cell) {
+        const rowIndex = parseInt(cell.dataset.rgrow || '', 10);
+        if (!isNaN(rowIndex)) return rowIndex;
+      }
+    }
+    return null;
+  }, []);
+
+  // Handle column header selection
+  const selectColumn = useCallback((colIndex: number) => {
+    const totalRows = spreadsheet.data.rows.length;
+    setSelectedCell({ row: 0, col: colIndex });
+    setSelectionRange(normalizeRange(0, colIndex, totalRows - 1, colIndex));
+    selectedCellRef.current = { row: 0, col: colIndex };
+    selectionRangeRef.current = normalizeRange(0, colIndex, totalRows - 1, colIndex);
+    // Update RevoGrid's visual selection
+    revoGridRef.current?.setCellsFocus(
+      { x: colIndex, y: 0 },
+      { x: colIndex, y: totalRows - 1 - headerRowCount }
+    );
+  }, [spreadsheet.data.rows.length, headerRowCount]);
+
+  // Handle column range selection
+  const selectColumnRange = useCallback((startCol: number, endCol: number) => {
+    const totalRows = spreadsheet.data.rows.length;
+    const minCol = Math.min(startCol, endCol);
+    const maxCol = Math.max(startCol, endCol);
+    setSelectedCell({ row: 0, col: minCol });
+    setSelectionRange(normalizeRange(0, minCol, totalRows - 1, maxCol));
+    selectedCellRef.current = { row: 0, col: minCol };
+    selectionRangeRef.current = normalizeRange(0, minCol, totalRows - 1, maxCol);
+    // Update RevoGrid's visual selection
+    revoGridRef.current?.setCellsFocus(
+      { x: minCol, y: 0 },
+      { x: maxCol, y: totalRows - 1 - headerRowCount }
+    );
+  }, [spreadsheet.data.rows.length, headerRowCount]);
+
+  // Handle row header selection
+  const selectRow = useCallback((rowIndex: number) => {
+    const totalCols = spreadsheet.data.columnCount;
+    setSelectedCell({ row: rowIndex, col: 0 });
+    setSelectionRange(normalizeRange(rowIndex, 0, rowIndex, totalCols - 1));
+    selectedCellRef.current = { row: rowIndex, col: 0 };
+    selectionRangeRef.current = normalizeRange(rowIndex, 0, rowIndex, totalCols - 1);
+    // Update RevoGrid's visual selection (adjust for header rows)
+    const gridRowIndex = rowIndex - headerRowCount;
+    if (gridRowIndex >= 0) {
+      revoGridRef.current?.setCellsFocus(
+        { x: 0, y: gridRowIndex },
+        { x: totalCols - 1, y: gridRowIndex }
+      );
+    }
+  }, [spreadsheet.data.columnCount, headerRowCount]);
+
+  // Handle row range selection
+  const selectRowRange = useCallback((startRow: number, endRow: number) => {
+    const totalCols = spreadsheet.data.columnCount;
+    const minRow = Math.min(startRow, endRow);
+    const maxRow = Math.max(startRow, endRow);
+    setSelectedCell({ row: minRow, col: 0 });
+    setSelectionRange(normalizeRange(minRow, 0, maxRow, totalCols - 1));
+    selectedCellRef.current = { row: minRow, col: 0 };
+    selectionRangeRef.current = normalizeRange(minRow, 0, maxRow, totalCols - 1);
+    // Update RevoGrid's visual selection (adjust for header rows)
+    const gridMinRow = minRow - headerRowCount;
+    const gridMaxRow = maxRow - headerRowCount;
+    if (gridMaxRow >= 0) {
+      revoGridRef.current?.setCellsFocus(
+        { x: 0, y: Math.max(0, gridMinRow) },
+        { x: totalCols - 1, y: gridMaxRow }
+      );
+    }
+  }, [spreadsheet.data.columnCount, headerRowCount]);
+
+  // Handle mousedown on grid container for header selection
+  const handleHeaderMouseDown = useCallback((event: React.MouseEvent) => {
+    const target = event.target as HTMLElement;
+
+    // Check for column header click
+    const colIndex = getColumnIndexFromHeader(target);
+    if (colIndex !== null) {
+      event.preventDefault();
+      selectColumn(colIndex);
+      setHeaderDrag({ type: 'column', startIndex: colIndex, currentIndex: colIndex });
+      return;
+    }
+
+    // Check for row header click
+    const rowIndex = getRowIndexFromHeader(target);
+    if (rowIndex !== null) {
+      event.preventDefault();
+      selectRow(rowIndex);
+      setHeaderDrag({ type: 'row', startIndex: rowIndex, currentIndex: rowIndex });
+      return;
+    }
+  }, [getColumnIndexFromHeader, getRowIndexFromHeader, selectColumn, selectRow]);
+
+  // Handle mousemove for header drag selection
+  useEffect(() => {
+    if (!headerDrag) return;
+
+    const handleMouseMove = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      const drag = headerDragRef.current;
+      if (!drag) return;
+
+      if (drag.type === 'column') {
+        const colIndex = getColumnIndexFromHeader(target);
+        if (colIndex !== null && colIndex !== drag.currentIndex) {
+          setHeaderDrag({ ...drag, currentIndex: colIndex });
+          selectColumnRange(drag.startIndex, colIndex);
+        }
+      } else if (drag.type === 'row') {
+        const rowIndex = getRowIndexFromHeader(target);
+        if (rowIndex !== null && rowIndex !== drag.currentIndex) {
+          setHeaderDrag({ ...drag, currentIndex: rowIndex });
+          selectRowRange(drag.startIndex, rowIndex);
+        }
+      }
+    };
+
+    const handleMouseUp = () => {
+      setHeaderDrag(null);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [headerDrag, getColumnIndexFromHeader, getRowIndexFromHeader, selectColumnRange, selectRowRange]);
 
   // Capture listener for Cmd+S and Cmd+V to intercept before RevoGrid
   // Only handles keys when focus is within the spreadsheet editor
@@ -1021,6 +1158,7 @@ export function SpreadsheetEditor({
         {...(dialogOpen ? { inert: '' } : {})}
         style={!isActive ? { pointerEvents: 'none' } : undefined}
         onContextMenu={handleContextMenu}
+        onMouseDown={handleHeaderMouseDown}
         onClick={(e) => {
           // Fallback: extract cell from click target
           const target = e.target as HTMLElement;
@@ -1037,6 +1175,7 @@ export function SpreadsheetEditor({
         }}
       >
         <RevoGrid
+          ref={(el) => { revoGridRef.current = el as unknown as HTMLRevoGridElement; }}
           columns={columns}
           source={source}
           pinnedTopSource={pinnedTopSource}
@@ -1051,7 +1190,6 @@ export function SpreadsheetEditor({
           onAfterfocus={handleFocusCell}
           onSetrange={handleSetRange}
           onBeforecellfocus={handleCellClick}
-          onBeforesorting={handleBeforeSorting}
         />
         {contextMenu && (
           <ContextMenu

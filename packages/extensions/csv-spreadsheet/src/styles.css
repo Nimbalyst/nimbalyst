@@ -188,6 +188,16 @@
   height: 37px;
 }
 
+/* Column headers should be clickable */
+.spreadsheet-editor revo-grid revogr-header .rgHeaderCell {
+  cursor: pointer;
+}
+
+/* Row headers should be clickable */
+.spreadsheet-editor revo-grid .rowHeaders revogr-data .rgCell {
+  cursor: pointer;
+}
+
 /* Cell content styling */
 .spreadsheet-editor revogr-cell {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
