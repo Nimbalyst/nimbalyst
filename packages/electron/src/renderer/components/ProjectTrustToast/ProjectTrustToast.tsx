@@ -308,7 +308,7 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
               onClick={handleSave}
               disabled={isSubmitting}
             >
-              {isSubmitting ? 'Saving...' : 'Trust Project'}
+              {isSubmitting ? 'Saving...' : 'Save'}
             </button>
           </div>
         </div>
