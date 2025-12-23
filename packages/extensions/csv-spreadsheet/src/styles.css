@@ -198,6 +198,20 @@
   cursor: pointer;
 }
 
+/* Cell editing styles for dark mode */
+[data-theme="dark"] .spreadsheet-editor revo-grid revogr-edit,
+[data-theme="crystal-dark"] .spreadsheet-editor revo-grid revogr-edit {
+  background-color: var(--surface-primary);
+}
+
+[data-theme="dark"] .spreadsheet-editor revo-grid revogr-edit input,
+[data-theme="crystal-dark"] .spreadsheet-editor revo-grid revogr-edit input {
+  background-color: var(--surface-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--primary-color);
+  outline: none;
+}
+
 /* Cell content styling */
 .spreadsheet-editor revogr-cell {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
