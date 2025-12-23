@@ -20,6 +20,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.49.8] - 2025-12-23
+
+
+### Added
+- CSV spreadsheet supports clicking row/column headers to select entire rows/columns
+- MCP tools for AI agents to debug extensions
+
+### Fixed
+- CSV row header selection now correctly handles header rows
+- AI edits no longer trigger false autosaves in diff mode
+- CSV spreadsheet no longer types characters when Cmd+key is pressed
+- /compact command no longer shows false "no output" error
+- CSV spreadsheet cell editing now uses dark background in dark mode
+- OS notifications now show agent's final summary instead of first message
+- Allow All mode now bypasses URL permission prompts
+- CSV spreadsheet dark mode cell borders now visible and selection highlights correctly
+- CSV spreadsheet sorting now excludes empty rows and works from column headers
+- Workspaces now restore correctly after dev mode restart
+
 ## [0.49.7] - 2025-12-22
 
 
