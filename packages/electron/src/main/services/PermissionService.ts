@@ -517,6 +517,20 @@ export class PermissionService {
   public isUrlAllowed(workspacePath: string, url: string): boolean {
     const workspaceName = workspacePath.split('/').pop() || workspacePath;
     const engine = this.getEngine(workspacePath);
+    const permissionMode = engine.getPermissionMode();
+
+    // In allow-all mode, all URLs are allowed
+    if (permissionMode === 'allow-all') {
+      logger.agentSecurity.info(`[PermissionService:${workspaceName}] isUrlAllowed:`, {
+        workspace: workspacePath,
+        url,
+        permissionMode,
+        result: true,
+        reason: 'allow-all mode',
+      });
+      return true;
+    }
+
     const patterns = engine.getAllowedUrlPatterns();
     const result = engine.isUrlAllowed(url);
     logger.agentSecurity.info(`[PermissionService:${workspaceName}] isUrlAllowed:`, {
