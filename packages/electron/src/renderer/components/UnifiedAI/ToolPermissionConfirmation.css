@@ -226,3 +226,20 @@
 .tool-permission-confirmation-button--always:hover {
   opacity: 0.9;
 }
+
+/* Allow All WebFetches - full width, distinct style */
+.tool-permission-confirmation-group--webfetch-all {
+  border-style: dashed;
+  background: transparent;
+}
+
+.tool-permission-confirmation-button--always-all {
+  flex: 1;
+  background: var(--surface-tertiary);
+  color: var(--primary-color);
+  border: 1px solid var(--primary-color);
+}
+
+.tool-permission-confirmation-button--always-all:hover {
+  background: color-mix(in srgb, var(--primary-color) 15%, var(--surface-tertiary));
+}

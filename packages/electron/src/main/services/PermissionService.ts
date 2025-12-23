@@ -37,9 +37,7 @@ function toWorkspacePermissions(stored: AgentPermissions | undefined): Workspace
       displayName: r.displayName,
       addedAt: r.addedAt,
     })),
-    isTrusted: stored.isTrusted,
-    trustedAt: stored.trustedAt,
-    permissionMode: stored.permissionMode ?? 'ask',
+    permissionMode: stored.permissionMode ?? null,
     additionalDirectories: (stored.additionalDirectories ?? []).map((d) => ({
       path: d.path,
       canWrite: d.canWrite,
@@ -68,8 +66,6 @@ function toAgentPermissions(engine: WorkspacePermissions): AgentPermissions {
       displayName: r.displayName,
       addedAt: r.addedAt,
     })),
-    isTrusted: engine.isTrusted,
-    trustedAt: engine.trustedAt,
     permissionMode: engine.permissionMode,
     additionalDirectories: engine.additionalDirectories.map((d) => ({
       path: d.path,
@@ -119,8 +115,7 @@ export class PermissionService {
       logger.agentSecurity.info(`[PermissionService:${workspaceName}] Loading permissions:`, {
         workspace: workspacePath,
         stored: stored ? {
-          isTrusted: stored.isTrusted,
-          mode: stored.permissionMode,
+          permissionMode: stored.permissionMode,
           additionalDirectories: stored.additionalDirectories?.map(d => d.path) || [],
           allowedUrlPatterns: stored.allowedUrlPatterns?.map(u => u.pattern) || [],
         } : 'none',
@@ -154,8 +149,7 @@ export class PermissionService {
     const permissions = engine.getWorkspacePermissions();
     logger.agentSecurity.info(`[PermissionService:${workspaceName}] Saving permissions:`, {
       workspace: workspacePath,
-      isTrusted: permissions.isTrusted,
-      mode: permissions.permissionMode,
+      permissionMode: permissions.permissionMode,
       additionalDirectories: permissions.additionalDirectories.map(d => d.path),
       allowedUrlPatterns: permissions.allowedUrlPatterns.map(u => u.pattern),
     });
@@ -387,10 +381,11 @@ export class PermissionService {
 
   /**
    * Trust a workspace (enable agent operations)
+   * @param mode - The permission mode to set (defaults to 'ask')
    */
-  public trustWorkspace(workspacePath: string): void {
+  public trustWorkspace(workspacePath: string, mode: 'ask' | 'allow-all' = 'ask'): void {
     const engine = this.getEngine(workspacePath);
-    engine.trustWorkspace();
+    engine.trustWorkspace(mode);
     this.saveEngine(workspacePath, engine);
   }
 
@@ -472,17 +467,17 @@ export class PermissionService {
   }
 
   /**
-   * Get the permission mode
+   * Get the permission mode (null if untrusted)
    */
-  public getPermissionMode(workspacePath: string): 'ask' | 'allow-all' {
+  public getPermissionMode(workspacePath: string): 'ask' | 'allow-all' | null {
     const engine = this.getEngine(workspacePath);
     return engine.getPermissionMode();
   }
 
   /**
-   * Set the permission mode
+   * Set the permission mode (setting to null revokes trust)
    */
-  public setPermissionMode(workspacePath: string, mode: 'ask' | 'allow-all'): void {
+  public setPermissionMode(workspacePath: string, mode: 'ask' | 'allow-all' | null): void {
     const engine = this.getEngine(workspacePath);
     engine.setPermissionMode(mode);
     this.saveEngine(workspacePath, engine);
@@ -589,6 +584,40 @@ export class PermissionService {
       result,
     });
     return result;
+  }
+
+  /**
+   * Check if all URLs are allowed (wildcard pattern exists)
+   */
+  public isAllUrlsAllowed(workspacePath: string): boolean {
+    const engine = this.getEngine(workspacePath);
+    return engine.isAllUrlsAllowed();
+  }
+
+  /**
+   * Allow all URLs (adds the wildcard pattern '*')
+   */
+  public allowAllUrls(workspacePath: string): void {
+    const workspaceName = workspacePath.split('/').pop() || workspacePath;
+    const engine = this.getEngine(workspacePath);
+    logger.agentSecurity.info(`[PermissionService:${workspaceName}] allowAllUrls:`, {
+      workspace: workspacePath,
+    });
+    engine.allowAllUrls();
+    this.saveEngine(workspacePath, engine);
+  }
+
+  /**
+   * Revoke "allow all URLs" permission
+   */
+  public revokeAllUrlsPermission(workspacePath: string): void {
+    const workspaceName = workspacePath.split('/').pop() || workspacePath;
+    const engine = this.getEngine(workspacePath);
+    logger.agentSecurity.info(`[PermissionService:${workspaceName}] revokeAllUrlsPermission:`, {
+      workspace: workspacePath,
+    });
+    engine.revokeAllUrlsPermission();
+    this.saveEngine(workspacePath, engine);
   }
 
   /**

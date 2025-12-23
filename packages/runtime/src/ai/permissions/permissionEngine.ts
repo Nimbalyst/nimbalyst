@@ -32,7 +32,7 @@ export type PermissionDecision = 'allow' | 'deny' | 'ask';
 /**
  * Scope for permission grants
  */
-export type PermissionScope = 'once' | 'session' | 'always';
+export type PermissionScope = 'once' | 'session' | 'always' | 'always-all';
 
 /**
  * A stored permission rule
@@ -48,8 +48,11 @@ export interface PermissionRule {
 
 /**
  * Permission mode for the workspace
+ * - null/undefined: Workspace not trusted (show trust toast)
+ * - 'ask': Smart permissions - prompt for new patterns, remember choices
+ * - 'allow-all': Auto-approve all tool calls (except denied patterns)
  */
-export type PermissionMode = 'ask' | 'allow-all';
+export type PermissionMode = 'ask' | 'allow-all' | null;
 
 /**
  * An additional directory the agent has access to outside the workspace
@@ -77,17 +80,17 @@ export interface AllowedUrlPattern {
 
 /**
  * Workspace-level permission settings (persisted)
+ *
+ * Trust is determined by permissionMode:
+ * - null/undefined: Not trusted (show trust toast)
+ * - 'ask' or 'allow-all': Trusted
  */
 export interface WorkspacePermissions {
   /** Patterns that are always allowed in this workspace */
   allowedPatterns: PermissionRule[];
   /** Patterns that are always denied in this workspace */
   deniedPatterns: PermissionRule[];
-  /** Whether the workspace is trusted for agent operations */
-  isTrusted: boolean;
-  /** Timestamp when trust was granted */
-  trustedAt?: number;
-  /** Permission mode: 'ask' prompts for each command, 'allow-all' auto-approves */
+  /** Permission mode: null=untrusted, 'ask'=smart permissions, 'allow-all'=auto-approve */
   permissionMode: PermissionMode;
   /** Additional directories outside workspace that the agent can access */
   additionalDirectories: AdditionalDirectory[];
@@ -192,17 +195,14 @@ export class PermissionEngine {
       ? {
           allowedPatterns: [...workspacePermissions.allowedPatterns],
           deniedPatterns: [...workspacePermissions.deniedPatterns],
-          isTrusted: workspacePermissions.isTrusted,
-          trustedAt: workspacePermissions.trustedAt,
-          permissionMode: workspacePermissions.permissionMode ?? 'ask',
+          permissionMode: workspacePermissions.permissionMode ?? null,
           additionalDirectories: [...(workspacePermissions.additionalDirectories ?? [])],
           allowedUrlPatterns: [...(workspacePermissions.allowedUrlPatterns ?? [])],
         }
       : {
           allowedPatterns: [],
           deniedPatterns: [],
-          isTrusted: false,
-          permissionMode: 'ask',
+          permissionMode: null,
           additionalDirectories: [],
           allowedUrlPatterns: [],
         };
@@ -223,37 +223,37 @@ export class PermissionEngine {
   }
 
   /**
-   * Check if the workspace is trusted
+   * Check if the workspace is trusted (has a permission mode set)
    */
   isWorkspaceTrusted(): boolean {
-    return this.workspacePermissions.isTrusted;
+    return this.workspacePermissions.permissionMode !== null;
   }
 
   /**
-   * Trust the workspace
+   * Trust the workspace by setting a permission mode
+   * @param mode - The permission mode to set (defaults to 'ask')
    */
-  trustWorkspace(): void {
-    this.workspacePermissions.isTrusted = true;
-    this.workspacePermissions.trustedAt = Date.now();
+  trustWorkspace(mode: 'ask' | 'allow-all' = 'ask'): void {
+    this.workspacePermissions.permissionMode = mode;
   }
 
   /**
-   * Revoke workspace trust
+   * Revoke workspace trust by clearing the permission mode
    */
   revokeWorkspaceTrust(): void {
-    this.workspacePermissions.isTrusted = false;
-    this.workspacePermissions.trustedAt = undefined;
+    this.workspacePermissions.permissionMode = null;
   }
 
   /**
-   * Get the permission mode
+   * Get the permission mode (null if not trusted)
    */
   getPermissionMode(): PermissionMode {
     return this.workspacePermissions.permissionMode;
   }
 
   /**
-   * Set the permission mode
+   * Set the permission mode (also trusts the workspace)
+   * Setting to null revokes trust
    */
   setPermissionMode(mode: PermissionMode): void {
     this.workspacePermissions.permissionMode = mode;
@@ -335,10 +335,16 @@ export class PermissionEngine {
 
   /**
    * Check if a URL matches any allowed pattern
+   * Special pattern '*' allows all URLs (used for "Allow All WebFetches")
    */
   isUrlAllowed(url: string): boolean {
     if (this.workspacePermissions.allowedUrlPatterns.length === 0) {
       return false;
+    }
+
+    // Check for wildcard "allow all" pattern first
+    if (this.workspacePermissions.allowedUrlPatterns.some(p => p.pattern === '*')) {
+      return true;
     }
 
     try {
@@ -361,6 +367,36 @@ export class PermissionEngine {
     }
 
     return false;
+  }
+
+  /**
+   * Check if all URLs are allowed (webfetch:* pattern exists)
+   */
+  isAllUrlsAllowed(): boolean {
+    return this.workspacePermissions.allowedUrlPatterns.some(p => p.pattern === '*');
+  }
+
+  /**
+   * Allow all URLs (adds the wildcard pattern)
+   */
+  allowAllUrls(): void {
+    // Remove any existing wildcard pattern first
+    this.workspacePermissions.allowedUrlPatterns =
+      this.workspacePermissions.allowedUrlPatterns.filter(u => u.pattern !== '*');
+    // Add wildcard pattern
+    this.workspacePermissions.allowedUrlPatterns.push({
+      pattern: '*',
+      description: 'Allow all web fetches',
+      addedAt: Date.now(),
+    });
+  }
+
+  /**
+   * Revoke "allow all URLs" permission
+   */
+  revokeAllUrlsPermission(): void {
+    this.workspacePermissions.allowedUrlPatterns =
+      this.workspacePermissions.allowedUrlPatterns.filter(u => u.pattern !== '*');
   }
 
   /**
@@ -643,8 +679,8 @@ export class PermissionEngine {
    * Evaluate a full command (may contain multiple actions)
    */
   evaluateCommand(rawCommand: string, sessionId: string): CommandEvaluation {
-    // First check workspace trust
-    if (!this.workspacePermissions.isTrusted) {
+    // First check workspace trust (permissionMode must be set)
+    if (this.workspacePermissions.permissionMode === null) {
       const parsed = parseCommand(rawCommand);
       return {
         command: parsed,
@@ -711,8 +747,8 @@ export class PermissionEngine {
       return this.evaluateCommand(toolDescription, sessionId);
     }
 
-    // Check workspace trust for non-Bash tools too
-    if (!this.workspacePermissions.isTrusted) {
+    // Check workspace trust for non-Bash tools too (permissionMode must be set)
+    if (this.workspacePermissions.permissionMode === null) {
       return {
         command: {
           raw: toolDescription,
@@ -976,13 +1012,12 @@ export class PermissionEngine {
 }
 
 /**
- * Default workspace permissions
+ * Default workspace permissions (untrusted)
  */
 export const DEFAULT_WORKSPACE_PERMISSIONS: WorkspacePermissions = {
   allowedPatterns: [],
   deniedPatterns: [],
-  isTrusted: false,
-  permissionMode: 'ask',
+  permissionMode: null,
   additionalDirectories: [],
   allowedUrlPatterns: [],
 };
@@ -994,8 +1029,6 @@ export function serializeWorkspacePermissions(permissions: WorkspacePermissions)
   return {
     allowedPatterns: permissions.allowedPatterns.map((r) => ({ ...r })),
     deniedPatterns: permissions.deniedPatterns.map((r) => ({ ...r })),
-    isTrusted: permissions.isTrusted,
-    trustedAt: permissions.trustedAt,
     permissionMode: permissions.permissionMode,
     additionalDirectories: permissions.additionalDirectories.map((d) => ({ ...d })),
     allowedUrlPatterns: permissions.allowedUrlPatterns.map((u) => ({ ...u })),
@@ -1004,6 +1037,7 @@ export function serializeWorkspacePermissions(permissions: WorkspacePermissions)
 
 /**
  * Deserialize workspace permissions from storage
+ * Handles migration from old format with isTrusted field
  */
 export function deserializeWorkspacePermissions(data: unknown): WorkspacePermissions {
   if (!data || typeof data !== 'object') {
@@ -1011,6 +1045,17 @@ export function deserializeWorkspacePermissions(data: unknown): WorkspacePermiss
   }
 
   const obj = data as Record<string, unknown>;
+
+  // Migration: If old format with isTrusted, convert to permissionMode
+  let permissionMode: PermissionMode = null;
+  if (obj.permissionMode === 'allow-all') {
+    permissionMode = 'allow-all';
+  } else if (obj.permissionMode === 'ask') {
+    permissionMode = 'ask';
+  } else if (obj.isTrusted) {
+    // Migration from old format: trusted workspaces (any truthy isTrusted) default to 'ask'
+    permissionMode = 'ask';
+  }
 
   return {
     allowedPatterns: Array.isArray(obj.allowedPatterns)
@@ -1031,9 +1076,7 @@ export function deserializeWorkspacePermissions(data: unknown): WorkspacePermiss
             addedAt: Number(r.addedAt ?? Date.now()),
           }))
       : [],
-    isTrusted: Boolean(obj.isTrusted),
-    trustedAt: typeof obj.trustedAt === 'number' ? obj.trustedAt : undefined,
-    permissionMode: obj.permissionMode === 'allow-all' ? 'allow-all' : 'ask',
+    permissionMode,
     additionalDirectories: Array.isArray(obj.additionalDirectories)
       ? obj.additionalDirectories
           .filter((d: any) => d && typeof d === 'object' && typeof d.path === 'string')

@@ -14,7 +14,7 @@ describe('permissionEngine', () => {
   function createTrustedEngine(): PermissionEngine {
     return new PermissionEngine(workspacePath, {
       ...DEFAULT_WORKSPACE_PERMISSIONS,
-      isTrusted: true,
+      permissionMode: 'ask',
     });
   }
 
@@ -42,12 +42,13 @@ describe('permissionEngine', () => {
       expect(engine.isWorkspaceTrusted()).toBe(false);
     });
 
-    it('should set trustedAt timestamp when trusting', () => {
+    it('should set permissionMode when trusting', () => {
       const engine = new PermissionEngine(workspacePath);
+      expect(engine.getPermissionMode()).toBe(null);
+
       engine.trustWorkspace();
       const perms = engine.getWorkspacePermissions();
-      expect(perms.trustedAt).toBeDefined();
-      expect(perms.trustedAt).toBeGreaterThan(0);
+      expect(perms.permissionMode).toBe('ask');
     });
   });
 
@@ -437,8 +438,6 @@ describe('permissionEngine', () => {
           { pattern: 'npm:run:build', displayName: 'npm run build', addedAt: 2000 },
         ],
         deniedPatterns: [{ pattern: 'git:reset-hard', displayName: 'Git reset --hard', addedAt: 3000 }],
-        isTrusted: true,
-        trustedAt: 5000,
         permissionMode: 'ask',
         additionalDirectories: [{ path: '/external/docs', canWrite: false, addedAt: 4000 }],
         allowedUrlPatterns: [{ pattern: 'https://api.example.com/*', description: 'Example API', addedAt: 6000 }],
@@ -452,8 +451,6 @@ describe('permissionEngine', () => {
           { pattern: 'npm:run:build', displayName: 'npm run build', addedAt: 2000 },
         ],
         deniedPatterns: [{ pattern: 'git:reset-hard', displayName: 'Git reset --hard', addedAt: 3000 }],
-        isTrusted: true,
-        trustedAt: 5000,
         permissionMode: 'ask',
         additionalDirectories: [{ path: '/external/docs', canWrite: false, addedAt: 4000 }],
         allowedUrlPatterns: [{ pattern: 'https://api.example.com/*', description: 'Example API', addedAt: 6000 }],
@@ -464,8 +461,6 @@ describe('permissionEngine', () => {
       const data = {
         allowedPatterns: [{ pattern: 'git:push', displayName: 'Git push', addedAt: 1000 }],
         deniedPatterns: [{ pattern: 'git:reset-hard', displayName: 'Git reset --hard', addedAt: 3000 }],
-        isTrusted: true,
-        trustedAt: 5000,
         permissionMode: 'allow-all',
         additionalDirectories: [{ path: '/docs', canWrite: true, addedAt: 6000 }],
       };
@@ -475,8 +470,6 @@ describe('permissionEngine', () => {
       expect(permissions.allowedPatterns).toHaveLength(1);
       expect(permissions.allowedPatterns[0].pattern).toBe('git:push');
       expect(permissions.deniedPatterns).toHaveLength(1);
-      expect(permissions.isTrusted).toBe(true);
-      expect(permissions.trustedAt).toBe(5000);
       expect(permissions.permissionMode).toBe('allow-all');
       expect(permissions.additionalDirectories).toHaveLength(1);
       expect(permissions.additionalDirectories[0].path).toBe('/docs');
@@ -490,9 +483,7 @@ describe('permissionEngine', () => {
       expect(deserializeWorkspacePermissions({})).toEqual({
         allowedPatterns: [],
         deniedPatterns: [],
-        isTrusted: false,
-        trustedAt: undefined,
-        permissionMode: 'ask',
+        permissionMode: null,
         additionalDirectories: [],
         allowedUrlPatterns: [],
       });
@@ -506,7 +497,7 @@ describe('permissionEngine', () => {
           null,
         ],
         deniedPatterns: 'not-an-array',
-        isTrusted: 'yes', // Should coerce to true
+        isTrusted: 'yes', // Should migrate from old format to 'ask'
       };
 
       const permissions = deserializeWorkspacePermissions(data);
@@ -515,7 +506,8 @@ describe('permissionEngine', () => {
       expect(permissions.allowedPatterns).toHaveLength(2);
       expect(permissions.allowedPatterns[0].pattern).toBe('valid');
       expect(permissions.deniedPatterns).toHaveLength(0);
-      expect(permissions.isTrusted).toBe(true);
+      // Migration: isTrusted: true -> permissionMode: 'ask'
+      expect(permissions.permissionMode).toBe('ask');
     });
   });
 
@@ -539,7 +531,6 @@ describe('permissionEngine', () => {
     it('should auto-approve commands in allow-all mode', () => {
       const engine = new PermissionEngine(workspacePath, {
         ...DEFAULT_WORKSPACE_PERMISSIONS,
-        isTrusted: true,
         permissionMode: 'allow-all',
       });
 
@@ -552,7 +543,6 @@ describe('permissionEngine', () => {
     it('should still respect denied patterns in allow-all mode', () => {
       const engine = new PermissionEngine(workspacePath, {
         ...DEFAULT_WORKSPACE_PERMISSIONS,
-        isTrusted: true,
         permissionMode: 'allow-all',
       });
 
@@ -636,10 +626,10 @@ describe('permissionEngine', () => {
 
   describe('evaluateTool (non-Bash tools)', () => {
     it('should deny all tools when workspace is not trusted', () => {
-      // Create untrusted engine
+      // Create untrusted engine (permissionMode: null)
       const engine = new PermissionEngine(workspacePath, {
         ...DEFAULT_WORKSPACE_PERMISSIONS,
-        isTrusted: false,
+        permissionMode: null,
       });
 
       // Bash tool should be denied
@@ -797,7 +787,7 @@ describe('permissionEngine', () => {
     it('should load URL patterns from initial permissions', () => {
       const engine = new PermissionEngine(workspacePath, {
         ...DEFAULT_WORKSPACE_PERMISSIONS,
-        isTrusted: true,
+        permissionMode: 'ask',
         allowedUrlPatterns: [
           { pattern: 'saved.com', description: 'Saved', addedAt: Date.now() },
         ],
@@ -870,7 +860,7 @@ describe('permissionEngine', () => {
     it('should serialize URL patterns', () => {
       const permissions: WorkspacePermissions = {
         ...DEFAULT_WORKSPACE_PERMISSIONS,
-        isTrusted: true,
+        permissionMode: 'ask',
         allowedUrlPatterns: [
           { pattern: 'example.com', description: 'Example', addedAt: 1000 },
           { pattern: '*.github.com', description: 'GitHub', addedAt: 2000 },
@@ -888,7 +878,6 @@ describe('permissionEngine', () => {
       const data = {
         allowedPatterns: [],
         deniedPatterns: [],
-        isTrusted: true,
         permissionMode: 'ask',
         additionalDirectories: [],
         allowedUrlPatterns: [
@@ -906,7 +895,6 @@ describe('permissionEngine', () => {
       const data = {
         allowedPatterns: [],
         deniedPatterns: [],
-        isTrusted: true,
         permissionMode: 'ask',
         additionalDirectories: [],
         // No allowedUrlPatterns field

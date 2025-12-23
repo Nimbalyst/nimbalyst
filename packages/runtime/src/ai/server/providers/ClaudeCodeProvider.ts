@@ -74,7 +74,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   // Tool permission requests - stores pending permission resolvers
   // When a tool requires approval, we block until the UI provides a response via IPC
   private pendingToolPermissions: Map<string, {
-    resolve: (response: { decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' }) => void;
+    resolve: (response: { decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' | 'always-all' }) => void;
     reject: (error: Error) => void;
     request: any; // PermissionRequest
   }> = new Map();
@@ -126,7 +126,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     workspacePath: string,
     sessionId: string,
     requestId: string,
-    response: { decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' }
+    response: { decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' | 'always-all' }
   ) => void) | null = null;
 
   // Security logging callback (injected from electron main process)
@@ -146,6 +146,12 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     workspacePath: string,
     url: string,
     description: string
+  ) => void) | null = null;
+
+  // Allow all URLs handler (injected from electron main process)
+  // Called when user clicks "Allow All WebFetches"
+  private static allowAllUrlsHandler: ((
+    workspacePath: string
   ) => void) | null = null;
 
   // Additional directory saver (injected from electron main process)
@@ -277,6 +283,16 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   }
 
   /**
+   * Set the allow all URLs handler function (called from electron main process)
+   * This is called when user clicks "Allow All WebFetches"
+   */
+  public static setAllowAllUrlsHandler(handler: ((
+    workspacePath: string
+  ) => void) | null): void {
+    ClaudeCodeProvider.allowAllUrlsHandler = handler;
+  }
+
+  /**
    * Set the additional directory saver function (called from electron main process)
    * This saves directories when user approves file access outside workspace with "Always"
    */
@@ -306,7 +322,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     workspacePath: string,
     sessionId: string,
     requestId: string,
-    response: { decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' }
+    response: { decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' | 'always-all' }
   ) => void) | null): void {
     ClaudeCodeProvider.permissionResponseHandler = handler;
   }
@@ -1966,7 +1982,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
    */
   public resolveToolPermission(
     requestId: string,
-    response: { decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' }
+    response: { decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' | 'always-all' }
   ): void {
     const pending = this.pendingToolPermissions.get(requestId);
     if (pending) {
@@ -2255,7 +2271,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               const requestId = result.request.id;
 
               // Create promise that will be resolved when user responds
-              const responsePromise = new Promise<{ decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' }>((resolve, reject) => {
+              const responsePromise = new Promise<{ decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' | 'always-all' }>((resolve, reject) => {
                 this.pendingToolPermissions.set(requestId, {
                   resolve,
                   reject,
@@ -2679,7 +2695,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           };
 
           // Create promise that will be resolved when user responds
-          const responsePromise = new Promise<{ decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' }>((resolve, reject) => {
+          const responsePromise = new Promise<{ decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' | 'always-all' }>((resolve, reject) => {
             this.pendingToolPermissions.set(requestId, {
               resolve,
               reject,
@@ -2715,8 +2731,13 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             });
 
             if (response.decision === 'allow') {
-              // Save URL pattern if scope is 'always'
-              if (response.scope === 'always' && ClaudeCodeProvider.urlPatternSaver) {
+              // Handle "Allow All WebFetches" - save wildcard pattern
+              if (response.scope === 'always-all' && ClaudeCodeProvider.allowAllUrlsHandler) {
+                ClaudeCodeProvider.allowAllUrlsHandler(workspacePath);
+                this.logSecurity('[PreToolUse] Saved wildcard URL pattern (allow all)');
+              }
+              // Save URL pattern if scope is 'always' (for specific hostname)
+              else if (response.scope === 'always' && ClaudeCodeProvider.urlPatternSaver) {
                 try {
                   const parsedUrl = new URL(url);
                   const hostname = parsedUrl.hostname;
@@ -2835,7 +2856,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           }
 
           // Create promise that will be resolved when user responds
-          const responsePromise = new Promise<{ decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' }>((resolve, reject) => {
+          const responsePromise = new Promise<{ decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' | 'always-all' }>((resolve, reject) => {
             this.pendingToolPermissions.set(requestId, {
               resolve,
               reject,

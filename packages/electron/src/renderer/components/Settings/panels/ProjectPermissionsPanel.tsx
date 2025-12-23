@@ -589,7 +589,12 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
       )}
 
       {/* Footer */}
-      {permissions?.isTrusted && (permissions?.allowedPatterns.length || permissions?.deniedPatterns.length) ? (
+      {permissions?.isTrusted && (
+        permissions?.allowedPatterns.length ||
+        permissions?.deniedPatterns.length ||
+        permissions?.allowedUrlPatterns?.length ||
+        permissions?.additionalDirectories?.length
+      ) ? (
         <div className="permissions-footer">
           <button
             className="btn-secondary"

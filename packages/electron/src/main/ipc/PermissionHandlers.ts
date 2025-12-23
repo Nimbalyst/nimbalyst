@@ -38,21 +38,30 @@ export function registerPermissionHandlers(): void {
       throw new Error('workspacePath is required');
     }
 
+    const workspaceName = workspacePath.split('/').pop() || workspacePath;
+
     try {
-      const isTrusted = permissionService.isWorkspaceTrusted(workspacePath);
       const allowedPatterns = permissionService.getAllowedPatterns(workspacePath);
       const deniedPatterns = permissionService.getDeniedPatterns(workspacePath);
       const permissionMode = permissionService.getPermissionMode(workspacePath);
       const additionalDirectories = permissionService.getAdditionalDirectories(workspacePath);
       const allowedUrlPatterns = permissionService.getAllowedUrlPatterns(workspacePath);
 
-      // Get trustedAt from the engine's workspace permissions
-      const engine = (permissionService as any).getEngine(workspacePath);
-      const workspacePermissions = engine?.getWorkspacePermissions();
+      // isTrusted is derived from permissionMode (null = not trusted)
+      const isTrusted = permissionMode !== null;
+
+      logger.main.info(`[PermissionHandlers:${workspaceName}] getWorkspacePermissions:`, {
+        workspace: workspacePath,
+        isTrusted,
+        permissionMode,
+        allowedPatternsCount: allowedPatterns.length,
+        deniedPatternsCount: deniedPatterns.length,
+        additionalDirectoriesCount: additionalDirectories.length,
+        allowedUrlPatternsCount: allowedUrlPatterns.length,
+      });
 
       return {
         isTrusted,
-        trustedAt: workspacePermissions?.trustedAt,
         allowedPatterns,
         deniedPatterns,
         permissionMode,
@@ -299,6 +308,54 @@ export function registerPermissionHandlers(): void {
       return { success: true };
     } catch (error) {
       logger.main.error('[PermissionHandlers] Failed to remove allowed URL pattern:', error);
+      throw error;
+    }
+  });
+
+  // Check if all URLs are allowed (wildcard pattern)
+  ipcMain.handle('permissions:isAllUrlsAllowed', async (_event, workspacePath: string) => {
+    if (!workspacePath) {
+      throw new Error('workspacePath is required');
+    }
+
+    try {
+      return permissionService.isAllUrlsAllowed(workspacePath);
+    } catch (error) {
+      logger.main.error('[PermissionHandlers] Failed to check all URLs allowed:', error);
+      throw error;
+    }
+  });
+
+  // Allow all URLs (add wildcard pattern)
+  ipcMain.handle('permissions:allowAllUrls', async (_event, workspacePath: string) => {
+    if (!workspacePath) {
+      throw new Error('workspacePath is required');
+    }
+
+    try {
+      permissionService.allowAllUrls(workspacePath);
+      logger.main.info('[PermissionHandlers] All URLs allowed for workspace');
+      broadcastPermissionChange(workspacePath);
+      return { success: true };
+    } catch (error) {
+      logger.main.error('[PermissionHandlers] Failed to allow all URLs:', error);
+      throw error;
+    }
+  });
+
+  // Revoke "allow all URLs" permission
+  ipcMain.handle('permissions:revokeAllUrlsPermission', async (_event, workspacePath: string) => {
+    if (!workspacePath) {
+      throw new Error('workspacePath is required');
+    }
+
+    try {
+      permissionService.revokeAllUrlsPermission(workspacePath);
+      logger.main.info('[PermissionHandlers] All URLs permission revoked');
+      broadcastPermissionChange(workspacePath);
+      return { success: true };
+    } catch (error) {
+      logger.main.error('[PermissionHandlers] Failed to revoke all URLs permission:', error);
       throw error;
     }
   });

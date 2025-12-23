@@ -172,8 +172,11 @@ export interface AgentPermissionRule {
 
 /**
  * Permission mode for the workspace
+ * - null: Workspace not trusted (show trust toast)
+ * - 'ask': Smart permissions - prompt for new patterns, remember choices
+ * - 'allow-all': Auto-approve all tool calls (except denied patterns)
  */
-export type AgentPermissionMode = 'ask' | 'allow-all';
+export type AgentPermissionMode = 'ask' | 'allow-all' | null;
 
 /**
  * An additional directory the agent has access to outside the workspace
@@ -201,17 +204,17 @@ export interface AgentAllowedUrlPattern {
 
 /**
  * Agent permissions stored per workspace
+ *
+ * Trust is determined by permissionMode:
+ * - null: Not trusted (show trust toast)
+ * - 'ask' or 'allow-all': Trusted
  */
 export interface AgentPermissions {
   /** Patterns that are always allowed in this workspace */
   allowedPatterns: AgentPermissionRule[];
   /** Patterns that are always denied in this workspace */
   deniedPatterns: AgentPermissionRule[];
-  /** Whether the workspace is trusted for agent operations */
-  isTrusted: boolean;
-  /** Timestamp when trust was granted */
-  trustedAt?: number;
-  /** Permission mode: 'ask' prompts for each command, 'allow-all' auto-approves */
+  /** Permission mode: null=untrusted, 'ask'=smart permissions, 'allow-all'=auto-approve */
   permissionMode: AgentPermissionMode;
   /** Additional directories outside workspace that the agent can access */
   additionalDirectories: AgentAdditionalDirectory[];
@@ -290,6 +293,9 @@ const workspaceStore = new Store<Record<string, WorkspaceState>>({
   clearInvalidConfig: true,
   defaults: {},
 });
+
+// Log the store path on initialization for debugging
+console.log('[Store] workspaceStore path:', workspaceStore.path);
 
 const DEFAULT_TAB_MANAGER_STATE: TabManagerState = {
   tabs: [],
@@ -436,9 +442,15 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
       deniedPatterns: Array.isArray(raw.agentPermissions.deniedPatterns)
         ? raw.agentPermissions.deniedPatterns.map((r: any) => ({ ...r }))
         : [],
-      isTrusted: Boolean(raw.agentPermissions.isTrusted),
-      trustedAt: raw.agentPermissions.trustedAt,
-      permissionMode: raw.agentPermissions.permissionMode ?? 'ask',
+      // Migration: Convert from old isTrusted to permissionMode
+      // If permissionMode is already set, use it; otherwise derive from isTrusted
+      permissionMode: raw.agentPermissions.permissionMode === 'allow-all'
+        ? 'allow-all'
+        : raw.agentPermissions.permissionMode === 'ask'
+          ? 'ask'
+          : raw.agentPermissions.isTrusted
+            ? 'ask'  // Migration: any truthy isTrusted defaults to 'ask'
+            : null,  // Not trusted
       additionalDirectories: Array.isArray(raw.agentPermissions.additionalDirectories)
         ? raw.agentPermissions.additionalDirectories.map((d: any) => ({ ...d }))
         : [],
@@ -1146,10 +1158,30 @@ export function setWorkspaceExtensionConfigurationBulk(
 
 // Agent Permission State Management
 export function getAgentPermissions(workspacePath: string): AgentPermissions | undefined {
-  return getWorkspaceState(workspacePath).agentPermissions;
+  const key = workspaceKey(workspacePath);
+  const workspaceName = workspacePath.split('/').pop() || workspacePath;
+  const permissions = getWorkspaceState(workspacePath).agentPermissions;
+  console.log(`[Store:${workspaceName}] getAgentPermissions:`, {
+    workspacePath,
+    key,
+    storePath: workspaceStore.path,
+    hasPermissions: !!permissions,
+    permissionMode: permissions?.permissionMode,
+  });
+  return permissions;
 }
 
 export function saveAgentPermissions(workspacePath: string, permissions: AgentPermissions): void {
+  const key = workspaceKey(workspacePath);
+  const workspaceName = workspacePath.split('/').pop() || workspacePath;
+  console.log(`[Store:${workspaceName}] saveAgentPermissions:`, {
+    workspacePath,
+    key,
+    storePath: workspaceStore.path,
+    permissionMode: permissions.permissionMode,
+    allowedPatternsCount: permissions.allowedPatterns.length,
+    allowedUrlPatternsCount: permissions.allowedUrlPatterns?.length || 0,
+  });
   updateWorkspaceState(workspacePath, (state) => {
     // Use structuredClone to deep copy the entire permissions object
     // This ensures all fields are preserved without manual mapping
@@ -1158,24 +1190,22 @@ export function saveAgentPermissions(workspacePath: string, permissions: AgentPe
 }
 
 export function isWorkspaceTrusted(workspacePath: string): boolean {
-  return getWorkspaceState(workspacePath).agentPermissions?.isTrusted ?? false;
+  return getWorkspaceState(workspacePath).agentPermissions?.permissionMode !== null &&
+         getWorkspaceState(workspacePath).agentPermissions?.permissionMode !== undefined;
 }
 
-export function setWorkspaceTrusted(workspacePath: string, trusted: boolean): void {
+export function setWorkspaceTrusted(workspacePath: string, trusted: boolean, mode: 'ask' | 'allow-all' = 'ask'): void {
   updateWorkspaceState(workspacePath, (state) => {
     if (!state.agentPermissions) {
       state.agentPermissions = {
         allowedPatterns: [],
         deniedPatterns: [],
-        isTrusted: trusted,
-        trustedAt: trusted ? Date.now() : undefined,
-        permissionMode: 'ask',
+        permissionMode: trusted ? mode : null,
         additionalDirectories: [],
         allowedUrlPatterns: [],
       };
     } else {
-      state.agentPermissions.isTrusted = trusted;
-      state.agentPermissions.trustedAt = trusted ? Date.now() : undefined;
+      state.agentPermissions.permissionMode = trusted ? mode : null;
     }
   });
 }
@@ -1190,8 +1220,7 @@ export function addAllowedPattern(
       state.agentPermissions = {
         allowedPatterns: [],
         deniedPatterns: [],
-        isTrusted: false,
-        permissionMode: 'ask',
+        permissionMode: null,
         additionalDirectories: [],
         allowedUrlPatterns: [],
       };
@@ -1221,8 +1250,7 @@ export function addDeniedPattern(
       state.agentPermissions = {
         allowedPatterns: [],
         deniedPatterns: [],
-        isTrusted: false,
-        permissionMode: 'ask',
+        permissionMode: null,
         additionalDirectories: [],
         allowedUrlPatterns: [],
       };

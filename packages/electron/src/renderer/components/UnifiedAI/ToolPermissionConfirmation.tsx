@@ -36,7 +36,7 @@ export interface ToolPermissionData {
   timestamp: number;
 }
 
-export type PermissionScope = 'once' | 'session' | 'always';
+export type PermissionScope = 'once' | 'session' | 'always' | 'always-all';
 
 interface ToolPermissionConfirmationProps {
   data: ToolPermissionData;
@@ -183,6 +183,17 @@ export const ToolPermissionConfirmation: React.FC<ToolPermissionConfirmationProp
     });
   }, [data.requestId, data.sessionId, onSubmit]);
 
+  // Handler for "Allow All WebFetches" - saves wildcard pattern
+  const handleAllowAllWebFetches = useCallback(() => {
+    onSubmit(data.requestId, data.sessionId, {
+      decision: 'allow',
+      scope: 'always-all'
+    });
+  }, [data.requestId, data.sessionId, onSubmit]);
+
+  // Check if this is a WebFetch request (can offer "Allow All WebFetches")
+  const isWebFetch = toolName === 'WebFetch';
+
   // Get title based on tool and destructiveness
   const getTitle = () => {
     if (hasDestructive) {
@@ -291,6 +302,25 @@ export const ToolPermissionConfirmation: React.FC<ToolPermissionConfirmationProp
           </button>
         </div>
       </div>
+
+      {/* Group 3: Allow All WebFetches (only for WebFetch tool) */}
+      {isWebFetch && (
+        <div className="tool-permission-confirmation-group tool-permission-confirmation-group--webfetch-all">
+          <div className="tool-permission-confirmation-patterns">
+            <div className="tool-permission-confirmation-patterns-label">
+              Or allow all URLs:
+            </div>
+          </div>
+          <div className="tool-permission-confirmation-actions-row">
+            <button
+              className="tool-permission-confirmation-button tool-permission-confirmation-button--always-all"
+              onClick={handleAllowAllWebFetches}
+            >
+              Allow All WebFetches
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -490,6 +490,12 @@ app.whenReady().then(async () => {
       permissionService.addAllowedUrlPattern(workspacePath, pattern, description);
     });
 
+    // Inject "Allow All URLs" handler for WebFetch "Allow All WebFetches" button
+    // This saves the wildcard pattern (*) to allow all web fetches
+    ClaudeCodeProvider.setAllowAllUrlsHandler((workspacePath) => {
+      permissionService.allowAllUrls(workspacePath);
+    });
+
     // Inject additional directory saver for file access "Always" approvals
     // This saves directories when user approves access outside workspace with "Always"
     ClaudeCodeProvider.setAdditionalDirectorySaver((workspacePath, directory, canWrite) => {
