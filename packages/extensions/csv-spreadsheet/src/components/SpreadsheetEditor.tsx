@@ -11,7 +11,6 @@ import type { CustomEditorProps, NormalizedSelectionRange } from '../types';
 import { useSpreadsheetData } from '../hooks/useSpreadsheetData';
 import { columnIndexToLetter, generateColumnHeaders } from '../utils/csvParser';
 import { isFormula } from '../utils/formulaEngine';
-import { SpreadsheetToolbar } from './SpreadsheetToolbar';
 import { FormulaBar } from './FormulaBar';
 import { ContextMenu, type ContextMenuItem } from './ContextMenu';
 import { registerEditorStore, unregisterEditorStore } from '../aiTools';
@@ -38,6 +37,7 @@ function formatSelectionRef(selection: NormalizedSelectionRange | null): string 
 
 /**
  * Convert spreadsheet data to RevoGrid source format with display buffer
+ * When headerRowCount > 0, returns only the data rows (non-header rows)
  */
 function toGridSource(
   rows: { raw: string; computed: string | number | null; error?: string }[][],
@@ -45,10 +45,46 @@ function toGridSource(
   headerRowCount: number,
   displayColumnCount: number
 ): Record<string, string | number>[] {
-  const displayRowCount = rows.length + DISPLAY_BUFFER_ROWS;
+  // Start from after header rows
+  const dataRows = rows.slice(headerRowCount);
+  const displayRowCount = dataRows.length + DISPLAY_BUFFER_ROWS;
   const result: Record<string, string | number>[] = [];
 
   for (let rowIndex = 0; rowIndex < displayRowCount; rowIndex++) {
+    const rowData: Record<string, string | number> = {};
+    const row = dataRows[rowIndex];
+
+    for (let c = 0; c < displayColumnCount; c++) {
+      const colKey = columnIndexToLetter(c);
+      const cell = row?.[c];
+
+      if (cell?.error) {
+        rowData[colKey] = cell.error;
+      } else if (cell?.computed !== null && cell?.computed !== undefined) {
+        rowData[colKey] = cell.computed;
+      } else {
+        rowData[colKey] = cell?.raw || '';
+      }
+    }
+    result.push(rowData);
+  }
+
+  return result;
+}
+
+/**
+ * Convert header rows to pinned top source format for RevoGrid
+ */
+function toPinnedTopSource(
+  rows: { raw: string; computed: string | number | null; error?: string }[][],
+  headerRowCount: number,
+  displayColumnCount: number
+): Record<string, string | number>[] {
+  if (headerRowCount === 0) return [];
+
+  const result: Record<string, string | number>[] = [];
+
+  for (let rowIndex = 0; rowIndex < headerRowCount; rowIndex++) {
     const rowData: Record<string, string | number> = {};
     const row = rows[rowIndex];
 
@@ -64,9 +100,7 @@ function toGridSource(
         rowData[colKey] = cell?.raw || '';
       }
     }
-    if (rowIndex < headerRowCount) {
-      rowData._rowClass = 'header-row';
-    }
+    rowData._rowClass = 'header-row';
     result.push(rowData);
   }
 
@@ -137,6 +171,8 @@ export function SpreadsheetEditor({
     y: number;
     isRowHeader: boolean;
     rowIndex: number | null;
+    isColumnHeader: boolean;
+    colIndex: number | null;
   } | null>(null);
   const gridContainerRef = useRef<HTMLDivElement>(null);
 
@@ -242,10 +278,32 @@ export function SpreadsheetEditor({
     [displayColumnCount]
   );
 
+  const headerRowCount = spreadsheet.data.headerRowCount || 0;
+
   const source = useMemo(
-    () => toGridSource(spreadsheet.data.rows, spreadsheet.data.columnCount, spreadsheet.data.headerRowCount || 0, displayColumnCount),
-    [spreadsheet.data.rows, spreadsheet.data.columnCount, spreadsheet.data.headerRowCount, displayColumnCount]
+    () => toGridSource(spreadsheet.data.rows, spreadsheet.data.columnCount, headerRowCount, displayColumnCount),
+    [spreadsheet.data.rows, spreadsheet.data.columnCount, headerRowCount, displayColumnCount]
   );
+
+  const pinnedTopSource = useMemo(
+    () => toPinnedTopSource(spreadsheet.data.rows, headerRowCount, displayColumnCount),
+    [spreadsheet.data.rows, headerRowCount, displayColumnCount]
+  );
+
+  /**
+   * Translate a row index from RevoGrid to the actual row index in our data.
+   * RevoGrid uses separate indices for pinned rows vs regular rows.
+   * - Rows in pinnedTopSource have indices 0 to headerRowCount-1 (in pinned context)
+   * - Rows in source have indices 0 to N (but map to headerRowCount to headerRowCount+N in our data)
+   */
+  const translateRowIndex = useCallback((gridRowIndex: number, isPinned: boolean): number => {
+    if (isPinned) {
+      // Pinned rows map directly to header rows (0 to headerRowCount-1)
+      return gridRowIndex;
+    }
+    // Regular rows need to be offset by the header row count
+    return gridRowIndex + headerRowCount;
+  }, [headerRowCount]);
 
   // Handle before edit - inject raw value for formulas
   const handleBeforeEdit = useCallback(
@@ -255,11 +313,16 @@ export function SpreadsheetEditor({
       prop?: string;
       val?: unknown;
       model?: Record<string, unknown>;
+      type?: string;
     } | null>) => {
       if (!event.detail) return;
 
-      const { rowIndex, prop } = event.detail;
+      const { rowIndex, prop, type } = event.detail;
       if (rowIndex === undefined || prop === undefined) return;
+
+      // Determine if this is a pinned row edit
+      const isPinned = type === 'rowPinStart';
+      const actualRowIndex = translateRowIndex(rowIndex, isPinned);
 
       const colIndex = columnIndexToLetter(0) === prop ? 0 :
         generateColumnHeaders(displayColumnCount).indexOf(prop);
@@ -267,7 +330,7 @@ export function SpreadsheetEditor({
       if (colIndex < 0) return;
 
       // Get the raw value (formula) from our data
-      const cell = spreadsheet.data.rows[rowIndex]?.[colIndex];
+      const cell = spreadsheet.data.rows[actualRowIndex]?.[colIndex];
       if (cell && cell.raw !== cell.computed) {
         // Override the edit value with the raw formula
         if (event.detail.model) {
@@ -275,7 +338,7 @@ export function SpreadsheetEditor({
         }
       }
     },
-    [spreadsheet.data.rows, displayColumnCount]
+    [spreadsheet.data.rows, displayColumnCount, translateRowIndex]
   );
 
   // Handle cell edit
@@ -288,6 +351,7 @@ export function SpreadsheetEditor({
       rowIndex?: number;
       prop?: string;
       colIndex?: number;
+      type?: string;
     } | null>) => {
       if (!event.detail) return;
 
@@ -295,29 +359,38 @@ export function SpreadsheetEditor({
       const rowIndex = detail.rowIndex;
       const prop = detail.prop;
       const value = detail.val ?? detail.value;
+      const type = detail.type;
 
       if (rowIndex === undefined || prop === undefined) return;
+
+      // Determine if this is a pinned row edit
+      const isPinned = type === 'rowPinStart';
+      const actualRowIndex = translateRowIndex(rowIndex, isPinned);
 
       // Use display column count to find columns in the buffer zone
       const colIndex = columnIndexToLetter(0) === prop ? 0 :
         generateColumnHeaders(displayColumnCount).indexOf(prop);
 
       if (colIndex >= 0) {
-        spreadsheet.updateCell(rowIndex, colIndex, String(value ?? ''));
+        spreadsheet.updateCell(actualRowIndex, colIndex, String(value ?? ''));
       }
     },
-    [spreadsheet, displayColumnCount]
+    [spreadsheet, displayColumnCount, translateRowIndex]
   );
 
   // Handle cell focus (selection)
   const handleFocusCell = useCallback(
-    (event: RevoGridCustomEvent<{ rowIndex: number; colIndex: number } | null>) => {
+    (event: RevoGridCustomEvent<{ rowIndex: number; colIndex: number; type?: string } | null>) => {
       console.log('[CSV] handleFocusCell event:', event.detail);
       if (!event.detail) return;
-      const { rowIndex, colIndex } = event.detail;
+      const { rowIndex, colIndex, type } = event.detail;
 
-      const newCell = { row: rowIndex, col: colIndex };
-      const newRange = normalizeRange(rowIndex, colIndex, rowIndex, colIndex);
+      // Translate row index based on whether it's from pinned rows
+      const isPinned = type === 'rowPinStart';
+      const actualRowIndex = translateRowIndex(rowIndex, isPinned);
+
+      const newCell = { row: actualRowIndex, col: colIndex };
+      const newRange = normalizeRange(actualRowIndex, colIndex, actualRowIndex, colIndex);
 
       console.log('[CSV] Setting selectedCell to:', newCell);
       setSelectedCell(newCell);
@@ -327,21 +400,25 @@ export function SpreadsheetEditor({
       selectedCellRef.current = newCell;
       selectionRangeRef.current = newRange;
     },
-    []
+    [translateRowIndex]
   );
 
   // Handle cell click as backup for selection
   const handleCellClick = useCallback(
-    (event: RevoGridCustomEvent<{ row: number; col: number } | null>) => {
+    (event: RevoGridCustomEvent<{ row: number; col: number; type?: string } | null>) => {
       console.log('[CSV] handleCellClick event:', event.detail);
       if (!event.detail) return;
-      const { row, col } = event.detail;
+      const { row, col, type } = event.detail;
 
-      console.log('[CSV] Setting selectedCell from click to:', { row, col });
-      setSelectedCell({ row, col });
-      setSelectionRange(normalizeRange(row, col, row, col));
+      // Translate row index based on whether it's from pinned rows
+      const isPinned = type === 'rowPinStart';
+      const actualRow = translateRowIndex(row, isPinned);
+
+      console.log('[CSV] Setting selectedCell from click to:', { row: actualRow, col });
+      setSelectedCell({ row: actualRow, col });
+      setSelectionRange(normalizeRange(actualRow, col, actualRow, col));
     },
-    []
+    [translateRowIndex]
   );
 
   // Handle range selection from RevoGrid
@@ -362,17 +439,23 @@ export function SpreadsheetEditor({
 
       if (x === undefined || y === undefined || x1 === undefined || y1 === undefined) return;
 
-      const newRange = normalizeRange(y, x, y1, x1);
+      // Determine if the selection is in pinned rows
+      // Range selections in RevoGrid don't cross pinned/unpinned boundaries typically
+      const isPinned = event.detail.type === 'rowPinStart';
+      const actualY = translateRowIndex(y, isPinned);
+      const actualY1 = translateRowIndex(y1, isPinned);
+
+      const newRange = normalizeRange(actualY, x, actualY1, x1);
       console.log('[CSV] Setting selection from range:', newRange);
 
-      setSelectedCell({ row: y, col: x });
+      setSelectedCell({ row: actualY, col: x });
       setSelectionRange(newRange);
 
       // Update refs immediately so capture handlers have fresh values
-      selectedCellRef.current = { row: y, col: x };
+      selectedCellRef.current = { row: actualY, col: x };
       selectionRangeRef.current = newRange;
     },
-    []
+    [translateRowIndex]
   );
 
   // Get raw value for formula bar
@@ -392,45 +475,29 @@ export function SpreadsheetEditor({
     [selectedCell, spreadsheet]
   );
 
-  // Toolbar actions
-  const handleAddRow = useCallback(() => {
-    const insertIndex = selectedCell ? selectedCell.row + 1 : undefined;
-    spreadsheet.addRow(insertIndex);
-  }, [spreadsheet, selectedCell]);
+  // Intercept RevoGrid's built-in sorting to use our sort logic
+  const handleBeforeSorting = useCallback(
+    (event: RevoGridCustomEvent<{
+      column?: { prop?: string };
+      order?: 'asc' | 'desc';
+    } | null>) => {
+      // Prevent RevoGrid's default sorting
+      event.preventDefault();
 
-  const handleDeleteRow = useCallback(() => {
-    if (selectedCell) {
-      spreadsheet.deleteRow(selectedCell.row);
-      setSelectedCell(null);
-      setSelectionRange(null);
-    }
-  }, [spreadsheet, selectedCell]);
+      if (!event.detail) return;
 
-  const handleAddColumn = useCallback(() => {
-    const insertIndex = selectedCell ? selectedCell.col + 1 : undefined;
-    spreadsheet.addColumn(insertIndex);
-  }, [spreadsheet, selectedCell]);
+      const { column, order } = event.detail;
+      if (!column?.prop || !order) return;
 
-  const handleDeleteColumn = useCallback(() => {
-    if (selectedCell) {
-      spreadsheet.deleteColumn(selectedCell.col);
-      setSelectedCell(null);
-      setSelectionRange(null);
-    }
-  }, [spreadsheet, selectedCell]);
-
-  const handleSort = useCallback(
-    (direction: 'asc' | 'desc') => {
-      if (selectedCell) {
-        spreadsheet.sortByColumn(selectedCell.col, direction);
+      // Find the column index from the prop (column letter)
+      const colIndex = generateColumnHeaders(displayColumnCount).indexOf(column.prop);
+      if (colIndex >= 0) {
+        console.log(`[CSV] Column header sort: column ${column.prop} (index ${colIndex}), direction ${order}`);
+        spreadsheet.sortByColumn(colIndex, order);
       }
     },
-    [spreadsheet, selectedCell]
+    [spreadsheet, displayColumnCount]
   );
-
-  const handleToggleHeaders = useCallback(() => {
-    spreadsheet.toggleHeaders();
-  }, [spreadsheet]);
 
   // Context menu handler
   const handleContextMenu = useCallback((event: React.MouseEvent) => {
@@ -440,6 +507,24 @@ export function SpreadsheetEditor({
 
     const target = event.target as HTMLElement;
     const rect = container.getBoundingClientRect();
+
+    // Check if clicking on a column header
+    // RevoGrid column headers are in revogr-header elements with data-rgcol attribute
+    const columnHeader = target.closest('revogr-header [data-rgcol]') as HTMLElement | null;
+    if (columnHeader) {
+      const colIndex = parseInt(columnHeader.dataset.rgcol || '', 10);
+      if (!isNaN(colIndex)) {
+        setContextMenu({
+          x: event.clientX - rect.left,
+          y: event.clientY - rect.top,
+          isRowHeader: false,
+          rowIndex: null,
+          isColumnHeader: true,
+          colIndex,
+        });
+        return;
+      }
+    }
 
     // Check if clicking on a row header
     const rowHeader = target.closest('[data-rgrow]:not([data-rgcol])') as HTMLElement | null;
@@ -453,6 +538,8 @@ export function SpreadsheetEditor({
           y: event.clientY - rect.top,
           isRowHeader: true,
           rowIndex,
+          isColumnHeader: false,
+          colIndex: null,
         });
         return;
       }
@@ -482,6 +569,8 @@ export function SpreadsheetEditor({
       y: event.clientY - rect.top,
       isRowHeader: false,
       rowIndex: null,
+      isColumnHeader: false,
+      colIndex: null,
     });
   }, [spreadsheet.data.columnCount, selectionRange]);
 
@@ -760,6 +849,45 @@ export function SpreadsheetEditor({
     return items;
   }, [spreadsheet]);
 
+  // Build column header context menu items
+  const getColumnHeaderContextMenuItems = useCallback((colIndex: number): ContextMenuItem[] => {
+    const colLetter = columnIndexToLetter(colIndex);
+    return [
+      {
+        label: `Sort ${colLetter} A → Z`,
+        action: () => {
+          console.log(`[CSV] Context menu sort: column ${colLetter} (index ${colIndex}), direction asc`);
+          spreadsheet.sortByColumn(colIndex, 'asc');
+        },
+      },
+      {
+        label: `Sort ${colLetter} Z → A`,
+        action: () => {
+          console.log(`[CSV] Context menu sort: column ${colLetter} (index ${colIndex}), direction desc`);
+          spreadsheet.sortByColumn(colIndex, 'desc');
+        },
+      },
+      { label: '', action: () => {}, separator: true },
+      {
+        label: 'Insert Column Left',
+        action: () => spreadsheet.addColumn(colIndex),
+      },
+      {
+        label: 'Insert Column Right',
+        action: () => spreadsheet.addColumn(colIndex + 1),
+      },
+      {
+        label: 'Delete Column',
+        action: () => {
+          spreadsheet.deleteColumn(colIndex);
+          setSelectedCell(null);
+          setSelectionRange(null);
+        },
+        disabled: spreadsheet.data.columnCount <= 1,
+      },
+    ];
+  }, [spreadsheet]);
+
   // Build context menu items
   const getContextMenuItems = useCallback((): ContextMenuItem[] => {
     const hasSelection = !!selectedCell;
@@ -863,11 +991,14 @@ export function SpreadsheetEditor({
   // Get fresh menu items when context menu opens
   const contextMenuItems = useMemo(() => {
     if (!contextMenu) return [];
+    if (contextMenu.isColumnHeader && contextMenu.colIndex !== null) {
+      return getColumnHeaderContextMenuItems(contextMenu.colIndex);
+    }
     if (contextMenu.isRowHeader && contextMenu.rowIndex !== null) {
       return getRowHeaderContextMenuItems(contextMenu.rowIndex);
     }
     return getContextMenuItems();
-  }, [contextMenu, getContextMenuItems, getRowHeaderContextMenuItems]);
+  }, [contextMenu, getContextMenuItems, getRowHeaderContextMenuItems, getColumnHeaderContextMenuItems]);
 
   return (
     <div
@@ -882,22 +1013,6 @@ export function SpreadsheetEditor({
         value={getSelectedCellRaw()}
         onChange={handleFormulaChange}
         isFormula={isFormula(getSelectedCellRaw())}
-      />
-      <SpreadsheetToolbar
-        onAddRow={handleAddRow}
-        onDeleteRow={handleDeleteRow}
-        onAddColumn={handleAddColumn}
-        onDeleteColumn={handleDeleteColumn}
-        onSortAsc={() => handleSort('asc')}
-        onSortDesc={() => handleSort('desc')}
-        onToggleHeaders={handleToggleHeaders}
-        hasSelection={!!selectedCell}
-        hasHeaders={spreadsheet.data.hasHeaders}
-        sortConfig={spreadsheet.sortConfig}
-        canUndo={spreadsheet.canUndo}
-        canRedo={spreadsheet.canRedo}
-        onUndo={spreadsheet.undo}
-        onRedo={spreadsheet.redo}
       />
       <div
         ref={gridContainerRef}
@@ -924,6 +1039,7 @@ export function SpreadsheetEditor({
         <RevoGrid
           columns={columns}
           source={source}
+          pinnedTopSource={pinnedTopSource}
           theme={theme === 'light' ? 'default' : 'darkCompact'}
           rowHeaders={true}
           resize={true}
@@ -935,6 +1051,7 @@ export function SpreadsheetEditor({
           onAfterfocus={handleFocusCell}
           onSetrange={handleSetRange}
           onBeforecellfocus={handleCellClick}
+          onBeforesorting={handleBeforeSorting}
         />
         {contextMenu && (
           <ContextMenu

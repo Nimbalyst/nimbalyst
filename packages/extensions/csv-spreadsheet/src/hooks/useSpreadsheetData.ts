@@ -311,13 +311,29 @@ export function useSpreadsheetData(
       const headerRows = headerRowCount > 0 ? newData.rows.slice(0, headerRowCount) : [];
       const dataRows = headerRowCount > 0 ? newData.rows.slice(headerRowCount) : newData.rows;
 
-      const sortedRows = [...dataRows].sort((a, b) => {
+      // Helper to check if a row is empty (all cells are empty strings)
+      const isRowEmpty = (row: Cell[]): boolean => {
+        return row.every(cell => cell.raw === '' && (cell.computed === '' || cell.computed === null));
+      };
+
+      // Separate non-empty rows from empty rows
+      const nonEmptyRows = dataRows.filter(row => !isRowEmpty(row));
+      const emptyRows = dataRows.filter(row => isRowEmpty(row));
+
+      console.log(`[CSV sortByColumn] Sorting ${nonEmptyRows.length} non-empty rows, keeping ${emptyRows.length} empty rows at end`);
+
+      // Only sort the non-empty rows
+      const sortedNonEmptyRows = [...nonEmptyRows].sort((a, b) => {
         const aVal = a[columnIndex]?.computed;
         const bVal = b[columnIndex]?.computed;
 
-        if (aVal === null && bVal === null) return 0;
-        if (aVal === null) return direction === 'asc' ? -1 : 1;
-        if (bVal === null) return direction === 'asc' ? 1 : -1;
+        // Handle empty values within non-empty rows
+        const aEmpty = aVal === null || aVal === undefined || aVal === '';
+        const bEmpty = bVal === null || bVal === undefined || bVal === '';
+
+        if (aEmpty && bEmpty) return 0;
+        if (aEmpty) return direction === 'asc' ? 1 : -1; // Empty values go to end in asc, start in desc
+        if (bEmpty) return direction === 'asc' ? -1 : 1;
 
         if (typeof aVal === 'number' && typeof bVal === 'number') {
           return direction === 'asc' ? aVal - bVal : bVal - aVal;
@@ -327,7 +343,8 @@ export function useSpreadsheetData(
         return direction === 'asc' ? result : -result;
       });
 
-      newData.rows = [...headerRows, ...sortedRows];
+      // Combine: header rows + sorted non-empty rows + empty rows at the end
+      newData.rows = [...headerRows, ...sortedNonEmptyRows, ...emptyRows];
       return newData;
     });
 
