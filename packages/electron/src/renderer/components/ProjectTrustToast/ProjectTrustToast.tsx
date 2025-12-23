@@ -207,6 +207,7 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
             disabled={isSubmitting}
           >
             <span className="project-trust-toast-mode-label">Smart Permissions</span>
+            <span className="project-trust-toast-mode-badge project-trust-toast-mode-badge--beta">Beta</span>
             <span className="project-trust-toast-mode-badge">Recommended</span>
           </button>
           <button
