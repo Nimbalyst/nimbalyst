@@ -24,9 +24,19 @@ export const ACTIVE_EDITOR_SELECTOR = '.file-tabs-container .multi-editor-instan
 // Scoped to file-tabs-container to avoid matching AI Chat tabs
 export const ACTIVE_FILE_TAB_SELECTOR = '.file-tabs-container .tab.active .tab-title';
 
+/**
+ * Permission mode for testing. Use with launchElectronApp's permissionMode option.
+ * - 'ask': Smart Permissions mode (requires manual approval for each tool)
+ * - 'allow-all': Always Allow mode (no permission prompts)
+ * - undefined: Don't auto-configure (shows trust toast)
+ */
+export type TestPermissionMode = 'ask' | 'allow-all';
+
 export async function launchElectronApp(options?: {
   workspace?: string;
   env?: Record<string, string>;
+  /** Auto-trust workspace and set permission mode. Skips the trust toast. */
+  permissionMode?: TestPermissionMode;
 }): Promise<ElectronApplication> {
   const electronMain = path.resolve(__dirname, '../out/main/index.js');
   const electronCwd = path.resolve(__dirname, '../../../');
@@ -65,7 +75,7 @@ export async function launchElectronApp(options?: {
   }
 
   // Build env
-  const testEnv = {
+  const testEnv: Record<string, string | undefined> = {
     ...process.env,
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? 'playwright-test-key',
     ELECTRON_DISABLE_SECURITY_WARNINGS: '1',
@@ -73,6 +83,11 @@ export async function launchElectronApp(options?: {
     PLAYWRIGHT: '1', // Default: skip session restoration
     ...options?.env,
   };
+
+  // Set permission mode if specified - auto-trusts workspace and sets mode
+  if (options?.permissionMode) {
+    testEnv.NIMBALYST_PERMISSION_MODE = options.permissionMode;
+  }
 
   // If test passes ENABLE_SESSION_RESTORE, remove PLAYWRIGHT to allow restoration
   if (options?.env && 'ENABLE_SESSION_RESTORE' in options.env) {

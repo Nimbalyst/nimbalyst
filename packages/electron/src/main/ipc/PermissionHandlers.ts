@@ -303,5 +303,44 @@ export function registerPermissionHandlers(): void {
     }
   });
 
+  // Evaluate a tool command and return the permission decision (for testing)
+  ipcMain.handle('permissions:evaluateCommand', async (_event, workspacePath: string, sessionId: string, toolName: string, toolDescription: string) => {
+    if (!workspacePath) {
+      throw new Error('workspacePath is required');
+    }
+    if (!toolName) {
+      throw new Error('toolName is required');
+    }
+
+    try {
+      const result = await permissionService.evaluateCommand(workspacePath, sessionId, toolName, toolDescription);
+      logger.main.info('[PermissionHandlers] Command evaluated:', { toolName, decision: result.decision });
+      return result;
+    } catch (error) {
+      logger.main.error('[PermissionHandlers] Failed to evaluate command:', error);
+      throw error;
+    }
+  });
+
+  // Apply a permission response (for testing)
+  ipcMain.handle('permissions:applyResponse', async (_event, workspacePath: string, sessionId: string, requestId: string, response: { decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' }) => {
+    if (!workspacePath) {
+      throw new Error('workspacePath is required');
+    }
+    if (!requestId) {
+      throw new Error('requestId is required');
+    }
+
+    try {
+      permissionService.applyPermissionResponse(workspacePath, sessionId, requestId, response);
+      logger.main.info('[PermissionHandlers] Permission response applied:', { requestId, decision: response.decision, scope: response.scope });
+      broadcastPermissionChange(workspacePath);
+      return { success: true };
+    } catch (error) {
+      logger.main.error('[PermissionHandlers] Failed to apply permission response:', error);
+      throw error;
+    }
+  });
+
   logger.main.info('[PermissionHandlers] Permission handlers registered');
 }

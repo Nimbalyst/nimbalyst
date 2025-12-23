@@ -9,15 +9,17 @@ import {
   submitChatPrompt,
   openAgentPermissionsSettings,
   getAllowedUrlPatterns,
+  getAllowedToolPatterns,
 } from '../utils/testHelpers';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
 /**
- * E2E test for WebFetch permission checks.
+ * E2E tests for WebFetch and WebSearch permission checks.
  *
- * Tests that in Smart Permissions mode, WebFetch requests trigger permission
- * confirmation and that "Always" properly saves the URL pattern.
+ * Tests that in Smart Permissions mode:
+ * - WebFetch requests trigger permission confirmation and "Always" saves URL patterns
+ * - WebSearch requests trigger permission confirmation and "Always" saves tool patterns
  */
 
 // Increase timeout for AI-related tests
@@ -128,4 +130,61 @@ test('webfetch: Allow Always saves pattern and subsequent requests pass without 
     pattern.toLowerCase().includes('example.com')
   );
   expect(hasExampleDomain).toBe(true);
+});
+
+test('websearch: Allow Always saves pattern and subsequent requests pass without asking', async () => {
+  // Switch to agent mode
+  await switchToAgentMode(page);
+  await page.waitForTimeout(1000);
+
+  // First request: Ask the agent to search the web
+  await submitChatPrompt(page, 'Search the web for "Anthropic Claude latest news"');
+
+  // Wait for the permission confirmation dialog to appear
+  const permissionConfirmation = page.locator(PLAYWRIGHT_TEST_SELECTORS.permissionConfirmation);
+  await expect(permissionConfirmation).toBeVisible({ timeout: 30000 });
+
+  // Verify the dialog shows permission-related info
+  await expect(permissionConfirmation.locator(PLAYWRIGHT_TEST_SELECTORS.permissionConfirmationTitle))
+    .toContainText('permission');
+
+  // Verify the command shows it's a search (the rawCommand includes "search")
+  const commandText = await permissionConfirmation.locator(PLAYWRIGHT_TEST_SELECTORS.permissionConfirmationCommand).textContent();
+  expect(commandText).toBeTruthy();
+  expect(commandText?.toLowerCase()).toContain('search');
+
+  // Click "Allow Always" to save the pattern
+  const allowAlwaysButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.permissionConfirmationAllowAlwaysButton);
+  await expect(allowAlwaysButton).toBeVisible();
+  await allowAlwaysButton.click();
+
+  // Wait for the dialog to close and the request to complete
+  await expect(permissionConfirmation).not.toBeVisible({ timeout: 5000 });
+
+  // Wait for the AI to finish responding
+  await page.waitForTimeout(3000);
+
+  // Second request: Ask to search again - should NOT ask for permission
+  await submitChatPrompt(page, 'Search for "TypeScript 5.0 features"');
+
+  // Wait a bit for the request to be processed
+  await page.waitForTimeout(5000);
+
+  // The permission dialog should NOT appear this time since we clicked "Allow Always"
+  // If it does appear within 3 seconds, the test fails
+  const dialogAppeared = await permissionConfirmation.isVisible().catch(() => false);
+  expect(dialogAppeared).toBe(false);
+
+  // Navigate to Agent Permissions settings and verify the tool pattern was saved
+  await openAgentPermissionsSettings(page);
+
+  // Get all allowed tool patterns from the settings panel
+  const allowedPatterns = await getAllowedToolPatterns(page);
+  console.log('Allowed tool patterns:', allowedPatterns);
+
+  // Verify "Search the web" (the displayName for websearch) is in the list
+  const hasWebSearchPattern = allowedPatterns.some(pattern =>
+    pattern.toLowerCase().includes('search') && pattern.toLowerCase().includes('web')
+  );
+  expect(hasWebSearchPattern).toBe(true);
 });

@@ -156,6 +156,16 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     canWrite: boolean
   ) => void) | null = null;
 
+  // Pending request registrar (injected from electron main process)
+  // Registers a permission request so it can be looked up when the user responds
+  // Used for tools that bypass the normal evaluateCommand flow (e.g., WebSearch)
+  private static pendingRequestRegistrar: ((
+    requestId: string,
+    workspacePath: string,
+    sessionId: string,
+    request: any // PermissionRequest
+  ) => void) | null = null;
+
   static readonly DEFAULT_MODEL = 'claude-code:sonnet';
 
   /**
@@ -299,6 +309,20 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     response: { decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' }
   ) => void) | null): void {
     ClaudeCodeProvider.permissionResponseHandler = handler;
+  }
+
+  /**
+   * Set the pending request registrar function (called from electron main process)
+   * This allows tools that bypass the normal evaluateCommand flow (e.g., WebSearch)
+   * to register their permission requests so they can be handled by permissionResponseHandler
+   */
+  public static setPendingRequestRegistrar(registrar: ((
+    requestId: string,
+    workspacePath: string,
+    sessionId: string,
+    request: any // PermissionRequest
+  ) => void) | null): void {
+    ClaudeCodeProvider.pendingRequestRegistrar = registrar;
   }
 
   async initialize(config: ProviderConfig): Promise<void> {
@@ -2622,18 +2646,27 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           // URL not in allowed list - handle permission request directly in hook
           this.logSecurity(`[PreToolUse] WebFetch URL not allowed, requesting permission:`, { url });
 
+          // Extract hostname for the permission pattern (what gets saved)
+          let hostname: string;
+          try {
+            hostname = new URL(url).hostname;
+          } catch {
+            hostname = url; // Fallback to full URL if parsing fails
+          }
+
           // Generate a unique request ID
           const requestId = `perm-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
           // Create a permission request object
+          // Pattern uses hostname so "Allow Always" applies to the whole domain
           const permissionRequest = {
             id: requestId,
             toolName: 'WebFetch',
             rawCommand: `fetch ${url}`,
             actionsNeedingApproval: [{
               action: {
-                pattern: `WebFetch:${url}`,
-                displayName: `Fetch ${url}`,
+                pattern: `webfetch:${hostname}`,
+                displayName: `Fetch from ${hostname}`,
               },
               decision: 'ask' as const,
               reason: 'URL not in allowed list',
@@ -2730,23 +2763,55 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           });
         }
 
-        // WebSearch always needs approval (no URL pattern matching for searches)
+        // WebSearch needs approval unless already allowed
         if (toolName === 'WebSearch') {
           const query = toolInput?.query;
-          this.logSecurity(`[PreToolUse] WebSearch requesting permission:`, { query });
+          this.logSecurity(`[PreToolUse] WebSearch checking permission:`, { query });
+
+          // First check if WebSearch is already allowed via the permission handler
+          if (ClaudeCodeProvider.permissionHandler && workspacePath && sessionId) {
+            try {
+              const result = await ClaudeCodeProvider.permissionHandler(
+                workspacePath,
+                sessionId,
+                'WebSearch',
+                `search "${query}"`
+              );
+              if (result.decision === 'allow') {
+                this.logSecurity(`[PreToolUse] WebSearch already allowed, permitting:`, { query });
+                return {};
+              }
+              if (result.decision === 'deny') {
+                this.logSecurity(`[PreToolUse] WebSearch denied by permission settings:`, { query });
+                return {
+                  hookSpecificOutput: {
+                    hookEventName: 'PreToolUse' as const,
+                    permissionDecision: 'deny' as const
+                  }
+                };
+              }
+              // If decision is 'ask', continue with the permission request flow below
+            } catch (error) {
+              this.logSecurity(`[PreToolUse] WebSearch permission check failed, asking user:`, { query, error });
+            }
+          }
+
+          // Need to ask user for permission
+          this.logSecurity(`[PreToolUse] WebSearch requesting user permission:`, { query });
 
           // Generate a unique request ID
           const requestId = `perm-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
           // Create a permission request object
+          // Use generic pattern 'websearch' so "Allow Always" applies to all future searches
           const permissionRequest = {
             id: requestId,
             toolName: 'WebSearch',
             rawCommand: `search "${query}"`,
             actionsNeedingApproval: [{
               action: {
-                pattern: `WebSearch:${query}`,
-                displayName: `Search: ${query}`,
+                pattern: 'websearch',
+                displayName: 'Search the web',
               },
               decision: 'ask' as const,
               reason: 'Web search requires approval',
@@ -2757,6 +2822,17 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             hasDestructiveActions: false,
             createdAt: Date.now(),
           };
+
+          // Register the pending request with PermissionService so it can be looked up
+          // when the user responds and the permission can be persisted
+          if (ClaudeCodeProvider.pendingRequestRegistrar && workspacePath && sessionId) {
+            ClaudeCodeProvider.pendingRequestRegistrar(
+              requestId,
+              workspacePath,
+              sessionId,
+              permissionRequest
+            );
+          }
 
           // Create promise that will be resolved when user responds
           const responsePromise = new Promise<{ decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' }>((resolve, reject) => {
@@ -2792,6 +2868,24 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               query,
               decision: response.decision,
               scope: response.scope,
+            });
+
+            // Persist the permission response for session/always scope
+            if (ClaudeCodeProvider.permissionResponseHandler && workspacePath && sessionId) {
+              ClaudeCodeProvider.permissionResponseHandler(
+                workspacePath,
+                sessionId,
+                requestId,
+                response
+              );
+            }
+
+            // Emit event so UI can update
+            this.emit('toolPermission:resolved', {
+              requestId,
+              sessionId,
+              response,
+              timestamp: Date.now()
             });
 
             if (response.decision === 'allow') {

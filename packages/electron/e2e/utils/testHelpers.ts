@@ -116,9 +116,12 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   trustMenu: '.trust-menu',
   trustToast: '.project-trust-toast',
   trustToastOverlay: '.project-trust-toast-overlay',
-  trustToastOption: '.project-trust-toast-option',
-  trustToastSmartPermissions: '.project-trust-toast-option:has-text("Smart Permissions")',
-  trustToastAlwaysAllow: '.project-trust-toast-option:has-text("Always Allow")',
+  trustToastModeBtn: '.project-trust-toast-mode-btn',
+  trustToastSmartPermissions: '.project-trust-toast-mode-btn:has-text("Smart Permissions")',
+  trustToastAlwaysAllow: '.project-trust-toast-mode-btn:has-text("Always Allow")',
+  trustToastSaveButton: '.project-trust-toast-save',
+  trustToastCancelButton: '.project-trust-toast-cancel',
+  trustToastDontTrustButton: '.project-trust-toast-dont-trust',
 
   // Permission confirmation (inline tool permission request)
   permissionConfirmation: '.tool-permission-confirmation',
@@ -146,6 +149,9 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   permissionsUrlItem: '.permissions-url-item',
   permissionsUrlPattern: '.permissions-url-pattern',
   permissionsEmptyState: '.permissions-empty-state',
+  permissionsPatternList: '.permissions-pattern-list',
+  permissionsPatternItem: '.permissions-pattern-item',
+  permissionsPatternName: '.permissions-pattern-name',
 };
 
 /**
@@ -669,14 +675,19 @@ export async function trustWorkspaceSmartPermissions(page: Page): Promise<void> 
   const trustToast = page.locator(PLAYWRIGHT_TEST_SELECTORS.trustToast);
 
   // Wait for toast to appear (it shows for new untrusted workspaces)
-  const isVisible = await trustToast.isVisible().catch(() => false);
-  if (!isVisible) {
+  try {
+    await expect(trustToast).toBeVisible({ timeout: 5000 });
+  } catch {
     // Toast may have already been dismissed or workspace already trusted
     return;
   }
 
-  // Click Smart Permissions option
+  // Smart Permissions is selected by default, but click it to be sure
   await page.locator(PLAYWRIGHT_TEST_SELECTORS.trustToastSmartPermissions).click();
+  await page.waitForTimeout(300);
+
+  // Click "Trust Project" to save the selection
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.trustToastSaveButton).click();
   await page.waitForTimeout(500);
 
   // Wait for toast to dismiss
@@ -691,14 +702,19 @@ export async function trustWorkspaceAlwaysAllow(page: Page): Promise<void> {
   const trustToast = page.locator(PLAYWRIGHT_TEST_SELECTORS.trustToast);
 
   // Wait for toast to appear (it shows for new untrusted workspaces)
-  const isVisible = await trustToast.isVisible().catch(() => false);
-  if (!isVisible) {
+  try {
+    await expect(trustToast).toBeVisible({ timeout: 5000 });
+  } catch {
     // Toast may have already been dismissed or workspace already trusted
     return;
   }
 
-  // Click Always Allow option
+  // Click Always Allow option to select it
   await page.locator(PLAYWRIGHT_TEST_SELECTORS.trustToastAlwaysAllow).click();
+  await page.waitForTimeout(300);
+
+  // Click "Trust Project" to save the selection
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.trustToastSaveButton).click();
   await page.waitForTimeout(500);
 
   // Wait for toast to dismiss
@@ -755,6 +771,24 @@ export async function getAllowedUrlPatterns(page: Page): Promise<string[]> {
   const patterns: string[] = [];
   for (let i = 0; i < count; i++) {
     const text = await urlPatterns.nth(i).textContent();
+    if (text) {
+      patterns.push(text.trim());
+    }
+  }
+
+  return patterns;
+}
+
+/**
+ * Get allowed tool patterns from the Agent Permissions settings panel
+ */
+export async function getAllowedToolPatterns(page: Page): Promise<string[]> {
+  const toolPatterns = page.locator(PLAYWRIGHT_TEST_SELECTORS.permissionsPatternName);
+  const count = await toolPatterns.count();
+
+  const patterns: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const text = await toolPatterns.nth(i).textContent();
     if (text) {
       patterns.push(text.trim());
     }

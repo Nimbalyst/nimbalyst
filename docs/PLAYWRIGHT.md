@@ -409,6 +409,34 @@ electronApp = await launchElectronApp({
 });
 ```
 
+### Permission Mode for Tests
+
+Use the `permissionMode` option to auto-trust workspaces and skip the trust toast:
+
+```typescript
+// Launch with "Always Allow" mode - no permission prompts
+electronApp = await launchElectronApp({
+  workspace: workspaceDir,
+  permissionMode: 'allow-all'
+});
+
+// Launch with "Smart Permissions" mode - will prompt for tools
+electronApp = await launchElectronApp({
+  workspace: workspaceDir,
+  permissionMode: 'ask'
+});
+
+// Launch without setting permission mode - shows trust toast (default)
+electronApp = await launchElectronApp({
+  workspace: workspaceDir
+});
+```
+
+This is useful for:
+- **Most E2E tests**: Use `permissionMode: 'allow-all'` to avoid permission prompts
+- **Permission-specific tests**: Use `permissionMode: 'ask'` to test permission dialogs
+- **Trust toast tests**: Omit `permissionMode` to test the trust toast UI
+
 ## Common Test Patterns
 
 ### Testing File Changes
@@ -727,8 +755,8 @@ const editorRegistry = await page.evaluate(() => (window as any).__editorRegistr
 
 ### Best Practices Summary
 
-1. **Use `data-testid`** for critical interactive elements (buttons, inputs, dialogs)
-2. **Use `data-*` attributes** for state and mode indicators
+1. **Use \****`data-testid`** for critical interactive elements (buttons, inputs, dialogs)
+2. **Use \****\`data-*`**\*\* attributes** for state and mode indicators
 3. **Use semantic class names** that won't change with styling refactors
 4. **Structure HTML** to make relationships between elements clear
 5. **Expose test hooks** for complex internal state when necessary

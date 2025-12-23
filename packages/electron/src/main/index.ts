@@ -468,6 +468,7 @@ app.whenReady().then(async () => {
     const permissionService = getPermissionService();
     ClaudeCodeProvider.setPermissionHandler(permissionService.getPermissionHandler());
     ClaudeCodeProvider.setPermissionResponseHandler(permissionService.getPermissionResponseHandler());
+    ClaudeCodeProvider.setPendingRequestRegistrar(permissionService.getPendingRequestRegistrar());
 
     // Inject security logger for agent permission checks (dev mode only)
     // This allows reviewing all permission decisions in the AGENT-SECURITY log

@@ -107,6 +107,9 @@ export class PermissionService {
 
   /**
    * Get or create a permission engine for a workspace
+   *
+   * Supports environment variables for testing:
+   * - NIMBALYST_PERMISSION_MODE: 'ask' | 'allow-all' - Auto-trust and set permission mode
    */
   private getEngine(workspacePath: string): PermissionEngine {
     const workspaceName = workspacePath.split('/').pop() || workspacePath;
@@ -124,6 +127,20 @@ export class PermissionService {
       });
       const permissions = toWorkspacePermissions(stored);
       engine = new PermissionEngine(workspacePath, permissions);
+
+      // Support NIMBALYST_PERMISSION_MODE env var for testing
+      // This auto-trusts the workspace and sets the permission mode
+      const envPermissionMode = process.env.NIMBALYST_PERMISSION_MODE;
+      if (envPermissionMode === 'ask' || envPermissionMode === 'allow-all') {
+        logger.agentSecurity.info(`[PermissionService:${workspaceName}] Auto-configuring from NIMBALYST_PERMISSION_MODE:`, {
+          workspace: workspacePath,
+          mode: envPermissionMode,
+        });
+        engine.trustWorkspace();
+        engine.setPermissionMode(envPermissionMode);
+        // Don't save - this is a runtime-only override for testing
+      }
+
       this.engines.set(workspacePath, engine);
     }
     return engine;
@@ -334,6 +351,38 @@ export class PermissionService {
     response: { decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' }
   ) => void {
     return this.applyPermissionResponse.bind(this);
+  }
+
+  /**
+   * Register a pending permission request from external sources (e.g., PreToolUse hook).
+   * This allows tools that bypass the normal evaluateCommand flow to still use
+   * the standard permission response handler.
+   */
+  public registerPendingRequest(
+    requestId: string,
+    workspacePath: string,
+    sessionId: string,
+    request: PermissionRequest
+  ): void {
+    const workspaceName = workspacePath.split('/').pop() || workspacePath;
+    logger.agentSecurity.info(`[PermissionService:${workspaceName}] Registering external pending request:`, {
+      requestId,
+      toolName: request.toolName,
+      patterns: request.actionsNeedingApproval.map(a => a.action.pattern),
+    });
+    this.pendingRequests.set(requestId, { workspacePath, sessionId, request });
+  }
+
+  /**
+   * Get handler for registering pending requests for ClaudeCodeProvider
+   */
+  public getPendingRequestRegistrar(): (
+    requestId: string,
+    workspacePath: string,
+    sessionId: string,
+    request: PermissionRequest
+  ) => void {
+    return this.registerPendingRequest.bind(this);
   }
 
   /**
