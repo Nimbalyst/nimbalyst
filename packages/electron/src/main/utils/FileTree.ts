@@ -62,11 +62,6 @@ export function getFolderContents(dirPath: string, depth: number = 0): FileTreeI
                 continue;
             }
 
-            // Skip hidden files except special ones
-            if (item.startsWith('.') && item !== '.nimbalyst' && item !== '.claude') {
-                continue;
-            }
-
             const fullPath = join(dirPath, item);
 
             try {
