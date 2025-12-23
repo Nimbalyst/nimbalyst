@@ -587,18 +587,43 @@ export function SpreadsheetEditor({
   }, []);
 
   // Helper to get row index from a row header element
+  // Returns the DATA row index (not grid row index), accounting for header rows
   const getRowIndexFromHeader = useCallback((target: HTMLElement): number | null => {
-    // Row headers are in .rowHeaders area and have data-rgrow but no data-rgcol
-    const rowHeaderArea = target.closest('.rowHeaders');
-    if (rowHeaderArea) {
-      const cell = target.closest('[data-rgrow]') as HTMLElement | null;
-      if (cell) {
-        const rowIndex = parseInt(cell.dataset.rgrow || '', 10);
-        if (!isNaN(rowIndex)) return rowIndex;
-      }
+    // Find the cell with data-rgrow attribute
+    const cell = target.closest('[data-rgrow]') as HTMLElement | null;
+    if (!cell) return null;
+
+    // Must be in row headers area (either regular or pinned)
+    const isInRowHeaders = !!cell.closest('.rowHeaders');
+    if (!isInRowHeaders) return null;
+
+    const gridRowIndex = parseInt(cell.dataset.rgrow || '', 10);
+    if (isNaN(gridRowIndex)) return null;
+
+    // Check if this is a pinned row (header rows) by looking for various indicators
+    // The pinned rows container may have different structures depending on RevoGrid version
+    const viewport = cell.closest('revogr-viewport-scroll');
+    const slot = viewport?.getAttribute('slot');
+    const dataContainer = cell.closest('revogr-data');
+    const dataType = dataContainer?.getAttribute('type');
+    const isPinned = slot?.includes('rowPinStart') || dataType === 'rowPinStart';
+
+    // Debug logging - uncomment if needed
+    // console.log('[CSV] getRowIndexFromHeader:', {
+    //   gridRowIndex,
+    //   isPinned,
+    //   slot,
+    //   dataType,
+    //   cellClasses: cell.className,
+    // });
+
+    // Translate grid index to data index
+    if (isPinned) {
+      return gridRowIndex; // Pinned rows map directly
+    } else {
+      return gridRowIndex + headerRowCount; // Regular rows are offset
     }
-    return null;
-  }, []);
+  }, [headerRowCount]);
 
   // Handle column header selection
   const selectColumn = useCallback((colIndex: number) => {
@@ -637,9 +662,19 @@ export function SpreadsheetEditor({
     setSelectionRange(normalizeRange(rowIndex, 0, rowIndex, totalCols - 1));
     selectedCellRef.current = { row: rowIndex, col: 0 };
     selectionRangeRef.current = normalizeRange(rowIndex, 0, rowIndex, totalCols - 1);
-    // Update RevoGrid's visual selection (adjust for header rows)
-    const gridRowIndex = rowIndex - headerRowCount;
-    if (gridRowIndex >= 0) {
+
+    // Update RevoGrid's visual selection
+    if (rowIndex < headerRowCount) {
+      // Pinned row - use rowPinStart type
+      revoGridRef.current?.setCellsFocus(
+        { x: 0, y: rowIndex },
+        { x: totalCols - 1, y: rowIndex },
+        undefined, // colType
+        'rowPinStart' // rowType
+      );
+    } else {
+      // Regular row - adjust index for header offset
+      const gridRowIndex = rowIndex - headerRowCount;
       revoGridRef.current?.setCellsFocus(
         { x: 0, y: gridRowIndex },
         { x: totalCols - 1, y: gridRowIndex }
@@ -656,12 +691,40 @@ export function SpreadsheetEditor({
     setSelectionRange(normalizeRange(minRow, 0, maxRow, totalCols - 1));
     selectedCellRef.current = { row: minRow, col: 0 };
     selectionRangeRef.current = normalizeRange(minRow, 0, maxRow, totalCols - 1);
-    // Update RevoGrid's visual selection (adjust for header rows)
-    const gridMinRow = minRow - headerRowCount;
-    const gridMaxRow = maxRow - headerRowCount;
-    if (gridMaxRow >= 0) {
+
+    // Update RevoGrid's visual selection
+    // Handle cases: all pinned, all regular, or mixed
+    if (maxRow < headerRowCount) {
+      // All rows are pinned
       revoGridRef.current?.setCellsFocus(
-        { x: 0, y: Math.max(0, gridMinRow) },
+        { x: 0, y: minRow },
+        { x: totalCols - 1, y: maxRow },
+        undefined,
+        'rowPinStart'
+      );
+    } else if (minRow >= headerRowCount) {
+      // All rows are regular (not pinned)
+      const gridMinRow = minRow - headerRowCount;
+      const gridMaxRow = maxRow - headerRowCount;
+      revoGridRef.current?.setCellsFocus(
+        { x: 0, y: gridMinRow },
+        { x: totalCols - 1, y: gridMaxRow }
+      );
+    } else {
+      // Mixed: some pinned, some regular
+      // RevoGrid doesn't support cross-type selection in one call, so we select both parts
+      // Select pinned rows first
+      revoGridRef.current?.setCellsFocus(
+        { x: 0, y: minRow },
+        { x: totalCols - 1, y: headerRowCount - 1 },
+        undefined,
+        'rowPinStart'
+      );
+      // Then select regular rows (this may override the pinned selection visually,
+      // but our internal selectionRange tracks the full range for copy/paste)
+      const gridMaxRow = maxRow - headerRowCount;
+      revoGridRef.current?.setCellsFocus(
+        { x: 0, y: 0 },
         { x: totalCols - 1, y: gridMaxRow }
       );
     }
