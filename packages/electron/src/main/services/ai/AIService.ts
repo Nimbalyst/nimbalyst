@@ -1362,6 +1362,7 @@ export class AIService {
 
       try {
         let fullResponse = '';
+        let lastTextSection = '';  // Track text after the last tool call (for notifications)
         const toolCalls: any[] = [];
         const edits: any[] = [];  // Track edits for the assistant message
         let hasStreamingContent = false;  // Track if we used streamContent tool
@@ -1442,6 +1443,7 @@ export class AIService {
               textChunks++;
               const chunkContent = chunk.content || '';
               fullResponse += chunkContent;
+              lastTextSection += chunkContent;  // Accumulate for notification (reset on tool calls)
 
               // Update activity to indicate streaming
               if (textChunks === 1) {
@@ -1466,6 +1468,7 @@ export class AIService {
               if (chunk.toolCall) {
                 toolCallCount++;
                 toolCalls.push(chunk.toolCall);
+                lastTextSection = '';  // Reset so notification shows text after last tool call
                 // console.group('🔨 [AIService] Tool call received from AI');
                 // console.log('Tool name:', chunk.toolCall.name);
                 // console.log('Tool arguments:', chunk.toolCall.arguments);
@@ -1895,8 +1898,10 @@ export class AIService {
               soundService.playCompletionSound(workspacePath);
 
               // Show OS notification if enabled and window not focused
-              const notificationBody = fullResponse.length > 0
-                ? fullResponse.substring(0, 100) + (fullResponse.length > 100 ? '...' : '')
+              // Use lastTextSection (text after last tool call) for more relevant notification content
+              const notificationText = lastTextSection.trim() || fullResponse;
+              const notificationBody = notificationText.length > 0
+                ? notificationText.substring(0, 100) + (notificationText.length > 100 ? '...' : '')
                 : 'Response complete';
 
               // console.log('[AIService] Calling notification service for session:', session.id);
