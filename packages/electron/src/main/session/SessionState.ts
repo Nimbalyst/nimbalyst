@@ -47,12 +47,12 @@ export async function saveSessionState() {
         lastUpdated: Date.now()
     };
 
-    logger.session.info('[SAVE] Saving session state:', JSON.stringify(sessionState, null, 2));
+    // logger.session.info('[SAVE] Saving session state:', JSON.stringify(sessionState, null, 2));
     saveToStore(sessionState);
 
     // Verify the save by reading it back
     const verified = getSessionState();
-    logger.session.info('[SAVE] Verified session state:', JSON.stringify(verified, null, 2));
+    // logger.session.info('[SAVE] Verified session state:', JSON.stringify(verified, null, 2));
 }
 
 // Restore session state
