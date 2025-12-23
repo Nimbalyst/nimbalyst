@@ -155,6 +155,37 @@
   --revo-border-color: var(--border-primary);
   --revo-text-color: var(--text-primary);
   --revo-header-text-color: var(--text-secondary);
+  --revo-grid-cell-border: rgba(255, 255, 255, 0.15);
+  --revo-grid-header-border: rgba(255, 255, 255, 0.2);
+}
+
+/* Add vertical cell borders for dark themes (darkCompact theme doesn't include them) */
+[data-theme="dark"] .spreadsheet-editor revo-grid revogr-data .rgCell,
+[data-theme="crystal-dark"] .spreadsheet-editor revo-grid revogr-data .rgCell {
+  box-shadow: 0 -1px 0 0 rgba(255, 255, 255, 0.15) inset, -1px 0 0 0 rgba(255, 255, 255, 0.15) inset;
+}
+
+/* Disable full row highlighting on selection - only show cell selection border */
+.spreadsheet-editor revo-grid revogr-data .rgRow.focused-rgRow {
+  background-color: transparent;
+}
+
+/* Highlight row headers when rows are selected */
+.spreadsheet-editor revo-grid .rowHeaders revogr-data .rgRow.focused-rgRow .rgCell {
+  background-color: var(--revo-grid-focused-bg, rgba(59, 130, 246, 0.15));
+}
+
+/* Selection range background fill */
+.spreadsheet-editor revo-grid revogr-overlay-selection .selection-border-range {
+  background-color: rgba(59, 130, 246, 0.1);
+}
+
+/* Column header height - slightly taller than data rows (32px + 5px = 37px) */
+.spreadsheet-editor revo-grid revogr-header {
+  line-height: 37px;
+}
+.spreadsheet-editor revo-grid revogr-header .header-rgRow {
+  height: 37px;
 }
 
 /* Cell content styling */
