@@ -771,6 +771,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       let chunkCount = 0;
       let firstChunkTime: number | undefined;
       let toolCallCount = 0;
+      let receivedCompactBoundary = false;
       // Track tool calls by ID so we can update them with results
       const toolCallsById: Map<string, any> = new Map();
       // Track usage data from the SDK
@@ -1336,6 +1337,9 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               //   trigger: chunk.compact_metadata?.trigger
               // });
 
+              // Mark that we received a compact boundary (prevents false "no output" error)
+              receivedCompactBoundary = true;
+
               // Display compact completion message to user
               const preTokens = chunk.compact_metadata?.pre_tokens || 'unknown';
               yield {
@@ -1630,7 +1634,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
       // Check if this was a slash command that returned no output
       // This helps users understand when a command doesn't exist or failed silently
-      if (isSlashCommand && fullContent.trim().length === 0 && toolCallCount === 0) {
+      // Skip this check if we received a compact_boundary (compact outputs via system message, not fullContent)
+      if (isSlashCommand && fullContent.trim().length === 0 && toolCallCount === 0 && !receivedCompactBoundary) {
         // Extract the command name from the message for the error message
         const commandMatch = message.trimStart().match(/^\/(\S+)/);
         const commandName = commandMatch ? commandMatch[1] : 'unknown';
