@@ -9,12 +9,21 @@ Nimbalyst runs MCP servers **inside the Electron main process** to provide AI ca
 ### Current Internal MCP Servers
 
 1. **Shared MCP Server** (`httpServer.ts`) - Port varies, provides:
-   - `applyDiff` - Apply code replacements to documents
-   - `streamContent` - Stream content to documents
-   - `capture_mockup_screenshot` - Capture annotated mockup screenshots
+  - `applyDiff` - Apply code replacements to documents
+  - `streamContent` - Stream content to documents
+  - `capture_mockup_screenshot` - Capture annotated mockup screenshots
+  - `capture_editor_screenshot` - Capture screenshots of any editor view (custom editors, markdown, code)
 
 2. **Session Naming MCP Server** (`sessionNamingServer.ts`) - Port varies, provides:
-   - `update_session_title` - Update AI session titles
+  - `extension_build` - Build extension project (runs `npm run build`)
+  - `extension_install` - Install extension into running Nimbalyst
+  - `extension_reload` - Hot reload extension (rebuild + reinstall)
+  - `extension_uninstall` - Remove extension from running instance
+  - `restart_nimbalyst` - Restart the application
+  - `extension_get_logs` - Get recent logs from extension development
+  - `extension_get_status` - Query extension load status and contributions
+
+3. **Extension Development Kit MCP Server** (`extensionDevServer.ts`) - Port varies, provides:
 
 ## Architecture
 
@@ -633,19 +642,19 @@ console.log('[CLAUDE-CODE] MCP config:', JSON.stringify(config, null, 2));
 See existing implementations:
 
 1. **Shared MCP Server**: `packages/electron/src/main/mcp/httpServer.ts`
-   - Multi-tool server with workspace routing
-   - IPC coordination with renderer
-   - Document state management
+  - Multi-tool server with workspace routing
+  - IPC coordination with renderer
+  - Document state management
 
 2. **Session Naming Server**: `packages/electron/src/main/mcp/sessionNamingServer.ts`
-   - Simple single-tool server
-   - Session-scoped context
-   - Direct database updates
+  - Simple single-tool server
+  - Session-scoped context
+  - Direct database updates
 
 3. **Mockup Screenshot Service**: `packages/electron/src/main/services/MockupScreenshotService.ts`
-   - Hot/cold path pattern
-   - Request-response via IPC
-   - Timeout handling
+  - Hot/cold path pattern
+  - Request-response via IPC
+  - Timeout handling
 
 ## Troubleshooting
 
@@ -679,3 +688,140 @@ If workspace/session context is missing:
 2. Store per-connection, not globally
 3. Validate context before using it
 4. Provide clear error messages when context is missing
+
+## Extension Development Tools Reference
+
+The Extension Development Kit (EDK) MCP server provides tools specifically designed for AI agents developing extensions. This enables iterative extension development with full visibility into logs, screenshots, and extension state.
+
+### extension_get_logs
+
+Retrieve recent logs from extension development activities.
+
+**Parameters:**
+- `extensionId` (string, optional): Filter logs to a specific extension ID
+- `lastSeconds` (number, optional): Get logs from the last N seconds (default: 60, max: 300)
+- `logLevel` (string, optional): Minimum log level - 'error', 'warn', 'info', 'debug', or 'all' (default: 'all')
+- `source` (string, optional): Log source filter - 'renderer', 'main', 'build', or 'all' (default: 'all')
+
+**Log Sources:**
+- `renderer`: Console output from extension code running in the renderer process
+- `main`: Main process logs related to extension operations
+- `build`: Output from `npm run build` during extension compilation
+
+**Example Response:**
+```
+Extension Development Logs (last 60s)
+Found 15 log entries (buffer: 42/1000)
+Errors: 2, Warnings: 3, Info: 8, Debug: 2
+---
+17:23:45.123 INFO  [main]      Starting build for extension: com.example.my-ext
+17:23:46.456 INFO  [build]     (com.example.my-ext) Compiling TypeScript...
+17:23:47.789 ERROR [renderer]  (com.example.my-ext) TypeError: Cannot read property 'foo' of undefined
+```
+
+### extension_get_status
+
+Query the current status of an installed extension.
+
+**Parameters:**
+- `extensionId` (string, required): The extension ID to query
+
+**Example Response:**
+```
+Extension: com.example.my-ext
+Status: loaded
+
+Custom Editors (1):
+  - My Custom Editor (*.myext)
+
+AI Tools (2):
+  - my_tool_1
+  - my_tool_2
+
+New File Menu Items (1):
+  - My File Type (.myext)
+```
+
+### capture_editor_screenshot
+
+Capture a screenshot of the current editor view. Works with any file type including custom editors from extensions.
+
+**Parameters:**
+- `file_path` (string, optional): The absolute path to the file being edited (uses active file if not specified)
+- `selector` (string, optional): CSS selector to capture a specific element (captures full editor if not specified)
+
+**Use Cases:**
+- Verify custom editor UI rendering during development
+- Capture visual state for debugging layout issues
+- Document extension UI for testing
+
+**Note:** This tool is in the Shared MCP Server (`httpServer.ts`), not the EDK server, but is essential for extension development workflows.
+
+### Extension Development Workflow
+
+A typical AI agent extension development session:
+
+1. **Build the extension:**
+```
+   extension_build(path: "/path/to/my-extension")
+```
+
+2. **Install into running Nimbalyst:**
+```
+   extension_install(path: "/path/to/my-extension")
+```
+
+3. **Check logs for errors:**
+```
+   extension_get_logs(extensionId: "com.example.my-ext", logLevel: "error")
+```
+
+4. **Verify it loaded correctly:**
+```
+   extension_get_status(extensionId: "com.example.my-ext")
+```
+
+5. **Open a file using your custom editor and capture screenshot:**
+```
+   capture_editor_screenshot(file_path: "/path/to/test.myext")
+```
+
+6. **Make changes and hot reload:**
+```
+   extension_reload(extensionId: "com.example.my-ext", path: "/path/to/my-extension")
+```
+
+7. **Check logs after reload:**
+```
+   extension_get_logs(lastSeconds: 30)
+```
+
+### ExtensionLogService Architecture
+
+The log capture system uses a ring buffer architecture:
+
+```
+┌─────────────────────────────────────────────────┐
+│         ExtensionLogService (Singleton)          │
+│                                                   │
+│  ┌─────────────────────────────────────────────┐ │
+│  │        Ring Buffer (1000 entries max)        │ │
+│  │                                               │ │
+│  │  Entry: { timestamp, level, source,          │ │
+│  │           extensionId, message, stack? }     │ │
+│  └─────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────┘
+        ↑                    ↑                    ↑
+   Renderer            Main Process          Build Output
+   Console              Logs                 (npm run build)
+```
+
+**Log Entry Fields:**
+- `timestamp`: Unix timestamp in milliseconds
+- `level`: 'error' | 'warn' | 'info' | 'debug'
+- `source`: 'renderer' | 'main' | 'build'
+- `extensionId`: Extension ID when detectable from source path
+- `message`: The log message content
+- `stack`: Stack trace for errors (when available)
+- `sourceFile`: File path for renderer logs
+- `line`: Line number for renderer logs
