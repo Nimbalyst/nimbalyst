@@ -46,45 +46,26 @@ function getFileType(filePath: string): string {
 // Cache for quick open file searches
 const fileNameCaches = new Map<string, Array<{ path: string; name: string }>>();
 
-// Ripgrep arguments for searching common text file types
-// Used by both file name search (findWorkspaceFiles) and content search
-const QUICKOPEN_FILE_TYPE_ARGS = [
-    // Ripgrep built-in types
-    '--type', 'md',
-    '--type', 'ts',
-    '--type', 'js',
-    '--type', 'json',
-    '--type', 'css',
-    '--type', 'html',
-    '--type', 'py',
-    '--type', 'rust',
-    '--type', 'go',
-    '--type', 'java',
-    '--type', 'c',
-    '--type', 'cpp',
-    '--type', 'ruby',
-    '--type', 'php',
-    '--type', 'sh',
-    '--type', 'yaml',
-    '--type', 'xml',
-    '--type', 'sql',
-    // Additional extensions not covered by built-in types
-    '--glob', '*.txt',
-    '--glob', '*.csv',
-    '--glob', '*.env',
-    '--glob', '*.toml',
-    '--glob', '*.ini',
-    '--glob', '*.conf',
-    '--glob', '*.cfg',
-    '--glob', '*.mockup.html',
-    '--glob', '*.datamodel.json',
-    '--glob', '*.datamodel',
-    '--glob', '*.swift',
-    '--glob', '*.kt',
-    '--glob', '*.scala',
-    '--glob', '*.graphql',
-    '--glob', '*.prisma',
-];
+// Binary file extensions to exclude from QuickOpen results
+// Note: Images are NOT excluded - Nimbalyst can display them
+// Note: PDFs are NOT excluded - extensions may add support
+const BINARY_EXTENSIONS = new Set([
+    // Audio/Video
+    '.mp3', '.mp4', '.avi', '.mov', '.wmv', '.flac', '.wav', '.ogg', '.webm', '.mkv',
+    // Archives
+    '.zip', '.tar', '.gz', '.rar', '.7z', '.bz2', '.xz',
+    // Binaries/Libraries
+    '.exe', '.dll', '.so', '.dylib', '.o', '.a', '.lib', '.bin',
+    // Documents (non-text)
+    '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+    // Database/Lock files
+    '.db', '.sqlite', '.sqlite3', '.lock',
+    // Fonts
+    '.ttf', '.otf', '.woff', '.woff2', '.eot',
+    // Other binary
+    '.pyc', '.pyo', '.class', '.jar', '.war', '.ear',
+    '.node', '.wasm',
+]);
 
 // Get the ripgrep binary path for the current platform
 function getRipgrepPath(): string {
@@ -144,13 +125,14 @@ function getRipgrepPath(): string {
 }
 
 // Cross-platform file finder using ripgrep --files
-// Finds all text files suitable for QuickOpen (not just markdown)
+// Finds all files and filters out binary extensions
 async function findWorkspaceFiles(dir: string): Promise<string[]> {
     const rgPath = getRipgrepPath();
 
+    // Find ALL files, only exclude directories (no file type filtering)
     const rgArgs = [
         '--files',
-        ...QUICKOPEN_FILE_TYPE_ARGS,
+        '--hidden',  // Include dotfiles like .gitignore
         ...RIPGREP_EXCLUDE_ARGS_ARRAY,
         dir
     ];
@@ -173,7 +155,12 @@ async function findWorkspaceFiles(dir: string): Promise<string[]> {
     return stdout
         .split('\n')
         .filter(line => line.trim())
-        .map(file => path.normalize(file));
+        .map(file => path.normalize(file))
+        .filter(file => {
+            // Filter out binary files by extension
+            const ext = path.extname(file).toLowerCase();
+            return !BINARY_EXTENSIONS.has(ext);
+        });
 }
 
 export function registerWorkspaceHandlers() {
