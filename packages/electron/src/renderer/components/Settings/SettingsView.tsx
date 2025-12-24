@@ -30,9 +30,6 @@ export interface ProviderConfig {
   version?: string;
   updateAvailable?: boolean;
   installStatus?: 'not-installed' | 'installing' | 'installed' | 'error';
-  allowedTools?: string[];
-  mcpEnabled?: boolean;
-  permissionMode?: string;
   authMethod?: string;
 }
 

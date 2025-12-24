@@ -431,7 +431,7 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
   const handleToolPermissionSubmit = useCallback(async (
     requestId: string,
     confirmSessionId: string,
-    response: { decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' }
+    response: { decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' | 'always-all' }
   ) => {
     try {
       await window.electronAPI.invoke('claude-code:answer-tool-permission', {

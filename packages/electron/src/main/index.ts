@@ -68,6 +68,7 @@ import { AnalyticsService } from "./services/analytics/AnalyticsService.ts";
 import { registerAnalyticsHandlers } from "./ipc/AnalyticsHandlers.ts";
 import { shutdownStytchAuth, handleAuthCallback } from './services/StytchAuthService';
 import { getPermissionService } from './services/PermissionService';
+import { ClaudeSettingsManager } from './services/ClaudeSettingsManager';
 
 // CRITICAL: Hide dock icon when running as background Node process
 // This prevents Terminal icon from appearing when Claude Code spawns child processes
@@ -463,43 +464,29 @@ app.whenReady().then(async () => {
     // This allows Claude to access SDK docs when working on extension projects
     ClaudeCodeProvider.setAdditionalDirectoriesLoader(getAdditionalDirectoriesForWorkspace);
 
-    // Inject permission handlers for Bash command approval
-    // This allows the runtime package to evaluate Bash permissions
-    const permissionService = getPermissionService();
-    ClaudeCodeProvider.setPermissionHandler(permissionService.getPermissionHandler());
-    ClaudeCodeProvider.setPermissionResponseHandler(permissionService.getPermissionResponseHandler());
-    ClaudeCodeProvider.setPendingRequestRegistrar(permissionService.getPendingRequestRegistrar());
-
     // Inject security logger for agent permission checks (dev mode only)
-    // This allows reviewing all permission decisions in the AGENT-SECURITY log
     if (process.env.NODE_ENV === 'development') {
       ClaudeCodeProvider.setSecurityLogger((message, data) => {
         logger.agentSecurity.info(message, data);
       });
     }
 
-    // Inject URL permission checker for WebFetch/WebSearch
-    // This allows the runtime to check if URLs match allowed patterns
-    ClaudeCodeProvider.setUrlPermissionChecker((workspacePath, url) => {
-      return permissionService.isUrlAllowed(workspacePath, url);
+    // Inject Claude settings pattern saver
+    // Writes tool patterns to .claude/settings.local.json when user approves with "Always"
+    const claudeSettingsManager = ClaudeSettingsManager.getInstance();
+    ClaudeCodeProvider.setClaudeSettingsPatternSaver(async (workspacePath, pattern) => {
+      await claudeSettingsManager.addAllowedTool(workspacePath, pattern);
     });
 
-    // Inject URL pattern saver for WebFetch "Always" approvals
-    // This saves hostname patterns when user approves with "Always"
-    ClaudeCodeProvider.setUrlPatternSaver((workspacePath, pattern, description) => {
-      permissionService.addAllowedUrlPattern(workspacePath, pattern, description);
-    });
-
-    // Inject "Allow All URLs" handler for WebFetch "Allow All WebFetches" button
-    // This saves the wildcard pattern (*) to allow all web fetches
-    ClaudeCodeProvider.setAllowAllUrlsHandler((workspacePath) => {
-      permissionService.allowAllUrls(workspacePath);
-    });
-
-    // Inject additional directory saver for file access "Always" approvals
-    // This saves directories when user approves access outside workspace with "Always"
-    ClaudeCodeProvider.setAdditionalDirectorySaver((workspacePath, directory, canWrite) => {
-      permissionService.addAdditionalDirectory(workspacePath, directory, canWrite);
+    // Inject trust checker
+    // Checks if a workspace is trusted before allowing tool execution
+    const permissionService = getPermissionService();
+    ClaudeCodeProvider.setTrustChecker((workspacePath) => {
+      const mode = permissionService.getPermissionMode(workspacePath);
+      return {
+        trusted: mode !== null,
+        mode
+      };
     });
 
     registerMockupHandlers();

@@ -206,8 +206,7 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
             onClick={() => setSelectedMode('ask')}
             disabled={isSubmitting}
           >
-            <span className="project-trust-toast-mode-label">Smart Permissions</span>
-            <span className="project-trust-toast-mode-badge project-trust-toast-mode-badge--beta">Beta</span>
+            <span className="project-trust-toast-mode-label">Ask</span>
             <span className="project-trust-toast-mode-badge">Recommended</span>
           </button>
           <button
@@ -215,7 +214,7 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
             onClick={() => setSelectedMode('allow-all')}
             disabled={isSubmitting}
           >
-            <span className="project-trust-toast-mode-label">Always Allow</span>
+            <span className="project-trust-toast-mode-label">Allow All Edits</span>
             {selectedMode === 'allow-all' && (
               <span className="project-trust-toast-mode-badge project-trust-toast-mode-badge--danger">Risky</span>
             )}
@@ -227,39 +226,33 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
           {selectedMode === 'ask' ? (
             <>
               <p className="project-trust-toast-mode-summary">
-                Safe operations auto-approved. New patterns remembered when you approve them.
+                The agent will ask for permission before running commands. When you approve, your choices are saved to <code>.claude/settings.local.json</code> for future sessions.
               </p>
               <ul className="project-trust-toast-features-list">
                 <li>
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                     <path d="M13.5 4.5l-7 7-4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
-                  <span><strong>Permanently allow</strong> specific tool patterns (not just for this session)</span>
+                  <span><strong>Approve once</strong> or <strong>always</strong> for each tool pattern</span>
                 </li>
                 <li>
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                     <path d="M13.5 4.5l-7 7-4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
-                  <span><strong>Fine-grained bash control</strong> - allow "npm test" but block "rm -rf"</span>
+                  <span><strong>Fine-grained control</strong> - allow "npm test" but block "rm -rf"</span>
                 </li>
                 <li>
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                     <path d="M13.5 4.5l-7 7-4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
-                  <span><strong>Additional directories</strong> - grant access to folders outside the project</span>
-                </li>
-                <li>
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                    <path d="M13.5 4.5l-7 7-4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  <span><strong>URL patterns</strong> - control which domains the agent can fetch</span>
+                  <span><strong>Permissions shared</strong> with Claude Code CLI in this project</span>
                 </li>
               </ul>
             </>
           ) : (
             <>
               <p className="project-trust-toast-mode-summary project-trust-toast-mode-summary--warning">
-                The agent will run all tools without asking for permission. This gives the AI full control over file operations, shell commands, and network requests.
+                The agent will run all file and edit operations without asking. Shell commands and web requests may still require approval.
               </p>
               <ul className="project-trust-toast-features-list project-trust-toast-features-list--warning">
                 <li>
@@ -267,14 +260,14 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
                     <path d="M8 5.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                     <path d="M8 11h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                   </svg>
-                  <span>All file read/write operations are automatically approved</span>
+                  <span>All file read/write/edit operations are automatically approved</span>
                 </li>
                 <li>
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                     <path d="M8 5.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                     <path d="M8 11h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                   </svg>
-                  <span>All shell commands run without confirmation</span>
+                  <span>Bash commands and web fetches follow Claude Code's settings</span>
                 </li>
                 <li>
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none">

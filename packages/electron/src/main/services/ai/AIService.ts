@@ -32,7 +32,6 @@ import { getAIProviderOverrides, saveAIProviderOverrides, clearAIProviderOverrid
 import { mergeAISettings } from '../../utils/aiSettingsMerge';
 import { ALL_PACKAGES } from '../../../shared/toolPackages';
 import { getMessageSyncHandler, getSyncProvider } from '../SyncManager';
-import { getPermissionService } from '../PermissionService';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -2405,29 +2404,6 @@ export class AIService {
       // Check if this is a ClaudeCodeProvider with the resolve method
       if (typeof (provider as any).resolveToolPermission === 'function') {
         (provider as any).resolveToolPermission(requestId, response);
-
-        // If scope is 'always' or 'session', check if other pending requests now auto-approve
-        if (response.decision === 'allow' && (response.scope === 'always' || response.scope === 'session') && session.workspacePath) {
-          const permissionService = getPermissionService();
-          const autoApproved = permissionService.reEvaluatePendingRequests(session.workspacePath, sessionId);
-
-          // Auto-resolve the newly approved requests
-          for (const approved of autoApproved) {
-            logger.main.info(`[AIService] Auto-resolving permission for: ${approved.requestId}`);
-            (provider as any).resolveToolPermission(approved.requestId, { decision: 'allow', scope: response.scope });
-            // Notify renderer to remove from pending UI
-            event.sender.send('ai:toolPermissionResolved', {
-              requestId: approved.requestId,
-              sessionId,
-              autoApproved: true
-            });
-          }
-
-          if (autoApproved.length > 0) {
-            logger.main.info(`[AIService] Auto-approved ${autoApproved.length} additional permission(s)`);
-          }
-        }
-
         return { success: true };
       } else {
         logger.main.warn(`[AIService] Provider does not support tool permission: ${session.provider}`);

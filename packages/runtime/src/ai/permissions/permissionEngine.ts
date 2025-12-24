@@ -187,8 +187,12 @@ export class PermissionEngine {
   private workspacePath: string;
   private workspacePermissions: WorkspacePermissions;
   private sessionPermissions: Map<string, SessionPermissions> = new Map();
+  /** Unique ID for debugging cache behavior */
+  public readonly engineId: string;
+  private static engineCounter = 0;
 
   constructor(workspacePath: string, workspacePermissions?: WorkspacePermissions) {
+    this.engineId = `engine-${++PermissionEngine.engineCounter}`;
     this.workspacePath = workspacePath;
     // Deep clone to avoid shared state issues
     this.workspacePermissions = workspacePermissions

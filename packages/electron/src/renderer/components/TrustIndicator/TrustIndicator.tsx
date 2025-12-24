@@ -140,9 +140,9 @@ export const TrustIndicator: React.FC<TrustIndicatorProps> = ({
     }
     if (status.isTrusted) {
       if (status.permissionMode === 'allow-all') {
-        return 'All agent commands allowed';
+        return 'Allow All Edits mode';
       }
-      return 'Smart permissions enabled';
+      return 'Ask mode enabled';
     }
     return 'Workspace not trusted for agent';
   };
@@ -153,9 +153,9 @@ export const TrustIndicator: React.FC<TrustIndicatorProps> = ({
     }
     if (status.isTrusted) {
       if (status.permissionMode === 'allow-all') {
-        return 'The AI agent can run all commands without asking.';
+        return 'File operations auto-approved. Bash and web requests follow Claude Code settings.';
       }
-      return 'Safe operations auto-approved. New patterns remembered when you approve them.';
+      return 'Agent asks before running commands. Approvals saved to .claude/settings.local.json.';
     }
     return 'Trust this workspace to allow the AI agent to run commands.';
   };
@@ -191,7 +191,7 @@ export const TrustIndicator: React.FC<TrustIndicatorProps> = ({
               />
               <span>
                 {status?.isTrusted
-                  ? (status.permissionMode === 'allow-all' ? 'Allow All' : 'Smart Permissions')
+                  ? (status.permissionMode === 'allow-all' ? 'Allow All Edits' : 'Ask')
                   : 'Not Trusted'}
               </span>
             </div>

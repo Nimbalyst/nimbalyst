@@ -1,12 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { ProviderConfig, Model } from '../../Settings/SettingsView';
-import {
-  CLAUDE_CODE_TOOLS,
-  TOOL_CATEGORIES,
-  isAllToolsAllowed,
-  getToolsByCategory,
-  getDefaultAllowedTools
-} from './claudeCodeTools';
 // Import the actual SDK package.json to get the exact installed version
 // @ts-ignore - importing json
 import sdkPackageJson from '@anthropic-ai/claude-agent-sdk/package.json';
@@ -519,128 +512,17 @@ export function ClaudeCodePanel({
                 </div>
               </div>
 
-              <div className="provider-panel-section">
-                <h4 className="provider-panel-section-title">MCP Configuration</h4>
-                <div className="cli-config-section">
-                  <div className="cli-config-row">
-                    <label className="cli-config-checkbox">
-                      <input
-                        type="checkbox"
-                        checked={config.mcpEnabled ?? true}
-                        onChange={(e) => onConfigChange({ mcpEnabled: e.target.checked })}
-                      />
-                      <span>Enable MCP Tools (file editing, etc.)</span>
-                    </label>
-                  </div>
-                </div>
-              </div>
 
               <div className="provider-panel-section">
-                <h4 className="provider-panel-section-title">Allowed Tools</h4>
-                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-                  Select which tools Claude Agent can use. Deselecting tools can improve safety but may limit functionality.
+                <h4 className="provider-panel-section-title">Tool Permissions</h4>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                  Tool permissions are now managed per-project. When Claude Agent attempts to use a tool,
+                  you'll be prompted to allow or deny the action.
                 </p>
-
-                <div className="tools-selection">
-                  <div className="tools-header">
-                    <label className="cli-config-checkbox">
-                      <input
-                        type="checkbox"
-                        checked={isAllToolsAllowed(config.allowedTools)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            // Select all tools
-                            const allToolNames = CLAUDE_CODE_TOOLS.map(t => t.name);
-                            onConfigChange({ allowedTools: allToolNames });
-                          } else {
-                            onConfigChange({ allowedTools: [] });
-                          }
-                        }}
-                      />
-                      <span style={{ fontWeight: 600 }}>Select All</span>
-                    </label>
-                  </div>
-
-                  <div className="tools-categories">
-                    {TOOL_CATEGORIES.map(category => {
-                      const categoryTools = getToolsByCategory(category.id);
-                      // Use default tools if allowedTools is not set
-                      const selectedTools = config.allowedTools && config.allowedTools.length > 0
-                        ? config.allowedTools
-                        : getDefaultAllowedTools();
-                      const allCategoryToolsSelected = categoryTools.every(tool =>
-                        selectedTools.includes(tool.name)
-                      );
-
-                      return (
-                        <div key={category.id} className="tool-category">
-                          <div className="tool-category-header">
-                            <label className="cli-config-checkbox">
-                              <input
-                                type="checkbox"
-                                checked={allCategoryToolsSelected}
-                                onChange={(e) => {
-                                  const toolNames = categoryTools.map(t => t.name);
-                                  // Use default tools as the base if allowedTools is not set
-                                  const currentTools = config.allowedTools && config.allowedTools.length > 0
-                                    ? config.allowedTools
-                                    : getDefaultAllowedTools();
-                                  let newAllowedTools = [...currentTools];
-
-                                  if (e.target.checked) {
-                                    // Add all category tools
-                                    toolNames.forEach(name => {
-                                      if (!newAllowedTools.includes(name)) {
-                                        newAllowedTools.push(name);
-                                      }
-                                    });
-                                  } else {
-                                    // Remove all category tools
-                                    newAllowedTools = newAllowedTools.filter(
-                                      name => !toolNames.includes(name)
-                                    );
-                                  }
-
-                                  onConfigChange({ allowedTools: newAllowedTools });
-                                }}
-                              />
-                              <span className="tool-category-name">{category.name}</span>
-                            </label>
-                            <span className="tool-category-description">{category.description}</span>
-                          </div>
-
-                          <div className="tool-list">
-                            {categoryTools.map(tool => (
-                              <label key={tool.name} className="tool-checkbox">
-                                <input
-                                  type="checkbox"
-                                  checked={selectedTools.includes(tool.name)}
-                                  onChange={(e) => {
-                                    // Use default tools as the base if allowedTools is not set
-                                    const currentTools = config.allowedTools && config.allowedTools.length > 0
-                                      ? config.allowedTools
-                                      : getDefaultAllowedTools();
-                                    let newAllowedTools;
-
-                                    if (e.target.checked) {
-                                      newAllowedTools = [...currentTools, tool.name];
-                                    } else {
-                                      newAllowedTools = currentTools.filter(t => t !== tool.name);
-                                    }
-
-                                    onConfigChange({ allowedTools: newAllowedTools });
-                                  }}
-                                />
-                                <span className="tool-name">{tool.name}</span>
-                                <span className="tool-description">{tool.description}</span>
-                              </label>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                  To view or modify allowed tools for a project, go to{' '}
+                  <strong>Project Settings &gt; Permissions</strong>.
+                </p>
               </div>
         </>
       )}

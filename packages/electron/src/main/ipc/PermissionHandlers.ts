@@ -3,6 +3,7 @@
  */
 import { ipcMain, dialog, BrowserWindow } from 'electron';
 import { getPermissionService } from '../services/PermissionService';
+import { ClaudeSettingsManager } from '../services/ClaudeSettingsManager';
 import { logger } from '../utils/logger';
 
 /**
@@ -33,38 +34,65 @@ export function registerPermissionHandlers(): void {
   });
 
   // Get workspace permissions (trust status, allowed/denied patterns, mode, directories)
+  // Now reads from Claude settings files (.claude/settings.local.json) for patterns
   ipcMain.handle('permissions:getWorkspacePermissions', async (_event, workspacePath: string) => {
     if (!workspacePath) {
       throw new Error('workspacePath is required');
     }
 
     const workspaceName = workspacePath.split('/').pop() || workspacePath;
+    const claudeSettingsManager = ClaudeSettingsManager.getInstance();
 
     try {
-      const allowedPatterns = permissionService.getAllowedPatterns(workspacePath);
-      const deniedPatterns = permissionService.getDeniedPatterns(workspacePath);
+      // Get trust mode from our store (still managed by us)
       const permissionMode = permissionService.getPermissionMode(workspacePath);
-      const additionalDirectories = permissionService.getAdditionalDirectories(workspacePath);
-      const allowedUrlPatterns = permissionService.getAllowedUrlPatterns(workspacePath);
-
-      // isTrusted is derived from permissionMode (null = not trusted)
       const isTrusted = permissionMode !== null;
+
+      // Read patterns from Claude settings files
+      const effectiveSettings = await claudeSettingsManager.getEffectiveSettings(workspacePath);
+      const claudePermissions = effectiveSettings.permissions;
+
+      // Convert Claude patterns to our display format
+      const allowedPatterns = claudePermissions.allow.map((pattern, index) => ({
+        pattern,
+        displayName: pattern, // Claude patterns are self-descriptive
+        addedAt: Date.now() - index, // No timestamp in Claude settings, use index for ordering
+      }));
+
+      // Additional directories from Claude settings
+      const additionalDirectories = (claudePermissions.additionalDirectories || []).map((dir, index) => ({
+        path: dir,
+        addedAt: Date.now() - index,
+      }));
+
+      // Extract URL patterns from allowed patterns (those that start with WebFetch)
+      const allowedUrlPatterns = claudePermissions.allow
+        .filter(p => p.startsWith('WebFetch'))
+        .map((pattern, index) => {
+          // Parse WebFetch(domain:example.com) format
+          const match = pattern.match(/^WebFetch\(domain:(.+)\)$/);
+          const domain = match ? match[1] : pattern;
+          return {
+            pattern: domain,
+            description: `Allow fetching from ${domain}`,
+            addedAt: Date.now() - index,
+          };
+        });
 
       logger.main.info(`[PermissionHandlers:${workspaceName}] getWorkspacePermissions:`, {
         workspace: workspacePath,
         isTrusted,
         permissionMode,
         allowedPatternsCount: allowedPatterns.length,
-        deniedPatternsCount: deniedPatterns.length,
         additionalDirectoriesCount: additionalDirectories.length,
         allowedUrlPatternsCount: allowedUrlPatterns.length,
+        sources: effectiveSettings.sources,
       });
 
       return {
         isTrusted,
         allowedPatterns,
-        deniedPatterns,
-        permissionMode,
+        permissionMode: permissionMode || 'ask', // Default to 'ask' if trusted
         additionalDirectories,
         allowedUrlPatterns,
       };
@@ -108,7 +136,7 @@ export function registerPermissionHandlers(): void {
     }
   });
 
-  // Remove a pattern rule
+  // Remove a pattern rule (from Claude settings)
   ipcMain.handle('permissions:removePattern', async (_event, workspacePath: string, pattern: string) => {
     if (!workspacePath) {
       throw new Error('workspacePath is required');
@@ -118,8 +146,10 @@ export function registerPermissionHandlers(): void {
     }
 
     try {
-      permissionService.removePatternRule(workspacePath, pattern);
-      logger.main.info('[PermissionHandlers] Pattern removed:', pattern);
+      const claudeSettingsManager = ClaudeSettingsManager.getInstance();
+      await claudeSettingsManager.removeAllowedTool(workspacePath, pattern);
+      logger.main.info('[PermissionHandlers] Pattern removed from Claude settings:', pattern);
+      broadcastPermissionChange(workspacePath);
       return { success: true };
     } catch (error) {
       logger.main.error('[PermissionHandlers] Failed to remove pattern:', error);
@@ -127,15 +157,26 @@ export function registerPermissionHandlers(): void {
     }
   });
 
-  // Reset permissions to defaults
+  // Reset permissions to defaults - clears all patterns from Claude settings
   ipcMain.handle('permissions:resetToDefaults', async (_event, workspacePath: string) => {
     if (!workspacePath) {
       throw new Error('workspacePath is required');
     }
 
     try {
-      permissionService.resetPermissions(workspacePath);
+      const claudeSettingsManager = ClaudeSettingsManager.getInstance();
+      // Get current settings
+      const settings = await claudeSettingsManager.getEffectiveSettings(workspacePath);
+      // Remove all allowed patterns
+      for (const pattern of settings.permissions.allow) {
+        await claudeSettingsManager.removeAllowedTool(workspacePath, pattern);
+      }
+      // Remove all additional directories
+      for (const dir of settings.permissions.additionalDirectories || []) {
+        await claudeSettingsManager.removeAdditionalDirectory(workspacePath, dir);
+      }
       logger.main.info('[PermissionHandlers] Permissions reset to defaults:', workspacePath);
+      broadcastPermissionChange(workspacePath);
       return { success: true };
     } catch (error) {
       logger.main.error('[PermissionHandlers] Failed to reset permissions:', error);
@@ -143,8 +184,8 @@ export function registerPermissionHandlers(): void {
     }
   });
 
-  // Add an allowed pattern manually
-  ipcMain.handle('permissions:addAllowedPattern', async (_event, workspacePath: string, pattern: string, displayName: string) => {
+  // Add an allowed pattern manually (to Claude settings)
+  ipcMain.handle('permissions:addAllowedPattern', async (_event, workspacePath: string, pattern: string, _displayName: string) => {
     if (!workspacePath) {
       throw new Error('workspacePath is required');
     }
@@ -153,8 +194,10 @@ export function registerPermissionHandlers(): void {
     }
 
     try {
-      permissionService.addAllowedPattern(workspacePath, pattern, displayName || pattern);
-      logger.main.info('[PermissionHandlers] Allowed pattern added:', pattern);
+      const claudeSettingsManager = ClaudeSettingsManager.getInstance();
+      await claudeSettingsManager.addAllowedTool(workspacePath, pattern);
+      logger.main.info('[PermissionHandlers] Allowed pattern added to Claude settings:', pattern);
+      broadcastPermissionChange(workspacePath);
       return { success: true };
     } catch (error) {
       logger.main.error('[PermissionHandlers] Failed to add allowed pattern:', error);
@@ -162,23 +205,11 @@ export function registerPermissionHandlers(): void {
     }
   });
 
-  // Add a denied pattern manually
-  ipcMain.handle('permissions:addDeniedPattern', async (_event, workspacePath: string, pattern: string, displayName: string) => {
-    if (!workspacePath) {
-      throw new Error('workspacePath is required');
-    }
-    if (!pattern) {
-      throw new Error('pattern is required');
-    }
-
-    try {
-      permissionService.addDeniedPattern(workspacePath, pattern, displayName || pattern);
-      logger.main.info('[PermissionHandlers] Denied pattern added:', pattern);
-      return { success: true };
-    } catch (error) {
-      logger.main.error('[PermissionHandlers] Failed to add denied pattern:', error);
-      throw error;
-    }
+  // Denied patterns are no longer persisted - deny is just a one-time action
+  // This handler is kept for backward compatibility but does nothing
+  ipcMain.handle('permissions:addDeniedPattern', async (_event, _workspacePath: string, pattern: string, _displayName: string) => {
+    logger.main.info('[PermissionHandlers] Denied pattern ignored (denials are not persisted):', pattern);
+    return { success: true };
   });
 
   // Set permission mode
@@ -201,8 +232,8 @@ export function registerPermissionHandlers(): void {
     }
   });
 
-  // Add an additional directory
-  ipcMain.handle('permissions:addAdditionalDirectory', async (_event, workspacePath: string, dirPath: string, canWrite: boolean) => {
+  // Add an additional directory (to Claude settings)
+  ipcMain.handle('permissions:addAdditionalDirectory', async (_event, workspacePath: string, dirPath: string, _canWrite: boolean) => {
     if (!workspacePath) {
       throw new Error('workspacePath is required');
     }
@@ -211,8 +242,10 @@ export function registerPermissionHandlers(): void {
     }
 
     try {
-      permissionService.addAdditionalDirectory(workspacePath, dirPath, canWrite);
-      logger.main.info('[PermissionHandlers] Additional directory added:', dirPath, 'canWrite:', canWrite);
+      const claudeSettingsManager = ClaudeSettingsManager.getInstance();
+      await claudeSettingsManager.addAdditionalDirectory(workspacePath, dirPath);
+      logger.main.info('[PermissionHandlers] Additional directory added to Claude settings:', dirPath);
+      broadcastPermissionChange(workspacePath);
       return { success: true };
     } catch (error) {
       logger.main.error('[PermissionHandlers] Failed to add additional directory:', error);
@@ -220,7 +253,7 @@ export function registerPermissionHandlers(): void {
     }
   });
 
-  // Remove an additional directory
+  // Remove an additional directory (from Claude settings)
   ipcMain.handle('permissions:removeAdditionalDirectory', async (_event, workspacePath: string, dirPath: string) => {
     if (!workspacePath) {
       throw new Error('workspacePath is required');
@@ -230,8 +263,10 @@ export function registerPermissionHandlers(): void {
     }
 
     try {
-      permissionService.removeAdditionalDirectory(workspacePath, dirPath);
-      logger.main.info('[PermissionHandlers] Additional directory removed:', dirPath);
+      const claudeSettingsManager = ClaudeSettingsManager.getInstance();
+      await claudeSettingsManager.removeAdditionalDirectory(workspacePath, dirPath);
+      logger.main.info('[PermissionHandlers] Additional directory removed from Claude settings:', dirPath);
+      broadcastPermissionChange(workspacePath);
       return { success: true };
     } catch (error) {
       logger.main.error('[PermissionHandlers] Failed to remove additional directory:', error);
@@ -240,6 +275,8 @@ export function registerPermissionHandlers(): void {
   });
 
   // Update an additional directory's write access
+  // Note: Claude settings don't distinguish read/write for additional directories
+  // All additional directories have full access. This handler is kept for backward compatibility.
   ipcMain.handle('permissions:updateAdditionalDirectoryAccess', async (_event, workspacePath: string, dirPath: string, canWrite: boolean) => {
     if (!workspacePath) {
       throw new Error('workspacePath is required');
@@ -248,32 +285,39 @@ export function registerPermissionHandlers(): void {
       throw new Error('dirPath is required');
     }
 
-    try {
-      permissionService.updateAdditionalDirectoryWriteAccess(workspacePath, dirPath, canWrite);
-      logger.main.info('[PermissionHandlers] Additional directory access updated:', dirPath, 'canWrite:', canWrite);
-      return { success: true };
-    } catch (error) {
-      logger.main.error('[PermissionHandlers] Failed to update additional directory access:', error);
-      throw error;
-    }
+    // Claude settings don't support read-only directories - log and return success
+    logger.main.info('[PermissionHandlers] Additional directory access update ignored (Claude settings use full access):', dirPath, 'requested canWrite:', canWrite);
+    return { success: true };
   });
 
-  // Get allowed URL patterns
+  // Get allowed URL patterns (from Claude settings)
   ipcMain.handle('permissions:getAllowedUrlPatterns', async (_event, workspacePath: string) => {
     if (!workspacePath) {
       throw new Error('workspacePath is required');
     }
 
     try {
-      return permissionService.getAllowedUrlPatterns(workspacePath);
+      const claudeSettingsManager = ClaudeSettingsManager.getInstance();
+      const settings = await claudeSettingsManager.getEffectiveSettings(workspacePath);
+      // Extract WebFetch patterns and convert to URL patterns
+      return settings.permissions.allow
+        .filter(p => p.startsWith('WebFetch'))
+        .map((pattern, index) => {
+          if (pattern === 'WebFetch') {
+            return { pattern: '*', description: 'All URLs allowed', addedAt: Date.now() - index };
+          }
+          const match = pattern.match(/^WebFetch\(domain:(.+)\)$/);
+          const domain = match ? match[1] : pattern;
+          return { pattern: domain, description: `Allow fetching from ${domain}`, addedAt: Date.now() - index };
+        });
     } catch (error) {
       logger.main.error('[PermissionHandlers] Failed to get allowed URL patterns:', error);
       throw error;
     }
   });
 
-  // Add an allowed URL pattern
-  ipcMain.handle('permissions:addAllowedUrlPattern', async (_event, workspacePath: string, pattern: string, description: string) => {
+  // Add an allowed URL pattern (to Claude settings as WebFetch pattern)
+  ipcMain.handle('permissions:addAllowedUrlPattern', async (_event, workspacePath: string, pattern: string, _description: string) => {
     if (!workspacePath) {
       throw new Error('workspacePath is required');
     }
@@ -282,8 +326,11 @@ export function registerPermissionHandlers(): void {
     }
 
     try {
-      permissionService.addAllowedUrlPattern(workspacePath, pattern, description || '');
-      logger.main.info('[PermissionHandlers] Allowed URL pattern added:', pattern);
+      const claudeSettingsManager = ClaudeSettingsManager.getInstance();
+      // Convert to Claude format: domain -> WebFetch(domain:domain)
+      const claudePattern = pattern === '*' ? 'WebFetch' : `WebFetch(domain:${pattern})`;
+      await claudeSettingsManager.addAllowedTool(workspacePath, claudePattern);
+      logger.main.info('[PermissionHandlers] Allowed URL pattern added to Claude settings:', claudePattern);
       broadcastPermissionChange(workspacePath);
       return { success: true };
     } catch (error) {
@@ -292,7 +339,7 @@ export function registerPermissionHandlers(): void {
     }
   });
 
-  // Remove an allowed URL pattern
+  // Remove an allowed URL pattern (from Claude settings)
   ipcMain.handle('permissions:removeAllowedUrlPattern', async (_event, workspacePath: string, pattern: string) => {
     if (!workspacePath) {
       throw new Error('workspacePath is required');
@@ -302,8 +349,11 @@ export function registerPermissionHandlers(): void {
     }
 
     try {
-      permissionService.removeAllowedUrlPattern(workspacePath, pattern);
-      logger.main.info('[PermissionHandlers] Allowed URL pattern removed:', pattern);
+      const claudeSettingsManager = ClaudeSettingsManager.getInstance();
+      // Convert to Claude format for removal
+      const claudePattern = pattern === '*' ? 'WebFetch' : `WebFetch(domain:${pattern})`;
+      await claudeSettingsManager.removeAllowedTool(workspacePath, claudePattern);
+      logger.main.info('[PermissionHandlers] Allowed URL pattern removed from Claude settings:', claudePattern);
       broadcastPermissionChange(workspacePath);
       return { success: true };
     } catch (error) {
@@ -312,28 +362,65 @@ export function registerPermissionHandlers(): void {
     }
   });
 
-  // Check if all URLs are allowed (wildcard pattern)
+  // Check if a specific URL is allowed (via Claude settings)
+  ipcMain.handle('permissions:isUrlAllowed', async (_event, workspacePath: string, url: string) => {
+    if (!workspacePath) {
+      throw new Error('workspacePath is required');
+    }
+    if (!url) {
+      throw new Error('url is required');
+    }
+
+    try {
+      const claudeSettingsManager = ClaudeSettingsManager.getInstance();
+      const settings = await claudeSettingsManager.getEffectiveSettings(workspacePath);
+      const allowedPatterns = settings.permissions.allow.filter(p => p.startsWith('WebFetch'));
+
+      // Check for wildcard (all URLs allowed)
+      if (allowedPatterns.includes('WebFetch')) {
+        return true;
+      }
+
+      // Check for domain match
+      try {
+        const urlObj = new URL(url);
+        const domain = urlObj.hostname;
+        const domainPattern = `WebFetch(domain:${domain})`;
+        return allowedPatterns.includes(domainPattern);
+      } catch {
+        return false;
+      }
+    } catch (error) {
+      logger.main.error('[PermissionHandlers] Failed to check if URL is allowed:', error);
+      throw error;
+    }
+  });
+
+  // Check if all URLs are allowed (wildcard pattern in Claude settings)
   ipcMain.handle('permissions:isAllUrlsAllowed', async (_event, workspacePath: string) => {
     if (!workspacePath) {
       throw new Error('workspacePath is required');
     }
 
     try {
-      return permissionService.isAllUrlsAllowed(workspacePath);
+      const claudeSettingsManager = ClaudeSettingsManager.getInstance();
+      const settings = await claudeSettingsManager.getEffectiveSettings(workspacePath);
+      return settings.permissions.allow.includes('WebFetch');
     } catch (error) {
       logger.main.error('[PermissionHandlers] Failed to check all URLs allowed:', error);
       throw error;
     }
   });
 
-  // Allow all URLs (add wildcard pattern)
+  // Allow all URLs (add wildcard pattern to Claude settings)
   ipcMain.handle('permissions:allowAllUrls', async (_event, workspacePath: string) => {
     if (!workspacePath) {
       throw new Error('workspacePath is required');
     }
 
     try {
-      permissionService.allowAllUrls(workspacePath);
+      const claudeSettingsManager = ClaudeSettingsManager.getInstance();
+      await claudeSettingsManager.addAllowedTool(workspacePath, 'WebFetch');
       logger.main.info('[PermissionHandlers] All URLs allowed for workspace');
       broadcastPermissionChange(workspacePath);
       return { success: true };
@@ -343,14 +430,15 @@ export function registerPermissionHandlers(): void {
     }
   });
 
-  // Revoke "allow all URLs" permission
+  // Revoke "allow all URLs" permission (remove wildcard from Claude settings)
   ipcMain.handle('permissions:revokeAllUrlsPermission', async (_event, workspacePath: string) => {
     if (!workspacePath) {
       throw new Error('workspacePath is required');
     }
 
     try {
-      permissionService.revokeAllUrlsPermission(workspacePath);
+      const claudeSettingsManager = ClaudeSettingsManager.getInstance();
+      await claudeSettingsManager.removeAllowedTool(workspacePath, 'WebFetch');
       logger.main.info('[PermissionHandlers] All URLs permission revoked');
       broadcastPermissionChange(workspacePath);
       return { success: true };
@@ -360,44 +448,8 @@ export function registerPermissionHandlers(): void {
     }
   });
 
-  // Evaluate a tool command and return the permission decision (for testing)
-  ipcMain.handle('permissions:evaluateCommand', async (_event, workspacePath: string, sessionId: string, toolName: string, toolDescription: string) => {
-    if (!workspacePath) {
-      throw new Error('workspacePath is required');
-    }
-    if (!toolName) {
-      throw new Error('toolName is required');
-    }
-
-    try {
-      const result = await permissionService.evaluateCommand(workspacePath, sessionId, toolName, toolDescription);
-      logger.main.info('[PermissionHandlers] Command evaluated:', { toolName, decision: result.decision });
-      return result;
-    } catch (error) {
-      logger.main.error('[PermissionHandlers] Failed to evaluate command:', error);
-      throw error;
-    }
-  });
-
-  // Apply a permission response (for testing)
-  ipcMain.handle('permissions:applyResponse', async (_event, workspacePath: string, sessionId: string, requestId: string, response: { decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' }) => {
-    if (!workspacePath) {
-      throw new Error('workspacePath is required');
-    }
-    if (!requestId) {
-      throw new Error('requestId is required');
-    }
-
-    try {
-      permissionService.applyPermissionResponse(workspacePath, sessionId, requestId, response);
-      logger.main.info('[PermissionHandlers] Permission response applied:', { requestId, decision: response.decision, scope: response.scope });
-      broadcastPermissionChange(workspacePath);
-      return { success: true };
-    } catch (error) {
-      logger.main.error('[PermissionHandlers] Failed to apply permission response:', error);
-      throw error;
-    }
-  });
+  // Permission evaluation is now handled by Claude SDK - these handlers are no longer needed
+  // The SDK evaluates permissions via canUseTool callback in ClaudeCodeProvider
 
   logger.main.info('[PermissionHandlers] Permission handlers registered');
 }

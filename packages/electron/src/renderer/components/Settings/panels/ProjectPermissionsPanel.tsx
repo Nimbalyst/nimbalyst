@@ -9,7 +9,6 @@ interface PatternRule {
 
 interface AdditionalDirectory {
   path: string;
-  canWrite: boolean;
   addedAt: number;
 }
 
@@ -26,7 +25,6 @@ interface PermissionsState {
   trustedAt?: number;
   permissionMode: PermissionMode;
   allowedPatterns: PatternRule[];
-  deniedPatterns: PatternRule[];
   additionalDirectories: AdditionalDirectory[];
   allowedUrlPatterns: AllowedUrlPattern[];
 }
@@ -79,7 +77,6 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
         isTrusted: permissions.isTrusted,
         permissionMode: permissions.permissionMode,
         allowedPatternsCount: permissions.allowedPatterns.length,
-        deniedPatternsCount: permissions.deniedPatterns.length,
         additionalDirectoriesCount: permissions.additionalDirectories.length,
       });
     }
@@ -186,17 +183,6 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
     }
   };
 
-  const handleToggleDirectoryWriteAccess = async (dirPath: string, canWrite: boolean) => {
-    try {
-      await window.electronAPI.invoke('permissions:updateAdditionalDirectoryAccess', workspacePath, dirPath, canWrite);
-      await loadPermissions();
-      posthog?.capture('additional_directory_access_changed', { canWrite });
-    } catch (err) {
-      console.error('Failed to update directory access:', err);
-      setError(err instanceof Error ? err.message : 'Failed to update directory access');
-    }
-  };
-
   const handleAddUrlPattern = async () => {
     if (!newUrlPattern.trim()) return;
 
@@ -257,7 +243,7 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
         <h2>Agent Permissions</h2>
         <p>
           Manage which commands the AI agent can run in this project.
-          Patterns you approve are remembered for future sessions.
+          Approved patterns are saved to <code>.claude/settings.local.json</code> and shared with Claude Code CLI.
         </p>
       </div>
 
@@ -344,9 +330,9 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
               <div className="permissions-mode-option-content">
                 <span className="material-symbols-outlined">verified_user</span>
                 <div className="permissions-mode-option-text">
-                  <span className="permissions-mode-option-title">Smart Permissions</span>
+                  <span className="permissions-mode-option-title">Ask</span>
                   <span className="permissions-mode-option-description">
-                    Safe operations auto-approved. New patterns remembered when you approve them.
+                    Agent asks before running commands. Approvals saved to .claude/settings.local.json.
                   </span>
                 </div>
               </div>
@@ -362,9 +348,9 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
               <div className="permissions-mode-option-content">
                 <span className="material-symbols-outlined">check_circle</span>
                 <div className="permissions-mode-option-text">
-                  <span className="permissions-mode-option-title">Allow all</span>
+                  <span className="permissions-mode-option-title">Allow All Edits</span>
                   <span className="permissions-mode-option-description">
-                    Auto-approve all commands. Denied patterns are still blocked.
+                    File operations auto-approved. Bash and web requests follow Claude Code settings.
                   </span>
                 </div>
               </div>
@@ -394,24 +380,6 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
                   <div className="permissions-directory-path">
                     <span className="material-symbols-outlined">folder</span>
                     <span className="permissions-directory-path-text" title={dir.path}>{dir.path}</span>
-                  </div>
-                  <div className="permissions-directory-access">
-                    <button
-                      className={`permissions-access-toggle ${!dir.canWrite ? 'active' : ''}`}
-                      onClick={() => handleToggleDirectoryWriteAccess(dir.path, false)}
-                      title="Read-only access"
-                    >
-                      <span className="material-symbols-outlined">visibility</span>
-                      Read
-                    </button>
-                    <button
-                      className={`permissions-access-toggle ${dir.canWrite ? 'active' : ''}`}
-                      onClick={() => handleToggleDirectoryWriteAccess(dir.path, true)}
-                      title="Read and write access"
-                    >
-                      <span className="material-symbols-outlined">edit</span>
-                      Write
-                    </button>
                   </div>
                   <button
                     className="permissions-directory-remove"
@@ -556,42 +524,10 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
         </div>
       )}
 
-      {/* Denied Patterns Section - Only show when trusted */}
-      {permissions?.isTrusted && (
-        <div className="permissions-section">
-          <div className="permissions-section-header">
-            <span>Denied Patterns</span>
-            <span className="permissions-section-count">{permissions?.deniedPatterns.length || 0}</span>
-          </div>
-          {permissions?.deniedPatterns.length === 0 ? (
-            <div className="permissions-empty-state">
-              No patterns denied. When you deny a command, its pattern will appear here.
-            </div>
-          ) : (
-            <div className="permissions-pattern-list">
-              {permissions?.deniedPatterns.map((rule) => (
-                <div key={rule.pattern} className="permissions-pattern-item permissions-pattern-denied">
-                  <span className="permissions-pattern-name">{rule.displayName}</span>
-                  <button
-                    className="permissions-pattern-remove"
-                    onClick={() => handleRemovePattern(rule.pattern, 'denied')}
-                    title="Remove pattern"
-                  >
-                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M2 4h12M6 4V2.5A1.5 1.5 0 017.5 1h1A1.5 1.5 0 0110 2.5V4M5 7v5M8 7v5M11 7v5M3 4v9.5A1.5 1.5 0 004.5 15h7a1.5 1.5 0 001.5-1.5V4"/>
-                    </svg>
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Footer */}
       {permissions?.isTrusted && (
         permissions?.allowedPatterns.length ||
-        permissions?.deniedPatterns.length ||
         permissions?.allowedUrlPatterns?.length ||
         permissions?.additionalDirectories?.length
       ) ? (

@@ -28,9 +28,6 @@ export interface ProviderSettings {
   defaultModel?: string;
   baseUrl?: string;
   apiKey?: string;
-  allowedTools?: string[];
-  mcpEnabled?: boolean;
-  permissionMode?: string;
   authMethod?: string;
 }
 

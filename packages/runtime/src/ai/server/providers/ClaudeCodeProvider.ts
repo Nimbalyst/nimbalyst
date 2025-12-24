@@ -108,69 +108,22 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   // (e.g., SDK docs when working on an extension project)
   private static additionalDirectoriesLoader: ((workspacePath: string) => string[]) | null = null;
 
-  // Permission handler (injected from electron main process)
-  // Evaluates whether a Bash command should be allowed, denied, or requires user approval
-  private static permissionHandler: ((
-    workspacePath: string,
-    sessionId: string,
-    toolName: string,
-    command: string
-  ) => Promise<{
-    decision: 'allow' | 'deny' | 'ask';
-    request?: any; // PermissionRequest if decision is 'ask'
-  }>) | null = null;
-
-  // Permission response handler (injected from electron main process)
-  // Called when user responds to a permission request
-  private static permissionResponseHandler: ((
-    workspacePath: string,
-    sessionId: string,
-    requestId: string,
-    response: { decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' | 'always-all' }
-  ) => void) | null = null;
-
   // Security logging callback (injected from electron main process)
   // Only enabled in dev mode for reviewing agent security checks
   private static securityLogger: ((message: string, data?: any) => void) | null = null;
 
-  // URL permission checker (injected from electron main process)
-  // Checks if a URL matches allowed patterns for WebFetch/WebSearch
-  private static urlPermissionChecker: ((
+  // Claude settings pattern saver (injected from electron main process)
+  // Writes tool patterns to .claude/settings.local.json when user approves with "Always"
+  private static claudeSettingsPatternSaver: ((
     workspacePath: string,
-    url: string
-  ) => boolean) | null = null;
+    pattern: string
+  ) => Promise<void>) | null = null;
 
-  // URL pattern saver (injected from electron main process)
-  // Saves a URL pattern when user approves WebFetch with "Always"
-  private static urlPatternSaver: ((
-    workspacePath: string,
-    url: string,
-    description: string
-  ) => void) | null = null;
-
-  // Allow all URLs handler (injected from electron main process)
-  // Called when user clicks "Allow All WebFetches"
-  private static allowAllUrlsHandler: ((
+  // Trust checker (injected from electron main process)
+  // Checks if a workspace is trusted before allowing tool execution
+  private static trustChecker: ((
     workspacePath: string
-  ) => void) | null = null;
-
-  // Additional directory saver (injected from electron main process)
-  // Saves a directory when user approves file access outside workspace with "Always"
-  private static additionalDirectorySaver: ((
-    workspacePath: string,
-    directory: string,
-    canWrite: boolean
-  ) => void) | null = null;
-
-  // Pending request registrar (injected from electron main process)
-  // Registers a permission request so it can be looked up when the user responds
-  // Used for tools that bypass the normal evaluateCommand flow (e.g., WebSearch)
-  private static pendingRequestRegistrar: ((
-    requestId: string,
-    workspacePath: string,
-    sessionId: string,
-    request: any // PermissionRequest
-  ) => void) | null = null;
+  ) => { trusted: boolean; mode: 'ask' | 'allow-all' | null }) | null = null;
 
   static readonly DEFAULT_MODEL = 'claude-code:sonnet';
 
@@ -234,25 +187,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   }
 
   /**
-   * Set the permission handler function (called from electron main process)
-   * This allows the runtime package to evaluate Bash command permissions
-   * without directly depending on electron code
-   */
-  public static setPermissionHandler(handler: ((
-    workspacePath: string,
-    sessionId: string,
-    toolName: string,
-    command: string
-  ) => Promise<{
-    decision: 'allow' | 'deny' | 'ask';
-    request?: any;
-  }>) | null): void {
-    ClaudeCodeProvider.permissionHandler = handler;
-  }
-
-  /**
    * Set the security logger function (called from electron main process)
-   * This allows agent security checks to be logged to the dedicated AGENT_SECURITY log
    * Only enabled in dev mode for reviewing permission decisions
    */
   public static setSecurityLogger(logger: ((message: string, data?: any) => void) | null): void {
@@ -260,48 +195,24 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   }
 
   /**
-   * Set the URL permission checker function (called from electron main process)
-   * This allows checking if URLs match allowed patterns for WebFetch/WebSearch
+   * Set the Claude settings pattern saver function (called from electron main process)
+   * Writes tool patterns to .claude/settings.local.json when user approves with "Always"
    */
-  public static setUrlPermissionChecker(checker: ((
+  public static setClaudeSettingsPatternSaver(saver: ((
     workspacePath: string,
-    url: string
-  ) => boolean) | null): void {
-    ClaudeCodeProvider.urlPermissionChecker = checker;
+    pattern: string
+  ) => Promise<void>) | null): void {
+    ClaudeCodeProvider.claudeSettingsPatternSaver = saver;
   }
 
   /**
-   * Set the URL pattern saver function (called from electron main process)
-   * This saves URL patterns when user approves WebFetch with "Always"
+   * Set the trust checker function (called from electron main process)
+   * Checks if a workspace is trusted before allowing tool execution
    */
-  public static setUrlPatternSaver(saver: ((
-    workspacePath: string,
-    url: string,
-    description: string
-  ) => void) | null): void {
-    ClaudeCodeProvider.urlPatternSaver = saver;
-  }
-
-  /**
-   * Set the allow all URLs handler function (called from electron main process)
-   * This is called when user clicks "Allow All WebFetches"
-   */
-  public static setAllowAllUrlsHandler(handler: ((
+  public static setTrustChecker(checker: ((
     workspacePath: string
-  ) => void) | null): void {
-    ClaudeCodeProvider.allowAllUrlsHandler = handler;
-  }
-
-  /**
-   * Set the additional directory saver function (called from electron main process)
-   * This saves directories when user approves file access outside workspace with "Always"
-   */
-  public static setAdditionalDirectorySaver(saver: ((
-    workspacePath: string,
-    directory: string,
-    canWrite: boolean
-  ) => void) | null): void {
-    ClaudeCodeProvider.additionalDirectorySaver = saver;
+  ) => { trusted: boolean; mode: 'ask' | 'allow-all' | null }) | null): void {
+    ClaudeCodeProvider.trustChecker = checker;
   }
 
   /**
@@ -311,34 +222,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     if (ClaudeCodeProvider.securityLogger) {
       ClaudeCodeProvider.securityLogger(message, data);
     }
-  }
-
-  /**
-   * Set the permission response handler function (called from electron main process)
-   * This allows the runtime package to apply permission responses
-   * without directly depending on electron code
-   */
-  public static setPermissionResponseHandler(handler: ((
-    workspacePath: string,
-    sessionId: string,
-    requestId: string,
-    response: { decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' | 'always-all' }
-  ) => void) | null): void {
-    ClaudeCodeProvider.permissionResponseHandler = handler;
-  }
-
-  /**
-   * Set the pending request registrar function (called from electron main process)
-   * This allows tools that bypass the normal evaluateCommand flow (e.g., WebSearch)
-   * to register their permission requests so they can be handled by permissionResponseHandler
-   */
-  public static setPendingRequestRegistrar(registrar: ((
-    requestId: string,
-    workspacePath: string,
-    sessionId: string,
-    request: any // PermissionRequest
-  ) => void) | null): void {
-    ClaudeCodeProvider.pendingRequestRegistrar = registrar;
   }
 
   async initialize(config: ProviderConfig): Promise<void> {
@@ -629,25 +512,14 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         'TodoRead', 'TodoWrite'
       ];
 
-      let allowedList: string[] | undefined;
+      // In planning mode, enforce read-only toolset
+      // In agent mode, we do NOT set allowedTools so that tools flow through to canUseTool
+      // where our permission system can prompt the user
       if (this.currentMode === 'planning') {
-        // In planning mode, enforce read-only toolset regardless of configured settings
-        allowedList = DEFAULT_PLANNING_TOOLS;
-      } else if ((this.config as any)?.allowedTools) {
-        allowedList = (this.config as any).allowedTools as string[];
-      }
-      // NOTE: In agent mode, we intentionally do NOT set allowedTools.
-      // Setting allowedTools: ['*'] would cause all tools to match the "Allow Rules"
-      // in the SDK permission flow, bypassing our canUseTool callback.
-      // By not setting allowedTools, tools flow through to canUseTool where our
-      // PermissionEngine can evaluate them properly.
-
-      if (allowedList) {
-        (options as any).allowedTools = allowedList;
+        (options as any).allowedTools = DEFAULT_PLANNING_TOOLS;
         // Workaround for SDK bug: also pass all disallowed tools explicitly
-        const disallowed = SDK_NATIVE_TOOLS.filter(t => !allowedList!.includes(t));
+        const disallowed = SDK_NATIVE_TOOLS.filter(t => !DEFAULT_PLANNING_TOOLS.includes(t));
         (options as any).disallowedTools = disallowed;
-        // Some builds expect 'blockedTools' instead
         (options as any).blockedTools = disallowed;
       }
 
@@ -2194,9 +2066,70 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   }
 
   /**
+   * Generate a tool pattern for Claude Code's allowedTools format.
+   * These patterns are written to .claude/settings.local.json when user approves with "Always".
+   */
+  private generateToolPattern(toolName: string, input: any): string {
+    switch (toolName) {
+      case 'Bash': {
+        // Extract the command prefix for pattern matching
+        // e.g., "git push origin main" -> "Bash(git push:*)"
+        const command = (input?.command as string) || '';
+        const words = command.trim().split(/\s+/);
+        if (words.length >= 2) {
+          // Use first two words for more specific patterns
+          return `Bash(${words[0]} ${words[1]}:*)`;
+        } else if (words.length === 1 && words[0]) {
+          return `Bash(${words[0]}:*)`;
+        }
+        return 'Bash';
+      }
+
+      case 'WebFetch': {
+        // Extract domain for pattern matching
+        const url = (input?.url as string) || '';
+        try {
+          const parsedUrl = new URL(url);
+          return `WebFetch(domain:${parsedUrl.hostname})`;
+        } catch {
+          return 'WebFetch';
+        }
+      }
+
+      case 'WebSearch':
+        return 'WebSearch';
+
+      case 'Read':
+      case 'Write':
+      case 'Edit':
+      case 'MultiEdit':
+      case 'Glob':
+      case 'Grep':
+      case 'LS':
+      case 'TodoRead':
+      case 'TodoWrite':
+      case 'Task':
+      case 'NotebookRead':
+      case 'NotebookEdit':
+      case 'ExitPlanMode':
+        return toolName;
+
+      default:
+        // MCP tools: mcp__server__tool - use as-is
+        if (toolName.startsWith('mcp__')) {
+          return toolName;
+        }
+        return toolName;
+    }
+  }
+
+  /**
    * Create canUseTool handler for permission requests.
-   * Checks ALL tool calls against permission engine and handles AskUserQuestion.
-   * This allows us to use 'default' permission mode while requiring user approval for tools.
+   * The SDK evaluates settings.json rules first. This handler is only called when:
+   * 1. No matching rule was found in settings.json
+   * 2. The tool needs user approval
+   *
+   * Our job is to show UI, wait for user response, and save patterns if "Always" is chosen.
    */
   private createCanUseToolHandler(sessionId?: string, workspacePath?: string) {
     return async (
@@ -2207,15 +2140,14 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // Log all tool permission checks
       this.logSecurity('[canUseTool] Tool call received:', {
         toolName,
-        hasPermissionHandler: !!ClaudeCodeProvider.permissionHandler,
+        workspacePath: workspacePath?.slice(-30),
       });
 
       // Internal Nimbalyst MCP tools that should always be allowed without permission prompts
-      // Only include non-destructive tools here - editing tools (applyDiff, streamContent)
-      // should go through normal permission flow
       const internalMcpTools = [
         'mcp__nimbalyst-session-naming__name_session',
         'mcp__nimbalyst-mcp__capture_mockup_screenshot',
+        'mcp__nimbalyst-mcp__capture_editor_screenshot',
       ];
 
       if (internalMcpTools.includes(toolName)) {
@@ -2223,242 +2155,149 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         return { behavior: 'allow', updatedInput: input };
       }
 
-      // Check tool calls against permission engine (skip AskUserQuestion - handled separately)
-      if (toolName !== 'AskUserQuestion' && workspacePath && sessionId && ClaudeCodeProvider.permissionHandler) {
-        // Build a description of the tool call for permission checking
-        // For Bash, use the command; for other tools, create a descriptive string
-        let toolDescription: string;
-        if (toolName === 'Bash') {
-          toolDescription = input?.command || '';
-        } else {
-          // For non-Bash tools, create a description like "Edit file.ts" or "Write /path/to/file"
-          toolDescription = this.buildToolDescription(toolName, input);
+      // Handle AskUserQuestion separately - it's about getting user input, not permission
+      if (toolName === 'AskUserQuestion') {
+        return this.handleAskUserQuestion(sessionId, input, options);
+      }
+
+      // Check workspace trust before allowing any tools
+      if (workspacePath && ClaudeCodeProvider.trustChecker) {
+        const trustStatus = ClaudeCodeProvider.trustChecker(workspacePath);
+        if (!trustStatus.trusted) {
+          this.logSecurity('[canUseTool] Workspace not trusted, denying tool:', { toolName });
+          return {
+            behavior: 'deny',
+            message: 'Workspace is not trusted. Please trust the workspace to use AI tools.'
+          };
         }
+      }
 
-        if (toolDescription) {
-          this.logSecurity('[canUseTool] Checking permission:', {
-            toolName,
-            toolDescription: toolDescription.slice(0, 100),
-          });
+      // The SDK has already evaluated settings.json rules.
+      // If we're here, it means the SDK needs user approval for this tool.
+      // Show permission UI and wait for user response.
 
-          try {
-            const result = await ClaudeCodeProvider.permissionHandler(
-              workspacePath,
-              sessionId,
-              toolName,
-              toolDescription
-            );
+      const requestId = `tool-${sessionId || 'unknown'}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const toolDescription = this.buildToolDescription(toolName, input);
 
-            this.logSecurity('[canUseTool] Permission result:', {
-              toolName,
-              decision: result.decision,
-              hasRequest: !!result.request,
-            });
+      this.logSecurity('[canUseTool] Showing permission prompt:', {
+        toolName,
+        toolDescription: toolDescription.slice(0, 100),
+        requestId,
+      });
 
-            if (result.decision === 'allow') {
-              return { behavior: 'allow', updatedInput: input };
+      // Create a simplified permission request for the UI
+      const request = {
+        id: requestId,
+        toolName,
+        rawCommand: toolName === 'Bash' ? input?.command || '' : toolDescription,
+        actionsNeedingApproval: [{
+          action: {
+            pattern: toolName, // Used by ToolPermissionConfirmation for display
+            displayName: toolDescription,
+            command: toolName === 'Bash' ? input?.command || '' : '',
+            isDestructive: ['Write', 'Edit', 'MultiEdit', 'Bash'].includes(toolName),
+            referencedPaths: [],
+            hasRedirection: false,
+          },
+          decision: 'ask' as const,
+          reason: 'Tool requires user approval',
+          isDestructive: ['Write', 'Edit', 'MultiEdit', 'Bash'].includes(toolName),
+          isRisky: toolName === 'Bash',
+          warnings: [],
+          outsidePaths: [],
+          sensitivePaths: [],
+        }],
+        hasDestructiveActions: ['Write', 'Edit', 'MultiEdit', 'Bash'].includes(toolName),
+        createdAt: Date.now(),
+      };
+
+      // Create promise that will be resolved when user responds
+      const responsePromise = new Promise<{ decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' | 'always-all' }>((resolve, reject) => {
+        this.pendingToolPermissions.set(requestId, {
+          resolve,
+          reject,
+          request
+        });
+
+        // Set up abort handler
+        if (options.signal) {
+          options.signal.addEventListener('abort', () => {
+            this.pendingToolPermissions.delete(requestId);
+            reject(new Error('Request aborted'));
+          }, { once: true });
+        }
+      });
+
+      // Emit event to notify renderer to show permission UI
+      this.emit('toolPermission:pending', {
+        requestId,
+        sessionId,
+        workspacePath,
+        request,
+        timestamp: Date.now()
+      });
+
+      try {
+        // Wait for user to respond
+        const response = await responsePromise;
+
+        this.logSecurity('[canUseTool] User response received:', {
+          toolName,
+          decision: response.decision,
+          scope: response.scope,
+        });
+
+        // If user approved with "Always", save the pattern to .claude/settings.local.json
+        if (response.decision === 'allow' && response.scope === 'always' && workspacePath) {
+          const pattern = this.generateToolPattern(toolName, input);
+          if (ClaudeCodeProvider.claudeSettingsPatternSaver) {
+            try {
+              await ClaudeCodeProvider.claudeSettingsPatternSaver(workspacePath, pattern);
+              this.logSecurity('[canUseTool] Saved pattern to Claude settings:', { pattern });
+            } catch (saveError) {
+              console.error('[CLAUDE-CODE] Failed to save pattern:', saveError);
+              // Don't fail the tool call if saving fails
             }
-
-            if (result.decision === 'deny') {
-              return {
-                behavior: 'deny',
-                message: 'Tool call denied by permission settings'
-              };
-            }
-
-            // decision === 'ask' - need user approval
-            if (result.request) {
-              const requestId = result.request.id;
-
-              // Create promise that will be resolved when user responds
-              const responsePromise = new Promise<{ decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' | 'always-all' }>((resolve, reject) => {
-                this.pendingToolPermissions.set(requestId, {
-                  resolve,
-                  reject,
-                  request: result.request
-                });
-
-                // Set up abort handler
-                if (options.signal) {
-                  options.signal.addEventListener('abort', () => {
-                    this.pendingToolPermissions.delete(requestId);
-                    reject(new Error('Request aborted'));
-                  }, { once: true });
-                }
-              });
-
-              // Emit event to notify renderer to show permission UI
-              this.emit('toolPermission:pending', {
-                requestId,
-                sessionId,
-                workspacePath,
-                request: result.request,
-                timestamp: Date.now()
-              });
-
-              try {
-                // Wait for user to respond
-                const response = await responsePromise;
-
-                this.logSecurity('[canUseTool] User response received:', {
-                  toolName,
-                  decision: response.decision,
-                  scope: response.scope,
-                });
-
-                // For WebFetch with "always" approval, save the URL pattern instead of generic pattern
-                if (toolName === 'WebFetch' && response.decision === 'allow' && response.scope === 'always') {
-                  const url = input?.url;
-                  if (url && ClaudeCodeProvider.urlPatternSaver) {
-                    try {
-                      // Extract hostname for the pattern
-                      const parsedUrl = new URL(url);
-                      const hostname = parsedUrl.hostname;
-                      ClaudeCodeProvider.urlPatternSaver(
-                        workspacePath,
-                        hostname,
-                        `Allow fetching from ${hostname}`
-                      );
-                      this.logSecurity('[canUseTool] Saved URL pattern:', { hostname });
-                    } catch (urlError) {
-                      this.logSecurity('[canUseTool] Failed to parse URL for pattern:', { url, error: urlError });
-                    }
-                  }
-                } else if (response.decision === 'allow' && response.scope === 'always' && ClaudeCodeProvider.additionalDirectorySaver) {
-                  // For file operations with "always" approval, save the directory if path is outside workspace
-                  const path = require('path');
-                  let filePath: string | undefined;
-                  let isWriteOperation = false;
-                  let isReadOnlyBashCommand = false;
-
-                  // Extract file path based on tool type
-                  if (toolName === 'Read') {
-                    filePath = input?.file_path;
-                  } else if (toolName === 'Grep') {
-                    filePath = input?.path;
-                  } else if (toolName === 'Glob') {
-                    filePath = input?.path;
-                  } else if (toolName === 'Edit' || toolName === 'Write' || toolName === 'MultiEdit') {
-                    filePath = input?.file_path;
-                    isWriteOperation = true;
-                  } else if (toolName === 'Bash') {
-                    // For Bash, check if this is a read-only command accessing outside paths
-                    // Look in actionsNeedingApproval since that's where evaluations are stored
-                    const actionsNeedingApproval = result?.request?.actionsNeedingApproval || [];
-                    const firstAction = actionsNeedingApproval[0];
-                    const outsidePaths = firstAction?.outsidePaths || [];
-                    const isReadOnly = firstAction?.isReadOnly;
-
-                    if (outsidePaths.length > 0) {
-                      // Save the first outside path's directory
-                      filePath = outsidePaths[0];
-                      // Check if this is a read-only command (find, grep, ls, cat, etc.)
-                      isReadOnlyBashCommand = isReadOnly === true;
-                    }
-                  }
-
-                  let savedDirectory = false;
-                  if (filePath && workspacePath) {
-                    // Check if path is outside workspace
-                    const normalizedPath = path.resolve(filePath);
-                    const normalizedWorkspace = path.resolve(workspacePath);
-                    if (!normalizedPath.startsWith(normalizedWorkspace)) {
-                      // Extract directory from path (or use path itself if it's a directory)
-                      const fs = require('fs');
-                      let directory: string;
-                      try {
-                        // Check if the path is a directory
-                        const stats = fs.statSync(normalizedPath);
-                        directory = stats.isDirectory() ? normalizedPath : path.dirname(normalizedPath);
-                      } catch {
-                        // Path doesn't exist yet or can't be accessed, use dirname
-                        directory = path.dirname(normalizedPath);
-                      }
-
-                      ClaudeCodeProvider.additionalDirectorySaver(
-                        workspacePath,
-                        directory,
-                        isWriteOperation
-                      );
-                      savedDirectory = true;
-                      this.logSecurity('[canUseTool] Saved additional directory:', {
-                        directory,
-                        canWrite: isWriteOperation,
-                        isReadOnlyBashCommand
-                      });
-                    }
-                  }
-
-                  // For read-only bash commands that access outside directories,
-                  // DON'T save the command pattern (like bash:find) - only the directory matters
-                  // This prevents asking for bash:find, bash:grep, bash:ls etc. separately
-                  if (!(toolName === 'Bash' && isReadOnlyBashCommand && savedDirectory)) {
-                    // Apply the permission response for pattern saving
-                    if (ClaudeCodeProvider.permissionResponseHandler) {
-                      ClaudeCodeProvider.permissionResponseHandler(
-                        workspacePath,
-                        sessionId,
-                        requestId,
-                        response
-                      );
-                    }
-                  }
-                } else {
-                  // Apply the permission response via the handler for non-WebFetch tools
-                  if (ClaudeCodeProvider.permissionResponseHandler) {
-                    ClaudeCodeProvider.permissionResponseHandler(
-                      workspacePath,
-                      sessionId,
-                      requestId,
-                      response
-                    );
-                  }
-                }
-
-                // Emit event so UI can update
-                this.emit('toolPermission:resolved', {
-                  requestId,
-                  sessionId,
-                  response,
-                  timestamp: Date.now()
-                });
-
-                if (response.decision === 'allow') {
-                  return { behavior: 'allow', updatedInput: input };
-                } else {
-                  return {
-                    behavior: 'deny',
-                    message: 'Tool call denied by user'
-                  };
-                }
-              } catch (error) {
-                this.logSecurity('[canUseTool] Permission request failed:', {
-                  toolName,
-                  error: error instanceof Error ? error.message : 'Unknown error',
-                });
-                // On abort/error, deny the tool use
-                return {
-                  behavior: 'deny',
-                  message: error instanceof Error ? error.message : 'Permission request cancelled'
-                };
-              }
-            }
-          } catch (error) {
-            console.error('[CLAUDE-CODE] Permission check failed:', error);
-            // On error, fall through to allow (fail open for now)
           }
         }
-      }
 
-      // Auto-approve if permission handler didn't deny or ask
-      if (toolName !== 'AskUserQuestion') {
+        // Emit event so UI can update
+        this.emit('toolPermission:resolved', {
+          requestId,
+          sessionId,
+          response,
+          timestamp: Date.now()
+        });
+
+        if (response.decision === 'allow') {
+          return { behavior: 'allow', updatedInput: input };
+        } else {
+          return {
+            behavior: 'deny',
+            message: 'Tool call denied by user'
+          };
+        }
+      } catch (error) {
+        this.logSecurity('[canUseTool] Permission request failed:', {
+          toolName,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
         return {
-          behavior: 'allow',
-          updatedInput: input
+          behavior: 'deny',
+          message: error instanceof Error ? error.message : 'Permission request cancelled'
         };
       }
+    };
+  }
 
-      // Handle AskUserQuestion - need to get user input
+  /**
+   * Handle AskUserQuestion tool - get user input for questions
+   */
+  private async handleAskUserQuestion(
+    sessionId: string | undefined,
+    input: any,
+    options: { signal: AbortSignal }
+  ): Promise<{ behavior: 'allow' | 'deny'; updatedInput?: any; message?: string }> {
       // Debug logging - uncomment if needed
       // console.log('[CLAUDE-CODE] AskUserQuestion tool invoked, waiting for user answers');
 
@@ -2537,7 +2376,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           message: error instanceof Error ? error.message : 'Question cancelled'
         };
       }
-    };
   }
 
   /**
@@ -2630,313 +2468,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         }
       }
 
-      // WebFetch/WebSearch: Check URL against allowed patterns
-      // The SDK may auto-allow these, but we want to check URL patterns first
+      // WebFetch/WebSearch: Let SDK handle via canUseTool
+      // The SDK reads settings.json and calls canUseTool when permission is needed
       if (toolName === 'WebFetch' || toolName === 'WebSearch') {
-        const url = toolName === 'WebFetch' ? toolInput?.url : null;
-
-        this.logSecurity(`[PreToolUse] ${toolName} intercepted:`, {
-          url,
-          workspacePath,
-          hasUrlChecker: !!ClaudeCodeProvider.urlPermissionChecker,
-        });
-
-        // For WebFetch, check if URL matches allowed patterns
-        if (toolName === 'WebFetch' && url && workspacePath) {
-          if (ClaudeCodeProvider.urlPermissionChecker) {
-            const isAllowed = ClaudeCodeProvider.urlPermissionChecker(workspacePath, url);
-            this.logSecurity(`[PreToolUse] WebFetch URL check:`, {
-              url,
-              isAllowed,
-            });
-
-            if (isAllowed) {
-              // URL matches an allowed pattern - let it through
-              this.logSecurity(`[PreToolUse] WebFetch URL allowed, permitting:`, { url });
-              return {};
-            }
-          } else {
-            this.logSecurity(`[PreToolUse] WARNING: No URL permission checker set!`);
-          }
-
-          // URL not in allowed list - handle permission request directly in hook
-          this.logSecurity(`[PreToolUse] WebFetch URL not allowed, requesting permission:`, { url });
-
-          // Extract hostname for the permission pattern (what gets saved)
-          let hostname: string;
-          try {
-            hostname = new URL(url).hostname;
-          } catch {
-            hostname = url; // Fallback to full URL if parsing fails
-          }
-
-          // Generate a unique request ID
-          const requestId = `perm-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-
-          // Create a permission request object
-          // Pattern uses hostname so "Allow Always" applies to the whole domain
-          const permissionRequest = {
-            id: requestId,
-            toolName: 'WebFetch',
-            rawCommand: `fetch ${url}`,
-            actionsNeedingApproval: [{
-              action: {
-                pattern: `webfetch:${hostname}`,
-                displayName: `Fetch from ${hostname}`,
-              },
-              decision: 'ask' as const,
-              reason: 'URL not in allowed list',
-              warnings: [] as string[],
-              outsidePaths: [] as string[],
-              sensitivePaths: [] as string[],
-            }],
-            hasDestructiveActions: false,
-            createdAt: Date.now(),
-          };
-
-          // Create promise that will be resolved when user responds
-          const responsePromise = new Promise<{ decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' | 'always-all' }>((resolve, reject) => {
-            this.pendingToolPermissions.set(requestId, {
-              resolve,
-              reject,
-              request: permissionRequest
-            });
-
-            // Set up abort handler using the abort controller
-            if (this.abortController?.signal) {
-              this.abortController.signal.addEventListener('abort', () => {
-                this.pendingToolPermissions.delete(requestId);
-                reject(new Error('Request aborted'));
-              }, { once: true });
-            }
-          });
-
-          // Emit event to notify renderer to show permission UI
-          this.emit('toolPermission:pending', {
-            requestId,
-            sessionId,
-            workspacePath,
-            request: permissionRequest,
-            timestamp: Date.now()
-          });
-
-          try {
-            // Wait for user to respond
-            const response = await responsePromise;
-
-            this.logSecurity('[PreToolUse] WebFetch permission response received:', {
-              url,
-              decision: response.decision,
-              scope: response.scope,
-            });
-
-            if (response.decision === 'allow') {
-              // Handle "Allow All WebFetches" - save wildcard pattern
-              if (response.scope === 'always-all' && ClaudeCodeProvider.allowAllUrlsHandler) {
-                ClaudeCodeProvider.allowAllUrlsHandler(workspacePath);
-                this.logSecurity('[PreToolUse] Saved wildcard URL pattern (allow all)');
-              }
-              // Save URL pattern if scope is 'always' (for specific hostname)
-              else if (response.scope === 'always' && ClaudeCodeProvider.urlPatternSaver) {
-                try {
-                  const parsedUrl = new URL(url);
-                  const hostname = parsedUrl.hostname;
-                  ClaudeCodeProvider.urlPatternSaver(
-                    workspacePath,
-                    hostname,
-                    `Allow fetching from ${hostname}`
-                  );
-                  this.logSecurity('[PreToolUse] Saved URL pattern:', { hostname });
-                } catch (urlError) {
-                  this.logSecurity('[PreToolUse] Failed to parse URL for pattern:', { url, error: urlError });
-                }
-              }
-
-              return {
-                hookSpecificOutput: {
-                  hookEventName: 'PreToolUse' as const,
-                  permissionDecision: 'allow' as const
-                }
-              };
-            } else {
-              return {
-                hookSpecificOutput: {
-                  hookEventName: 'PreToolUse' as const,
-                  permissionDecision: 'deny' as const
-                }
-              };
-            }
-          } catch (error) {
-            this.logSecurity('[PreToolUse] WebFetch permission error:', { url, error });
-            // On error (e.g., abort), deny the request
-            return {
-              hookSpecificOutput: {
-                hookEventName: 'PreToolUse' as const,
-                permissionDecision: 'deny' as const
-              }
-            };
-          }
-        } else if (toolName === 'WebFetch') {
-          // Log why we're not checking
-          this.logSecurity(`[PreToolUse] WebFetch skipping permission check:`, {
-            hasUrl: !!url,
-            hasWorkspacePath: !!workspacePath,
-          });
-        }
-
-        // WebSearch needs approval unless already allowed
-        if (toolName === 'WebSearch') {
-          const query = toolInput?.query;
-          this.logSecurity(`[PreToolUse] WebSearch checking permission:`, { query });
-
-          // First check if WebSearch is already allowed via the permission handler
-          if (ClaudeCodeProvider.permissionHandler && workspacePath && sessionId) {
-            try {
-              const result = await ClaudeCodeProvider.permissionHandler(
-                workspacePath,
-                sessionId,
-                'WebSearch',
-                `search "${query}"`
-              );
-              if (result.decision === 'allow') {
-                this.logSecurity(`[PreToolUse] WebSearch already allowed, permitting:`, { query });
-                return {};
-              }
-              if (result.decision === 'deny') {
-                this.logSecurity(`[PreToolUse] WebSearch denied by permission settings:`, { query });
-                return {
-                  hookSpecificOutput: {
-                    hookEventName: 'PreToolUse' as const,
-                    permissionDecision: 'deny' as const
-                  }
-                };
-              }
-              // If decision is 'ask', continue with the permission request flow below
-            } catch (error) {
-              this.logSecurity(`[PreToolUse] WebSearch permission check failed, asking user:`, { query, error });
-            }
-          }
-
-          // Need to ask user for permission
-          this.logSecurity(`[PreToolUse] WebSearch requesting user permission:`, { query });
-
-          // Generate a unique request ID
-          const requestId = `perm-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-
-          // Create a permission request object
-          // Use generic pattern 'websearch' so "Allow Always" applies to all future searches
-          const permissionRequest = {
-            id: requestId,
-            toolName: 'WebSearch',
-            rawCommand: `search "${query}"`,
-            actionsNeedingApproval: [{
-              action: {
-                pattern: 'websearch',
-                displayName: 'Search the web',
-              },
-              decision: 'ask' as const,
-              reason: 'Web search requires approval',
-              warnings: [] as string[],
-              outsidePaths: [] as string[],
-              sensitivePaths: [] as string[],
-            }],
-            hasDestructiveActions: false,
-            createdAt: Date.now(),
-          };
-
-          // Register the pending request with PermissionService so it can be looked up
-          // when the user responds and the permission can be persisted
-          if (ClaudeCodeProvider.pendingRequestRegistrar && workspacePath && sessionId) {
-            ClaudeCodeProvider.pendingRequestRegistrar(
-              requestId,
-              workspacePath,
-              sessionId,
-              permissionRequest
-            );
-          }
-
-          // Create promise that will be resolved when user responds
-          const responsePromise = new Promise<{ decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' | 'always-all' }>((resolve, reject) => {
-            this.pendingToolPermissions.set(requestId, {
-              resolve,
-              reject,
-              request: permissionRequest
-            });
-
-            // Set up abort handler
-            if (this.abortController?.signal) {
-              this.abortController.signal.addEventListener('abort', () => {
-                this.pendingToolPermissions.delete(requestId);
-                reject(new Error('Request aborted'));
-              }, { once: true });
-            }
-          });
-
-          // Emit event to notify renderer to show permission UI
-          this.emit('toolPermission:pending', {
-            requestId,
-            sessionId,
-            workspacePath,
-            request: permissionRequest,
-            timestamp: Date.now()
-          });
-
-          try {
-            // Wait for user to respond
-            const response = await responsePromise;
-
-            this.logSecurity('[PreToolUse] WebSearch permission response received:', {
-              query,
-              decision: response.decision,
-              scope: response.scope,
-            });
-
-            // Persist the permission response for session/always scope
-            if (ClaudeCodeProvider.permissionResponseHandler && workspacePath && sessionId) {
-              ClaudeCodeProvider.permissionResponseHandler(
-                workspacePath,
-                sessionId,
-                requestId,
-                response
-              );
-            }
-
-            // Emit event so UI can update
-            this.emit('toolPermission:resolved', {
-              requestId,
-              sessionId,
-              response,
-              timestamp: Date.now()
-            });
-
-            if (response.decision === 'allow') {
-              return {
-                hookSpecificOutput: {
-                  hookEventName: 'PreToolUse' as const,
-                  permissionDecision: 'allow' as const
-                }
-              };
-            } else {
-              return {
-                hookSpecificOutput: {
-                  hookEventName: 'PreToolUse' as const,
-                  permissionDecision: 'deny' as const
-                }
-              };
-            }
-          } catch (error) {
-            this.logSecurity('[PreToolUse] WebSearch permission error:', { query, error });
-            return {
-              hookSpecificOutput: {
-                hookEventName: 'PreToolUse' as const,
-                permissionDecision: 'deny' as const
-              }
-            };
-          }
-        }
-
-        // No URL or workspace - let SDK handle it
-        this.logSecurity(`[PreToolUse] ${toolName} - no URL/workspace, deferring to SDK`);
+        this.logSecurity(`[PreToolUse] ${toolName} - deferring to SDK/canUseTool`);
         return {};
       }
 

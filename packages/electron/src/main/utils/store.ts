@@ -159,67 +159,27 @@ export interface SessionHistoryLayout {
 }
 
 /**
- * Agent permission rule for storing allowed/denied patterns
- */
-export interface AgentPermissionRule {
-  /** Pattern identifier, e.g., 'git:push', 'npm:run:build' */
-  pattern: string;
-  /** Human-readable display name */
-  displayName: string;
-  /** Timestamp when this rule was added */
-  addedAt: number;
-}
-
-/**
  * Permission mode for the workspace
  * - null: Workspace not trusted (show trust toast)
  * - 'ask': Smart permissions - prompt for new patterns, remember choices
- * - 'allow-all': Auto-approve all tool calls (except denied patterns)
+ * - 'allow-all': Auto-approve all tool calls
  */
 export type AgentPermissionMode = 'ask' | 'allow-all' | null;
 
 /**
- * An additional directory the agent has access to outside the workspace
- */
-export interface AgentAdditionalDirectory {
-  /** The absolute path to the directory */
-  path: string;
-  /** Whether the agent can write to this directory */
-  canWrite: boolean;
-  /** When this directory was added */
-  addedAt: number;
-}
-
-/**
- * A URL pattern that the agent is allowed to access
- */
-export interface AgentAllowedUrlPattern {
-  /** The URL pattern (e.g., "*.github.com", "api.example.com", "https://docs.anthropic.com/*") */
-  pattern: string;
-  /** Human-readable description */
-  description: string;
-  /** When this pattern was added */
-  addedAt: number;
-}
-
-/**
- * Agent permissions stored per workspace
+ * Agent permissions stored per workspace.
+ *
+ * Only stores the trust mode - all tool/URL patterns are now managed by
+ * Claude Code's native settings files (.claude/settings.json and .claude/settings.local.json).
+ * We are just a UI on top of Claude's permission system.
  *
  * Trust is determined by permissionMode:
  * - null: Not trusted (show trust toast)
  * - 'ask' or 'allow-all': Trusted
  */
 export interface AgentPermissions {
-  /** Patterns that are always allowed in this workspace */
-  allowedPatterns: AgentPermissionRule[];
-  /** Patterns that are always denied in this workspace */
-  deniedPatterns: AgentPermissionRule[];
   /** Permission mode: null=untrusted, 'ask'=smart permissions, 'allow-all'=auto-approve */
   permissionMode: AgentPermissionMode;
-  /** Additional directories outside workspace that the agent can access */
-  additionalDirectories: AgentAdditionalDirectory[];
-  /** URL patterns the agent is allowed to fetch/access */
-  allowedUrlPatterns: AgentAllowedUrlPattern[];
 }
 
 export interface AgenticCodingWindowState {
@@ -435,28 +395,13 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
     showFileIcons: raw.showFileIcons ?? undefined,
     aiProviderOverrides: raw.aiProviderOverrides ? { ...raw.aiProviderOverrides } : undefined,
     extensionConfiguration: raw.extensionConfiguration ? { ...raw.extensionConfiguration } : undefined,
+    // AgentPermissions now only contains permissionMode - patterns are in Claude's settings files
     agentPermissions: raw.agentPermissions ? {
-      allowedPatterns: Array.isArray(raw.agentPermissions.allowedPatterns)
-        ? raw.agentPermissions.allowedPatterns.map((r: any) => ({ ...r }))
-        : [],
-      deniedPatterns: Array.isArray(raw.agentPermissions.deniedPatterns)
-        ? raw.agentPermissions.deniedPatterns.map((r: any) => ({ ...r }))
-        : [],
-      // Migration: Convert from old isTrusted to permissionMode
-      // If permissionMode is already set, use it; otherwise derive from isTrusted
       permissionMode: raw.agentPermissions.permissionMode === 'allow-all'
         ? 'allow-all'
         : raw.agentPermissions.permissionMode === 'ask'
           ? 'ask'
-          : raw.agentPermissions.isTrusted
-            ? 'ask'  // Migration: any truthy isTrusted defaults to 'ask'
-            : null,  // Not trusted
-      additionalDirectories: Array.isArray(raw.agentPermissions.additionalDirectories)
-        ? raw.agentPermissions.additionalDirectories.map((d: any) => ({ ...d }))
-        : [],
-      allowedUrlPatterns: Array.isArray(raw.agentPermissions.allowedUrlPatterns)
-        ? raw.agentPermissions.allowedUrlPatterns.map((u: any) => ({ ...u }))
-        : [],
+          : null,
     } : undefined,
     lastUpdated: raw.lastUpdated ?? raw.updated_at ?? Date.now(),
   };
@@ -527,7 +472,7 @@ function cloneWorkspaceState(state: WorkspaceState): WorkspaceState {
           ])
         )
       : undefined,
-    agentPermissions: state.agentPermissions ? structuredClone(state.agentPermissions) : undefined,
+    agentPermissions: state.agentPermissions ? { permissionMode: state.agentPermissions.permissionMode } : undefined,
     lastUpdated: state.lastUpdated,
   };
 }
@@ -1172,20 +1117,13 @@ export function getAgentPermissions(workspacePath: string): AgentPermissions | u
 }
 
 export function saveAgentPermissions(workspacePath: string, permissions: AgentPermissions): void {
-  const key = workspaceKey(workspacePath);
   const workspaceName = workspacePath.split('/').pop() || workspacePath;
   console.log(`[Store:${workspaceName}] saveAgentPermissions:`, {
     workspacePath,
-    key,
-    storePath: workspaceStore.path,
     permissionMode: permissions.permissionMode,
-    allowedPatternsCount: permissions.allowedPatterns.length,
-    allowedUrlPatternsCount: permissions.allowedUrlPatterns?.length || 0,
   });
   updateWorkspaceState(workspacePath, (state) => {
-    // Use structuredClone to deep copy the entire permissions object
-    // This ensures all fields are preserved without manual mapping
-    state.agentPermissions = structuredClone(permissions);
+    state.agentPermissions = { permissionMode: permissions.permissionMode };
   });
 }
 
@@ -1196,99 +1134,7 @@ export function isWorkspaceTrusted(workspacePath: string): boolean {
 
 export function setWorkspaceTrusted(workspacePath: string, trusted: boolean, mode: 'ask' | 'allow-all' = 'ask'): void {
   updateWorkspaceState(workspacePath, (state) => {
-    if (!state.agentPermissions) {
-      state.agentPermissions = {
-        allowedPatterns: [],
-        deniedPatterns: [],
-        permissionMode: trusted ? mode : null,
-        additionalDirectories: [],
-        allowedUrlPatterns: [],
-      };
-    } else {
-      state.agentPermissions.permissionMode = trusted ? mode : null;
-    }
+    state.agentPermissions = { permissionMode: trusted ? mode : null };
   });
 }
 
-export function addAllowedPattern(
-  workspacePath: string,
-  pattern: string,
-  displayName: string
-): void {
-  updateWorkspaceState(workspacePath, (state) => {
-    if (!state.agentPermissions) {
-      state.agentPermissions = {
-        allowedPatterns: [],
-        deniedPatterns: [],
-        permissionMode: null,
-        additionalDirectories: [],
-        allowedUrlPatterns: [],
-      };
-    }
-    // Remove from denied if present
-    state.agentPermissions.deniedPatterns = state.agentPermissions.deniedPatterns.filter(
-      (r) => r.pattern !== pattern
-    );
-    // Add to allowed if not present
-    if (!state.agentPermissions.allowedPatterns.some((r) => r.pattern === pattern)) {
-      state.agentPermissions.allowedPatterns.push({
-        pattern,
-        displayName,
-        addedAt: Date.now(),
-      });
-    }
-  });
-}
-
-export function addDeniedPattern(
-  workspacePath: string,
-  pattern: string,
-  displayName: string
-): void {
-  updateWorkspaceState(workspacePath, (state) => {
-    if (!state.agentPermissions) {
-      state.agentPermissions = {
-        allowedPatterns: [],
-        deniedPatterns: [],
-        permissionMode: null,
-        additionalDirectories: [],
-        allowedUrlPatterns: [],
-      };
-    }
-    // Remove from allowed if present
-    state.agentPermissions.allowedPatterns = state.agentPermissions.allowedPatterns.filter(
-      (r) => r.pattern !== pattern
-    );
-    // Add to denied if not present
-    if (!state.agentPermissions.deniedPatterns.some((r) => r.pattern === pattern)) {
-      state.agentPermissions.deniedPatterns.push({
-        pattern,
-        displayName,
-        addedAt: Date.now(),
-      });
-    }
-  });
-}
-
-export function removeAgentPermissionRule(workspacePath: string, pattern: string): void {
-  updateWorkspaceState(workspacePath, (state) => {
-    if (state.agentPermissions) {
-      state.agentPermissions.allowedPatterns = state.agentPermissions.allowedPatterns.filter(
-        (r) => r.pattern !== pattern
-      );
-      state.agentPermissions.deniedPatterns = state.agentPermissions.deniedPatterns.filter(
-        (r) => r.pattern !== pattern
-      );
-    }
-  });
-}
-
-export function resetAgentPermissions(workspacePath: string): void {
-  updateWorkspaceState(workspacePath, (state) => {
-    if (state.agentPermissions) {
-      state.agentPermissions.allowedPatterns = [];
-      state.agentPermissions.deniedPatterns = [];
-      // Keep trust status
-    }
-  });
-}

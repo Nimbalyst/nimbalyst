@@ -291,12 +291,14 @@ export const ToolPermissionConfirmation: React.FC<ToolPermissionConfirmationProp
           <button
             className="tool-permission-confirmation-button tool-permission-confirmation-button--session"
             onClick={handleAllowSession}
+            title="Allow for this session only"
           >
             Allow Session
           </button>
           <button
             className="tool-permission-confirmation-button tool-permission-confirmation-button--always"
             onClick={handleAllowAlways}
+            title="Save to .claude/settings.local.json"
           >
             Allow Always
           </button>

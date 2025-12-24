@@ -102,6 +102,23 @@ export async function addAllowedUrlPattern(
 }
 
 /**
+ * Check if a URL is allowed via IPC (renderer -> main)
+ * This calls through the PermissionService to check against saved patterns
+ */
+export async function isUrlAllowed(
+  page: Page,
+  workspacePath: string,
+  url: string
+): Promise<boolean> {
+  return await page.evaluate(
+    async ({ workspacePath, url }) => {
+      return await (window as any).electronAPI.invoke('permissions:isUrlAllowed', workspacePath, url);
+    },
+    { workspacePath, url }
+  );
+}
+
+/**
  * Create a mock permission request for testing
  */
 export function createMockPermissionRequest(
