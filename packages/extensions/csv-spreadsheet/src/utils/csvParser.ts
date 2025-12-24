@@ -109,6 +109,9 @@ export function parseCSV(content: string): { data: SpreadsheetData; delimiter: '
 
   const hasHeaders = headerRowCount > 0;
 
+  // Use metadata frozenColumnCount if present, otherwise default to 0
+  const frozenColumnCount = metadata?.frozenColumnCount ?? 0;
+
   return {
     data: {
       rows,
@@ -116,6 +119,7 @@ export function parseCSV(content: string): { data: SpreadsheetData; delimiter: '
       headers: hasHeaders ? rows[0].map(cell => cell.raw) : undefined,
       hasHeaders,
       headerRowCount,
+      frozenColumnCount,
     },
     delimiter,
     metadata,
@@ -177,6 +181,7 @@ export function serializeToCSV(data: SpreadsheetData, delimiter: ',' | '\t' = ',
     const metadata: CSVMetadata = {
       hasHeaders: data.hasHeaders,
       headerRowCount: data.headerRowCount || (data.hasHeaders ? 1 : 0),
+      frozenColumnCount: data.frozenColumnCount || 0,
     };
     return `${serializeMetadata(metadata)}\n${csvContent}`;
   }

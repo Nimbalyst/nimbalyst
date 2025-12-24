@@ -228,6 +228,29 @@
   font-weight: 600;
 }
 
+/* Frozen/pinned column styling */
+/* Header cells in frozen columns get a subtle background */
+.spreadsheet-editor revo-grid [slot="colPinStart-header"] revogr-header .rgHeaderCell {
+  background-color: var(--surface-secondary);
+}
+
+/* Data cells in frozen columns get a subtle background */
+.spreadsheet-editor revo-grid [slot="colPinStart"] revogr-data .rgCell {
+  background-color: var(--surface-secondary);
+}
+
+/* Border to visually separate frozen columns from scrollable area */
+.spreadsheet-editor revo-grid [slot="colPinStart"],
+.spreadsheet-editor revo-grid [slot="colPinStart-header"] {
+  border-right: 2px solid var(--primary-color);
+}
+
+/* Dark theme: ensure frozen column contrast */
+[data-theme="dark"] .spreadsheet-editor revo-grid [slot="colPinStart"] revogr-data .rgCell,
+[data-theme="crystal-dark"] .spreadsheet-editor revo-grid [slot="colPinStart"] revogr-data .rgCell {
+  background-color: var(--surface-secondary);
+}
+
 /* Error cells */
 .spreadsheet-editor .cell-error {
   color: #ef4444;

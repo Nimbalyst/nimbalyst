@@ -8,6 +8,7 @@
 export interface CSVMetadata {
   hasHeaders: boolean;
   headerRowCount?: number;
+  frozenColumnCount?: number;
 }
 
 /**
@@ -47,6 +48,8 @@ export interface SpreadsheetData {
   hasHeaders: boolean;
   /** Number of header rows (0 = no headers, 1+ = that many rows are headers) */
   headerRowCount: number;
+  /** Number of frozen/pinned columns on the left (0 = no frozen columns) */
+  frozenColumnCount: number;
 }
 
 /**

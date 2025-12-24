@@ -83,6 +83,7 @@ function createEmptySpreadsheet(): SpreadsheetData {
     columnCount,
     hasHeaders: false,
     headerRowCount: 0,
+    frozenColumnCount: 0,
   };
 }
 
@@ -111,6 +112,7 @@ export interface UseSpreadsheetDataResult {
   deleteColumn: (index: number) => void;
   sortByColumn: (columnIndex: number, direction: SortDirection) => void;
   setHeaderRowCount: (count: number) => void;
+  setFrozenColumnCount: (count: number) => void;
   toggleHeaders: () => void;
 
   // Clipboard (uses system clipboard)
@@ -123,6 +125,10 @@ export interface UseSpreadsheetDataResult {
   toCSV: () => string;
   loadFromCSV: (content: string) => void;
   markClean: () => void;
+
+  // Disk content tracking (for external change detection)
+  contentMatchesDisk: (content: string) => boolean;
+  updateDiskContent: (content: string) => void;
 
   // Sort state
   sortConfig: SortConfig | null;
@@ -145,6 +151,10 @@ export function useSpreadsheetData(
   const parsedData = useRef(initialParse.current());
   const [delimiter, setDelimiter] = useState<',' | '\t'>(parsedData.current.delimiter);
 
+  // Track the last content we received from disk (for detecting external changes)
+  // This is used to ignore file watcher notifications that match what we already have
+  const lastKnownDiskContentRef = useRef<string>(initialContent);
+
   // Main data state with undo/redo
   const [data, setData, { undo, redo, canUndo, canRedo, reset }] = useUndoable<SpreadsheetData>(
     initialContent ? parsedData.current.data : createEmptySpreadsheet()
@@ -156,20 +166,19 @@ export function useSpreadsheetData(
 
   // Track dirty state changes and notify of content changes
   const markDirty = useCallback(() => {
-    console.log('[CSV markDirty] Called, isDirty:', isDirty, 'has onContentChange:', !!onContentChange);
     if (!isDirty) {
       setIsDirty(true);
       onDirtyChange?.(true);
     }
     // Always notify of content change for autosave
-    console.log('[CSV markDirty] Calling onContentChange');
     onContentChange?.();
   }, [isDirty, onDirtyChange, onContentChange]);
 
   // Update a cell (expands data if editing beyond current bounds)
   const updateCell = useCallback((row: number, col: number, value: string) => {
-    console.log('[CSV updateCell] Called with row:', row, 'col:', col, 'value:', JSON.stringify(value));
+    console.log('[CSV updateCell] row:', row, 'col:', col, 'value:', value);
     setData(prev => {
+      console.log('[CSV updateCell] prev rows[9]:', prev.rows[9]?.map(c => c.raw).join(','));
       const newData = { ...prev };
 
       // Expand rows if needed
@@ -320,8 +329,6 @@ export function useSpreadsheetData(
       const nonEmptyRows = dataRows.filter(row => !isRowEmpty(row));
       const emptyRows = dataRows.filter(row => isRowEmpty(row));
 
-      console.log(`[CSV sortByColumn] Sorting ${nonEmptyRows.length} non-empty rows, keeping ${emptyRows.length} empty rows at end`);
-
       // Only sort the non-empty rows
       const sortedNonEmptyRows = [...nonEmptyRows].sort((a, b) => {
         const aVal = a[columnIndex]?.computed;
@@ -373,6 +380,20 @@ export function useSpreadsheetData(
     markDirty();
   }, [setData, markDirty]);
 
+  // Set frozen column count
+  const setFrozenColumnCount = useCallback((count: number) => {
+    setData(prev => {
+      const newData = { ...prev };
+      const maxCols = newData.columnCount;
+      const safeCount = Math.max(0, Math.min(count, maxCols));
+
+      newData.frozenColumnCount = safeCount;
+
+      return newData;
+    });
+    markDirty();
+  }, [setData, markDirty]);
+
   // Toggle headers (legacy)
   const toggleHeaders = useCallback(() => {
     setData(prev => {
@@ -394,7 +415,9 @@ export function useSpreadsheetData(
 
   // Clear cells in selection
   const clearCells = useCallback((selection: NormalizedSelectionRange) => {
+    console.log('[CSV clearCells] Clearing selection:', selection);
     setData(prev => {
+      console.log('[CSV clearCells] prev rows[9]:', prev.rows[9]?.map(c => c.raw).join(','));
       const newData = { ...prev };
       newData.rows = prev.rows.map(row => [...row]);
 
@@ -406,6 +429,7 @@ export function useSpreadsheetData(
         }
       }
 
+      console.log('[CSV clearCells] newData rows[9]:', newData.rows[9]?.map(c => c.raw).join(','));
       return recalculateFormulas(newData);
     });
     markDirty();
@@ -413,7 +437,6 @@ export function useSpreadsheetData(
 
   // Copy selection to system clipboard
   const copySelection = useCallback((selection: NormalizedSelectionRange) => {
-    console.log('[CSV copySelection] Called with selection:', selection);
     const values: string[][] = [];
     for (let r = selection.startRow; r <= selection.endRow; r++) {
       const row: string[] = [];
@@ -424,21 +447,15 @@ export function useSpreadsheetData(
       values.push(row);
     }
 
-    console.log('[CSV copySelection] Copied values:', JSON.stringify(values));
-
     // Copy to system clipboard as tab-delimited text
     const text = values.map(row => row.join('\t')).join('\n');
-    navigator.clipboard.writeText(text).then(() => {
-      console.log('[CSV copySelection] Wrote to system clipboard:', text.length, 'chars');
-    }).catch(err => {
-      console.log('[CSV copySelection] Failed to write to system clipboard:', err);
+    navigator.clipboard.writeText(text).catch(() => {
+      // Clipboard access denied - nothing to do
     });
   }, [data.rows]);
 
   // Cut selection - copy to clipboard and clear cells immediately
   const cutSelection = useCallback((selection: NormalizedSelectionRange) => {
-    console.log('[CSV cutSelection] Called with selection:', selection);
-
     // First copy the values
     const values: string[][] = [];
     for (let r = selection.startRow; r <= selection.endRow; r++) {
@@ -452,8 +469,8 @@ export function useSpreadsheetData(
 
     // Copy to system clipboard
     const text = values.map(row => row.join('\t')).join('\n');
-    navigator.clipboard.writeText(text).catch(err => {
-      console.log('[CSV cutSelection] Failed to write to system clipboard:', err);
+    navigator.clipboard.writeText(text).catch(() => {
+      // Clipboard access denied - nothing to do
     });
 
     // Clear the cells
@@ -462,23 +479,14 @@ export function useSpreadsheetData(
 
   // Paste from text (system clipboard) - parses tab/newline delimited text
   const pasteFromText = useCallback((targetRow: number, targetCol: number, text: string) => {
-    console.log('[CSV pasteFromText] Called with targetRow:', targetRow, 'targetCol:', targetCol);
-    console.log('[CSV pasteFromText] Text length:', text.length);
-    console.log('[CSV pasteFromText] Raw text:', JSON.stringify(text));
-
     // Parse text as tab-delimited rows (Excel/Sheets format)
     const lines = text.split(/\r?\n/);
-    console.log('[CSV pasteFromText] Lines:', lines.length);
 
     const values = lines
       .filter(line => line.length > 0) // Skip empty lines
       .map(line => line.split('\t'));
 
-    console.log('[CSV pasteFromText] Parsed values:', values.length, 'rows, first row cols:', values[0]?.length);
-    console.log('[CSV pasteFromText] First few values:', JSON.stringify(values.slice(0, 3)));
-
     if (values.length === 0) {
-      console.log('[CSV pasteFromText] No values to paste, returning');
       return;
     }
 
@@ -533,11 +541,9 @@ export function useSpreadsheetData(
         }
       }
 
-      console.log('[CSV pasteFromText] After paste, data has', newData.rows.length, 'rows,', newData.columnCount, 'cols');
       return recalculateFormulas(newData);
     });
 
-    console.log('[CSV pasteFromText] Calling markDirty');
     markDirty();
   }, [setData, markDirty]);
 
@@ -547,14 +553,29 @@ export function useSpreadsheetData(
     return serializeToCSV(trimmedData, delimiter);
   }, [data, delimiter]);
 
-  // Load from CSV
+  // Check if content matches what we last received from disk
+  // Used to skip unnecessary reloads when file watcher fires after our own save
+  const contentMatchesDisk = useCallback((content: string): boolean => {
+    return content === lastKnownDiskContentRef.current;
+  }, []);
+
+  // Load from CSV (called when file is reloaded from disk, e.g., after AI edit)
   const loadFromCSV = useCallback((content: string) => {
     const parsed = parseCSV(content);
+    // Recalculate formulas on the loaded data (same as initial load)
+    const dataWithFormulas = recalculateFormulas(parsed.data);
     setDelimiter(parsed.delimiter);
-    reset(parsed.data);
+    reset(dataWithFormulas);
     setIsDirty(false);
     setSortConfig(null);
+    // Update our record of what's on disk
+    lastKnownDiskContentRef.current = content;
   }, [reset]);
+
+  // Update our record of what's on disk (called after save)
+  const updateDiskContent = useCallback((content: string) => {
+    lastKnownDiskContentRef.current = content;
+  }, []);
 
   // Mark clean
   const markClean = useCallback(() => {
@@ -579,6 +600,7 @@ export function useSpreadsheetData(
     deleteColumn,
     sortByColumn,
     setHeaderRowCount,
+    setFrozenColumnCount,
     toggleHeaders,
 
     copySelection,
@@ -589,6 +611,8 @@ export function useSpreadsheetData(
     toCSV,
     loadFromCSV,
     markClean,
+    contentMatchesDisk,
+    updateDiskContent,
 
     sortConfig,
   };

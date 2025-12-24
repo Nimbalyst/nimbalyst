@@ -109,14 +109,18 @@ function toPinnedTopSource(
 
 /**
  * Generate column definitions for RevoGrid
+ * @param columnCount Total number of columns to generate
+ * @param frozenColumnCount Number of columns to pin on the left (frozen)
  */
-function generateColumns(columnCount: number): ColumnRegular[] {
+function generateColumns(columnCount: number, frozenColumnCount: number = 0): ColumnRegular[] {
   const columnHeaders = generateColumnHeaders(columnCount);
 
-  return columnHeaders.map((letter) => ({
+  return columnHeaders.map((letter, index) => ({
     prop: letter,
     name: letter,
     size: 120,
+    // Pin columns that are within the frozen count
+    ...(index < frozenColumnCount ? { pin: 'colPinStart' as const } : {}),
   }));
 }
 
@@ -189,8 +193,13 @@ export function SpreadsheetEditor({
   headerDragRef.current = headerDrag;
 
   // Register getContent function for saving
+  // When this is called, the host is about to save our content to disk
+  // We update our disk content tracker so we can ignore the subsequent file watcher notification
   const getContent = useCallback(() => {
-    return spreadsheet.toCSV();
+    const content = spreadsheet.toCSV();
+    // Update our record of what will be on disk after this save
+    spreadsheet.updateDiskContent(content);
+    return content;
   }, [spreadsheet]);
 
   useEffect(() => {
@@ -205,13 +214,41 @@ export function SpreadsheetEditor({
     };
   }, [filePath, spreadsheet]);
 
-  // Handle external content reload
+  // Handle notification of external file change (e.g., when AI agent edits the file)
+  // We compare against BOTH the last known disk content AND the current editor content
+  // This prevents clobbering user edits when file watcher fires after our own save
+  // OR when another tab of the same file saves
   const handleReloadContent = useCallback(
     (newContent: string) => {
-      spreadsheet.loadFromCSV(newContent);
-      spreadsheet.markClean();
-      setSelectedCell(null);
-      setSelectionRange(null);
+      try {
+        // Check 1: Compare against what we last knew was on disk
+        if (spreadsheet.contentMatchesDisk(newContent)) {
+          console.log(`[CSV] File change notification ignored - disk content unchanged`);
+          return;
+        }
+
+        // Check 2: Compare against our CURRENT content (serialized)
+        // This catches the case where another tab saved the same file - if our current
+        // content matches what's now on disk, we don't need to reload
+        const currentContent = spreadsheet.toCSV();
+        if (currentContent === newContent) {
+          console.log(`[CSV] File change notification ignored - matches current content`);
+          // Update our disk reference since we now know this is what's on disk
+          spreadsheet.updateDiskContent(newContent);
+          return;
+        }
+
+        // Content is actually different - this is a real external change (e.g., AI edit)
+        console.log(`[CSV] External file change detected, reloading (${newContent.length} bytes)`);
+        spreadsheet.loadFromCSV(newContent);
+        spreadsheet.markClean();
+        setSelectedCell(null);
+        setSelectionRange(null);
+        console.log('[CSV] Content reload complete');
+      } catch (error) {
+        console.error('[CSV] Failed to reload content:', error);
+        // Don't throw - the editor should remain functional even if reload fails
+      }
     },
     [spreadsheet]
   );
@@ -284,16 +321,23 @@ export function SpreadsheetEditor({
   // Display dimensions (data + buffer)
   const displayColumnCount = spreadsheet.data.columnCount + DISPLAY_BUFFER_COLS;
 
+  // Frozen column count (columns pinned on the left)
+  const frozenColumnCount = spreadsheet.data.frozenColumnCount || 0;
+
   // Memoized grid data
   const columns = useMemo(
-    () => generateColumns(displayColumnCount),
-    [displayColumnCount]
+    () => generateColumns(displayColumnCount, frozenColumnCount),
+    [displayColumnCount, frozenColumnCount]
   );
 
   const headerRowCount = spreadsheet.data.headerRowCount || 0;
 
   const source = useMemo(
-    () => toGridSource(spreadsheet.data.rows, spreadsheet.data.columnCount, headerRowCount, displayColumnCount),
+    () => {
+      const result = toGridSource(spreadsheet.data.rows, spreadsheet.data.columnCount, headerRowCount, displayColumnCount);
+      console.log('[CSV source] Recomputed, row 9:', result[9 - headerRowCount]?.A, result[9 - headerRowCount]?.B);
+      return result;
+    },
     [spreadsheet.data.rows, spreadsheet.data.columnCount, headerRowCount, displayColumnCount]
   );
 
@@ -331,7 +375,6 @@ export function SpreadsheetEditor({
       // This prevents RevoGrid from opening edit mode when user presses Cmd+F, Cmd+K, etc.
       const timeSinceBlock = Date.now() - lastCmdKeyBlockedRef.current;
       if (timeSinceBlock < 100) {
-        console.log('[CSV] BLOCKING edit start - Cmd+key was pressed', timeSinceBlock, 'ms ago');
         event.preventDefault();
         return;
       }
@@ -350,13 +393,17 @@ export function SpreadsheetEditor({
 
       if (colIndex < 0) return;
 
-      // Get the raw value (formula) from our data
+      // Get the raw value from our data - this ensures the edit starts with our current value
       const cell = spreadsheet.data.rows[actualRowIndex]?.[colIndex];
-      if (cell && cell.raw !== cell.computed) {
-        // Override the edit value with the raw formula
-        if (event.detail.model) {
-          event.detail.model[prop] = cell.raw;
-        }
+      const ourValue = cell?.raw ?? '';
+      const modelValue = event.detail.model?.[prop];
+
+      console.log('[CSV handleBeforeEdit] row:', actualRowIndex, 'col:', colIndex, 'ourValue:', ourValue, 'modelValue:', modelValue);
+
+      // ALWAYS sync the model with our data to prevent stale values
+      if (event.detail.model && modelValue !== ourValue) {
+        console.log('[CSV handleBeforeEdit] FIXING stale model value');
+        event.detail.model[prop] = ourValue;
       }
     },
     [spreadsheet.data.rows, displayColumnCount, translateRowIndex]
@@ -382,6 +429,8 @@ export function SpreadsheetEditor({
       const value = detail.val ?? detail.value;
       const type = detail.type;
 
+      console.log('[CSV handleAfterEdit] rowIndex:', rowIndex, 'prop:', prop, 'value:', value, 'model:', detail.model);
+
       if (rowIndex === undefined || prop === undefined) return;
 
       // Determine if this is a pinned row edit
@@ -402,7 +451,6 @@ export function SpreadsheetEditor({
   // Handle cell focus (selection)
   const handleFocusCell = useCallback(
     (event: RevoGridCustomEvent<{ rowIndex: number; colIndex: number; type?: string } | null>) => {
-      console.log('[CSV] handleFocusCell event:', event.detail);
       if (!event.detail) return;
       const { rowIndex, colIndex, type } = event.detail;
 
@@ -413,7 +461,6 @@ export function SpreadsheetEditor({
       const newCell = { row: actualRowIndex, col: colIndex };
       const newRange = normalizeRange(actualRowIndex, colIndex, actualRowIndex, colIndex);
 
-      console.log('[CSV] Setting selectedCell to:', newCell);
       setSelectedCell(newCell);
       setSelectionRange(newRange);
 
@@ -427,7 +474,6 @@ export function SpreadsheetEditor({
   // Handle cell click as backup for selection
   const handleCellClick = useCallback(
     (event: RevoGridCustomEvent<{ row: number; col: number; type?: string } | null>) => {
-      console.log('[CSV] handleCellClick event:', event.detail);
       if (!event.detail) return;
       const { row, col, type } = event.detail;
 
@@ -435,7 +481,6 @@ export function SpreadsheetEditor({
       const isPinned = type === 'rowPinStart';
       const actualRow = translateRowIndex(row, isPinned);
 
-      console.log('[CSV] Setting selectedCell from click to:', { row: actualRow, col });
       setSelectedCell({ row: actualRow, col });
       setSelectionRange(normalizeRange(actualRow, col, actualRow, col));
     },
@@ -449,7 +494,6 @@ export function SpreadsheetEditor({
       area?: { x: number; y: number; x1: number; y1: number };
       x?: number; y?: number; x1?: number; y1?: number;
     } | null>) => {
-      console.log('[CSV] handleSetRange event:', event.detail);
       if (!event.detail) return;
 
       // RevoGrid sometimes puts coords in area, sometimes directly on detail
@@ -467,7 +511,6 @@ export function SpreadsheetEditor({
       const actualY1 = translateRowIndex(y1, isPinned);
 
       const newRange = normalizeRange(actualY, x, actualY1, x1);
-      console.log('[CSV] Setting selection from range:', newRange);
 
       setSelectedCell({ row: actualY, col: x });
       setSelectionRange(newRange);
@@ -801,24 +844,10 @@ export function SpreadsheetEditor({
       const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
       const cmdOrCtrl = isMac ? event.metaKey : event.ctrlKey;
 
-      // Log Cmd+key presses for debugging
-      if (cmdOrCtrl) {
-        console.log('[CSV Keyboard] keydown capture:', {
-          key: event.key,
-          metaKey: event.metaKey,
-          ctrlKey: event.ctrlKey,
-          target: (event.target as HTMLElement)?.tagName,
-          targetClass: (event.target as HTMLElement)?.className,
-          isActive,
-          dialogOpen: isDialogOpen(),
-        });
-      }
-
       // Don't handle if a dialog is open or editor is inactive
       // Use synchronous isDialogOpen() check instead of dialogOpen state
       // because state updates are async and can miss the first keystroke
       if (isDialogOpen() || !isActive) {
-        console.log('[CSV Keyboard] Skipping - dialog open or inactive');
         return;
       }
 
@@ -831,13 +860,10 @@ export function SpreadsheetEditor({
         !editor.contains(activeEl);
 
       if (isExternalInput) {
-        console.log('[CSV Keyboard] Skipping - external input');
         return;
       }
 
       if (!cmdOrCtrl) return;
-
-      console.log('[CSV Keyboard] Processing Cmd+' + event.key, { isEditingCell: activeEl?.tagName === 'INPUT' && activeEl?.closest('revo-grid') });
 
       const key = event.key.toLowerCase();
 
@@ -918,8 +944,10 @@ export function SpreadsheetEditor({
       // Record timestamp of Cmd+key for beforeeditstart and beforeinput handlers
       // We DON'T block the keydown itself - let it propagate to Electron menus
       // Instead, we block RevoGrid from entering edit mode via onBeforeeditstart
-      console.log('[CSV Keyboard] Recording Cmd+' + event.key + ' timestamp for edit blocking');
-      lastCmdKeyBlockedRef.current = Date.now();
+      // BUT: Don't block when already editing a cell - allow Cmd+A, Cmd+C, etc. to work
+      if (!isEditingCell) {
+        lastCmdKeyBlockedRef.current = Date.now();
+      }
     };
 
     // Block ALL beforeinput events that immediately follow a Cmd+key press
@@ -930,17 +958,10 @@ export function SpreadsheetEditor({
       if (!editor.contains(target)) return;
 
       const timeSinceBlock = Date.now() - lastCmdKeyBlockedRef.current;
-      console.log('[CSV Keyboard] beforeinput:', {
-        inputType: event.inputType,
-        data: event.data,
-        timeSinceBlock,
-        target: target?.tagName,
-      });
 
       // Block ANY text input within 100ms of blocking a Cmd+key
       // This catches the case where RevoGrid opens edit mode on Cmd+key
       if (timeSinceBlock < 100 && event.inputType === 'insertText') {
-        console.log('[CSV Keyboard] BLOCKING beforeinput (within 100ms of Cmd+key)');
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
@@ -1030,6 +1051,11 @@ export function SpreadsheetEditor({
         if (!isEditing && selectionRange) {
           event.preventDefault();
           spreadsheet.clearCells(selectionRange);
+          // Force RevoGrid to refresh after clearing cells
+          // Use setTimeout to ensure React has rendered the new source
+          setTimeout(() => {
+            revoGridRef.current?.refresh('all');
+          }, 0);
         }
       }
 
@@ -1113,40 +1139,81 @@ export function SpreadsheetEditor({
   // Build column header context menu items
   const getColumnHeaderContextMenuItems = useCallback((colIndex: number): ContextMenuItem[] => {
     const colLetter = columnIndexToLetter(colIndex);
-    return [
+    const currentFrozenCount = spreadsheet.data.frozenColumnCount || 0;
+    const isCurrentlyFrozen = colIndex < currentFrozenCount;
+    const isAtFrozenBoundary = colIndex === 0 || colIndex === currentFrozenCount;
+
+    const items: ContextMenuItem[] = [
       {
         label: `Sort ${colLetter} A → Z`,
-        action: () => {
-          console.log(`[CSV] Context menu sort: column ${colLetter} (index ${colIndex}), direction asc`);
-          spreadsheet.sortByColumn(colIndex, 'asc');
-        },
+        action: () => spreadsheet.sortByColumn(colIndex, 'asc'),
       },
       {
         label: `Sort ${colLetter} Z → A`,
-        action: () => {
-          console.log(`[CSV] Context menu sort: column ${colLetter} (index ${colIndex}), direction desc`);
-          spreadsheet.sortByColumn(colIndex, 'desc');
-        },
+        action: () => spreadsheet.sortByColumn(colIndex, 'desc'),
       },
       { label: '', action: () => {}, separator: true },
-      {
-        label: 'Insert Column Left',
-        action: () => spreadsheet.addColumn(colIndex),
-      },
-      {
-        label: 'Insert Column Right',
-        action: () => spreadsheet.addColumn(colIndex + 1),
-      },
-      {
-        label: 'Delete Column',
-        action: () => {
-          spreadsheet.deleteColumn(colIndex);
-          setSelectedCell(null);
-          setSelectionRange(null);
-        },
-        disabled: spreadsheet.data.columnCount <= 1,
-      },
     ];
+
+    // Freeze/Unfreeze column options
+    if (isCurrentlyFrozen) {
+      if (colIndex === currentFrozenCount - 1) {
+        items.push({
+          label: 'Unfreeze Column',
+          action: () => spreadsheet.setFrozenColumnCount(currentFrozenCount - 1),
+        });
+      }
+      if (currentFrozenCount > 1) {
+        items.push({
+          label: 'Unfreeze All Columns',
+          action: () => spreadsheet.setFrozenColumnCount(0),
+        });
+      }
+    } else {
+      if (isAtFrozenBoundary) {
+        items.push({
+          label: 'Freeze Column',
+          action: () => spreadsheet.setFrozenColumnCount(colIndex + 1),
+        });
+      } else {
+        items.push({
+          label: `Freeze Columns A-${colLetter}`,
+          action: () => spreadsheet.setFrozenColumnCount(colIndex + 1),
+        });
+      }
+    }
+
+    items.push({ label: '', action: () => {}, separator: true });
+
+    items.push({
+      label: 'Insert Column Left',
+      action: () => {
+        spreadsheet.addColumn(colIndex);
+        // Adjust frozen count if inserting before frozen columns
+        if (colIndex < currentFrozenCount) {
+          spreadsheet.setFrozenColumnCount(currentFrozenCount + 1);
+        }
+      },
+    });
+    items.push({
+      label: 'Insert Column Right',
+      action: () => spreadsheet.addColumn(colIndex + 1),
+    });
+    items.push({
+      label: 'Delete Column',
+      action: () => {
+        spreadsheet.deleteColumn(colIndex);
+        // Adjust frozen count if deleting a frozen column
+        if (colIndex < currentFrozenCount) {
+          spreadsheet.setFrozenColumnCount(Math.max(0, currentFrozenCount - 1));
+        }
+        setSelectedCell(null);
+        setSelectionRange(null);
+      },
+      disabled: spreadsheet.data.columnCount <= 1,
+    });
+
+    return items;
   }, [spreadsheet]);
 
   // Build context menu items
@@ -1291,7 +1358,6 @@ export function SpreadsheetEditor({
             const rowIndex = parseInt(cell.dataset.rgrow || '', 10);
             const colIndex = parseInt(cell.dataset.rgcol || '', 10);
             if (!isNaN(rowIndex) && !isNaN(colIndex)) {
-              console.log('[CSV] Click fallback setting selectedCell to:', { row: rowIndex, col: colIndex });
               setSelectedCell({ row: rowIndex, col: colIndex });
               setSelectionRange(normalizeRange(rowIndex, colIndex, rowIndex, colIndex));
             }
