@@ -1138,13 +1138,38 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         }
 
         const applyReload = async () => {
-          // No pending tags - handle as normal file change
-          if (false) {  // This block is now dead code - will be cleaned up
-            // Dead code placeholder - can be removed in cleanup
+          // For custom editors: Just notify them of the file change, don't update our state
+          // The custom editor owns its content - it will compare and decide whether to reload
+          // If it does reload, it will call onDirtyChange/onContentChange to update us
+          if (isCustom && customEditorReloadRef.current) {
+            // Create history snapshot of external change for custom editors too
+            if (window.electronAPI?.history && newContent) {
+              try {
+                await window.electronAPI.history.createSnapshot(
+                    data.path,
+                    newContent,
+                    'external-change',
+                    'File modified externally'
+                );
+              } catch (error) {
+                logger.ui.error(`[TabEditor] Failed to create history snapshot for custom editor:`, error);
+              }
+            }
+
+            try {
+              logger.ui.info(`[TabEditor] Notifying custom editor of file change for ${fileName}`);
+              customEditorReloadRef.current(newContent);
+              // Update lastSavedContent to reflect what's on disk, but don't touch other state
+              // The editor will report its state via callbacks if it actually updates
+              lastSavedContentRef.current = newContent;
+              setLastSavedContent(newContent);
+            } catch (error) {
+              logger.ui.error(`[TabEditor] Failed to notify custom editor of file change:`, error);
+            }
             return;
           }
 
-          // No pending tags - normal file change (user edit or external change)
+          // For built-in editors (markdown/code): Handle normally
           // Create history snapshot of external change
           if (window.electronAPI?.history && newContent) {
             try {
@@ -1190,14 +1215,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               }
             } catch (error) {
               logger.ui.error(`[TabEditor] Failed to update editor content:`, error);
-            }
-          } else if (customEditorReloadRef.current) {
-            // Update custom editor content
-            try {
-              logger.ui.info(`[TabEditor] Reloading custom editor content for ${fileName}`);
-              customEditorReloadRef.current(newContent);
-            } catch (error) {
-              logger.ui.error(`[TabEditor] Failed to reload custom editor content:`, error);
             }
           }
         };
