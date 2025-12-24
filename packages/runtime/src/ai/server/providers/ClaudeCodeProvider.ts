@@ -79,6 +79,11 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     request: any; // PermissionRequest
   }> = new Map();
 
+  // Session-level permission cache - patterns approved with 'session' or 'always' scope
+  // This prevents re-prompting for the same pattern within a session, since the SDK
+  // doesn't hot-reload settings files mid-session
+  private sessionApprovedPatterns: Set<string> = new Set();
+
   // Shared MCP server port (injected from electron main process)
   // This server provides capture_mockup_screenshot tool only.
   // applyDiff and streamContent are NOT exposed via MCP - they're only for chat providers via IPC.
@@ -2174,8 +2179,21 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
       // The SDK has already evaluated settings.json rules.
       // If we're here, it means the SDK needs user approval for this tool.
-      // Show permission UI and wait for user response.
 
+      // Check session-level cache first - if user already approved this pattern in this session,
+      // auto-approve without prompting again (SDK doesn't hot-reload settings files mid-session)
+      const pattern = this.generateToolPattern(toolName, input);
+      if (this.sessionApprovedPatterns.has(pattern)) {
+        this.logSecurity('[canUseTool] Pattern already approved this session:', { pattern, toolName });
+        return { behavior: 'allow', updatedInput: input };
+      }
+      // Also check for wildcard patterns (e.g., 'WebFetch' matches any WebFetch call)
+      if (toolName === 'WebFetch' && this.sessionApprovedPatterns.has('WebFetch')) {
+        this.logSecurity('[canUseTool] WebFetch wildcard approved this session:', { toolName });
+        return { behavior: 'allow', updatedInput: input };
+      }
+
+      // Show permission UI and wait for user response.
       const requestId = `tool-${sessionId || 'unknown'}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const toolDescription = this.buildToolDescription(toolName, input);
 
@@ -2192,7 +2210,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         rawCommand: toolName === 'Bash' ? input?.command || '' : toolDescription,
         actionsNeedingApproval: [{
           action: {
-            pattern: toolName, // Used by ToolPermissionConfirmation for display
+            pattern, // The actual pattern (e.g., 'Bash(git commit:*)') for display and saving
             displayName: toolDescription,
             command: toolName === 'Bash' ? input?.command || '' : '',
             isDestructive: ['Write', 'Edit', 'MultiEdit', 'Bash'].includes(toolName),
@@ -2247,13 +2265,27 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           scope: response.scope,
         });
 
-        // If user approved with "Always", save the pattern to .claude/settings.local.json
-        if (response.decision === 'allow' && response.scope === 'always' && workspacePath) {
-          const pattern = this.generateToolPattern(toolName, input);
+        // Cache approval for this session (for 'session', 'always', and 'always-all' scopes)
+        // This prevents re-prompting since the SDK doesn't hot-reload settings mid-session
+        if (response.decision === 'allow' && response.scope !== 'once') {
+          if (response.scope === 'always-all' && toolName === 'WebFetch') {
+            // For "Allow All WebFetches", cache a wildcard pattern
+            this.sessionApprovedPatterns.add('WebFetch');
+            this.logSecurity('[canUseTool] Added wildcard pattern to session cache:', { pattern: 'WebFetch', scope: response.scope });
+          } else {
+            this.sessionApprovedPatterns.add(pattern);
+            this.logSecurity('[canUseTool] Added pattern to session cache:', { pattern, scope: response.scope });
+          }
+        }
+
+        // If user approved with "Always" or "Always All", save the pattern to .claude/settings.local.json
+        if (response.decision === 'allow' && (response.scope === 'always' || response.scope === 'always-all') && workspacePath) {
           if (ClaudeCodeProvider.claudeSettingsPatternSaver) {
             try {
-              await ClaudeCodeProvider.claudeSettingsPatternSaver(workspacePath, pattern);
-              this.logSecurity('[canUseTool] Saved pattern to Claude settings:', { pattern });
+              // For "Always All WebFetches", save the wildcard pattern
+              const patternToSave = (response.scope === 'always-all' && toolName === 'WebFetch') ? 'WebFetch' : pattern;
+              await ClaudeCodeProvider.claudeSettingsPatternSaver(workspacePath, patternToSave);
+              this.logSecurity('[canUseTool] Saved pattern to Claude settings:', { pattern: patternToSave });
             } catch (saveError) {
               console.error('[CLAUDE-CODE] Failed to save pattern:', saveError);
               // Don't fail the tool call if saving fails
