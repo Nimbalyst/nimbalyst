@@ -290,14 +290,28 @@ export const RichTranscriptView = React.forwardRef<
 
   // Auto-scroll to bottom when messages change (if user was at bottom)
   useEffect(() => {
-    if (!wasAtBottomRef.current) return;
-
+    // Use double RAF to ensure DOM is fully rendered before scrolling
+    // This matches the session load effect and prevents wasAtBottomRef from being
+    // incorrectly set to false during content height changes
     requestAnimationFrame(() => {
-      if (vlistRef.current) {
-        // Account for the "Thinking..." indicator which is an extra item after messages
-        const lastIndex = isWaitingForResponse ? messages.length : messages.length - 1;
-        vlistRef.current.scrollToIndex(lastIndex, { align: 'end' });
-      }
+      requestAnimationFrame(() => {
+        if (vlistRef.current) {
+          // Re-check if we're at bottom after layout settles
+          // This handles cases where wasAtBottomRef was incorrectly set during content updates
+          const scrollSize = vlistRef.current.scrollSize;
+          const viewportSize = vlistRef.current.viewportSize;
+          const scrollOffset = vlistRef.current.scrollOffset;
+          const distanceFromBottom = scrollSize - scrollOffset - viewportSize;
+          const isAtBottom = distanceFromBottom < 100; // Slightly more lenient threshold
+
+          if (isAtBottom || wasAtBottomRef.current) {
+            // Account for the "Thinking..." indicator which is an extra item after messages
+            const lastIndex = isWaitingForResponse ? messages.length : messages.length - 1;
+            vlistRef.current.scrollToIndex(lastIndex, { align: 'end' });
+            wasAtBottomRef.current = true; // Reset the ref since we scrolled to bottom
+          }
+        }
+      });
     });
   }, [messages, isWaitingForResponse]);
 
