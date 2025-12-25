@@ -3,12 +3,45 @@
  */
 
 /**
+ * Column format types
+ */
+export type ColumnType = 'text' | 'number' | 'currency' | 'percentage' | 'date';
+
+/**
+ * Currency format options
+ */
+export type CurrencyCode = 'USD' | 'EUR' | 'GBP' | 'JPY' | 'CNY';
+
+/**
+ * Date format options
+ */
+export type DateFormat = 'MM/DD/YYYY' | 'DD/MM/YYYY' | 'YYYY-MM-DD' | 'MMM D, YYYY';
+
+/**
+ * Column format configuration
+ */
+export interface ColumnFormat {
+  /** Column type determines how values are parsed and displayed */
+  type: ColumnType;
+  /** Number of decimal places for number/currency/percentage types */
+  decimals?: number;
+  /** Whether to show thousands separator for number/currency types */
+  showThousandsSeparator?: boolean;
+  /** Currency code for currency type */
+  currency?: CurrencyCode;
+  /** Date format string for date type */
+  dateFormat?: DateFormat;
+}
+
+/**
  * Metadata stored in CSV comment header
  */
 export interface CSVMetadata {
   hasHeaders: boolean;
   headerRowCount?: number;
   frozenColumnCount?: number;
+  /** Column format configurations, keyed by column index */
+  columnFormats?: Record<number, ColumnFormat>;
 }
 
 /**
@@ -50,6 +83,8 @@ export interface SpreadsheetData {
   headerRowCount: number;
   /** Number of frozen/pinned columns on the left (0 = no frozen columns) */
   frozenColumnCount: number;
+  /** Column format configurations, keyed by column index */
+  columnFormats: Record<number, ColumnFormat>;
 }
 
 /**

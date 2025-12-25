@@ -3,7 +3,7 @@
  */
 
 import Papa from 'papaparse';
-import type { SpreadsheetData, Cell, CSVMetadata } from '../types';
+import type { SpreadsheetData, Cell, CSVMetadata, ColumnFormat } from '../types';
 
 /** Comment prefix for nimbalyst metadata */
 const METADATA_PREFIX = '# nimbalyst:';
@@ -112,6 +112,9 @@ export function parseCSV(content: string): { data: SpreadsheetData; delimiter: '
   // Use metadata frozenColumnCount if present, otherwise default to 0
   const frozenColumnCount = metadata?.frozenColumnCount ?? 0;
 
+  // Use metadata columnFormats if present, otherwise default to empty
+  const columnFormats: Record<number, ColumnFormat> = metadata?.columnFormats ?? {};
+
   return {
     data: {
       rows,
@@ -120,6 +123,7 @@ export function parseCSV(content: string): { data: SpreadsheetData; delimiter: '
       hasHeaders,
       headerRowCount,
       frozenColumnCount,
+      columnFormats,
     },
     delimiter,
     metadata,
@@ -178,10 +182,13 @@ export function serializeToCSV(data: SpreadsheetData, delimiter: ',' | '\t' = ',
 
   // Prepend metadata comment if requested
   if (includeMetadata) {
+    // Only include columnFormats if there are any defined
+    const hasColumnFormats = Object.keys(data.columnFormats || {}).length > 0;
     const metadata: CSVMetadata = {
       hasHeaders: data.hasHeaders,
       headerRowCount: data.headerRowCount || (data.hasHeaders ? 1 : 0),
       frozenColumnCount: data.frozenColumnCount || 0,
+      ...(hasColumnFormats ? { columnFormats: data.columnFormats } : {}),
     };
     return `${serializeMetadata(metadata)}\n${csvContent}`;
   }

@@ -251,6 +251,15 @@
   background-color: var(--surface-secondary);
 }
 
+/* Cell alignment classes */
+.spreadsheet-editor revo-grid .cell-align-right {
+  text-align: right;
+}
+
+.spreadsheet-editor revo-grid .cell-align-center {
+  text-align: center;
+}
+
 /* Error cells */
 .spreadsheet-editor .cell-error {
   color: #ef4444;
@@ -323,4 +332,149 @@
   height: 1px;
   margin: 4px 0;
   background-color: var(--border-primary);
+}
+
+/* Column Format Dialog */
+.column-format-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.column-format-dialog {
+  background-color: var(--surface-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.24);
+  min-width: 320px;
+  max-width: 400px;
+}
+
+.column-format-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.column-format-dialog-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.dialog-close-button {
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.dialog-close-button:hover {
+  color: var(--text-primary);
+}
+
+.column-format-dialog-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.format-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.format-field label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.format-field select,
+.format-field input[type="number"] {
+  padding: 8px 12px;
+  font-size: 14px;
+  background-color: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  color: var(--text-primary);
+  outline: none;
+}
+
+.format-field select:focus,
+.format-field input[type="number"]:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb, 59, 130, 246), 0.2);
+}
+
+.format-field-checkbox {
+  flex-direction: row;
+  align-items: center;
+}
+
+.format-field-checkbox label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-weight: 400;
+  color: var(--text-primary);
+}
+
+.format-field-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary-color);
+}
+
+.column-format-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-primary);
+}
+
+.dialog-button {
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dialog-button.secondary {
+  background-color: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  color: var(--text-primary);
+}
+
+.dialog-button.secondary:hover {
+  background-color: var(--surface-hover);
+}
+
+.dialog-button.primary {
+  background-color: var(--primary-color);
+  border: 1px solid var(--primary-color);
+  color: white;
+}
+
+.dialog-button.primary:hover {
+  opacity: 0.9;
 }

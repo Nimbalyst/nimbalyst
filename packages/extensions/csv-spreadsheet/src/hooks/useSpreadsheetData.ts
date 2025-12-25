@@ -5,7 +5,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import useUndoable from 'use-undoable';
-import type { SpreadsheetData, Cell, SortDirection, SortConfig, NormalizedSelectionRange } from '../types';
+import type { SpreadsheetData, Cell, SortDirection, SortConfig, NormalizedSelectionRange, ColumnFormat } from '../types';
 import { parseCSV, serializeToCSV, createCell } from '../utils/csvParser';
 import { recalculateFormulas, isFormula, evaluateFormula } from '../utils/formulaEngine';
 
@@ -84,6 +84,7 @@ function createEmptySpreadsheet(): SpreadsheetData {
     hasHeaders: false,
     headerRowCount: 0,
     frozenColumnCount: 0,
+    columnFormats: {},
   };
 }
 
@@ -113,6 +114,7 @@ export interface UseSpreadsheetDataResult {
   sortByColumn: (columnIndex: number, direction: SortDirection) => void;
   setHeaderRowCount: (count: number) => void;
   setFrozenColumnCount: (count: number) => void;
+  setColumnFormat: (columnIndex: number, format: ColumnFormat | null) => void;
   toggleHeaders: () => void;
 
   // Clipboard (uses system clipboard)
@@ -394,6 +396,25 @@ export function useSpreadsheetData(
     markDirty();
   }, [setData, markDirty]);
 
+  // Set column format (null to clear/reset to default)
+  const setColumnFormat = useCallback((columnIndex: number, format: ColumnFormat | null) => {
+    setData(prev => {
+      const newData = { ...prev };
+      const newFormats = { ...newData.columnFormats };
+
+      if (format === null) {
+        // Remove the format (reset to default text)
+        delete newFormats[columnIndex];
+      } else {
+        newFormats[columnIndex] = format;
+      }
+
+      newData.columnFormats = newFormats;
+      return newData;
+    });
+    markDirty();
+  }, [setData, markDirty]);
+
   // Toggle headers (legacy)
   const toggleHeaders = useCallback(() => {
     setData(prev => {
@@ -601,6 +622,7 @@ export function useSpreadsheetData(
     sortByColumn,
     setHeaderRowCount,
     setFrozenColumnCount,
+    setColumnFormat,
     toggleHeaders,
 
     copySelection,

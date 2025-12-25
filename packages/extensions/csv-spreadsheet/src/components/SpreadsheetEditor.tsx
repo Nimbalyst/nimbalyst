@@ -7,12 +7,14 @@
 
 import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { RevoGrid, type RevoGridCustomEvent, type ColumnRegular } from '@revolist/react-datagrid';
-import type { CustomEditorProps, NormalizedSelectionRange } from '../types';
+import type { CustomEditorProps, NormalizedSelectionRange, ColumnFormat } from '../types';
 import { useSpreadsheetData } from '../hooks/useSpreadsheetData';
 import { columnIndexToLetter, generateColumnHeaders } from '../utils/csvParser';
 import { isFormula } from '../utils/formulaEngine';
+import { formatCellValue, getColumnTypeName, DEFAULT_COLUMN_FORMAT } from '../utils/formatters';
 import { FormulaBar } from './FormulaBar';
 import { ContextMenu, type ContextMenuItem } from './ContextMenu';
+import { ColumnFormatDialog } from './ColumnFormatDialog';
 import { registerEditorStore, unregisterEditorStore } from '../aiTools';
 
 // Buffer of extra empty rows/columns to show beyond actual data
@@ -43,7 +45,8 @@ function toGridSource(
   rows: { raw: string; computed: string | number | null; error?: string }[][],
   columnCount: number,
   headerRowCount: number,
-  displayColumnCount: number
+  displayColumnCount: number,
+  columnFormats: Record<number, ColumnFormat> = {}
 ): Record<string, string | number>[] {
   // Start from after header rows
   const dataRows = rows.slice(headerRowCount);
@@ -57,11 +60,13 @@ function toGridSource(
     for (let c = 0; c < displayColumnCount; c++) {
       const colKey = columnIndexToLetter(c);
       const cell = row?.[c];
+      const format = columnFormats[c] || DEFAULT_COLUMN_FORMAT;
 
       if (cell?.error) {
         rowData[colKey] = cell.error;
       } else if (cell?.computed !== null && cell?.computed !== undefined) {
-        rowData[colKey] = cell.computed;
+        // Apply column formatting to the computed value
+        rowData[colKey] = formatCellValue(cell.computed, format);
       } else {
         rowData[colKey] = cell?.raw || '';
       }
@@ -108,20 +113,50 @@ function toPinnedTopSource(
 }
 
 /**
+ * Get CSS class for column alignment based on format type
+ */
+function getColumnAlignmentClass(format: ColumnFormat | undefined): string {
+  if (!format) return '';
+  switch (format.type) {
+    case 'number':
+    case 'currency':
+    case 'percentage':
+      return 'cell-align-right';
+    case 'date':
+      return 'cell-align-center';
+    case 'text':
+    default:
+      return '';
+  }
+}
+
+/**
  * Generate column definitions for RevoGrid
  * @param columnCount Total number of columns to generate
  * @param frozenColumnCount Number of columns to pin on the left (frozen)
+ * @param columnFormats Column format configurations
  */
-function generateColumns(columnCount: number, frozenColumnCount: number = 0): ColumnRegular[] {
+function generateColumns(
+  columnCount: number,
+  frozenColumnCount: number = 0,
+  columnFormats: Record<number, ColumnFormat> = {}
+): ColumnRegular[] {
   const columnHeaders = generateColumnHeaders(columnCount);
 
-  return columnHeaders.map((letter, index) => ({
-    prop: letter,
-    name: letter,
-    size: 120,
-    // Pin columns that are within the frozen count
-    ...(index < frozenColumnCount ? { pin: 'colPinStart' as const } : {}),
-  }));
+  return columnHeaders.map((letter, index) => {
+    const format = columnFormats[index];
+    const alignClass = getColumnAlignmentClass(format);
+
+    return {
+      prop: letter,
+      name: letter,
+      size: 120,
+      // Pin columns that are within the frozen count
+      ...(index < frozenColumnCount ? { pin: 'colPinStart' as const } : {}),
+      // Add cell class for alignment based on format type
+      ...(alignClass ? { cellProperties: () => ({ class: { [alignClass]: true } }) } : {}),
+    };
+  });
 }
 
 /**
@@ -192,6 +227,9 @@ export function SpreadsheetEditor({
   const headerDragRef = useRef(headerDrag);
   headerDragRef.current = headerDrag;
 
+  // Column format dialog state
+  const [formatDialogColumn, setFormatDialogColumn] = useState<number | null>(null);
+
   // Register getContent function for saving
   // When this is called, the host is about to save our content to disk
   // We update our disk content tracker so we can ignore the subsequent file watcher notification
@@ -258,7 +296,7 @@ export function SpreadsheetEditor({
   }, [onReloadContent, handleReloadContent]);
 
   // Selector for detecting dialogs/overlays
-  const DIALOG_SELECTOR = '[role="dialog"], .quick-open-modal, .command-palette, [class*="modal"], [class*="overlay"]:not(.spreadsheet-editor *)';
+  const DIALOG_SELECTOR = '[role="dialog"], .quick-open-modal, .command-palette, [class*="modal"], [class*="overlay"]:not(.spreadsheet-editor *), .column-format-dialog-overlay';
 
   // Synchronous check for dialogs - used in keyboard handlers
   const isDialogOpen = useCallback(() => {
@@ -324,21 +362,25 @@ export function SpreadsheetEditor({
   // Frozen column count (columns pinned on the left)
   const frozenColumnCount = spreadsheet.data.frozenColumnCount || 0;
 
+  // Column formats
+  const columnFormats = spreadsheet.data.columnFormats || {};
+
   // Memoized grid data
   const columns = useMemo(
-    () => generateColumns(displayColumnCount, frozenColumnCount),
-    [displayColumnCount, frozenColumnCount]
+    () => generateColumns(displayColumnCount, frozenColumnCount, columnFormats),
+    [displayColumnCount, frozenColumnCount, columnFormats]
   );
 
   const headerRowCount = spreadsheet.data.headerRowCount || 0;
 
   const source = useMemo(
     () => {
-      const result = toGridSource(spreadsheet.data.rows, spreadsheet.data.columnCount, headerRowCount, displayColumnCount);
-      console.log('[CSV source] Recomputed, row 9:', result[9 - headerRowCount]?.A, result[9 - headerRowCount]?.B);
+      console.log('[CSV source] columnFormats:', columnFormats);
+      const result = toGridSource(spreadsheet.data.rows, spreadsheet.data.columnCount, headerRowCount, displayColumnCount, columnFormats);
+      console.log('[CSV source] Recomputed, row 0:', result[0]);
       return result;
     },
-    [spreadsheet.data.rows, spreadsheet.data.columnCount, headerRowCount, displayColumnCount]
+    [spreadsheet.data.rows, spreadsheet.data.columnCount, headerRowCount, displayColumnCount, columnFormats]
   );
 
   const pinnedTopSource = useMemo(
@@ -553,6 +595,7 @@ export function SpreadsheetEditor({
     const columnHeader = target.closest('revogr-header [data-rgcol]') as HTMLElement | null;
     if (columnHeader) {
       const colIndex = parseInt(columnHeader.dataset.rgcol || '', 10);
+      console.log('[CSV Context Menu] Column header clicked, colIndex:', colIndex, 'columnLetter:', columnIndexToLetter(colIndex));
       if (!isNaN(colIndex)) {
         setContextMenu({
           x: event.clientX - rect.left,
@@ -1142,8 +1185,18 @@ export function SpreadsheetEditor({
     const currentFrozenCount = spreadsheet.data.frozenColumnCount || 0;
     const isCurrentlyFrozen = colIndex < currentFrozenCount;
     const isAtFrozenBoundary = colIndex === 0 || colIndex === currentFrozenCount;
+    const currentFormat = columnFormats[colIndex];
+    const formatTypeName = currentFormat ? getColumnTypeName(currentFormat.type) : 'Text';
 
     const items: ContextMenuItem[] = [
+      {
+        label: `Format Column (${formatTypeName})...`,
+        action: () => {
+          setContextMenu(null);
+          setFormatDialogColumn(colIndex);
+        },
+      },
+      { label: '', action: () => {}, separator: true },
       {
         label: `Sort ${colLetter} A → Z`,
         action: () => spreadsheet.sortByColumn(colIndex, 'asc'),
@@ -1214,7 +1267,7 @@ export function SpreadsheetEditor({
     });
 
     return items;
-  }, [spreadsheet]);
+  }, [spreadsheet, columnFormats]);
 
   // Build context menu items
   const getContextMenuItems = useCallback((): ContextMenuItem[] => {
@@ -1390,6 +1443,20 @@ export function SpreadsheetEditor({
           />
         )}
       </div>
+
+      {/* Column Format Dialog */}
+      <ColumnFormatDialog
+        isOpen={formatDialogColumn !== null}
+        columnIndex={formatDialogColumn ?? 0}
+        columnLetter={formatDialogColumn !== null ? columnIndexToLetter(formatDialogColumn) : ''}
+        currentFormat={formatDialogColumn !== null ? columnFormats[formatDialogColumn] : undefined}
+        onSave={(format) => {
+          if (formatDialogColumn !== null) {
+            spreadsheet.setColumnFormat(formatDialogColumn, format);
+          }
+        }}
+        onClose={() => setFormatDialogColumn(null)}
+      />
     </div>
   );
 }
