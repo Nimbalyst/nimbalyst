@@ -16,9 +16,12 @@ export function SessionListScreen() {
     refresh,
     status,
     hasReceivedInitialData,
+    createSession,
+    isCreatingSession,
   } = useSync();
   const [showProjectPicker, setShowProjectPicker] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -27,8 +30,29 @@ export function SessionListScreen() {
     setTimeout(() => setIsRefreshing(false), 1000);
   };
 
+  const handleCreateSession = async () => {
+    setCreateError(null);
+
+    // Use the selected project ID or default
+    const projectId = selectedProject?.id || 'default';
+
+    const result = await createSession(projectId);
+
+    if (result.success && result.sessionId) {
+      // Navigate to the new session
+      navigate(`/session/${result.sessionId}`);
+    } else {
+      setCreateError(result.error || 'Failed to create session');
+      // Clear error after 3 seconds
+      setTimeout(() => setCreateError(null), 3000);
+    }
+  };
+
   // Show loading state until we've received initial data from the server
   const isLoading = isConfigured && !hasReceivedInitialData;
+
+  // Determine if we can create a session (need to have received data and have projects)
+  const canCreateSession = hasReceivedInitialData && projects.length > 0;
 
   return (
     <div className="flex flex-col h-screen">
@@ -52,6 +76,27 @@ export function SessionListScreen() {
         </div>
         <div className="flex items-center gap-1">
           <SyncStatusBadge />
+          {/* New Session Button */}
+          {canCreateSession && (
+            <button
+              onClick={handleCreateSession}
+              disabled={isCreatingSession}
+              className="p-1.5 rounded-lg hover:bg-[var(--surface-tertiary)] text-[var(--primary-color)] disabled:opacity-50"
+              title="New Session"
+            >
+              {isCreatingSession ? (
+                <svg className="animate-spin h-[18px] w-[18px]" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" x2="12" y1="5" y2="19"/>
+                  <line x1="5" x2="19" y1="12" y2="12"/>
+                </svg>
+              )}
+            </button>
+          )}
           <button
             onClick={() => navigate('/settings')}
             className="p-1.5 rounded-lg hover:bg-[var(--surface-tertiary)] text-[var(--text-secondary)]"
@@ -129,6 +174,13 @@ export function SessionListScreen() {
           onSelectProject={selectProject}
           onClose={() => setShowProjectPicker(false)}
         />
+      )}
+
+      {/* Error Toast */}
+      {createError && (
+        <div className="fixed bottom-24 left-4 right-4 bg-[var(--error-color)] text-white px-4 py-3 rounded-lg shadow-lg text-sm text-center safe-area-bottom">
+          {createError}
+        </div>
       )}
     </div>
   );

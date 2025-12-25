@@ -40,6 +40,8 @@ export type {
   SyncedQueuedPrompt,
   SessionIndexEntry,
   DeviceInfo,
+  CreateSessionRequest,
+  CreateSessionResponse,
 } from './types';
 
 export { createCollabV3Sync } from './CollabV3Sync';

@@ -12,7 +12,8 @@
     "cap:sync": "npm run build && npx cap sync",
     "cap:open:ios": "npx cap open ios",
     "ios:dev": "npm run build && npx cap sync ios && npx cap open ios",
-    "ios:build": "npm run build && npx cap sync ios"
+    "ios:build": "npm run build && npx cap sync ios",
+    "devdeploy:ios": "npm run build && npx cap sync ios"
   },
   "dependencies": {
     "@capacitor-mlkit/barcode-scanning": "^7.0.0",

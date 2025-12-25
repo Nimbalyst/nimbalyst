@@ -666,6 +666,156 @@ export class AIService {
       } else {
         logger.main.info('[AIService] onIndexChange not available on sync provider');
       }
+
+      // Listen for session creation requests from mobile
+      if (syncProvider.onCreateSessionRequest) {
+        syncProvider.onCreateSessionRequest(async (request) => {
+          logger.main.info('[AIService] Received create session request from mobile:', {
+            requestId: request.requestId,
+            projectId: request.projectId,
+            hasInitialPrompt: !!request.initialPrompt
+          });
+
+          try {
+            // Find a window for this project/workspace
+            const { BrowserWindow } = await import('electron');
+            const windows = BrowserWindow.getAllWindows().filter(w => !w.isDestroyed());
+
+            if (windows.length === 0) {
+              logger.main.warn('[AIService] No windows available to create session');
+              if (syncProvider.sendCreateSessionResponse) {
+                syncProvider.sendCreateSessionResponse({
+                  requestId: request.requestId,
+                  success: false,
+                  error: 'No desktop windows available'
+                });
+              }
+              return;
+            }
+
+            // Find the window that matches this project's workspace path
+            let targetWindow = windows[0]; // Default to first window
+            let workspacePath: string | undefined;
+
+            if (request.projectId && request.projectId !== 'default') {
+              // Try to find a window with this workspace using findWindowByWorkspace
+              const matchedWindow = findWindowByWorkspace(request.projectId);
+              if (matchedWindow) {
+                targetWindow = matchedWindow;
+                workspacePath = request.projectId;
+              } else {
+                // Try to find by project name (last path component)
+                for (const win of windows) {
+                  const state = windowStates.get(win.id);
+                  if (state?.workspacePath) {
+                    const pathBasename = state.workspacePath.split(/[\\/]/).pop();
+                    if (pathBasename === request.projectId || state.workspacePath.includes(request.projectId)) {
+                      targetWindow = win;
+                      workspacePath = state.workspacePath;
+                      break;
+                    }
+                  }
+                }
+              }
+            }
+
+            // If no workspace path found yet, get it from the target window
+            if (!workspacePath) {
+              const targetState = windowStates.get(targetWindow.id);
+              workspacePath = targetState?.workspacePath;
+            }
+
+            // Create the session using the SessionManager
+            // Use claude-code as the default provider for mobile-created sessions
+            const session = await this.sessionManager.createSession(
+              'claude-code',  // provider
+              undefined,      // documentContext
+              workspacePath,  // workspacePath
+              undefined,      // providerConfig
+              undefined,      // model
+              'chat',         // sessionType
+              'agent'         // mode
+            );
+
+            logger.main.info('[AIService] Created session for mobile request:', {
+              requestId: request.requestId,
+              sessionId: session.id,
+              workspacePath
+            });
+            if (session && syncProvider.syncSessionsToIndex) {
+              syncProvider.syncSessionsToIndex([{
+                id: session.id,
+                title: session.title,
+                provider: session.provider,
+                model: session.model,
+                mode: session.mode,
+                workspaceId: session.workspaceId,
+                workspacePath: session.workspacePath,
+                messageCount: session.messageCount,
+                updatedAt: typeof session.updatedAt === 'number' ? session.updatedAt : session.updatedAt?.getTime() || Date.now(),
+                createdAt: typeof session.createdAt === 'number' ? session.createdAt : session.createdAt?.getTime() || Date.now()
+              }]);
+            }
+
+            // Send success response
+            if (syncProvider.sendCreateSessionResponse) {
+              syncProvider.sendCreateSessionResponse({
+                requestId: request.requestId,
+                success: true,
+                sessionId: session.id
+              });
+            }
+
+            // If there's an initial prompt, queue it for execution
+            if (request.initialPrompt && session) {
+              const promptId = `mobile-create-prompt-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+              const { getQueuedPromptsStore } = await import('../RepositoryManager');
+              const queueStore = getQueuedPromptsStore();
+
+              await queueStore.create({
+                id: promptId,
+                sessionId: session.id,
+                prompt: request.initialPrompt
+              });
+
+              logger.main.info('[AIService] Queued initial prompt from mobile:', {
+                sessionId: session.id,
+                promptId
+              });
+
+              // Notify the window to process the queue
+              if (targetWindow && !targetWindow.isDestroyed()) {
+                targetWindow.webContents.send('ai:queuedPromptsReceived', {
+                  sessionId: session.id,
+                  promptCount: 1,
+                  workspacePath
+                });
+              }
+            }
+
+            // Notify the window to show the new session
+            if (targetWindow && !targetWindow.isDestroyed()) {
+              targetWindow.webContents.send('ai:sessionCreatedFromMobile', {
+                sessionId: session.id,
+                requestId: request.requestId
+              });
+            }
+          } catch (error) {
+            logger.main.error('[AIService] Failed to create session from mobile:', error);
+            if (syncProvider.sendCreateSessionResponse) {
+              syncProvider.sendCreateSessionResponse({
+                requestId: request.requestId,
+                success: false,
+                error: error instanceof Error ? error.message : 'Unknown error'
+              });
+            }
+          }
+        });
+
+        logger.main.info('[AIService] Session creation request handler initialized');
+      } else {
+        logger.main.info('[AIService] onCreateSessionRequest not available on sync provider');
+      }
     } catch (error) {
       logger.main.error('[AIService] Failed to initialize mobile sync handler:', error);
     }

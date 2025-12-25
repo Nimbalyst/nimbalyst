@@ -31,7 +31,9 @@ export type ClientMessage =
   | IndexUpdateMessage
   | IndexBatchUpdateMessage
   | IndexDeleteMessage
-  | DeviceAnnounceMessage;
+  | DeviceAnnounceMessage
+  | CreateSessionRequestMessage
+  | CreateSessionResponseMessage;
 
 /** Request messages since a cursor */
 export interface SyncRequestMessage {
@@ -87,6 +89,37 @@ export interface DeviceAnnounceMessage {
   device: DeviceInfo;
 }
 
+/** Request session creation from mobile to desktop */
+export interface CreateSessionRequestMessage {
+  type: 'create_session_request';
+  request: EncryptedCreateSessionRequest;
+}
+
+/** Response to session creation request from desktop */
+export interface CreateSessionResponseMessage {
+  type: 'create_session_response';
+  response: EncryptedCreateSessionResponse;
+}
+
+/** Encrypted session creation request (sent over wire) */
+export interface EncryptedCreateSessionRequest {
+  request_id: string;
+  project_id: string;
+  /** Base64 encoded encrypted initial prompt (optional) */
+  encrypted_initial_prompt?: string;
+  /** Base64 encoded IV for initial prompt decryption */
+  initial_prompt_iv?: string;
+  timestamp: number;
+}
+
+/** Encrypted session creation response (sent over wire) */
+export interface EncryptedCreateSessionResponse {
+  request_id: string;
+  success: boolean;
+  session_id?: string;
+  error?: string;
+}
+
 // ============================================================================
 // Server → Client Messages
 // ============================================================================
@@ -102,6 +135,8 @@ export type ServerMessage =
   | DevicesListMessage
   | DeviceJoinedMessage
   | DeviceLeftMessage
+  | CreateSessionRequestBroadcastMessage
+  | CreateSessionResponseBroadcastMessage
   | ErrorMessage;
 
 /** Response to sync_request */
@@ -171,6 +206,20 @@ export interface DeviceJoinedMessage {
 export interface DeviceLeftMessage {
   type: 'device_left';
   device_id: string;
+}
+
+/** Broadcast session creation request to other devices (desktop receives this) */
+export interface CreateSessionRequestBroadcastMessage {
+  type: 'create_session_request_broadcast';
+  request: EncryptedCreateSessionRequest;
+  from_connection_id?: string;
+}
+
+/** Broadcast session creation response to other devices (mobile receives this) */
+export interface CreateSessionResponseBroadcastMessage {
+  type: 'create_session_response_broadcast';
+  response: EncryptedCreateSessionResponse;
+  from_connection_id?: string;
 }
 
 /** Error response */

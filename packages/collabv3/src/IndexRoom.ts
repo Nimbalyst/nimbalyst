@@ -17,6 +17,10 @@ import type {
   DevicesListMessage,
   DeviceJoinedMessage,
   DeviceLeftMessage,
+  EncryptedCreateSessionRequest,
+  EncryptedCreateSessionResponse,
+  CreateSessionRequestBroadcastMessage,
+  CreateSessionResponseBroadcastMessage,
 } from './types';
 import { createLogger } from './logger';
 
@@ -230,6 +234,14 @@ export class IndexRoom implements DurableObject {
 
         case 'device_announce':
           await this.handleDeviceAnnounce(ws, connState, message.device);
+          break;
+
+        case 'create_session_request':
+          await this.handleCreateSessionRequest(ws, connState, message.request);
+          break;
+
+        case 'create_session_response':
+          await this.handleCreateSessionResponse(ws, connState, message.response);
           break;
 
         default:
@@ -460,6 +472,48 @@ export class IndexRoom implements DurableObject {
       device,
     };
     this.broadcast(joinedMessage, ws);
+  }
+
+  /**
+   * Handle session creation request from mobile - broadcast to desktop clients
+   */
+  private async handleCreateSessionRequest(
+    ws: WebSocket,
+    connState: ConnectionState,
+    request: EncryptedCreateSessionRequest
+  ): Promise<void> {
+    log.debug('Received create_session_request:', request.request_id, 'for project:', request.project_id);
+
+    // Broadcast the request to all other connections (desktop will pick it up)
+    const broadcastMessage: CreateSessionRequestBroadcastMessage = {
+      type: 'create_session_request_broadcast',
+      request,
+      from_connection_id: this.getConnectionId(ws),
+    };
+    this.broadcast(broadcastMessage, ws);
+
+    log.debug('Broadcast create_session_request to', this.connections.size - 1, 'other connections');
+  }
+
+  /**
+   * Handle session creation response from desktop - broadcast to mobile clients
+   */
+  private async handleCreateSessionResponse(
+    ws: WebSocket,
+    connState: ConnectionState,
+    response: EncryptedCreateSessionResponse
+  ): Promise<void> {
+    log.debug('Received create_session_response:', response.request_id, 'success:', response.success);
+
+    // Broadcast the response to all other connections (mobile will pick it up)
+    const broadcastMessage: CreateSessionResponseBroadcastMessage = {
+      type: 'create_session_response_broadcast',
+      response,
+      from_connection_id: this.getConnectionId(ws),
+    };
+    this.broadcast(broadcastMessage, ws);
+
+    log.debug('Broadcast create_session_response to', this.connections.size - 1, 'other connections');
   }
 
   /**

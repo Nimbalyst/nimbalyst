@@ -26,6 +26,8 @@ import type {
   SessionIndexData,
   ProjectIndexEntry,
   DeviceInfo,
+  CreateSessionRequest,
+  CreateSessionResponse,
 } from './types';
 
 // ============================================================================
@@ -124,6 +126,25 @@ type DecryptedSessionIndexEntry = Omit<SessionIndexEntry, 'title' | 'encrypted_t
   queuedPrompts?: PlaintextQueuedPrompt[];  // Decrypted queued prompts
 };
 
+/** Encrypted create session request for wire protocol */
+interface EncryptedCreateSessionRequest {
+  request_id: string;
+  project_id: string;
+  /** Encrypted initial prompt (base64), optional */
+  encrypted_initial_prompt?: string;
+  /** IV for prompt decryption (base64), required if encrypted_initial_prompt present */
+  initial_prompt_iv?: string;
+  timestamp: number;
+}
+
+/** Encrypted create session response for wire protocol */
+interface EncryptedCreateSessionResponse {
+  request_id: string;
+  success: boolean;
+  session_id?: string;
+  error?: string;
+}
+
 type ClientMessage =
   | { type: 'sync_request'; since_id?: string; since_seq?: number }
   | { type: 'append_message'; message: EncryptedMessage }
@@ -133,7 +154,9 @@ type ClientMessage =
   | { type: 'index_update'; session: SessionIndexEntry }
   | { type: 'index_batch_update'; sessions: SessionIndexEntry[] }
   | { type: 'index_delete'; session_id: string }
-  | { type: 'device_announce'; device: DeviceInfo };
+  | { type: 'device_announce'; device: DeviceInfo }
+  | { type: 'create_session_request'; request: EncryptedCreateSessionRequest }
+  | { type: 'create_session_response'; response: EncryptedCreateSessionResponse };
 
 type ServerMessage =
   | { type: 'sync_response'; messages: EncryptedMessage[]; metadata: SessionMetadata | null; has_more: boolean; cursor: string | null }
@@ -145,6 +168,8 @@ type ServerMessage =
   | { type: 'devices_list'; devices: DeviceInfo[] }
   | { type: 'device_joined'; device: DeviceInfo }
   | { type: 'device_left'; device_id: string }
+  | { type: 'create_session_request_broadcast'; request: EncryptedCreateSessionRequest; from_connection_id?: string }
+  | { type: 'create_session_response_broadcast'; response: EncryptedCreateSessionResponse; from_connection_id?: string }
   | { type: 'error'; code: string; message: string };
 
 // ============================================================================
@@ -406,6 +431,12 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
   // Listeners for index changes (session updates broadcast to all connected clients)
   const indexChangeListeners = new Set<(sessionId: string, entry: SessionIndexEntry) => void>();
+
+  // Listeners for session creation requests (from mobile)
+  const createSessionRequestListeners = new Set<(request: CreateSessionRequest) => void>();
+
+  // Listeners for session creation responses (for mobile to receive response from desktop)
+  const createSessionResponseListeners = new Set<(response: CreateSessionResponse) => void>();
 
   // Queue for operations that need to wait for index connection
   type PendingOperation = { type: 'sessions'; data: SessionIndexData[]; options?: { syncMessages?: boolean } } | { type: 'projects'; data: ProjectIndexEntry[] };
@@ -1034,6 +1065,62 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
             // console.log('[CollabV3] Device left:', message.device_id);
             break;
 
+          case 'create_session_request_broadcast': {
+            // Another device (mobile) requested session creation
+            // Decrypt the initial prompt if present
+            let initialPrompt: string | undefined;
+            if (message.request.encrypted_initial_prompt && message.request.initial_prompt_iv && config.encryptionKey) {
+              try {
+                initialPrompt = await decrypt(message.request.encrypted_initial_prompt, message.request.initial_prompt_iv, config.encryptionKey);
+              } catch (err) {
+                console.error('[CollabV3] Failed to decrypt initial prompt:', err);
+              }
+            }
+
+            const decryptedRequest: CreateSessionRequest = {
+              requestId: message.request.request_id,
+              projectId: message.request.project_id,
+              initialPrompt,
+              timestamp: message.request.timestamp,
+            };
+
+            // Debug logging - uncomment if needed
+            // console.log('[CollabV3] Received create_session_request from mobile:', decryptedRequest.requestId);
+
+            // Notify all listeners (desktop will handle this)
+            createSessionRequestListeners.forEach((callback) => {
+              try {
+                callback(decryptedRequest);
+              } catch (err) {
+                console.error('[CollabV3] Error in create session request listener:', err);
+              }
+            });
+            break;
+          }
+
+          case 'create_session_response_broadcast': {
+            // Desktop responded to our session creation request
+            const response: CreateSessionResponse = {
+              requestId: message.response.request_id,
+              success: message.response.success,
+              sessionId: message.response.session_id,
+              error: message.response.error,
+            };
+
+            // Debug logging - uncomment if needed
+            // console.log('[CollabV3] Received create_session_response:', response.requestId, 'success:', response.success);
+
+            // Notify all listeners (mobile will handle this)
+            createSessionResponseListeners.forEach((callback) => {
+              try {
+                callback(response);
+              } catch (err) {
+                console.error('[CollabV3] Error in create session response listener:', err);
+              }
+            });
+            break;
+          }
+
           case 'error':
             console.error('[CollabV3] Index error:', message.code, message.message);
             if (pendingIndexFetch) {
@@ -1661,6 +1748,72 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
     /** Get cached index entry for a session (from index_sync_response and index_broadcast) */
     getCachedIndexEntry(sessionId: string): CachedSessionIndex | undefined {
       return sessionIndexCache.get(sessionId);
+    },
+
+    /** Subscribe to session creation requests from other devices (e.g., mobile) */
+    onCreateSessionRequest(callback: (request: CreateSessionRequest) => void): () => void {
+      createSessionRequestListeners.add(callback);
+      return () => {
+        createSessionRequestListeners.delete(callback);
+      };
+    },
+
+    /** Send a response to a session creation request */
+    sendCreateSessionResponse(response: CreateSessionResponse): void {
+      if (!indexWs || !indexConnected) {
+        console.error('[CollabV3] Cannot send create session response - not connected');
+        return;
+      }
+
+      const wireResponse: EncryptedCreateSessionResponse = {
+        request_id: response.requestId,
+        success: response.success,
+        session_id: response.sessionId,
+        error: response.error,
+      };
+
+      const msg: ClientMessage = { type: 'create_session_response', response: wireResponse };
+      // Debug logging - uncomment if needed
+      // console.log('[CollabV3] Sending create_session_response:', response.requestId, 'success:', response.success);
+      indexWs.send(JSON.stringify(msg));
+    },
+
+    /** Send a session creation request (for mobile to request desktop to create a session) */
+    async sendCreateSessionRequest(request: CreateSessionRequest): Promise<void> {
+      if (!indexWs || !indexConnected) {
+        console.error('[CollabV3] Cannot send create session request - not connected');
+        return;
+      }
+
+      const wireRequest: EncryptedCreateSessionRequest = {
+        request_id: request.requestId,
+        project_id: request.projectId,
+        timestamp: request.timestamp,
+      };
+
+      // Encrypt initial prompt if present
+      if (request.initialPrompt && config.encryptionKey) {
+        try {
+          const { encrypted, iv } = await encrypt(request.initialPrompt, config.encryptionKey);
+          wireRequest.encrypted_initial_prompt = encrypted;
+          wireRequest.initial_prompt_iv = iv;
+        } catch (err) {
+          console.error('[CollabV3] Failed to encrypt initial prompt:', err);
+        }
+      }
+
+      const msg: ClientMessage = { type: 'create_session_request', request: wireRequest };
+      // Debug logging - uncomment if needed
+      // console.log('[CollabV3] Sending create_session_request:', request.requestId, 'project:', request.projectId);
+      indexWs.send(JSON.stringify(msg));
+    },
+
+    /** Subscribe to session creation responses (for mobile to receive response from desktop) */
+    onCreateSessionResponse(callback: (response: CreateSessionResponse) => void): () => void {
+      createSessionResponseListeners.add(callback);
+      return () => {
+        createSessionResponseListeners.delete(callback);
+      };
     },
   };
 

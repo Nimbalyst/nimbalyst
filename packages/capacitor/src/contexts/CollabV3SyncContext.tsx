@@ -85,6 +85,14 @@ interface SyncContextValue {
   inactivityTimeoutMinutes: number;
   /** Set the inactivity timeout (in minutes, 0 to disable) */
   setInactivityTimeoutMinutes: (minutes: number) => void;
+  /**
+   * Request desktop to create a new AI session.
+   * Returns a promise that resolves with the session ID if successful.
+   * The session will appear in the sessions list once created and synced.
+   */
+  createSession: (projectId: string, initialPrompt?: string) => Promise<{ success: boolean; sessionId?: string; error?: string }>;
+  /** Whether a session creation request is in progress */
+  isCreatingSession: boolean;
 }
 
 // ============================================================================
@@ -155,10 +163,30 @@ interface DeviceInfo {
   last_active_at: number;
 }
 
+/** Encrypted create session request for wire protocol */
+interface EncryptedCreateSessionRequest {
+  request_id: string;
+  project_id: string;
+  /** Encrypted initial prompt (base64), optional */
+  encrypted_initial_prompt?: string;
+  /** IV for prompt decryption (base64), required if encrypted_initial_prompt present */
+  initial_prompt_iv?: string;
+  timestamp: number;
+}
+
+/** Encrypted create session response for wire protocol */
+interface EncryptedCreateSessionResponse {
+  request_id: string;
+  success: boolean;
+  session_id?: string;
+  error?: string;
+}
+
 type ClientMessage =
   | { type: 'index_sync_request'; project_id?: string }
   | { type: 'index_update'; session: ServerSessionEntry }
-  | { type: 'device_announce'; device: DeviceInfo };
+  | { type: 'device_announce'; device: DeviceInfo }
+  | { type: 'create_session_request'; request: EncryptedCreateSessionRequest };
 
 type ServerMessage =
   | {
@@ -179,6 +207,11 @@ type ServerMessage =
   | {
       type: 'project_broadcast';
       project: ServerProjectEntry;
+      from_connection_id?: string;
+    }
+  | {
+      type: 'create_session_response_broadcast';
+      response: EncryptedCreateSessionResponse;
       from_connection_id?: string;
     }
   | { type: 'error'; code: string; message: string };
@@ -512,11 +545,18 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
   const [connectionConfig, setConnectionConfig] = useState<SyncConnectionConfig | null>(null);
   // Inactivity timeout setting (in ms, 0 = disabled)
   const [inactivityTimeoutMs, setInactivityTimeoutMs] = useState(() => loadInactivityTimeout());
+  // Session creation state
+  const [isCreatingSession, setIsCreatingSession] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const deviceAnnounceIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const inactivityTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Pending session creation requests (by requestId)
+  const pendingSessionCreationsRef = useRef<Map<string, {
+    resolve: (result: { success: boolean; sessionId?: string; error?: string }) => void;
+    timeout: NodeJS.Timeout;
+  }>>(new Map());
   // Encryption key derived from credentials
   const encryptionKeyRef = useRef<ForgeKey | null>(null);
 
@@ -693,6 +733,26 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
             break;
           }
 
+          case 'create_session_response_broadcast': {
+            // Desktop responded to our session creation request
+            const response = message.response;
+            // Debug logging - uncomment if needed
+            // console.log('[CollabV3] Received create_session_response:', response.request_id, 'success:', response.success);
+
+            const pending = pendingSessionCreationsRef.current.get(response.request_id);
+            if (pending) {
+              clearTimeout(pending.timeout);
+              pendingSessionCreationsRef.current.delete(response.request_id);
+              setIsCreatingSession(false);
+              pending.resolve({
+                success: response.success,
+                sessionId: response.session_id,
+                error: response.error,
+              });
+            }
+            break;
+          }
+
           case 'error': {
             console.error('[CollabV3] Server error:', message.code, message.message);
             setStatus((prev) => ({
@@ -787,6 +847,60 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
       wsRef.current.send(JSON.stringify(msg));
     },
     [allSessions]
+  );
+
+  // Create a new session on the desktop
+  const createSession = useCallback(
+    async (projectId: string, initialPrompt?: string): Promise<{ success: boolean; sessionId?: string; error?: string }> => {
+      if (wsRef.current?.readyState !== WebSocket.OPEN) {
+        return { success: false, error: 'Not connected to sync server' };
+      }
+
+      // Generate a unique request ID
+      const requestId = `mobile-create-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+      setIsCreatingSession(true);
+
+      return new Promise((resolve) => {
+        // Set a timeout for the request
+        const timeout = setTimeout(() => {
+          pendingSessionCreationsRef.current.delete(requestId);
+          setIsCreatingSession(false);
+          resolve({ success: false, error: 'Session creation request timed out' });
+        }, 30000); // 30 second timeout
+
+        // Store the pending request
+        pendingSessionCreationsRef.current.set(requestId, { resolve, timeout });
+
+        // Build the request
+        const wireRequest: EncryptedCreateSessionRequest = {
+          request_id: requestId,
+          project_id: projectId,
+          timestamp: Date.now(),
+        };
+
+        // Encrypt initial prompt if present (async operation)
+        const sendRequest = async () => {
+          if (initialPrompt && encryptionKeyRef.current) {
+            try {
+              const { encrypted, iv } = await encrypt(initialPrompt, encryptionKeyRef.current);
+              wireRequest.encrypted_initial_prompt = encrypted;
+              wireRequest.initial_prompt_iv = iv;
+            } catch (err) {
+              console.error('[CollabV3] Failed to encrypt initial prompt:', err);
+            }
+          }
+
+          const msg: ClientMessage = { type: 'create_session_request', request: wireRequest };
+          // Debug logging - uncomment if needed
+          // console.log('[CollabV3] Sending create_session_request:', requestId, 'project:', projectId);
+          wsRef.current?.send(JSON.stringify(msg));
+        };
+
+        sendRequest();
+      });
+    },
+    []
   );
 
   // Connect to IndexRoom
@@ -1128,6 +1242,8 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
     reconnect,
     inactivityTimeoutMinutes: inactivityTimeoutMs / 60000,
     setInactivityTimeoutMinutes,
+    createSession,
+    isCreatingSession,
   };
 
   return <SyncContext.Provider value={value}>{children}</SyncContext.Provider>;

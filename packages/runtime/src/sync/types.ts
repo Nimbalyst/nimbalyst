@@ -174,6 +174,18 @@ export interface SyncProvider {
     /** Decrypted queued prompts */
     queuedPrompts?: Array<{ id: string; prompt: string; timestamp: number }>;
   } | undefined;
+
+  /** Subscribe to session creation requests from other devices (e.g., mobile) */
+  onCreateSessionRequest?(callback: (request: CreateSessionRequest) => void): () => void;
+
+  /** Send a response to a session creation request */
+  sendCreateSessionResponse?(response: CreateSessionResponse): void;
+
+  /** Send a session creation request (for mobile to request desktop to create a session) */
+  sendCreateSessionRequest?(request: CreateSessionRequest): void;
+
+  /** Subscribe to session creation responses (for mobile to receive response from desktop) */
+  onCreateSessionResponse?(callback: (response: CreateSessionResponse) => void): () => void;
 }
 
 /** Session data for bulk index sync */
@@ -272,4 +284,34 @@ export interface ProjectIndexEntry {
   sessionCount: number; // number of sessions in this project
   lastActivityAt: number; // timestamp of most recent session activity
   enabled: boolean; // whether this project is enabled for sync (user controlled)
+}
+
+/**
+ * Request to create a new AI session from mobile.
+ * Sent via index WebSocket, processed by desktop.
+ */
+export interface CreateSessionRequest {
+  /** Unique request ID for tracking */
+  requestId: string;
+  /** Project/workspace ID to create the session in */
+  projectId: string;
+  /** Optional initial prompt to send after session creation */
+  initialPrompt?: string;
+  /** Timestamp when request was created */
+  timestamp: number;
+}
+
+/**
+ * Response to a create session request.
+ * Sent by desktop after session is created.
+ */
+export interface CreateSessionResponse {
+  /** Request ID this is responding to */
+  requestId: string;
+  /** Whether session creation succeeded */
+  success: boolean;
+  /** Session ID if created successfully */
+  sessionId?: string;
+  /** Error message if creation failed */
+  error?: string;
 }
