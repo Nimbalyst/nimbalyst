@@ -211,7 +211,7 @@ interface SessionDetailScreenProps {
 export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenProps) {
   const navigate = useNavigate();
   const { sessionId } = useParams<{ sessionId: string }>();
-  const { config, sendIndexUpdate } = useSync();
+  const { config, sendIndexUpdate, sessions } = useSync();
 
   const [messages, setMessages] = useState<SyncedMessage[]>([]);
   const [metadata, setMetadata] = useState<Partial<WireSessionMetadata>>({});
@@ -487,7 +487,9 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
     };
   }, [sessionId, messages, metadata]);
 
-  const title = metadata.title || 'Untitled Session';
+  // Get title from index entry (syncs correctly) or fall back to metadata
+  const indexEntry = sessions.find((s) => s.id === sessionId);
+  const title = indexEntry?.title || metadata.title || 'Untitled Session';
 
   // Detect pending interactive prompts from messages
   const pendingPrompt = useMemo((): {
@@ -550,7 +552,7 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
 
       // Send as a new message
       const msg: ClientMessage = {
-        type: 'add_message',
+        type: 'append_message',
         message: {
           source: 'system',
           direction: 'input',
