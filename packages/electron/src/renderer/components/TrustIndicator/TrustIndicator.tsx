@@ -3,9 +3,8 @@ import { MaterialSymbol } from '@nimbalyst/runtime';
 import './TrustIndicator.css';
 
 export interface TrustStatus {
-  isTrusted: boolean;
   trustedAt?: number;
-  permissionMode: 'ask' | 'allow-all';
+  permissionMode: 'ask' | 'allow-all' | 'bypass-all' | null;
 }
 
 interface TrustIndicatorProps {
@@ -32,7 +31,6 @@ export const TrustIndicator: React.FC<TrustIndicatorProps> = ({
       const result = await window.electronAPI.invoke('permissions:getWorkspacePermissions', workspacePath);
       if (result) {
         setStatus({
-          isTrusted: result.isTrusted,
           trustedAt: result.trustedAt,
           permissionMode: result.permissionMode,
         });
@@ -114,12 +112,16 @@ export const TrustIndicator: React.FC<TrustIndicatorProps> = ({
     onChangeMode?.();
   };
 
+  const isTrusted = status?.permissionMode !== null && status?.permissionMode !== undefined;
+
   const getStatusIcon = (): string => {
     if (!status) {
       return 'shield';
     }
-    if (status.isTrusted) {
-      return status.permissionMode === 'allow-all' ? 'shield' : 'verified_user';
+    if (isTrusted) {
+      if (status.permissionMode === 'bypass-all') return 'warning';
+      if (status.permissionMode === 'allow-all') return 'shield';
+      return 'verified_user';
     }
     return 'gpp_maybe';
   };
@@ -128,8 +130,10 @@ export const TrustIndicator: React.FC<TrustIndicatorProps> = ({
     if (!status) {
       return 'loading';
     }
-    if (status.isTrusted) {
-      return status.permissionMode === 'allow-all' ? 'allow-all' : 'trusted';
+    if (isTrusted) {
+      if (status.permissionMode === 'bypass-all') return 'bypass-all';
+      if (status.permissionMode === 'allow-all') return 'allow-all';
+      return 'trusted';
     }
     return 'untrusted';
   };
@@ -138,7 +142,10 @@ export const TrustIndicator: React.FC<TrustIndicatorProps> = ({
     if (!status) {
       return 'Loading trust status...';
     }
-    if (status.isTrusted) {
+    if (isTrusted) {
+      if (status.permissionMode === 'bypass-all') {
+        return 'Bypass All Checks mode (dangerous)';
+      }
       if (status.permissionMode === 'allow-all') {
         return 'Allow All Edits mode';
       }
@@ -151,7 +158,10 @@ export const TrustIndicator: React.FC<TrustIndicatorProps> = ({
     if (!status) {
       return '';
     }
-    if (status.isTrusted) {
+    if (isTrusted) {
+      if (status.permissionMode === 'bypass-all') {
+        return 'All operations auto-approved without any prompts. Use at your own risk.';
+      }
       if (status.permissionMode === 'allow-all') {
         return 'File operations auto-approved. Bash and web requests follow Claude Code settings.';
       }
@@ -186,12 +196,12 @@ export const TrustIndicator: React.FC<TrustIndicatorProps> = ({
             <div className="trust-menu-current-mode-label">Current mode:</div>
             <div className="trust-menu-current-mode-value">
               <MaterialSymbol
-                icon={status?.isTrusted ? (status.permissionMode === 'allow-all' ? 'shield' : 'verified_user') : 'gpp_maybe'}
+                icon={getStatusIcon()}
                 size={20}
               />
               <span>
-                {status?.isTrusted
-                  ? (status.permissionMode === 'allow-all' ? 'Allow All Edits' : 'Ask')
+                {isTrusted
+                  ? (status?.permissionMode === 'bypass-all' ? 'Bypass All Checks' : status?.permissionMode === 'allow-all' ? 'Allow All Edits' : 'Ask')
                   : 'Not Trusted'}
               </span>
             </div>

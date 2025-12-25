@@ -65,6 +65,11 @@ export const ToolPermissionConfirmation: React.FC<ToolPermissionConfirmationProp
 
   // Get the human-readable display name for the pattern being approved
   const getPatternDisplayName = (pattern: string): string => {
+    // Handle compound commands - these get unique patterns and shouldn't be cached
+    if (pattern.startsWith('Bash:compound:')) {
+      return 'this compound command (one-time only)';
+    }
+
     // Handle Bash patterns like "Bash(git commit:*)" -> "git commit commands"
     const bashMatch = pattern.match(/^Bash\(([^:]+):\*\)$/);
     if (bashMatch) {
@@ -135,6 +140,14 @@ export const ToolPermissionConfirmation: React.FC<ToolPermissionConfirmationProp
   const patternDisplayName = useMemo(() => {
     if (uniquePatterns.length > 0) {
       return uniquePatterns[0][1].displayName;
+    }
+    return toolName;
+  }, [uniquePatterns, toolName]);
+
+  // Get the raw pattern that will be saved to settings
+  const rawPattern = useMemo(() => {
+    if (uniquePatterns.length > 0) {
+      return uniquePatterns[0][0]; // The key is the raw pattern
     }
     return toolName;
   }, [uniquePatterns, toolName]);
@@ -229,9 +242,11 @@ export const ToolPermissionConfirmation: React.FC<ToolPermissionConfirmationProp
                 <span className="tool-permission-confirmation-tooltip-code">{patternDisplayName}</span> until you close the app
               </div>
               <div className="tool-permission-confirmation-tooltip-item">
-                <span className="tool-permission-confirmation-tooltip-key">Always:</span> Save{' '}
-                <span className="tool-permission-confirmation-tooltip-code">{patternDisplayName}</span> to{' '}
+                <span className="tool-permission-confirmation-tooltip-key">Always:</span> Save to{' '}
                 <span className="tool-permission-confirmation-tooltip-code">.claude/settings.local.json</span>
+              </div>
+              <div className="tool-permission-confirmation-tooltip-pattern">
+                Pattern: <span className="tool-permission-confirmation-tooltip-code">{rawPattern}</span>
               </div>
             </div>
           )}

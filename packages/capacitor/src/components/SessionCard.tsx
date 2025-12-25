@@ -33,12 +33,17 @@ export function SessionCard({ session, compact, isSelected, onClick }: SessionCa
           <span className={`font-medium text-sm line-clamp-1 ${isSelected ? 'text-[var(--primary-color)]' : 'text-[var(--text-primary)]'}`}>
             {session.title || 'Untitled Session'}
           </span>
-          {session.isExecuting && (
+          {session.hasPendingPrompt && (
+            <span className="px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-purple-500 text-white flex-shrink-0 animate-pulse">
+              Action
+            </span>
+          )}
+          {session.isExecuting && !session.hasPendingPrompt && (
             <span className="px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-blue-500 text-white flex-shrink-0 animate-pulse">
               Running
             </span>
           )}
-          {session.pendingExecution && !session.isExecuting && (
+          {session.pendingExecution && !session.isExecuting && !session.hasPendingPrompt && (
             <span className="px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-[var(--warning-color)] text-white flex-shrink-0">
               Pending
             </span>
@@ -64,12 +69,17 @@ export function SessionCard({ session, compact, isSelected, onClick }: SessionCa
             {session.title || 'Untitled Session'}
           </span>
         </div>
-        {session.isExecuting && (
+        {session.hasPendingPrompt && (
+          <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-purple-500 text-white animate-pulse">
+            Action Required
+          </span>
+        )}
+        {session.isExecuting && !session.hasPendingPrompt && (
           <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-500 text-white animate-pulse">
             Running
           </span>
         )}
-        {session.pendingExecution && !session.isExecuting && (
+        {session.pendingExecution && !session.isExecuting && !session.hasPendingPrompt && (
           <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-[var(--warning-color)] text-white">
             Pending
           </span>

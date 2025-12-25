@@ -114,6 +114,8 @@ interface SessionIndexEntry {
   queuedPromptCount?: number;
   /** Encrypted queued prompts */
   encryptedQueuedPrompts?: EncryptedQueuedPrompt[];
+  /** Whether there are pending interactive prompts (permissions or questions) waiting for response */
+  hasPendingPrompt?: boolean;
 }
 
 /** Decrypted session index entry with required title - used for return values */
@@ -365,6 +367,8 @@ interface CachedSessionIndex {
   isExecuting?: boolean;
   /** Decrypted queued prompts (stored locally after decryption) */
   queuedPrompts?: PlaintextQueuedPrompt[];
+  /** Whether there are pending interactive prompts (permissions or questions) waiting for response */
+  hasPendingPrompt?: boolean;
 }
 
 // ============================================================================
@@ -911,6 +915,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                     isExecuting: entry.isExecuting,
                     queuedPromptCount: entry.queuedPromptCount,
                     queuedPrompts,
+                    hasPendingPrompt: entry.hasPendingPrompt,
                   };
 
                   // Cache the decrypted entry
@@ -960,6 +965,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               updated_at: entry.updated_at,
               pendingExecution: entry.pendingExecution,
               isExecuting: entry.isExecuting,
+              hasPendingPrompt: entry.hasPendingPrompt,
             };
 
             // Decrypt title - encrypted titles are required

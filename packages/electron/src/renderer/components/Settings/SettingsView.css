@@ -2240,6 +2240,30 @@
   color: var(--accent-primary);
 }
 
+/* Dangerous bypass-all mode styling */
+.permissions-mode-option.dangerous {
+  border-color: var(--warning-color, #f59e0b);
+  background: color-mix(in srgb, var(--warning-color, #f59e0b) 5%, var(--surface-secondary));
+}
+
+.permissions-mode-option.dangerous:hover {
+  border-color: var(--warning-color, #f59e0b);
+  background: color-mix(in srgb, var(--warning-color, #f59e0b) 10%, var(--surface-secondary));
+}
+
+.permissions-mode-option.dangerous .permissions-mode-option-content .material-symbols-outlined {
+  color: var(--warning-color, #f59e0b);
+}
+
+.permissions-mode-option.dangerous.selected {
+  border-color: var(--error-color, #ef4444);
+  background: color-mix(in srgb, var(--error-color, #ef4444) 10%, var(--surface-secondary));
+}
+
+.permissions-mode-option.dangerous.selected .permissions-mode-option-content .material-symbols-outlined {
+  color: var(--error-color, #ef4444);
+}
+
 .permissions-mode-option-text {
   display: flex;
   flex-direction: column;

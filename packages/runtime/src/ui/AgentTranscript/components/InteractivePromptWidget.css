@@ -1,0 +1,369 @@
+/**
+ * Interactive Prompt Widget Styles
+ *
+ * Styles for permission requests and ask user question prompts
+ * in the transcript view. Works on both desktop and mobile.
+ */
+
+.interactive-prompt {
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  padding: 12px;
+  margin: 8px 0;
+}
+
+.interactive-prompt--pending {
+  border-color: var(--primary-color);
+  animation: interactive-prompt-pulse 2s ease-in-out infinite;
+}
+
+.interactive-prompt--destructive {
+  border-color: var(--error-color);
+}
+
+.interactive-prompt--resolved {
+  opacity: 0.7;
+}
+
+@keyframes interactive-prompt-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(var(--primary-color-rgb, 59, 130, 246), 0.3);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(var(--primary-color-rgb, 59, 130, 246), 0.1);
+  }
+}
+
+/* Header */
+.interactive-prompt__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.interactive-prompt__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  color: var(--primary-color);
+  flex-shrink: 0;
+}
+
+.interactive-prompt__icon--destructive {
+  color: var(--error-color);
+}
+
+.interactive-prompt__icon--resolved {
+  color: var(--success-color);
+}
+
+.interactive-prompt__title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.interactive-prompt__details-toggle {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.interactive-prompt__details-toggle:hover {
+  background: var(--surface-hover);
+  color: var(--text-secondary);
+}
+
+/* Warnings */
+.interactive-prompt__warnings {
+  margin-bottom: 8px;
+}
+
+.interactive-prompt__warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--warning-color);
+  padding: 4px 0;
+}
+
+.interactive-prompt__warning svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* Command */
+.interactive-prompt__command {
+  background: var(--surface-tertiary);
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  overflow-x: auto;
+}
+
+.interactive-prompt__command code {
+  font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+  font-size: 12px;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Details */
+.interactive-prompt__details {
+  background: var(--surface-tertiary);
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+}
+
+.interactive-prompt__detail-row {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+  padding: 2px 0;
+}
+
+.interactive-prompt__detail-label {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.interactive-prompt__detail-value {
+  color: var(--text-secondary);
+  word-break: break-all;
+}
+
+/* Actions */
+.interactive-prompt__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.interactive-prompt__actions--centered {
+  justify-content: center;
+}
+
+.interactive-prompt__separator {
+  width: 1px;
+  background: var(--border-primary);
+  margin: 0 4px;
+}
+
+.interactive-prompt__button {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.interactive-prompt__button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.interactive-prompt__button--deny {
+  background: var(--surface-tertiary);
+  color: var(--text-secondary);
+  border-color: var(--border-primary);
+}
+
+.interactive-prompt__button--deny:hover:not(:disabled) {
+  background: var(--error-color);
+  color: white;
+  border-color: var(--error-color);
+}
+
+.interactive-prompt__button--allow {
+  background: var(--primary-color);
+  color: white;
+}
+
+.interactive-prompt__button--allow:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.interactive-prompt__button--session,
+.interactive-prompt__button--always {
+  background: var(--surface-tertiary);
+  color: var(--text-secondary);
+  border-color: var(--border-primary);
+}
+
+.interactive-prompt__button--session:hover:not(:disabled),
+.interactive-prompt__button--always:hover:not(:disabled) {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.interactive-prompt__button--submit {
+  background: var(--primary-color);
+  color: white;
+  padding: 10px 24px;
+  font-size: 14px;
+}
+
+.interactive-prompt__button--submit:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+/* Pattern info */
+.interactive-prompt__pattern-info {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.interactive-prompt__pattern-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  background: var(--surface-tertiary);
+  border-radius: 4px;
+  font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+  font-size: 10px;
+}
+
+/* Question cards */
+.interactive-prompt__questions {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.interactive-prompt__question-card {
+  background: var(--surface-tertiary);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.interactive-prompt__question-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.interactive-prompt__question-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--primary-color);
+  color: white;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.interactive-prompt__multi-hint {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.interactive-prompt__question-text {
+  font-size: 14px;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+/* Options */
+.interactive-prompt__options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.interactive-prompt__option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.interactive-prompt__option:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--primary-color);
+}
+
+.interactive-prompt__option--selected {
+  background: rgba(var(--primary-color-rgb, 59, 130, 246), 0.1);
+  border-color: var(--primary-color);
+}
+
+.interactive-prompt__option-indicator {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 2px solid var(--border-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.interactive-prompt__option-indicator--selected {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+  color: white;
+}
+
+.interactive-prompt__option-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.interactive-prompt__option-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.interactive-prompt__option-description {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+/* Mobile optimizations */
+@media (max-width: 480px) {
+  .interactive-prompt {
+    padding: 10px;
+  }
+
+  .interactive-prompt__actions {
+    flex-direction: column;
+  }
+
+  .interactive-prompt__separator {
+    display: none;
+  }
+
+  .interactive-prompt__button {
+    width: 100%;
+    padding: 10px;
+    font-size: 14px;
+  }
+}

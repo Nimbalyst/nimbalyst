@@ -18,12 +18,11 @@ interface AllowedUrlPattern {
   addedAt: number;
 }
 
-type PermissionMode = 'ask' | 'allow-all';
+type PermissionMode = 'ask' | 'allow-all' | 'bypass-all';
 
 interface PermissionsState {
-  isTrusted: boolean;
   trustedAt?: number;
-  permissionMode: PermissionMode;
+  permissionMode: PermissionMode | null;
   allowedPatterns: PatternRule[];
   additionalDirectories: AdditionalDirectory[];
   allowedUrlPatterns: AllowedUrlPattern[];
@@ -74,7 +73,7 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
   useEffect(() => {
     if (permissions) {
       posthog?.capture('agent_permissions_opened', {
-        isTrusted: permissions.isTrusted,
+        isTrusted: permissions.permissionMode !== null,
         permissionMode: permissions.permissionMode,
         allowedPatternsCount: permissions.allowedPatterns.length,
         additionalDirectoriesCount: permissions.additionalDirectories.length,
@@ -269,7 +268,7 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
         <div className="permissions-trust-card">
           <div className="permissions-trust-info">
             <div className="permissions-trust-status">
-              {permissions?.isTrusted ? (
+              {permissions?.permissionMode !== null ? (
                 <>
                   <span className="material-symbols-outlined permissions-trust-icon trusted">verified</span>
                   <span className="permissions-trust-label">This workspace is trusted</span>
@@ -282,7 +281,7 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
               )}
             </div>
             <p className="permissions-trust-description">
-              {permissions?.isTrusted
+              {permissions?.permissionMode !== null
                 ? 'The AI agent can run commands in this workspace.'
                 : 'Trust this workspace to allow the AI agent to run commands.'}
             </p>
@@ -293,7 +292,7 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
             )}
           </div>
           <div className="permissions-trust-action">
-            {permissions?.isTrusted ? (
+            {permissions?.permissionMode !== null ? (
               <button
                 className="btn-secondary"
                 onClick={handleRevokeWorkspaceTrust}
@@ -313,7 +312,7 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
       </div>
 
       {/* Permission Mode Section - Only show when trusted */}
-      {permissions?.isTrusted && (
+      {permissions?.permissionMode !== null && (
         <div className="permissions-section">
           <div className="permissions-section-header">
             <span>Permission Mode</span>
@@ -355,12 +354,30 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
                 </div>
               </div>
             </label>
+            <label className={`permissions-mode-option dangerous ${permissions.permissionMode === 'bypass-all' ? 'selected' : ''}`}>
+              <input
+                type="radio"
+                name="permissionMode"
+                value="bypass-all"
+                checked={permissions.permissionMode === 'bypass-all'}
+                onChange={() => handlePermissionModeChange('bypass-all')}
+              />
+              <div className="permissions-mode-option-content">
+                <span className="material-symbols-outlined">warning</span>
+                <div className="permissions-mode-option-text">
+                  <span className="permissions-mode-option-title">Bypass All Checks</span>
+                  <span className="permissions-mode-option-description">
+                    All operations auto-approved without any prompts. Use at your own risk.
+                  </span>
+                </div>
+              </div>
+            </label>
           </div>
         </div>
       )}
 
       {/* Additional Directories Section - Only show when trusted */}
-      {permissions?.isTrusted && (
+      {permissions?.permissionMode !== null && (
         <div className="permissions-section">
           <div className="permissions-section-header">
             <span>Additional Directories</span>
@@ -406,7 +423,7 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
       )}
 
       {/* Allowed URL Patterns Section - Only show when trusted */}
-      {permissions?.isTrusted && (
+      {permissions?.permissionMode !== null && (
         <div className="permissions-section">
           <div className="permissions-section-header">
             <span>Allowed URL Patterns</span>
@@ -493,7 +510,7 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
       )}
 
       {/* Allowed Patterns Section - Only show when trusted */}
-      {permissions?.isTrusted && (
+      {permissions?.permissionMode !== null && (
         <div className="permissions-section">
           <div className="permissions-section-header">
             <span>Allowed Patterns</span>
@@ -526,7 +543,7 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
 
 
       {/* Footer */}
-      {permissions?.isTrusted && (
+      {permissions?.permissionMode !== null && (
         permissions?.allowedPatterns.length ||
         permissions?.allowedUrlPatterns?.length ||
         permissions?.additionalDirectories?.length

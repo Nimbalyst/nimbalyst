@@ -132,6 +132,8 @@ interface ServerSessionEntry {
   queuedPromptCount?: number;
   /** Encrypted queued prompts */
   encryptedQueuedPrompts?: EncryptedQueuedPrompt[];
+  /** Whether there are pending interactive prompts (permissions or questions) waiting for response */
+  hasPendingPrompt?: boolean;
 }
 
 interface ServerProjectEntry {
@@ -595,6 +597,7 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
         sentBy: server.pendingExecution.sentBy as 'mobile' | 'desktop',
       } : undefined,
       isExecuting: server.isExecuting,
+      hasPendingPrompt: server.hasPendingPrompt,
     };
   }, []);
 

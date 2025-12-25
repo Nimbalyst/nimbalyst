@@ -334,3 +334,206 @@ export interface CreateAgentMessageInput {
   createdAt?: Date | string;  // Optional timestamp for imported messages (defaults to NOW())
   providerMessageId?: string;  // Provider-assigned message ID (e.g., SDK uuid) for deduplication
 }
+
+// ============================================================================
+// Interactive Prompt Message Types
+// These message types support mobile-compatible permission and question flows.
+// Requests are persisted as messages, allowing any device to render the UI and respond.
+// Responses are also persisted, allowing the provider to poll for completion.
+// ============================================================================
+
+/**
+ * Status of an interactive prompt (permission request or user question)
+ */
+export type InteractivePromptStatus = 'pending' | 'resolved' | 'cancelled';
+
+/**
+ * Permission request message - persisted when SDK needs tool approval
+ */
+export interface PermissionRequestContent {
+  type: 'permission_request';
+  requestId: string;
+  toolName: string;
+  rawCommand: string;           // The command/tool description shown to user
+  pattern: string;              // Pattern for "Allow Session/Always" (e.g., 'Bash(git commit:*)')
+  patternDisplayName: string;   // Human-readable pattern description
+  isDestructive: boolean;
+  warnings: string[];
+  timestamp: number;
+  status: InteractivePromptStatus;
+}
+
+/**
+ * Permission response message - created when user responds to a permission request
+ */
+export interface PermissionResponseContent {
+  type: 'permission_response';
+  requestId: string;            // Links to the permission_request
+  decision: 'allow' | 'deny';
+  scope: 'once' | 'session' | 'always' | 'always-all';
+  respondedAt: number;
+  respondedBy: 'desktop' | 'mobile';
+}
+
+/**
+ * AskUserQuestion request message - persisted when Claude needs user input
+ */
+export interface AskUserQuestionRequestContent {
+  type: 'ask_user_question_request';
+  questionId: string;
+  questions: Array<{
+    question: string;
+    header: string;
+    options: Array<{ label: string; description: string }>;
+    multiSelect: boolean;
+  }>;
+  timestamp: number;
+  status: InteractivePromptStatus;
+}
+
+/**
+ * AskUserQuestion response message - created when user answers questions
+ */
+export interface AskUserQuestionResponseContent {
+  type: 'ask_user_question_response';
+  questionId: string;           // Links to the ask_user_question_request
+  answers: Record<string, string>;
+  respondedAt: number;
+  respondedBy: 'desktop' | 'mobile';
+}
+
+/**
+ * Union type for all interactive prompt content types
+ */
+export type InteractivePromptContent =
+  | PermissionRequestContent
+  | PermissionResponseContent
+  | AskUserQuestionRequestContent
+  | AskUserQuestionResponseContent;
+
+/**
+ * Type guard to check if content is an interactive prompt
+ */
+export function isInteractivePromptContent(content: unknown): content is InteractivePromptContent {
+  if (typeof content !== 'object' || content === null) return false;
+  const type = (content as { type?: string }).type;
+  return type === 'permission_request' ||
+         type === 'permission_response' ||
+         type === 'ask_user_question_request' ||
+         type === 'ask_user_question_response';
+}
+
+/**
+ * Type guard to check if content is a pending permission request
+ */
+export function isPendingPermissionRequest(content: unknown): content is PermissionRequestContent {
+  if (typeof content !== 'object' || content === null) return false;
+  const c = content as { type?: string; status?: string };
+  return c.type === 'permission_request' && c.status === 'pending';
+}
+
+/**
+ * Type guard to check if content is a pending AskUserQuestion request
+ */
+export function isPendingAskUserQuestion(content: unknown): content is AskUserQuestionRequestContent {
+  if (typeof content !== 'object' || content === null) return false;
+  const c = content as { type?: string; status?: string };
+  return c.type === 'ask_user_question_request' && c.status === 'pending';
+}
+
+/**
+ * Helper to parse message content as interactive prompt content
+ * Returns undefined if content is not valid JSON or not an interactive prompt
+ */
+export function parseInteractivePromptContent(content: string): InteractivePromptContent | undefined {
+  try {
+    const parsed = JSON.parse(content);
+    if (isInteractivePromptContent(parsed)) {
+      return parsed;
+    }
+  } catch {
+    // Not valid JSON or not an interactive prompt
+  }
+  return undefined;
+}
+
+/**
+ * Check if a list of messages contains any pending interactive prompts.
+ * Used to show "waiting for response" indicator in session lists.
+ */
+export function hasPendingInteractivePrompts(messages: Array<{ content: string }>): boolean {
+  for (const msg of messages) {
+    try {
+      const content = JSON.parse(msg.content);
+      if ((content.type === 'permission_request' || content.type === 'ask_user_question_request') &&
+          content.status === 'pending') {
+        // Check if there's a corresponding response
+        const requestId = content.requestId || content.questionId;
+        const responseType = content.type === 'permission_request' ? 'permission_response' : 'ask_user_question_response';
+
+        // Look for a response with matching requestId/questionId
+        const hasResponse = messages.some(m => {
+          try {
+            const c = JSON.parse(m.content);
+            return c.type === responseType && (c.requestId === requestId || c.questionId === requestId);
+          } catch {
+            return false;
+          }
+        });
+
+        if (!hasResponse) {
+          return true; // Found a pending prompt without a response
+        }
+      }
+    } catch {
+      // Not valid JSON, skip
+    }
+  }
+  return false;
+}
+
+/**
+ * Get a human-readable display name for a tool permission pattern.
+ * Used both when persisting permission requests and in the UI.
+ */
+export function getPatternDisplayName(pattern: string): string {
+  // Handle compound commands - these get unique patterns and shouldn't be cached
+  if (pattern.startsWith('Bash:compound:')) {
+    return 'this compound command (one-time only)';
+  }
+
+  // Handle Bash patterns like 'Bash(git commit:*)' or 'Bash(npm run:*)'
+  const bashMatch = pattern.match(/^Bash\(([^:]+):\*\)$/);
+  if (bashMatch) {
+    return `${bashMatch[1]} commands`;
+  }
+
+  // Handle tool patterns like 'WebFetch(https://docs.anthropic.com:*)'
+  const toolMatch = pattern.match(/^(\w+)\(([^:]+):\*\)$/);
+  if (toolMatch) {
+    const [, toolName, target] = toolMatch;
+    if (toolName === 'WebFetch') {
+      try {
+        const url = new URL(target);
+        return `Fetch from ${url.hostname}`;
+      } catch {
+        return `Fetch from ${target}`;
+      }
+    }
+    return `${toolName}: ${target}`;
+  }
+
+  // Handle wildcard patterns like 'WebFetch' (all WebFetch calls)
+  if (pattern === 'WebFetch') {
+    return 'all web fetches';
+  }
+
+  // Handle simple Bash patterns like 'Bash(ls:*)'
+  const simpleBashMatch = pattern.match(/^Bash\((\w+):\*\)$/);
+  if (simpleBashMatch) {
+    return `${simpleBashMatch[1]} commands`;
+  }
+
+  // Default: return the pattern as-is
+  return pattern;
+}

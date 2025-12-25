@@ -148,6 +148,11 @@
 }
 
 .project-trust-toast-mode-btn--selected.project-trust-toast-mode-btn--danger {
+  border-color: #f59e0b;
+  background: color-mix(in srgb, #f59e0b 12%, var(--surface-secondary));
+}
+
+.project-trust-toast-mode-btn--selected.project-trust-toast-mode-btn--dangerous {
   border-color: #ef4444;
   background: color-mix(in srgb, #ef4444 12%, var(--surface-secondary));
 }
@@ -168,6 +173,11 @@
 }
 
 .project-trust-toast-mode-badge--danger {
+  background: color-mix(in srgb, #f59e0b 15%, transparent);
+  color: #f59e0b;
+}
+
+.project-trust-toast-mode-badge--dangerous {
   background: color-mix(in srgb, #ef4444 15%, transparent);
   color: #ef4444;
 }
@@ -194,6 +204,10 @@
 
 .project-trust-toast-mode-summary--warning {
   color: #f59e0b;
+}
+
+.project-trust-toast-mode-summary--dangerous {
+  color: #ef4444;
 }
 
 /* Features list (inside mode details) */
@@ -228,6 +242,10 @@
 
 .project-trust-toast-features-list--warning li svg {
   color: #f59e0b;
+}
+
+.project-trust-toast-features-list--dangerous li svg {
+  color: #ef4444;
 }
 
 /* Footer */

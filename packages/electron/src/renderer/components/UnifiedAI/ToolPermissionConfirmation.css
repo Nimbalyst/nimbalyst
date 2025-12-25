@@ -97,6 +97,13 @@
   border-radius: 3px;
 }
 
+.tool-permission-confirmation-tooltip-pattern {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-primary);
+  color: var(--text-tertiary);
+}
+
 /* Warnings */
 .tool-permission-confirmation-warnings {
   display: flex;

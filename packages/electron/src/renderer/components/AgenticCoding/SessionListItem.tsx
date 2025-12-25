@@ -12,6 +12,7 @@ interface SessionListItemProps {
   isLoaded?: boolean; // Whether session is loaded in a tab
   isProcessing?: boolean; // Whether session is actively processing
   hasUnread?: boolean; // Whether session has unread messages
+  hasPendingPrompt?: boolean; // Whether session has a pending permission/question prompt waiting for response
   isArchived?: boolean; // Whether session is archived
   isSelected?: boolean; // Whether session is selected for bulk actions
   sortBy?: 'updated' | 'created'; // Which timestamp to display based on sort order
@@ -33,6 +34,7 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
   isLoaded = false,
   isProcessing = false,
   hasUnread = false,
+  hasPendingPrompt = false,
   isArchived = false,
   isSelected = false,
   sortBy = 'updated',
@@ -170,6 +172,10 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
         {isProcessing ? (
           <div className="session-list-item-status processing" title="Processing...">
             <MaterialSymbol icon="progress_activity" size={14} />
+          </div>
+        ) : hasPendingPrompt ? (
+          <div className="session-list-item-status pending-prompt" title="Waiting for your response">
+            <MaterialSymbol icon="help" size={14} />
           </div>
         ) : hasUnread ? (
           <div className="session-list-item-status unread" title="Unread response">

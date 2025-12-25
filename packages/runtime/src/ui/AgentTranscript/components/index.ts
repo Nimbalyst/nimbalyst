@@ -7,3 +7,5 @@ export { TodosSidebar } from './TodosSidebar';
 export { LoginRequiredWidget } from './LoginRequiredWidget';
 export { PromptsMenuButton, FloatingTranscriptActions } from './FloatingTranscriptActions';
 export { storeAskUserQuestionAnswers } from './CustomToolWidgets';
+export { InteractivePromptWidget } from './InteractivePromptWidget';
+export type { InteractivePromptWidgetProps } from './InteractivePromptWidget';

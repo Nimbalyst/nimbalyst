@@ -11,7 +11,7 @@ import {
 } from '../utils/store';
 import { logger } from '../utils/logger';
 
-type PermissionMode = 'ask' | 'allow-all';
+type PermissionMode = 'ask' | 'allow-all' | 'bypass-all';
 
 /**
  * Permission Service singleton

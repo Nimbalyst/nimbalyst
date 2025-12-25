@@ -162,9 +162,10 @@ export interface SessionHistoryLayout {
  * Permission mode for the workspace
  * - null: Workspace not trusted (show trust toast)
  * - 'ask': Smart permissions - prompt for new patterns, remember choices
- * - 'allow-all': Auto-approve all tool calls
+ * - 'allow-all': Auto-approve file edits, follow Claude Code settings for Bash
+ * - 'bypass-all': Auto-approve all tool calls without any prompts (dangerous)
  */
-export type AgentPermissionMode = 'ask' | 'allow-all' | null;
+export type AgentPermissionMode = 'ask' | 'allow-all' | 'bypass-all' | null;
 
 /**
  * Agent permissions stored per workspace.
@@ -175,10 +176,10 @@ export type AgentPermissionMode = 'ask' | 'allow-all' | null;
  *
  * Trust is determined by permissionMode:
  * - null: Not trusted (show trust toast)
- * - 'ask' or 'allow-all': Trusted
+ * - 'ask', 'allow-all', or 'bypass-all': Trusted
  */
 export interface AgentPermissions {
-  /** Permission mode: null=untrusted, 'ask'=smart permissions, 'allow-all'=auto-approve */
+  /** Permission mode: null=untrusted, 'ask'=smart permissions, 'allow-all'=auto-approve edits, 'bypass-all'=auto-approve everything */
   permissionMode: AgentPermissionMode;
 }
 
@@ -401,7 +402,9 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
         ? 'allow-all'
         : raw.agentPermissions.permissionMode === 'ask'
           ? 'ask'
-          : null,
+          : raw.agentPermissions.permissionMode === 'bypass-all'
+            ? 'bypass-all'
+            : null,
     } : undefined,
     lastUpdated: raw.lastUpdated ?? raw.updated_at ?? Date.now(),
   };
@@ -1117,11 +1120,6 @@ export function getAgentPermissions(workspacePath: string): AgentPermissions | u
 }
 
 export function saveAgentPermissions(workspacePath: string, permissions: AgentPermissions): void {
-  const workspaceName = workspacePath.split('/').pop() || workspacePath;
-  console.log(`[Store:${workspaceName}] saveAgentPermissions:`, {
-    workspacePath,
-    permissionMode: permissions.permissionMode,
-  });
   updateWorkspaceState(workspacePath, (state) => {
     state.agentPermissions = { permissionMode: permissions.permissionMode };
   });
@@ -1132,7 +1130,7 @@ export function isWorkspaceTrusted(workspacePath: string): boolean {
          getWorkspaceState(workspacePath).agentPermissions?.permissionMode !== undefined;
 }
 
-export function setWorkspaceTrusted(workspacePath: string, trusted: boolean, mode: 'ask' | 'allow-all' = 'ask'): void {
+export function setWorkspaceTrusted(workspacePath: string, trusted: boolean, mode: 'ask' | 'allow-all' | 'bypass-all' = 'ask'): void {
   updateWorkspaceState(workspacePath, (state) => {
     state.agentPermissions = { permissionMode: trusted ? mode : null };
   });

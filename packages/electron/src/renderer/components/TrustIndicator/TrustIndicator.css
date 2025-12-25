@@ -20,6 +20,10 @@
   color: var(--text-secondary);
 }
 
+.trust-indicator.bypass-all {
+  color: var(--warning-color, #f59e0b);
+}
+
 .trust-indicator.loading {
   color: var(--text-tertiary);
 }
@@ -45,6 +49,10 @@
 
 .trust-indicator-dot.allow-all {
   background-color: var(--primary-color);
+}
+
+.trust-indicator-dot.bypass-all {
+  background-color: var(--error-color, #ef4444);
 }
 
 .trust-indicator-dot.loading {
@@ -112,6 +120,11 @@
   color: var(--primary-color);
 }
 
+.trust-status-badge.bypass-all {
+  background-color: color-mix(in srgb, var(--error-color, #ef4444) 15%, transparent);
+  color: var(--error-color, #ef4444);
+}
+
 /* Current Mode - Prominent Display */
 .trust-menu-current-mode {
   margin: 0 8px 8px 8px;
@@ -129,6 +142,11 @@
 .trust-menu-current-mode.allow-all {
   border-color: var(--primary-color);
   background: color-mix(in srgb, var(--primary-color) 10%, var(--surface-primary));
+}
+
+.trust-menu-current-mode.bypass-all {
+  border-color: var(--error-color, #ef4444);
+  background: color-mix(in srgb, var(--error-color, #ef4444) 10%, var(--surface-primary));
 }
 
 .trust-menu-current-mode.untrusted {
@@ -161,6 +179,10 @@
 
 .trust-menu-current-mode.allow-all .trust-menu-current-mode-value {
   color: var(--primary-color);
+}
+
+.trust-menu-current-mode.bypass-all .trust-menu-current-mode-value {
+  color: var(--error-color, #ef4444);
 }
 
 .trust-menu-current-mode.untrusted .trust-menu-current-mode-value {

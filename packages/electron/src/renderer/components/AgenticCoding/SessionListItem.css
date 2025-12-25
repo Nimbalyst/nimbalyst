@@ -90,6 +90,21 @@
   opacity: 1;
 }
 
+.session-list-item-status.pending-prompt {
+  color: var(--warning-color, #f59e0b);
+  opacity: 1;
+  animation: session-list-item-pulse 2s ease-in-out infinite;
+}
+
+@keyframes session-list-item-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
 .session-list-item-content {
   flex: 1;
   min-width: 0;

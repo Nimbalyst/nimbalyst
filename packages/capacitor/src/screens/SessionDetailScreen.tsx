@@ -3,8 +3,15 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useSync } from '../contexts/CollabV3SyncContext';
 import { getSessionJwt } from '../services/StytchAuthService';
 import { AgentTranscriptPanel, transformAgentMessagesToUI, PromptsMenuButton } from '@nimbalyst/runtime';
-import { AIInput } from '@nimbalyst/runtime/ui';
+import { AIInput, InteractivePromptWidget } from '@nimbalyst/runtime/ui';
 import type { SessionData, ChatAttachment, PromptMarker } from '@nimbalyst/runtime';
+import type {
+  PermissionRequestContent,
+  PermissionResponseContent,
+  AskUserQuestionRequestContent,
+  AskUserQuestionResponseContent,
+  InteractivePromptContent,
+} from '@nimbalyst/runtime';
 import forge from 'node-forge';
 
 /**
@@ -215,6 +222,9 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
   const [inputValue, setInputValue] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
+
+  // Interactive prompt state
+  const [isSubmittingPrompt, setIsSubmittingPrompt] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const encryptionKeyRef = useRef<ForgeKey | null>(null);
@@ -479,6 +489,87 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
 
   const title = metadata.title || 'Untitled Session';
 
+  // Detect pending interactive prompts from messages
+  const pendingPrompt = useMemo((): {
+    type: 'permission_request' | 'ask_user_question_request';
+    content: PermissionRequestContent | AskUserQuestionRequestContent;
+  } | null => {
+    // Scan messages from newest to oldest looking for pending prompts
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      try {
+        const parsed = JSON.parse(msg.content);
+        if (parsed.type === 'permission_request' && parsed.status === 'pending') {
+          // Check if there's a response for this request
+          const hasResponse = messages.some(m => {
+            try {
+              const r = JSON.parse(m.content);
+              return r.type === 'permission_response' && r.requestId === parsed.requestId;
+            } catch { return false; }
+          });
+          if (!hasResponse) {
+            return { type: 'permission_request', content: parsed as PermissionRequestContent };
+          }
+        }
+        if (parsed.type === 'ask_user_question_request' && parsed.status === 'pending') {
+          // Check if there's a response for this question
+          const hasResponse = messages.some(m => {
+            try {
+              const r = JSON.parse(m.content);
+              return r.type === 'ask_user_question_response' && r.questionId === parsed.questionId;
+            } catch { return false; }
+          });
+          if (!hasResponse) {
+            return { type: 'ask_user_question_request', content: parsed as AskUserQuestionRequestContent };
+          }
+        }
+      } catch {
+        // Not JSON or not an interactive prompt
+      }
+    }
+    return null;
+  }, [messages]);
+
+  // Handle submitting a response to an interactive prompt
+  const handlePromptResponse = useCallback(async (
+    response: PermissionResponseContent | AskUserQuestionResponseContent
+  ) => {
+    if (!wsRef.current || !encryptionKeyRef.current) {
+      console.error('[SessionDetail] Cannot submit prompt response: not connected');
+      return;
+    }
+
+    setIsSubmittingPrompt(true);
+    try {
+      // Encrypt the response
+      const responseContent = JSON.stringify({
+        content: JSON.stringify(response),
+        metadata: {},
+      });
+      const { encrypted, iv } = await encrypt(responseContent, encryptionKeyRef.current);
+
+      // Send as a new message
+      const msg: ClientMessage = {
+        type: 'add_message',
+        message: {
+          source: 'system',
+          direction: 'input',
+          encrypted_content: encrypted,
+          iv,
+          metadata: { isPromptResponse: true },
+        },
+      };
+      wsRef.current.send(JSON.stringify(msg));
+
+      console.log('[SessionDetail] Submitted prompt response:', response.type);
+    } catch (err) {
+      console.error('[SessionDetail] Failed to submit prompt response:', err);
+      setError('Failed to submit response');
+    } finally {
+      setIsSubmittingPrompt(false);
+    }
+  }, []);
+
   // Generate unique ID for messages
   const generateId = () => {
     return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
@@ -611,15 +702,28 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
         )}
       </main>
 
+      {/* Interactive Prompt (when pending) */}
+      {pendingPrompt && (
+        <div className="flex-shrink-0 px-3 py-2 border-t border-[var(--border-primary)] bg-[var(--surface-secondary)]">
+          <InteractivePromptWidget
+            promptType={pendingPrompt.type}
+            content={pendingPrompt.content}
+            onSubmitResponse={handlePromptResponse}
+            isMobile={true}
+            isSubmitting={isSubmittingPrompt}
+          />
+        </div>
+      )}
+
       {/* AI Input - Fixed at bottom with safe area for home indicator */}
       <footer className="flex-shrink-0 bg-[var(--surface-primary)] border-t border-[var(--border-primary)] safe-area-bottom">
         <AIInput
           value={inputValue}
           onChange={handleInputChange}
           onSend={handleSendMessage}
-          disabled={!connected || isSending}
+          disabled={!connected || isSending || !!pendingPrompt}
           isLoading={isSending}
-          placeholder={connected ? 'Type your message...' : 'Connecting...'}
+          placeholder={pendingPrompt ? 'Respond to prompt above...' : (connected ? 'Type your message...' : 'Connecting...')}
           attachments={attachments}
           onAttachmentAdd={handleAttachmentAdd}
           onAttachmentRemove={handleAttachmentRemove}

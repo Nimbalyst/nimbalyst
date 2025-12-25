@@ -2319,7 +2319,8 @@ export class AIService {
 
       // Check if this is a ClaudeCodeProvider with the resolve method
       if (typeof (provider as any).resolveAskUserQuestion === 'function') {
-        (provider as any).resolveAskUserQuestion(questionId, answers);
+        // Pass sessionId for response message persistence
+        (provider as any).resolveAskUserQuestion(questionId, answers, sessionId, 'desktop');
         return { success: true };
       } else {
         logger.main.warn(`[AIService] Provider does not support AskUserQuestion: ${session.provider}`);
@@ -2403,7 +2404,8 @@ export class AIService {
 
       // Check if this is a ClaudeCodeProvider with the resolve method
       if (typeof (provider as any).resolveToolPermission === 'function') {
-        (provider as any).resolveToolPermission(requestId, response);
+        // Pass sessionId for response message persistence
+        (provider as any).resolveToolPermission(requestId, response, sessionId, 'desktop');
         return { success: true };
       } else {
         logger.main.warn(`[AIService] Provider does not support tool permission: ${session.provider}`);

@@ -478,6 +478,13 @@ app.whenReady().then(async () => {
       await claudeSettingsManager.addAllowedTool(workspacePath, pattern);
     });
 
+    // Inject Claude settings pattern checker
+    // Checks if a pattern is in the allow list (from all settings sources)
+    ClaudeCodeProvider.setClaudeSettingsPatternChecker(async (workspacePath, pattern) => {
+      const effectiveSettings = await claudeSettingsManager.getEffectiveSettings(workspacePath);
+      return effectiveSettings.permissions.allow.includes(pattern);
+    });
+
     // Inject trust checker
     // Checks if a workspace is trusted before allowing tool execution
     const permissionService = getPermissionService();

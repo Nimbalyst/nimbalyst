@@ -10,7 +10,7 @@ interface ProjectTrustToastProps {
   onDismiss?: () => void;
 }
 
-type TrustChoice = 'ask' | 'allow-all';
+type TrustChoice = 'ask' | 'allow-all' | 'bypass-all';
 
 /**
  * One-time toast that appears when an untrusted project is opened.
@@ -27,6 +27,7 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
   const [isChangingMode, setIsChangingMode] = useState(false);
   const [selectedMode, setSelectedMode] = useState<TrustChoice>('ask');
   const toastRef = useRef<HTMLDivElement>(null);
+  const justSavedRef = useRef(false);
 
   // Handle forceShow prop - show toast when parent wants to change mode
   useEffect(() => {
@@ -48,7 +49,8 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
         const status = await window.electronAPI.invoke('permissions:getWorkspacePermissions', workspacePath);
         console.log('[ProjectTrustToast] Trust status for', workspacePath, ':', status);
         // Show toast if workspace is not trusted yet (but not if we're in change mode)
-        if (!status.isTrusted && !isChangingMode) {
+        // Trusted = permissionMode is not null
+        if (status.permissionMode === null && !isChangingMode) {
           setIsVisible(true);
         }
       } catch (error) {
@@ -60,14 +62,21 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
   }, [workspacePath, isChangingMode]);
 
   // Listen for external trust changes (e.g., from settings or TrustIndicator)
+  // But ignore changes if we just saved to avoid race conditions
   useEffect(() => {
     const handlePermissionChange = async () => {
       if (!workspacePath) return;
 
+      // Ignore permission changes right after we saved
+      if (justSavedRef.current) {
+        return;
+      }
+
       try {
         const status = await window.electronAPI.invoke('permissions:getWorkspacePermissions', workspacePath);
         // Show toast if workspace is NOT trusted (e.g., user clicked "Change Mode")
-        if (!status.isTrusted) {
+        // Trusted = permissionMode is not null
+        if (status.permissionMode === null) {
           setIsVisible(true);
         } else {
           setIsVisible(false);
@@ -120,10 +129,12 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
     if (!workspacePath || isSubmitting) return;
 
     setIsSubmitting(true);
+    // Mark that we just saved to prevent race conditions with permission change listener
+    justSavedRef.current = true;
 
     try {
-      // Trust the workspace with the selected permission mode
-      await window.electronAPI.invoke('permissions:trustWorkspace', workspacePath);
+      // Set the permission mode directly - this also trusts the workspace
+      // (any non-null mode means trusted)
       await window.electronAPI.invoke('permissions:setPermissionMode', workspacePath, selectedMode);
       setIsVisible(false);
       setIsChangingMode(false);
@@ -131,6 +142,8 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
       onDismiss?.();
     } catch (error) {
       console.error('[ProjectTrustToast] Failed to set trust:', error);
+      // Only reset justSavedRef on error so we can try again
+      justSavedRef.current = false;
     } finally {
       setIsSubmitting(false);
     }
@@ -210,13 +223,20 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
             <span className="project-trust-toast-mode-badge">Recommended</span>
           </button>
           <button
-            className={`project-trust-toast-mode-btn ${selectedMode === 'allow-all' ? 'project-trust-toast-mode-btn--selected project-trust-toast-mode-btn--danger' : ''}`}
+            className={`project-trust-toast-mode-btn ${selectedMode === 'allow-all' ? 'project-trust-toast-mode-btn--selected' : ''}`}
             onClick={() => setSelectedMode('allow-all')}
             disabled={isSubmitting}
           >
             <span className="project-trust-toast-mode-label">Allow All Edits</span>
-            {selectedMode === 'allow-all' && (
-              <span className="project-trust-toast-mode-badge project-trust-toast-mode-badge--danger">Risky</span>
+          </button>
+          <button
+            className={`project-trust-toast-mode-btn ${selectedMode === 'bypass-all' ? 'project-trust-toast-mode-btn--selected project-trust-toast-mode-btn--dangerous' : ''}`}
+            onClick={() => setSelectedMode('bypass-all')}
+            disabled={isSubmitting}
+          >
+            <span className="project-trust-toast-mode-label">Bypass All</span>
+            {selectedMode === 'bypass-all' && (
+              <span className="project-trust-toast-mode-badge project-trust-toast-mode-badge--dangerous">Dangerous</span>
             )}
           </button>
         </div>
@@ -249,7 +269,7 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
                 </li>
               </ul>
             </>
-          ) : (
+          ) : selectedMode === 'allow-all' ? (
             <>
               <p className="project-trust-toast-mode-summary project-trust-toast-mode-summary--warning">
                 The agent will run all file and edit operations without asking. Shell commands and web requests may still require approval.
@@ -275,6 +295,35 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
                     <path d="M8 11h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                   </svg>
                   <span>Only use with projects you fully trust</span>
+                </li>
+              </ul>
+            </>
+          ) : (
+            <>
+              <p className="project-trust-toast-mode-summary project-trust-toast-mode-summary--dangerous">
+                The agent will run ALL operations without ANY permission prompts. This includes shell commands, file operations, and web requests.
+              </p>
+              <ul className="project-trust-toast-features-list project-trust-toast-features-list--dangerous">
+                <li>
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                    <path d="M8 5.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                    <path d="M8 11h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                  <span><strong>No permission prompts</strong> - everything runs immediately</span>
+                </li>
+                <li>
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                    <path d="M8 5.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                    <path d="M8 11h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                  <span><strong>Ignores Claude Code settings</strong> - bypasses all safety checks</span>
+                </li>
+                <li>
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                    <path d="M8 5.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                    <path d="M8 11h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                  <span><strong>Use at your own risk</strong> - only for testing/development</span>
                 </li>
               </ul>
             </>

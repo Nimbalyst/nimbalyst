@@ -1,6 +1,36 @@
 // Import and re-export types from server types to avoid duplication
-import type { Message, DocumentContext, SessionData, AgentMessage, CreateAgentMessageInput, AgentMessageDirection, ChatAttachment } from './server/types';
-export type { Message, DocumentContext, SessionData, AgentMessage, CreateAgentMessageInput, AgentMessageDirection, ChatAttachment };
+import type {
+  Message,
+  DocumentContext,
+  SessionData,
+  AgentMessage,
+  CreateAgentMessageInput,
+  AgentMessageDirection,
+  ChatAttachment,
+  // Interactive prompt types
+  InteractivePromptStatus,
+  PermissionRequestContent,
+  PermissionResponseContent,
+  AskUserQuestionRequestContent,
+  AskUserQuestionResponseContent,
+  InteractivePromptContent,
+} from './server/types';
+export type {
+  Message,
+  DocumentContext,
+  SessionData,
+  AgentMessage,
+  CreateAgentMessageInput,
+  AgentMessageDirection,
+  ChatAttachment,
+  // Interactive prompt types
+  InteractivePromptStatus,
+  PermissionRequestContent,
+  PermissionResponseContent,
+  AskUserQuestionRequestContent,
+  AskUserQuestionResponseContent,
+  InteractivePromptContent,
+};
 
 // Core AI types
 export interface AIToolCall {

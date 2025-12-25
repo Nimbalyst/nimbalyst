@@ -133,6 +133,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // Track sessions that are actively running (from session state manager)
   const [runningSessions, setRunningSessions] = useState<Set<string>>(new Set());
 
+  // Track sessions with pending prompts (permission or question requests waiting for response)
+  const [pendingPromptSessions, setPendingPromptSessions] = useState<Set<string>>(new Set());
+
   // Prompt history navigation state (per session)
   const [historyPosition, setHistoryPosition] = useState<Map<string, number>>(new Map());
   const [savedDraft, setSavedDraft] = useState<Map<string, string>>(new Map());
@@ -1630,6 +1633,60 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     };
   }, []);
 
+  // Listen for pending prompt events (tool permissions and AskUserQuestion)
+  // This tracks which sessions have prompts waiting for user response
+  useEffect(() => {
+    const handleToolPermission = (data: { sessionId: string; requestId: string }) => {
+      if (!data?.sessionId) return;
+      setPendingPromptSessions(prev => {
+        const next = new Set(prev);
+        next.add(data.sessionId);
+        return next;
+      });
+    };
+
+    const handleToolPermissionResolved = (data: { sessionId: string; requestId: string }) => {
+      if (!data?.sessionId) return;
+      // Note: We keep the session in pendingPromptSessions until ALL prompts are resolved
+      // For simplicity, we'll just remove it here - the AISessionView tracks individual prompts
+      setPendingPromptSessions(prev => {
+        const next = new Set(prev);
+        next.delete(data.sessionId);
+        return next;
+      });
+    };
+
+    const handleAskUserQuestion = (data: { sessionId: string; questionId: string }) => {
+      if (!data?.sessionId) return;
+      setPendingPromptSessions(prev => {
+        const next = new Set(prev);
+        next.add(data.sessionId);
+        return next;
+      });
+    };
+
+    const handleAskUserQuestionAnswered = (data: { sessionId: string; questionId: string }) => {
+      if (!data?.sessionId) return;
+      setPendingPromptSessions(prev => {
+        const next = new Set(prev);
+        next.delete(data.sessionId);
+        return next;
+      });
+    };
+
+    const cleanupToolPermission = window.electronAPI.on('ai:toolPermission', handleToolPermission);
+    const cleanupToolPermissionResolved = window.electronAPI.on('ai:toolPermissionResolved', handleToolPermissionResolved);
+    const cleanupAskUserQuestion = window.electronAPI.on('ai:askUserQuestion', handleAskUserQuestion);
+    const cleanupAskUserQuestionAnswered = window.electronAPI.on('ai:askUserQuestionAnswered', handleAskUserQuestionAnswered);
+
+    return () => {
+      cleanupToolPermission?.();
+      cleanupToolPermissionResolved?.();
+      cleanupAskUserQuestion?.();
+      cleanupAskUserQuestionAnswered?.();
+    };
+  }, []);
+
   // Handle draft input change (optimized to avoid recreating all tabs)
   const handleDraftInputChange = useCallback((sessionId: string, value: string) => {
     setSessionTabs(prev => {
@@ -2623,6 +2680,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             loadedSessionIds={loadedSessionIds}
             processingSessions={processingSessions}
             unreadSessions={unreadSessions}
+            pendingPromptSessions={pendingPromptSessions}
             renamedSession={renamedSession}
             updatedSession={updatedSession}
             onSessionSelect={openSessionInTab}

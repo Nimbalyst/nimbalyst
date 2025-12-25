@@ -257,6 +257,8 @@ export interface SessionIndexEntry {
   };
   /** Whether the session is currently executing (processing AI request) */
   isExecuting?: boolean;
+  /** Whether there are pending interactive prompts (permissions or questions) waiting for response */
+  hasPendingPrompt?: boolean;
 }
 
 /**

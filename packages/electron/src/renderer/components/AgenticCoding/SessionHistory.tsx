@@ -17,6 +17,7 @@ interface SessionItem {
   messageCount: number;
   isProcessing?: boolean;
   hasUnread?: boolean;
+  hasPendingPrompt?: boolean;
   isArchived?: boolean;
 }
 
@@ -26,6 +27,7 @@ interface SessionHistoryProps {
   loadedSessionIds?: string[]; // IDs of sessions loaded in tabs
   processingSessions?: Set<string>; // IDs of sessions currently processing
   unreadSessions?: Set<string>; // IDs of sessions with unread messages
+  pendingPromptSessions?: Set<string>; // IDs of sessions with pending permission/question prompts
   renamedSession?: { id: string; title: string } | null; // Session that was just renamed
   updatedSession?: { id: string; timestamp: number } | null; // Session that was just updated
   onSessionSelect: (sessionId: string) => void;
@@ -59,6 +61,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   loadedSessionIds = [],
   processingSessions = new Set(),
   unreadSessions = new Set(),
+  pendingPromptSessions = new Set(),
   renamedSession = null,
   updatedSession = null,
   onSessionSelect,
@@ -269,14 +272,15 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
     searchMessageContent(searchQuery);
   }, [searchQuery, contentSearchTriggered, searchMessageContent]);
 
-  // Update visual indicators (processing state, unread badges) without reloading from database
+  // Update visual indicators (processing state, unread badges, pending prompts) without reloading from database
   useEffect(() => {
     setSessions(prevSessions => prevSessions.map(session => ({
       ...session,
       isProcessing: processingSessions.has(session.id),
-      hasUnread: unreadSessions.has(session.id)
+      hasUnread: unreadSessions.has(session.id),
+      hasPendingPrompt: pendingPromptSessions.has(session.id)
     })));
-  }, [processingSessions, unreadSessions]);
+  }, [processingSessions, unreadSessions, pendingPromptSessions]);
 
   // Update session title when renamed (efficient update without database reload)
   useEffect(() => {
@@ -874,6 +878,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
                     messageCount={session.messageCount}
                     isProcessing={session.isProcessing}
                     hasUnread={session.hasUnread}
+                    hasPendingPrompt={session.hasPendingPrompt}
                   />
                 ))}
               </CollapsibleGroup>

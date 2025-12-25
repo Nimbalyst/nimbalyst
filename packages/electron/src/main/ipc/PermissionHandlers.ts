@@ -47,6 +47,7 @@ export function registerPermissionHandlers(): void {
       // Get trust mode from our store (still managed by us)
       const permissionMode = permissionService.getPermissionMode(workspacePath);
       const isTrusted = permissionMode !== null;
+      logger.main.info(`[PermissionHandlers:${workspaceName}] getWorkspacePermissions - permissionMode:`, { permissionMode, isTrusted });
 
       // Read patterns from Claude settings files
       const effectiveSettings = await claudeSettingsManager.getEffectiveSettings(workspacePath);
@@ -92,7 +93,7 @@ export function registerPermissionHandlers(): void {
       return {
         isTrusted,
         allowedPatterns,
-        permissionMode: permissionMode || 'ask', // Default to 'ask' if trusted
+        permissionMode, // null means not trusted, don't default
         additionalDirectories,
         allowedUrlPatterns,
       };
@@ -213,17 +214,20 @@ export function registerPermissionHandlers(): void {
   });
 
   // Set permission mode
-  ipcMain.handle('permissions:setPermissionMode', async (_event, workspacePath: string, mode: 'ask' | 'allow-all') => {
+  ipcMain.handle('permissions:setPermissionMode', async (_event, workspacePath: string, mode: 'ask' | 'allow-all' | 'bypass-all') => {
     if (!workspacePath) {
       throw new Error('workspacePath is required');
     }
-    if (mode !== 'ask' && mode !== 'allow-all') {
-      throw new Error('mode must be "ask" or "allow-all"');
+    if (mode !== 'ask' && mode !== 'allow-all' && mode !== 'bypass-all') {
+      throw new Error('mode must be "ask", "allow-all", or "bypass-all"');
     }
 
     try {
+      logger.main.info('[PermissionHandlers] Setting permission mode:', { workspacePath, mode });
       permissionService.setPermissionMode(workspacePath, mode);
-      logger.main.info('[PermissionHandlers] Permission mode set:', mode);
+      // Verify it was saved correctly
+      const savedMode = permissionService.getPermissionMode(workspacePath);
+      logger.main.info('[PermissionHandlers] Permission mode after save:', { mode, savedMode, isTrusted: savedMode !== null });
       broadcastPermissionChange(workspacePath);
       return { success: true };
     } catch (error) {

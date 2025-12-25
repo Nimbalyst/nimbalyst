@@ -13,7 +13,13 @@ import {
   StreamChunk,
   AIModel,
   Message,
+  PermissionRequestContent,
+  PermissionResponseContent,
+  AskUserQuestionRequestContent,
+  AskUserQuestionResponseContent,
+  getPatternDisplayName,
 } from '../types';
+import { AgentMessagesRepository } from '../../../storage/repositories/AgentMessagesRepository';
 import path from 'path';
 import fs from 'fs';
 import { app } from 'electron';
@@ -124,11 +130,19 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     pattern: string
   ) => Promise<void>) | null = null;
 
+  // Claude settings pattern checker (injected from electron main process)
+  // Checks if a pattern is in the allow list of .claude/settings.local.json
+  private static claudeSettingsPatternChecker: ((
+    workspacePath: string,
+    pattern: string
+  ) => Promise<boolean>) | null = null;
+
   // Trust checker (injected from electron main process)
   // Checks if a workspace is trusted before allowing tool execution
+  // Modes: 'ask' = prompt for each command, 'allow-all' = auto-approve file edits, 'bypass-all' = auto-approve everything
   private static trustChecker: ((
     workspacePath: string
-  ) => { trusted: boolean; mode: 'ask' | 'allow-all' | null }) | null = null;
+  ) => { trusted: boolean; mode: 'ask' | 'allow-all' | 'bypass-all' | null }) | null = null;
 
   static readonly DEFAULT_MODEL = 'claude-code:sonnet';
 
@@ -211,12 +225,23 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   }
 
   /**
+   * Set the Claude settings pattern checker function (called from electron main process)
+   * Checks if a pattern is in the allow list of Claude settings files
+   */
+  public static setClaudeSettingsPatternChecker(checker: ((
+    workspacePath: string,
+    pattern: string
+  ) => Promise<boolean>) | null): void {
+    ClaudeCodeProvider.claudeSettingsPatternChecker = checker;
+  }
+
+  /**
    * Set the trust checker function (called from electron main process)
    * Checks if a workspace is trusted before allowing tool execution
    */
   public static setTrustChecker(checker: ((
     workspacePath: string
-  ) => { trusted: boolean; mode: 'ask' | 'allow-all' | null }) | null): void {
+  ) => { trusted: boolean; mode: 'ask' | 'allow-all' | 'bypass-all' | null }) | null): void {
     ClaudeCodeProvider.trustChecker = checker;
   }
 
@@ -1817,12 +1842,39 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   /**
    * Resolve a pending AskUserQuestion request with user's answers
    * Called by IPC handler when renderer provides answers
+   * @param sessionId - Session ID for persisting the response message
+   * @param respondedBy - Device that responded ('desktop' or 'mobile')
    */
-  public resolveAskUserQuestion(questionId: string, answers: Record<string, string>): void {
+  public resolveAskUserQuestion(
+    questionId: string,
+    answers: Record<string, string>,
+    sessionId?: string,
+    respondedBy: 'desktop' | 'mobile' = 'desktop'
+  ): void {
     const pending = this.pendingAskUserQuestions.get(questionId);
     if (pending) {
       pending.resolve(answers);
       this.pendingAskUserQuestions.delete(questionId);
+
+      // Persist the response as a message for sync and audit trail
+      if (sessionId) {
+        const responseContent: AskUserQuestionResponseContent = {
+          type: 'ask_user_question_response',
+          questionId,
+          answers,
+          respondedAt: Date.now(),
+          respondedBy,
+        };
+        this.logAgentMessage(
+          sessionId,
+          'claude-code',
+          'output',
+          JSON.stringify(responseContent),
+          { messageType: 'ask_user_question_response' }
+        ).catch(err => {
+          console.error('[CLAUDE-CODE] Failed to persist AskUserQuestion response:', err);
+        });
+      }
       // Debug logging - uncomment if needed
       // console.log(`[CLAUDE-CODE] AskUserQuestion resolved for ID: ${questionId}`);
     } else {
@@ -1856,15 +1908,40 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   /**
    * Resolve a pending Bash permission request with user's response
    * Called by IPC handler when renderer provides a permission response
+   * @param sessionId - Session ID for persisting the response message
+   * @param respondedBy - Device that responded ('desktop' or 'mobile')
    */
   public resolveToolPermission(
     requestId: string,
-    response: { decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' | 'always-all' }
+    response: { decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' | 'always-all' },
+    sessionId?: string,
+    respondedBy: 'desktop' | 'mobile' = 'desktop'
   ): void {
     const pending = this.pendingToolPermissions.get(requestId);
     if (pending) {
       pending.resolve(response);
       this.pendingToolPermissions.delete(requestId);
+
+      // Persist the response as a message for sync and audit trail
+      if (sessionId) {
+        const responseContent: PermissionResponseContent = {
+          type: 'permission_response',
+          requestId,
+          decision: response.decision,
+          scope: response.scope,
+          respondedAt: Date.now(),
+          respondedBy,
+        };
+        this.logAgentMessage(
+          sessionId,
+          'claude-code',
+          'output',
+          JSON.stringify(responseContent),
+          { messageType: 'permission_response' }
+        ).catch(err => {
+          console.error('[CLAUDE-CODE] Failed to persist permission response:', err);
+        });
+      }
       // console.log(`[CLAUDE-CODE] Tool permission resolved for ID: ${requestId}`);
     } else {
       console.warn(`[CLAUDE-CODE] No pending tool permission found for requestId: ${requestId}`);
@@ -1890,6 +1967,130 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       pending.reject(new Error('Request aborted'));
     }
     this.pendingToolPermissions.clear();
+  }
+
+  /**
+   * Poll for a permission response message in the session.
+   * This enables mobile and cross-session responses.
+   * When a response is found, it resolves the pending permission promise.
+   */
+  private async pollForPermissionResponse(
+    sessionId: string,
+    requestId: string,
+    signal: AbortSignal
+  ): Promise<void> {
+    const pollInterval = 500; // ms
+    const maxPollTime = 10 * 60 * 1000; // 10 minutes max
+    const startTime = Date.now();
+
+    while (!signal.aborted && Date.now() - startTime < maxPollTime) {
+      // Check if request was already resolved (e.g., via IPC)
+      if (!this.pendingToolPermissions.has(requestId)) {
+        return; // Already resolved, stop polling
+      }
+
+      try {
+        // Get recent messages for this session
+        const messages = await AgentMessagesRepository.list(sessionId, { limit: 50 });
+
+        // Look for a permission_response that matches our requestId
+        for (const msg of messages) {
+          try {
+            const content = JSON.parse(msg.content);
+            if (content.type === 'permission_response' && content.requestId === requestId) {
+              // Found a response - resolve the pending promise
+              const response: PermissionResponseContent = content;
+              const pending = this.pendingToolPermissions.get(requestId);
+              if (pending) {
+                pending.resolve({
+                  decision: response.decision,
+                  scope: response.scope
+                });
+                this.pendingToolPermissions.delete(requestId);
+                this.logSecurity('[pollForPermissionResponse] Found response message:', {
+                  requestId,
+                  decision: response.decision,
+                  scope: response.scope,
+                  respondedBy: response.respondedBy
+                });
+              }
+              return;
+            }
+          } catch {
+            // Not valid JSON, skip
+          }
+        }
+      } catch (error) {
+        // Log but continue polling
+        console.error('[CLAUDE-CODE] Error polling for permission response:', error);
+      }
+
+      // Wait before polling again
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+    }
+
+    // Timeout - don't reject, let IPC path handle it or let it stay pending
+    this.logSecurity('[pollForPermissionResponse] Polling timed out:', { requestId });
+  }
+
+  /**
+   * Poll for an AskUserQuestion response message in the session.
+   * This enables mobile and cross-session responses.
+   * When a response is found, it resolves the pending question promise.
+   */
+  private async pollForAskUserQuestionResponse(
+    sessionId: string,
+    questionId: string,
+    signal: AbortSignal
+  ): Promise<void> {
+    const pollInterval = 500; // ms
+    const maxPollTime = 10 * 60 * 1000; // 10 minutes max
+    const startTime = Date.now();
+
+    while (!signal.aborted && Date.now() - startTime < maxPollTime) {
+      // Check if request was already resolved (e.g., via IPC)
+      if (!this.pendingAskUserQuestions.has(questionId)) {
+        return; // Already resolved, stop polling
+      }
+
+      try {
+        // Get recent messages for this session
+        const messages = await AgentMessagesRepository.list(sessionId, { limit: 50 });
+
+        // Look for an ask_user_question_response that matches our questionId
+        for (const msg of messages) {
+          try {
+            const content = JSON.parse(msg.content);
+            if (content.type === 'ask_user_question_response' && content.questionId === questionId) {
+              // Found a response - resolve the pending promise
+              const response: AskUserQuestionResponseContent = content;
+              const pending = this.pendingAskUserQuestions.get(questionId);
+              if (pending) {
+                pending.resolve(response.answers);
+                this.pendingAskUserQuestions.delete(questionId);
+                this.logSecurity('[pollForAskUserQuestionResponse] Found response message:', {
+                  questionId,
+                  answersCount: Object.keys(response.answers).length,
+                  respondedBy: response.respondedBy
+                });
+              }
+              return;
+            }
+          } catch {
+            // Not valid JSON, skip
+          }
+        }
+      } catch (error) {
+        // Log but continue polling
+        console.error('[CLAUDE-CODE] Error polling for AskUserQuestion response:', error);
+      }
+
+      // Wait before polling again
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+    }
+
+    // Timeout - don't reject, let IPC path handle it or let it stay pending
+    this.logSecurity('[pollForAskUserQuestionResponse] Polling timed out:', { questionId });
   }
 
   private async getMcpServersConfig(sessionId?: string, workspacePath?: string) {
@@ -2073,21 +2274,72 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   /**
    * Generate a tool pattern for Claude Code's allowedTools format.
    * These patterns are written to .claude/settings.local.json when user approves with "Always".
+   *
+   * Pattern strategy:
+   * - git: include subcommand for granularity (git diff, git commit, etc.)
+   * - npm/npx: include subcommand (npm run, npm test, npx vitest, etc.)
+   * - everything else: just base command (ls, cat, grep, etc.)
+   *
+   * We never include paths/filenames - patterns match any invocation of the command.
    */
   private generateToolPattern(toolName: string, input: any): string {
     switch (toolName) {
       case 'Bash': {
-        // Extract the command prefix for pattern matching
-        // e.g., "git push origin main" -> "Bash(git push:*)"
         const command = (input?.command as string) || '';
-        const words = command.trim().split(/\s+/);
-        if (words.length >= 2) {
-          // Use first two words for more specific patterns
-          return `Bash(${words[0]} ${words[1]}:*)`;
-        } else if (words.length === 1 && words[0]) {
-          return `Bash(${words[0]}:*)`;
+
+        // Detect compound commands - these should not be cached
+        // because approving "git add" shouldn't auto-approve "git add && git commit"
+        if (/\s*&&\s*|\s*\|\|\s*|\s*;\s*|\s*\|\s*/.test(command)) {
+          // Return a unique pattern that won't match future commands
+          return `Bash:compound:${Date.now()}`;
         }
-        return 'Bash';
+
+        const words = command.trim().split(/\s+/);
+
+        if (words.length === 0 || !words[0]) {
+          return 'Bash';
+        }
+
+        const baseCommand = words[0];
+
+        // For git, find the subcommand (skip flags like -C, --no-pager)
+        // "git -C /path diff" -> "Bash(git diff:*)"
+        // "git commit -m 'msg'" -> "Bash(git commit:*)"
+        if (baseCommand === 'git') {
+          for (let i = 1; i < words.length; i++) {
+            const word = words[i];
+            if (word.startsWith('-')) {
+              // Skip flags that take arguments
+              if (['-C', '-c', '--git-dir', '--work-tree'].includes(word)) {
+                i++;
+              }
+              continue;
+            }
+            // First non-flag is the subcommand
+            return `Bash(git ${word}:*)`;
+          }
+          return `Bash(git:*)`;
+        }
+
+        // For npm/npx, find the subcommand (skip flags like --prefix)
+        if (baseCommand === 'npm' || baseCommand === 'npx') {
+          for (let i = 1; i < words.length; i++) {
+            const word = words[i];
+            if (word.startsWith('-')) {
+              if (['--prefix', '-w', '--workspace'].includes(word)) {
+                i++;
+              }
+              continue;
+            }
+            return `Bash(${baseCommand} ${word}:*)`;
+          }
+          return `Bash(${baseCommand}:*)`;
+        }
+
+        // For everything else, just the base command
+        // "ls -la /some/path" -> "Bash(ls:*)"
+        // "cat /etc/passwd" -> "Bash(cat:*)"
+        return `Bash(${baseCommand}:*)`;
       }
 
       case 'WebFetch': {
@@ -2175,6 +2427,13 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             message: 'Workspace is not trusted. Please trust the workspace to use AI tools.'
           };
         }
+
+        // Bypass-all mode: auto-approve everything without prompting
+        // This is dangerous and should only be used for testing or trusted environments
+        if (trustStatus.mode === 'bypass-all') {
+          this.logSecurity('[canUseTool] Bypass-all mode, auto-approving:', { toolName });
+          return { behavior: 'allow', updatedInput: input };
+        }
       }
 
       // The SDK has already evaluated settings.json rules.
@@ -2196,6 +2455,9 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // Show permission UI and wait for user response.
       const requestId = `tool-${sessionId || 'unknown'}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const toolDescription = this.buildToolDescription(toolName, input);
+      const isDestructive = ['Write', 'Edit', 'MultiEdit', 'Bash'].includes(toolName);
+      const rawCommand = toolName === 'Bash' ? input?.command || '' : toolDescription;
+      const patternDisplay = getPatternDisplayName(pattern);
 
       this.logSecurity('[canUseTool] Showing permission prompt:', {
         toolName,
@@ -2203,33 +2465,60 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         requestId,
       });
 
-      // Create a simplified permission request for the UI
+      // Create the permission request content for persisting as a message
+      const permissionRequestContent: PermissionRequestContent = {
+        type: 'permission_request',
+        requestId,
+        toolName,
+        rawCommand,
+        pattern,
+        patternDisplayName: patternDisplay,
+        isDestructive,
+        warnings: [],
+        timestamp: Date.now(),
+        status: 'pending',
+      };
+
+      // Persist permission request as a message for mobile compatibility
+      // This allows any device (desktop or mobile) to see and respond to the request
+      if (sessionId) {
+        await this.logAgentMessage(
+          sessionId,
+          'claude-code',
+          'output',
+          JSON.stringify(permissionRequestContent),
+          { messageType: 'permission_request' }
+        );
+      }
+
+      // Create a simplified permission request for the legacy UI (backwards compatibility)
       const request = {
         id: requestId,
         toolName,
-        rawCommand: toolName === 'Bash' ? input?.command || '' : toolDescription,
+        rawCommand,
         actionsNeedingApproval: [{
           action: {
             pattern, // The actual pattern (e.g., 'Bash(git commit:*)') for display and saving
             displayName: toolDescription,
             command: toolName === 'Bash' ? input?.command || '' : '',
-            isDestructive: ['Write', 'Edit', 'MultiEdit', 'Bash'].includes(toolName),
+            isDestructive,
             referencedPaths: [],
             hasRedirection: false,
           },
           decision: 'ask' as const,
           reason: 'Tool requires user approval',
-          isDestructive: ['Write', 'Edit', 'MultiEdit', 'Bash'].includes(toolName),
+          isDestructive,
           isRisky: toolName === 'Bash',
           warnings: [],
           outsidePaths: [],
           sensitivePaths: [],
         }],
-        hasDestructiveActions: ['Write', 'Edit', 'MultiEdit', 'Bash'].includes(toolName),
+        hasDestructiveActions: isDestructive,
         createdAt: Date.now(),
       };
 
       // Create promise that will be resolved when user responds
+      // Response can come from either IPC (desktop) or message polling (mobile/cross-session)
       const responsePromise = new Promise<{ decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' | 'always-all' }>((resolve, reject) => {
         this.pendingToolPermissions.set(requestId, {
           resolve,
@@ -2246,7 +2535,15 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         }
       });
 
-      // Emit event to notify renderer to show permission UI
+      // Start polling for message-based responses in parallel with IPC
+      // This enables mobile/cross-session responses
+      if (sessionId) {
+        this.pollForPermissionResponse(sessionId, requestId, options.signal).catch(() => {
+          // Polling error - IPC path may still work
+        });
+      }
+
+      // Emit event to notify renderer to show permission UI (legacy IPC path)
       this.emit('toolPermission:pending', {
         requestId,
         sessionId,
@@ -2256,7 +2553,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       });
 
       try {
-        // Wait for user to respond
+        // Wait for user to respond (via IPC or message polling)
         const response = await responsePromise;
 
         this.logSecurity('[canUseTool] User response received:', {
@@ -2267,7 +2564,9 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
         // Cache approval for this session (for 'session', 'always', and 'always-all' scopes)
         // This prevents re-prompting since the SDK doesn't hot-reload settings mid-session
-        if (response.decision === 'allow' && response.scope !== 'once') {
+        // Skip caching compound commands - they must be approved each time
+        const isCompoundCommand = pattern.startsWith('Bash:compound:');
+        if (response.decision === 'allow' && response.scope !== 'once' && !isCompoundCommand) {
           if (response.scope === 'always-all' && toolName === 'WebFetch') {
             // For "Allow All WebFetches", cache a wildcard pattern
             this.sessionApprovedPatterns.add('WebFetch');
@@ -2279,7 +2578,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         }
 
         // If user approved with "Always" or "Always All", save the pattern to .claude/settings.local.json
-        if (response.decision === 'allow' && (response.scope === 'always' || response.scope === 'always-all') && workspacePath) {
+        // Skip saving compound commands - they can't be meaningfully cached
+        if (response.decision === 'allow' && (response.scope === 'always' || response.scope === 'always-all') && workspacePath && !isCompoundCommand) {
           if (ClaudeCodeProvider.claudeSettingsPatternSaver) {
             try {
               // For "Always All WebFetches", save the wildcard pattern
@@ -2348,6 +2648,27 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // Generate unique ID for this question set
       const questionId = `ask-${sessionId || 'unknown'}-${Date.now()}`;
 
+      // Create the AskUserQuestion request content for persisting as a message
+      const askUserQuestionContent: AskUserQuestionRequestContent = {
+        type: 'ask_user_question_request',
+        questionId,
+        questions,
+        timestamp: Date.now(),
+        status: 'pending',
+      };
+
+      // Persist the question request as a message for mobile compatibility
+      // This allows any device (desktop or mobile) to see and respond to the questions
+      if (sessionId) {
+        await this.logAgentMessage(
+          sessionId,
+          'claude-code',
+          'output',
+          JSON.stringify(askUserQuestionContent),
+          { messageType: 'ask_user_question_request' }
+        );
+      }
+
       // Create promise that will be resolved when user provides answers
       const answersPromise = new Promise<Record<string, string>>((resolve, reject) => {
         this.pendingAskUserQuestions.set(questionId, {
@@ -2365,7 +2686,15 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         }
       });
 
-      // Emit event to notify renderer to show question UI
+      // Start polling for message-based responses in parallel with IPC
+      // This enables mobile/cross-session responses
+      if (sessionId) {
+        this.pollForAskUserQuestionResponse(sessionId, questionId, options.signal).catch(() => {
+          // Polling error - IPC path may still work
+        });
+      }
+
+      // Emit event to notify renderer to show question UI (legacy IPC path)
       // The widget will be rendered when the tool_use block is processed
       // We store the questionId so the widget knows which pending question to resolve
       this.emit('askUserQuestion:pending', {
@@ -2495,6 +2824,141 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               hookEventName: 'PreToolUse' as const,
               permissionDecision: 'deny' as const,
               errorMessage: `ExitPlanMode was cancelled or interrupted.`
+            }
+          };
+        }
+      }
+
+      // SECURITY: Check each part of compound Bash commands separately
+      // Claude's pattern matching (e.g., Bash(git add:*)) can be bypassed with chained commands
+      // like "git add file && rm -rf /". PreToolUse runs BEFORE SDK's allow rules, so we can catch this.
+      // See: https://github.com/anthropics/claude-code/issues/4956
+      if (toolName === 'Bash') {
+        const command = (toolInput?.command as string) || '';
+        if (/\s*&&\s*|\s*\|\|\s*|\s*;\s*/.test(command)) {
+          this.logSecurity(`[PreToolUse] Compound Bash command detected, checking each part:`, { command: command.slice(0, 100) });
+
+          // Split on &&, ||, ; (but not | which is piping, not chaining)
+          const subCommands = command.split(/\s*(?:&&|\|\||;)\s*/).filter(cmd => cmd.trim());
+
+          // Check each sub-command
+          for (const subCommand of subCommands) {
+            const subPattern = this.generateToolPattern('Bash', { command: subCommand });
+
+            // Skip if already approved in session
+            if (this.sessionApprovedPatterns.has(subPattern)) {
+              this.logSecurity(`[PreToolUse] Sub-command already approved in session:`, { subCommand: subCommand.slice(0, 50), pattern: subPattern });
+              continue;
+            }
+
+            // Also check if pattern is in Claude settings file (would be auto-approved by SDK)
+            if (workspacePath && ClaudeCodeProvider.claudeSettingsPatternChecker) {
+              try {
+                const isAllowed = await ClaudeCodeProvider.claudeSettingsPatternChecker(workspacePath, subPattern);
+                if (isAllowed) {
+                  this.logSecurity(`[PreToolUse] Sub-command allowed by Claude settings:`, { subCommand: subCommand.slice(0, 50), pattern: subPattern });
+                  // Add to session cache so we don't check file again
+                  this.sessionApprovedPatterns.add(subPattern);
+                  continue;
+                }
+              } catch (e) {
+                // If check fails, proceed to ask user
+                this.logSecurity(`[PreToolUse] Failed to check Claude settings:`, { error: e });
+              }
+            }
+
+            // Need to check this sub-command - use our permission flow
+            this.logSecurity(`[PreToolUse] Sub-command needs approval:`, { subCommand: subCommand.slice(0, 50), pattern: subPattern });
+
+            const requestId = `compound-${sessionId || 'unknown'}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            const subDescription = `Part of compound command: ${subCommand.slice(0, 60)}${subCommand.length > 60 ? '...' : ''}`;
+
+            // Create permission request for this sub-command
+            const request = {
+              id: requestId,
+              toolName: 'Bash',
+              rawCommand: subCommand,
+              actionsNeedingApproval: [{
+                action: {
+                  pattern: subPattern,
+                  displayName: subDescription,
+                  command: subCommand,
+                  isDestructive: true,
+                  referencedPaths: [],
+                  hasRedirection: false,
+                },
+                decision: 'ask' as const,
+                reason: 'Sub-command of compound command requires approval',
+                isDestructive: true,
+                isRisky: true,
+                warnings: ['This is part of a compound command - each part is checked separately'],
+                outsidePaths: [],
+                sensitivePaths: [],
+              }],
+              hasDestructiveActions: true,
+              createdAt: Date.now(),
+            };
+
+            // Wait for user approval
+            const responsePromise = new Promise<{ decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' | 'always-all' }>((resolve, reject) => {
+              this.pendingToolPermissions.set(requestId, { resolve, reject, request });
+            });
+
+            // Emit event to show permission UI
+            this.emit('toolPermission:pending', {
+              requestId,
+              sessionId,
+              workspacePath,
+              request,
+              timestamp: Date.now()
+            });
+
+            try {
+              const response = await responsePromise;
+
+              if (response.decision === 'deny') {
+                this.logSecurity(`[PreToolUse] Sub-command denied:`, { subCommand: subCommand.slice(0, 50) });
+                return {
+                  hookSpecificOutput: {
+                    hookEventName: 'PreToolUse' as const,
+                    permissionDecision: 'deny' as const,
+                    errorMessage: `Command denied: ${subCommand.slice(0, 50)}`
+                  }
+                };
+              }
+
+              // Cache approval if not 'once'
+              if (response.scope !== 'once') {
+                this.sessionApprovedPatterns.add(subPattern);
+                this.logSecurity(`[PreToolUse] Sub-command approved and cached:`, { pattern: subPattern, scope: response.scope });
+              }
+
+              // Save to settings if 'always'
+              if (response.scope === 'always' && workspacePath && ClaudeCodeProvider.claudeSettingsPatternSaver) {
+                try {
+                  await ClaudeCodeProvider.claudeSettingsPatternSaver(workspacePath, subPattern);
+                } catch (e) {
+                  console.error('[CLAUDE-CODE] Failed to save pattern:', e);
+                }
+              }
+            } catch (error) {
+              this.logSecurity(`[PreToolUse] Sub-command permission failed:`, { error });
+              return {
+                hookSpecificOutput: {
+                  hookEventName: 'PreToolUse' as const,
+                  permissionDecision: 'deny' as const,
+                  errorMessage: `Permission check failed for: ${subCommand.slice(0, 50)}`
+                }
+              };
+            }
+          }
+
+          // All sub-commands approved, allow the compound command
+          this.logSecurity(`[PreToolUse] All sub-commands approved, allowing compound command`);
+          return {
+            hookSpecificOutput: {
+              hookEventName: 'PreToolUse' as const,
+              permissionDecision: 'allow' as const
             }
           };
         }
