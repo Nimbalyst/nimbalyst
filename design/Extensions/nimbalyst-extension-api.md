@@ -5,7 +5,7 @@ This document provides the TypeScript API definitions for the Nimbalyst Extensio
 ## Implementation Status
 
 | Feature | Status | Notes |
-|---------|--------|-------|
+| --- | --- | --- |
 | Extension Manifest | Implemented | Full validation on load |
 | Custom Editors | Implemented | Via `contributions.customEditors` |
 | AI Tools | Implemented | Integrated with Claude Code MCP |
@@ -998,7 +998,7 @@ interface ExtensionContextProvider {
 
 ## Security Considerations
 
-Extensions currently run with full renderer process privileges. See the [Extension System Security Review](./extension-system-security-review.md) for details on:
+Extensions currently run with full renderer process privileges. See the [extension-system-security-review.md](./extension-system-security-review.md) for details on:
 
 - Current trust model (full trust)
 - IPC access concerns

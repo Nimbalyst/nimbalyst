@@ -129,6 +129,7 @@
   background: var(--surface-tertiary);
   border-radius: 4px;
   padding: 8px 10px;
+  max-height: 200px;
   overflow-x: auto;
 }
 
