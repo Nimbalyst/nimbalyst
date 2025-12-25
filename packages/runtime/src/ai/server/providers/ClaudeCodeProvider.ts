@@ -2834,6 +2834,15 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // like "git add file && rm -rf /". PreToolUse runs BEFORE SDK's allow rules, so we can catch this.
       // See: https://github.com/anthropics/claude-code/issues/4956
       if (toolName === 'Bash') {
+        // In bypass-all mode, skip compound command checking entirely
+        if (workspacePath && ClaudeCodeProvider.trustChecker) {
+          const trustStatus = ClaudeCodeProvider.trustChecker(workspacePath);
+          if (trustStatus.trusted && trustStatus.mode === 'bypass-all') {
+            this.logSecurity(`[PreToolUse] Bypass-all mode, skipping compound command check`);
+            return {};
+          }
+        }
+
         const command = (toolInput?.command as string) || '';
         if (/\s*&&\s*|\s*\|\|\s*|\s*;\s*/.test(command)) {
           this.logSecurity(`[PreToolUse] Compound Bash command detected, checking each part:`, { command: command.slice(0, 100) });
