@@ -200,8 +200,10 @@ export function createSyncedSessionStore(
 
       const result = await baseStore.updateTitleIfNotNamed(sessionId, title);
 
-      // If title was updated, push to sync (only if already connected)
+      // If title was updated, ensure sync connection and push update
+      // This is critical for mobile sync - title changes must reach other devices
       if (result) {
+        await ensureSyncConnected(sessionId);
         pushToSync(sessionId, {
           type: 'metadata_updated',
           metadata: { title, updatedAt: Date.now() },

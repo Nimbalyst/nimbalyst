@@ -93,6 +93,10 @@ interface SyncContextValue {
   createSession: (projectId: string, initialPrompt?: string) => Promise<{ success: boolean; sessionId?: string; error?: string }>;
   /** Whether a session creation request is in progress */
   isCreatingSession: boolean;
+  /** List of currently connected devices (desktop, other mobiles, etc.) */
+  connectedDevices: DeviceInfo[];
+  /** Whether any desktop device is currently connected */
+  isDesktopConnected: boolean;
 }
 
 // ============================================================================
@@ -214,7 +218,10 @@ type ServerMessage =
       response: EncryptedCreateSessionResponse;
       from_connection_id?: string;
     }
-  | { type: 'error'; code: string; message: string };
+  | { type: 'error'; code: string; message: string }
+  | { type: 'devices_list'; devices: DeviceInfo[] }
+  | { type: 'device_joined'; device: DeviceInfo }
+  | { type: 'device_left'; device_id: string };
 
 // ============================================================================
 // Encryption Utilities (using node-forge for mobile compatibility)
@@ -547,6 +554,8 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
   const [inactivityTimeoutMs, setInactivityTimeoutMs] = useState(() => loadInactivityTimeout());
   // Session creation state
   const [isCreatingSession, setIsCreatingSession] = useState(false);
+  // Connected devices tracking
+  const [connectedDevices, setConnectedDevices] = useState<DeviceInfo[]>([]);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -759,6 +768,34 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
               ...prev,
               error: message.message,
             }));
+            break;
+          }
+
+          case 'devices_list': {
+            // console.log('[CollabV3] Received devices list:', message.devices.length, 'devices');
+            setConnectedDevices(message.devices);
+            break;
+          }
+
+          case 'device_joined': {
+            // console.log('[CollabV3] Device joined:', message.device.name);
+            setConnectedDevices((prev) => {
+              // Check if already in list (shouldn't happen, but be safe)
+              if (prev.some((d) => d.device_id === message.device.device_id)) {
+                return prev.map((d) =>
+                  d.device_id === message.device.device_id ? message.device : d
+                );
+              }
+              return [...prev, message.device];
+            });
+            break;
+          }
+
+          case 'device_left': {
+            // console.log('[CollabV3] Device left:', message.device_id);
+            setConnectedDevices((prev) =>
+              prev.filter((d) => d.device_id !== message.device_id)
+            );
             break;
           }
         }
@@ -1224,6 +1261,9 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
     setInactivityTimeoutMs(minutes * 60 * 1000);
   }, []);
 
+  // Check if any desktop device is connected
+  const isDesktopConnected = connectedDevices.some((d) => d.type === 'desktop');
+
   const value: SyncContextValue = {
     isAuthenticated: authenticated,
     isPaired: paired,
@@ -1244,6 +1284,8 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
     setInactivityTimeoutMinutes,
     createSession,
     isCreatingSession,
+    connectedDevices,
+    isDesktopConnected,
   };
 
   return <SyncContext.Provider value={value}>{children}</SyncContext.Provider>;

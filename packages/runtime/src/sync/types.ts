@@ -186,6 +186,12 @@ export interface SyncProvider {
 
   /** Subscribe to session creation responses (for mobile to receive response from desktop) */
   onCreateSessionResponse?(callback: (response: CreateSessionResponse) => void): () => void;
+
+  /** Get list of currently connected devices */
+  getConnectedDevices?(): DeviceInfo[];
+
+  /** Subscribe to device status changes (devices joining/leaving) */
+  onDeviceStatusChange?(callback: (devices: DeviceInfo[]) => void): () => void;
 }
 
 /** Session data for bulk index sync */

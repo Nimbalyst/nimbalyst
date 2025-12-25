@@ -438,6 +438,22 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
   // Listeners for session creation responses (for mobile to receive response from desktop)
   const createSessionResponseListeners = new Set<(response: CreateSessionResponse) => void>();
 
+  // Connected devices tracking
+  const connectedDevices = new Map<string, DeviceInfo>();
+  const deviceStatusListeners = new Set<(devices: DeviceInfo[]) => void>();
+
+  // Notify all device status listeners
+  function notifyDeviceStatusChange(): void {
+    const devices = Array.from(connectedDevices.values());
+    for (const listener of deviceStatusListeners) {
+      try {
+        listener(devices);
+      } catch (err) {
+        console.error('[CollabV3] Error in device status listener:', err);
+      }
+    }
+  }
+
   // Queue for operations that need to wait for index connection
   type PendingOperation = { type: 'sessions'; data: SessionIndexData[]; options?: { syncMessages?: boolean } } | { type: 'projects'; data: ProjectIndexEntry[] };
   const pendingOperations: PendingOperation[] = [];
@@ -465,7 +481,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
     const updatedCache: CachedSessionIndex = {
       session_id: sessionId,
       project_id: cached.project_id,
-      title: cached.title,
+      title: pending.title ?? cached.title,
       provider: cached.provider,
       model: cached.model,
       mode: cached.mode,
@@ -1055,14 +1071,24 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
           case 'devices_list':
             // console.log('[CollabV3] Received devices list:', message.devices.length, 'devices');
+            // Replace all tracked devices with the server's list
+            connectedDevices.clear();
+            for (const device of message.devices) {
+              connectedDevices.set(device.device_id, device);
+            }
+            notifyDeviceStatusChange();
             break;
 
           case 'device_joined':
             // console.log('[CollabV3] Device joined:', message.device.name);
+            connectedDevices.set(message.device.device_id, message.device);
+            notifyDeviceStatusChange();
             break;
 
           case 'device_left':
             // console.log('[CollabV3] Device left:', message.device_id);
+            connectedDevices.delete(message.device_id);
+            notifyDeviceStatusChange();
             break;
 
           case 'create_session_request_broadcast': {
@@ -1643,13 +1669,15 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
           } else {
             // No cached data and missing required fields for a full update.
             // Queue the partial update to be applied when the session is cached.
-            // This handles cases like isExecuting being set before syncSessionsToIndex runs.
-            const hasPartialUpdate = 'isExecuting' in meta || 'pendingExecution' in meta;
+            // This handles cases like isExecuting being set before syncSessionsToIndex runs,
+            // or title updates from session naming that arrive before the session is indexed.
+            const hasPartialUpdate = 'isExecuting' in meta || 'pendingExecution' in meta || meta.title !== undefined;
             if (hasPartialUpdate) {
-              // console.log('[CollabV3] Queueing partial metadata update for session:', sessionId, { isExecuting: meta.isExecuting, pendingExecution: meta.pendingExecution });
+              // console.log('[CollabV3] Queueing partial metadata update for session:', sessionId, { isExecuting: meta.isExecuting, pendingExecution: meta.pendingExecution, title: meta.title });
               const existing = pendingMetadataUpdates.get(sessionId) || {};
               if ('isExecuting' in meta) existing.isExecuting = meta.isExecuting;
               if ('pendingExecution' in meta) existing.pendingExecution = meta.pendingExecution;
+              if (meta.title !== undefined) existing.title = meta.title;
               pendingMetadataUpdates.set(sessionId, existing);
             } else {
               // console.log('[CollabV3] Skipping index update - no cached data and missing required fields for session:', sessionId);
@@ -1813,6 +1841,21 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       createSessionResponseListeners.add(callback);
       return () => {
         createSessionResponseListeners.delete(callback);
+      };
+    },
+
+    /** Get list of currently connected devices */
+    getConnectedDevices(): DeviceInfo[] {
+      return Array.from(connectedDevices.values());
+    },
+
+    /** Subscribe to device status changes (devices joining/leaving) */
+    onDeviceStatusChange(callback: (devices: DeviceInfo[]) => void): () => void {
+      deviceStatusListeners.add(callback);
+      // Immediately notify with current state
+      callback(Array.from(connectedDevices.values()));
+      return () => {
+        deviceStatusListeners.delete(callback);
       };
     },
   };
