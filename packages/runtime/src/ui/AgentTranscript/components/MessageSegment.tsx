@@ -4,6 +4,7 @@ import { MarkdownRenderer } from './MarkdownRenderer';
 import { JSONViewer } from './JSONViewer';
 import { DiffViewer } from './DiffViewer';
 import { LoginRequiredWidget } from './LoginRequiredWidget';
+import { ContextLimitWidget } from './ContextLimitWidget';
 import { MaterialSymbol } from '../../icons/MaterialSymbol';
 import { formatToolDisplayName } from '../utils/toolNameFormatter';
 import './MessageSegment.css';
@@ -18,6 +19,8 @@ interface MessageSegmentProps {
   onToggleToolExpand: (toolId: string) => void;
   documentContext?: { filePath?: string }; // For passing file path to edits
   shouldShowLoginWidget?: boolean; // Control whether to show login widget
+  sessionId?: string; // For context limit widget to trigger compact command
+  isLastMessage?: boolean; // For context limit widget to show compact button only on last message
 }
 
 export const MessageSegment: React.FC<MessageSegmentProps> = ({
@@ -28,7 +31,9 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
   expandedTools,
   onToggleToolExpand,
   documentContext,
-  shouldShowLoginWidget = true
+  shouldShowLoginWidget = true,
+  sessionId,
+  isLastMessage = false
 }) => {
   const [isDiffExpanded, setDiffExpanded] = useState(false);
   const [enlargedImage, setEnlargedImage] = useState<ChatAttachment | null>(null);
@@ -81,6 +86,19 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
       console.warn('[MessageSegment] Login widget triggered via string matching. Text preview:', text.substring(0, 100));
     }
     return result;
+  };
+
+  // Helper function to check if content indicates context limit exceeded
+  const isContextLimitError = (text: string): boolean => {
+    const lowerText = text.toLowerCase();
+    return (
+      lowerText.includes('prompt is too long') ||
+      lowerText.includes('prompt too long') ||
+      lowerText.includes('context limit') ||
+      lowerText.includes('context window') ||
+      lowerText.includes('exceeds maximum context') ||
+      lowerText.includes('maximum context length')
+    );
   };
 
   // Helper function to strip the final <NIMBALYST_SYSTEM_MESSAGE> tag from content
@@ -303,6 +321,11 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
     // If it's a login-required error but we shouldn't show widget, render nothing
     if (isLoginRequired && !shouldShowLoginWidget) {
       return null;
+    }
+
+    // Check if this is a context limit error
+    if (isContextLimitError(errorMessage)) {
+      return <ContextLimitWidget sessionId={sessionId} isLastMessage={isLastMessage} />;
     }
 
     // Otherwise, render the generic error UI

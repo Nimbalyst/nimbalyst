@@ -2071,6 +2071,31 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     }
   }, []);
 
+  // Listen for slash command triggers from widgets (e.g., ContextLimitWidget compact button)
+  useEffect(() => {
+    const handleSlashCommand = (event: CustomEvent<{ sessionId?: string; command: string }>) => {
+      const { sessionId, command } = event.detail;
+      if (!command) return;
+
+      // Find the target session - use provided sessionId or fall back to active tab
+      const targetSessionId = sessionId || activeTabId;
+      if (!targetSessionId) {
+        console.warn('[AgenticPanel] No session ID for slash command');
+        return;
+      }
+
+      console.log(`[AgenticPanel] Handling slash command: ${command} for session ${targetSessionId}`);
+
+      // Send the command as a message
+      handleSendMessage(targetSessionId, command, []);
+    };
+
+    window.addEventListener('trigger-slash-command', handleSlashCommand as EventListener);
+    return () => {
+      window.removeEventListener('trigger-slash-command', handleSlashCommand as EventListener);
+    };
+  }, [activeTabId, handleSendMessage]);
+
   // Handle file click - use the canonical file opening path
   const handleFileClick = useCallback(async (filePath: string) => {
     try {

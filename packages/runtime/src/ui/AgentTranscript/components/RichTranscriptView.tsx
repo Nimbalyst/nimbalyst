@@ -874,6 +874,8 @@ export const RichTranscriptView = React.forwardRef<
                             onToggleToolExpand={toggleToolExpand}
                             documentContext={documentContext}
                             shouldShowLoginWidget={shouldShowLoginWidgetForIndex(index)}
+                            sessionId={sessionId}
+                            isLastMessage={index === messages.length - 1}
                           />
                         </div>
                       </div>
