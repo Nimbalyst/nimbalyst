@@ -826,29 +826,29 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
         return;
       }
 
-      // Find the session in our cache to get its project_id
+      // Find the session in our cache to get its metadata
+      // If session not found, use minimal data - server will merge with existing session
       const session = allSessions.find((s) => s.id === sessionId);
       if (!session) {
-        console.warn('[CollabV3] Cannot send index update - session not found:', sessionId);
-        return;
+        console.warn('[CollabV3] Session not in cache, sending update with minimal data:', sessionId);
       }
 
       const serverSession: ServerSessionEntry = {
         session_id: sessionId,
-        project_id: session.workspaceId || 'default',
-        provider: session.provider,
-        model: session.model,
-        mode: session.mode,
-        message_count: session.messageCount,
-        last_message_at: session.lastMessageAt,
-        created_at: session.createdAt,
+        project_id: session?.workspaceId || 'default',
+        provider: session?.provider || 'unknown',
+        model: session?.model,
+        mode: session?.mode,
+        message_count: session?.messageCount || 0,
+        last_message_at: session?.lastMessageAt || Date.now(),
+        created_at: session?.createdAt || Date.now(),
         updated_at: Date.now(),
         pendingExecution: update.pendingExecution,
         queuedPromptCount: update.queuedPrompts?.length ?? 0,
       };
 
       // Encrypt title - encryption is required
-      if (session.title) {
+      if (session?.title) {
         if (!encryptionKeyRef.current) {
           console.error('[CollabV3] Cannot send title: no encryption key');
         } else {
