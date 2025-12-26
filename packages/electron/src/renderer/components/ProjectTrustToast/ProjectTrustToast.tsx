@@ -34,6 +34,16 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
     if (forceShow && workspacePath) {
       setIsChangingMode(true);
       setIsVisible(true);
+      // Fetch current permission mode to pre-select it
+      window.electronAPI.invoke('permissions:getWorkspacePermissions', workspacePath)
+        .then((status) => {
+          if (status.permissionMode) {
+            setSelectedMode(status.permissionMode as TrustChoice);
+          }
+        })
+        .catch((error) => {
+          console.error('[ProjectTrustToast] Failed to fetch current permission mode:', error);
+        });
     }
   }, [forceShow, workspacePath]);
 
