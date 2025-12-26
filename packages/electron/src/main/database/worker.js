@@ -606,8 +606,31 @@ class PGLiteWorker {
 
   async close(message) {
     if (this.db) {
-      await this.db.close();
-      this.db = null;
+      console.log('[PGLite Worker] Closing database...');
+      try {
+        // Close the database connection
+        await this.db.close();
+        console.log('[PGLite Worker] Database closed successfully');
+
+        // Explicitly remove lock file if it still exists
+        // This is critical for Windows where forced shutdowns may not clean up properly
+        const fs = require('fs');
+        const lockPath = path.join(this.dataDir, 'postmaster.pid');
+        try {
+          if (fs.existsSync(lockPath)) {
+            fs.unlinkSync(lockPath);
+            console.log('[PGLite Worker] Removed lock file after close');
+          }
+        } catch (lockError) {
+          console.warn('[PGLite Worker] Failed to remove lock file after close:', lockError);
+        }
+
+        this.db = null;
+      } catch (error) {
+        console.error('[PGLite Worker] Error during database close:', error);
+        this.db = null;
+        throw error;
+      }
     }
     return {
       id: message.id,

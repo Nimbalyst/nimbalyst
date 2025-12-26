@@ -907,9 +907,10 @@ app.on('before-quit', async (event) => {
     // Mark app as quitting to prevent interval operations
     isAppQuitting = true;
 
-    // Setup force quit timer - allow enough time for database backup
-    // Backup can take up to 5 seconds, plus other cleanup
-    const forceQuitDelay = app.isPackaged ? 10000 : 8000;
+    // Setup force quit timer - allow enough time for database backup + close
+    // Database operations: backup (up to 5s) + close worker (up to 2s) + buffer (3s)
+    // This is CRITICAL for Windows where forced shutdowns need proper cleanup time
+    const forceQuitDelay = app.isPackaged ? 12000 : 10000;
     setupForceQuit(forceQuitDelay);
 
     let debugLog: string | null = null;
@@ -1225,6 +1226,30 @@ app.on('before-quit', async (event) => {
                     console.error('[QUIT] Error cleaning up old backups:', error);
                 }
             }
+
+            // CRITICAL: Close database worker to ensure PGlite releases lock files
+            // This is essential for Windows where forced shutdowns may not give cleanup time
+            const t11c = Date.now();
+            console.log(`[QUIT] [${t11c}] Closing database worker...`);
+            if (canWriteLogs && debugLog) {
+                try { fs.appendFileSync(debugLog, '[QUIT] Closing database worker\n'); } catch (e) {}
+            }
+
+            try {
+                const closePromise = db.close();
+                const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 2000));
+                await Promise.race([closePromise, timeoutPromise]);
+                const t11d = Date.now();
+                console.log(`[QUIT] [${t11d}] Database worker closed (${t11d-t11c}ms)`);
+                if (canWriteLogs && debugLog) {
+                    try { fs.appendFileSync(debugLog, `[QUIT] Database worker closed (${t11d-t11c}ms)\n`); } catch (e) {}
+                }
+            } catch (closeError) {
+                console.error('[QUIT] Error closing database worker:', closeError);
+                if (canWriteLogs && debugLog) {
+                    try { fs.appendFileSync(debugLog, `[QUIT] Error closing database worker: ${closeError}\n`); } catch (e) {}
+                }
+            }
         } else {
             console.log('[QUIT] Database not initialized, skipping backup');
         }
@@ -1337,3 +1362,35 @@ app.on('window-all-closed', () => {
     createWorkspaceManagerWindow();
   }
 });
+
+// Windows-specific shutdown signal handlers
+// Windows sends different signals than Unix systems during forced shutdowns
+if (process.platform === 'win32') {
+  // Handle SIGBREAK (Windows equivalent of SIGTERM for graceful shutdown)
+  process.on('SIGBREAK', () => {
+    console.log('[SHUTDOWN] SIGBREAK received (Windows graceful shutdown)');
+    logger.main.info('SIGBREAK received, initiating graceful shutdown');
+    if (!isAppQuitting) {
+      app.quit();
+    }
+  });
+
+  // Handle SIGINT (Ctrl+C in console, or task manager "End Task")
+  process.on('SIGINT', () => {
+    console.log('[SHUTDOWN] SIGINT received');
+    logger.main.info('SIGINT received, initiating graceful shutdown');
+    if (!isAppQuitting) {
+      app.quit();
+    }
+  });
+
+  // Handle SIGTERM (sent by Windows Update restart, shutdown -s, etc.)
+  // Note: Windows doesn't always send this, but handle it if it does
+  process.on('SIGTERM', () => {
+    console.log('[SHUTDOWN] SIGTERM received (Windows forced shutdown)');
+    logger.main.info('SIGTERM received, initiating graceful shutdown');
+    if (!isAppQuitting) {
+      app.quit();
+    }
+  });
+}
