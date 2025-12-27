@@ -134,6 +134,7 @@
   bottom: 0;
   width: 2px;
   background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(128, 128, 128, 0.75);
   pointer-events: auto;
   cursor: ew-resize;
   z-index: 6;
@@ -147,6 +148,7 @@
   height: 40px;
   background: rgba(255, 255, 255, 0.9);
   border-radius: 999px;
+  border: 2px solid rgba(128, 128, 128, 0.75);
   transform: translateY(-50%);
 }
 

@@ -121,6 +121,7 @@ export default function App() {
             component: MockupViewer,
             name: 'MockupLM',
             supportsAI: true,
+            supportsSourceMode: true,
           });
           logger.ui.info('[CustomEditors] MockupLM editor registered');
         }

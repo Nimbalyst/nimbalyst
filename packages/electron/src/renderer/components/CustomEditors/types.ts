@@ -1,53 +1,20 @@
 /**
  * Custom Editor Types
  *
- * Defines the interface that all custom editors must implement
- * to integrate with the TabEditor system.
+ * All custom editors now use the EditorHost API from @nimbalyst/runtime.
+ * This file re-exports the necessary types for backward compatibility.
  */
 
-import type { ConfigTheme } from 'rexical';
+import type { ComponentType } from 'react';
+import type { EditorHostProps } from '@nimbalyst/runtime';
+
+// Re-export for use in custom editors
+export type { EditorHostProps };
 
 /**
- * Props that all custom editors receive from TabEditor
+ * Custom editor component type - accepts EditorHostProps
  */
-export interface CustomEditorProps {
-  // File identification
-  filePath: string;
-  fileName: string;
-
-  // Initial content
-  initialContent: string;
-
-  // Editor state
-  theme: ConfigTheme;
-  isActive: boolean;
-
-  // Workspace context
-  workspaceId?: string;
-
-  // Callbacks
-  onContentChange?: () => void;
-  onDirtyChange?: (isDirty: boolean) => void;
-
-  // Content access (for saving and AI integration)
-  onGetContentReady?: (getContentFunction: () => string) => void;
-
-  // Document actions
-  onViewHistory?: () => void;
-  onRenameDocument?: () => void;
-
-  /**
-   * Called when the file content changes externally (e.g., AI edited the file).
-   * Custom editors should implement this to reload their content from the new value.
-   */
-  onReloadContent?: (callback: (newContent: string) => void) => void;
-}
-
-/**
- * Return type for custom editor components
- * Each custom editor is a React component that receives CustomEditorProps
- */
-export type CustomEditorComponent = React.FC<CustomEditorProps>;
+export type CustomEditorComponent = ComponentType<EditorHostProps>;
 
 /**
  * Custom editor registration entry
@@ -64,4 +31,7 @@ export interface CustomEditorRegistration {
 
   // Optional: Whether this editor supports AI editing via EditorRegistry
   supportsAI?: boolean;
+
+  // Optional: Whether this editor supports source mode (viewing/editing raw content in Monaco)
+  supportsSourceMode?: boolean;
 }

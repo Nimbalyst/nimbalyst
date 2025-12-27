@@ -5,6 +5,12 @@
  * - Normal editing mode with syntax highlighting
  * - Diff mode for AI-generated changes (Phase 2)
  * - Same interface as StravuEditor for seamless TabEditor integration
+ *
+ * Content Ownership Pattern:
+ * - This editor OWNS its content state
+ * - TabEditor notifies us of file changes via setContent
+ * - We track lastKnownDiskContentRef to ignore echoes from our own saves
+ * - We decide whether to reload based on comparing incoming content vs disk state
  */
 
 import React, { useRef, useEffect, useCallback, useState } from 'react';
@@ -59,6 +65,12 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   const initialContentRef = useRef(initialContent);
   const isProgrammaticChangeRef = useRef(false);
 
+  // Content ownership: track what we believe is on disk to ignore our own saves
+  const lastKnownDiskContentRef = useRef<string>(initialContent);
+
+  // Track if we've done initial load
+  const hasLoadedInitialContentRef = useRef(false);
+
   // Diff mode state
   const [diffMode, setDiffMode] = useState<MonacoDiffModeConfig | null>(null);
 
@@ -100,32 +112,49 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   /**
    * Get current editor content
    * Exposed to parent via onGetContent callback
+   * Updates lastKnownDiskContentRef so we can ignore file watcher echoes
    */
   const getContent = useCallback((): string => {
+    let result: string;
+
     // In diff mode, get content from the modified editor
     if (diffMode && diffEditorRef.current) {
-      return diffEditorRef.current.getModifiedEditor().getValue();
+      result = diffEditorRef.current.getModifiedEditor().getValue();
+    } else if (!editorRef.current) {
+      result = content;
+    } else {
+      result = editorRef.current.getValue();
     }
 
-    if (!editorRef.current) {
-      return content;
-    }
-    return editorRef.current.getValue();
+    // Update our disk state so we can ignore the file watcher echo
+    lastKnownDiskContentRef.current = result;
+    return result;
   }, [content, diffMode]);
 
   /**
    * Set editor content programmatically
    * Used for external updates (e.g., file watcher reloads)
+   * Compares against lastKnownDiskContentRef to ignore our own saves
    */
-  const setEditorContent = useCallback((newContent: string) => {
+  const setEditorContent = useCallback((newContent: string, options?: { force?: boolean }) => {
+    // Check if this is just an echo of our own save (unless forced)
+    if (!options?.force && newContent === lastKnownDiskContentRef.current) {
+      console.log('[MonacoCodeEditor] setEditorContent ignored - matches our last known disk state');
+      return;
+    }
+
     console.log('[MonacoCodeEditor] setEditorContent called', {
       newLength: newContent.length,
       hasEditor: !!editorRef.current,
-      preview: newContent.substring(0, 50)
+      preview: newContent.substring(0, 50),
+      forced: options?.force ?? false
     });
 
     // Update state first
     setContent(newContent);
+
+    // Update our disk state tracker
+    lastKnownDiskContentRef.current = newContent;
 
     // Then update Monaco editor if it's mounted
     if (editorRef.current && !diffMode) {
@@ -188,49 +217,57 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   /**
    * Accept the diff - get the new content
    * This is called by TabEditor when user clicks Accept All
+   * Updates disk state tracker since this content will be saved
    */
   const acceptDiff = useCallback((): string => {
     console.log('[MonacoCodeEditor] acceptDiff called', { hasDiffMode: !!diffMode });
 
+    let result: string;
+
     // Get content from diff editor if available
     if (diffEditorRef.current) {
-      const newContent = diffEditorRef.current.getModifiedEditor().getValue();
-      console.log('[MonacoCodeEditor] Got content from diff editor', { length: newContent.length });
-      return newContent;
-    }
-
-    // Fallback: if we have diffMode state, return the new content
-    if (diffMode) {
+      result = diffEditorRef.current.getModifiedEditor().getValue();
+      console.log('[MonacoCodeEditor] Got content from diff editor', { length: result.length });
+    } else if (diffMode) {
+      // Fallback: if we have diffMode state, return the new content
       console.log('[MonacoCodeEditor] Returning new content from diffMode state');
-      return diffMode.newContent;
+      result = diffMode.newContent;
+    } else {
+      console.warn('[MonacoCodeEditor] acceptDiff called but no diff editor or diffMode available');
+      result = content;
     }
 
-    console.warn('[MonacoCodeEditor] acceptDiff called but no diff editor or diffMode available');
-    return content;
+    // Update disk state since this will be saved
+    lastKnownDiskContentRef.current = result;
+    return result;
   }, [diffMode, content]);
 
   /**
    * Reject the diff - get the old content
    * This is called by TabEditor when user clicks Reject All
+   * Updates disk state tracker since this content will be saved
    */
   const rejectDiff = useCallback((): string => {
     console.log('[MonacoCodeEditor] rejectDiff called', { hasDiffMode: !!diffMode });
 
+    let result: string;
+
     // Get content from diff editor if available
     if (diffEditorRef.current) {
-      const oldContent = diffEditorRef.current.getOriginalEditor().getValue();
-      console.log('[MonacoCodeEditor] Got content from diff editor (original)', { length: oldContent.length });
-      return oldContent;
-    }
-
-    // Fallback: if we have diffMode state, return the old content
-    if (diffMode) {
+      result = diffEditorRef.current.getOriginalEditor().getValue();
+      console.log('[MonacoCodeEditor] Got content from diff editor (original)', { length: result.length });
+    } else if (diffMode) {
+      // Fallback: if we have diffMode state, return the old content
       console.log('[MonacoCodeEditor] Returning old content from diffMode state');
-      return diffMode.oldContent;
+      result = diffMode.oldContent;
+    } else {
+      console.warn('[MonacoCodeEditor] rejectDiff called but no diff editor or diffMode available');
+      result = content;
     }
 
-    console.warn('[MonacoCodeEditor] rejectDiff called but no diff editor or diffMode available');
-    return content;
+    // Update disk state since this will be saved
+    lastKnownDiskContentRef.current = result;
+    return result;
   }, [diffMode, content]);
 
   /**

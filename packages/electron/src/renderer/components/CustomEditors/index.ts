@@ -6,7 +6,7 @@
 
 export { customEditorRegistry } from './registry';
 export type {
-  CustomEditorProps,
+  EditorHostProps,
   CustomEditorComponent,
   CustomEditorRegistration,
 } from './types';
