@@ -20,6 +20,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.49.12] - 2025-12-26
+
+
+### Added
+- Context limit errors now show helpful widget with compact button
+- E2E tests for agent tool permission system
+
+### Changed
+- Use Claude Code native settings for tool permissions
+
+### Fixed
+- Quoted strings and heredocs no longer trigger compound command detection
+- Compound bash commands now require approval for each part
+- Trust toast now shows current permission mode when changing settings
+- Long Bash commands in permission dialog now scroll vertically
+- Bypass-all mode now skips compound command permission checks
+- Custom editor file changes no longer clobber user edits
+- Permission prompts no longer repeat and show specific patterns
+- Agentic panel now scrolls to show sent messages
+- Windows forced shutdowns no longer leave database locks
+
 ## [0.49.11] - 2025-12-23
 
 
