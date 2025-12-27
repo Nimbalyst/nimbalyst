@@ -4,6 +4,7 @@
  */
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
+import { parse as parseShellCommand } from 'shell-quote';
 import type { MessageParam, ImageBlockParam, TextBlockParam, ContentBlockParam, DocumentBlockParam } from '@anthropic-ai/sdk/resources';
 import { BaseAIProvider } from '../AIProvider';
 import {
@@ -2272,6 +2273,68 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   }
 
   /**
+   * Check if a command contains shell chaining operators (&&, ||, ;)
+   * Uses shell-quote library for proper parsing that handles quotes and heredocs
+   */
+  private hasShellChainingOperators(command: string): boolean {
+    try {
+      const parsed = parseShellCommand(command);
+      // shell-quote returns operators as { op: '&&' } objects
+      return parsed.some(token =>
+        typeof token === 'object' &&
+        token !== null &&
+        'op' in token &&
+        ['&&', '||', ';'].includes(token.op)
+      );
+    } catch {
+      // If parsing fails, fall back to simple regex (less accurate but safe)
+      return /\s*&&\s*|\s*\|\|\s*|\s*;\s*/.test(command);
+    }
+  }
+
+  /**
+   * Split a command on shell chaining operators (&&, ||, ;)
+   * Uses shell-quote library for proper parsing that handles quotes and heredocs
+   * Returns array of individual commands
+   */
+  private splitOnShellOperators(command: string): string[] {
+    try {
+      const parsed = parseShellCommand(command);
+      const commands: string[] = [];
+      let currentTokens: string[] = [];
+
+      for (const token of parsed) {
+        if (typeof token === 'object' && token !== null && 'op' in token) {
+          // This is an operator
+          if (['&&', '||', ';'].includes(token.op)) {
+            // Chaining operator - flush current command
+            if (currentTokens.length > 0) {
+              commands.push(currentTokens.join(' '));
+              currentTokens = [];
+            }
+          } else {
+            // Other operators (|, >, <, etc.) - keep as part of current command
+            currentTokens.push(token.op);
+          }
+        } else if (typeof token === 'string') {
+          currentTokens.push(token);
+        }
+        // Skip other token types (comments, etc.)
+      }
+
+      // Don't forget the last command
+      if (currentTokens.length > 0) {
+        commands.push(currentTokens.join(' '));
+      }
+
+      return commands.length > 0 ? commands : [command];
+    } catch {
+      // If parsing fails, return original command as single element
+      return [command];
+    }
+  }
+
+  /**
    * Generate a tool pattern for Claude Code's allowedTools format.
    * These patterns are written to .claude/settings.local.json when user approves with "Always".
    *
@@ -2289,7 +2352,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
         // Detect compound commands - these should not be cached
         // because approving "git add" shouldn't auto-approve "git add && git commit"
-        if (/\s*&&\s*|\s*\|\|\s*|\s*;\s*|\s*\|\s*/.test(command)) {
+        // Use quote-aware detection to avoid false positives on heredocs/quoted strings
+        if (this.hasShellChainingOperators(command)) {
           // Return a unique pattern that won't match future commands
           return `Bash:compound:${Date.now()}`;
         }
@@ -2854,11 +2918,12 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         }
 
         const command = (toolInput?.command as string) || '';
-        if (/\s*&&\s*|\s*\|\|\s*|\s*;\s*/.test(command)) {
+        // Use quote-aware detection to avoid false positives on heredocs/quoted strings
+        if (this.hasShellChainingOperators(command)) {
           this.logSecurity(`[PreToolUse] Compound Bash command detected, checking each part:`, { command: command.slice(0, 100) });
 
-          // Split on &&, ||, ; (but not | which is piping, not chaining)
-          const subCommands = command.split(/\s*(?:&&|\|\||;)\s*/).filter(cmd => cmd.trim());
+          // Split on unquoted &&, ||, ; while respecting quotes and heredocs
+          const subCommands = this.splitOnShellOperators(command);
 
           // Check each sub-command
           for (const subCommand of subCommands) {
