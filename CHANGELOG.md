@@ -20,6 +20,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.49.13] - 2025-12-27
+
+
+### Added
+- Text attachments now clickable to preview content
+
+### Changed
+- Increase AI session message limit from 2000 to 5000
+
+### Fixed
+- Queued messages now appear in chat transcript
+- MockupViewer now uses EditorHost API for content management
+- MonacoCodeEditor fails diff view for source mode
+- Custom editors now properly save on close and support source mode
+- Thinking dots touch side of panel
+- File tree now shows all folders in workspaces with large dependency dirs
+- DatamodelLM editor no longer reloads on every user edit
+- Extension reload validation now correctly detects components export
+
 ## [0.49.12] - 2025-12-26
 
 
