@@ -20,6 +20,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.49.14] - 2025-12-27
+
+
+### Added
+- Support wildcard domain patterns and "Allow All Domains" button
+
+### Fixed
+- Provider icons now visible in dark mode session picker
+
 ## [0.49.13] - 2025-12-27
 
 
