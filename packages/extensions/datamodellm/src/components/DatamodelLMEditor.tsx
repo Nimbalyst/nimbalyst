@@ -3,6 +3,12 @@
  *
  * The main editor component that integrates with Nimbalyst's custom editor system.
  * This component receives file content and provides the visual data modeling interface.
+ *
+ * Content Ownership Pattern:
+ * - This editor OWNS its content state
+ * - TabEditor only notifies us of file changes via onReloadContent
+ * - We track lastKnownDiskContentRef to ignore echoes from our own saves
+ * - We decide whether to reload based on comparing incoming content vs disk state
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react';
@@ -48,6 +54,12 @@ export function DatamodelLMEditor({
   const storeRef = useRef<DataModelStoreApi | null>(null);
   const canvasRef = useRef<DataModelCanvasRef>(null);
 
+  // Track what we believe is on disk to ignore echoes from our own saves
+  const lastKnownDiskContentRef = useRef<string>(initialContent);
+
+  // Track if we've done initial load
+  const hasLoadedInitialContentRef = useRef(false);
+
   // Initialize store on mount
   if (!storeRef.current) {
     storeRef.current = createDataModelStore();
@@ -55,12 +67,21 @@ export function DatamodelLMEditor({
 
   const store = storeRef.current;
 
-  // Parse initial content and load into store
+  // Parse initial content and load into store - ONLY ON FIRST MOUNT
   useEffect(() => {
+    // Only load once - subsequent updates come through onReloadContent
+    if (hasLoadedInitialContentRef.current) {
+      console.log('[DatamodelLM] Skipping initial load - already loaded');
+      return;
+    }
+    hasLoadedInitialContentRef.current = true;
+    console.log('[DatamodelLM] Initial load from initialContent, length:', initialContent?.length);
+
     if (initialContent) {
       try {
         const data = parsePrismaSchema(initialContent);
         store.getState().loadFromFile(data);
+        lastKnownDiskContentRef.current = initialContent;
       } catch (error) {
         console.error('[DatamodelLM] Failed to parse Prisma schema:', error);
         store.getState().loadFromFile(createEmptyDataModel());
@@ -69,7 +90,8 @@ export function DatamodelLMEditor({
       // New file - create empty data model
       store.getState().loadFromFile(createEmptyDataModel());
     }
-  }, [initialContent, store]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store]); // Only depend on store, not initialContent
 
   // Set up callbacks for dirty tracking
   useEffect(() => {
@@ -84,9 +106,13 @@ export function DatamodelLMEditor({
   }, [store, onDirtyChange, onContentChange]);
 
   // Register getContent function for saving
+  // When TabEditor calls getContent for saving, we update our disk state tracking
   const getContent = useCallback(() => {
     const data = store.getState().toFileData();
-    return serializeToPrismaSchema(data);
+    const content = serializeToPrismaSchema(data);
+    // Update our disk state so we can ignore the file watcher echo
+    lastKnownDiskContentRef.current = content;
+    return content;
   }, [store]);
 
   useEffect(() => {
@@ -111,13 +137,37 @@ export function DatamodelLMEditor({
   }, [filePath, store]);
 
   // Handle external content changes (e.g., AI edited the file)
+  // Compare against lastKnownDiskContentRef to ignore echoes from our own saves
   const handleReloadContent = useCallback((newContent: string) => {
-    console.log('[DatamodelLM] Reloading content from external change');
+    // Check if this is just an echo of our own save
+    if (newContent === lastKnownDiskContentRef.current) {
+      console.log('[DatamodelLM] File change notification ignored - matches our last known disk state');
+      return;
+    }
+
+    console.log('[DatamodelLM] External file change detected, reloading');
+    console.log('[DatamodelLM] lastKnownDiskContent length:', lastKnownDiskContentRef.current.length);
+    console.log('[DatamodelLM] newContent length:', newContent.length);
+
+    // Debug: Show first difference
+    if (lastKnownDiskContentRef.current.length === newContent.length) {
+      for (let i = 0; i < newContent.length; i++) {
+        if (newContent[i] !== lastKnownDiskContentRef.current[i]) {
+          console.log('[DatamodelLM] First diff at index:', i);
+          console.log('[DatamodelLM] Expected char:', JSON.stringify(lastKnownDiskContentRef.current.substring(i, i+20)));
+          console.log('[DatamodelLM] Got char:', JSON.stringify(newContent.substring(i, i+20)));
+          break;
+        }
+      }
+    }
+
     try {
       const data = parsePrismaSchema(newContent);
       store.getState().loadFromFile(data);
       // Mark as clean since we just loaded fresh content
       store.getState().markClean();
+      // Update our disk state
+      lastKnownDiskContentRef.current = newContent;
     } catch (error) {
       console.error('[DatamodelLM] Failed to parse reloaded content:', error);
     }
