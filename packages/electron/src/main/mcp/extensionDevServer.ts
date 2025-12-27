@@ -26,6 +26,7 @@ import { spawn } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import { ExtensionLogService } from '../services/ExtensionLogService';
+import { database } from '../database/initialize';
 
 // ============================================================================
 // Manifest Validation
@@ -652,6 +653,20 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
                   },
                   required: ['extensionId']
                 }
+              },
+              {
+                name: 'database_query',
+                description: 'Execute a SELECT query against the Nimbalyst PGLite database. Only SELECT queries are allowed for safety. Useful for debugging and inspecting application state. Available tables include: ai_sessions, ai_agent_messages, document_history, session_files, queued_prompts, tracker_items.',
+                inputSchema: {
+                  type: 'object',
+                  properties: {
+                    sql: {
+                      type: 'string',
+                      description: 'The SELECT SQL query to execute. Must start with SELECT.'
+                    }
+                  },
+                  required: ['sql']
+                }
               }
             ]
           };
@@ -1123,6 +1138,66 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
                   responseChannel
                 });
               });
+            }
+
+            case 'database_query': {
+              const sql = args?.sql as string;
+
+              if (!sql) {
+                return {
+                  content: [{ type: 'text', text: 'Error: sql is required' }],
+                  isError: true
+                };
+              }
+
+              // Safety check: only allow SELECT queries
+              const trimmedSQL = sql.trim().toLowerCase();
+              if (!trimmedSQL.startsWith('select')) {
+                return {
+                  content: [{
+                    type: 'text',
+                    text: 'Error: Only SELECT queries are allowed for safety. Write operations are not permitted through this tool.'
+                  }],
+                  isError: true
+                };
+              }
+
+              console.log(`[Extension Dev MCP] Executing database query: ${sql.substring(0, 100)}...`);
+
+              try {
+                const result = await database.query(sql);
+
+                // Format results for display
+                const rowCount = result.rows.length;
+                let responseText = `Query executed successfully.\n\nRows returned: ${rowCount}\n`;
+
+                if (rowCount > 0) {
+                  // Get column names from first row
+                  const columns = Object.keys(result.rows[0]);
+                  responseText += `Columns: ${columns.join(', ')}\n\n`;
+
+                  // Format as JSON for readability (limit to first 100 rows to avoid huge responses)
+                  const displayRows = result.rows.slice(0, 100);
+                  responseText += JSON.stringify(displayRows, null, 2);
+
+                  if (rowCount > 100) {
+                    responseText += `\n\n... and ${rowCount - 100} more rows (truncated)`;
+                  }
+                } else {
+                  responseText += '\nNo rows returned.';
+                }
+
+                return {
+                  content: [{ type: 'text', text: responseText }],
+                  isError: false
+                };
+              } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                return {
+                  content: [{ type: 'text', text: `Query error: ${errorMessage}` }],
+                  isError: true
+                };
+              }
             }
 
             default:
