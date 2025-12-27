@@ -75,8 +75,8 @@ export function createPGLiteAgentMessagesStore(db: PGliteLike, ensureDbReady?: E
       await ensureReady();
 
       // Safeguard: limit maximum messages loaded to prevent OOM from corrupted sessions
-      // Sessions with more than 2000 messages are likely corrupted by sync bugs
-      const MAX_MESSAGES = 2000;
+      // Sessions with more than 5000 messages are likely corrupted by sync bugs
+      const MAX_MESSAGES = 5000;
       const limit = options?.limit ? Math.min(options.limit, MAX_MESSAGES) : MAX_MESSAGES;
       const offset = options?.offset ?? 0;
       const includeHidden = options?.includeHidden ?? false;
