@@ -15,6 +15,64 @@ import {
   TEST_TIMEOUTS,
 } from '../helpers';
 
+/**
+ * Helper to get Monaco editor content
+ * Uses multiple methods to find the editor content with retry logic
+ */
+async function getMonacoContent(page: Page, timeout = 5000): Promise<string> {
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeout) {
+    const result = await page.evaluate(() => {
+      // Method 1: Try global monaco API
+      const monaco = (window as any).monaco;
+      const editors = monaco?.editor?.getEditors();
+      console.log('[getMonacoContent] monaco:', !!monaco, 'editors:', editors?.length);
+      if (editors && editors.length > 0) {
+        return { source: 'monaco-api', content: editors[0].getValue() };
+      }
+
+      // Method 2: Try getting from view lines (fallback)
+      // Note: view-lines use non-breaking spaces (charCode 160), need to normalize
+      const monacoWrapper = document.querySelector('.monaco-code-editor');
+      if (monacoWrapper) {
+        const lines = monacoWrapper.querySelectorAll('.view-line');
+        if (lines.length > 0) {
+          const rawContent = Array.from(lines).map(l => l.textContent || '').join('\n');
+          // Replace non-breaking spaces with regular spaces
+          const normalizedContent = rawContent.replace(/\u00A0/g, ' ');
+          return { source: 'view-lines', content: normalizedContent };
+        }
+      }
+
+      return null;
+    });
+
+    if (result !== null && result.content.length > 0) {
+      console.log(`[TEST] getMonacoContent source: ${result.source}`);
+      return result.content;
+    }
+
+    await page.waitForTimeout(200);
+  }
+
+  // Final fallback - get text from view-lines
+  const fallback = await page.evaluate(() => {
+    const monacoWrapper = document.querySelector('.monaco-code-editor');
+    if (monacoWrapper) {
+      const lines = monacoWrapper.querySelectorAll('.view-line');
+      if (lines.length > 0) {
+        const rawContent = Array.from(lines).map(l => l.textContent || '').join('\n');
+        // Replace non-breaking spaces with regular spaces
+        return rawContent.replace(/\u00A0/g, ' ');
+      }
+    }
+    return '';
+  });
+  console.log('[TEST] getMonacoContent source: fallback');
+  return fallback;
+}
+
 let electronApp: ElectronApplication;
 let page: Page;
 let workspaceDir: string;
@@ -59,15 +117,8 @@ test('Monaco editor detects external file changes', async () => {
   // Wait for initial content to render
   await page.waitForTimeout(500);
 
-  // Get Monaco editor value directly instead of textContent (which includes line numbers)
-  const initialText = await page.evaluate(() => {
-    // Access Monaco editor instance via the global monaco variable
-    const editors = (window as any).monaco?.editor?.getEditors();
-    if (editors && editors.length > 0) {
-      return editors[0].getValue();
-    }
-    return '';
-  });
+  // Get Monaco editor value using helper with retry logic
+  const initialText = await getMonacoContent(page);
 
   console.log('[TEST] Initial content:', initialText);
   expect(initialText).toContain('Hello World');
@@ -85,14 +136,8 @@ test('Monaco editor detects external file changes', async () => {
   // Wait for file watcher to trigger
   await page.waitForTimeout(3000);
 
-  // Check if editor updated
-  const updatedText = await page.evaluate(() => {
-    const editors = (window as any).monaco?.editor?.getEditors();
-    if (editors && editors.length > 0) {
-      return editors[0].getValue();
-    }
-    return '';
-  });
+  // Check if editor updated using helper with retry logic
+  const updatedText = await getMonacoContent(page);
 
   console.log('[TEST] Content after external change:', {
     contains_modified: updatedText.includes('Modified externally'),

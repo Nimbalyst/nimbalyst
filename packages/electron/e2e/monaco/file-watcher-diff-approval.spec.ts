@@ -25,6 +25,60 @@ import {
 } from '../helpers';
 import { PLAYWRIGHT_TEST_SELECTORS } from '../utils/testHelpers';
 
+/**
+ * Helper to get Monaco editor content
+ * Uses multiple methods to find the editor content with retry logic
+ */
+async function getMonacoContent(page: Page, timeout = 5000): Promise<string> {
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeout) {
+    const result = await page.evaluate(() => {
+      // Method 1: Try global monaco API
+      const monaco = (window as any).monaco;
+      const editors = monaco?.editor?.getEditors();
+      if (editors && editors.length > 0) {
+        return { source: 'monaco-api', content: editors[0].getValue() };
+      }
+
+      // Method 2: Try getting from view lines (fallback)
+      // Note: view-lines use non-breaking spaces (charCode 160), need to normalize
+      const monacoWrapper = document.querySelector('.monaco-code-editor');
+      if (monacoWrapper) {
+        const lines = monacoWrapper.querySelectorAll('.view-line');
+        if (lines.length > 0) {
+          const rawContent = Array.from(lines).map(l => l.textContent || '').join('\n');
+          // Replace non-breaking spaces with regular spaces
+          const normalizedContent = rawContent.replace(/\u00A0/g, ' ');
+          return { source: 'view-lines', content: normalizedContent };
+        }
+      }
+
+      return null;
+    });
+
+    if (result !== null && result.content.length > 0) {
+      return result.content;
+    }
+
+    await page.waitForTimeout(200);
+  }
+
+  // Final fallback - get text from view-lines
+  return await page.evaluate(() => {
+    const monacoWrapper = document.querySelector('.monaco-code-editor');
+    if (monacoWrapper) {
+      const lines = monacoWrapper.querySelectorAll('.view-line');
+      if (lines.length > 0) {
+        const rawContent = Array.from(lines).map(l => l.textContent || '').join('\n');
+        // Replace non-breaking spaces with regular spaces
+        return rawContent.replace(/\u00A0/g, ' ');
+      }
+    }
+    return '';
+  });
+}
+
 test.describe('Monaco Editor - File Watcher Diff Approval', () => {
   let electronApp: ElectronApplication;
   let page: Page;
@@ -104,13 +158,7 @@ test.describe('Monaco Editor - File Watcher Diff Approval', () => {
 
     // Step 3: Verify original content loads in Monaco
     console.log('[TEST] Verifying original content...');
-    const initialText = await page.evaluate(() => {
-      const editors = (window as any).monaco?.editor?.getEditors();
-      if (editors && editors.length > 0) {
-        return editors[0].getValue();
-      }
-      return '';
-    });
+    const initialText = await getMonacoContent(page);
 
     console.log('[TEST] Initial Monaco content:', initialText);
     expect(initialText).toContain('Original content');
@@ -180,13 +228,7 @@ test.describe('Monaco Editor - File Watcher Diff Approval', () => {
 
     // Step 9: Verify editor content is now the accepted content
     console.log('[TEST] Verifying accepted content in editor...');
-    const finalEditorText = await page.evaluate(() => {
-      const editors = (window as any).monaco?.editor?.getEditors();
-      if (editors && editors.length > 0) {
-        return editors[0].getValue();
-      }
-      return '';
-    });
+    const finalEditorText = await getMonacoContent(page);
 
     console.log('[TEST] Final editor content:', finalEditorText);
     expect(finalEditorText).toContain('Modified by AI');
