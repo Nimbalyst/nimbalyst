@@ -325,6 +325,32 @@ Inline dialog shown in the agent panel when a tool needs approval:
 
 ## Security Considerations
 
+### Compound Command Protection
+
+The Claude Agent SDK has a known limitation where bash pattern matching uses simple prefix matching. This means a pattern like `Bash(git status:*)` could potentially match a compound command like `git status && rm -rf /`.
+
+**Our Mitigation:**
+
+Nimbalyst's PreToolUse hook intercepts compound commands (those containing `&&`, `||`, or `;`) and checks each sub-command separately:
+
+1. When you run `git status && git describe`, both commands are evaluated independently
+2. If `git status` is allowed but `git describe` is not, you'll be prompted for `git describe`
+3. Each sub-command approval is saved as its own pattern
+
+**Pattern Validation:**
+
+The `ClaudeSettingsManager.addAllowedTool()` method includes security validation:
+
+- **Compound patterns blocked**: Patterns like `Bash:compound:*` are never saved to settings. These are one-time approvals that must be re-approved each session.
+- **Garbage pattern filtering**: Invalid patterns that look like code fragments (e.g., `Bash(const:*)`, `Bash(//:*)`) are rejected. These can occur if Claude's output is incorrectly parsed as bash commands.
+
+**Invalid pattern examples that are blocked:**
+- `Bash(const:*)` - JavaScript keyword
+- `Bash([]:*)` - Array syntax
+- `Bash(//:*)` - Comment syntax
+- `Bash(```:*)` - Code fence
+- `Bash(}:*)` - Closing brace
+
 ### Path Validation
 
 All file paths are validated against:

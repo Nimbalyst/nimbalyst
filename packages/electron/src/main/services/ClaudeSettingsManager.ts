@@ -195,6 +195,52 @@ export class ClaudeSettingsManager {
    * (personal, not shared with team)
    */
   async addAllowedTool(workspacePath: string, pattern: string): Promise<void> {
+    // SECURITY: Never save compound command patterns - they must be approved each time
+    // Compound patterns like "Bash:compound:1234567890" should never be persisted
+    if (pattern.startsWith('Bash:compound:')) {
+      log.warn(`Refusing to save compound command pattern (security): ${pattern}`);
+      return;
+    }
+
+    // VALIDATION: Filter out garbage patterns that are clearly not valid tool patterns
+    // These can occur when Claude's code output is incorrectly parsed as bash commands
+    if (pattern.startsWith('Bash(')) {
+      // Extract the command from Bash(command:*)
+      const match = pattern.match(/^Bash\(([^:]+):\*\)$/);
+      if (match) {
+        const command = match[1];
+        // Valid bash commands should start with a letter or be common commands
+        // Reject patterns that look like code fragments (const, //, [], {}, etc.)
+        const invalidPatterns = [
+          /^[^a-zA-Z]/, // Doesn't start with a letter
+          /^const$/i,
+          /^let$/i,
+          /^var$/i,
+          /^if$/i,
+          /^for$/i,
+          /^while$/i,
+          /^function$/i,
+          /^return$/i,
+          /^class$/i,
+          /^import$/i,
+          /^export$/i,
+          /^\[.*\]$/,    // Array syntax
+          /^\{.*\}$/,    // Object syntax
+          /^\/\//,       // Comment
+          /^```/,        // Code fence
+          /^--$/,        // Double dash alone
+          /^\)$/,        // Just closing paren
+          /^\}$/,        // Just closing brace
+          /^,$/,         // Just comma
+        ];
+
+        if (invalidPatterns.some(regex => regex.test(command))) {
+          log.warn(`Refusing to save invalid bash pattern (looks like code): ${pattern}`);
+          return;
+        }
+      }
+    }
+
     const filePath = this.getProjectLocalPath(workspacePath);
     const settings = (await this.readSettingsFile(filePath)) || {};
 

@@ -2434,6 +2434,16 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           this.logSecurity('[canUseTool] Bypass-all mode, auto-approving:', { toolName });
           return { behavior: 'allow', updatedInput: input };
         }
+
+        // Allow-all mode: auto-approve file edit operations without prompting
+        // Bash commands and web requests still require approval
+        if (trustStatus.mode === 'allow-all') {
+          const fileEditTools = ['Edit', 'Write', 'MultiEdit', 'Read', 'Glob', 'Grep', 'LS', 'NotebookEdit'];
+          if (fileEditTools.includes(toolName)) {
+            this.logSecurity('[canUseTool] Allow-all mode, auto-approving file tool:', { toolName });
+            return { behavior: 'allow', updatedInput: input };
+          }
+        }
       }
 
       // The SDK has already evaluated settings.json rules.
