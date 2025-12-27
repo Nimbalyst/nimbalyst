@@ -388,9 +388,29 @@ export function registerPermissionHandlers(): void {
       // Check for domain match
       try {
         const urlObj = new URL(url);
-        const domain = urlObj.hostname;
-        const domainPattern = `WebFetch(domain:${domain})`;
-        return allowedPatterns.includes(domainPattern);
+        const hostname = urlObj.hostname;
+
+        for (const pattern of allowedPatterns) {
+          const match = pattern.match(/^WebFetch\(domain:(.+)\)$/);
+          if (!match) continue;
+
+          const domainPattern = match[1];
+
+          // Exact match
+          if (domainPattern === hostname) {
+            return true;
+          }
+
+          // Wildcard match: *.example.com matches sub.example.com but not example.com
+          if (domainPattern.startsWith('*.')) {
+            const suffix = domainPattern.slice(1); // ".example.com"
+            if (hostname.endsWith(suffix) && hostname.length > suffix.length) {
+              return true;
+            }
+          }
+        }
+
+        return false;
       } catch {
         return false;
       }

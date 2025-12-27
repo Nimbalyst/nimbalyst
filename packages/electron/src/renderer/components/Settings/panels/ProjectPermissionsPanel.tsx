@@ -218,6 +218,35 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
     }
   };
 
+  const handleAllowAllDomains = async () => {
+    try {
+      await window.electronAPI.invoke('permissions:allowAllUrls', workspacePath);
+      await loadPermissions();
+      setSuccess('All domains are now allowed');
+      posthog?.capture('all_domains_allowed');
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      console.error('Failed to allow all domains:', err);
+      setError(err instanceof Error ? err.message : 'Failed to allow all domains');
+    }
+  };
+
+  const handleRevokeAllDomains = async () => {
+    try {
+      await window.electronAPI.invoke('permissions:revokeAllUrlsPermission', workspacePath);
+      await loadPermissions();
+      setSuccess('All domains permission revoked');
+      posthog?.capture('all_domains_revoked');
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      console.error('Failed to revoke all domains permission:', err);
+      setError(err instanceof Error ? err.message : 'Failed to revoke all domains permission');
+    }
+  };
+
+  // Check if "all domains" wildcard is enabled (pattern is '*' which maps to 'WebFetch')
+  const isAllDomainsAllowed = permissions?.allowedUrlPatterns?.some(p => p.pattern === 'WebFetch') ?? false;
+
   if (!workspacePath) {
     return (
       <div className="settings-panel-content">
@@ -431,80 +460,113 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
           </div>
           <p className="permissions-section-description">
             Allow the agent to fetch or curl specific domains.
-            Use wildcards like <code>*.github.com</code> or <code>https://api.example.com/*</code>
+            Use wildcards like <code>*.github.com</code> to allow all subdomains.
           </p>
-          {(permissions?.allowedUrlPatterns?.length || 0) === 0 && !isAddingUrl ? (
-            <div className="permissions-empty-state">
-              No URL patterns allowed yet. The agent will ask before making web requests.
+
+          {/* All Domains Allowed Card */}
+          {isAllDomainsAllowed ? (
+            <div className="permissions-all-domains-card">
+              <div className="permissions-all-domains-info">
+                <span className="material-symbols-outlined permissions-all-domains-icon">public</span>
+                <div className="permissions-all-domains-text">
+                  <span className="permissions-all-domains-title">All domains allowed</span>
+                  <span className="permissions-all-domains-description">
+                    The agent can fetch from any URL without asking.
+                  </span>
+                </div>
+              </div>
+              <button
+                className="btn-secondary"
+                onClick={handleRevokeAllDomains}
+              >
+                Revoke
+              </button>
             </div>
           ) : (
-            <div className="permissions-url-list">
-              {permissions?.allowedUrlPatterns?.map((urlPattern) => (
-                <div key={urlPattern.pattern} className="permissions-url-item">
-                  <div className="permissions-url-info">
-                    <span className="permissions-url-pattern">{urlPattern.pattern}</span>
-                    {urlPattern.description && (
-                      <span className="permissions-url-description">{urlPattern.description}</span>
-                    )}
+            <>
+              {(permissions?.allowedUrlPatterns?.length || 0) === 0 && !isAddingUrl ? (
+                <div className="permissions-empty-state">
+                  No URL patterns allowed yet. The agent will ask before making web requests.
+                </div>
+              ) : (
+                <div className="permissions-url-list">
+                  {permissions?.allowedUrlPatterns?.map((urlPattern) => (
+                    <div key={urlPattern.pattern} className="permissions-url-item">
+                      <div className="permissions-url-info">
+                        <span className="permissions-url-pattern">{urlPattern.pattern}</span>
+                        {urlPattern.description && (
+                          <span className="permissions-url-description">{urlPattern.description}</span>
+                        )}
+                      </div>
+                      <button
+                        className="permissions-url-remove"
+                        onClick={() => handleRemoveUrlPattern(urlPattern.pattern)}
+                        title="Remove URL pattern"
+                      >
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M2 4h12M6 4V2.5A1.5 1.5 0 017.5 1h1A1.5 1.5 0 0110 2.5V4M5 7v5M8 7v5M11 7v5M3 4v9.5A1.5 1.5 0 004.5 15h7a1.5 1.5 0 001.5-1.5V4"/>
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {isAddingUrl ? (
+                <div className="permissions-add-url-form">
+                  <input
+                    type="text"
+                    className="permissions-url-input"
+                    placeholder="URL pattern (e.g., *.github.com)"
+                    value={newUrlPattern}
+                    onChange={(e) => setNewUrlPattern(e.target.value)}
+                    autoFocus
+                  />
+                  <input
+                    type="text"
+                    className="permissions-url-input"
+                    placeholder="Description (optional)"
+                    value={newUrlDescription}
+                    onChange={(e) => setNewUrlDescription(e.target.value)}
+                  />
+                  <div className="permissions-add-url-actions">
+                    <button
+                      className="btn-secondary"
+                      onClick={() => {
+                        setIsAddingUrl(false);
+                        setNewUrlPattern('');
+                        setNewUrlDescription('');
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="btn-primary"
+                      onClick={handleAddUrlPattern}
+                      disabled={!newUrlPattern.trim()}
+                    >
+                      Add
+                    </button>
                   </div>
+                </div>
+              ) : (
+                <div className="permissions-url-actions">
                   <button
-                    className="permissions-url-remove"
-                    onClick={() => handleRemoveUrlPattern(urlPattern.pattern)}
-                    title="Remove URL pattern"
+                    className="btn-secondary permissions-add-url-btn"
+                    onClick={() => setIsAddingUrl(true)}
                   >
-                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M2 4h12M6 4V2.5A1.5 1.5 0 017.5 1h1A1.5 1.5 0 0110 2.5V4M5 7v5M8 7v5M11 7v5M3 4v9.5A1.5 1.5 0 004.5 15h7a1.5 1.5 0 001.5-1.5V4"/>
-                    </svg>
+                    <span className="material-symbols-outlined">add</span>
+                    Add URL Pattern
+                  </button>
+                  <button
+                    className="btn-secondary permissions-allow-all-btn"
+                    onClick={handleAllowAllDomains}
+                  >
+                    <span className="material-symbols-outlined">public</span>
+                    Allow All Domains
                   </button>
                 </div>
-              ))}
-            </div>
-          )}
-          {isAddingUrl ? (
-            <div className="permissions-add-url-form">
-              <input
-                type="text"
-                className="permissions-url-input"
-                placeholder="URL pattern (e.g., *.github.com)"
-                value={newUrlPattern}
-                onChange={(e) => setNewUrlPattern(e.target.value)}
-                autoFocus
-              />
-              <input
-                type="text"
-                className="permissions-url-input"
-                placeholder="Description (optional)"
-                value={newUrlDescription}
-                onChange={(e) => setNewUrlDescription(e.target.value)}
-              />
-              <div className="permissions-add-url-actions">
-                <button
-                  className="btn-secondary"
-                  onClick={() => {
-                    setIsAddingUrl(false);
-                    setNewUrlPattern('');
-                    setNewUrlDescription('');
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="btn-primary"
-                  onClick={handleAddUrlPattern}
-                  disabled={!newUrlPattern.trim()}
-                >
-                  Add
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              className="btn-secondary permissions-add-url-btn"
-              onClick={() => setIsAddingUrl(true)}
-            >
-              <span className="material-symbols-outlined">add</span>
-              Add URL Pattern
-            </button>
+              )}
+            </>
           )}
         </div>
       )}

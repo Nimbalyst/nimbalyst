@@ -2512,13 +2512,63 @@
   margin-top: 4px;
 }
 
-.permissions-add-url-btn {
+.permissions-url-actions {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  gap: 8px;
   margin-top: 8px;
 }
 
-.permissions-add-url-btn .material-symbols-outlined {
+.permissions-add-url-btn,
+.permissions-allow-all-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.permissions-add-url-btn .material-symbols-outlined,
+.permissions-allow-all-btn .material-symbols-outlined {
   font-size: 18px;
+}
+
+/* All Domains Allowed Card */
+.permissions-all-domains-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  background: color-mix(in srgb, var(--accent-primary) 10%, var(--surface-secondary));
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 30%, var(--border-primary));
+  border-radius: 8px;
+}
+
+.permissions-all-domains-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.permissions-all-domains-icon {
+  font-size: 24px;
+  color: var(--accent-primary);
+  flex-shrink: 0;
+}
+
+.permissions-all-domains-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.permissions-all-domains-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.permissions-all-domains-description {
+  font-size: 12px;
+  color: var(--text-secondary);
 }

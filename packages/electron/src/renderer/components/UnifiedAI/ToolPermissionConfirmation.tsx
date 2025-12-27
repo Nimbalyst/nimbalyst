@@ -62,6 +62,7 @@ export const ToolPermissionConfirmation: React.FC<ToolPermissionConfirmationProp
   const hasDestructive = request.hasDestructiveActions;
   const toolName = request.toolName;
   const [showTooltip, setShowTooltip] = useState(false);
+  const [isAllowingAllDomains, setIsAllowingAllDomains] = useState(false);
 
   // Get the human-readable display name for the pattern being approved
   const getPatternDisplayName = (pattern: string): string => {
@@ -199,6 +200,27 @@ export const ToolPermissionConfirmation: React.FC<ToolPermissionConfirmationProp
     });
   }, [data.requestId, data.sessionId, onSubmit]);
 
+  // Check if this is a WebFetch permission request
+  const isWebFetchRequest = useMemo(() => {
+    return uniquePatterns.some(([pattern]) => pattern.startsWith('WebFetch'));
+  }, [uniquePatterns]);
+
+  // Handle "Allow All Domains" - saves WebFetch wildcard and allows this request
+  const handleAllowAllDomains = useCallback(async () => {
+    setIsAllowingAllDomains(true);
+    try {
+      await window.electronAPI.invoke('permissions:allowAllUrls', data.workspacePath);
+      // Now allow this specific request
+      onSubmit(data.requestId, data.sessionId, {
+        decision: 'allow',
+        scope: 'once' // The wildcard is already saved, so we just need to allow once
+      });
+    } catch (error) {
+      console.error('Failed to allow all domains:', error);
+      setIsAllowingAllDomains(false);
+    }
+  }, [data.workspacePath, data.requestId, data.sessionId, onSubmit]);
+
   return (
     <div className={`tool-permission-confirmation ${hasDestructive ? 'tool-permission-confirmation--destructive' : ''}`}>
       {/* Header */}
@@ -303,6 +325,19 @@ export const ToolPermissionConfirmation: React.FC<ToolPermissionConfirmationProp
         >
           Always
         </button>
+        {isWebFetchRequest && (
+          <>
+            <div className="tool-permission-confirmation-separator" />
+            <button
+              className="tool-permission-confirmation-button tool-permission-confirmation-button--all-domains"
+              onClick={handleAllowAllDomains}
+              disabled={isAllowingAllDomains}
+              title="Allow fetching from any domain without asking"
+            >
+              {isAllowingAllDomains ? 'Saving...' : 'All Domains'}
+            </button>
+          </>
+        )}
       </div>
 
       {/* Pattern info line */}

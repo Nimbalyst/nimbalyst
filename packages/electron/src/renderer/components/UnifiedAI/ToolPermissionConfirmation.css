@@ -221,6 +221,22 @@
   opacity: 0.9;
 }
 
+/* All Domains - accent/green style */
+.tool-permission-confirmation-button--all-domains {
+  background: var(--accent-primary, #10b981);
+  color: white;
+  border-color: var(--accent-primary, #10b981);
+}
+
+.tool-permission-confirmation-button--all-domains:hover {
+  opacity: 0.9;
+}
+
+.tool-permission-confirmation-button--all-domains:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* Pattern info line */
 .tool-permission-confirmation-pattern-info {
   font-size: 11px;
