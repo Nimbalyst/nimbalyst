@@ -179,13 +179,15 @@ function validateBuiltExtension(extensionPath: string, manifestPath: string): Ma
 
         // Check for components export at the END of the built output
         // Vite/Rollup puts exports at the end: "export { X as components }" or "export { components }"
-        // Get the last 500 chars to check exports section
-        const exportSection = mainContent.slice(-500);
+        // Get the last 2000 chars to check exports section (500 was too small for large exports)
+        const exportSection = mainContent.slice(-2000);
 
         // Look for "components" in the export statement
         // Patterns: "as components", "components }" (named export), "components:" (object property)
+        // Also check for "as components" which is common in minified Vite output
         const hasComponentsExport =
           /export\s*\{[^}]*\bcomponents\b[^}]*\}/.test(exportSection) ||
+          /\bas\s+components\b/.test(exportSection) ||
           /exports\.components\s*=/.test(mainContent) ||
           /export\s+const\s+components\s*=/.test(mainContent);
 
