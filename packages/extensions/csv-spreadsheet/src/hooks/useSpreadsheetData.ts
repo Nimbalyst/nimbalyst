@@ -398,7 +398,9 @@ export function useSpreadsheetData(
 
   // Set column format (null to clear/reset to default)
   const setColumnFormat = useCallback((columnIndex: number, format: ColumnFormat | null) => {
+    console.log('[CSV setColumnFormat] Setting format for column', columnIndex, 'to:', format);
     setData(prev => {
+      console.log('[CSV setColumnFormat] Previous formats:', prev.columnFormats);
       const newData = { ...prev };
       const newFormats = { ...newData.columnFormats };
 
@@ -409,6 +411,7 @@ export function useSpreadsheetData(
         newFormats[columnIndex] = format;
       }
 
+      console.log('[CSV setColumnFormat] New formats:', newFormats);
       newData.columnFormats = newFormats;
       return newData;
     });

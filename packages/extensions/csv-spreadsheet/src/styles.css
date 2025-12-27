@@ -247,6 +247,11 @@
   font-size: 13px;
 }
 
+/* Cell padding - add space around content */
+.spreadsheet-editor revo-grid revogr-data .rgCell {
+  padding: 0 6px;
+}
+
 /* Header row styling (row 0 when hasHeaders is enabled) */
 .spreadsheet-editor .header-row {
   background-color: var(--surface-secondary) !important;

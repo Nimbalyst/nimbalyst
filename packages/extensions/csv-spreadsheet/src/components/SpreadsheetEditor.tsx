@@ -317,8 +317,10 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
     });
   }, [host]); // Only depend on host, use ref for spreadsheet
 
-  // Selector for detecting dialogs/overlays
-  const DIALOG_SELECTOR = '[role="dialog"], .quick-open-modal, .command-palette, [class*="modal"], [class*="overlay"]:not(.spreadsheet-editor *), .column-format-dialog-overlay';
+  // Selector for detecting dialogs/overlays that should block the spreadsheet
+  // NOTE: We explicitly list dialog selectors rather than using wildcards like [class*="overlay"]
+  // because those can match unrelated elements in the host application (e.g., AgentCommandPalette)
+  const DIALOG_SELECTOR = '[role="dialog"], .quick-open-modal, .command-palette, [class*="modal"]';
 
   // Synchronous check for dialogs - used in keyboard handlers
   const isDialogOpen = useCallback(() => {
@@ -1478,6 +1480,8 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
         // Use inert attribute to completely disable focus/interaction when dialog is open
         {...(dialogOpen ? { inert: '' } : {})}
         style={!isActive ? { pointerEvents: 'none' } : undefined}
+        data-dialog-open={dialogOpen}
+        data-is-active={isActive}
         onContextMenu={handleContextMenu}
         onMouseDown={handleHeaderMouseDown}
         onClick={(e) => {
@@ -1528,6 +1532,7 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
         columnLetter={formatDialogColumn !== null ? columnIndexToLetter(formatDialogColumn) : ''}
         currentFormat={formatDialogColumn !== null ? columnFormats[formatDialogColumn] : undefined}
         onSave={(format) => {
+          console.log('[CSV Format] Saving format for column', formatDialogColumn, 'format:', format);
           if (formatDialogColumn !== null) {
             spreadsheet.setColumnFormat(formatDialogColumn, format);
           }
