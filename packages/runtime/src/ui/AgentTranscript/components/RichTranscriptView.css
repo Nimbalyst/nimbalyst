@@ -619,7 +619,7 @@
   gap: 0.5rem;
   color: var(--text-secondary);
   font-style: italic;
-  padding: 0.5rem 0;
+  padding: 0.5rem 1rem;
   margin-bottom: 0.5rem;
 }
 
