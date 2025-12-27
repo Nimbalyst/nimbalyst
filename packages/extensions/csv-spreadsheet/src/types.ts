@@ -133,21 +133,9 @@ export interface NormalizedSelectionRange {
 
 /**
  * Props for custom editor components (from Nimbalyst extension system)
+ * Re-exported from runtime for convenience
  */
-export interface CustomEditorProps {
-  filePath: string;
-  fileName: string;
-  initialContent: string;
-  theme: 'light' | 'dark' | 'crystal-dark';
-  isActive: boolean;
-  workspaceId?: string;
-  onContentChange?: () => void;
-  onDirtyChange?: (isDirty: boolean) => void;
-  onGetContentReady?: (getContentFn: () => string) => void;
-  onReloadContent?: (callback: (newContent: string) => void) => void;
-  onViewHistory?: () => void;
-  onRenameDocument?: () => void;
-}
+export type { EditorHost, EditorHostProps } from '@nimbalyst/runtime';
 
 /**
  * Cell reference (for formulas)

@@ -72,14 +72,43 @@
   color: var(--text-tertiary);
 }
 
-/* Toolbar */
+/* Toolbar - wraps formula bar and action buttons */
 .spreadsheet-toolbar {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 12px;
-  background-color: var(--surface-primary);
+  gap: 8px;
+  background-color: var(--surface-secondary);
   border-bottom: 1px solid var(--border-primary);
+}
+
+/* Formula bar takes up available space within toolbar */
+.spreadsheet-toolbar .formula-bar {
+  flex: 1;
+  border-bottom: none;
+}
+
+/* Source mode toggle button */
+.source-mode-button {
+  padding: 6px 12px;
+  margin-right: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  background-color: var(--surface-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.source-mode-button:hover {
+  background-color: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.source-mode-button:active {
+  background-color: var(--surface-primary);
 }
 
 .toolbar-group {

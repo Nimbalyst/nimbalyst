@@ -9,10 +9,12 @@ import { MaterialSymbol } from '@nimbalyst/runtime/ui/icons/MaterialSymbol';
 import type { DataModelStoreApi } from '../store';
 import type { EntityViewMode } from '../types';
 import { exportSchema, getAvailableFormats, type ExportFormat } from '../export-service';
+import type { EditorHost } from '@nimbalyst/runtime';
 
 interface DataModelToolbarProps {
   store: DataModelStoreApi;
   onScreenshot?: () => void;
+  host?: EditorHost;
 }
 
 const VIEW_MODES: { value: EntityViewMode; label: string }[] = [
@@ -21,7 +23,7 @@ const VIEW_MODES: { value: EntityViewMode; label: string }[] = [
   { value: 'full', label: 'Full' },
 ];
 
-export function DataModelToolbar({ store, onScreenshot }: DataModelToolbarProps) {
+export function DataModelToolbar({ store, onScreenshot, host }: DataModelToolbarProps) {
   const state = store.getState();
   const { entities, relationships, entityViewMode, database } = state;
 
@@ -208,6 +210,17 @@ export function DataModelToolbar({ store, onScreenshot }: DataModelToolbarProps)
           >
             <MaterialSymbol icon="download" size={18} />
           </button>
+
+          {/* Source mode toggle */}
+          {host?.supportsSourceMode && (
+            <button
+              className="datamodel-toolbar-button"
+              onClick={() => host.toggleSourceMode?.()}
+              title="View raw Prisma source"
+            >
+              View Source
+            </button>
+          )}
         </div>
       </div>
 

@@ -1,3 +1,10 @@
+/**
+ * usePDFDocument Hook
+ *
+ * Loads a PDF document using the EditorHost API for binary content loading.
+ * Uses PDF.js to parse and render the PDF.
+ */
+
 import { useState, useEffect } from 'react';
 
 // Get PDF.js from the host
@@ -28,7 +35,21 @@ export interface UsePDFDocumentResult {
   error: string | null;
 }
 
-export function usePDFDocument(filePath: string): UsePDFDocumentResult {
+/**
+ * Function to load binary content - matches EditorHost.loadBinaryContent signature
+ */
+type LoadBinaryContent = () => Promise<ArrayBuffer>;
+
+/**
+ * Load a PDF document using the provided content loader.
+ *
+ * @param loadBinaryContent Function to load binary content (from EditorHost)
+ * @param filePath File path (used as dependency to re-load when path changes)
+ */
+export function usePDFDocument(
+  loadBinaryContent: LoadBinaryContent,
+  filePath: string
+): UsePDFDocumentResult {
   const [document, setDocument] = useState<PDFDocumentProxy | null>(null);
   const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -65,24 +86,9 @@ export function usePDFDocument(filePath: string): UsePDFDocumentResult {
           }
         }
 
-        // Read the PDF file content using Electron API
-        const electronAPI = (window as any).electronAPI;
-        if (!electronAPI?.readFileContent) {
-          throw new Error('File reading API not available');
-        }
-
-        // Request binary mode explicitly for PDF files
-        const result = await electronAPI.readFileContent(filePath, { binary: true });
-        if (!result || !result.success) {
-          throw new Error(result?.error || 'Failed to read PDF file');
-        }
-
-        // Convert base64 content to Uint8Array for PDF.js
-        const binaryString = atob(result.content);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
+        // Load binary content via EditorHost
+        const arrayBuffer = await loadBinaryContent();
+        const bytes = new Uint8Array(arrayBuffer);
 
         // Load the PDF document from binary data
         const loadingTask = pdfjsLib.getDocument({ data: bytes });
@@ -107,7 +113,7 @@ export function usePDFDocument(filePath: string): UsePDFDocumentResult {
     return () => {
       cancelled = true;
     };
-  }, [filePath]);
+  }, [loadBinaryContent, filePath]);
 
   return { document, totalPages, loading, error };
 }

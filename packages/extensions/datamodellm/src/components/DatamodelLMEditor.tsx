@@ -2,13 +2,13 @@
  * DatamodelLM Editor
  *
  * The main editor component that integrates with Nimbalyst's custom editor system.
- * This component receives file content and provides the visual data modeling interface.
+ * Uses the EditorHost API for all host communication.
  *
  * Content Ownership Pattern:
  * - This editor OWNS its content state
- * - TabEditor only notifies us of file changes via onReloadContent
+ * - Host notifies us of file changes via onFileChanged
  * - We track lastKnownDiskContentRef to ignore echoes from our own saves
- * - We decide whether to reload based on comparing incoming content vs disk state
+ * - Host triggers saves via onSaveRequested, we respond by calling saveContent
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react';
@@ -20,45 +20,22 @@ import { createEmptyDataModel } from '../types';
 import { parsePrismaSchema, serializeToPrismaSchema } from '../prismaParser';
 import { registerEditorStore, unregisterEditorStore } from '../aiTools';
 import { captureDataModelCanvas, copyScreenshotToClipboard } from '../utils/screenshotUtils';
+import type { EditorHostProps } from '@nimbalyst/runtime';
 
-/**
- * Props received from Nimbalyst's custom editor system
- */
-interface CustomEditorProps {
-  filePath: string;
-  fileName: string;
-  initialContent: string;
-  theme: 'light' | 'dark' | 'crystal-dark';
-  isActive: boolean;
-  workspaceId?: string;
-  onContentChange?: () => void;
-  onDirtyChange?: (isDirty: boolean) => void;
-  onGetContentReady?: (getContentFn: () => string) => void;
-  onReloadContent?: (callback: (newContent: string) => void) => void;
-  onViewHistory?: () => void;
-  onRenameDocument?: () => void;
-}
+export function DatamodelLMEditor({ host }: EditorHostProps) {
+  // Extract frequently used values from host
+  const { filePath, theme } = host;
 
-export function DatamodelLMEditor({
-  filePath,
-  fileName,
-  initialContent,
-  theme,
-  isActive,
-  onContentChange,
-  onDirtyChange,
-  onGetContentReady,
-  onReloadContent,
-}: CustomEditorProps) {
+  // Loading state
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<Error | null>(null);
+
   // Create a store instance for this editor
   const storeRef = useRef<DataModelStoreApi | null>(null);
   const canvasRef = useRef<DataModelCanvasRef>(null);
 
   // Track what we believe is on disk to ignore echoes from our own saves
-  const lastKnownDiskContentRef = useRef<string>(initialContent);
-
-  // Track if we've done initial load
-  const hasLoadedInitialContentRef = useRef(false);
+  const lastKnownDiskContentRef = useRef<string>('');
 
   // Initialize store on mount
   if (!storeRef.current) {
@@ -67,57 +44,102 @@ export function DatamodelLMEditor({
 
   const store = storeRef.current;
 
-  // Parse initial content and load into store - ONLY ON FIRST MOUNT
+  // Ref to track if initial load has completed (prevents infinite loop)
+  const hasLoadedRef = useRef(false);
+
+  // Load content on mount (only once)
   useEffect(() => {
-    // Only load once - subsequent updates come through onReloadContent
-    if (hasLoadedInitialContentRef.current) {
-      console.log('[DatamodelLM] Skipping initial load - already loaded');
-      return;
-    }
-    hasLoadedInitialContentRef.current = true;
-    console.log('[DatamodelLM] Initial load from initialContent, length:', initialContent?.length);
+    // Skip if already loaded
+    if (hasLoadedRef.current) return;
 
-    if (initialContent) {
-      try {
-        const data = parsePrismaSchema(initialContent);
-        store.getState().loadFromFile(data);
-        lastKnownDiskContentRef.current = initialContent;
-      } catch (error) {
-        console.error('[DatamodelLM] Failed to parse Prisma schema:', error);
-        store.getState().loadFromFile(createEmptyDataModel());
-      }
-    } else {
-      // New file - create empty data model
-      store.getState().loadFromFile(createEmptyDataModel());
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store]); // Only depend on store, not initialContent
+    let mounted = true;
 
-  // Set up callbacks for dirty tracking
+    host.loadContent()
+      .then((content) => {
+        if (!mounted) return;
+
+        hasLoadedRef.current = true;
+
+        if (content) {
+          try {
+            const data = parsePrismaSchema(content);
+            store.getState().loadFromFile(data);
+            lastKnownDiskContentRef.current = content;
+          } catch (error) {
+            console.error('[DatamodelLM] Failed to parse Prisma schema:', error);
+            store.getState().loadFromFile(createEmptyDataModel());
+          }
+        } else {
+          // New file - create empty data model
+          store.getState().loadFromFile(createEmptyDataModel());
+        }
+        setIsLoading(false);
+      })
+      .catch((error) => {
+        if (mounted) {
+          hasLoadedRef.current = true;
+          console.error('[DatamodelLM] Failed to load content:', error);
+          setLoadError(error);
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [host, store]);
+
+  // Set up callbacks for dirty tracking (only once on mount)
   useEffect(() => {
     store.getState().setCallbacks({
       onDirtyChange: (isDirty) => {
-        onDirtyChange?.(isDirty);
-        if (isDirty) {
-          onContentChange?.();
-        }
+        host.setDirty(isDirty);
       },
     });
-  }, [store, onDirtyChange, onContentChange]);
-
-  // Register getContent function for saving
-  // When TabEditor calls getContent for saving, we update our disk state tracking
-  const getContent = useCallback(() => {
-    const data = store.getState().toFileData();
-    const content = serializeToPrismaSchema(data);
-    // Update our disk state so we can ignore the file watcher echo
-    lastKnownDiskContentRef.current = content;
-    return content;
+    // Intentionally only run once - host.setDirty is stable
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store]);
 
+  // Subscribe to file change notifications (only depends on host for subscription)
   useEffect(() => {
-    onGetContentReady?.(getContent);
-  }, [getContent, onGetContentReady]);
+    return host.onFileChanged((newContent) => {
+      // Check if this is just an echo of our own save
+      if (newContent === lastKnownDiskContentRef.current) {
+        console.log('[DatamodelLM] File change notification ignored - matches our last known disk state');
+        return;
+      }
+
+      console.log('[DatamodelLM] External file change detected, reloading');
+
+      try {
+        const data = parsePrismaSchema(newContent);
+        store.getState().loadFromFile(data);
+        // Mark as clean since we just loaded fresh content
+        store.getState().markClean();
+        // Update our disk state
+        lastKnownDiskContentRef.current = newContent;
+      } catch (error) {
+        console.error('[DatamodelLM] Failed to parse reloaded content:', error);
+      }
+    });
+  }, [host]); // Only depend on host - store is accessed via closure
+
+  // Subscribe to save requests from host
+  useEffect(() => {
+    return host.onSaveRequested(async () => {
+      try {
+        const data = store.getState().toFileData();
+        const content = serializeToPrismaSchema(data);
+        // Update disk state BEFORE saving to prevent echo
+        lastKnownDiskContentRef.current = content;
+        await host.saveContent(content);
+        store.getState().markClean();
+        console.log('[DatamodelLM] Saved');
+      } catch (error) {
+        console.error('[DatamodelLM] Save failed:', error);
+      }
+    });
+  }, [host]); // Only depend on host - store is accessed via closure
 
   // Subscribe to store changes and force re-render
   const [, forceUpdate] = useState(0);
@@ -136,48 +158,6 @@ export function DatamodelLMEditor({
     };
   }, [filePath, store]);
 
-  // Handle external content changes (e.g., AI edited the file)
-  // Compare against lastKnownDiskContentRef to ignore echoes from our own saves
-  const handleReloadContent = useCallback((newContent: string) => {
-    // Check if this is just an echo of our own save
-    if (newContent === lastKnownDiskContentRef.current) {
-      console.log('[DatamodelLM] File change notification ignored - matches our last known disk state');
-      return;
-    }
-
-    console.log('[DatamodelLM] External file change detected, reloading');
-    console.log('[DatamodelLM] lastKnownDiskContent length:', lastKnownDiskContentRef.current.length);
-    console.log('[DatamodelLM] newContent length:', newContent.length);
-
-    // Debug: Show first difference
-    if (lastKnownDiskContentRef.current.length === newContent.length) {
-      for (let i = 0; i < newContent.length; i++) {
-        if (newContent[i] !== lastKnownDiskContentRef.current[i]) {
-          console.log('[DatamodelLM] First diff at index:', i);
-          console.log('[DatamodelLM] Expected char:', JSON.stringify(lastKnownDiskContentRef.current.substring(i, i+20)));
-          console.log('[DatamodelLM] Got char:', JSON.stringify(newContent.substring(i, i+20)));
-          break;
-        }
-      }
-    }
-
-    try {
-      const data = parsePrismaSchema(newContent);
-      store.getState().loadFromFile(data);
-      // Mark as clean since we just loaded fresh content
-      store.getState().markClean();
-      // Update our disk state
-      lastKnownDiskContentRef.current = newContent;
-    } catch (error) {
-      console.error('[DatamodelLM] Failed to parse reloaded content:', error);
-    }
-  }, [store]);
-
-  // Register the reload callback with TabEditor
-  useEffect(() => {
-    onReloadContent?.(handleReloadContent);
-  }, [onReloadContent, handleReloadContent]);
-
   // Handle screenshot capture
   const handleScreenshot = useCallback(async () => {
     const canvasElement = canvasRef.current?.getCanvasElement();
@@ -195,9 +175,29 @@ export function DatamodelLMEditor({
     }
   }, []);
 
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="datamodel-editor" data-theme={theme}>
+        <div style={{ padding: '20px', color: 'var(--text-secondary)' }}>Loading...</div>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (loadError) {
+    return (
+      <div className="datamodel-editor" data-theme={theme}>
+        <div style={{ padding: '20px', color: 'var(--text-error)' }}>
+          Failed to load: {loadError.message}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="datamodel-editor" data-theme={theme}>
-      <DataModelToolbar store={store} onScreenshot={handleScreenshot} />
+      <DataModelToolbar store={store} onScreenshot={handleScreenshot} host={host} />
       <ReactFlowProvider>
         <DataModelCanvas ref={canvasRef} store={store} theme={theme} />
       </ReactFlowProvider>

@@ -16,7 +16,8 @@
       {
         "filePatterns": ["*.prisma"],
         "displayName": "Data Model Editor",
-        "component": "DatamodelLMEditor"
+        "component": "DatamodelLMEditor",
+        "supportsSourceMode": true
       }
     ],
     "aiTools": [

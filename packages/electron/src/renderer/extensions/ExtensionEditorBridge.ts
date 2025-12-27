@@ -55,11 +55,12 @@ function registerExtensionEditors(extensionId: string): string[] {
         component: component as React.FC<any>,
         name: contribution.displayName,
         supportsAI: extension.manifest.permissions?.ai || false,
+        supportsSourceMode: contribution.supportsSourceMode || false,
       });
 
       registeredExtensions.push(...extensions);
       logger.ui.info(
-        `[ExtensionEditorBridge] Registered ${contribution.displayName} for ${extensions.join(', ')}`
+        `[ExtensionEditorBridge] Registered ${contribution.displayName} for ${extensions.join(', ')} (sourceMode=${contribution.supportsSourceMode || false})`
       );
     }
   }

@@ -71,3 +71,15 @@ export {
   executeExtensionTool,
 } from './ExtensionAIToolsBridge';
 export type { MCPToolDefinition } from './ExtensionAIToolsBridge';
+
+// Editor Host
+export type {
+  EditorHost,
+  EditorHostProps,
+  DiffConfig,
+  DiffResult,
+} from './editorHost';
+
+// Editor Host Hook
+export { useEditorHost } from './useEditorHost';
+export type { UseEditorHostOptions, UseEditorHostResult } from './useEditorHost';

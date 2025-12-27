@@ -1,3 +1,15 @@
+/**
+ * PDF Viewer Editor
+ *
+ * Read-only viewer for PDF files.
+ * Uses the EditorHost API for host communication.
+ *
+ * Note: PDFs are binary and read-only, so this viewer:
+ * - Loads content via electronAPI.readFileContent (binary mode)
+ * - Never marks as dirty
+ * - Doesn't implement save functionality
+ */
+
 import { useState, useEffect, useCallback } from 'react';
 import { usePDFDocument } from './hooks/usePDFDocument';
 import { PDFScrollView } from './components/PDFScrollView';
@@ -6,43 +18,42 @@ import { Toolbar } from './components/Toolbar';
 // Get React from host (needed for TypeScript)
 const React = (window as any).__nimbalyst_extensions.react;
 
-export interface CustomEditorComponentProps {
-  filePath: string;
-  fileName: string;
-  initialContent: string;
-  theme: 'light' | 'dark' | 'crystal-dark';
-  isActive: boolean;
-  workspaceId?: string;
-  onContentChange?: () => void;
-  onDirtyChange?: (isDirty: boolean) => void;
-  onGetContentReady?: (getContentFn: () => string) => void;
-  onViewHistory?: () => void;
-  onRenameDocument?: () => void;
+// Import EditorHostProps type from runtime
+// Note: Extensions access runtime types via the host's exposed modules
+interface EditorHost {
+  readonly filePath: string;
+  readonly fileName: string;
+  readonly theme: 'light' | 'dark' | 'crystal-dark';
+  readonly isActive: boolean;
+  readonly workspaceId?: string;
+  loadContent(): Promise<string>;
+  loadBinaryContent(): Promise<ArrayBuffer>;
+  onFileChanged(callback: (newContent: string) => void): () => void;
+  setDirty(isDirty: boolean): void;
+  saveContent(content: string | ArrayBuffer): Promise<void>;
+  onSaveRequested(callback: () => void): () => void;
+  openHistory(): void;
 }
 
-export function PDFViewerEditor(props: CustomEditorComponentProps) {
-  const {
-    filePath,
-    theme,
-    isActive,
-    onGetContentReady,
-    onDirtyChange,
-  } = props;
+interface EditorHostProps {
+  host: EditorHost;
+}
 
-  const { document, totalPages, loading, error } = usePDFDocument(filePath);
+export function PDFViewerEditor({ host }: EditorHostProps) {
+  const { filePath, theme, isActive } = host;
+
+  // Use the EditorHost's loadBinaryContent for cross-platform compatibility
+  const { document, totalPages, loading, error } = usePDFDocument(
+    host.loadBinaryContent.bind(host),
+    filePath
+  );
   const [scale, setScale] = useState(1.0);
   const [fitToWidth, setFitToWidth] = useState(true); // Start with fit-to-width enabled
 
-  // PDFs are read-only - do NOT register a getContent function
-  // Registering one that returns '' would cause the save system to overwrite
-  // the PDF with an empty string if it detects a "change"
+  // PDFs are read-only - mark as never dirty
   useEffect(() => {
-    // Only set dirty to false, never provide a getContent function
-    if (onDirtyChange) {
-      onDirtyChange(false); // Never dirty
-    }
-    // Intentionally NOT calling onGetContentReady - this prevents any save attempts
-  }, [onDirtyChange]);
+    host.setDirty(false);
+  }, [host]);
 
   // Handle scale changes from user zoom actions
   const handleScaleChange = useCallback((newScale: number) => {

@@ -15,7 +15,8 @@
       {
         "filePatterns": ["*.csv", "*.tsv"],
         "displayName": "Spreadsheet Editor",
-        "component": "SpreadsheetEditor"
+        "component": "SpreadsheetEditor",
+        "supportsSourceMode": true
       }
     ],
     "fileIcons": {

@@ -7,6 +7,7 @@
  */
 
 import type { ComponentType } from 'react';
+import type { EditorHostProps } from './editorHost';
 
 // ============================================================================
 // Extension Manifest Types
@@ -251,6 +252,13 @@ export interface CustomEditorContribution {
 
   /** Component name to look up in module exports */
   component: string;
+
+  /**
+   * Whether this editor supports source mode (viewing/editing raw file content in Monaco).
+   * When true, the host will provide a "View Source" button and handle mode switching.
+   * Default: false
+   */
+  supportsSourceMode?: boolean;
 }
 
 /**
@@ -305,7 +313,7 @@ export interface ExtensionModule {
   deactivate?: () => Promise<void> | void;
 
   /** React components exported by the extension (for custom editors) */
-  components?: Record<string, ComponentType<CustomEditorComponentProps>>;
+  components?: Record<string, ComponentType<EditorHostProps>>;
 
   /** AI tools exported by the extension */
   aiTools?: ExtensionAITool[];
@@ -323,150 +331,8 @@ export interface ExtensionModule {
   hostComponents?: Record<string, ComponentType>;
 }
 
-/**
- * Diff mode state passed to custom editors that support diff visualization.
- * This enables custom editors to show before/after comparisons when AI edits files.
- */
-export interface CustomEditorDiffState {
-  /** Whether diff mode is currently active */
-  isActive: boolean;
-
-  /** Pre-edit content (the baseline before AI changes) */
-  baseline: string;
-
-  /** AI's proposed content (what's now on disk) */
-  target: string;
-
-  /** History tag ID for tracking this diff */
-  tagId: string;
-
-  /** AI session ID that made the edit */
-  sessionId: string;
-}
-
-/**
- * Capabilities that a custom editor can declare.
- * The host uses these to determine what features to enable.
- */
-export interface CustomEditorCapabilities {
-  /** Can serialize content to/from string (default: true) */
-  supportsTextContent?: boolean;
-
-  /** Can handle binary data */
-  supportsBinaryContent?: boolean;
-
-  /** Can show before/after diff visualization */
-  supportsDiffMode?: boolean;
-
-  /** Can handle incremental content streaming */
-  supportsStreaming?: boolean;
-
-  /** Has internal undo/redo stack */
-  supportsUndo?: boolean;
-
-  /** Supports find/replace operations */
-  supportsSearch?: boolean;
-}
-
-/**
- * Callbacks for custom editors to communicate state to the host.
- * This replaces the scattered individual callbacks with a structured interface.
- */
-export interface CustomEditorHostCallbacks {
-  /** Report that the editor is fully loaded and ready */
-  reportReady: () => void;
-
-  /** Report an error during loading or operation */
-  reportError: (error: Error) => void;
-
-  /** Get current content for saving (replaces onGetContentReady pattern) */
-  getContent: () => string | null;
-
-  /** Get binary content for saving (for binary editors) */
-  getBinaryContent?: () => ArrayBuffer | null;
-
-  /** Report editor capabilities (call once on mount) */
-  reportCapabilities?: (capabilities: CustomEditorCapabilities) => void;
-}
-
-/**
- * Props passed to custom editor components from extensions
- */
-export interface CustomEditorComponentProps {
-  /** Absolute path to the file being edited */
-  filePath: string;
-
-  /** File name without path */
-  fileName: string;
-
-  /** Initial file content as string */
-  initialContent: string;
-
-  /** Current theme */
-  theme: 'light' | 'dark' | 'crystal-dark';
-
-  /** Whether this editor is the active/focused one */
-  isActive: boolean;
-
-  /** Workspace identifier (if in a workspace) */
-  workspaceId?: string;
-
-  /** Called when content changes (for dirty tracking) */
-  onContentChange?: () => void;
-
-  /** Called when dirty state changes */
-  onDirtyChange?: (isDirty: boolean) => void;
-
-  /** Register a function to get current content (for saving) */
-  onGetContentReady?: (getContentFn: () => string) => void;
-
-  /** Open document history dialog */
-  onViewHistory?: () => void;
-
-  /** Trigger document rename */
-  onRenameDocument?: () => void;
-
-  // ============================================================================
-  // New API (Phase 3 additions)
-  // ============================================================================
-
-  /**
-   * Register host callbacks when editor mounts.
-   * The host calls these to get content, check capabilities, etc.
-   * Editors should call this once on mount with their implementation.
-   */
-  onRegisterCallbacks?: (callbacks: CustomEditorHostCallbacks) => void;
-
-  /**
-   * Called when editor unmounts - clean up host registration.
-   */
-  onUnregisterCallbacks?: () => void;
-
-  /**
-   * Diff mode state for editors that support diff visualization.
-   * Only provided if the editor declared supportsDiffMode capability.
-   * When active, the editor should show a visual diff between baseline and target.
-   */
-  diffState?: CustomEditorDiffState;
-
-  /**
-   * Called when user accepts the diff (keeps the AI's changes).
-   * Only relevant when diffState.isActive is true.
-   */
-  onAcceptDiff?: () => void;
-
-  /**
-   * Called when user rejects the diff (reverts to baseline).
-   * Only relevant when diffState.isActive is true.
-   */
-  onRejectDiff?: () => void;
-
-  /**
-   * Callback to reload content from disk.
-   * Called when file changes externally and editor should refresh.
-   */
-  onReloadContent?: (callback: (newContent: string) => void) => void;
-}
+// Note: CustomEditorComponentProps has been replaced by EditorHostProps from './editorHost'
+// Custom editors now receive a single 'host' prop that provides all communication with TabEditor.
 
 // ============================================================================
 // AI Tool Types

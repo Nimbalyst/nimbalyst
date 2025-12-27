@@ -34,10 +34,11 @@ import { FixedTabHeaderContainer, FixedTabHeaderRegistry } from '@nimbalyst/runt
 import { MonacoCodeEditor } from '../MonacoCodeEditor';
 import { MonacoDiffApprovalBar } from '../MonacoDiffApprovalBar';
 import { ImageViewer } from '../ImageViewer';
-import { MockupDiffViewer } from '../CustomEditors/MockupEditor/MockupDiffViewer';
 import { getFileType } from '../../utils/fileTypeDetector';
 import { customEditorRegistry } from '../CustomEditors';
 import { logger } from '../../utils/logger';
+import { createEditorHost } from './createEditorHost';
+import type { EditorHost, DiffConfig } from '@nimbalyst/runtime';
 
 interface TabEditorProps {
   // Identification
@@ -145,6 +146,30 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const isCustom = fileType === 'custom';
   const isMockupFile = isCustom && filePath.toLowerCase().endsWith('.mockup.html');
 
+  // Check if the custom editor supports source mode (from registry)
+  const customEditorSupportsSourceMode = useMemo(() => {
+    if (!isCustom) return false;
+
+    // Try to find the editor registration for this file
+    const lastDot = filePath.lastIndexOf('.');
+    if (lastDot <= 0) return false;
+
+    // Try single extension first
+    const singleExt = filePath.substring(lastDot).toLowerCase();
+    let registration = customEditorRegistry.getRegistration(singleExt);
+
+    // Try compound extension if single didn't match
+    if (!registration) {
+      const secondLastDot = filePath.lastIndexOf('.', lastDot - 1);
+      if (secondLastDot > 0) {
+        const compoundExt = filePath.substring(secondLastDot).toLowerCase();
+        registration = customEditorRegistry.getRegistration(compoundExt);
+      }
+    }
+
+    return registration?.supportsSourceMode || false;
+  }, [isCustom, filePath, registryVersion]);
+
   // View mode state for markdown files (lexical = rich text editor, monaco = raw markdown)
   const [markdownViewMode, setMarkdownViewMode] = useState<'lexical' | 'monaco'>('lexical');
   const [viewModeVersion, setViewModeVersion] = useState(0);
@@ -159,8 +184,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const [conflictDialogContent, setConflictDialogContent] = useState<string>('');
   const [showMonacoDiffBar, setShowMonacoDiffBar] = useState(false); // For Monaco diff approval bar
   const [isEditorReady, setIsEditorReady] = useState(false); // Track when editor is mounted and ready
-  const [mockupDiffData, setMockupDiffData] = useState<{ oldContent: string; newContent: string } | null>(null);
-  const [mockupDiffAction, setMockupDiffAction] = useState<'idle' | 'accept' | 'reject'>('idle');
+  const [customEditorSourceMode, setCustomEditorSourceMode] = useState(false); // Source mode for custom editors
 
   // Track editor type usage when file is opened
   const hasTrackedOpenRef = useRef<string | null>(null);
@@ -212,8 +236,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
   useEffect(() => {
     currentFilePathRef.current = filePath;
-    setMockupDiffData(null);
-    setMockupDiffAction('idle');
+    setCustomEditorSourceMode(false); // Reset source mode when switching files
   }, [filePath]);
 
   // Refs for stable access in timers/callbacks
@@ -232,7 +255,18 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const hasInitialContentSyncRef = useRef<boolean>(false);
   const pendingAIEditTagRef = useRef<{tagId: string, sessionId: string, filePath: string} | null>(null);
   const isApplyingDiffRef = useRef<boolean>(false); // Track programmatic diff application
-  const customEditorReloadRef = useRef<((newContent: string) => void) | null>(null); // Callback to reload custom editor content
+  const editorHostFileChangeCallbackRef = useRef<((newContent: string) => void) | null>(null); // For EditorHost file change subscription
+  const diffRequestCallbackRef = useRef<((config: DiffConfig) => void) | null>(null); // For EditorHost diff request subscription
+  const editorHostSaveRequestCallbackRef = useRef<(() => void) | null>(null); // For EditorHost save request subscription
+  const sourceModeChangedCallbackRef = useRef<((isSourceMode: boolean) => void) | null>(null); // For EditorHost source mode subscription
+
+  // Refs for EditorHost stability - these allow editorHost to access current values without recreating
+  const themeRef = useRef(theme);
+  const isActiveRef = useRef(isActive);
+  const customEditorSourceModeRef = useRef(customEditorSourceMode);
+  const customEditorSupportSourceModeRef = useRef(customEditorSupportsSourceMode);
+  const onViewHistoryRef = useRef(onViewHistory);
+  const onDirtyChangeRef = useRef(onDirtyChange);
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -251,6 +285,14 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   useEffect(() => {
     lastSaveTimeRef.current = lastSaveTime;
   }, [lastSaveTime]);
+
+  // Keep EditorHost stability refs in sync
+  useEffect(() => { themeRef.current = theme; }, [theme]);
+  useEffect(() => { isActiveRef.current = isActive; }, [isActive]);
+  useEffect(() => { customEditorSourceModeRef.current = customEditorSourceMode; }, [customEditorSourceMode]);
+  useEffect(() => { customEditorSupportSourceModeRef.current = customEditorSupportsSourceMode; }, [customEditorSupportsSourceMode]);
+  useEffect(() => { onViewHistoryRef.current = onViewHistory; }, [onViewHistory]);
+  useEffect(() => { onDirtyChangeRef.current = onDirtyChange; }, [onDirtyChange]);
 
   useEffect(() => {
     lastSavedContentRef.current = lastSavedContent;
@@ -419,6 +461,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     // Wait for editor to be ready before checking pending diffs
     if (!isEditorReady) return;
     if (!editorRef.current && !isMockupFile) return;
+    // Skip pending diff check when in source mode - source mode is for raw editing
+    if (customEditorSourceMode) return;
 
     hasCheckedForPendingTagsRef.current = true;
     // Reset the flag for this file
@@ -463,7 +507,15 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         // If content differs, apply the diff
         if (oldContent !== newContent) {
           if (isMockupFile) {
-            setMockupDiffData({ oldContent, newContent });
+            // Route through EditorHost callback - MockupViewer handles diff mode
+            if (diffRequestCallbackRef.current) {
+              diffRequestCallbackRef.current({
+                originalContent: oldContent,
+                modifiedContent: newContent,
+                tagId: pendingTag.id,
+                sessionId: pendingTag.sessionId,
+              });
+            }
             setContent(oldContent);
             contentRef.current = oldContent;
             initialContentRef.current = oldContent;
@@ -529,7 +581,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     };
 
     checkAndApplyPendingDiffs();
-  }, [filePath, isMarkdown, isEditorReady, isMockupFile, onDirtyChange]); // Wait for editor to be ready before checking pending diffs
+  }, [filePath, isMarkdown, isEditorReady, isMockupFile, onDirtyChange, customEditorSourceMode]); // Wait for editor to be ready before checking pending diffs
 
 
   // Helper: Save file with history snapshot
@@ -645,7 +697,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         // Check if we should clear the pending-review tag after save
         // ONLY check for user-initiated saves (manual/autosave), NOT AI operations
         // During AI operations (apply/accept/reject), skipDiffCheck will be true
-        if (!skipDiffCheck && editorRef.current && pendingAIEditTagRef.current?.tagId) {
+        // Only check for Lexical editors (markdown) - Monaco/custom editors don't have getEditorState
+        if (!skipDiffCheck && editorRef.current && pendingAIEditTagRef.current?.tagId && typeof editorRef.current.getEditorState === 'function') {
           const hasDiffs = editorRef.current.getEditorState().read(() => {
             return $hasDiffNodes(editorRef.current!);
           });
@@ -782,7 +835,18 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         return;
       }
 
-      // Skip if no content getter
+      // For custom editors using EditorHost: tell them to save
+      if (editorHostSaveRequestCallbackRef.current) {
+        try {
+          logger.ui.info(`[TabEditor] Requesting save from custom editor: ${fileName}`);
+          editorHostSaveRequestCallbackRef.current();
+        } catch (error) {
+          logger.ui.error(`[TabEditor] Custom editor save request failed for ${filePath}:`, error);
+        }
+        return;
+      }
+
+      // For built-in editors: use getContentFn
       if (!getContentFnRef.current) return;
 
       try {
@@ -966,7 +1030,15 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           if (isMockupFile) {
             diffUpdatePromise = (async () => {
               pendingAIEditTagRef.current = tagInfo;
-              setMockupDiffData({ oldContent, newContent });
+              // Route through EditorHost callback - MockupViewer handles diff mode
+              if (diffRequestCallbackRef.current) {
+                diffRequestCallbackRef.current({
+                  originalContent: oldContent,
+                  modifiedContent: newContent,
+                  tagId: pendingTags[0].id,
+                  sessionId: pendingTags[0].sessionId,
+                });
+              }
               setContent(oldContent);
               contentRef.current = oldContent;
               initialContentRef.current = oldContent;
@@ -1138,10 +1210,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         }
 
         const applyReload = async () => {
-          // For custom editors: Just notify them of the file change, don't update our state
+          // For custom editors using EditorHost: Just notify them of the file change
           // The custom editor owns its content - it will compare and decide whether to reload
-          // If it does reload, it will call onDirtyChange/onContentChange to update us
-          if (isCustom && customEditorReloadRef.current) {
+          if (isCustom && editorHostFileChangeCallbackRef.current) {
             // Create history snapshot of external change for custom editors too
             if (window.electronAPI?.history && newContent) {
               try {
@@ -1158,7 +1229,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
             try {
               logger.ui.info(`[TabEditor] Notifying custom editor of file change for ${fileName}`);
-              customEditorReloadRef.current(newContent);
+              editorHostFileChangeCallbackRef.current(newContent);
               // Update lastSavedContent to reflect what's on disk, but don't touch other state
               // The editor will report its state via callbacks if it actually updates
               lastSavedContentRef.current = newContent;
@@ -1535,127 +1606,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   }, []);
 
   // Monaco diff mode accept/reject handlers
-  const handleMockupDiffAccept = useCallback(async () => {
-    if (!mockupDiffData || !pendingAIEditTagRef.current) {
-      logger.ui.warn('[TabEditor] Cannot accept mockup diff - missing data or tag');
-      return;
-    }
-
-    const operationFilePath = filePath;
-    setMockupDiffAction('accept');
-
-    try {
-      const newContent = mockupDiffData.newContent;
-      await window.electronAPI.saveFile(newContent, operationFilePath);
-
-      // Check if file path changed during async operation - if so, abort
-      if (currentFilePathRef.current !== operationFilePath) {
-        logger.ui.info('[TabEditor] Mockup diff accept aborted - file path changed');
-        return;
-      }
-
-      if (window.electronAPI.history) {
-        await window.electronAPI.history.updateTagStatus(
-          operationFilePath,
-          pendingAIEditTagRef.current.tagId,
-          'reviewed'
-        );
-      }
-
-      // Final check before applying state changes
-      if (currentFilePathRef.current !== operationFilePath) {
-        logger.ui.info('[TabEditor] Mockup diff accept aborted - file path changed');
-        return;
-      }
-
-      // Track analytics event for accepting mockup diff
-      posthog?.capture('ai_diff_accepted', {
-        acceptType: 'all',
-        replacementCount: 1,
-        fileType: 'mockup'
-      });
-
-      pendingAIEditTagRef.current = null;
-      setMockupDiffData(null);
-      setContent(newContent);
-      contentRef.current = newContent;
-      initialContentRef.current = newContent;
-      setLastSavedContent(newContent);
-      lastSavedContentRef.current = newContent;
-      setIsDirty(false);
-      isDirtyRef.current = false;
-      onDirtyChange?.(false);
-    } catch (error) {
-      logger.ui.error('[TabEditor] Error accepting mockup diff:', error);
-    } finally {
-      // Only reset action if we're still on the same file
-      if (currentFilePathRef.current === operationFilePath) {
-        setMockupDiffAction('idle');
-      }
-    }
-  }, [mockupDiffData, filePath, onDirtyChange, posthog]);
-
-  const handleMockupDiffReject = useCallback(async () => {
-    if (!mockupDiffData || !pendingAIEditTagRef.current) {
-      logger.ui.warn('[TabEditor] Cannot reject mockup diff - missing data or tag');
-      return;
-    }
-
-    const operationFilePath = filePath;
-    setMockupDiffAction('reject');
-
-    try {
-      const oldContent = mockupDiffData.oldContent;
-      await window.electronAPI.saveFile(oldContent, operationFilePath);
-
-      // Check if file path changed during async operation - if so, abort
-      if (currentFilePathRef.current !== operationFilePath) {
-        logger.ui.info('[TabEditor] Mockup diff reject aborted - file path changed');
-        return;
-      }
-
-      if (window.electronAPI.history) {
-        await window.electronAPI.history.updateTagStatus(
-          operationFilePath,
-          pendingAIEditTagRef.current.tagId,
-          'reviewed'
-        );
-      }
-
-      // Final check before applying state changes
-      if (currentFilePathRef.current !== operationFilePath) {
-        logger.ui.info('[TabEditor] Mockup diff reject aborted - file path changed');
-        return;
-      }
-
-      // Track analytics event for rejecting mockup diff
-      posthog?.capture('ai_diff_rejected', {
-        rejectType: 'all',
-        replacementCount: 1,
-        fileType: 'mockup'
-      });
-
-      pendingAIEditTagRef.current = null;
-      setMockupDiffData(null);
-      setContent(oldContent);
-      contentRef.current = oldContent;
-      initialContentRef.current = oldContent;
-      setLastSavedContent(oldContent);
-      lastSavedContentRef.current = oldContent;
-      setIsDirty(false);
-      isDirtyRef.current = false;
-      onDirtyChange?.(false);
-    } catch (error) {
-      logger.ui.error('[TabEditor] Error rejecting mockup diff:', error);
-    } finally {
-      // Only reset action if we're still on the same file
-      if (currentFilePathRef.current === operationFilePath) {
-        setMockupDiffAction('idle');
-      }
-    }
-  }, [mockupDiffData, filePath, onDirtyChange, posthog]);
-
-  // Monaco diff mode accept/reject handlers
   const handleMonacoDiffAccept = useCallback(async () => {
     console.log('[TabEditor] !!!!! handleMonacoDiffAccept CALLED !!!!!');
     console.log('[TabEditor] editorRef.current:', !!editorRef.current);
@@ -1734,9 +1684,10 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
       // CRITICAL: Update Monaco editor's content after exiting diff mode
       // Without this, Monaco will revert to the old content when it switches back to normal mode
+      // Use force: true because Monaco's disk tracker already has this content from acceptDiff()
       if (editorRef.current.setContent) {
         console.log('[TabEditor] Updating Monaco editor content after diff acceptance');
-        editorRef.current.setContent(newContent);
+        editorRef.current.setContent(newContent, { force: true });
       }
 
       logger.ui.info('[TabEditor] Monaco diff accepted successfully');
@@ -1791,6 +1742,224 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     }
   }, [filePath]);
 
+  // Create EditorHost for custom editors
+  // This is memoized and uses refs for changing values to stay stable across renders
+  // Only recreate when filePath or workspaceId changes (genuinely new file/workspace)
+  const editorHost = useMemo<EditorHost>(() => {
+    return createEditorHost({
+      filePath,
+      fileName,
+      // Use getters that access refs for values that change but shouldn't recreate host
+      get theme() { return themeRef.current; },
+      get isActive() { return isActiveRef.current; },
+      workspaceId,
+
+      // Read file content from disk (text)
+      readFile: async (path: string): Promise<string> => {
+        const result = await window.electronAPI.readFileContent(path);
+        return result?.content || '';
+      },
+
+      // Read file content from disk (binary)
+      readBinaryFile: async (path: string): Promise<ArrayBuffer> => {
+        const result = await window.electronAPI.readFileContent(path, { binary: true });
+        if (!result?.success || !result.content) {
+          throw new Error(result?.error || 'Failed to read binary file');
+        }
+        // Convert base64 to ArrayBuffer
+        const binaryString = atob(result.content);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        return bytes.buffer;
+      },
+
+      // Subscribe to file changes
+      // The actual file watcher is handled by TabEditor's main effect
+      // We just wire up the callback so it gets called when files change
+      subscribeToFileChanges: (callback: (newContent: string) => void): (() => void) => {
+        editorHostFileChangeCallbackRef.current = callback;
+        return () => {
+          editorHostFileChangeCallbackRef.current = null;
+        };
+      },
+
+      // Report dirty state change
+      onDirtyChange: (isDirty: boolean) => {
+        setIsDirty(isDirty);
+        isDirtyRef.current = isDirty;
+        onDirtyChangeRef.current?.(isDirty);
+      },
+
+      // Save content to disk
+      saveContent: async (content: string | ArrayBuffer): Promise<void> => {
+        // Write to disk
+        if (typeof content === 'string') {
+          await window.electronAPI.saveFile(content, filePath);
+        } else {
+          // TODO: Handle binary content
+          throw new Error('Binary content saving not yet implemented');
+        }
+
+        // Create history snapshot
+        if (window.electronAPI.history && typeof content === 'string') {
+          await window.electronAPI.history.createSnapshot(filePath, content, 'auto-save', 'Auto-save');
+        }
+
+        // Update our tracking of what's on disk
+        if (typeof content === 'string') {
+          lastSavedContentRef.current = content;
+          setLastSavedContent(content);
+        }
+        setLastSaveTime(Date.now());
+
+        // Mark clean
+        setIsDirty(false);
+        isDirtyRef.current = false;
+        onDirtyChangeRef.current?.(false);
+      },
+
+      // Subscribe to save requests from host (autosave timer, manual save)
+      subscribeToSaveRequests: (callback: () => void): (() => void) => {
+        editorHostSaveRequestCallbackRef.current = callback;
+        return () => {
+          editorHostSaveRequestCallbackRef.current = null;
+        };
+      },
+
+      // Open history dialog
+      openHistory: () => {
+        onViewHistoryRef.current?.();
+      },
+
+      // Subscribe to diff requests (optional - for editors that support diff mode)
+      subscribeToDiffRequests: (callback: (config: DiffConfig) => void): (() => void) => {
+        diffRequestCallbackRef.current = callback;
+        return () => {
+          diffRequestCallbackRef.current = null;
+        };
+      },
+
+      // Report diff result
+      reportDiffResult: async (result): Promise<void> => {
+        if (!pendingAIEditTagRef.current) return;
+
+        // Save the resulting content
+        await window.electronAPI.saveFile(result.content, filePath);
+
+        // Update tag status
+        if (window.electronAPI.history) {
+          await window.electronAPI.history.updateTagStatus(
+            filePath,
+            pendingAIEditTagRef.current.tagId,
+            'reviewed'
+          );
+        }
+
+        // Clear pending tag
+        pendingAIEditTagRef.current = null;
+
+        // Update state
+        setContent(result.content);
+        contentRef.current = result.content;
+        setLastSavedContent(result.content);
+        lastSavedContentRef.current = result.content;
+        setIsDirty(false);
+        isDirtyRef.current = false;
+        onDirtyChangeRef.current?.(false);
+      },
+
+      // Check if diff mode is active
+      isDiffModeActive: () => {
+        return pendingAIEditTagRef.current !== null;
+      },
+
+      // ============ SOURCE MODE ============
+
+      // Source mode is declared in extension manifest (supportsSourceMode)
+      // Use getter to access ref for dynamic value
+      get supportsSourceMode() { return customEditorSupportSourceModeRef.current; },
+
+      // Toggle source mode
+      toggleSourceMode: async () => {
+        const currentlyInSourceMode = customEditorSourceModeRef.current;
+
+        if (currentlyInSourceMode) {
+          // Switching FROM source mode TO custom editor
+          // Save Monaco's content to disk first so custom editor loads fresh data
+          if (getContentFnRef.current && isDirtyRef.current) {
+            const monacoContent = getContentFnRef.current();
+            logger.ui.info(`[TabEditor] Saving source mode content before switching to editor: ${fileName}`);
+            await window.electronAPI.saveFile(monacoContent, filePath);
+            // Update our tracking
+            lastSavedContentRef.current = monacoContent;
+            setLastSavedContent(monacoContent);
+            setContent(monacoContent);
+            contentRef.current = monacoContent;
+            setIsDirty(false);
+            isDirtyRef.current = false;
+          }
+        } else {
+          // Switching TO source mode FROM custom editor
+          // First, save custom editor's content if dirty
+          if (isDirtyRef.current && editorHostSaveRequestCallbackRef.current) {
+            logger.ui.info(`[TabEditor] Saving custom editor content before switching to source mode: ${fileName}`);
+            editorHostSaveRequestCallbackRef.current();
+            // Give the save a moment to complete
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+          // Reload content from disk so Monaco has fresh data
+          try {
+            const result = await window.electronAPI.readFileContent(filePath);
+            if (result?.content) {
+              setContent(result.content);
+              contentRef.current = result.content;
+              lastSavedContentRef.current = result.content;
+              setLastSavedContent(result.content);
+            }
+          } catch (error) {
+            logger.ui.error(`[TabEditor] Failed to load content for source mode: ${filePath}`, error);
+          }
+        }
+
+        setCustomEditorSourceMode(!currentlyInSourceMode);
+        // Notify subscribers
+        sourceModeChangedCallbackRef.current?.(!currentlyInSourceMode);
+      },
+
+      // Subscribe to source mode changes
+      subscribeToSourceModeChanges: (callback: (isSourceMode: boolean) => void): (() => void) => {
+        sourceModeChangedCallbackRef.current = callback;
+        return () => {
+          sourceModeChangedCallbackRef.current = null;
+        };
+      },
+
+      // Check if source mode is active
+      isSourceModeActive: () => {
+        return customEditorSourceModeRef.current;
+      },
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filePath, fileName, workspaceId]); // Only recreate when file or workspace changes
+
+  // Register manual save function for custom editors
+  // This ensures saveTabById works when closing dirty custom editor tabs
+  // Skip when in source mode - Monaco handles its own save registration
+  useEffect(() => {
+    if (!isCustom || !onManualSaveReady || customEditorSourceMode) return;
+
+    // Register a save function that triggers the EditorHost callback
+    const customEditorSave = async () => {
+      if (editorHostSaveRequestCallbackRef.current) {
+        logger.ui.info(`[TabEditor] Triggering custom editor save on close: ${fileName}`);
+        editorHostSaveRequestCallbackRef.current();
+      }
+    };
+    onManualSaveReady(customEditorSave);
+  }, [isCustom, onManualSaveReady, fileName, customEditorSourceMode]);
+
   return (
       <div
           className={`tab-editor multi-editor-instance ${isActive ? 'active' : 'hidden'}`}
@@ -1810,17 +1979,64 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           editor={editorRef.current}
         />
           {isCustom ? (() => {
-            if (isMockupFile && mockupDiffData) {
+            // Source mode: render Monaco instead of custom editor
+            if (customEditorSourceMode) {
               return (
-                <MockupDiffViewer
-                  originalHtml={mockupDiffData.oldContent}
-                  updatedHtml={mockupDiffData.newContent}
-                  fileName={fileName}
-                  onAccept={handleMockupDiffAccept}
-                  onReject={handleMockupDiffReject}
-                  isAccepting={mockupDiffAction === 'accept'}
-                  isRejecting={mockupDiffAction === 'reject'}
-                />
+                <>
+                  <div className="custom-editor-source-toolbar" style={{
+                    padding: '8px 16px',
+                    borderBottom: '1px solid var(--border-primary)',
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    alignItems: 'center',
+                    gap: '8px',
+                    background: 'var(--surface-secondary)',
+                  }}>
+                    <span style={{
+                      marginRight: 'auto',
+                      fontSize: '13px',
+                      color: 'var(--text-secondary)'
+                    }}>
+                      Source Mode
+                    </span>
+                    <button
+                      onClick={() => editorHost.toggleSourceMode?.()}
+                      style={{
+                        padding: '4px 12px',
+                        fontSize: '13px',
+                        cursor: 'pointer',
+                        background: 'var(--surface-primary)',
+                        border: '1px solid var(--border-primary)',
+                        borderRadius: '4px',
+                        color: 'var(--text-primary)',
+                      }}
+                    >
+                      Editor
+                    </button>
+                  </div>
+                  <MonacoCodeEditor
+                    key={`${filePath}-source`}
+                    filePath={filePath}
+                    fileName={fileName}
+                    initialContent={content}
+                    theme={theme}
+                    isActive={isActive}
+                    onContentChange={handleContentChange}
+                    onGetContent={(getContentFn) => {
+                      getContentFnRef.current = getContentFn;
+                      if (onGetContentReady) {
+                        onGetContentReady(getContentFn);
+                      }
+                      if (onManualSaveReady) {
+                        onManualSaveReady(handleManualSave);
+                      }
+                    }}
+                    onEditorReady={(editorWrapper) => {
+                      editorRef.current = editorWrapper;
+                      setIsEditorReady(true);
+                    }}
+                  />
+                </>
               );
             }
 
@@ -1845,37 +2061,16 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             }
 
             if (CustomEditor) {
+              // Mark editor as ready when custom editor mounts
+              // The editor will call host.loadContent() on mount
+              if (!isEditorReady) {
+                setIsEditorReady(true);
+              }
+
               return (
                 <CustomEditor
                   key={filePath}
-                  filePath={filePath}
-                  fileName={fileName}
-                  initialContent={content}
-                  theme={theme}
-                  isActive={isActive}
-                  workspaceId={workspaceId}
-                  onContentChange={handleContentChange}
-                  onDirtyChange={(isDirty: boolean) => {
-                    setIsDirty(isDirty);
-                    isDirtyRef.current = isDirty;
-                    onDirtyChange?.(isDirty);
-                  }}
-                  onGetContentReady={(getContentFn: () => string) => {
-                    // Store the getContent function for TabEditor's save machinery
-                    getContentFnRef.current = getContentFn;
-                    // Notify parent
-                    onGetContentReady?.(getContentFn);
-                    // Expose the manual save function
-                    onManualSaveReady?.(handleManualSave);
-                    // Mark editor as ready
-                    setIsEditorReady(true);
-                  }}
-                  onReloadContent={(callback) => {
-                    // Store the reload callback for file watcher to call
-                    customEditorReloadRef.current = callback;
-                  }}
-                  onViewHistory={onViewHistory}
-                  onRenameDocument={onRenameDocument}
+                  host={editorHost}
                 />
               );
             }

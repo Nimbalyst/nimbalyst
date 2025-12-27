@@ -7,9 +7,9 @@
 
 import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { RevoGrid, type RevoGridCustomEvent, type ColumnRegular } from '@revolist/react-datagrid';
-import type { CustomEditorProps, NormalizedSelectionRange, ColumnFormat } from '../types';
+import type { EditorHostProps, NormalizedSelectionRange, ColumnFormat } from '../types';
 import { useSpreadsheetData } from '../hooks/useSpreadsheetData';
-import { columnIndexToLetter, generateColumnHeaders } from '../utils/csvParser';
+import { columnIndexToLetter, columnLetterToIndex, generateColumnHeaders } from '../utils/csvParser';
 import { isFormula } from '../utils/formulaEngine';
 import { formatCellValue, getColumnTypeName, DEFAULT_COLUMN_FORMAT } from '../utils/formatters';
 import { FormulaBar } from './FormulaBar';
@@ -176,21 +176,83 @@ function normalizeRange(
   };
 }
 
-export function SpreadsheetEditor({
-  filePath,
-  initialContent,
-  theme,
-  isActive,
-  onContentChange,
-  onDirtyChange,
-  onGetContentReady,
-  onReloadContent,
-}: CustomEditorProps) {
-  // Main data hook with undo/redo
-  const spreadsheet = useSpreadsheetData(initialContent, filePath, {
-    onDirtyChange,
-    onContentChange,
+export function SpreadsheetEditor({ host }: EditorHostProps) {
+  // Extract frequently used values from host
+  const { filePath, theme, isActive } = host;
+
+  // Loading state - we load content via host.loadContent() instead of receiving it as a prop
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<Error | null>(null);
+
+  // Main data hook with undo/redo - starts empty, we'll load content into it
+  const spreadsheet = useSpreadsheetData('', filePath, {
+    onDirtyChange: host.setDirty,
+    onContentChange: () => {}, // Not needed - dirty state is handled by host.setDirty
   });
+
+  // Ref to track spreadsheet for stable callbacks (avoids re-subscribing on every change)
+  const spreadsheetRef = useRef(spreadsheet);
+  spreadsheetRef.current = spreadsheet;
+
+  // Ref to track if initial load has completed (prevents infinite loop)
+  const hasLoadedRef = useRef(false);
+
+  // Load content on mount (only once)
+  useEffect(() => {
+    // Skip if already loaded
+    if (hasLoadedRef.current) return;
+
+    let mounted = true;
+
+    host.loadContent()
+      .then((content) => {
+        if (mounted) {
+          hasLoadedRef.current = true;
+          // Load content into the spreadsheet
+          spreadsheet.loadFromCSV(content);
+          spreadsheet.markClean();
+          setIsLoading(false);
+        }
+      })
+      .catch((error) => {
+        if (mounted) {
+          hasLoadedRef.current = true;
+          console.error('[CSV] Failed to load content:', error);
+          setLoadError(error);
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [host, spreadsheet]);
+
+  // Subscribe to file change notifications
+  useEffect(() => {
+    return host.onFileChanged((newContent) => {
+      const ss = spreadsheetRef.current;
+
+      // Check if this is just an echo of our own save
+      if (ss.contentMatchesDisk(newContent)) {
+        console.log('[CSV] File change notification ignored - disk content unchanged');
+        return;
+      }
+
+      // Check if content matches what we currently have
+      const currentContent = ss.toCSV();
+      if (currentContent === newContent) {
+        console.log('[CSV] File change notification ignored - matches current content');
+        ss.updateDiskContent(newContent);
+        return;
+      }
+
+      // Content is actually different - this is a real external change
+      console.log('[CSV] External file change detected, reloading');
+      ss.loadFromCSV(newContent);
+      ss.markClean();
+    });
+  }, [host]); // Only depend on host, use ref for spreadsheet
 
   // Ref for the editor container (defined early for use in effects)
   const editorRef = useRef<HTMLDivElement>(null);
@@ -230,20 +292,6 @@ export function SpreadsheetEditor({
   // Column format dialog state
   const [formatDialogColumn, setFormatDialogColumn] = useState<number | null>(null);
 
-  // Register getContent function for saving
-  // When this is called, the host is about to save our content to disk
-  // We update our disk content tracker so we can ignore the subsequent file watcher notification
-  const getContent = useCallback(() => {
-    const content = spreadsheet.toCSV();
-    // Update our record of what will be on disk after this save
-    spreadsheet.updateDiskContent(content);
-    return content;
-  }, [spreadsheet]);
-
-  useEffect(() => {
-    onGetContentReady?.(getContent);
-  }, [getContent, onGetContentReady]);
-
   // Register store for AI tool access
   useEffect(() => {
     registerEditorStore(filePath, spreadsheet);
@@ -252,48 +300,22 @@ export function SpreadsheetEditor({
     };
   }, [filePath, spreadsheet]);
 
-  // Handle notification of external file change (e.g., when AI agent edits the file)
-  // We compare against BOTH the last known disk content AND the current editor content
-  // This prevents clobbering user edits when file watcher fires after our own save
-  // OR when another tab of the same file saves
-  const handleReloadContent = useCallback(
-    (newContent: string) => {
-      try {
-        // Check 1: Compare against what we last knew was on disk
-        if (spreadsheet.contentMatchesDisk(newContent)) {
-          console.log(`[CSV] File change notification ignored - disk content unchanged`);
-          return;
-        }
-
-        // Check 2: Compare against our CURRENT content (serialized)
-        // This catches the case where another tab saved the same file - if our current
-        // content matches what's now on disk, we don't need to reload
-        const currentContent = spreadsheet.toCSV();
-        if (currentContent === newContent) {
-          console.log(`[CSV] File change notification ignored - matches current content`);
-          // Update our disk reference since we now know this is what's on disk
-          spreadsheet.updateDiskContent(newContent);
-          return;
-        }
-
-        // Content is actually different - this is a real external change (e.g., AI edit)
-        console.log(`[CSV] External file change detected, reloading (${newContent.length} bytes)`);
-        spreadsheet.loadFromCSV(newContent);
-        spreadsheet.markClean();
-        setSelectedCell(null);
-        setSelectionRange(null);
-        console.log('[CSV] Content reload complete');
-      } catch (error) {
-        console.error('[CSV] Failed to reload content:', error);
-        // Don't throw - the editor should remain functional even if reload fails
-      }
-    },
-    [spreadsheet]
-  );
-
+  // Subscribe to save requests from host (autosave timer triggers this)
   useEffect(() => {
-    onReloadContent?.(handleReloadContent);
-  }, [onReloadContent, handleReloadContent]);
+    return host.onSaveRequested(async () => {
+      try {
+        const ss = spreadsheetRef.current;
+        const content = ss.toCSV();
+        // Update disk content BEFORE saving to prevent echo
+        ss.updateDiskContent(content);
+        await host.saveContent(content);
+        ss.markClean();
+        console.log('[CSV] Saved');
+      } catch (error) {
+        console.error('[CSV] Save failed:', error);
+      }
+    });
+  }, [host]); // Only depend on host, use ref for spreadsheet
 
   // Selector for detecting dialogs/overlays
   const DIALOG_SELECTOR = '[role="dialog"], .quick-open-modal, .command-palette, [class*="modal"], [class*="overlay"]:not(.spreadsheet-editor *), .column-format-dialog-overlay';
@@ -592,11 +614,22 @@ export function SpreadsheetEditor({
 
     // Check if clicking on a column header
     // RevoGrid column headers are in revogr-header elements with data-rgcol attribute
+    // Note: We need to check if the header is in the row header area (which has class 'rowHeaders')
     const columnHeader = target.closest('revogr-header [data-rgcol]') as HTMLElement | null;
     if (columnHeader) {
-      const colIndex = parseInt(columnHeader.dataset.rgcol || '', 10);
-      console.log('[CSV Context Menu] Column header clicked, colIndex:', colIndex, 'columnLetter:', columnIndexToLetter(colIndex));
-      if (!isNaN(colIndex)) {
+      // Skip if this is the row header column (clicking on the corner)
+      const isRowHeaderArea = columnHeader.closest('.rowHeaders');
+      if (isRowHeaderArea) {
+        // Ignore clicks on the row header column header
+        return;
+      }
+
+      // Get the actual column letter from the header text (e.g., "A", "B", "E")
+      // This is more reliable than data-rgcol which can be off by one when header rows are pinned
+      const headerText = columnHeader.textContent?.trim() || '';
+      const colIndex = columnLetterToIndex(headerText);
+      console.log('[CSV Context Menu] Column header clicked, headerText:', headerText, 'colIndex:', colIndex);
+      if (colIndex >= 0) {
         setContextMenu({
           x: event.clientX - rect.left,
           y: event.clientY - rect.top,
@@ -1381,6 +1414,39 @@ export function SpreadsheetEditor({
     return getContextMenuItems();
   }, [contextMenu, getContextMenuItems, getRowHeaderContextMenuItems, getColumnHeaderContextMenuItems]);
 
+  // Render loading state
+  if (isLoading) {
+    return (
+      <div className="spreadsheet-editor" data-theme={theme}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '100%',
+          color: 'var(--text-secondary)',
+        }}>
+          Loading spreadsheet...
+        </div>
+      </div>
+    );
+  }
+
+  // Render error state
+  if (loadError) {
+    return (
+      <div className="spreadsheet-editor" data-theme={theme}>
+        <div style={{
+          padding: '20px',
+          color: 'var(--text-primary)',
+          backgroundColor: 'var(--surface-primary)',
+        }}>
+          <h3 style={{ color: 'var(--text-primary)' }}>Error Loading Spreadsheet</h3>
+          <p style={{ color: 'var(--text-secondary)' }}>{loadError.message}</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       ref={editorRef}
@@ -1389,12 +1455,23 @@ export function SpreadsheetEditor({
       onKeyDown={handleKeyDown}
       tabIndex={0}
     >
-      <FormulaBar
-        cellRef={formatSelectionRef(selectionRange)}
-        value={getSelectedCellRaw()}
-        onChange={handleFormulaChange}
-        isFormula={isFormula(getSelectedCellRaw())}
-      />
+      <div className="spreadsheet-toolbar">
+        <FormulaBar
+          cellRef={formatSelectionRef(selectionRange)}
+          value={getSelectedCellRaw()}
+          onChange={handleFormulaChange}
+          isFormula={isFormula(getSelectedCellRaw())}
+        />
+        {host.supportsSourceMode && (
+          <button
+            className="source-mode-button"
+            onClick={() => host.toggleSourceMode?.()}
+            title="View raw CSV source"
+          >
+            View Source
+          </button>
+        )}
+      </div>
       <div
         ref={gridContainerRef}
         className="spreadsheet-grid-container"
