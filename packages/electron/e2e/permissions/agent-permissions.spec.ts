@@ -29,7 +29,7 @@ test.beforeEach(async () => {
   const testFilePath = path.join(workspaceDir, 'test.md');
   await fs.writeFile(testFilePath, '# Test Document\n\nTest content.\n', 'utf8');
 
-  electronApp = await launchElectronApp({ workspace: workspaceDir });
+  electronApp = await launchElectronApp({ workspace: workspaceDir, permissionMode: 'none' });
   page = await electronApp.firstWindow();
 
   // Wait for page to load

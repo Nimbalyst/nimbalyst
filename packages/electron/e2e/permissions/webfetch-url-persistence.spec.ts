@@ -37,7 +37,7 @@ test.beforeEach(async () => {
   const testFilePath = path.join(workspaceDir, 'test.md');
   await fs.writeFile(testFilePath, '# Test Document\n\nTest content.\n', 'utf8');
 
-  electronApp = await launchElectronApp({ workspace: workspaceDir });
+  electronApp = await launchElectronApp({ workspace: workspaceDir, permissionMode: 'none' });
   page = await electronApp.firstWindow();
 
   await page.waitForLoadState('domcontentloaded');
@@ -134,7 +134,7 @@ test('URL pattern: persists across app restart', async () => {
   await new Promise(resolve => setTimeout(resolve, 1000));
 
   // Step 3: Relaunch the app with the same workspace
-  electronApp = await launchElectronApp({ workspace: workspaceDir });
+  electronApp = await launchElectronApp({ workspace: workspaceDir, permissionMode: 'none' });
   page = await electronApp.firstWindow();
   await page.waitForLoadState('domcontentloaded');
   await dismissAPIKeyDialog(page);

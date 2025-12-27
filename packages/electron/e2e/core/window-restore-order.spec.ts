@@ -40,7 +40,7 @@ planStatus:
     // Launch app with workspace - enable session restoration
     let electronApp = await launchElectronApp({
       workspace: workspacePath,
-      env: { NODE_ENV: 'test', ENABLE_SESSION_RESTORE: '1' }
+      env: { NODE_ENV: 'test', ENABLE_SESSION_RESTORE: '1' },
     });
 
     let page = await electronApp.firstWindow();
@@ -98,7 +98,7 @@ planStatus:
     // Relaunch the app with session restoration enabled
     electronApp = await launchElectronApp({
       workspace: workspacePath,
-      env: { NODE_ENV: 'test', ENABLE_SESSION_RESTORE: '1' }
+      env: { NODE_ENV: 'test', ENABLE_SESSION_RESTORE: '1' },
     });
 
     // Wait for windows to be restored
@@ -168,7 +168,7 @@ planStatus:
     // Launch app with workspace - enable session restoration
     let electronApp = await launchElectronApp({
       workspace: workspacePath,
-      env: { NODE_ENV: 'test', ENABLE_SESSION_RESTORE: '1' }
+      env: { NODE_ENV: 'test', ENABLE_SESSION_RESTORE: '1' },
     });
 
     let page = await electronApp.firstWindow();
@@ -215,7 +215,7 @@ planStatus:
     // Relaunch with session restoration
     electronApp = await launchElectronApp({
       workspace: workspacePath,
-      env: { NODE_ENV: 'test', ENABLE_SESSION_RESTORE: '1' }
+      env: { NODE_ENV: 'test', ENABLE_SESSION_RESTORE: '1' },
     });
 
     await new Promise(resolve => setTimeout(resolve, 3000));

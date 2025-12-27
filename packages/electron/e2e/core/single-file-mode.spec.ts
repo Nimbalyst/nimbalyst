@@ -31,6 +31,7 @@ async function launchSingleFileMode(filePath: string): Promise<{ electronApp: El
       ELECTRON_DISABLE_SECURITY_WARNINGS: '1',
       PLAYWRIGHT: '1',
       NODE_ENV: 'test',
+      NIMBALYST_PERMISSION_MODE: 'allow-all',
     }
   });
 

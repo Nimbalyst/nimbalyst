@@ -27,15 +27,15 @@ export const ACTIVE_FILE_TAB_SELECTOR = '.file-tabs-container .tab.active .tab-t
 /**
  * Permission mode for testing. Use with launchElectronApp's permissionMode option.
  * - 'ask': Smart Permissions mode (requires manual approval for each tool)
- * - 'allow-all': Always Allow mode (no permission prompts)
- * - undefined: Don't auto-configure (shows trust toast)
+ * - 'allow-all': Always Allow mode (no permission prompts) - DEFAULT
+ * - 'none': Don't auto-configure (shows trust toast) - use this to test the trust toast
  */
-export type TestPermissionMode = 'ask' | 'allow-all';
+export type TestPermissionMode = 'ask' | 'allow-all' | 'none';
 
 export async function launchElectronApp(options?: {
   workspace?: string;
   env?: Record<string, string>;
-  /** Auto-trust workspace and set permission mode. Skips the trust toast. */
+  /** Permission mode. Defaults to 'allow-all' to skip trust toast. Use 'none' to show the toast. */
   permissionMode?: TestPermissionMode;
 }): Promise<ElectronApplication> {
   const electronMain = path.resolve(__dirname, '../out/main/index.js');
@@ -84,9 +84,11 @@ export async function launchElectronApp(options?: {
     ...options?.env,
   };
 
-  // Set permission mode if specified - auto-trusts workspace and sets mode
-  if (options?.permissionMode) {
-    testEnv.NIMBALYST_PERMISSION_MODE = options.permissionMode;
+  // Set permission mode - defaults to 'allow-all' to skip trust toast in tests
+  // Pass permissionMode: 'none' explicitly to test the trust toast behavior
+  const permissionMode = options?.permissionMode ?? 'allow-all';
+  if (permissionMode !== 'none') {
+    testEnv.NIMBALYST_PERMISSION_MODE = permissionMode;
   }
 
   // If test passes ENABLE_SESSION_RESTORE, remove PLAYWRIGHT to allow restoration

@@ -14,6 +14,18 @@ import { logger } from '../utils/logger';
 type PermissionMode = 'ask' | 'allow-all' | 'bypass-all';
 
 /**
+ * Check if a test permission mode is set via environment variable.
+ * This is used by E2E tests to bypass the project trust toast.
+ */
+function getTestPermissionMode(): PermissionMode | null {
+  const envMode = process.env.NIMBALYST_PERMISSION_MODE;
+  if (envMode === 'ask' || envMode === 'allow-all' || envMode === 'bypass-all') {
+    return envMode;
+  }
+  return null;
+}
+
+/**
  * Permission Service singleton
  *
  * Only handles workspace trust management. Pattern evaluation and storage
@@ -66,8 +78,15 @@ export class PermissionService {
 
   /**
    * Get the permission mode (null if untrusted)
+   * If NIMBALYST_PERMISSION_MODE env var is set, always returns that mode (for E2E tests)
    */
   public getPermissionMode(workspacePath: string): PermissionMode | null {
+    // E2E test override - always return the test mode if set
+    const testMode = getTestPermissionMode();
+    if (testMode) {
+      return testMode;
+    }
+
     const stored = getAgentPermissions(workspacePath);
     return stored?.permissionMode ?? null;
   }

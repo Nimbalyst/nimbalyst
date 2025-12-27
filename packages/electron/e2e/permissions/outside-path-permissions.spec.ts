@@ -43,7 +43,7 @@ test.beforeEach(async () => {
   outsideFilePath = path.join(outsideDir, 'secret.txt');
   await fs.writeFile(outsideFilePath, 'This is a secret file outside the workspace.\n', 'utf8');
 
-  electronApp = await launchElectronApp({ workspace: workspaceDir });
+  electronApp = await launchElectronApp({ workspace: workspaceDir, permissionMode: 'none' });
   page = await electronApp.firstWindow();
 
   await page.waitForLoadState('domcontentloaded');
