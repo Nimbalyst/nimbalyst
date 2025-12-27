@@ -1,46 +1,37 @@
-# Nimbalyst v0.48.13 Release Notes
+# Nimbalyst v0.49.14 Release Notes
 
 ## New Features
 
+### Claude Agent Integration
+- **Agent permission interface** - Integrating with claude-code settings json, control which tools agents can use with workspace trust levels
+- **Wildcard domain patterns** - Permission multiple domains at once with wildcards like `*.example.com`
+- **Permissions for compound commands** - Layer in individual permission checks for compound bash commands
+- **Project Trust** - Check if user trusts project source
+- **Clarifying questions** - Claude can now ask you clarifying questions during agentic sessions for better results
+- **Context limit error widget** - Helpful widget when context limits are exceeded
+- **Copy button for messages** - Copy AI responses and user messages from the transcript
+- **Session quick open** - Press Cmd+L to quickly search and open AI sessions
+- **Text attachments clickable** - Click text attachments to preview their content
+- **Selected text context** - Text selection automatically included in AI prompts
 
-### AI Improvements
-- Claude model selection: Choose between Opus 4.5, Opus 4, Sonnet 4, and more
-- Session archiving with multi-select support
-- Large text pastes automatically become attachments to keep transcripts clean
-- Slash command suggestions displayed in empty chat sessions
-- Memory mode for quick context addition
+### Editor & Extensions
+- **PDF viewer** - View PDFs with text selection and fit-to-width zoom
+- **Mockup Visual diff viewer** - See AI-generated mockup changes with before/after comparison
 
-
-### Editor Enhancements
-- DataModelLM: Visual data model schema editor with AI integration, auto-layout and export to DDL, JSON, DBML
-- Git status icons in file tree showing modified/untracked files
-- File tree filtering for modified files and by file type
-- Multi-select files in file tree
-- Mouse back/forward buttons navigate between tabs
-- Cmd+Shift+T reopens last closed tab
-- Native spell check with correction suggestions
-
-
-### File & History
-- Folder History dialog to browse and restore deleted files
-- Document links now export as standard markdown and support fuzzy search
-- File context menu opens files in system default application
-- @ mentions in AI chat support CamelCase search for file matching
-
-
-## Improvements
-
-- Auto-updater uses subtle toast instead of intrusive popup window (you'll see this in the next release)
-- Session list shows relative dates ("2 hours ago") instead of timestamps
-- Window title shows AI session name when in agent mode
-- Unified settings view with project-level AI provider overrides
-- Improved mockup annotations styling
+### Files Enhancements
+- **Dotfiles in file tree** - Show dotfiles when "All Files" filter is selected
+- **Enhanced New File dialog** - File type selection and folder picker
+- **Quick Open improvements** - Find all files including dotfiles and images
 
 
 ## Fixed
 
-- Images display correctly in all tabs
-- Mermaid diagrams error handling improved
-- Table action menu and context menu position correctly when scrolled
-- Mockup images load correctly when reopening documents
-- One failing editor tab no longer breaks the entire app
+- Improved reliability of queued messages
+- File tree shows all folders in workspaces with large dependency directories
+- Database backups no longer overwrite good data with corrupted backups
+- File mentions match files with spaces in names
+- Slash command menu arrow keys navigate in visual order
+- Tabs reliably reopen with Cmd+Shift+T
+- Closing AI session navigates to adjacent tab instead of first tab
+- Typeahead menus no longer auto-select item under cursor on open
+- MCP connection timeout increased to 20 seconds for slower server startups
