@@ -37,6 +37,9 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
 }) => {
   const [isDiffExpanded, setDiffExpanded] = useState(false);
   const [enlargedImage, setEnlargedImage] = useState<ChatAttachment | null>(null);
+  const [enlargedText, setEnlargedText] = useState<ChatAttachment | null>(null);
+  const [textContent, setTextContent] = useState<string | null>(null);
+  const [textLoadError, setTextLoadError] = useState<string | null>(null);
 
   // Handle Escape key to close enlarged image modal
   useEffect(() => {
@@ -51,6 +54,63 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [enlargedImage]);
+
+  // Handle Escape key to close enlarged text modal
+  useEffect(() => {
+    if (!enlargedText) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setEnlargedText(null);
+        setTextContent(null);
+        setTextLoadError(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [enlargedText]);
+
+  // Load text content when a text attachment is selected
+  useEffect(() => {
+    if (!enlargedText) {
+      setTextContent(null);
+      setTextLoadError(null);
+      return;
+    }
+
+    const loadTextContent = async () => {
+      try {
+        // Read the file content using Electron's file system API
+        if (typeof window !== 'undefined' && (window as any).electronAPI) {
+          const result = await (window as any).electronAPI.invoke('read-file-content', enlargedText.filepath);
+          if (result?.success) {
+            // Handle binary files (e.g., PDFs) - for now just show a message
+            if (result.isBinary) {
+              setTextContent('[Binary file - preview not available]');
+            } else {
+              setTextContent(result.content);
+            }
+            setTextLoadError(null);
+          } else if (result === null) {
+            setTextLoadError('File not found');
+            setTextContent(null);
+          } else {
+            setTextLoadError('Failed to read file');
+            setTextContent(null);
+          }
+        } else {
+          setTextLoadError('File reading not available');
+          setTextContent(null);
+        }
+      } catch (error) {
+        setTextLoadError(error instanceof Error ? error.message : 'Failed to read file');
+        setTextContent(null);
+      }
+    };
+
+    loadTextContent();
+  }, [enlargedText]);
 
   // Helper function to check if content indicates login is required
   // Uses SDK's first-class isAuthError flag when available (preferred)
@@ -372,14 +432,22 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
       return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
     };
 
+    const handleAttachmentClick = (attachment: ChatAttachment) => {
+      if (attachment.type === 'image') {
+        setEnlargedImage(attachment);
+      } else {
+        setEnlargedText(attachment);
+      }
+    };
+
     return (
       <div className="message-attachments">
         {message.attachments.map((attachment) => (
           <div
             key={attachment.id}
             className="message-attachment-item"
-            onClick={() => attachment.type === 'image' && setEnlargedImage(attachment)}
-            title={attachment.type === 'image' ? 'Click to enlarge' : attachment.filename}
+            onClick={() => handleAttachmentClick(attachment)}
+            title="Click to preview"
           >
             {attachment.type === 'image' ? (
               <img
@@ -450,6 +518,62 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
     );
   };
 
+  // Render text preview modal
+  const renderTextModal = () => {
+    if (!enlargedText) return null;
+
+    const handleClose = () => {
+      setEnlargedText(null);
+      setTextContent(null);
+      setTextLoadError(null);
+    };
+
+    return (
+      <div
+        className="message-attachment-modal-overlay"
+        onClick={handleClose}
+      >
+        <div
+          className="message-attachment-text-modal"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="message-attachment-text-modal-header">
+            <MaterialSymbol
+              icon={enlargedText.type === 'pdf' ? 'picture_as_pdf' : 'description'}
+              size={18}
+            />
+            <span className="message-attachment-text-modal-title">
+              {enlargedText.filename}
+            </span>
+            <button
+              className="message-attachment-modal-close message-attachment-text-modal-close"
+              onClick={handleClose}
+              aria-label="Close"
+            >
+              <MaterialSymbol icon="close" size={18} />
+            </button>
+          </div>
+          <div className="message-attachment-text-modal-content">
+            {textLoadError ? (
+              <div className="message-attachment-text-modal-error">
+                <MaterialSymbol icon="error" size={24} />
+                <span>{textLoadError}</span>
+              </div>
+            ) : textContent === null ? (
+              <div className="message-attachment-text-modal-loading">
+                <span>Loading...</span>
+              </div>
+            ) : (
+              <pre className="message-attachment-text-modal-pre">
+                {textContent}
+              </pre>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // Render edits as diffs
   const renderEdits = () => {
     if (!message.edits || message.edits.length === 0) return null;
@@ -512,6 +636,7 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
       {renderEdits()}
       {renderError()}
       {renderImageModal()}
+      {renderTextModal()}
     </div>
   );
 };
