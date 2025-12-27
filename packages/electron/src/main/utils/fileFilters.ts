@@ -33,7 +33,17 @@ export const EXCLUDED_DIRS = new Set([
   '.vscode',
   '.idea',
   '__pycache__',
-  '.DS_Store'
+  '.DS_Store',
+  '.venv',          // Python virtual environments
+  'venv',           // Python virtual environments (without dot)
+  '.env',           // Virtual environments
+  'env',            // Virtual environments
+  '.tox',           // Python tox testing environments
+  'target',         // Rust/Java build output
+  '.gradle',        // Gradle cache
+  '.maven',         // Maven cache
+  'vendor',         // PHP/Go dependencies
+  'Pods',           // iOS CocoaPods
 ]);
 
 /**
@@ -89,13 +99,23 @@ export const GLOB_EXCLUDE_PATTERNS = [
   '**/.vscode/**',
   '**/.idea/**',
   '**/__pycache__/**',
-  '**/.DS_Store/**'
+  '**/.DS_Store/**',
+  '**/.venv/**',
+  '**/venv/**',
+  '**/.env/**',
+  '**/env/**',
+  '**/.tox/**',
+  '**/target/**',
+  '**/.gradle/**',
+  '**/.maven/**',
+  '**/vendor/**',
+  '**/Pods/**'
 ];
 
 /**
  * Ripgrep glob arguments for excluding directories (as plain string to avoid bundler issues)
  */
-export const RIPGREP_EXCLUDE_ARGS = '--glob !**/node_modules/** --glob !**/.git/** --glob !**/.worktrees/** --glob !**/worktrees/** --glob !**/dist/** --glob !**/build/** --glob !**/out/** --glob !**/.next/** --glob !**/.nuxt/** --glob !**/.cache/** --glob !**/coverage/** --glob !**/.vscode/** --glob !**/.idea/** --glob !**/__pycache__/** --glob !**/.DS_Store/**';
+export const RIPGREP_EXCLUDE_ARGS = '--glob !**/node_modules/** --glob !**/.git/** --glob !**/.worktrees/** --glob !**/worktrees/** --glob !**/dist/** --glob !**/build/** --glob !**/out/** --glob !**/.next/** --glob !**/.nuxt/** --glob !**/.cache/** --glob !**/coverage/** --glob !**/.vscode/** --glob !**/.idea/** --glob !**/__pycache__/** --glob !**/.DS_Store/** --glob !**/.venv/** --glob !**/venv/** --glob !**/.env/** --glob !**/env/** --glob !**/.tox/** --glob !**/target/** --glob !**/.gradle/** --glob !**/.maven/** --glob !**/vendor/** --glob !**/Pods/**';
 
 /**
  * Ripgrep glob arguments as array for use with execFile (cross-platform)
@@ -115,10 +135,20 @@ export const RIPGREP_EXCLUDE_ARGS_ARRAY = [
     '--glob', '!**/.vscode/**',
     '--glob', '!**/.idea/**',
     '--glob', '!**/__pycache__/**',
-    '--glob', '!**/.DS_Store/**'
+    '--glob', '!**/.DS_Store/**',
+    '--glob', '!**/.venv/**',
+    '--glob', '!**/venv/**',
+    '--glob', '!**/.env/**',
+    '--glob', '!**/env/**',
+    '--glob', '!**/.tox/**',
+    '--glob', '!**/target/**',
+    '--glob', '!**/.gradle/**',
+    '--glob', '!**/.maven/**',
+    '--glob', '!**/vendor/**',
+    '--glob', '!**/Pods/**'
 ];
 
 /**
  * Find command prune arguments for excluding directories
  */
-export const FIND_PRUNE_ARGS = '\\( -path "*/node_modules/*" -o -path "*/.git/*" -o -path "*/.worktrees/*" -o -path "*/worktrees/*" -o -path "*/dist/*" -o -path "*/build/*" -o -path "*/out/*" -o -path "*/.next/*" -o -path "*/.nuxt/*" -o -path "*/.cache/*" -o -path "*/coverage/*" -o -path "*/.vscode/*" -o -path "*/.idea/*" -o -path "*/__pycache__/*" -o -path "*/.DS_Store/*" \\) -prune -o';
+export const FIND_PRUNE_ARGS = '\\( -path "*/node_modules/*" -o -path "*/.git/*" -o -path "*/.worktrees/*" -o -path "*/worktrees/*" -o -path "*/dist/*" -o -path "*/build/*" -o -path "*/out/*" -o -path "*/.next/*" -o -path "*/.nuxt/*" -o -path "*/.cache/*" -o -path "*/coverage/*" -o -path "*/.vscode/*" -o -path "*/.idea/*" -o -path "*/__pycache__/*" -o -path "*/.DS_Store/*" -o -path "*/.venv/*" -o -path "*/venv/*" -o -path "*/.env/*" -o -path "*/env/*" -o -path "*/.tox/*" -o -path "*/target/*" -o -path "*/.gradle/*" -o -path "*/.maven/*" -o -path "*/vendor/*" -o -path "*/Pods/*" \\) -prune -o';
