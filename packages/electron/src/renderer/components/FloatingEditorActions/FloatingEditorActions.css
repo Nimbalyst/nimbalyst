@@ -1,0 +1,118 @@
+/**
+ * FloatingEditorActions styles
+ *
+ * Consistent with rexical's FloatingDocumentActionsPlugin styling.
+ */
+
+.floating-editor-actions {
+  position: absolute;
+  top: 6px;
+  right: 12px;
+  display: flex;
+  gap: 8px;
+  z-index: 100;
+  pointer-events: none;
+}
+
+.floating-editor-button {
+  pointer-events: auto;
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  border: 1px solid var(--border-primary);
+  background: var(--surface-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  padding: 0;
+  color: var(--text-primary);
+}
+
+.floating-editor-button:hover {
+  background: var(--surface-hover);
+  border-color: var(--primary-color);
+}
+
+.floating-editor-button:active {
+  transform: scale(0.95);
+}
+
+.floating-editor-button.active {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.floating-editor-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.floating-editor-button .material-symbols-outlined {
+  font-size: 20px;
+  opacity: 0.8;
+}
+
+.floating-editor-button:hover .material-symbols-outlined {
+  opacity: 1;
+}
+
+/* Menu styles */
+.floating-editor-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 99;
+}
+
+.floating-editor-menu {
+  position: absolute;
+  top: 44px;
+  right: 0;
+  min-width: 180px;
+  background: var(--surface-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  pointer-events: auto;
+  padding: 4px 0;
+}
+
+.floating-editor-menu-item {
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.floating-editor-menu-item:hover {
+  background: var(--surface-hover);
+}
+
+.floating-editor-menu-item:active {
+  background: var(--surface-secondary);
+}
+
+.floating-editor-menu-item .material-symbols-outlined {
+  font-size: 18px;
+  opacity: 0.8;
+}
+
+.floating-editor-menu-item .checkmark {
+  margin-left: auto;
+  color: var(--primary-color);
+}
+
+.floating-editor-menu-item.active {
+  color: var(--primary-color);
+}
