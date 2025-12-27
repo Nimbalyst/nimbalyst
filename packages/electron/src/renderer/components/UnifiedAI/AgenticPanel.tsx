@@ -520,7 +520,27 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
               return tab;
             }
 
-            const messages = [...sessionData.messages];
+            // Merge messages: use database messages but preserve any local-only messages
+            // (messages that exist in local state but not in database yet)
+            const dbMessages = sessionData.messages || [];
+            const localMessages = tab.sessionData.messages || [];
+
+            // Find the latest timestamp in DB messages
+            const latestDbTimestamp = dbMessages.length > 0
+              ? Math.max(...dbMessages.map(m => m.timestamp || 0))
+              : 0;
+
+            // Keep any local messages that are newer than the latest DB message
+            // These are likely user messages that haven't been persisted yet
+            const localOnlyMessages = localMessages.filter(localMsg => {
+              const localTs = localMsg.timestamp || 0;
+              // Keep if it's newer than DB and not already in DB (by timestamp match)
+              return localTs > latestDbTimestamp &&
+                !dbMessages.some(dbMsg => dbMsg.timestamp === localTs);
+            });
+
+            // Merge: DB messages + any local-only messages
+            const messages = [...dbMessages, ...localOnlyMessages];
 
             // Preserve read state from ref (most recent), then tab state, then database
             const refReadState = readStateRef.current.get(sessionId);
@@ -1464,7 +1484,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           }, 100);
         }
         // Schedule reload to get the latest message from database
-        scheduleSessionReload(data.sessionId, { immediate: true, reason });
+        // Use a delay to avoid racing with queue processing which adds user messages to local state
+        // The 200ms delay ensures any queued prompt processing (100ms) completes first
+        scheduleSessionReload(data.sessionId, { immediate: false, reason, minInterval: 200 });
 
         // If this is the active tab, mark it as read immediately (after reload completes)
         // We need to wait a tiny bit for the reload to populate the message with an ID
@@ -1934,9 +1956,20 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       const existingTab = prev.find(tab => tab?.id === sessionId);
 
       if (!existingTab) {
-        console.warn('[AgenticPanel] Tab not found in state when trying to add user message. This should not happen.');
+        console.warn('[AgenticPanel] Tab not found in state when trying to add user message:', {
+          sessionId,
+          availableTabs: prev.map(t => t?.id),
+          queuedPromptId
+        });
         return prev;
       }
+
+      console.log('[AgenticPanel] Adding user message to transcript:', {
+        sessionId,
+        messagePreview: message.substring(0, 50),
+        queuedPromptId,
+        existingMessageCount: existingTab.sessionData.messages?.length || 0
+      });
 
       const userMessage = {
         role: 'user' as const,
