@@ -114,7 +114,7 @@ export function SessionListScreen() {
   const canCreateSession = hasReceivedInitialData && projects.length > 0;
 
   return (
-    <div className="flex flex-col w-full bg-[var(--surface-primary)]" style={{ height: '100dvh' }}>
+    <div className="flex flex-col w-full overflow-x-hidden bg-[var(--surface-primary)]" style={{ height: '100dvh' }}>
       {/* Header - Fixed with safe area */}
       <header className="flex-shrink-0 flex items-center justify-between px-3 py-2 border-b border-[var(--border-primary)] bg-[var(--surface-secondary)] safe-area-top">
         <div className="flex items-center gap-1">
@@ -173,6 +173,7 @@ export function SessionListScreen() {
       <main
         ref={scrollContainerRef}
         className="flex-1 overflow-auto min-h-0"
+        style={{ touchAction: 'pan-y' }}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
