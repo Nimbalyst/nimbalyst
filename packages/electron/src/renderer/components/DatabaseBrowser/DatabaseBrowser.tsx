@@ -310,7 +310,13 @@ export function DatabaseBrowser() {
                 className="query-input"
                 value={sqlQuery}
                 onChange={(e) => setSqlQuery(e.target.value)}
-                placeholder="Enter SELECT query... (write operations disabled for safety)"
+                onKeyDown={(e) => {
+                  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                    e.preventDefault();
+                    executeQuery();
+                  }
+                }}
+                placeholder="Enter SELECT query... (Cmd+Enter to execute)"
                 rows={5}
               />
               {queryError && <div className="error">{queryError}</div>}
