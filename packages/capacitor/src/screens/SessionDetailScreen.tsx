@@ -717,8 +717,8 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
         </div>
       )}
 
-      {/* AI Input - Fixed at bottom with safe area for home indicator */}
-      <footer className="flex-shrink-0 bg-[var(--surface-primary)] border-t border-[var(--border-primary)] safe-area-bottom">
+      {/* AI Input - Fixed at bottom */}
+      <footer className="flex-shrink-0 bg-[var(--surface-primary)] border-t border-[var(--border-primary)]">
         <AIInput
           value={inputValue}
           onChange={handleInputChange}
