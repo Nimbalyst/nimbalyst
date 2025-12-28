@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useSync } from '../contexts/CollabV3SyncContext';
+import { useSync, type Project } from '../contexts/CollabV3SyncContext';
 import { SyncStatusBadge } from '../components/SyncStatusBadge';
 import { SessionCard } from '../components/SessionCard';
 import { ProjectPicker } from '../components/ProjectPicker';
@@ -20,6 +20,7 @@ export function SessionListScreen() {
     isCreatingSession,
   } = useSync();
   const [showProjectPicker, setShowProjectPicker] = useState(false);
+  const [showNewSessionProjectPicker, setShowNewSessionProjectPicker] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -30,11 +31,16 @@ export function SessionListScreen() {
     setTimeout(() => setIsRefreshing(false), 1000);
   };
 
-  const handleCreateSession = async () => {
+  const handleNewSessionClick = () => {
+    setShowNewSessionProjectPicker(true);
+  };
+
+  const handleCreateSession = async (project: Project | null) => {
     setCreateError(null);
+    setShowNewSessionProjectPicker(false);
 
     // Use the selected project ID or default
-    const projectId = selectedProject?.id || 'default';
+    const projectId = project?.id || 'default';
 
     const result = await createSession(projectId);
 
@@ -79,7 +85,7 @@ export function SessionListScreen() {
           {/* New Session Button */}
           {canCreateSession && (
             <button
-              onClick={handleCreateSession}
+              onClick={handleNewSessionClick}
               disabled={isCreatingSession}
               className="p-1.5 rounded-lg hover:bg-[var(--surface-tertiary)] text-[var(--primary-color)] disabled:opacity-50"
               title="New Session"
@@ -166,13 +172,24 @@ export function SessionListScreen() {
         )}
       </main>
 
-      {/* Project Picker Dialog */}
+      {/* Project Filter Picker Dialog */}
       {showProjectPicker && (
         <ProjectPicker
           projects={projects}
           selectedProject={selectedProject}
           onSelectProject={selectProject}
           onClose={() => setShowProjectPicker(false)}
+        />
+      )}
+
+      {/* New Session Project Picker Dialog */}
+      {showNewSessionProjectPicker && (
+        <ProjectPicker
+          projects={projects}
+          selectedProject={null}
+          onSelectProject={handleCreateSession}
+          onClose={() => setShowNewSessionProjectPicker(false)}
+          showAllProjects={false}
         />
       )}
 

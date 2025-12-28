@@ -6,9 +6,10 @@ interface ProjectPickerProps {
   selectedProject: Project | null;
   onSelectProject: (project: Project | null) => void;
   onClose: () => void;
+  showAllProjects?: boolean;
 }
 
-export function ProjectPicker({ projects, selectedProject, onSelectProject, onClose }: ProjectPickerProps) {
+export function ProjectPicker({ projects, selectedProject, onSelectProject, onClose, showAllProjects = true }: ProjectPickerProps) {
   const handleSelect = (project: Project | null) => {
     onSelectProject(project);
     onClose();
@@ -41,7 +42,7 @@ export function ProjectPicker({ projects, selectedProject, onSelectProject, onCl
         {/* Project List */}
         <div className="overflow-auto" style={{ maxHeight: 'calc(70vh - 60px)' }}>
           {/* All Projects Option */}
-          <button
+          {showAllProjects && <button
             onClick={() => handleSelect(null)}
             className={`w-full flex items-center justify-between px-4 py-3 border-b border-[var(--border-primary)] hover:bg-[var(--surface-hover)] transition-colors ${
               !selectedProject ? 'bg-[var(--surface-secondary)]' : ''
@@ -68,7 +69,7 @@ export function ProjectPicker({ projects, selectedProject, onSelectProject, onCl
                 <path d="M20 6 9 17l-5-5"/>
               </svg>
             )}
-          </button>
+          </button>}
 
           {/* Individual Projects */}
           {projects.map((project) => (
