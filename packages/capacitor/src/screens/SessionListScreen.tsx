@@ -114,9 +114,9 @@ export function SessionListScreen() {
   const canCreateSession = hasReceivedInitialData && projects.length > 0;
 
   return (
-    <div className="flex flex-col h-screen">
-      {/* Header - Fixed with safe area for notch */}
-      <header className="sticky top-0 z-10 flex items-center justify-between px-3 py-2 border-b border-[var(--border-primary)] bg-[var(--surface-secondary)] safe-area-top">
+    <div className="flex flex-col w-full bg-[var(--surface-primary)]" style={{ height: '100dvh' }}>
+      {/* Header - Fixed with safe area */}
+      <header className="flex-shrink-0 flex items-center justify-between px-3 py-2 border-b border-[var(--border-primary)] bg-[var(--surface-secondary)] safe-area-top">
         <div className="flex items-center gap-1">
           {/* Project Picker Button */}
           <button
@@ -172,23 +172,27 @@ export function SessionListScreen() {
       {/* Content */}
       <main
         ref={scrollContainerRef}
-        className="flex-1 overflow-auto"
+        className="flex-1 overflow-auto min-h-0"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         onTouchCancel={handleTouchEnd}
-        style={{
-          transform: `translateY(${pullDistance}px)`,
-          transition: isPulling ? 'none' : 'transform 0.2s ease-out',
-        }}
       >
+        {/* Pull-to-refresh content wrapper */}
+        <div
+          style={{
+            transform: `translateY(${pullDistance}px)`,
+            transition: isPulling ? 'none' : 'transform 0.2s ease-out',
+            minHeight: '100%',
+          }}
+        >
         {/* Pull-to-refresh indicator */}
         {(isPulling || isRefreshing) && pullDistance > 0 && (
           <div
-            className="absolute top-0 left-0 right-0 flex items-center justify-center"
+            className="flex items-center justify-center"
             style={{
               height: `${pullDistance}px`,
-              transform: `translateY(-${pullDistance}px)`,
+              marginTop: `-${pullDistance}px`,
             }}
           >
             <div className="flex flex-col items-center gap-1">
@@ -287,6 +291,7 @@ export function SessionListScreen() {
             </div>
           </div>
         )}
+        </div>
       </main>
 
       {/* Project Filter Picker Dialog */}

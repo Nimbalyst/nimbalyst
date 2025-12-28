@@ -10,8 +10,7 @@ const config: CapacitorConfig = {
   //   cleartext: true
   // },
   ios: {
-    // Required for env(safe-area-inset-*) to work properly
-    contentInset: 'always',
+    // contentInset removed - causes issues with safe area handling
   },
 };
 
