@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSync, type Project } from '../contexts/CollabV3SyncContext';
 import { SyncStatusBadge } from '../components/SyncStatusBadge';
@@ -24,12 +24,65 @@ export function SessionListScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
+  // Pull-to-refresh state
+  const [pullDistance, setPullDistance] = useState(0);
+  const [isPulling, setIsPulling] = useState(false);
+  const touchStartY = useRef<number>(0);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const pullThreshold = 80; // Distance in pixels to trigger refresh
+
   const handleRefresh = async () => {
     setIsRefreshing(true);
     refresh();
     // Give the sync a moment to complete
     setTimeout(() => setIsRefreshing(false), 1000);
   };
+
+  // Pull-to-refresh handlers
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    const scrollContainer = scrollContainerRef.current;
+    if (!scrollContainer || isRefreshing) return;
+
+    // Only start tracking if we're at the top of the scroll
+    if (scrollContainer.scrollTop === 0) {
+      touchStartY.current = e.touches[0].clientY;
+      setIsPulling(true);
+    }
+  }, [isRefreshing]);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!isPulling || isRefreshing) return;
+
+    const scrollContainer = scrollContainerRef.current;
+    if (!scrollContainer) return;
+
+    const touchY = e.touches[0].clientY;
+    const deltaY = touchY - touchStartY.current;
+
+    // Only track downward pulls when at the top
+    if (deltaY > 0 && scrollContainer.scrollTop === 0) {
+      e.preventDefault();
+      // Apply resistance to the pull (diminishing returns)
+      const resistance = 0.5;
+      const distance = Math.min(deltaY * resistance, pullThreshold * 1.5);
+      setPullDistance(distance);
+    }
+  }, [isPulling, isRefreshing, pullThreshold]);
+
+  const handleTouchEnd = useCallback(() => {
+    if (!isPulling) return;
+
+    setIsPulling(false);
+
+    // Trigger refresh if pulled beyond threshold
+    if (pullDistance >= pullThreshold) {
+      handleRefresh();
+    }
+
+    // Reset pull distance with animation
+    setPullDistance(0);
+    touchStartY.current = 0;
+  }, [isPulling, pullDistance, pullThreshold]);
 
   const handleNewSessionClick = () => {
     setShowNewSessionProjectPicker(true);
@@ -117,7 +170,71 @@ export function SessionListScreen() {
       </header>
 
       {/* Content */}
-      <main className="flex-1 overflow-auto">
+      <main
+        ref={scrollContainerRef}
+        className="flex-1 overflow-auto"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
+        style={{
+          transform: `translateY(${pullDistance}px)`,
+          transition: isPulling ? 'none' : 'transform 0.2s ease-out',
+        }}
+      >
+        {/* Pull-to-refresh indicator */}
+        {(isPulling || isRefreshing) && pullDistance > 0 && (
+          <div
+            className="absolute top-0 left-0 right-0 flex items-center justify-center"
+            style={{
+              height: `${pullDistance}px`,
+              transform: `translateY(-${pullDistance}px)`,
+            }}
+          >
+            <div className="flex flex-col items-center gap-1">
+              {isRefreshing || pullDistance >= pullThreshold ? (
+                <svg
+                  className="animate-spin h-5 w-5 text-[var(--primary-color)]"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                    fill="none"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
+                </svg>
+              ) : (
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="text-[var(--text-tertiary)]"
+                  style={{
+                    transform: `rotate(${(pullDistance / pullThreshold) * 180}deg)`,
+                    transition: 'transform 0.1s ease-out',
+                  }}
+                >
+                  <path d="M12 5v14M19 12l-7 7-7-7" />
+                </svg>
+              )}
+            </div>
+          </div>
+        )}
         {!isConfigured ? (
           <EmptyState
             icon={
