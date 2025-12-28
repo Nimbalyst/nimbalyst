@@ -10,9 +10,11 @@ interface FileTreeFilterMenuProps {
   currentFilter: FileTreeFilter;
   showIcons: boolean;
   showGitStatus: boolean;
+  enableAutoScroll: boolean;
   onFilterChange: (filter: FileTreeFilter) => void;
   onShowIconsChange: (showIcons: boolean) => void;
   onShowGitStatusChange: (showGitStatus: boolean) => void;
+  onEnableAutoScrollChange: (enableAutoScroll: boolean) => void;
   hasActiveClaudeSession: boolean;
   claudeSessionFileCounts: { read: number; written: number };
   isGitRepo: boolean;
@@ -28,9 +30,11 @@ export function FileTreeFilterMenu({
   currentFilter,
   showIcons,
   showGitStatus,
+  enableAutoScroll,
   onFilterChange,
   onShowIconsChange,
   onShowGitStatusChange,
+  onEnableAutoScrollChange,
   hasActiveClaudeSession,
   claudeSessionFileCounts,
   isGitRepo,
@@ -226,6 +230,14 @@ export function FileTreeFilterMenu({
       >
         <MaterialSymbol icon={showGitStatus ? 'check_box' : 'check_box_outline_blank'} size={18} />
         <span>Show Git Status</span>
+      </div>
+
+      <div
+        className="filter-menu-item"
+        onClick={() => onEnableAutoScrollChange(!enableAutoScroll)}
+      >
+        <MaterialSymbol icon={enableAutoScroll ? 'check_box' : 'check_box_outline_blank'} size={18} />
+        <span>Auto-Scroll to Active File</span>
       </div>
     </div>
   );

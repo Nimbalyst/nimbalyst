@@ -18,6 +18,7 @@ interface FileTreeProps {
   onFileSelect: (filePath: string) => void;
   level: number;
   showIcons?: boolean;
+  enableAutoScroll?: boolean;
   onNewFile?: (folderPath: string, fileType: NewFileType) => void;
   onNewFolder?: (folderPath: string) => void;
   onRefreshFileTree?: () => void;
@@ -90,7 +91,7 @@ function getDirectoryGitStatus(
   return null;
 }
 
-export function FileTree({ items, currentFilePath, onFileSelect, level, showIcons = true, onNewFile, onNewFolder, onRefreshFileTree, onViewHistory, onViewWorkspaceHistory, selectedFolder, onFolderSelect, gitStatusMap, extensionFileTypes = [], sharedDragState, sharedExpandedDirs, selectedPaths: selectedPathsProp, onSelectionChange, sharedSelectionState, rootItems: rootItemsProp }: FileTreeProps) {
+export function FileTree({ items, currentFilePath, onFileSelect, level, showIcons = true, enableAutoScroll = true, onNewFile, onNewFolder, onRefreshFileTree, onViewHistory, onViewWorkspaceHistory, selectedFolder, onFolderSelect, gitStatusMap, extensionFileTypes = [], sharedDragState, sharedExpandedDirs, selectedPaths: selectedPathsProp, onSelectionChange, sharedSelectionState, rootItems: rootItemsProp }: FileTreeProps) {
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -168,6 +169,14 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
   // Track previous currentFilePath to detect actual file changes
   const prevFilePathRef = useRef<string | null>(null);
 
+  // Track user interaction with the file tree to prevent auto-scroll during manual navigation
+  // Initialize to a very old timestamp so initial auto-scroll works
+  const lastUserInteractionRef = useRef<number>(0);
+  const fileTreeRef = useRef<HTMLDivElement | null>(null);
+
+  // Track if user clicked within the file tree itself to open a file
+  const fileClickedInTreeRef = useRef<boolean>(false);
+
   // Update expanded directories when current file changes
   useEffect(() => {
     if (currentFilePath && level === 0) {
@@ -189,24 +198,57 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
     }
   }, [currentFilePath, items, level, findParentDirs, setExpandedDirs]);
 
-  // Scroll to active file only when currentFilePath actually changes
-  // Separate effect to avoid scrolling when items change (e.g., file deletion)
+  // Track user interactions to prevent auto-scroll while navigating the tree
   useEffect(() => {
-    if (currentFilePath && level === 0) {
+    if (level !== 0) return;
+
+    const handleUserInteraction = () => {
+      lastUserInteractionRef.current = Date.now();
+    };
+
+    const treeElement = document.querySelector('.workspace-file-tree');
+    if (treeElement) {
+      treeElement.addEventListener('click', handleUserInteraction);
+      treeElement.addEventListener('scroll', handleUserInteraction);
+
+      return () => {
+        treeElement.removeEventListener('click', handleUserInteraction);
+        treeElement.removeEventListener('scroll', handleUserInteraction);
+      };
+    }
+  }, [level]);
+
+  // Scroll to active file only when currentFilePath actually changes
+  // AND user hasn't interacted with the tree recently (within last 2 seconds)
+  // AND auto-scroll is enabled
+  useEffect(() => {
+    if (currentFilePath && level === 0 && enableAutoScroll) {
       const filePathChanged = prevFilePathRef.current !== currentFilePath;
       if (filePathChanged) {
         prevFilePathRef.current = currentFilePath;
 
-        // Scroll the active file into view after a brief delay to allow for expansion
-        setTimeout(() => {
-          const activeFileElement = document.querySelector('.file-tree-file.active');
-          if (activeFileElement) {
-            activeFileElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-          }
-        }, 100);
+        // Don't auto-scroll if the user just clicked a file in the tree
+        if (fileClickedInTreeRef.current) {
+          fileClickedInTreeRef.current = false;
+          return;
+        }
+
+        // Only auto-scroll if user hasn't interacted with the tree in the last 2 seconds
+        const timeSinceLastInteraction = Date.now() - lastUserInteractionRef.current;
+        const shouldAutoScroll = timeSinceLastInteraction > 2000;
+
+        if (shouldAutoScroll) {
+          // Scroll the active file into view after a brief delay to allow for expansion
+          setTimeout(() => {
+            const activeFileElement = document.querySelector('.file-tree-file.active');
+            if (activeFileElement) {
+              activeFileElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+          }, 100);
+        }
       }
     }
-  }, [currentFilePath, level]);
+  }, [currentFilePath, level, enableAutoScroll]);
 
   // Clear multi-selection when a file is opened from outside the tree (e.g., keyboard shortcut)
   useEffect(() => {
@@ -317,6 +359,8 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
         if (onFolderSelect) {
           onFolderSelect(null);
         }
+        // Mark that the file was clicked in the tree to prevent auto-scroll
+        fileClickedInTreeRef.current = true;
         onFileSelect(item.path);
       }
     }
@@ -610,6 +654,7 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
                     onFileSelect={onFileSelect}
                     level={level + 1}
                     showIcons={showIcons}
+                    enableAutoScroll={enableAutoScroll}
                     onNewFile={onNewFile}
                     onNewFolder={onNewFolder}
                     onRefreshFileTree={onRefreshFileTree}

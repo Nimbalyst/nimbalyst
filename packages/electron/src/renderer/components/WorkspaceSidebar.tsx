@@ -123,6 +123,7 @@ export function WorkspaceSidebar({
   const [fileTreeFilter, setFileTreeFilter] = useState<FileTreeFilter>('all');
   const [showFileIcons, setShowFileIcons] = useState(true);
   const [showGitStatus, setShowGitStatus] = useState(true);
+  const [enableAutoScroll, setEnableAutoScroll] = useState(true);
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [filterMenuPosition, setFilterMenuPosition] = useState({ x: 0, y: 0 });
   const [sessionFileFilters, setSessionFileFilters] = useState<SessionFileFilterState>({ read: [], written: [] });
@@ -183,6 +184,11 @@ export function WorkspaceSidebar({
           setShowGitStatus(state.showGitStatus);
         }
 
+        // Set enableAutoScroll - handle both explicit false and undefined
+        if (state?.enableAutoScroll !== undefined) {
+          setEnableAutoScroll(state.enableAutoScroll);
+        }
+
         hasLoadedSettingsRef.current = true;
       })
       .catch(error => {
@@ -200,11 +206,12 @@ export function WorkspaceSidebar({
     window.electronAPI.invoke('workspace:update-state', workspacePath, {
       fileTreeFilter,
       showFileIcons,
-      showGitStatus
+      showGitStatus,
+      enableAutoScroll
     }).catch(error => {
       console.error('Failed to save file tree settings:', error);
     });
-  }, [workspacePath, fileTreeFilter, showFileIcons, showGitStatus]);
+  }, [workspacePath, fileTreeFilter, showFileIcons, showGitStatus, enableAutoScroll]);
 
   // Notify parent when selected folder changes
   const handleSelectedFolderChange = (folderPath: string | null) => {
@@ -1102,6 +1109,7 @@ export function WorkspaceSidebar({
                 onFileSelect={handleFileSelect}
                 level={0}
                 showIcons={showFileIcons}
+                enableAutoScroll={enableAutoScroll}
                 onNewFile={handleNewFileInFolder}
                 onNewFolder={handleNewFolderInFolder}
                 onRefreshFileTree={onRefreshFileTree}
@@ -1126,9 +1134,11 @@ export function WorkspaceSidebar({
               currentFilter={fileTreeFilter}
               showIcons={showFileIcons}
               showGitStatus={showGitStatus}
+              enableAutoScroll={enableAutoScroll}
               onFilterChange={handleFilterChange}
               onShowIconsChange={setShowFileIcons}
               onShowGitStatusChange={setShowGitStatus}
+              onEnableAutoScrollChange={setEnableAutoScroll}
               hasActiveClaudeSession={hasActiveClaudeSession}
               claudeSessionFileCounts={{
                 read: sessionFileFilters.read.length,
