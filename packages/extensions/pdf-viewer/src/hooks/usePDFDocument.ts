@@ -5,7 +5,7 @@
  * Uses PDF.js to parse and render the PDF.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 // Get PDF.js from the host
 const pdfjsLib = (window as any).__nimbalyst_extensions['pdfjs-dist'];
@@ -55,6 +55,11 @@ export function usePDFDocument(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Use ref to store the loadBinaryContent function to avoid dependency changes
+  // The function identity changes on every render but points to the same underlying operation
+  const loadBinaryContentRef = useRef(loadBinaryContent);
+  loadBinaryContentRef.current = loadBinaryContent;
+
   useEffect(() => {
     let cancelled = false;
 
@@ -87,7 +92,7 @@ export function usePDFDocument(
         }
 
         // Load binary content via EditorHost
-        const arrayBuffer = await loadBinaryContent();
+        const arrayBuffer = await loadBinaryContentRef.current();
         const bytes = new Uint8Array(arrayBuffer);
 
         // Load the PDF document from binary data
@@ -113,7 +118,9 @@ export function usePDFDocument(
     return () => {
       cancelled = true;
     };
-  }, [loadBinaryContent, filePath]);
+  // Only re-run when filePath changes - loadBinaryContent is accessed via ref
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filePath]);
 
   return { document, totalPages, loading, error };
 }
