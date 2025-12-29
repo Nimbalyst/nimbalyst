@@ -1,7 +1,8 @@
 /**
  * Build all extensions before packaging.
  *
- * This script finds all extensions in packages/extensions/ that have a build script
+ * This script first builds the extension-sdk (which extensions depend on),
+ * then finds all extensions in packages/extensions/ that have a build script
  * and runs npm run build for each one. This ensures extension dist/ folders exist
  * before electron-builder packages them.
  */
@@ -11,8 +12,30 @@ const fs = require('fs');
 const path = require('path');
 
 const EXTENSIONS_DIR = path.resolve(__dirname, '..', '..', 'extensions');
+const EXTENSION_SDK_DIR = path.resolve(__dirname, '..', '..', 'extension-sdk');
 
 async function buildExtensions() {
+  // First, build the extension-sdk since extensions depend on it
+  console.log('Building extension-sdk...');
+  if (fs.existsSync(EXTENSION_SDK_DIR)) {
+    const sdkPackageJson = path.join(EXTENSION_SDK_DIR, 'package.json');
+    if (fs.existsSync(sdkPackageJson)) {
+      const pkg = JSON.parse(fs.readFileSync(sdkPackageJson, 'utf-8'));
+      if (pkg.scripts?.build) {
+        try {
+          execSync('npm run build', {
+            cwd: EXTENSION_SDK_DIR,
+            stdio: 'inherit',
+          });
+          console.log('Built extension-sdk successfully');
+        } catch (error) {
+          console.error('Failed to build extension-sdk:', error.message);
+          process.exit(1);
+        }
+      }
+    }
+  }
+
   console.log('Building extensions...');
 
   // Check if extensions directory exists
