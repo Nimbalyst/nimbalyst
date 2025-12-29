@@ -309,6 +309,12 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     // console.log(`[CLAUDE-CODE] First 200 chars of message:`, message.substring(0, 200));
     // console.log(`[CLAUDE-CODE] Has attachments: ${!!attachments && attachments.length > 0}`);
 
+    // CRITICAL: Capture hidden mode flag at START and reset immediately
+    // This prevents race conditions when concurrent sendMessage calls overlap
+    // (e.g., auto-context /context command running while a queued prompt fires)
+    const hideMessages = this.markMessagesAsHidden;
+    this.markMessagesAsHidden = false;
+
     // Track session mode for MCP server configuration and tool filtering
     this.currentMode = (documentContext as any)?.mode || 'agent';
     // console.log(`[CLAUDE-CODE] Session mode: ${this.currentMode}`);
@@ -645,7 +651,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             disallowedTools: options.disallowedTools,
             permissionMode: options.permissionMode
           }
-        }), metadataToLog, this.markMessagesAsHidden);
+        }), metadataToLog, hideMessages);
       }
 
       // TODO: Debug logging - uncomment if needed for MCP troubleshooting
@@ -755,7 +761,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               : JSON.stringify(chunk);
             // Non-string chunks from SDK have a uuid field we can use for deduplication
             const providerMessageId = typeof chunk !== 'string' ? chunk.uuid : undefined;
-            this.logAgentMessage(sessionId, 'claude-code', 'output', rawChunkJson, undefined, this.markMessagesAsHidden, providerMessageId);
+            this.logAgentMessage(sessionId, 'claude-code', 'output', rawChunkJson, undefined, hideMessages, providerMessageId);
           }
 
           // if (chunkCount <= 5) {
@@ -805,7 +811,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             // This is much more reliable than string matching in message content
             if (chunk.error === 'authentication_failed') {
               console.error('[CLAUDE-CODE] Authentication error detected via SDK error field');
-              this.logError(sessionId, 'claude-code', new Error('Authentication failed'), 'assistant_chunk', 'authentication_error', this.markMessagesAsHidden);
+              this.logError(sessionId, 'claude-code', new Error('Authentication failed'), 'assistant_chunk', 'authentication_error', hideMessages);
               yield {
                 type: 'error',
                 error: 'Authentication failed. Please log in to continue.',
@@ -924,7 +930,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                             input: toolArgs
                           }]
                         }
-                      }), undefined, this.markMessagesAsHidden);
+                      }), undefined, hideMessages);
 
                       // Log the tool_result block
                       this.logAgentMessage(sessionId, 'claude-code', 'output', JSON.stringify({
@@ -937,7 +943,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                             is_error: false
                           }]
                         }
-                      }), undefined, this.markMessagesAsHidden);
+                      }), undefined, hideMessages);
                     }
 
                     yield {
@@ -996,7 +1002,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                             is_error: toolCall.isError || false
                           }]
                         }
-                      }), undefined, this.markMessagesAsHidden);
+                      }), undefined, hideMessages);
                     }
 
                     // Re-emit the tool call with the result
@@ -1100,7 +1106,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                       input: toolArgs
                     }]
                   }
-                }), undefined, this.markMessagesAsHidden);
+                }), undefined, hideMessages);
 
                 // Log the tool_result block
                 this.logAgentMessage(sessionId, 'claude-code', 'output', JSON.stringify({
@@ -1113,7 +1119,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                       is_error: false
                     }]
                   }
-                }), undefined, this.markMessagesAsHidden);
+                }), undefined, hideMessages);
               }
 
               yield {
@@ -1181,7 +1187,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               );
 
               // Log error to database (as 'output' since errors are provider responses)
-              this.logError(sessionId, 'claude-code', new Error(errorMessage), 'result_chunk', isAuthError ? 'authentication_error' : 'api_error', this.markMessagesAsHidden);
+              this.logError(sessionId, 'claude-code', new Error(errorMessage), 'result_chunk', isAuthError ? 'authentication_error' : 'api_error', hideMessages);
 
               // Yield error to UI with isAuthError flag if applicable
               yield {
@@ -1365,7 +1371,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                             is_error: toolCall.isError || false
                           }]
                         }
-                      }), undefined, this.markMessagesAsHidden);
+                      }), undefined, hideMessages);
                     }
 
                     // Re-emit the tool call with the result
@@ -1409,8 +1415,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                 // The logError call saves the message to the database and emits 'message:logged'
                 // which triggers a session reload in the UI, displaying the error
                 // Do NOT yield an error chunk here - that would cause duplicate display via ai:error IPC
-                // Pass markMessagesAsHidden so /context errors (auto-triggered) stay hidden
-                this.logError(sessionId, 'claude-code', new Error(commandError), 'slash_command_stderr', 'slash_command_error', this.markMessagesAsHidden);
+                // Pass hideMessages so /context errors (auto-triggered) stay hidden
+                this.logError(sessionId, 'claude-code', new Error(commandError), 'slash_command_stderr', 'slash_command_error', hideMessages);
               }
             }
             // Other user messages are internal - don't display
@@ -1448,7 +1454,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               const errorMessage = summary;
 
               // Log error to database (as 'output' since errors are provider responses)
-              this.logError(sessionId, 'claude-code', new Error(errorMessage), 'summary_chunk', 'authentication_error', this.markMessagesAsHidden);
+              this.logError(sessionId, 'claude-code', new Error(errorMessage), 'summary_chunk', 'authentication_error', hideMessages);
 
               // Yield error to UI with isAuthError flag for structured detection
               yield {
@@ -1485,7 +1491,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             if (chunk.error || chunk.isAuthenticating === false) {
               const errorMessage = chunk.error || 'Authentication required';
               console.error('[CLAUDE-CODE] Auth status error:', errorMessage);
-              this.logError(sessionId, 'claude-code', new Error(errorMessage), 'auth_status_chunk', 'authentication_error', this.markMessagesAsHidden);
+              this.logError(sessionId, 'claude-code', new Error(errorMessage), 'auth_status_chunk', 'authentication_error', hideMessages);
               yield {
                 type: 'error',
                 error: errorMessage,
@@ -1590,8 +1596,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         // The logError call saves the message to the database and emits 'message:logged'
         // which triggers a session reload in the UI, displaying the error
         // Do NOT yield an error chunk here - that would cause duplicate display via ai:error IPC
-        // Pass markMessagesAsHidden so /context errors (auto-triggered) stay hidden
-        this.logError(sessionId, 'claude-code', new Error(errorMessage), 'slash_command', 'slash_command_error', this.markMessagesAsHidden);
+        // Pass hideMessages so /context errors (auto-triggered) stay hidden
+        this.logError(sessionId, 'claude-code', new Error(errorMessage), 'slash_command', 'slash_command_error', hideMessages);
       }
 
       // Send completion event
@@ -1698,7 +1704,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           console.error(`[CLAUDE-CODE] CRITICAL: Cannot log error - sessionId is undefined!`);
         } else {
           console.error(`[CLAUDE-CODE] Logging error to database for session:`, sessionId);
-          this.logError(sessionId, 'claude-code', error, 'catch_block', 'exception', this.markMessagesAsHidden);
+          this.logError(sessionId, 'claude-code', error, 'catch_block', 'exception', hideMessages);
         }
 
         yield {
@@ -1714,8 +1720,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     } finally {
       // console.log('[CLAUDE-CODE] Cleaning up abort controller');
       this.abortController = null;
-      // Reset hidden mode flag after sendMessage completes
-      this.markMessagesAsHidden = false;
+      // Note: markMessagesAsHidden is reset at the START of sendMessage to prevent race conditions
     }
   }
 
