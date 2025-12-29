@@ -51,8 +51,8 @@ export async function registerHistoryHandlers() {
     });
 
     // PHASE 5: Update tag status
-    ipcMain.handle('history:update-tag-status', async (event, filePath: string, tagId: string, status: string) => {
-        await historyManager.updateTagStatus(filePath, tagId, status as any);
+    ipcMain.handle('history:update-tag-status', async (event, filePath: string, tagId: string, status: string, workspacePath?: string) => {
+        await historyManager.updateTagStatus(filePath, tagId, status as any, workspacePath);
     });
 
     // PHASE 5: Update tag content
@@ -73,6 +73,31 @@ export async function registerHistoryHandlers() {
 
     ipcMain.handle('history:get-diff-baseline', async (event, filePath: string) => {
         return await historyManager.getDiffBaseline(filePath);
+    });
+
+    // Get count of files with pending-review tags in a workspace
+    ipcMain.handle('history:get-pending-count', async (event, workspacePath: string) => {
+        return await historyManager.getPendingCount(workspacePath);
+    });
+
+    // Get count of files with pending-review tags for a specific session
+    ipcMain.handle('history:get-pending-count-for-session', async (event, workspacePath: string, sessionId: string) => {
+        return await historyManager.getPendingCountForSession(workspacePath, sessionId);
+    });
+
+    // Get list of files with pending-review tags for a specific session
+    ipcMain.handle('history:get-pending-files-for-session', async (event, workspacePath: string, sessionId: string) => {
+        return await historyManager.getPendingFilesForSession(workspacePath, sessionId);
+    });
+
+    // Clear all pending tags in a workspace
+    ipcMain.handle('history:clear-all-pending', async (event, workspacePath: string) => {
+        return await historyManager.clearAllPending(workspacePath);
+    });
+
+    // Clear pending tags for a specific session
+    ipcMain.handle('history:clear-pending-for-session', async (event, workspacePath: string, sessionId: string) => {
+        return await historyManager.clearPendingForSession(workspacePath, sessionId);
     });
 
     // Debug helper: get all tags with full metadata

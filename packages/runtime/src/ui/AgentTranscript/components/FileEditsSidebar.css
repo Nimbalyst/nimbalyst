@@ -215,3 +215,19 @@
 .file-edits-sidebar__icon--rename {
   color: var(--warning-color);
 }
+
+/* Pending Review Indicator */
+.file-edits-sidebar__file--pending {
+  background-color: rgba(251, 191, 36, 0.08);
+  border-color: rgba(251, 191, 36, 0.2);
+}
+
+.file-edits-sidebar__file--pending:hover {
+  background-color: rgba(251, 191, 36, 0.12);
+  border-color: rgba(251, 191, 36, 0.3);
+}
+
+.file-edits-sidebar__pending-icon {
+  color: var(--warning-color);
+  flex-shrink: 0;
+}

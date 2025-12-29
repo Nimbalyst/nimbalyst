@@ -1,12 +1,22 @@
 import { useState, useCallback } from 'react';
 
-export type SnapshotType = 'auto-save' | 'manual' | 'ai-diff' | 'pre-apply' | 'external-change' | 'ai-edit';
+export type SnapshotType = 'auto-save' | 'manual' | 'ai-diff' | 'pre-apply' | 'external-change' | 'ai-edit' | 'pre-edit' | 'incremental-approval' | 'auto';
+
+export interface SnapshotMetadata {
+  type?: string;
+  baseMarkdownHash?: string;
+  sessionId?: string;
+  tagId?: string;
+  status?: string;
+  [key: string]: unknown;
+}
 
 export interface Snapshot {
   timestamp: string;
   type: SnapshotType;
   size: number;
   baseMarkdownHash: string;
+  metadata?: SnapshotMetadata;
 }
 
 export function useHistory(filePath: string | null) {

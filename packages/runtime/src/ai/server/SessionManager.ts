@@ -10,6 +10,7 @@ import {
   hasSessionStore,
   setSessionStore,
   type SessionStore,
+  type SessionListItem,
   type UpdateSessionMetadataPayload,
 } from '../adapters/sessionStore';
 import { SessionData, Message, DocumentContext, AIProviderType } from './types';
@@ -621,6 +622,15 @@ export class SessionManager {
   async getSessions(workspacePath?: string): Promise<SessionData[]> {
     const workspace = workspacePath || this.currentWorkspacePath || 'default';
     return fetchSessionsForWorkspace(workspace);
+  }
+
+  /**
+   * Get lightweight session list (just metadata, no messages).
+   * Much faster than getSessions() - use when you only need id/title.
+   */
+  async getSessionList(workspacePath?: string): Promise<SessionListItem[]> {
+    const workspace = workspacePath || this.currentWorkspacePath || 'default';
+    return AISessionsRepository.list(workspace);
   }
 
   getCurrentSession(): SessionData | null {

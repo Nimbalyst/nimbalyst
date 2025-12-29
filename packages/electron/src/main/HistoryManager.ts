@@ -1,4 +1,4 @@
-import { app } from 'electron';
+import { app, BrowserWindow } from 'electron';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
@@ -54,6 +54,26 @@ export class HistoryManager {
 
   constructor() {}
 
+  /**
+   * Emit pending count changed event to all windows for a workspace
+   */
+  private async emitPendingCountChanged(workspacePath: string): Promise<void> {
+    try {
+      const count = await this.getPendingCount(workspacePath);
+      const windows = BrowserWindow.getAllWindows();
+      for (const window of windows) {
+        if (!window.isDestroyed()) {
+          window.webContents.send('history:pending-count-changed', {
+            workspacePath,
+            count
+          });
+        }
+      }
+    } catch (error) {
+      logger.main.error('[HistoryManager] Failed to emit pending count changed:', error);
+    }
+  }
+
   async initialize(): Promise<void> {
     // Ensure database is initialized
     if (!database.isInitialized()) {
@@ -68,7 +88,8 @@ export class HistoryManager {
     filePath: string,
     state: string,
     type: SnapshotType,
-    description?: string
+    description?: string,
+    extraMetadata?: Record<string, unknown>
   ): Promise<void> {
     // Calculate markdown hash first
     const baseMarkdownHash = crypto
@@ -95,7 +116,7 @@ export class HistoryManager {
     }
 
     // Create a promise for this snapshot operation
-    const snapshotPromise = this._createSnapshotImpl(filePath, state, type, description, baseMarkdownHash);
+    const snapshotPromise = this._createSnapshotImpl(filePath, state, type, description, baseMarkdownHash, extraMetadata);
     this.pendingSnapshots.set(snapshotKey, { promise: snapshotPromise, timestamp: now });
 
     try {
@@ -111,7 +132,8 @@ export class HistoryManager {
     state: string,
     type: SnapshotType,
     description: string | undefined,
-    baseMarkdownHash: string
+    baseMarkdownHash: string,
+    extraMetadata?: Record<string, unknown>
   ): Promise<void> {
     // Check for duplicate: if the most recent snapshot has the same content hash, skip
     try {
@@ -175,7 +197,7 @@ export class HistoryManager {
         compressed.length,
         Date.now(),
         1,
-        { type, description, baseMarkdownHash }
+        { type, description, baseMarkdownHash, ...extraMetadata }
       ]);
 
       logger.main.debug('[HistoryManager] Saved history to database for:', filePath);
@@ -416,6 +438,11 @@ export class HistoryManager {
       ]);
 
       logger.main.info('[HistoryManager] Created tag:', { filePath, tagId, sessionId, toolUseId });
+
+      // Emit pending count changed event
+      if (workspaceId) {
+        this.emitPendingCountChanged(workspaceId);
+      }
     } catch (error: any) {
       // Check if this is a unique constraint violation (duplicate pending pre-edit tag)
       if (error.code === '23505' || error.message?.includes('idx_history_pending_pre_edit_per_file')) {
@@ -511,8 +538,12 @@ export class HistoryManager {
   /**
    * Update tag status (pending-review -> reviewed -> archived)
    * Works for both pre-edit and incremental-approval tags
+   * @param filePath - Full path to the file
+   * @param tagId - The tag ID to update
+   * @param status - New status value
+   * @param workspacePath - Optional workspace path for event emission (uses file directory if not provided)
    */
-  async updateTagStatus(filePath: string, tagId: string, status: TagStatus): Promise<void> {
+  async updateTagStatus(filePath: string, tagId: string, status: TagStatus, workspacePath?: string): Promise<void> {
     try {
       // Ensure database is initialized
       if (!database.isInitialized()) {
@@ -546,6 +577,15 @@ export class HistoryManager {
       // logger.main.info('[HistoryManager] All tags for file after update:',
       //   checkResult.rows.map((r: any) => ({ tagId: r.tag_id, type: r.type, status: r.status }))
       // );
+
+      // Emit pending count changed event when status changes away from pending-review
+      if (status === 'reviewed' || status === 'archived') {
+        // Use provided workspace path, or fall back to file's directory
+        const eventPath = workspacePath || path.dirname(filePath);
+        if (eventPath !== '/' && eventPath !== path.parse(eventPath).root) {
+          this.emitPendingCountChanged(eventPath);
+        }
+      }
     } catch (error) {
       logger.main.error('[HistoryManager] Failed to update tag status:', error);
       throw error;
@@ -721,6 +761,208 @@ export class HistoryManager {
     } catch (error) {
       logger.main.error('[HistoryManager] Failed to create incremental-approval tag:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Convenience method to mark a tag as reviewed
+   * This is a wrapper around updateTagStatus for clarity
+   */
+  async markTagAsReviewed(filePath: string, tagId: string): Promise<void> {
+    await this.updateTagStatus(filePath, tagId, 'reviewed');
+  }
+
+  /**
+   * Get count of files with pending-review tags in a workspace
+   */
+  async getPendingCount(workspacePath: string): Promise<number> {
+    try {
+      if (!database.isInitialized()) {
+        await database.initialize();
+      }
+
+      // Use file_path LIKE to match all files within the workspace directory
+      const result = await database.query<{ count: string }>(`
+        SELECT COUNT(DISTINCT file_path) as count
+        FROM document_history
+        WHERE file_path LIKE $1
+          AND metadata->>'status' = 'pending-review'
+      `, [workspacePath + '%']);
+
+      return parseInt(result.rows[0]?.count || '0', 10);
+    } catch (error) {
+      logger.main.error('[HistoryManager] Failed to get pending count:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Get list of files with pending-review tags for a specific session
+   */
+  async getPendingFilesForSession(workspacePath: string, sessionId: string): Promise<string[]> {
+    try {
+      if (!database.isInitialized()) {
+        await database.initialize();
+      }
+
+      const result = await database.query<{ file_path: string }>(`
+        SELECT DISTINCT file_path
+        FROM document_history
+        WHERE file_path LIKE $1
+          AND metadata->>'status' = 'pending-review'
+          AND metadata->>'sessionId' = $2
+      `, [workspacePath + '%', sessionId]);
+
+      return result.rows.map((row: { file_path: string }) => row.file_path);
+    } catch (error) {
+      logger.main.error('[HistoryManager] Failed to get pending files for session:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get count of files with pending-review tags for a specific session
+   */
+  async getPendingCountForSession(workspacePath: string, sessionId: string): Promise<number> {
+    try {
+      if (!database.isInitialized()) {
+        await database.initialize();
+      }
+
+      const result = await database.query<{ count: string }>(`
+        SELECT COUNT(DISTINCT file_path) as count
+        FROM document_history
+        WHERE file_path LIKE $1
+          AND metadata->>'status' = 'pending-review'
+          AND metadata->>'sessionId' = $2
+      `, [workspacePath + '%', sessionId]);
+
+      return parseInt(result.rows[0]?.count || '0', 10);
+    } catch (error) {
+      logger.main.error('[HistoryManager] Failed to get pending count for session:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Clear all pending tags in a workspace by marking them as reviewed
+   * Returns an object with the count and list of cleared file paths
+   */
+  async clearAllPending(workspacePath: string): Promise<{ count: number; clearedFiles: string[] }> {
+    try {
+      if (!database.isInitialized()) {
+        await database.initialize();
+      }
+
+      const now = Date.now();
+
+      // First get the list of files we're clearing (for notifying tabs)
+      // Use file_path LIKE to match all files within the workspace directory
+      const filesResult = await database.query<{ file_path: string }>(`
+        SELECT DISTINCT file_path
+        FROM document_history
+        WHERE file_path LIKE $1
+          AND metadata->>'status' = 'pending-review'
+      `, [workspacePath + '%']);
+
+      const clearedFiles = filesResult.rows.map((row: { file_path: string }) => row.file_path);
+      const clearedCount = clearedFiles.length;
+
+      if (clearedCount > 0) {
+        // Update all pending tags to reviewed
+        await database.query(`
+          UPDATE document_history
+          SET metadata = jsonb_set(
+                jsonb_set(metadata, '{status}', '"reviewed"'),
+                '{updatedAt}', to_jsonb($1::bigint)
+              )
+          WHERE file_path LIKE $2
+            AND metadata->>'status' = 'pending-review'
+        `, [now, workspacePath + '%']);
+
+        logger.main.info('[HistoryManager] Cleared all pending tags:', { workspacePath, clearedCount, clearedFiles });
+
+        // Emit pending count changed event (count is now 0)
+        this.emitPendingCountChanged(workspacePath);
+
+        // Emit event to notify tabs to exit diff mode for cleared files
+        const windows = BrowserWindow.getAllWindows();
+        for (const window of windows) {
+          if (!window.isDestroyed()) {
+            window.webContents.send('history:pending-cleared', {
+              workspacePath,
+              clearedFiles
+            });
+          }
+        }
+      }
+
+      return { count: clearedCount, clearedFiles };
+    } catch (error) {
+      logger.main.error('[HistoryManager] Failed to clear all pending:', error);
+      return { count: 0, clearedFiles: [] };
+    }
+  }
+
+  /**
+   * Clear pending tags for a specific session by marking them as reviewed
+   * Returns an object with the count and list of cleared file paths
+   */
+  async clearPendingForSession(workspacePath: string, sessionId: string): Promise<{ count: number; clearedFiles: string[] }> {
+    try {
+      if (!database.isInitialized()) {
+        await database.initialize();
+      }
+
+      const now = Date.now();
+
+      // First get the list of files we're clearing (for notifying tabs)
+      const filesResult = await database.query<{ file_path: string }>(`
+        SELECT DISTINCT file_path
+        FROM document_history
+        WHERE file_path LIKE $1
+          AND metadata->>'status' = 'pending-review'
+          AND metadata->>'sessionId' = $2
+      `, [workspacePath + '%', sessionId]);
+
+      const clearedFiles = filesResult.rows.map((row: { file_path: string }) => row.file_path);
+      const clearedCount = clearedFiles.length;
+
+      if (clearedCount > 0) {
+        // Update pending tags for this session to reviewed
+        await database.query(`
+          UPDATE document_history
+          SET metadata = jsonb_set(
+                jsonb_set(metadata, '{status}', '"reviewed"'),
+                '{updatedAt}', to_jsonb($1::bigint)
+              )
+          WHERE file_path LIKE $2
+            AND metadata->>'status' = 'pending-review'
+            AND metadata->>'sessionId' = $3
+        `, [now, workspacePath + '%', sessionId]);
+
+        logger.main.info('[HistoryManager] Cleared pending tags for session:', { workspacePath, sessionId, clearedCount, clearedFiles });
+
+        // Emit pending count changed event
+        this.emitPendingCountChanged(workspacePath);
+
+        // Emit event to notify tabs to exit diff mode for cleared files
+        const windows = BrowserWindow.getAllWindows();
+        for (const window of windows) {
+          if (!window.isDestroyed()) {
+            window.webContents.send('history:pending-cleared', {
+              workspacePath,
+              sessionId,
+              clearedFiles
+            });
+          }
+        }
+      }
+
+      return { count: clearedCount, clearedFiles };
+    } catch (error) {
+      logger.main.error('[HistoryManager] Failed to clear pending for session:', error);
+      return { count: 0, clearedFiles: [] };
     }
   }
 

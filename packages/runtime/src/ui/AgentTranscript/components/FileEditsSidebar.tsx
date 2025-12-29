@@ -8,6 +8,8 @@ interface FileEditsSidebarProps {
   fileEdits: FileEditSummary[];
   onFileClick?: (filePath: string) => void;
   workspacePath?: string;
+  /** Set of file paths that have pending AI edits awaiting review */
+  pendingReviewFiles?: Set<string>;
 }
 
 interface FileGitStatus {
@@ -18,7 +20,8 @@ interface FileGitStatus {
 export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
   fileEdits,
   onFileClick,
-  workspacePath
+  workspacePath,
+  pendingReviewFiles
 }) => {
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [gitStatus, setGitStatus] = useState<Record<string, FileGitStatus>>({});
@@ -232,37 +235,48 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
 
         {!isCollapsed && (
           <div className="file-edits-sidebar__section-files">
-            {files.map(({ filePath, totalAdded, totalRemoved, operation, timestamp, edits }) => (
-              <button
-                key={filePath}
-                onClick={() => onFileClick?.(filePath)}
-                className="file-edits-sidebar__file"
-              >
-                <div className="file-edits-sidebar__file-content">
-                  {operation && (
-                    <div className="file-edits-sidebar__file-operation-icon">
-                      {getOperationIcon(operation)}
+            {files.map(({ filePath, totalAdded, totalRemoved, operation, timestamp, edits }) => {
+              const hasPendingReview = linkType === 'edited' && pendingReviewFiles?.has(filePath);
+              return (
+                <button
+                  key={filePath}
+                  onClick={() => onFileClick?.(filePath)}
+                  className={`file-edits-sidebar__file ${hasPendingReview ? 'file-edits-sidebar__file--pending' : ''}`}
+                >
+                  <div className="file-edits-sidebar__file-content">
+                    {hasPendingReview && (
+                      <MaterialSymbol
+                        icon="rate_review"
+                        size={14}
+                        className="file-edits-sidebar__pending-icon"
+                        title="Pending review"
+                      />
+                    )}
+                    {operation && (
+                      <div className="file-edits-sidebar__file-operation-icon">
+                        {getOperationIcon(operation)}
+                      </div>
+                    )}
+                    {linkType === 'edited' && renderGitStatus(filePath)}
+                    <div className="file-edits-sidebar__file-info">
+                      <div className="file-edits-sidebar__file-name" title={getRelativePath(filePath)}>
+                        {formatFileName(filePath)}
+                      </div>
                     </div>
-                  )}
-                  {linkType === 'edited' && renderGitStatus(filePath)}
-                  <div className="file-edits-sidebar__file-info">
-                    <div className="file-edits-sidebar__file-name" title={getRelativePath(filePath)}>
-                      {formatFileName(filePath)}
-                    </div>
+                    {linkType === 'edited' && (totalAdded > 0 || totalRemoved > 0) && (
+                      <div className="file-edits-sidebar__file-stats">
+                        {totalAdded > 0 && (
+                          <span className="file-edits-sidebar__file-stats-added">+{totalAdded}</span>
+                        )}
+                        {totalRemoved > 0 && (
+                          <span className="file-edits-sidebar__file-stats-removed">-{totalRemoved}</span>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  {linkType === 'edited' && (totalAdded > 0 || totalRemoved > 0) && (
-                    <div className="file-edits-sidebar__file-stats">
-                      {totalAdded > 0 && (
-                        <span className="file-edits-sidebar__file-stats-added">+{totalAdded}</span>
-                      )}
-                      {totalRemoved > 0 && (
-                        <span className="file-edits-sidebar__file-stats-removed">-{totalRemoved}</span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </button>
-            ))}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>

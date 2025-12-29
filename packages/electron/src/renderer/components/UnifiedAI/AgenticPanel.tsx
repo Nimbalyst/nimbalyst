@@ -542,6 +542,20 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             // Merge: DB messages + any local-only messages
             const messages = [...dbMessages, ...localOnlyMessages];
 
+            if (localOnlyMessages.length > 0) {
+              console.log('[AgenticPanel] Session reload preserving local-only messages:', {
+                sessionId,
+                localOnlyCount: localOnlyMessages.length,
+                dbMessageCount: dbMessages.length,
+                latestDbTimestamp,
+                localOnlyPreviews: localOnlyMessages.map(m => ({
+                  role: m.role,
+                  preview: m.content?.substring(0, 30),
+                  timestamp: m.timestamp
+                }))
+              });
+            }
+
             // Preserve read state from ref (most recent), then tab state, then database
             const refReadState = readStateRef.current.get(sessionId);
             const preservedTimestamp = refReadState?.lastReadMessageTimestamp ?? tab.sessionData.lastReadMessageTimestamp ?? 0;

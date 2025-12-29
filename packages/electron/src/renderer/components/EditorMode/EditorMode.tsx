@@ -889,6 +889,8 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
           filePath={currentFilePath}
           onRestore={handleRestoreFromHistory}
           theme={theme === 'auto' ? 'dark' : theme}
+          workspacePath={workspacePath}
+          onOpenSessionInChat={handleOpenSessionInChat}
         />
       )}
 

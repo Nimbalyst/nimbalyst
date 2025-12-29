@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { usePostHog } from 'posthog-js/react';
+import { ProviderIcon } from '@nimbalyst/runtime';
 import { useHistory } from '../../hooks/useHistory';
 import { DiffPreviewEditor, type DiffNavigationState } from './DiffPreviewEditor';
 import { TextDiffViewer, type TextDiffNavigationState } from './TextDiffViewer';
@@ -7,6 +8,7 @@ import { MonacoDiffViewer } from './MonacoDiffViewer';
 import { ImageDiffViewer } from './ImageDiffViewer';
 import { getFileType, type EditorType } from '../../utils/fileTypeDetector';
 import { getFileName } from '../../utils/pathUtils';
+import { getRelativeTimeString } from '../../utils/dateFormatting';
 import './HistoryDialog.css';
 
 interface HistoryDialogProps {
@@ -15,6 +17,8 @@ interface HistoryDialogProps {
   filePath: string | null;
   onRestore?: (content: string) => void;
   theme?: 'light' | 'dark' | 'crystal-dark';
+  workspacePath?: string;
+  onOpenSessionInChat?: (sessionId: string) => void;
 }
 
 type VersionSelection = {
@@ -28,7 +32,7 @@ const getSnapshotId = (snapshot: { timestamp: string; baseMarkdownHash: string }
   return `${snapshot.timestamp}-${snapshot.baseMarkdownHash}-${index}`;
 };
 
-export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'light' }: HistoryDialogProps) {
+export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'light', workspacePath, onOpenSessionInChat }: HistoryDialogProps) {
   const posthog = usePostHog();
   const { snapshots, loading, refreshSnapshots, loadSnapshot, deleteSnapshot } = useHistory(filePath);
   const [selectedVersions, setSelectedVersions] = useState<VersionSelection[]>([]);
@@ -42,6 +46,7 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
   const [versionAMeta, setVersionAMeta] = useState<{ type: string; timestamp: string } | null>(null);
   const [versionBMeta, setVersionBMeta] = useState<{ type: string; timestamp: string } | null>(null);
   const [navigationState, setNavigationState] = useState<DiffNavigationState | TextDiffNavigationState | null>(null);
+  const [sessionInfo, setSessionInfo] = useState<Record<string, { title: string; provider: string }>>({});
 
   // Detect file type
   const fileType: EditorType = useMemo(() => {
@@ -105,6 +110,47 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
       });
     }
   }, [isOpen, filePath, refreshSnapshots, posthog, fileType]);
+
+  // Fetch session info for AI edit snapshots
+  useEffect(() => {
+    if (!isOpen || !workspacePath || snapshots.length === 0) return;
+
+    const fetchSessionInfo = async () => {
+      // Collect unique session IDs from snapshots
+      const sessionIds = new Set<string>();
+      for (const snapshot of snapshots) {
+        const sessionId = snapshot.metadata?.sessionId;
+        if (sessionId) {
+          sessionIds.add(sessionId);
+        }
+      }
+
+      if (sessionIds.size === 0) return;
+
+      try {
+        // Fetch lightweight session list (just metadata, no messages)
+        const sessions = await window.electronAPI?.ai?.getSessionList?.(workspacePath);
+        if (sessions) {
+          const info: Record<string, { title: string; provider: string }> = {};
+          for (const session of sessions) {
+            if (sessionIds.has(session.id)) {
+              info[session.id] = {
+                title: session.title || 'Untitled Session',
+                provider: session.provider || 'claude'
+              };
+            }
+          }
+          if (Object.keys(info).length > 0) {
+            setSessionInfo(info);
+          }
+        }
+      } catch (error) {
+        console.error('[HistoryDialog] Failed to fetch session info:', error);
+      }
+    };
+
+    fetchSessionInfo();
+  }, [isOpen, workspacePath, snapshots]);
 
   useEffect(() => {
     // Reset selection when dialog opens/closes
@@ -412,6 +458,18 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
                 {displayedSnapshots.map((snapshot, index) => {
                   const snapshotId = getSnapshotId(snapshot, index);
                   const isSelected = selectedVersions.some(v => v.snapshotId === snapshotId);
+                  const sessionId = snapshot.metadata?.sessionId;
+                  const session = sessionId ? sessionInfo[sessionId] : null;
+                  const isAIEdit = ['pre-edit', 'ai-diff', 'ai-edit', 'incremental-approval'].includes(snapshot.type);
+                  const relativeTime = getRelativeTimeString(new Date(snapshot.timestamp).getTime());
+
+                  const handleSessionClick = (e: React.MouseEvent) => {
+                    e.stopPropagation();
+                    if (sessionId && onOpenSessionInChat) {
+                      onOpenSessionInChat(sessionId);
+                      onClose();
+                    }
+                  };
 
                   return (
                   <div
@@ -427,12 +485,23 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
                       <div className="history-item-main">
                         <span className="history-item-icon material-symbols-outlined">{getSnapshotIcon(snapshot.type)}</span>
                         <div className="history-item-info">
-                          <span className="history-item-type">{snapshot.type.replace('-', ' ')}</span>
-                          <span className="history-item-time">{formatTimestamp(snapshot.timestamp)}</span>
+                          <div className="history-item-type-row">
+                            <span className="history-item-type">{snapshot.type.replace('-', ' ')}</span>
+                            <span className="history-item-time">{relativeTime}</span>
+                          </div>
+                          {isAIEdit && session && (
+                            <button
+                              className="history-item-session-link"
+                              onClick={handleSessionClick}
+                              title="Open AI session in chat"
+                            >
+                              <ProviderIcon provider={session.provider} size={12} />
+                              <span className="history-item-session-name">{session.title}</span>
+                            </button>
+                          )}
                         </div>
                       </div>
                       <div className="history-item-actions">
-                        <span className="history-item-size">{(snapshot.size / 1024).toFixed(1)} KB</span>
                         <button
                           className="history-item-delete"
                           data-testid={`history-item-delete-${index}`}

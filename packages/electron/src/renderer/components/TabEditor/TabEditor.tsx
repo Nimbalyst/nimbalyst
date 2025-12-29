@@ -185,6 +185,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const [showMonacoDiffBar, setShowMonacoDiffBar] = useState(false); // For Monaco diff approval bar
   const [isEditorReady, setIsEditorReady] = useState(false); // Track when editor is mounted and ready
   const [customEditorSourceMode, setCustomEditorSourceMode] = useState(false); // Source mode for custom editors
+  const [diffSessionInfo, setDiffSessionInfo] = useState<{sessionId: string; sessionTitle?: string; editedAt?: number} | null>(null); // Session info for diff approval bar
 
   // Track editor type usage when file is opened
   const hasTrackedOpenRef = useRef<string | null>(null);
@@ -281,6 +282,38 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   // File watchers are now active for all open tabs, so changes are detected in real-time
   // via the 'file-changed-on-disk' event handler below. This eliminates the redundant
   // "File Changed While Inactive" dialog that would appear on tab switch.
+
+  // Helper function to fetch session info for diff approval bar
+  const fetchDiffSessionInfo = useCallback(async (sessionId: string, editedAt?: number) => {
+    try {
+      // Try to load session info
+      if (window.electronAPI?.aiLoadSession) {
+        const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspaceId);
+        if (sessionData) {
+          setDiffSessionInfo({
+            sessionId,
+            sessionTitle: sessionData.title || sessionData.name || 'AI Session',
+            editedAt: editedAt || Date.now()
+          });
+          return;
+        }
+      }
+    } catch (error) {
+      logger.ui.warn('[TabEditor] Failed to fetch session info for diff bar:', error);
+    }
+    // Fallback - just set session ID without title
+    setDiffSessionInfo({
+      sessionId,
+      editedAt: editedAt || Date.now()
+    });
+  }, [workspaceId]);
+
+  // Handler for "Go to Session" button
+  const handleGoToSession = useCallback((sessionId: string) => {
+    if (onOpenSessionInChat) {
+      onOpenSessionInChat(sessionId);
+    }
+  }, [onOpenSessionInChat]);
 
   useEffect(() => {
     lastSaveTimeRef.current = lastSaveTime;
@@ -531,6 +564,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             if (editorRef.current.showDiff) {
               editorRef.current.showDiff(oldContent, newContent);
               setShowMonacoDiffBar(true);
+              // Fetch session info for the diff approval bar
+              fetchDiffSessionInfo(pendingTag.sessionId, pendingTag.createdAt?.getTime?.() || Date.now());
             } else {
               logger.ui.warn(`[TabEditor] Monaco editor doesn't have showDiff method`);
             }
@@ -796,7 +831,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
       // Mark the tag as reviewed since user has manually intervened
       if (window.electronAPI?.history) {
-        window.electronAPI.history.updateTagStatus(tagInfo.filePath, tagInfo.tagId, 'reviewed')
+        window.electronAPI.history.updateTagStatus(tagInfo.filePath, tagInfo.tagId, 'reviewed', workspaceId)
           .catch(error => {
             logger.ui.error(`[TabEditor] Failed to mark tag as reviewed after user edit:`, error);
           });
@@ -1113,6 +1148,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                     console.log(`[TabEditor] Showing Monaco diff - old: ${oldContent.length}, new: ${newContent.length}`);
                     editorRef.current.showDiff(oldContent, newContent);
                     setShowMonacoDiffBar(true);
+                    // Fetch session info for the diff approval bar
+                    fetchDiffSessionInfo(tagInfo.sessionId, pendingTags[0].createdAt?.getTime?.() || Date.now());
                   }
                 }
               } catch (error) {
@@ -1178,6 +1215,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                       console.log(`[TabEditor] Showing Monaco diff (first time) - old: ${oldContent.length}, new: ${newContent.length}`);
                       editorRef.current.showDiff(oldContent, newContent);
                       setShowMonacoDiffBar(true);
+                      // Fetch session info for the diff approval bar
+                      fetchDiffSessionInfo(tagInfo.sessionId, pendingTags[0].createdAt?.getTime?.() || Date.now());
                     }
                   }
 
@@ -1326,6 +1365,62 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     // NOTE: onDirtyChange is NOT in dependencies to prevent re-registering listeners
     // We call it directly in handleFileChanged which captures the current value
   }, [filePath, fileName]);
+
+  // Listen for "Clear All Pending" event to exit diff mode when this file's pending tag is cleared
+  useEffect(() => {
+    if (!window.electronAPI?.history?.onPendingCleared) {
+      return;
+    }
+
+    const unsubscribe = window.electronAPI.history.onPendingCleared((data: { workspacePath: string; clearedFiles: string[] }) => {
+      // Check if this file was in the list of cleared files
+      if (data.clearedFiles.includes(filePath)) {
+        logger.ui.info('[TabEditor] Pending tag cleared for this file, exiting diff mode:', filePath);
+
+        // Clear pending tag ref
+        pendingAIEditTagRef.current = null;
+
+        // Exit diff mode if in Monaco
+        if (!isMarkdown && editorRef.current?.exitDiffMode) {
+          editorRef.current.exitDiffMode();
+        }
+
+        // Hide the diff approval bar and clear session info
+        setShowMonacoDiffBar(false);
+        setDiffSessionInfo(null);
+
+        // For Lexical (markdown), we need to clear diff nodes
+        if (isMarkdown && editorRef.current) {
+          // Reload from disk to get clean state
+          window.electronAPI.readFileContent(filePath).then((result) => {
+            if (result?.success && result.content !== undefined) {
+              const newContent = result.content;
+              setContent(newContent);
+              initialContentRef.current = newContent;
+              setLastSavedContent(newContent);
+              lastSavedContentRef.current = newContent;
+              contentRef.current = newContent;
+              setIsDirty(false);
+              isDirtyRef.current = false;
+              onDirtyChange?.(false);
+
+              // Update editor with clean content
+              const transformers = getEditorTransformers();
+              editorRef.current?.update(() => {
+                const root = $getRoot();
+                root.clear();
+                $convertFromEnhancedMarkdownString(newContent, transformers);
+              }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
+            }
+          });
+        }
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [filePath, isMarkdown, onDirtyChange]);
 
   // Handle conflict dialog actions
   const handleReloadFromDisk = useCallback(async () => {
@@ -1518,7 +1613,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           // We do NOT create an incremental-approval tag here because there are no more diffs
           // Incremental-approval tags are only created during partial acceptance (via INCREMENTAL_APPROVAL_COMMAND)
           logger.ui.info('[TabEditor] About to call updateTagStatus:', { filePath, tagId, status: 'reviewed' });
-          await window.electronAPI.history.updateTagStatus(filePath, tagId, 'reviewed');
+          await window.electronAPI.history.updateTagStatus(filePath, tagId, 'reviewed', workspaceId);
           logger.ui.info(`[TabEditor] Successfully marked AI edit tag as reviewed: ${tagId}`);
 
           // Clear the pending tag reference (session is complete)
@@ -1645,18 +1740,20 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         throw writeError;
       }
 
-      // Mark tag as reviewed (must pass filePath, tagId, status)
+      // Mark tag as reviewed (must pass filePath, tagId, status, workspacePath)
       if (window.electronAPI.history) {
         console.log('[TabEditor] About to call updateTagStatus', {
           filePath,
           tagId: pendingAIEditTagRef.current.tagId,
-          status: 'reviewed'
+          status: 'reviewed',
+          workspaceId
         });
 
         await window.electronAPI.history.updateTagStatus(
           filePath,
           pendingAIEditTagRef.current.tagId,
-          'reviewed'
+          'reviewed',
+          workspaceId
         );
 
         console.log('[TabEditor] Successfully marked tag as reviewed');
@@ -1672,8 +1769,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       // Clear pending tag ref
       pendingAIEditTagRef.current = null;
 
-      // Hide the diff approval bar
+      // Hide the diff approval bar and clear session info
       setShowMonacoDiffBar(false);
+      setDiffSessionInfo(null);
 
       // Update content and saved state
       setContent(newContent);
@@ -1711,12 +1809,13 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       // Write to disk - use saveFile with (content, filePath) parameter order
       await window.electronAPI.saveFile(oldContent, filePath);
 
-      // Mark tag as reviewed (must pass filePath, tagId, status)
+      // Mark tag as reviewed (must pass filePath, tagId, status, workspacePath)
       if (window.electronAPI.history) {
         await window.electronAPI.history.updateTagStatus(
           filePath,
           pendingAIEditTagRef.current.tagId,
-          'reviewed'
+          'reviewed',
+          workspaceId
         );
       }
 
@@ -1726,8 +1825,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       // Clear pending tag ref
       pendingAIEditTagRef.current = null;
 
-      // Hide the diff approval bar
+      // Hide the diff approval bar and clear session info
       setShowMonacoDiffBar(false);
+      setDiffSessionInfo(null);
 
       // Update content and saved state
       setContent(oldContent);
@@ -1853,7 +1953,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           await window.electronAPI.history.updateTagStatus(
             filePath,
             pendingAIEditTagRef.current.tagId,
-            'reviewed'
+            'reviewed',
+            workspaceId
           );
         }
 
@@ -2243,6 +2344,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                   fileName={fileName}
                   onAcceptAll={handleMonacoDiffAccept}
                   onRejectAll={handleMonacoDiffReject}
+                  sessionInfo={diffSessionInfo || undefined}
+                  onGoToSession={onOpenSessionInChat ? handleGoToSession : undefined}
                 />
               )}
               <MonacoCodeEditor

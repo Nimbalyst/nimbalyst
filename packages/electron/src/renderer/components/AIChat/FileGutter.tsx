@@ -8,6 +8,8 @@ interface FileGutterProps {
   workspacePath?: string;
   type: 'referenced' | 'edited';
   onFileClick?: (filePath: string) => void;
+  /** Optional: Set of file paths that have pending AI edits awaiting review */
+  pendingReviewFiles?: Set<string>;
 }
 
 interface FileData {
@@ -22,7 +24,7 @@ interface FileGitStatus {
   gitStatusCode?: string;
 }
 
-export function FileGutter({ sessionId, workspacePath, type, onFileClick }: FileGutterProps) {
+export function FileGutter({ sessionId, workspacePath, type, onFileClick, pendingReviewFiles }: FileGutterProps) {
   const [files, setFiles] = useState<FileData[]>([]);
   const [isExpanded, setIsExpanded] = useState(true);
   const [gitStatus, setGitStatus] = useState<Record<string, FileGitStatus>>({});
@@ -252,15 +254,24 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick }: File
           {groupedFiles.map((file) => {
             const fileName = getFileName(file.filePath);
             const hasStats = type === 'edited' && (file.linesAdded || file.linesRemoved);
+            const hasPendingReview = type === 'edited' && pendingReviewFiles?.has(file.filePath);
 
             return (
               <button
                 key={file.filePath}
                 onClick={() => handleFileClick(file.filePath)}
-                className="file-gutter__file"
+                className={`file-gutter__file ${hasPendingReview ? 'file-gutter__file--pending' : ''}`}
                 title={getRelativePath(file.filePath)}
               >
                 <div className="file-gutter__file-content">
+                  {hasPendingReview && (
+                    <MaterialSymbol
+                      icon="rate_review"
+                      size={14}
+                      className="file-gutter__pending-icon"
+                      title="Pending review"
+                    />
+                  )}
                   {file.operation && (
                     <div className="file-gutter__file-operation-icon">
                       {getOperationIcon(file.operation)}

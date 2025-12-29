@@ -81,6 +81,57 @@
   opacity: 0.9;
 }
 
+/* Session info styles */
+.monaco-diff-approval-bar-session {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.monaco-diff-approval-bar-session-icon {
+  color: var(--accent-primary);
+}
+
+.monaco-diff-approval-bar-session-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.monaco-diff-approval-bar-session-name {
+  font-weight: 600;
+  color: var(--accent-primary);
+}
+
+.monaco-diff-approval-bar-timestamp {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+/* Go to Session button */
+.monaco-diff-approval-bar-goto {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background-color: transparent;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.monaco-diff-approval-bar-goto:hover {
+  background-color: var(--surface-hover);
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
+}
+
 /* Dark theme adjustments */
 [data-theme="dark"] .monaco-diff-approval-bar,
 [data-theme="crystal-dark"] .monaco-diff-approval-bar {

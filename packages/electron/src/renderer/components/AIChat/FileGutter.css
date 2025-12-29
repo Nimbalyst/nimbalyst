@@ -182,3 +182,19 @@
 .file-gutter__icon--rename {
   color: var(--warning-color);
 }
+
+/* Pending Review State */
+.file-gutter__file--pending {
+  background-color: rgba(251, 191, 36, 0.08);
+  border-color: rgba(251, 191, 36, 0.2);
+}
+
+.file-gutter__file--pending:hover {
+  background-color: rgba(251, 191, 36, 0.15);
+  border-color: rgba(251, 191, 36, 0.3);
+}
+
+.file-gutter__pending-icon {
+  color: var(--warning-color);
+  flex-shrink: 0;
+}

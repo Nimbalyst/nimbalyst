@@ -4,6 +4,7 @@ import type { SessionData, ChatAttachment } from '@nimbalyst/runtime/ai/server/t
 import { AIInput, AIInputRef } from './AIInput';
 import { PromptQueueList } from './PromptQueueList';
 import { FileGutter } from '../AIChat/FileGutter';
+import { PendingReviewBanner } from '../AIChat/PendingReviewBanner';
 import type { TypeaheadOption } from '../Typeahead/GenericTypeahead';
 import type { AIMode } from './ModeTag';
 import { ExitPlanModeConfirmation, ExitPlanModeConfirmationData } from './ExitPlanModeConfirmation';
@@ -135,6 +136,54 @@ const TranscriptSectionComponent: React.FC<TranscriptSectionProps> = ({
   provider,
   onCommandSelect
 }) => {
+  // Track files with pending AI edits for this session
+  const [pendingReviewFiles, setPendingReviewFiles] = useState<Set<string>>(new Set());
+
+  // Fetch pending review files for this session
+  useEffect(() => {
+    if (!workspacePath || !sessionId) {
+      setPendingReviewFiles(new Set());
+      return;
+    }
+
+    const fetchPendingFiles = async () => {
+      try {
+        if (window.electronAPI?.history?.getPendingFilesForSession) {
+          const files = await window.electronAPI.history.getPendingFilesForSession(workspacePath, sessionId);
+          setPendingReviewFiles(new Set(files));
+        }
+      } catch (error) {
+        console.error('[AISessionView] Failed to fetch pending review files:', error);
+      }
+    };
+
+    fetchPendingFiles();
+
+    // Listen for pending cleared events to refresh the list
+    const unsubscribe = window.electronAPI?.history?.onPendingCleared?.(
+      (data: { workspacePath: string; sessionId?: string; clearedFiles: string[] }) => {
+        if (data.workspacePath === workspacePath) {
+          // Re-fetch to get the updated list
+          fetchPendingFiles();
+        }
+      }
+    );
+
+    // Also listen for pending count changes (which means new files might be pending)
+    const unsubscribeCount = window.electronAPI?.history?.onPendingCountChanged?.(
+      (data: { workspacePath: string; count: number }) => {
+        if (data.workspacePath === workspacePath) {
+          fetchPendingFiles();
+        }
+      }
+    );
+
+    return () => {
+      unsubscribe?.();
+      unsubscribeCount?.();
+    };
+  }, [workspacePath, sessionId]);
+
   // Create the renderEmptyExtra callback for slash command suggestions
   const renderEmptyExtra = React.useCallback(() => {
     // Only show for claude-code provider with empty session
@@ -161,6 +210,7 @@ const TranscriptSectionComponent: React.FC<TranscriptSectionProps> = ({
           workspacePath={workspacePath}
           type="referenced"
           onFileClick={onFileClick}
+          pendingReviewFiles={pendingReviewFiles}
         />
       )}
 
@@ -187,8 +237,17 @@ const TranscriptSectionComponent: React.FC<TranscriptSectionProps> = ({
           onCloseAndArchive={onCloseAndArchive}
           onUnarchive={onUnarchive}
           readFile={readFile}
+          renderFilesHeader={mode === 'agent' ? () => (
+            <PendingReviewBanner workspacePath={workspacePath} sessionId={sessionId} />
+          ) : undefined}
+          pendingReviewFiles={pendingReviewFiles}
         />
       </div>
+
+      {/* Pending review banner - shows pending files for current session */}
+      {mode === 'chat' && (
+        <PendingReviewBanner workspacePath={workspacePath} sessionId={sessionId} />
+      )}
 
       {/* Edited files gutter at bottom - only in chat mode (agent mode has sidebar) */}
       {mode === 'chat' && (
@@ -197,6 +256,7 @@ const TranscriptSectionComponent: React.FC<TranscriptSectionProps> = ({
           workspacePath={workspacePath}
           type="edited"
           onFileClick={onFileClick}
+          pendingReviewFiles={pendingReviewFiles}
         />
       )}
 

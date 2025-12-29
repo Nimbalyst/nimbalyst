@@ -1241,7 +1241,9 @@ export class AIService {
         timestamp: Date.now(),
         attachments: attachments && attachments.length > 0 ? attachments : undefined
       };
+      logger.main.info(`[AIService] Adding user message to session ${session.id}: "${message.substring(0, 50)}..." (queuedPromptId: ${queuedPromptId || 'none'})`);
       await this.sessionManager.addMessage(userMessage, session.id);
+      logger.main.info(`[AIService] User message added successfully to session ${session.id}`);
 
       // Update session title if this is the first user message
       if (session.messages.length === 0 || (session.messages.length === 1 && session.messages[0].role === 'user')) {
@@ -2181,9 +2183,14 @@ export class AIService {
     // Register the handler with IPC
     ipcMain.handle('ai:sendMessage', this.sendMessageHandler);
 
-    // Get session history
+    // Get session history (full session data with messages - slow)
     ipcMain.handle('ai:getSessions', async (event, workspacePath?: string) => {
       return await this.sessionManager.getSessions(workspacePath);
+    });
+
+    // Get session list (lightweight - just metadata, no messages)
+    ipcMain.handle('ai:getSessionList', async (event, workspacePath?: string) => {
+      return await this.sessionManager.getSessionList(workspacePath);
     });
 
     // Load a session

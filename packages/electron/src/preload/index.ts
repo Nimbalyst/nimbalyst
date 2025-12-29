@@ -278,10 +278,30 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('history:create-tag', filePath, tagId, content, sessionId, toolUseId),
     getTag: (filePath: string, tagId: string) =>
       ipcRenderer.invoke('history:get-tag', filePath, tagId),
-    updateTagStatus: (filePath: string, tagId: string, status: string) =>
-      ipcRenderer.invoke('history:update-tag-status', filePath, tagId, status),
+    updateTagStatus: (filePath: string, tagId: string, status: string, workspacePath?: string) =>
+      ipcRenderer.invoke('history:update-tag-status', filePath, tagId, status, workspacePath),
     updateTagContent: (filePath: string, tagId: string, content: string) =>
       ipcRenderer.invoke('history:update-tag-content', filePath, tagId, content),
+    getPendingCount: (workspacePath: string) =>
+      ipcRenderer.invoke('history:get-pending-count', workspacePath),
+    getPendingCountForSession: (workspacePath: string, sessionId: string) =>
+      ipcRenderer.invoke('history:get-pending-count-for-session', workspacePath, sessionId),
+    getPendingFilesForSession: (workspacePath: string, sessionId: string) =>
+      ipcRenderer.invoke('history:get-pending-files-for-session', workspacePath, sessionId),
+    clearAllPending: (workspacePath: string) =>
+      ipcRenderer.invoke('history:clear-all-pending', workspacePath),
+    clearPendingForSession: (workspacePath: string, sessionId: string) =>
+      ipcRenderer.invoke('history:clear-pending-for-session', workspacePath, sessionId),
+    onPendingCountChanged: (callback: (data: { workspacePath: string; count: number }) => void) => {
+      const handler = (_event: any, data: { workspacePath: string; count: number }) => callback(data);
+      ipcRenderer.on('history:pending-count-changed', handler);
+      return () => ipcRenderer.removeListener('history:pending-count-changed', handler);
+    },
+    onPendingCleared: (callback: (data: { workspacePath: string; sessionId?: string; clearedFiles: string[] }) => void) => {
+      const handler = (_event: any, data: { workspacePath: string; sessionId?: string; clearedFiles: string[] }) => callback(data);
+      ipcRenderer.on('history:pending-cleared', handler);
+      return () => ipcRenderer.removeListener('history:pending-cleared', handler);
+    },
   },
 
   // Session operations
@@ -502,6 +522,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     sendMessage: (message: string, documentContext?: any, sessionId?: string, workspacePath?: string) =>
       ipcRenderer.invoke('ai:sendMessage', message, documentContext, sessionId, workspacePath),
     getSessions: (workspacePath?: string) => ipcRenderer.invoke('ai:getSessions', workspacePath),
+    getSessionList: (workspacePath?: string) => ipcRenderer.invoke('ai:getSessionList', workspacePath),
     loadSession: (sessionId: string, workspacePath?: string, trackAsResume?: boolean) => ipcRenderer.invoke('ai:loadSession', sessionId, workspacePath, trackAsResume),
     clearSession: () => ipcRenderer.invoke('ai:clearSession'),
     updateSessionMessages: (sessionId: string, messages: any[], workspacePath?: string) =>

@@ -3162,16 +3162,31 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         // }
 
         if (pendingTags && pendingTags.length > 0) {
-          // PRODUCTION LOG: Track when tag creation is skipped due to existing tag
-          const tagAge = Date.now() - pendingTags[0].createdAt.getTime();
-          console.log('[PRE-EDIT SKIP]', JSON.stringify({
+          const existingTag = pendingTags[0];
+          const tagAge = Date.now() - existingTag.createdAt.getTime();
+
+          // Check if the pending tag is from the current session
+          if (existingTag.sessionId === sessionId) {
+            // Same session - skip creating another (existing behavior)
+            console.log('[PRE-EDIT SKIP]', JSON.stringify({
+              file: path.basename(filePath),
+              existingTagAge: tagAge + 'ms',
+              existingTagId: existingTag.id,
+              reason: 'same_session_tag',
+            }));
+            return;
+          }
+
+          // Different session - clear the old tag and create a new one
+          // This prevents edits from multiple sessions accumulating into one diff
+          console.log('[PRE-EDIT CLEAR]', JSON.stringify({
             file: path.basename(filePath),
-            existingTagAge: tagAge + 'ms',
-            existingTagId: pendingTags[0].id,
-            reason: 'existing_pending_tag',
+            clearedTagId: existingTag.id,
+            clearedSessionId: existingTag.sessionId,
+            newSessionId: sessionId,
+            reason: 'different_session',
           }));
-          // Don't create a new tag - the existing one covers all edits until user approves/rejects
-          return;
+          await historyManager.updateTagStatus(filePath, existingTag.id, 'reviewed');
         }
 
         // PRODUCTION LOG: Track when new tag is created
@@ -3263,13 +3278,16 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         }
 
         // Save as 'ai-edit' snapshot in history
+        // The sessionId is stored in snapshot metadata so the HistoryDialog can display
+        // which AI session made the edit and provide a clickable link to open that session
         try {
           const { historyManager } = await import('../../../../../electron/src/main/HistoryManager');
           await historyManager.createSnapshot(
             filePath,
             finalContent,
             'ai-edit',
-            `AI edit turn complete (session: ${sessionId || 'unknown'})`
+            `AI edit turn complete (session: ${sessionId || 'unknown'})`,
+            sessionId ? { sessionId } : undefined
           );
           // console.log(`[CLAUDE-CODE] Turn-end snapshot created for ${filePath}`);
         } catch (importError) {
