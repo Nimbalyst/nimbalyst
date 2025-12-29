@@ -1092,7 +1092,6 @@ export async function createApplicationMenu() {
                 // },
                 { type: 'separator' },
                 { label: 'Minimize', accelerator: KeyboardShortcuts.window.minimize, role: 'minimize' },
-                { label: 'Close', role: 'close' },
                 { type: 'separator' },
                 { label: 'Bring All to Front', role: 'front' },
                 { type: 'separator' },
