@@ -32,7 +32,7 @@ import { createWorkspaceManagerWindow } from '../window/WorkspaceManagerWindow.t
 import { createAIUsageReportWindow } from '../window/AIUsageReportWindow';
 import { createDatabaseBrowserWindow } from '../window/DatabaseBrowserWindow';
 import { loadFileIntoWindow } from '../file/FileOperations';
-import { getRecentItems, clearRecentItems, addToRecentItems, getTheme, setTheme, store, getWorkspaceState, getWorkspaceWindowState } from '../utils/store';
+import { getRecentItems, clearRecentItems, addToRecentItems, getTheme, setTheme, store, getWorkspaceState, getWorkspaceWindowState, isExtensionDevToolsEnabled } from '../utils/store';
 import { updateWindowTitleBars, updateNativeTheme } from '../theme/ThemeManager';
 import { getFileWatcherStatus, refreshWorkspaceFileTree, getGlobalFileWatcherStats } from '../file/FileWatcherDebug';
 import { getFolderContents } from '../utils/FileTree';
@@ -1336,7 +1336,8 @@ export async function createApplicationMenu() {
                         shell.openExternal('https://docs.nimbalyst.com/');
                     }
                 },
-                {
+                // Extension SDK Documentation - only show when Extension Development Kit is enabled
+                ...(isExtensionDevToolsEnabled() ? [{
                     label: 'Extension SDK Documentation',
                     click: async () => {
                         AnalyticsService.getInstance().sendEvent('help_accessed', {
@@ -1355,7 +1356,7 @@ export async function createApplicationMenu() {
                             );
                         }
                     }
-                },
+                }] : []),
                 {
                     label: 'Keyboard Shortcuts',
                     accelerator: 'CmdOrCtrl+/',
@@ -1416,7 +1417,8 @@ export async function createApplicationMenu() {
                         shell.openExternal('https://docs.nimbalyst.com/');
                     }
                 },
-                {
+                // Extension SDK Documentation - only show when Extension Development Kit is enabled
+                ...(isExtensionDevToolsEnabled() ? [{
                     label: 'Extension SDK Documentation',
                     click: async () => {
                         AnalyticsService.getInstance().sendEvent('help_accessed', {
@@ -1435,7 +1437,7 @@ export async function createApplicationMenu() {
                             );
                         }
                     }
-                },
+                }] : []),
                 {
                     label: 'Keyboard Shortcuts',
                     accelerator: 'CmdOrCtrl+/',
