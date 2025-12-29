@@ -5,14 +5,22 @@ Publish the tested internal release to the public repository following this auto
 
 ## PHASE 1: COLLECT INFORMATION
 
-1. **Ask user for version to promote**:
-  - Prompt: "Which version do you want to promote to public? (e.g., v0.45.29)"
-  - Get the version tag from user input
+1. **Get current version to promote**:
+  - Run: `git describe --tags --abbrev=0`
+  - This returns the most recent tag (the version to promote)
+  - Display to user: "Version to promote: [VERSION]"
 
-2. **Ask user for last public release**:
-  - Prompt: "What was the last public release version? (e.g., v0.45.25)"
-  - This determines which CHANGELOG entries to include
-  - Public release notes will cover ALL changes from that version to the new version
+2. **Fetch last public release automatically**:
+  - Use WebFetch to query: `https://api.github.com/repos/nimbalyst/nimbalyst/releases/latest`
+  - Extract the `tag_name` field from the response (this is the last public release version)
+
+3. **Display release summary**:
+  - Output both versions clearly to the user:
+```
+    Releasing: [NEW_VERSION]
+    Last public release: [LAST_VERSION]
+```
+  - This shows the range of changes that will be included in the release notes
 
 ## PHASE 2: GENERATE PUBLIC RELEASE NOTES
 
@@ -32,7 +40,7 @@ Publish the tested internal release to the public repository following this auto
     - Keep: User-facing features, UI improvements, bug fixes
   - Use present tense and marketing language
 
-3. **Create PUBLIC_RELEASE_NOTES.md**:
+3. **Create PUBLIC\_RELEASE\_NOTES.md**:
   - Write formatted notes to `PUBLIC_RELEASE_NOTES.md` in repository root
   - Show the user what will be published
   - Ask for approval before proceeding
@@ -46,9 +54,9 @@ Publish the tested internal release to the public repository following this auto
 
 2. **Trigger publish workflow**:
   - Use GitHub CLI to trigger the workflow:
-    ```bash
+```bash
     gh workflow run publish-public.yml -f version=[VERSION]
-    ```
+```
   - This triggers: https://github.com/nimbalyst/nimbalyst-code/actions/workflows/publish-public.yml
   - The workflow will:
     - Fetch PUBLIC_RELEASE_NOTES.md from the repo
@@ -65,9 +73,11 @@ Publish the tested internal release to the public repository following this auto
 
 ```
 User: /release-public
-Assistant: Which version do you want to promote to public? (e.g., v0.45.29)
-User: v0.45.29
-Assistant: What was the last public release version? (e.g., v0.45.25)
-User: v0.45.25
+Assistant: [Runs git describe --tags --abbrev=0]
+Assistant: [Fetches https://api.github.com/repos/nimbalyst/nimbalyst/releases/latest]
+
+Releasing: v0.45.29
+Last public release: v0.45.25
 
 [Generates cumulative notes covering v0.45.26, v0.45.27, v0.45.28, v0.45.29]
+```
