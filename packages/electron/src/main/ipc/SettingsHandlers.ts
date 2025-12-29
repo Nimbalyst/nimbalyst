@@ -376,25 +376,12 @@ export function registerSettingsHandlers() {
     ipcMain.handle('sync:get-status', async (_event, workspacePath?: string) => {
         const config = getSessionSyncConfig();
 
-        // Check basic config first (before initializing Stytch)
-        if (!config?.enabled || !config.serverUrl) {
-            return {
-                appConfigured: false,
-                projectEnabled: false,
-                connected: false,
-                syncing: false,
-                error: null,
-                stats: {
-                    sessionCount: 0,
-                    lastSyncedAt: null,
-                },
-            };
-        }
-
         // Lazy init Stytch to check auth status
         ensureStytchInitialized();
 
-        // Check if authenticated
+        // Sync is "configured" if the user is authenticated with Stytch
+        // The serverUrl is derived from environment (defaults to wss://sync.nimbalyst.com)
+        // so we don't need to check config.serverUrl anymore
         if (!StytchAuth.isAuthenticated()) {
             return {
                 appConfigured: false,
@@ -410,7 +397,8 @@ export function registerSettingsHandlers() {
         }
 
         // Check if project is enabled
-        const isProjectEnabled = !config.enabledProjects ||
+        // If no enabledProjects list, all projects are enabled by default
+        const isProjectEnabled = !config?.enabledProjects ||
             (workspacePath ? config.enabledProjects.includes(workspacePath) : true);
 
         // Get sync provider status from SyncManager
