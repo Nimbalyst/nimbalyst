@@ -20,6 +20,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.50.0] - 2025-12-29
+
+
+### Added
+- Monaco diff header now shows change count and navigation arrows
+- AI edits show pending review status with session links in file gutter
+- Mobile session list now supports pull-to-refresh
+- Mobile users can now choose project when creating new session
+- Database Browser now runs queries on Cmd+Enter
+- AI agents can now query PGLite database via MCP tool
+
+### Changed
+- Unified diff approval header across Monaco and Lexical editors
+
+### Fixed
+- Queued and mobile-synced messages now appear in transcript
+- Extensions now load correctly on Windows
+- Sync status icon now shows for newly authenticated users
+- Newly created files now show diff mode for AI edits
+- Extension SDK Documentation help link only visible to alpha users
+- Ctrl+W on Windows now closes tabs instead of the whole window
+- Sessions from other workspaces no longer appear in wrong project
+- Mobile session list no longer allows horizontal panning
+- Mobile keyboard no longer creates large gap below input
+- File tree no longer auto-scrolls while browsing folders
+- Mobile layout now respects iOS safe area properly
+- CSV spreadsheet no longer freezes when dialogs exist elsewhere
+
 ## [0.49.14] - 2025-12-27
 
 
