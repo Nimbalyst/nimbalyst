@@ -216,10 +216,15 @@ ${exportNames.map((name) => `export const ${name} = __mod?.${name};`).join('\n')
   async fileExists(filePath: string): Promise<boolean> {
     const electronAPI = (window as any).electronAPI;
     if (!electronAPI) {
+      console.warn('[ExtensionPlatformService] fileExists: electronAPI not available');
       return false;
     }
 
-    return electronAPI.invoke('extensions:file-exists', filePath);
+    const exists = await electronAPI.invoke('extensions:file-exists', filePath);
+    if (!exists) {
+      console.warn(`[ExtensionPlatformService] File not found: ${filePath}`);
+    }
+    return exists;
   }
 
   /**

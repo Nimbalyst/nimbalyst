@@ -533,7 +533,9 @@ export function registerExtensionHandlers(): void {
     try {
       await fs.access(filePath);
       return true;
-    } catch {
+    } catch (error) {
+      // Log the error details to help debug intermittent file access issues
+      logger.main.debug(`[ExtensionHandlers] File not found: ${filePath}`, error);
       return false;
     }
   });
