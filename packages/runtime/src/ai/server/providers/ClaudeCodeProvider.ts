@@ -3113,15 +3113,19 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           // Track this file as edited during this turn
           this.editedFilesThisTurn.add(filePath);
 
+          // Create unique tag ID for this edit
+          const actualToolUseId = toolUseID || `tool-${Date.now()}`;
+
           // Read current file content (if file exists)
+          // For new files, we create a pre-edit tag with empty content to enable diff mode
           try {
-            const content = fs.readFileSync(filePath, 'utf-8');
-            // Create unique tag ID for this edit
-            const actualToolUseId = toolUseID || `tool-${Date.now()}`;
+            fs.readFileSync(filePath, 'utf-8');
+            // File exists - tag with current content
             await this.tagFileBeforeEdit(filePath, workspacePath!, sessionId, actualToolUseId);
           } catch (error) {
-            // File might not exist yet (Write tool creating new file)
-            // console.log(`[CLAUDE-CODE] PreToolUse: File doesn't exist yet, will track for snapshot:`, filePath);
+            // File doesn't exist yet (Write tool creating new file)
+            // Create a pre-edit tag with empty content so diff mode shows the full new file
+            await this.tagFileBeforeEdit(filePath, workspacePath!, sessionId, actualToolUseId, true);
           }
         }
 
@@ -3138,12 +3142,14 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
   /**
    * Tag a file's current state before an AI edit
+   * @param isNewFile - If true, the file doesn't exist yet (being created), so use empty content
    */
   private async tagFileBeforeEdit(
     filePath: string,
     workspacePath: string,
     sessionId: string | undefined,
-    toolUseId: string
+    toolUseId: string,
+    isNewFile: boolean = false
   ): Promise<void> {
     const fs = require('fs');
 
@@ -3194,11 +3200,11 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         console.log('[PRE-EDIT TAG]', JSON.stringify({
           file: path.basename(filePath),
           tagId,
+          isNewFile,
         }));
 
-        // No pending tags - create the first one for this edit session
-        // Read current file content
-        const content = fs.readFileSync(filePath, 'utf-8');
+        // Get content: empty for new files, current content for existing files
+        const content = isNewFile ? '' : fs.readFileSync(filePath, 'utf-8');
 
         await historyManager.createTag(
           filePath,
