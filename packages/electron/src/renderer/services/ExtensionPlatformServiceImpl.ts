@@ -364,21 +364,17 @@ ${exportNames.map((name) => `export const ${name} = __mod?.${name};`).join('\n')
    * Resolve a relative path from an extension's root.
    */
   resolvePath(extensionPath: string, relativePath: string): string {
-    // Simple path resolution - this should work for both Unix and Windows
-    // by letting the main process handle the actual path resolution
-    const electronAPI = (window as any).electronAPI;
-    if (!electronAPI) {
-      // Fallback: simple concatenation
-      const separator = extensionPath.includes('\\') ? '\\' : '/';
-      return `${extensionPath}${separator}${relativePath}`;
-    }
+    // Detect the separator used in the extension path
+    const isWindows = extensionPath.includes('\\');
+    const separator = isWindows ? '\\' : '/';
 
-    // Use IPC for proper path resolution
-    // This is synchronous in the sense that we're building the path,
-    // but we need to make it async for IPC
-    // For now, use simple string concatenation which works for most cases
-    const separator = extensionPath.includes('\\') ? '\\' : '/';
-    return `${extensionPath}${separator}${relativePath}`;
+    // Normalize the relative path to use the same separator as the extension path
+    // This handles manifest.main values like "dist/index.js" on Windows
+    const normalizedRelative = isWindows
+      ? relativePath.replace(/\//g, '\\')
+      : relativePath.replace(/\\/g, '/');
+
+    return `${extensionPath}${separator}${normalizedRelative}`;
   }
 
   /**
