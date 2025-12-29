@@ -565,6 +565,16 @@ export class SessionManager {
       return null;
     }
 
+    // Validate workspace ownership to prevent cross-workspace session loading
+    // This prevents bugs where a session ID from one workspace could be loaded
+    // in another workspace (e.g., if the tab state got corrupted)
+    if (session.workspacePath && session.workspacePath !== workspace) {
+      console.warn(
+        `[SessionManager] Rejecting session ${sessionId}: belongs to ${session.workspacePath}, not ${workspace}`
+      );
+      return null;
+    }
+
     // Fetch raw agent messages from the database (already filtered to exclude hidden messages)
     const agentMessages = await AgentMessagesRepository.list(sessionId);
 
