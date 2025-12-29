@@ -2,7 +2,7 @@ import { BrowserWindow, ipcMain, dialog, app } from 'electron';
 import { join, basename } from 'path';
 import { existsSync, mkdirSync, statSync, readdirSync } from 'fs';
 import { getRecentItems, addToRecentItems, store, getWorkspaceWindowState, getTheme } from '../utils/store';
-import { createWindow } from './WindowManager';
+import { createWindow, findWindowByWorkspace } from './WindowManager';
 import { getBackgroundColor } from '../theme/ThemeManager';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
 
@@ -306,10 +306,25 @@ export function setupWorkspaceManagerHandlers() {
     return { success: false };
   });
 
-  // Open workspace (always in new window)
+  // Open workspace (reuse existing window if already open)
   ipcMain.handle('workspace-manager:open-workspace', async (event, workspacePath: string) => {
     // Add to recent workspaces
     addToRecentItems('workspaces', workspacePath, basename(workspacePath));
+
+    // Check if this workspace is already open in an existing window
+    const existingWindow = findWindowByWorkspace(workspacePath);
+    if (existingWindow && !existingWindow.isDestroyed()) {
+      // Focus the existing window instead of creating a new one
+      existingWindow.focus();
+
+      // Close workspace manager after focusing existing workspace
+      if (workspaceManagerWindow && !workspaceManagerWindow.isDestroyed()) {
+        workspaceManagerClosingForProject = true;
+        workspaceManagerWindow.close();
+      }
+
+      return { success: true };
+    }
 
     // Track workspace opened analytics event (use quick scan for analytics)
     try {
