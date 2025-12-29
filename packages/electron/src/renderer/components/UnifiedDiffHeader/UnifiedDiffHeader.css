@@ -1,0 +1,264 @@
+/**
+ * UnifiedDiffHeader styles
+ *
+ * Unified styling for diff approval header across all editor types.
+ * Combines the best elements from MonacoDiffApprovalBar and DiffApprovalBar.
+ */
+
+.unified-diff-header {
+  position: sticky;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: var(--surface-secondary);
+  border-bottom: 1px solid var(--border-primary);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.unified-diff-header-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  gap: 16px;
+  min-height: 48px;
+}
+
+/* Left section: Session info */
+.unified-diff-header-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.unified-diff-header-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.unified-diff-header-sparkle {
+  flex-shrink: 0;
+}
+
+/* Session info styles */
+.unified-diff-header-session {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.unified-diff-header-edit-text {
+  color: var(--text-secondary);
+}
+
+.unified-diff-header-timestamp {
+  color: var(--text-tertiary);
+}
+
+.unified-diff-header-timestamp::before {
+  content: "\00b7";
+  margin-right: 6px;
+}
+
+/* Session link button (icon + name) */
+.unified-diff-header-session-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: default;
+  transition: background-color 0.15s ease;
+}
+
+.unified-diff-header-session-link--clickable {
+  cursor: pointer;
+}
+
+.unified-diff-header-session-link--clickable:hover {
+  background-color: var(--surface-hover);
+}
+
+.unified-diff-header-session-icon {
+  flex-shrink: 0;
+}
+
+.unified-diff-header-session-name {
+  font-weight: 600;
+  color: var(--accent-primary);
+}
+
+/* Open icon - hidden by default, shown on hover */
+.unified-diff-header-session-open-icon {
+  opacity: 0;
+  color: var(--text-tertiary);
+  transition: opacity 0.15s ease;
+  flex-shrink: 0;
+}
+
+.unified-diff-header-session-link--clickable:hover .unified-diff-header-session-open-icon {
+  opacity: 1;
+}
+
+/* Middle section: Navigation */
+.unified-diff-header-navigation {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.unified-diff-header-nav-button {
+  background: transparent;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-primary);
+  padding: 0;
+  transition: background-color 0.15s ease;
+}
+
+.unified-diff-header-nav-button:hover:not(:disabled) {
+  background-color: var(--surface-hover);
+}
+
+.unified-diff-header-nav-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.unified-diff-header-change-counter {
+  font-size: 13px;
+  color: var(--text-secondary);
+  min-width: 80px;
+  text-align: center;
+  user-select: none;
+}
+
+/* Right section: Actions */
+.unified-diff-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.unified-diff-header-button {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.unified-diff-header-button:hover {
+  opacity: 0.85;
+}
+
+.unified-diff-header-button:active {
+  transform: scale(0.98);
+}
+
+.unified-diff-header-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.unified-diff-header-button:disabled:hover {
+  opacity: 0.4;
+  transform: none;
+}
+
+/* Reject buttons (outline style) */
+.unified-diff-header-button-reject,
+.unified-diff-header-button-reject-single {
+  color: var(--text-primary);
+  border-color: var(--border-primary);
+  background: var(--surface-primary);
+}
+
+.unified-diff-header-button-reject:hover:not(:disabled),
+.unified-diff-header-button-reject-single:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+/* Accept buttons (primary style) */
+.unified-diff-header-button-accept,
+.unified-diff-header-button-accept-single {
+  color: white;
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+.unified-diff-header-button-accept:hover:not(:disabled),
+.unified-diff-header-button-accept-single:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+/* Dark theme adjustments */
+[data-theme="dark"] .unified-diff-header,
+[data-theme="crystal-dark"] .unified-diff-header {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Responsive layout */
+@media (max-width: 768px) {
+  .unified-diff-header-content {
+    flex-wrap: wrap;
+  }
+
+  .unified-diff-header-info {
+    flex: 1 1 100%;
+    margin-bottom: 8px;
+  }
+
+  .unified-diff-header-navigation {
+    flex: 1 1 auto;
+  }
+
+  .unified-diff-header-actions {
+    margin-left: 0;
+  }
+}
+
+/* =============================================================================
+ * Lexical Change Group Highlighting
+ * These classes are applied to Lexical nodes when navigating through diff changes
+ * ============================================================================= */
+
+.diff-group-highlight-removed {
+  background-color: rgba(220, 38, 38, 0.15) !important;
+}
+
+.diff-group-highlight-added {
+  background-color: rgba(22, 163, 74, 0.15) !important;
+}
+
+.diff-group-highlight-modified {
+  background-color: rgba(59, 130, 246, 0.15) !important;
+}

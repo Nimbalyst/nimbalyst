@@ -32,7 +32,7 @@ import { DocumentHeaderContainer } from '@nimbalyst/runtime/plugins/TrackerPlugi
 import { setTextSelection, clearTextSelection } from '../UnifiedAI/TextSelectionIndicator';
 import { FixedTabHeaderContainer, FixedTabHeaderRegistry } from '@nimbalyst/runtime/plugins/shared/fixedTabHeader';
 import { MonacoCodeEditor } from '../MonacoCodeEditor';
-import { MonacoDiffApprovalBar } from '../MonacoDiffApprovalBar';
+import { UnifiedDiffHeader, LexicalDiffHeaderAdapter } from '../UnifiedDiffHeader';
 import { ImageViewer } from '../ImageViewer';
 import { getFileType } from '../../utils/fileTypeDetector';
 import { customEditorRegistry } from '../CustomEditors';
@@ -185,7 +185,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const [showMonacoDiffBar, setShowMonacoDiffBar] = useState(false); // For Monaco diff approval bar
   const [isEditorReady, setIsEditorReady] = useState(false); // Track when editor is mounted and ready
   const [customEditorSourceMode, setCustomEditorSourceMode] = useState(false); // Source mode for custom editors
-  const [diffSessionInfo, setDiffSessionInfo] = useState<{sessionId: string; sessionTitle?: string; editedAt?: number} | null>(null); // Session info for diff approval bar
+  const [diffSessionInfo, setDiffSessionInfo] = useState<{sessionId: string; sessionTitle?: string; editedAt?: number; provider?: string} | null>(null); // Session info for diff approval bar
 
   // Track editor type usage when file is opened
   const hasTrackedOpenRef = useRef<string | null>(null);
@@ -293,7 +293,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           setDiffSessionInfo({
             sessionId,
             sessionTitle: sessionData.title || sessionData.name || 'AI Session',
-            editedAt: editedAt || Date.now()
+            editedAt: editedAt || Date.now(),
+            provider: sessionData.provider
           });
           return;
         }
@@ -598,6 +599,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             }];
             editorRef.current.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
             console.log(`[TabEditor] Applied pending AI edit diff on mount`);
+            // Fetch session info for the diff approval bar (for Lexical)
+            fetchDiffSessionInfo(pendingTag.sessionId, pendingTag.createdAt?.getTime?.() || Date.now());
           } finally {
             setTimeout(() => {
               isApplyingDiffRef.current = false;
@@ -1130,6 +1133,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                     if (editorRef.current) {
                       editorRef.current.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
                       console.log(`[TabEditor] Updated diff with new edits`);
+                      // Fetch session info for the diff approval bar (for Lexical)
+                      fetchDiffSessionInfo(tagInfo.sessionId, pendingTags[0].createdAt?.getTime?.() || Date.now());
                     }
                   } finally {
                     // Wait for DOM to fully render with CSS classes
@@ -1198,6 +1203,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                     try {
                       editorRef.current.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
                       console.log(`[TabEditor] Dispatched APPLY_MARKDOWN_REPLACE_COMMAND`);
+                      // Fetch session info for the diff approval bar (for Lexical)
+                      fetchDiffSessionInfo(tagInfo.sessionId, pendingTags[0].createdAt?.getTime?.() || Date.now());
                     } finally {
                       // Reset flag after a small delay to ensure content change handler has run
                       await new Promise(resolve => setTimeout(resolve, 100));
@@ -1380,40 +1387,44 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         // Clear pending tag ref
         pendingAIEditTagRef.current = null;
 
-        // Exit diff mode if in Monaco
-        if (!isMarkdown && editorRef.current?.exitDiffMode) {
-          editorRef.current.exitDiffMode();
-        }
-
         // Hide the diff approval bar and clear session info
         setShowMonacoDiffBar(false);
         setDiffSessionInfo(null);
 
-        // For Lexical (markdown), we need to clear diff nodes
-        if (isMarkdown && editorRef.current) {
-          // Reload from disk to get clean state
-          window.electronAPI.readFileContent(filePath).then((result) => {
-            if (result?.success && result.content !== undefined) {
-              const newContent = result.content;
-              setContent(newContent);
-              initialContentRef.current = newContent;
-              setLastSavedContent(newContent);
-              lastSavedContentRef.current = newContent;
-              contentRef.current = newContent;
-              setIsDirty(false);
-              isDirtyRef.current = false;
-              onDirtyChange?.(false);
+        // Reload from disk to get the content that was kept (AI already wrote to disk)
+        // This is needed for both Monaco and Lexical to sync editor content with disk
+        window.electronAPI.readFileContent(filePath).then((result) => {
+          if (result?.success && result.content !== undefined) {
+            const newContent = result.content;
+            setContent(newContent);
+            initialContentRef.current = newContent;
+            setLastSavedContent(newContent);
+            lastSavedContentRef.current = newContent;
+            contentRef.current = newContent;
+            setIsDirty(false);
+            isDirtyRef.current = false;
+            onDirtyChange?.(false);
 
-              // Update editor with clean content
+            if (isMarkdown && editorRef.current) {
+              // For Lexical (markdown), we need to clear diff nodes and reload content
               const transformers = getEditorTransformers();
               editorRef.current?.update(() => {
                 const root = $getRoot();
                 root.clear();
                 $convertFromEnhancedMarkdownString(newContent, transformers);
               }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
+            } else if (!isMarkdown && editorRef.current) {
+              // For Monaco, exit diff mode and update content
+              if (editorRef.current.exitDiffMode) {
+                editorRef.current.exitDiffMode();
+              }
+              // Update Monaco editor content to match what's on disk
+              if (editorRef.current.setContent) {
+                editorRef.current.setContent(newContent, { force: true });
+              }
             }
-          });
-        }
+          }
+        });
       }
     });
 
@@ -2189,6 +2200,14 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               fileName={fileName}
             />
           ) : isMarkdown && markdownViewMode === 'lexical' ? (
+              <>
+              <LexicalDiffHeaderAdapter
+                editor={editorRef.current as any}
+                filePath={filePath}
+                fileName={fileName}
+                sessionInfo={diffSessionInfo || undefined}
+                onGoToSession={onOpenSessionInChat ? handleGoToSession : undefined}
+              />
               <div className="tab-editor-wrapper" style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
               <DocumentPathProvider documentPath={filePath}>
                 <StravuEditor
@@ -2260,6 +2279,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                 />
               </DocumentPathProvider>
               </div>
+              </>
           ) : isMarkdown && markdownViewMode === 'monaco' ? (
             <>
               <div className="monaco-markdown-toolbar" style={{
@@ -2340,12 +2360,16 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           ) : (
             <>
               {!isMarkdown && showMonacoDiffBar && (
-                <MonacoDiffApprovalBar
+                <UnifiedDiffHeader
+                  filePath={filePath}
                   fileName={fileName}
-                  onAcceptAll={handleMonacoDiffAccept}
-                  onRejectAll={handleMonacoDiffReject}
+                  capabilities={{
+                    onAcceptAll: handleMonacoDiffAccept,
+                    onRejectAll: handleMonacoDiffReject,
+                  }}
                   sessionInfo={diffSessionInfo || undefined}
                   onGoToSession={onOpenSessionInChat ? handleGoToSession : undefined}
+                  editorType="monaco"
                 />
               )}
               <MonacoCodeEditor

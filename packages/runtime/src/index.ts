@@ -25,6 +25,8 @@ export * from './agents';
 export { DocumentLinkPlugin } from './plugins/DocumentLinkPlugin';
 export { DocumentReferenceNode, DocumentReferenceTransformer, LegacyDocumentReferenceTransformer, $createDocumentReferenceNode, $isDocumentReferenceNode } from './plugins/DocumentLinkPlugin/DocumentLinkNode';
 export { DiffApprovalBarPlugin, DiffApprovalBar } from './plugins/DiffApprovalBar';
+export { useLexicalDiffState } from './plugins/DiffApprovalBar/useLexicalDiffState';
+export type { LexicalDiffState } from './plugins/DiffApprovalBar/useLexicalDiffState';
 export { SearchReplacePlugin, SearchReplaceBar, SearchReplaceStateManager } from './plugins/SearchReplace';
 export type { SearchReplaceState } from './plugins/SearchReplace';
 // Unified Tracker Plugin

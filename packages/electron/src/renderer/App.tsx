@@ -89,7 +89,8 @@ if (!pluginsRegistered) {
   registerDocumentLinkPlugin();
   registerTrackerPlugin(null); // Load built-in trackers now, custom trackers loaded in AppLayout
   registerAIChatPlugin();
-  registerDiffApprovalBarPlugin(); // Diff approval bar in fixed tab header
+  // Note: DiffApprovalBarPlugin disabled - now using UnifiedDiffHeader in TabEditor directly
+  // registerDiffApprovalBarPlugin();
   registerSearchReplacePlugin(); // Search/replace bar in fixed tab header
   registerMockupPlugin(); // Mockup embedding support
   pluginsRegistered = true;
