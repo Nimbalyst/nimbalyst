@@ -207,10 +207,18 @@ function categorizeError(error: unknown): string {
 if (typeof window !== 'undefined') {
   window.addEventListener('error', (event) => {
     const message = event.error?.message || event.message;
+    const stack = event.error?.stack || '';
 
     // Ignore benign ResizeObserver errors from virtualization libraries (virtua)
     // This error occurs when ResizeObserver callbacks trigger layout changes that cause more resize events
     if (message === 'ResizeObserver loop completed with undelivered notifications.') {
+      return;
+    }
+
+    // Ignore Monaco editor's internal widget errors - these occur when disposing editors
+    // while async operations (like find/replace state changes) are in progress
+    if (stack.includes('_FindWidget') || stack.includes('FindReplaceState')) {
+      console.debug('[ErrorNotificationService] Ignoring Monaco FindWidget error:', message);
       return;
     }
 

@@ -15,10 +15,12 @@ export interface ChangeGroupCapabilities {
   onNavigatePrevious: () => void;
   /** Navigate to next change group */
   onNavigateNext: () => void;
-  /** Accept the currently selected change group */
-  onAcceptCurrent: () => void;
-  /** Reject the currently selected change group */
-  onRejectCurrent: () => void;
+  /** Accept the currently selected change group (optional - not all editors support this) */
+  onAcceptCurrent?: () => void;
+  /** Reject the currently selected change group (optional - not all editors support this) */
+  onRejectCurrent?: () => void;
+  /** Whether per-change accept/reject is supported (default: true if onAcceptCurrent/onRejectCurrent provided) */
+  supportsPerChangeActions?: boolean;
 }
 
 export interface DiffCapabilities {

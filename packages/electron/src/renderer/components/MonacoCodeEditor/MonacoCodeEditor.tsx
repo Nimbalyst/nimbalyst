@@ -42,6 +42,9 @@ export interface MonacoCodeEditorProps {
   onContentChange?: () => void;
   onGetContent?: (getContentFn: () => string) => void;
   onEditorReady?: (editor: any) => void;
+
+  // Diff mode callback - called when diff change count updates
+  onDiffChangeCountUpdate?: (count: number) => void;
 }
 
 export interface MonacoDiffModeConfig {
@@ -58,6 +61,7 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   onContentChange,
   onGetContent,
   onEditorReady,
+  onDiffChangeCountUpdate,
 }) => {
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
   const diffEditorRef = useRef<MonacoEditor.IStandaloneDiffEditor | null>(null);
@@ -73,6 +77,10 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
 
   // Diff mode state
   const [diffMode, setDiffMode] = useState<MonacoDiffModeConfig | null>(null);
+
+  // Diff navigation state - number of changes and current index
+  const [diffChangeCount, setDiffChangeCount] = useState(0);
+  const diffChangeIndexRef = useRef(-1); // -1 means no selection, 0-based index otherwise
 
   // Track selection decorations for unfocused state
   const selectionDecorationsRef = useRef<string[]>([]);
@@ -271,6 +279,40 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   }, [diffMode, content]);
 
   /**
+   * Navigate to the next diff change
+   */
+  const goToNextDiff = useCallback(() => {
+    if (diffEditorRef.current) {
+      diffEditorRef.current.goToDiff('next');
+      // Update current index (Monaco doesn't expose this, so we track it manually)
+      if (diffChangeCount > 0) {
+        diffChangeIndexRef.current = Math.min(diffChangeIndexRef.current + 1, diffChangeCount - 1);
+        if (diffChangeIndexRef.current < 0) diffChangeIndexRef.current = 0;
+      }
+    }
+  }, [diffChangeCount]);
+
+  /**
+   * Navigate to the previous diff change
+   */
+  const goToPreviousDiff = useCallback(() => {
+    if (diffEditorRef.current) {
+      diffEditorRef.current.goToDiff('previous');
+      // Update current index
+      if (diffChangeCount > 0) {
+        diffChangeIndexRef.current = Math.max(diffChangeIndexRef.current - 1, 0);
+      }
+    }
+  }, [diffChangeCount]);
+
+  /**
+   * Get current diff change count (for UI display)
+   */
+  const getDiffChangeCount = useCallback(() => {
+    return diffChangeCount;
+  }, [diffChangeCount]);
+
+  /**
    * Handle editor mount
    * Monaco editor is ready to use
    */
@@ -311,6 +353,9 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
         exitDiffMode,
         acceptDiff,
         rejectDiff,
+        goToNextDiff,
+        goToPreviousDiff,
+        getDiffChangeCount,
       });
     }
 
@@ -369,7 +414,7 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
 
     // Focus editor on mount
     editor.focus();
-  }, [getContent, setEditorContent, onGetContent, onEditorReady, onContentChange, showDiff, exitDiffMode, acceptDiff, rejectDiff]);
+  }, [getContent, setEditorContent, onGetContent, onEditorReady, onContentChange, showDiff, exitDiffMode, acceptDiff, rejectDiff, goToNextDiff, goToPreviousDiff, getDiffChangeCount]);
 
   /**
    * Handle diff editor mount
@@ -396,7 +441,24 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
     } catch (error) {
       console.warn('[MonacoCodeEditor] Failed to disable diagnostics in diff editor:', error);
     }
-  }, []);
+
+    // Listen for diff computation updates to get the change count
+    editor.onDidUpdateDiff(() => {
+      const lineChanges = editor.getLineChanges();
+      const count = lineChanges?.length ?? 0;
+      console.log('[MonacoCodeEditor] Diff updated, change count:', count);
+      setDiffChangeCount(count);
+      // Notify parent of change count update
+      onDiffChangeCountUpdate?.(count);
+      // Reset to first change when diff is computed
+      diffChangeIndexRef.current = count > 0 ? 0 : -1;
+    });
+
+    // Navigate to first diff after mount (once diff is computed)
+    setTimeout(() => {
+      editor.revealFirstDiff();
+    }, 100);
+  }, [onDiffChangeCountUpdate]);
 
   /**
    * Update editor theme when theme changes

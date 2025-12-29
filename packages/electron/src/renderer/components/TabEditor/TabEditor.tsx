@@ -186,6 +186,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const [isEditorReady, setIsEditorReady] = useState(false); // Track when editor is mounted and ready
   const [customEditorSourceMode, setCustomEditorSourceMode] = useState(false); // Source mode for custom editors
   const [diffSessionInfo, setDiffSessionInfo] = useState<{sessionId: string; sessionTitle?: string; editedAt?: number; provider?: string} | null>(null); // Session info for diff approval bar
+  const [monacoDiffChangeCount, setMonacoDiffChangeCount] = useState(0); // Number of changes in Monaco diff mode
 
   // Track editor type usage when file is opened
   const hasTrackedOpenRef = useRef<string | null>(null);
@@ -1783,6 +1784,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       // Hide the diff approval bar and clear session info
       setShowMonacoDiffBar(false);
       setDiffSessionInfo(null);
+      setMonacoDiffChangeCount(0);
 
       // Update content and saved state
       setContent(newContent);
@@ -1839,6 +1841,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       // Hide the diff approval bar and clear session info
       setShowMonacoDiffBar(false);
       setDiffSessionInfo(null);
+      setMonacoDiffChangeCount(0);
 
       // Update content and saved state
       setContent(oldContent);
@@ -2366,6 +2369,14 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                   capabilities={{
                     onAcceptAll: handleMonacoDiffAccept,
                     onRejectAll: handleMonacoDiffReject,
+                    changeGroups: monacoDiffChangeCount > 0 ? {
+                      count: monacoDiffChangeCount,
+                      currentIndex: null, // Monaco doesn't track current index reliably
+                      onNavigatePrevious: () => editorRef.current?.goToPreviousDiff?.(),
+                      onNavigateNext: () => editorRef.current?.goToNextDiff?.(),
+                      // Monaco doesn't support per-change accept/reject
+                      supportsPerChangeActions: false,
+                    } : undefined,
                   }}
                   sessionInfo={diffSessionInfo || undefined}
                   onGoToSession={onOpenSessionInChat ? handleGoToSession : undefined}
@@ -2400,6 +2411,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                   // For Monaco, we get a wrapper with editor, setContent, getContent, showDiff, etc.
                   editorRef.current = editorWrapper;
                   setIsEditorReady(true);
+                }}
+                onDiffChangeCountUpdate={(count) => {
+                  setMonacoDiffChangeCount(count);
                 }}
               />
             </>

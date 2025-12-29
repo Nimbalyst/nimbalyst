@@ -57,6 +57,9 @@ export const UnifiedDiffHeader: React.FC<UnifiedDiffHeaderProps> = ({
   const { changeGroups } = capabilities;
   const hasChangeGroups = changeGroups && changeGroups.count > 0;
   const hasSelection = changeGroups && changeGroups.currentIndex !== null && changeGroups.currentIndex >= 0;
+  // Per-change actions are supported if explicitly set, or if the callbacks exist
+  const supportsPerChangeActions = changeGroups?.supportsPerChangeActions ??
+    (changeGroups?.onAcceptCurrent !== undefined && changeGroups?.onRejectCurrent !== undefined);
 
   const handleAcceptAll = () => {
     posthog?.capture('ai_diff_accepted', {
@@ -75,7 +78,7 @@ export const UnifiedDiffHeader: React.FC<UnifiedDiffHeaderProps> = ({
   };
 
   const handleAcceptCurrent = () => {
-    if (!changeGroups) return;
+    if (!changeGroups?.onAcceptCurrent) return;
     posthog?.capture('ai_diff_accepted', {
       acceptType: 'partial',
       editorType,
@@ -84,7 +87,7 @@ export const UnifiedDiffHeader: React.FC<UnifiedDiffHeaderProps> = ({
   };
 
   const handleRejectCurrent = () => {
-    if (!changeGroups) return;
+    if (!changeGroups?.onRejectCurrent) return;
     posthog?.capture('ai_diff_rejected', {
       rejectType: 'partial',
       editorType,
@@ -185,8 +188,8 @@ export const UnifiedDiffHeader: React.FC<UnifiedDiffHeaderProps> = ({
 
         {/* Right section: Actions */}
         <div className="unified-diff-header-actions">
-          {/* Per-change buttons (only if change groups supported) */}
-          {hasChangeGroups && (
+          {/* Per-change buttons (only if change groups AND per-change actions supported) */}
+          {hasChangeGroups && supportsPerChangeActions && (
             <>
               <button
                 className="unified-diff-header-button unified-diff-header-button-reject-single"
@@ -218,24 +221,24 @@ export const UnifiedDiffHeader: React.FC<UnifiedDiffHeaderProps> = ({
             onClick={handleRejectAll}
             type="button"
           >
-            {hasChangeGroups && (
+            {hasChangeGroups && supportsPerChangeActions && (
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M10 4L4 10M4 4L10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
               </svg>
             )}
-            Revert{hasChangeGroups ? ' All' : ''}
+            Revert{hasChangeGroups && supportsPerChangeActions ? ' All' : ''}
           </button>
           <button
             className="unified-diff-header-button unified-diff-header-button-accept"
             onClick={handleAcceptAll}
             type="button"
           >
-            {hasChangeGroups && (
+            {hasChangeGroups && supportsPerChangeActions && (
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M12 3L5 10L2 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             )}
-            Keep{hasChangeGroups ? ' All' : ''}
+            Keep{hasChangeGroups && supportsPerChangeActions ? ' All' : ''}
           </button>
         </div>
       </div>
