@@ -2,6 +2,7 @@ name: Internal Build (Artifact Only)
 
 # Builds on every push to main and PRs for internal testing
 # Does NOT notarize or publish - just uploads artifacts for download
+# Reuses the release workflow's build job
 
 on:
   push:
@@ -14,85 +15,10 @@ on:
     branches:
       - main
 
-permissions:
-  contents: read
-
 jobs:
   build:
-    strategy:
-      matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
-        include:
-          - os: macos-latest
-            platform: mac
-            arch: arm64
-          - os: ubuntu-latest
-            platform: linux
-            arch: x64
-          - os: windows-latest
-            platform: win
-            arch: x64
-
-    runs-on: ${{ matrix.os }}
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: '**/package-lock.json'
-
-      - name: Upgrade npm to 10.x
-        run: npm install -g npm@10
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build rexical package
-        working-directory: packages/rexical
-        env:
-          NODE_ENV: production
-        run: npm run build
-
-      - name: Build extensions
-        env:
-          NODE_ENV: production
-        run: |
-          cd packages/extensions/datamodellm
-          npm run build
-          cd ../../..
-          cd packages/extensions/pdf-viewer
-          npm run build
-
-      - name: Build Electron app (unsigned)
-        env:
-          NODE_ENV: production
-          # Skip notarization for faster builds
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        working-directory: packages/electron
-        run: |
-          npm run build
-          npm run build:extensions
-          if [ "${{ matrix.os }}" == "macos-latest" ]; then
-            electron-builder --mac --publish never
-          elif [ "${{ matrix.os }}" == "windows-latest" ]; then
-            electron-builder --win --x64 --publish never
-          else
-            electron-builder --linux --publish never
-          fi
-        shell: bash
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: internal-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.sha }}
-          path: |
-            packages/electron/release/*.dmg
-            packages/electron/release/*.zip
-            packages/electron/release/*.exe
-            packages/electron/release/*.AppImage
-          retention-days: 7
+    uses: ./.github/workflows/electron-build.yml
+    with:
+      release: false
+      create_github_release: false
+    secrets: inherit

@@ -27,6 +27,18 @@ on:
         options:
           - 'true'
           - 'false'
+  workflow_call:
+    inputs:
+      release:
+        description: 'Create a release'
+        required: false
+        default: false
+        type: boolean
+      create_github_release:
+        description: 'Create GitHub Release'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -151,14 +163,15 @@ jobs:
           # Public releases are created separately via the publish-public.yml workflow
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Require notarization for release builds
-          REQUIRE_NOTARIZE: ${{ github.event_name == 'push' || github.event.inputs.release == 'true' }}
+          # Release builds require notarization (push to tag, or explicit release input)
+          REQUIRE_NOTARIZE: ${{ github.ref_type == 'tag' || inputs.release == true || inputs.release == 'true' }}
           # Mark as official build for analytics tracking
           # This ensures PostHog only sends data from official GitHub release builds
           OFFICIAL_BUILD: 'true'
         working-directory: packages/electron
         run: |
           if [ "${{ matrix.os }}" == "macos-latest" ]; then
-            if [ "${{ github.event_name }}" == "push" ] || [ "${{ github.event.inputs.release }}" == "true" ]; then
+            if [ "${{ github.ref_type }}" == "tag" ] || [ "${{ inputs.release }}" == "true" ]; then
               npm run build:mac:notarized
             else
               npm run build:mac:local
@@ -200,7 +213,7 @@ jobs:
 
       # Generate update metadata files
       - name: Generate update metadata
-        if: github.event_name == 'push' || github.event.inputs.release == 'true'
+        if: github.ref_type == 'tag' || inputs.release == true || inputs.release == 'true'
         working-directory: packages/electron
         run: |
           node build/generate-update-yml.js || true
@@ -223,7 +236,7 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event.inputs.release == 'true'
+    if: github.ref_type == 'tag' || inputs.release == true || inputs.release == 'true'
     
     steps:
       - name: Checkout code
@@ -347,10 +360,10 @@ jobs:
           fi
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
 
-      # GitHub Release creation is now OPTIONAL (only when explicitly requested)
-      # All releases go to R2 by default for alpha testing
-      - name: Create GitHub Release (Optional - for stable promotion)
-        if: github.event.inputs.create_github_release == 'true'
+      # GitHub Release is created for tag pushes (required for /release-public workflow)
+      # or when explicitly requested via workflow_dispatch
+      - name: Create GitHub Release
+        if: github.ref_type == 'tag' || inputs.create_github_release == true || inputs.create_github_release == 'true'
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.get_version.outputs.VERSION }}
@@ -390,7 +403,7 @@ jobs:
           echo "   5. Save and restart the app"
           echo "   6. Check for updates (should find version $VERSION)"
           echo ""
-          if [[ "${{ github.event.inputs.create_github_release }}" == "true" ]]; then
+          if [[ "${{ inputs.create_github_release }}" == "true" ]]; then
             echo "✅ GitHub Release created at:"
             echo "   https://github.com/nimbalyst/nimbalyst-code/releases/tag/$VERSION"
           else
