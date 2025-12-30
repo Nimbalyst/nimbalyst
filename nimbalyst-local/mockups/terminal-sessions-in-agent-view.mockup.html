@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Terminal Sessions in Agent View - Mockup</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+      background: #1a1a1a;
+      color: #ffffff;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .app-container {
+      display: flex;
+      height: 100vh;
+    }
+
+    /* Session History Sidebar */
+    .session-history {
+      width: 240px;
+      background: #1e1e1e;
+      border-right: 1px solid #2d2d2d;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    .session-header {
+      padding: 12px 12px 10px 12px;
+      border-bottom: none;
+      background: #1e1e1e;
+    }
+
+    .session-title {
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1.2;
+      letter-spacing: 0.5px;
+      margin-bottom: 10px;
+      color: #808080;
+      text-transform: uppercase;
+    }
+
+    .search-box {
+      position: relative;
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 6px 8px 6px 28px;
+      background: #2d2d2d;
+      border: 1px solid #3a3a3a;
+      border-radius: 4px;
+      color: #ffffff;
+      font-size: 12px;
+      transition: all 0.15s ease;
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: #4a4a4a;
+      background: #333333;
+    }
+
+    .search-input::placeholder {
+      color: #6b7280;
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #6b7280;
+      width: 14px;
+      height: 14px;
+    }
+
+    .session-actions {
+      display: flex;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .new-session-btn,
+    .new-terminal-btn {
+      flex: 1;
+      padding: 6px 10px;
+      background: #2d2d2d;
+      border: 1px solid #3a3a3a;
+      border-radius: 4px;
+      color: #b3b3b3;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+
+    .new-session-btn:hover,
+    .new-terminal-btn:hover {
+      background: #333333;
+      border-color: #4a4a4a;
+      color: #ffffff;
+    }
+
+    .session-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 0;
+    }
+
+    .session-list::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .session-list::-webkit-scrollbar-thumb {
+      background: #4a4a4a;
+      border-radius: 4px;
+    }
+
+    .session-list::-webkit-scrollbar-thumb:hover {
+      background: #5a5a5a;
+    }
+
+    .time-group {
+      margin-bottom: 12px;
+    }
+
+    .time-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: #6b7280;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 12px 12px 6px 12px;
+    }
+
+    .session-item {
+      padding: 8px 10px;
+      margin: 0 6px 2px 6px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      position: relative;
+    }
+
+    .session-item:hover {
+      background: #2d2d2d;
+    }
+
+    .session-item.active {
+      background: #2d2d2d;
+      border-left: 2px solid #60a5fa;
+      padding-left: 8px;
+    }
+
+    .session-item-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+
+    .session-icon {
+      width: 18px;
+      height: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      background: #2d2d2d;
+      border-radius: 3px;
+      padding: 3px;
+    }
+
+    .session-icon svg {
+      width: 12px;
+      height: 12px;
+    }
+
+    .session-item-title {
+      font-size: 12px;
+      font-weight: 400;
+      color: #e5e5e5;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .session-item.active .session-item-title {
+      font-weight: 500;
+      color: #ffffff;
+    }
+
+    .session-status-dot {
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: #60a5fa;
+      flex-shrink: 0;
+    }
+
+    .session-count-badge {
+      min-width: 16px;
+      height: 16px;
+      padding: 0 4px;
+      background: #ef4444;
+      color: #ffffff;
+      border-radius: 8px;
+      font-size: 10px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .session-meta {
+      font-size: 10px;
+      color: #808080;
+      padding-left: 26px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .session-badge {
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-size: 9px;
+      font-weight: 600;
+      background: rgba(96, 165, 250, 0.15);
+      color: #60a5fa;
+    }
+
+    .terminal-badge {
+      background: rgba(16, 185, 129, 0.15);
+      color: #4ade80;
+    }
+
+    /* Main Content Area */
+    .main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: #171717;
+    }
+
+    .terminal-container {
+      flex: 1;
+      padding: 20px;
+      overflow: hidden;
+    }
+
+    .terminal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #2d2d2d;
+      margin-bottom: 16px;
+    }
+
+    .terminal-title-section {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .terminal-icon-large {
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(16, 185, 129, 0.12);
+      border-radius: 5px;
+    }
+
+    .terminal-icon-large svg {
+      width: 16px;
+      height: 16px;
+      color: #4ade80;
+    }
+
+    .terminal-title-text {
+      font-size: 14px;
+      font-weight: 500;
+      color: #ffffff;
+    }
+
+    .terminal-subtitle {
+      font-size: 11px;
+      color: #808080;
+      margin-top: 1px;
+    }
+
+    .terminal-actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    .terminal-action-btn {
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #2d2d2d;
+      border: 1px solid #3a3a3a;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      color: #808080;
+    }
+
+    .terminal-action-btn:hover {
+      background: #333333;
+      border-color: #4a4a4a;
+      color: #b3b3b3;
+    }
+
+    .terminal-window {
+      background: #0d0d0d;
+      border: 1px solid #2d2d2d;
+      border-radius: 5px;
+      padding: 14px;
+      height: calc(100% - 64px);
+      overflow-y: auto;
+      font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+      font-size: 12px;
+      line-height: 1.5;
+      color: #ffffff;
+    }
+
+    .terminal-line {
+      margin-bottom: 4px;
+    }
+
+    .terminal-prompt {
+      color: #4ade80;
+    }
+
+    .terminal-path {
+      color: #60a5fa;
+    }
+
+    .terminal-command {
+      color: #ffffff;
+    }
+
+    .terminal-output {
+      color: #d4d4d4;
+    }
+
+    .terminal-cursor {
+      display: inline-block;
+      width: 8px;
+      height: 16px;
+      background: #60a5fa;
+      animation: blink 1s infinite;
+    }
+
+    @keyframes blink {
+      0%, 50% { opacity: 1; }
+      51%, 100% { opacity: 0; }
+    }
+
+    /* Icons */
+    .icon-chat {
+      color: #60a5fa;
+    }
+
+    .icon-terminal {
+      color: #4ade80;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <!-- Session History Sidebar -->
+    <div class="session-history">
+      <div class="session-header">
+        <div class="session-title">Agent Sessions</div>
+        <div class="search-box">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.35-4.35"></path>
+          </svg>
+          <input type="text" class="search-input" placeholder="Search sessions...">
+        </div>
+        <div class="session-actions">
+          <button class="new-session-btn">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 5v14M5 12h14"></path>
+            </svg>
+            New Chat
+          </button>
+          <button class="new-terminal-btn">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="4 17 10 11 4 5"></polyline>
+              <line x1="12" y1="19" x2="20" y2="19"></line>
+            </svg>
+            Terminal
+          </button>
+        </div>
+      </div>
+
+      <div class="session-list">
+        <!-- Today Group -->
+        <div class="time-group">
+          <div class="time-label">Today</div>
+
+          <!-- Active Terminal Session -->
+          <div class="session-item active">
+            <div class="session-item-header">
+              <div class="session-icon icon-terminal">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="4 17 10 11 4 5"></polyline>
+                  <line x1="12" y1="19" x2="20" y2="19"></line>
+                </svg>
+              </div>
+              <div class="session-item-title">Terminal</div>
+              <div class="session-status-dot"></div>
+            </div>
+            <div class="session-meta">
+              Just now • <span class="terminal-badge">zsh</span>
+            </div>
+          </div>
+
+          <!-- Chat Session -->
+          <div class="session-item">
+            <div class="session-item-header">
+              <div class="session-icon icon-chat">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+              </div>
+              <div class="session-item-title">Add terminal sessions</div>
+              <div class="session-count-badge">2</div>
+            </div>
+            <div class="session-meta">
+              5 min ago • sonnet
+            </div>
+          </div>
+
+          <!-- Another Terminal Session -->
+          <div class="session-item">
+            <div class="session-item-header">
+              <div class="session-icon icon-terminal">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="4 17 10 11 4 5"></polyline>
+                  <line x1="12" y1="19" x2="20" y2="19"></line>
+                </svg>
+              </div>
+              <div class="session-item-title">Terminal 2</div>
+            </div>
+            <div class="session-meta">
+              15 minutes ago • <span class="terminal-badge">bash</span>
+            </div>
+          </div>
+
+          <!-- Chat Session -->
+          <div class="session-item">
+            <div class="session-item-header">
+              <div class="session-icon icon-chat">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+              </div>
+              <div class="session-item-title">Debug authentication bug</div>
+            </div>
+            <div class="session-meta">
+              1 hr ago • sonnet
+            </div>
+          </div>
+        </div>
+
+        <!-- Yesterday Group -->
+        <div class="time-group">
+          <div class="time-label">Yesterday</div>
+
+          <!-- Chat Session -->
+          <div class="session-item">
+            <div class="session-item-header">
+              <div class="session-icon icon-chat">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+              </div>
+              <div class="session-item-title">Refactor database layer</div>
+            </div>
+            <div class="session-meta">
+              Yesterday • sonnet
+            </div>
+          </div>
+
+          <!-- Terminal Session -->
+          <div class="session-item">
+            <div class="session-item-header">
+              <div class="session-icon icon-terminal">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="4 17 10 11 4 5"></polyline>
+                  <line x1="12" y1="19" x2="20" y2="19"></line>
+                </svg>
+              </div>
+              <div class="session-item-title">Terminal 3</div>
+            </div>
+            <div class="session-meta">
+              Yesterday • <span class="terminal-badge">zsh</span>
+            </div>
+          </div>
+
+          <!-- Chat Session -->
+          <div class="session-item">
+            <div class="session-item-header">
+              <div class="session-icon icon-chat">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+              </div>
+              <div class="session-item-title">Implement user settings</div>
+            </div>
+            <div class="session-meta">
+              Yesterday • sonnet
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Terminal Content -->
+    <div class="main-content">
+      <div class="terminal-container">
+        <div class="terminal-header">
+          <div class="terminal-title-section">
+            <div class="terminal-icon-large">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="4 17 10 11 4 5"></polyline>
+                <line x1="12" y1="19" x2="20" y2="19"></line>
+              </svg>
+            </div>
+            <div>
+              <div class="terminal-title-text">Terminal</div>
+              <div class="terminal-subtitle">zsh • ~/nimbalyst-code</div>
+            </div>
+          </div>
+          <div class="terminal-actions">
+            <button class="terminal-action-btn" title="Search">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+              </svg>
+            </button>
+            <button class="terminal-action-btn" title="Clear">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+            </button>
+            <button class="terminal-action-btn" title="Settings">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M12 1v6m0 6v6m-8.66-10.66 5.2 3m4.92 2.84 5.2 3M1 12h6m6 0h6M4.34 18.66l5.2-3m4.92-2.84 5.2-3"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="terminal-window">
+          <div class="terminal-line">
+            <span class="terminal-prompt">➜</span> <span class="terminal-path">~/nimbalyst-code</span> <span class="terminal-command">git status</span>
+          </div>
+          <div class="terminal-line terminal-output">On branch main</div>
+          <div class="terminal-line terminal-output">Your branch is up to date with 'origin/main'.</div>
+          <div class="terminal-line terminal-output"></div>
+          <div class="terminal-line terminal-output">Changes not staged for commit:</div>
+          <div class="terminal-line terminal-output">  (use "git add &lt;file&gt;..." to update what will be committed)</div>
+          <div class="terminal-line terminal-output">  (use "git restore &lt;file&gt;..." to discard changes in working directory)</div>
+          <div class="terminal-line terminal-output" style="color: #ef4444;">	modified:   packages/electron/src/main/services/TerminalSessionManager.ts</div>
+          <div class="terminal-line terminal-output"></div>
+          <div class="terminal-line terminal-output">Untracked files:</div>
+          <div class="terminal-line terminal-output">  (use "git add &lt;file&gt;..." to include in what will be committed)</div>
+          <div class="terminal-line terminal-output" style="color: #ef4444;">	nimbalyst-local/plans/terminal-session-type.md</div>
+          <div class="terminal-line terminal-output"></div>
+          <div class="terminal-line terminal-output">no changes added to commit (use "git add" and/or "git commit -a")</div>
+          <div class="terminal-line"></div>
+          <div class="terminal-line">
+            <span class="terminal-prompt">➜</span> <span class="terminal-path">~/nimbalyst-code</span> <span class="terminal-command">ls -la</span>
+          </div>
+          <div class="terminal-line terminal-output">total 128</div>
+          <div class="terminal-line terminal-output">drwxr-xr-x  15 jordan  staff    480 Dec 30 10:45 .</div>
+          <div class="terminal-line terminal-output">drwxr-xr-x   8 jordan  staff    256 Dec 29 14:22 ..</div>
+          <div class="terminal-line terminal-output">-rw-r--r--   1 jordan  staff    123 Dec 15 09:30 .gitignore</div>
+          <div class="terminal-line terminal-output">drwxr-xr-x  12 jordan  staff    384 Dec 30 09:15 .git</div>
+          <div class="terminal-line terminal-output">-rw-r--r--   1 jordan  staff   2048 Dec 20 11:45 CLAUDE.md</div>
+          <div class="terminal-line terminal-output">-rw-r--r--   1 jordan  staff   1024 Dec 18 16:20 README.md</div>
+          <div class="terminal-line terminal-output">drwxr-xr-x   8 jordan  staff    256 Dec 30 08:00 docs</div>
+          <div class="terminal-line terminal-output">drwxr-xr-x   5 jordan  staff    160 Dec 29 19:30 nimbalyst-local</div>
+          <div class="terminal-line terminal-output">-rw-r--r--   1 jordan  staff    512 Dec 10 10:00 package.json</div>
+          <div class="terminal-line terminal-output">drwxr-xr-x  18 jordan  staff    576 Dec 28 14:15 packages</div>
+          <div class="terminal-line"></div>
+          <div class="terminal-line">
+            <span class="terminal-prompt">➜</span> <span class="terminal-path">~/nimbalyst-code</span> <span class="terminal-cursor"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
