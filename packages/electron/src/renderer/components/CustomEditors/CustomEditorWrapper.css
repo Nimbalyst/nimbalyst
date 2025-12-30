@@ -1,0 +1,133 @@
+/* Custom Editor Error UI */
+.custom-editor-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 40px;
+  background: var(--surface-primary);
+}
+
+.custom-editor-error-content {
+  max-width: 500px;
+  text-align: center;
+}
+
+.custom-editor-error-icon {
+  color: var(--color-error);
+  margin-bottom: 16px;
+}
+
+.custom-editor-error-icon .loop {
+  color: var(--color-warning);
+}
+
+.custom-editor-error h2 {
+  margin: 0 0 8px;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.custom-editor-error-extension {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.custom-editor-error-extension code {
+  padding: 2px 6px;
+  background: var(--surface-secondary);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.custom-editor-error-message {
+  margin: 0 0 20px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.custom-editor-error-details {
+  margin: 0 0 20px;
+  text-align: left;
+}
+
+.custom-editor-error-details summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary);
+  padding: 8px 0;
+}
+
+.custom-editor-error-details summary:hover {
+  color: var(--text-primary);
+}
+
+.custom-editor-error-details pre {
+  margin: 8px 0 0;
+  padding: 12px;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.custom-editor-error-hint {
+  margin: 0 0 20px;
+  padding: 12px 16px;
+  background: color-mix(in srgb, var(--color-warning) 10%, var(--surface-secondary));
+  border: 1px solid color-mix(in srgb, var(--color-warning) 30%, var(--border-primary));
+  border-radius: 8px;
+  text-align: left;
+}
+
+.custom-editor-error-hint strong {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.custom-editor-error-hint ul {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.custom-editor-error-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+}
+
+.custom-editor-error-retry {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  background: var(--color-primary);
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background-color 0.1s ease;
+}
+
+.custom-editor-error-retry:hover {
+  background: var(--color-primary-hover);
+}

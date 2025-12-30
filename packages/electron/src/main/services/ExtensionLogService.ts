@@ -75,19 +75,41 @@ export class ExtensionLogService {
     line: number,
     sourceId: string
   ): void {
-    // Try to detect extension ID from the source path
-    // Extensions are loaded from paths like: extensions/com.example.my-extension/dist/index.js
+    // Try to detect extension ID from multiple sources
     let extensionId: string | undefined;
+
+    // 1. Check source path for extension directory
+    // Extensions are loaded from paths like: extensions/com.example.my-extension/dist/index.js
     const extensionMatch = sourceId.match(/extensions\/([^/]+)/);
     if (extensionMatch) {
       extensionId = extensionMatch[1];
     }
 
-    // Also check for dev extension symlinks or paths
-    const devExtMatch = sourceId.match(/[\\/]([^/\\]+)[\\/]dist[\\/]/);
-    if (!extensionId && devExtMatch) {
-      // Could be a dev extension path, use directory name as potential ID
-      extensionId = devExtMatch[1];
+    // 2. Check for dev extension symlinks or paths
+    if (!extensionId) {
+      const devExtMatch = sourceId.match(/[\\/]([^/\\]+)[\\/]dist[\\/]/);
+      if (devExtMatch) {
+        extensionId = devExtMatch[1];
+      }
+    }
+
+    // 3. Check message prefix for extension ID pattern like [extension-id]
+    // This works for blob URLs where we can't detect from path
+    if (!extensionId) {
+      const messagePrefixMatch = message.match(/^\[([a-zA-Z][a-zA-Z0-9._-]*)\]/);
+      if (messagePrefixMatch) {
+        const potentialId = messagePrefixMatch[1];
+        // Exclude common non-extension prefixes
+        const excludedPrefixes = [
+          'PostHog', 'vite', 'Monaco', 'App', 'RENDERER', 'MAIN', 'PERF',
+          'ExtensionSystem', 'ExtensionLoader', 'ExtensionPlatformService',
+          'AgenticPanel', 'AISessionView', 'TrackerPlugin', 'CustomTrackers',
+          'ERROR', 'WARN', 'INFO', 'DEBUG'
+        ];
+        if (!excludedPrefixes.some(p => potentialId.startsWith(p))) {
+          extensionId = potentialId;
+        }
+      }
     }
 
     this.addLog({

@@ -271,9 +271,81 @@ ${exportNames.map((name) => `export const ${name} = __mod?.${name};`).join('\n')
         URL.revokeObjectURL(blobUrl);
       }
     } catch (error) {
-      console.error('[ExtensionPlatformService] Failed to load module:', error);
+      // Analyze the error to provide helpful diagnostics
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+
+      // Detect common extension errors and provide specific guidance
+      let diagnostics = '';
+
+      if (errorMessage.includes('process is not defined')) {
+        diagnostics = `
+
+COMMON ERROR: "process is not defined"
+This usually means the extension or one of its dependencies checks for Node.js
+environment via "process" which doesn't exist in packaged builds.
+
+FIX: Add this to your vite.config.ts:
+  define: { 'process.env.NODE_ENV': JSON.stringify('production') }
+
+This is common with libraries like Three.js that check for Node.js environment.`;
+      }
+
+      if (errorMessage.includes('jsxDEV is not a function') ||
+          errorMessage.includes('jsx is not a function') ||
+          errorMessage.includes('jsxs is not a function')) {
+        diagnostics = `
+
+COMMON ERROR: "${errorMessage.includes('jsxDEV') ? 'jsxDEV' : 'jsx/jsxs'} is not a function"
+This usually means there's a mismatch between the extension's JSX runtime
+configuration and the host's provided shims.
+
+FIX: Ensure your vite.config.ts has:
+  esbuild: { jsxDev: false }
+
+And externals include both:
+  'react/jsx-runtime',
+  'react/jsx-dev-runtime'`;
+      }
+
+      if (errorMessage.includes('Cannot find module') ||
+          errorMessage.includes('Module not found') ||
+          errorMessage.includes('Failed to resolve module')) {
+        diagnostics = `
+
+COMMON ERROR: Module resolution failure
+The extension tried to import a module that isn't available.
+
+CHECK:
+1. All dependencies are listed in package.json
+2. React/Lexical should be externalized (not bundled):
+   external: ['react', 'react-dom', '@lexical/...']
+3. Run "npm run build" after updating dependencies`;
+      }
+
+      if (errorMessage.includes('is not a constructor') ||
+          errorMessage.includes('is not a function')) {
+        diagnostics = `
+
+COMMON ERROR: Incorrect export/import
+A class or function is not being exported/imported correctly.
+
+CHECK:
+1. Your exports in index.ts use the correct names
+2. Named exports vs default exports match between import and export
+3. The "components" export is an object mapping names to components`;
+      }
+
+      console.error('[ExtensionPlatformService] Failed to load module:', errorMessage);
+      if (errorStack) {
+        console.error('[ExtensionPlatformService] Stack:', errorStack);
+      }
+      if (diagnostics) {
+        console.error(diagnostics);
+      }
+
       throw new Error(
-        `Failed to load extension module from ${modulePath}: ${error}`
+        `Failed to load extension module from ${modulePath}: ${errorMessage}${diagnostics}`
       );
     }
   }

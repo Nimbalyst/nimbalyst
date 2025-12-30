@@ -1045,18 +1045,39 @@ async function tryCreateServer(port: number): Promise<any> {
             const activeFilePath = currentDocState?.filePath;
 
             return new Promise((resolve) => {
+              const TOOL_TIMEOUT_MS = 30000;
               const timeout = setTimeout(() => {
                 ipcMain.removeAllListeners(resultChannel);
+
+                console.error(`[MCP Server] Extension tool timed out:`, {
+                  toolName,
+                  timeoutMs: TOOL_TIMEOUT_MS,
+                  activeFilePath,
+                });
+
+                const timeoutMessage = [
+                  `Extension Tool Timeout`,
+                  `  Tool: ${toolName}`,
+                  `  Timeout: ${TOOL_TIMEOUT_MS / 1000}s`,
+                  ``,
+                  `The tool did not respond in time. This could mean:`,
+                  `1. The tool is performing a long-running operation`,
+                  `2. The tool is stuck in an infinite loop`,
+                  `3. There was a silent error in the tool handler`,
+                  ``,
+                  `Check the extension logs for more details.`,
+                ].join('\n');
+
                 resolve({
                   content: [
                     {
                       type: 'text',
-                      text: 'Timed out waiting for extension tool to execute'
+                      text: timeoutMessage
                     }
                   ],
                   isError: true
                 });
-              }, 30000);
+              }, TOOL_TIMEOUT_MS);
 
               ipcMain.once(resultChannel, (_event, result) => {
                 clearTimeout(timeout);
@@ -1069,6 +1090,12 @@ async function tryCreateServer(port: number): Promise<any> {
                 const hasError = !!result?.error;
                 const success = hasExplicitSuccess ? result.success : !hasError;
 
+                // Extract enhanced error details if available
+                const extensionId = result?.extensionId;
+                const resultToolName = result?.toolName;
+                const stack = result?.stack;
+                const errorContext = result?.errorContext;
+
                 // For successful results without explicit message, show the data
                 let responseText: string;
                 if (success) {
@@ -1079,17 +1106,64 @@ async function tryCreateServer(port: number): Promise<any> {
                     }
                   } else {
                     // No explicit message - the result itself is the data
-                    // Filter out success field if present
+                    // Filter out metadata fields
                     const dataToShow = { ...result };
                     delete dataToShow.success;
                     delete dataToShow.message;
+                    delete dataToShow.extensionId;
+                    delete dataToShow.toolName;
+                    delete dataToShow.stack;
+                    delete dataToShow.errorContext;
                     responseText = JSON.stringify(dataToShow, null, 2);
                   }
                 } else {
-                  responseText = `Error: ${result?.error || result?.message || 'Tool execution failed'}`;
+                  // Build detailed error message for Claude Code
+                  const errorParts: string[] = [];
+
+                  // Header with extension and tool info
+                  if (extensionId || resultToolName) {
+                    errorParts.push(`Extension Tool Error`);
+                    if (extensionId) errorParts.push(`  Extension: ${extensionId}`);
+                    if (resultToolName) errorParts.push(`  Tool: ${resultToolName}`);
+                    errorParts.push('');
+                  }
+
+                  // Main error message
+                  errorParts.push(`Error: ${result?.error || result?.message || 'Tool execution failed'}`);
+
+                  // Stack trace (truncated to avoid overwhelming the response)
+                  if (stack) {
+                    const truncatedStack = stack.split('\n').slice(0, 8).join('\n');
+                    errorParts.push('');
+                    errorParts.push('Stack trace:');
+                    errorParts.push(truncatedStack);
+                    if (stack.split('\n').length > 8) {
+                      errorParts.push('  ... (truncated)');
+                    }
+                  }
+
+                  // Additional context
+                  if (errorContext && Object.keys(errorContext).length > 0) {
+                    errorParts.push('');
+                    errorParts.push('Context:');
+                    for (const [key, value] of Object.entries(errorContext)) {
+                      if (value !== undefined && value !== null) {
+                        const valueStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
+                        errorParts.push(`  ${key}: ${valueStr}`);
+                      }
+                    }
+                  }
+
+                  responseText = errorParts.join('\n');
                 }
 
-                console.log(`[MCP Server] Extension tool result:`, { success, hasError, result: JSON.stringify(result).substring(0, 200) });
+                console.log(`[MCP Server] Extension tool result:`, {
+                  success,
+                  hasError,
+                  extensionId,
+                  toolName: resultToolName,
+                  result: JSON.stringify(result).substring(0, 200)
+                });
 
                 resolve({
                   content: [

@@ -201,21 +201,94 @@ export interface AIToolDefinition {
 }
 
 /**
+ * Services provided to extensions via the context.
+ */
+export interface ExtensionServices {
+  /** File system operations */
+  filesystem: {
+    /** Read a file's contents */
+    readFile: (path: string) => Promise<string>;
+    /** Write content to a file */
+    writeFile: (path: string, content: string) => Promise<void>;
+    /** Check if a file exists */
+    fileExists: (path: string) => Promise<boolean>;
+    /** Find files matching a pattern */
+    findFiles: (pattern: string) => Promise<string[]>;
+  };
+
+  /** UI operations */
+  ui: {
+    /** Show an info message */
+    showInfo: (message: string) => void;
+    /** Show a warning message */
+    showWarning: (message: string) => void;
+    /** Show an error message */
+    showError: (message: string) => void;
+  };
+
+  /** AI services (only available if permissions.ai is true) */
+  ai?: {
+    /** Register an AI tool */
+    registerTool: (tool: ExtensionAITool) => { dispose: () => void };
+    /** Register a context provider */
+    registerContextProvider: (provider: { id: string; getContext: () => Promise<string> }) => { dispose: () => void };
+  };
+
+  /** Configuration service (only available if contributions.configuration is defined) */
+  configuration?: {
+    /** Get a configuration value */
+    get: <T>(key: string, defaultValue?: T) => T;
+    /** Update a configuration value */
+    update: (key: string, value: unknown, scope?: 'user' | 'workspace') => Promise<void>;
+    /** Get all configuration values */
+    getAll: () => Record<string, unknown>;
+  };
+}
+
+/**
  * Context passed to the activate function.
+ * This is the full context available at runtime.
  */
 export interface ExtensionContext {
+  /** The extension's manifest */
+  manifest: ExtensionManifest;
+
   /** Absolute path to the extension's installation directory */
   extensionPath: string;
+
+  /** Services available to the extension */
+  services: ExtensionServices;
+
+  /**
+   * Array to add disposables to - these will be cleaned up on deactivation.
+   * Push any cleanup functions here.
+   */
+  subscriptions: Array<{ dispose: () => void }>;
 }
 
 /**
  * Context passed to AI tool handlers.
+ * NOTE: This is different from ExtensionContext!
+ */
+export interface AIToolContext {
+  /** Path to the current workspace (may be undefined if no workspace is open) */
+  workspacePath?: string;
+
+  /** Path to the currently active file (may be undefined if no file is open) */
+  activeFilePath?: string;
+
+  /** The extension context for accessing services */
+  extensionContext: ExtensionContext;
+}
+
+/**
+ * @deprecated Use AIToolContext instead. This type has incorrect property names.
  */
 export interface ToolContext {
-  /** Path to the currently open file (may be undefined) */
+  /** @deprecated Use activeFilePath instead */
   filePath?: string;
 
-  /** Content of the currently open file (may be undefined) */
+  /** @deprecated This property is not available - use extensionContext.services.filesystem.readFile */
   fileContent?: string;
 
   /** Path to extension installation directory */
@@ -250,18 +323,54 @@ export interface ExtensionAITool {
   /** Description for Claude to understand when to use it */
   description: string;
 
-  /** JSON Schema for input parameters */
-  inputSchema: {
+  /**
+   * JSON Schema for input parameters.
+   * Can use either 'inputSchema' or 'parameters' - both are supported.
+   */
+  inputSchema?: {
     type: 'object';
     properties: Record<string, JsonSchemaProperty>;
     required?: string[];
   };
 
-  /** Handler function */
+  /**
+   * JSON Schema for input parameters (alias for inputSchema).
+   * Use whichever naming convention you prefer.
+   */
+  parameters?: {
+    type: 'object';
+    properties: Record<string, JsonSchemaProperty>;
+    required?: string[];
+  };
+
+  /**
+   * Handler function.
+   * @param args - The validated input parameters
+   * @param context - Context including workspace path, active file, and extension services
+   * @returns A result object. Use { success: true, message: "..." } for success,
+   *          or { success: false, error: "..." } for errors.
+   */
   handler: (
     args: Record<string, unknown>,
-    context: ToolContext
-  ) => Promise<ToolResult>;
+    context: AIToolContext
+  ) => Promise<ExtensionToolResult>;
+}
+
+/**
+ * Result returned from extension AI tool handlers.
+ */
+export interface ExtensionToolResult {
+  /** Whether the tool executed successfully */
+  success: boolean;
+
+  /** Human-readable result message (shown to AI) */
+  message?: string;
+
+  /** Structured data result */
+  data?: unknown;
+
+  /** Error message if success is false */
+  error?: string;
 }
 
 /**

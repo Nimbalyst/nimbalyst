@@ -420,7 +420,8 @@ export interface AIToolContext {
 }
 
 /**
- * Result returned from extension AI tool execution
+ * Result returned from extension AI tool execution.
+ * Includes enhanced error details for debugging and diagnostics.
  */
 export interface ExtensionToolResult {
   /** Whether the tool executed successfully */
@@ -434,6 +435,18 @@ export interface ExtensionToolResult {
 
   /** Error message if success is false */
   error?: string;
+
+  /** Extension ID that provided this tool (added during execution) */
+  extensionId?: string;
+
+  /** Tool name that was executed (added during execution) */
+  toolName?: string;
+
+  /** Stack trace if an error occurred (for debugging) */
+  stack?: string;
+
+  /** Additional context about the error (for debugging) */
+  errorContext?: Record<string, unknown>;
 }
 
 // ============================================================================

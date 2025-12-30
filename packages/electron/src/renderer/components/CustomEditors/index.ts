@@ -5,6 +5,7 @@
  */
 
 export { customEditorRegistry } from './registry';
+export { CustomEditorWrapper } from './CustomEditorWrapper';
 export type {
   EditorHostProps,
   CustomEditorComponent,

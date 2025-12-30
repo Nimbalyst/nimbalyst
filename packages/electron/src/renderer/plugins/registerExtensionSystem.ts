@@ -371,12 +371,25 @@ export async function registerExtensionSystem(): Promise<void> {
 
         try {
           const result = await executeExtensionTool(toolName, args, context);
+          // Result already includes extensionId, toolName, stack, and errorContext from the bridge
           sendResult(resultChannel, result);
         } catch (error) {
+          // This catch handles errors that occur outside the tool handler itself
+          // (e.g., in the IPC layer or executeExtensionTool wrapper)
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          const stack = error instanceof Error ? error.stack : undefined;
+
           console.error(`[ExtensionSystem] Error executing tool ${toolName}:`, error);
+
           sendResult(resultChannel, {
             success: false,
-            error: error instanceof Error ? error.message : 'Unknown error',
+            error: errorMessage,
+            toolName,
+            stack,
+            errorContext: {
+              layer: 'extension-system-ipc',
+              hint: 'Error occurred in the IPC layer before reaching the tool handler.',
+            },
           });
         }
       });

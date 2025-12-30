@@ -35,7 +35,7 @@ import { MonacoCodeEditor } from '../MonacoCodeEditor';
 import { UnifiedDiffHeader, LexicalDiffHeaderAdapter } from '../UnifiedDiffHeader';
 import { ImageViewer } from '../ImageViewer';
 import { getFileType } from '../../utils/fileTypeDetector';
-import { customEditorRegistry } from '../CustomEditors';
+import { customEditorRegistry, CustomEditorWrapper } from '../CustomEditors';
 import { logger } from '../../utils/logger';
 import { createEditorHost } from './createEditorHost';
 import type { EditorHost, DiffConfig } from '@nimbalyst/runtime';
@@ -2158,30 +2158,46 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             // Render custom editor if one is registered for this file type
             // Check for compound extensions like .mockup.html
             const lastDot = filePath.lastIndexOf('.');
-            let CustomEditor = null;
+            let registration = null;
 
             if (lastDot > 0) {
               // Try single extension first
               const singleExt = filePath.substring(lastDot).toLowerCase();
-              CustomEditor = customEditorRegistry.getEditor(singleExt);
+              registration = customEditorRegistry.getRegistration(singleExt);
 
               // Try compound extension if single didn't match
-              if (!CustomEditor) {
+              if (!registration) {
                 const secondLastDot = filePath.lastIndexOf('.', lastDot - 1);
                 if (secondLastDot > 0) {
                   const compoundExt = filePath.substring(secondLastDot).toLowerCase();
-                  CustomEditor = customEditorRegistry.getEditor(compoundExt);
+                  registration = customEditorRegistry.getRegistration(compoundExt);
                 }
               }
             }
 
-            if (CustomEditor) {
+            if (registration) {
               // Mark editor as ready when custom editor mounts
               // The editor will call host.loadContent() on mount
               if (!isEditorReady) {
                 setIsEditorReady(true);
               }
 
+              // Wrap extension-provided editors with protection
+              // Built-in editors (no extensionId) are rendered directly
+              if (registration.extensionId) {
+                return (
+                  <CustomEditorWrapper
+                    key={filePath}
+                    component={registration.component}
+                    host={editorHost}
+                    extensionId={registration.extensionId}
+                    componentName={registration.componentName}
+                  />
+                );
+              }
+
+              // Built-in custom editors (e.g., mockup editor) rendered directly
+              const CustomEditor = registration.component;
               return (
                 <CustomEditor
                   key={filePath}

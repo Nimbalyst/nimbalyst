@@ -31,34 +31,183 @@ import { getExtensionPlatformService } from './ExtensionPlatformService';
 const MANIFEST_FILENAME = 'manifest.json';
 
 /**
- * Validates an extension manifest
+ * Validation result with detailed error information
+ */
+interface ManifestValidationResult {
+  error: string;
+  suggestion?: string;
+  field?: string;
+}
+
+/**
+ * Validates an extension manifest with detailed error messages and suggestions
  */
 function validateManifest(
   manifest: unknown,
   path: string
-): ExtensionManifest | { error: string } {
+): ExtensionManifest | ManifestValidationResult {
   if (!manifest || typeof manifest !== 'object') {
-    return { error: `Invalid manifest at ${path}: not an object` };
-  }
-
-  const m = manifest as Record<string, unknown>;
-
-  if (typeof m.id !== 'string' || !m.id) {
-    return { error: `Invalid manifest at ${path}: missing or invalid 'id'` };
-  }
-
-  if (typeof m.name !== 'string' || !m.name) {
-    return { error: `Invalid manifest at ${path}: missing or invalid 'name'` };
-  }
-
-  if (typeof m.version !== 'string' || !m.version) {
     return {
-      error: `Invalid manifest at ${path}: missing or invalid 'version'`,
+      error: `Invalid manifest at ${path}: not an object`,
+      suggestion: 'Ensure the manifest.json file contains a valid JSON object.',
     };
   }
 
+  const m = manifest as Record<string, unknown>;
+  const errors: ManifestValidationResult[] = [];
+
+  // Validate required fields
+  if (typeof m.id !== 'string' || !m.id) {
+    errors.push({
+      error: `Missing or invalid 'id'`,
+      field: 'id',
+      suggestion: 'Add a unique identifier, e.g., "id": "com.example.my-extension"',
+    });
+  } else {
+    // Validate ID format
+    const idPattern = /^[a-zA-Z][a-zA-Z0-9._-]*[a-zA-Z0-9]$/;
+    if (!idPattern.test(m.id as string)) {
+      errors.push({
+        error: `Invalid 'id' format: "${m.id}"`,
+        field: 'id',
+        suggestion: 'ID should start with a letter, contain only letters, numbers, dots, hyphens, and underscores. Example: "com.example.my-extension"',
+      });
+    }
+  }
+
+  if (typeof m.name !== 'string' || !m.name) {
+    errors.push({
+      error: `Missing or invalid 'name'`,
+      field: 'name',
+      suggestion: 'Add a display name, e.g., "name": "My Extension"',
+    });
+  }
+
+  if (typeof m.version !== 'string' || !m.version) {
+    errors.push({
+      error: `Missing or invalid 'version'`,
+      field: 'version',
+      suggestion: 'Add a semantic version, e.g., "version": "1.0.0"',
+    });
+  } else {
+    // Validate semver format
+    const semverPattern = /^\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?$/;
+    if (!semverPattern.test(m.version as string)) {
+      errors.push({
+        error: `Invalid 'version' format: "${m.version}"`,
+        field: 'version',
+        suggestion: 'Use semantic versioning format: "major.minor.patch", e.g., "1.0.0"',
+      });
+    }
+  }
+
   if (typeof m.main !== 'string' || !m.main) {
-    return { error: `Invalid manifest at ${path}: missing or invalid 'main'` };
+    errors.push({
+      error: `Missing or invalid 'main'`,
+      field: 'main',
+      suggestion: 'Add the entry point path, e.g., "main": "dist/index.js"',
+    });
+  } else if (!(m.main as string).endsWith('.js')) {
+    errors.push({
+      error: `Invalid 'main' format: "${m.main}" should end with .js`,
+      field: 'main',
+      suggestion: 'The main entry point should be a JavaScript file, e.g., "main": "dist/index.js"',
+    });
+  }
+
+  // Validate optional apiVersion
+  if (m.apiVersion !== undefined && typeof m.apiVersion !== 'string') {
+    errors.push({
+      error: `Invalid 'apiVersion' - should be a string`,
+      field: 'apiVersion',
+      suggestion: 'Use a string version, e.g., "apiVersion": "1.0"',
+    });
+  }
+
+  // Validate contributions if present
+  if (m.contributions !== undefined) {
+    if (typeof m.contributions !== 'object' || m.contributions === null) {
+      errors.push({
+        error: `Invalid 'contributions' - should be an object`,
+        field: 'contributions',
+        suggestion: 'Contributions should be an object with customEditors, aiTools, etc.',
+      });
+    } else {
+      const contributions = m.contributions as Record<string, unknown>;
+
+      // Validate customEditors
+      if (contributions.customEditors !== undefined) {
+        if (!Array.isArray(contributions.customEditors)) {
+          errors.push({
+            error: `Invalid 'contributions.customEditors' - should be an array`,
+            field: 'contributions.customEditors',
+            suggestion: 'customEditors should be an array of custom editor contributions',
+          });
+        } else {
+          contributions.customEditors.forEach((editor, index) => {
+            if (!editor.filePatterns || !Array.isArray(editor.filePatterns)) {
+              errors.push({
+                error: `customEditors[${index}] missing 'filePatterns' array`,
+                field: `contributions.customEditors[${index}].filePatterns`,
+                suggestion: 'Add file patterns, e.g., "filePatterns": ["*.myext"]',
+              });
+            }
+            if (!editor.component || typeof editor.component !== 'string') {
+              errors.push({
+                error: `customEditors[${index}] missing 'component' name`,
+                field: `contributions.customEditors[${index}].component`,
+                suggestion: 'Add component name that matches an export, e.g., "component": "MyEditor"',
+              });
+            }
+          });
+        }
+      }
+
+      // Validate aiTools
+      if (contributions.aiTools !== undefined) {
+        if (!Array.isArray(contributions.aiTools)) {
+          errors.push({
+            error: `Invalid 'contributions.aiTools' - should be an array`,
+            field: 'contributions.aiTools',
+            suggestion: 'aiTools should be an array listing AI tool names exported by the module',
+          });
+        }
+      }
+    }
+  }
+
+  // Validate permissions if present
+  if (m.permissions !== undefined) {
+    if (typeof m.permissions !== 'object' || m.permissions === null) {
+      errors.push({
+        error: `Invalid 'permissions' - should be an object`,
+        field: 'permissions',
+        suggestion: 'Permissions should be an object, e.g., { "ai": true, "filesystem": true }',
+      });
+    }
+  }
+
+  // Return first error if any (with all context for logging)
+  if (errors.length > 0) {
+    const firstError = errors[0];
+    const errorLines = [
+      `Invalid manifest at ${path}:`,
+      `  ${firstError.error}`,
+    ];
+    if (firstError.suggestion) {
+      errorLines.push(`  Suggestion: ${firstError.suggestion}`);
+    }
+    if (errors.length > 1) {
+      errorLines.push(`  (and ${errors.length - 1} more issue${errors.length > 2 ? 's' : ''})`);
+    }
+
+    console.error(`[ExtensionLoader] Manifest validation failed:\n${errorLines.join('\n')}`);
+
+    return {
+      error: errorLines.join('\n'),
+      field: firstError.field,
+      suggestion: firstError.suggestion,
+    };
   }
 
   return manifest as ExtensionManifest;
@@ -178,12 +327,76 @@ function createExtensionContext(
     };
   }
 
-  return {
+  // Create the base context
+  const context: ExtensionContext = {
     manifest,
     extensionPath,
     services,
     subscriptions,
   };
+
+  // Wrap context with API compatibility checking in development mode
+  // This helps extension developers catch incorrect API usage early
+  if (process.env.NODE_ENV !== 'production') {
+    return createAPICompatibilityProxy(context, manifest.id);
+  }
+
+  return context;
+}
+
+/**
+ * Creates a proxy that warns when extensions access non-existent API properties.
+ * This helps catch incorrect API usage during development.
+ */
+function createAPICompatibilityProxy(
+  context: ExtensionContext,
+  extensionId: string
+): ExtensionContext {
+  const knownProperties = new Set([
+    'manifest',
+    'extensionPath',
+    'services',
+    'subscriptions',
+  ]);
+
+  // Common mistakes that extension developers make
+  const apiMigrations: Record<string, string> = {
+    'registerAITool': 'context.services.ai.registerTool()',
+    'registerContextProvider': 'context.services.ai.registerContextProvider()',
+    'readFile': 'context.services.filesystem.readFile()',
+    'writeFile': 'context.services.filesystem.writeFile()',
+    'showError': 'context.services.ui.showError()',
+    'showWarning': 'context.services.ui.showWarning()',
+    'showInfo': 'context.services.ui.showInfo()',
+    'filePath': 'context.activeFilePath (in tool context, not ExtensionContext)',
+    'workspace': 'context.workspacePath (in tool context, not ExtensionContext)',
+  };
+
+  return new Proxy(context, {
+    get(target, prop: string) {
+      // Allow known properties
+      if (knownProperties.has(prop) || typeof prop === 'symbol') {
+        return (target as any)[prop];
+      }
+
+      // Check for common mistakes
+      if (apiMigrations[prop]) {
+        console.warn(
+          `[API Compatibility] Extension "${extensionId}" accessed "${prop}" on context.\n` +
+          `  This property does not exist. Did you mean: ${apiMigrations[prop]}\n` +
+          `  The extension API has changed - please update your extension.`
+        );
+      } else if (!(prop in target)) {
+        console.warn(
+          `[API Compatibility] Extension "${extensionId}" accessed unknown property "${prop}" on ExtensionContext.\n` +
+          `  Available properties: ${Array.from(knownProperties).join(', ')}\n` +
+          `  This may indicate the extension is using an outdated or incorrect API.`
+        );
+      }
+
+      return (target as any)[prop];
+    },
+  });
 }
 
 /**

@@ -34,4 +34,10 @@ export interface CustomEditorRegistration {
 
   // Optional: Whether this editor supports source mode (viewing/editing raw content in Monaco)
   supportsSourceMode?: boolean;
+
+  // Optional: Extension ID for error attribution (added automatically for extension-provided editors)
+  extensionId?: string;
+
+  // Optional: Component name for error attribution
+  componentName?: string;
 }

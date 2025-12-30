@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
+import { ExtensionErrorConsole } from './ExtensionErrorConsole';
 import './ExtensionDevIndicator.css';
 
 interface ExtensionDevIndicatorProps {
@@ -12,8 +13,30 @@ export const ExtensionDevIndicator: React.FC<ExtensionDevIndicatorProps> = ({
   const [isEnabled, setIsEnabled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
+  const [consoleOpen, setConsoleOpen] = useState(false);
+  const [errorCount, setErrorCount] = useState(0);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Check for errors periodically
+  const checkErrors = useCallback(async () => {
+    if (!isEnabled) return;
+    try {
+      const result = await window.electronAPI.extensionDevTools.getLogs({
+        logLevel: 'error',
+        lastSeconds: 300, // 5 minutes
+      });
+      setErrorCount(result.logs.length);
+    } catch (error) {
+      // Ignore errors during check
+    }
+  }, [isEnabled]);
+
+  useEffect(() => {
+    checkErrors();
+    const interval = setInterval(checkErrors, 5000);
+    return () => clearInterval(interval);
+  }, [checkErrors]);
 
   // Check if extension dev tools are enabled
   useEffect(() => {
@@ -68,7 +91,20 @@ export const ExtensionDevIndicator: React.FC<ExtensionDevIndicatorProps> = ({
     onOpenSettings?.();
   };
 
+  const handleOpenConsole = () => {
+    setMenuOpen(false);
+    setConsoleOpen(true);
+  };
+
   return (
+    <>
+      <ExtensionErrorConsole
+        isOpen={consoleOpen}
+        onClose={() => {
+          setConsoleOpen(false);
+          checkErrors(); // Refresh error count after closing
+        }}
+      />
     <div className="extension-dev-indicator-container">
       <button
         ref={buttonRef}
@@ -99,6 +135,19 @@ export const ExtensionDevIndicator: React.FC<ExtensionDevIndicatorProps> = ({
           <div className="extension-dev-menu-actions">
             <button
               className="extension-dev-menu-action"
+              onClick={handleOpenConsole}
+              role="menuitem"
+            >
+              <MaterialSymbol icon="terminal" size={18} />
+              <span>
+                View Logs
+                {errorCount > 0 && (
+                  <span className="extension-dev-error-badge">{errorCount}</span>
+                )}
+              </span>
+            </button>
+            <button
+              className="extension-dev-menu-action"
               onClick={handleRestart}
               disabled={isRestarting}
               role="menuitem"
@@ -120,5 +169,6 @@ export const ExtensionDevIndicator: React.FC<ExtensionDevIndicatorProps> = ({
         </div>
       )}
     </div>
+    </>
   );
 };

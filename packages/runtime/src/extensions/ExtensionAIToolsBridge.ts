@@ -12,7 +12,7 @@
 import { toolRegistry, type ToolDefinition } from '../ai/tools';
 import { editorRegistry } from '../ai/EditorRegistry';
 import { getExtensionLoader } from './ExtensionLoader';
-import type { ExtensionAITool, AIToolContext, LoadedExtension } from './types';
+import type { ExtensionAITool, AIToolContext, LoadedExtension, ExtensionToolResult } from './types';
 
 // Track which tools were registered by which extension
 const extensionToolsMap = new Map<string, string[]>();
@@ -121,14 +121,29 @@ export async function executeExtensionTool(
   toolName: string,
   args: Record<string, unknown>,
   context: { workspacePath?: string; activeFilePath?: string }
-): Promise<{ success: boolean; message?: string; data?: unknown; error?: string }> {
+): Promise<ExtensionToolResult> {
   const handler = toolHandlers.get(toolName);
   if (!handler) {
+    // List available tools to help diagnose the issue
+    const availableTools = Array.from(toolHandlers.keys());
+    const suggestion = availableTools.length > 0
+      ? `Available tools: ${availableTools.join(', ')}`
+      : 'No extension tools are currently registered.';
+
+    console.error(`[ExtensionAIToolsBridge] Tool not found: ${toolName}. ${suggestion}`);
+
     return {
       success: false,
       error: `Extension tool not found: ${toolName}`,
+      toolName,
+      errorContext: {
+        availableTools,
+        hint: 'Tool may not be registered, or the extension providing it is not loaded.',
+      },
     };
   }
+
+  const extensionId = handler.extension.manifest.id;
 
   try {
     const aiContext: AIToolContext = {
@@ -138,11 +153,71 @@ export async function executeExtensionTool(
     };
 
     const result = await handler.tool.handler(args, aiContext);
-    return result;
+
+    // Ensure the result includes extension metadata
+    return {
+      ...result,
+      extensionId,
+      toolName,
+    };
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error executing extension tool';
+    const stack = error instanceof Error ? error.stack : undefined;
+
+    // Detect common errors and provide helpful diagnostics
+    let diagnosticHint: string | undefined;
+
+    // Common: accessing wrong context property
+    if (errorMessage.includes('filePath') && errorMessage.includes('undefined')) {
+      diagnosticHint = 'Tool may be accessing "context.filePath" which does not exist. ' +
+        'Use "context.activeFilePath" instead.';
+    }
+
+    // Common: accessing properties on undefined context
+    if (errorMessage.includes("Cannot read propert") && errorMessage.includes("undefined")) {
+      diagnosticHint = 'Tool is accessing a property on an undefined value. ' +
+        'Check that context.workspacePath and context.activeFilePath may be undefined ' +
+        'when no file is open.';
+    }
+
+    // Common: registerAITool wrong API
+    if (errorMessage.includes('registerAITool') || errorMessage.includes('registerTool')) {
+      diagnosticHint = 'The AI tool registration API is "context.services.ai.registerTool()", ' +
+        'not "context.registerAITool()". Tools are registered via the module export, not in activate().';
+    }
+
+    // Common: returning wrong format
+    if (errorMessage.includes('success') && errorMessage.includes('boolean')) {
+      diagnosticHint = 'Tool handlers must return { success: boolean, message?: string, data?: unknown }. ' +
+        'Ensure the return value has the correct shape.';
+    }
+
+    // Log the full error for debugging
+    console.error(`[ExtensionAIToolsBridge] Tool execution failed:`, {
+      toolName,
+      extensionId,
+      error: errorMessage,
+      stack,
+      diagnosticHint,
+      args: JSON.stringify(args).substring(0, 500), // Truncate large args
+      context: {
+        workspacePath: context.workspacePath,
+        activeFilePath: context.activeFilePath,
+      },
+    });
+
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error executing extension tool',
+      error: errorMessage,
+      extensionId,
+      toolName,
+      stack,
+      errorContext: {
+        extensionName: handler.extension.manifest.name,
+        activeFilePath: context.activeFilePath,
+        workspacePath: context.workspacePath,
+        hint: diagnosticHint,
+      },
     };
   }
 }
