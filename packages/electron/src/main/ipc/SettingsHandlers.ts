@@ -228,6 +228,48 @@ export function registerSettingsHandlers() {
         }
     });
 
+    ipcMain.handle('extensionDevTools:get-logs', async (_event, filter?: {
+        extensionId?: string;
+        lastSeconds?: number;
+        logLevel?: 'error' | 'warn' | 'info' | 'debug' | 'all';
+        source?: 'renderer' | 'main' | 'build' | 'all';
+    }) => {
+        const { ExtensionLogService } = await import('../services/ExtensionLogService');
+        const logService = ExtensionLogService.getInstance();
+
+        const logs = logService.getLogs({
+            extensionId: filter?.extensionId,
+            lastSeconds: filter?.lastSeconds ?? 300, // Default to 5 minutes for UI
+            logLevel: filter?.logLevel ?? 'all',
+            source: filter?.source ?? 'all',
+        });
+
+        const stats = logService.getStats();
+
+        return { logs, stats };
+    });
+
+    ipcMain.handle('extensionDevTools:clear-logs', async (_event, extensionId?: string) => {
+        const { ExtensionLogService } = await import('../services/ExtensionLogService');
+        const logService = ExtensionLogService.getInstance();
+
+        if (extensionId) {
+            logService.clearForExtension(extensionId);
+        } else {
+            logService.clear();
+        }
+    });
+
+    ipcMain.handle('extensionDevTools:get-process-info', () => {
+        // Return process start time as epoch milliseconds
+        const uptimeSeconds = process.uptime();
+        const startTime = Date.now() - (uptimeSeconds * 1000);
+        return {
+            startTime,
+            uptimeSeconds,
+        };
+    });
+
     // App restart (used by extension dev mode)
     ipcMain.handle('app:restart', async () => {
         const { app } = await import('electron');

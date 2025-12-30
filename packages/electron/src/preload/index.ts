@@ -677,6 +677,33 @@ contextBridge.exposeInMainWorld('electronAPI', {
   extensionDevTools: {
     isEnabled: () => ipcRenderer.invoke('extensionDevTools:is-enabled') as Promise<boolean>,
     setEnabled: (enabled: boolean) => ipcRenderer.invoke('extensionDevTools:set-enabled', enabled) as Promise<void>,
+    getLogs: (filter?: {
+      extensionId?: string;
+      lastSeconds?: number;
+      logLevel?: 'error' | 'warn' | 'info' | 'debug' | 'all';
+      source?: 'renderer' | 'main' | 'build' | 'all';
+    }) => ipcRenderer.invoke('extensionDevTools:get-logs', filter) as Promise<{
+      logs: Array<{
+        timestamp: number;
+        level: 'error' | 'warn' | 'info' | 'debug';
+        source: 'renderer' | 'main' | 'build';
+        extensionId?: string;
+        message: string;
+        stack?: string;
+        line?: number;
+        sourceFile?: string;
+      }>;
+      stats: {
+        totalEntries: number;
+        byLevel: Record<'error' | 'warn' | 'info' | 'debug', number>;
+        bySource: Record<'renderer' | 'main' | 'build', number>;
+      };
+    }>,
+    clearLogs: (extensionId?: string) => ipcRenderer.invoke('extensionDevTools:clear-logs', extensionId) as Promise<void>,
+    getProcessInfo: () => ipcRenderer.invoke('extensionDevTools:get-process-info') as Promise<{
+      startTime: number;
+      uptimeSeconds: number;
+    }>,
   },
 
   // Generic IPC methods for services that need them

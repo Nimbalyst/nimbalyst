@@ -82,6 +82,20 @@
   color: #a855f7;
 }
 
+/* Uptime Display */
+.extension-dev-menu-uptime {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 12px 8px 12px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.extension-dev-menu-uptime .material-symbols-outlined {
+  color: var(--text-tertiary);
+}
+
 /* Menu Divider */
 .extension-dev-menu-divider {
   height: 1px;

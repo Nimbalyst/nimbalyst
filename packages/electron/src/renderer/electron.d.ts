@@ -272,6 +272,7 @@ interface ElectronAPI {
   extensionDevTools: {
     isEnabled: () => Promise<boolean>;
     setEnabled: (enabled: boolean) => Promise<void>;
+    getProcessInfo: () => Promise<{ startTime: number; uptimeSeconds: number }>;
   };
 
   // Open external links

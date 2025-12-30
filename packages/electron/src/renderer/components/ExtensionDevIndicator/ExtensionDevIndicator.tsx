@@ -3,6 +3,28 @@ import { MaterialSymbol } from '@nimbalyst/runtime';
 import { ExtensionErrorConsole } from './ExtensionErrorConsole';
 import './ExtensionDevIndicator.css';
 
+/**
+ * Format a timestamp as a relative time string (e.g., "5m ago", "2h ago")
+ */
+function formatRelativeTime(startTime: number): string {
+  const now = Date.now();
+  const diffMs = now - startTime;
+  const diffSeconds = Math.floor(diffMs / 1000);
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  const diffHours = Math.floor(diffMinutes / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffDays > 0) {
+    return `${diffDays}d ago`;
+  } else if (diffHours > 0) {
+    return `${diffHours}h ago`;
+  } else if (diffMinutes > 0) {
+    return `${diffMinutes}m ago`;
+  } else {
+    return 'just now';
+  }
+}
+
 interface ExtensionDevIndicatorProps {
   onOpenSettings?: () => void;
 }
@@ -15,6 +37,8 @@ export const ExtensionDevIndicator: React.FC<ExtensionDevIndicatorProps> = ({
   const [isRestarting, setIsRestarting] = useState(false);
   const [consoleOpen, setConsoleOpen] = useState(false);
   const [errorCount, setErrorCount] = useState(0);
+  const [processStartTime, setProcessStartTime] = useState<number | null>(null);
+  const [relativeTime, setRelativeTime] = useState<string>('');
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -38,12 +62,18 @@ export const ExtensionDevIndicator: React.FC<ExtensionDevIndicatorProps> = ({
     return () => clearInterval(interval);
   }, [checkErrors]);
 
-  // Check if extension dev tools are enabled
+  // Check if extension dev tools are enabled and get process info
   useEffect(() => {
     const checkEnabled = async () => {
       try {
         const enabled = await window.electronAPI.extensionDevTools.isEnabled();
         setIsEnabled(enabled);
+
+        if (enabled) {
+          const processInfo = await window.electronAPI.extensionDevTools.getProcessInfo();
+          setProcessStartTime(processInfo.startTime);
+          setRelativeTime(formatRelativeTime(processInfo.startTime));
+        }
       } catch (error) {
         console.error('[ExtensionDevIndicator] Failed to check enabled status:', error);
         setIsEnabled(false);
@@ -52,6 +82,19 @@ export const ExtensionDevIndicator: React.FC<ExtensionDevIndicatorProps> = ({
 
     checkEnabled();
   }, []);
+
+  // Update the relative time display every minute
+  useEffect(() => {
+    if (!processStartTime) return;
+
+    const updateRelativeTime = () => {
+      setRelativeTime(formatRelativeTime(processStartTime));
+    };
+
+    // Update every minute
+    const interval = setInterval(updateRelativeTime, 60000);
+    return () => clearInterval(interval);
+  }, [processStartTime]);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -129,6 +172,13 @@ export const ExtensionDevIndicator: React.FC<ExtensionDevIndicatorProps> = ({
             <MaterialSymbol icon="check_circle" size={16} />
             <span>Development tools active</span>
           </div>
+
+          {relativeTime && (
+            <div className="extension-dev-menu-uptime">
+              <MaterialSymbol icon="schedule" size={16} />
+              <span>Started {relativeTime}</span>
+            </div>
+          )}
 
           <div className="extension-dev-menu-divider" />
 
