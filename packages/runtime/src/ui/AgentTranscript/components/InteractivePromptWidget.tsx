@@ -32,6 +32,8 @@ export interface InteractivePromptWidgetProps {
   content: PermissionRequestContent | AskUserQuestionRequestContent;
   /** Callback when user submits a response */
   onSubmitResponse: (response: PermissionResponseContent | AskUserQuestionResponseContent) => void;
+  /** Callback when user cancels a question (optional, only used for ask_user_question) */
+  onCancelQuestion?: (response: AskUserQuestionResponseContent) => void;
   /** Whether this is being rendered on mobile */
   isMobile?: boolean;
   /** Whether the prompt is being submitted */
@@ -184,12 +186,14 @@ const PermissionRequestWidget: React.FC<PermissionRequestWidgetProps> = ({
 interface AskUserQuestionWidgetProps {
   content: AskUserQuestionRequestContent;
   onSubmit: (answers: Record<string, string>) => void;
+  onCancel?: () => void;
   isSubmitting?: boolean;
 }
 
 const AskUserQuestionWidgetInteractive: React.FC<AskUserQuestionWidgetProps> = ({
   content,
   onSubmit,
+  onCancel,
   isSubmitting,
 }) => {
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -297,6 +301,15 @@ const AskUserQuestionWidgetInteractive: React.FC<AskUserQuestionWidgetProps> = (
         >
           {isSubmitting ? 'Submitting...' : 'Submit Answers'}
         </button>
+        {onCancel && (
+          <button
+            className="interactive-prompt__button interactive-prompt__button--cancel"
+            onClick={onCancel}
+            disabled={isSubmitting}
+          >
+            Cancel
+          </button>
+        )}
       </div>
     </div>
   );
@@ -310,6 +323,7 @@ export const InteractivePromptWidget: React.FC<InteractivePromptWidgetProps> = (
   promptType,
   content,
   onSubmitResponse,
+  onCancelQuestion,
   isMobile = false,
   isSubmitting = false,
 }) => {
@@ -338,6 +352,24 @@ export const InteractivePromptWidget: React.FC<InteractivePromptWidgetProps> = (
     onSubmitResponse(response);
   }, [content, isMobile, onSubmitResponse]);
 
+  const handleQuestionCancel = useCallback(() => {
+    const questionContent = content as AskUserQuestionRequestContent;
+    const response: AskUserQuestionResponseContent = {
+      type: 'ask_user_question_response',
+      questionId: questionContent.questionId,
+      answers: {},
+      cancelled: true,
+      respondedAt: Date.now(),
+      respondedBy: isMobile ? 'mobile' : 'desktop',
+    };
+    if (onCancelQuestion) {
+      onCancelQuestion(response);
+    } else {
+      // Fall back to submit response with cancelled flag
+      onSubmitResponse(response);
+    }
+  }, [content, isMobile, onCancelQuestion, onSubmitResponse]);
+
   if (promptType === 'permission_request') {
     return (
       <PermissionRequestWidget
@@ -353,6 +385,7 @@ export const InteractivePromptWidget: React.FC<InteractivePromptWidgetProps> = (
       <AskUserQuestionWidgetInteractive
         content={content as AskUserQuestionRequestContent}
         onSubmit={handleQuestionSubmit}
+        onCancel={handleQuestionCancel}
         isSubmitting={isSubmitting}
       />
     );

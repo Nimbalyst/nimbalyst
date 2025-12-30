@@ -62,6 +62,11 @@
   height: 0.75rem;
 }
 
+.ask-user-question-widget__status--cancelled {
+  color: var(--text-secondary);
+  background-color: var(--surface-tertiary);
+}
+
 /* Questions container */
 .ask-user-question-widget__questions {
   padding: 0.75rem;

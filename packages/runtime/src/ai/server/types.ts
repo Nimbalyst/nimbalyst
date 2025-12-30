@@ -398,6 +398,7 @@ export interface AskUserQuestionResponseContent {
   type: 'ask_user_question_response';
   questionId: string;           // Links to the ask_user_question_request
   answers: Record<string, string>;
+  cancelled?: boolean;          // True if user cancelled instead of answering
   respondedAt: number;
   respondedBy: 'desktop' | 'mobile';
 }

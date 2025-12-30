@@ -153,6 +153,14 @@ export const AskUserQuestionWidget: React.FC<CustomToolWidgetProps> = ({
   const hasAnswers = Object.keys(answers).length > 0;
   const hasResult = tool.result !== undefined && tool.result !== null && tool.result !== '';
 
+  // Check if the question was cancelled
+  // The result will contain "cancelled" or be an error when the user cancels
+  const isCancelled = typeof tool.result === 'string' && (
+    tool.result.toLowerCase().includes('cancelled') ||
+    tool.result.toLowerCase().includes('canceled') ||
+    tool.result.toLowerCase().includes('user cancelled')
+  );
+
   // If no questions, show nothing
   if (questions.length === 0) {
     return null;
@@ -168,7 +176,7 @@ export const AskUserQuestionWidget: React.FC<CustomToolWidgetProps> = ({
     return null;
   }
 
-  const statusText = 'Questions Answered';
+  const statusText = isCancelled ? 'Question Cancelled' : 'Questions Answered';
 
   return (
     <div className={`ask-user-question-widget ${isCompleted ? 'ask-user-question-widget--submitted' : ''}`}>
@@ -183,12 +191,20 @@ export const AskUserQuestionWidget: React.FC<CustomToolWidgetProps> = ({
         <span className="ask-user-question-widget__title">
           {statusText}
         </span>
-        {isCompleted && (
+        {isCompleted && !isCancelled && (
           <span className="ask-user-question-widget__status">
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M10 3L4.5 8.5L2 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
             Submitted
+          </span>
+        )}
+        {isCancelled && (
+          <span className="ask-user-question-widget__status ask-user-question-widget__status--cancelled">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M9 3L3 9M3 3l6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Cancelled
           </span>
         )}
       </div>

@@ -1896,8 +1896,31 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     if (pending) {
       pending.reject(error);
       this.pendingAskUserQuestions.delete(questionId);
-      // Debug logging - uncomment if needed
-      // console.log(`[CLAUDE-CODE] AskUserQuestion rejected for ID: ${questionId}`);
+
+      // Extract sessionId from questionId (format: ask-{sessionId}-{timestamp})
+      const sessionIdMatch = questionId.match(/^ask-(.+)-\d+$/);
+      const sessionId = sessionIdMatch?.[1];
+
+      // Persist cancelled response for sync (so mobile knows it was cancelled)
+      if (sessionId && sessionId !== 'unknown') {
+        const responseContent: AskUserQuestionResponseContent = {
+          type: 'ask_user_question_response',
+          questionId,
+          answers: {},
+          cancelled: true,
+          respondedAt: Date.now(),
+          respondedBy: 'desktop',
+        };
+        this.logAgentMessage(
+          sessionId,
+          'claude-code',
+          'output',
+          JSON.stringify(responseContent),
+          { messageType: 'ask_user_question_response' }
+        ).catch(err => {
+          console.error('[CLAUDE-CODE] Failed to persist AskUserQuestion cancel:', err);
+        });
+      }
     }
   }
 
@@ -2068,17 +2091,28 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           try {
             const content = JSON.parse(msg.content);
             if (content.type === 'ask_user_question_response' && content.questionId === questionId) {
-              // Found a response - resolve the pending promise
+              // Found a response
               const response: AskUserQuestionResponseContent = content;
               const pending = this.pendingAskUserQuestions.get(questionId);
               if (pending) {
-                pending.resolve(response.answers);
-                this.pendingAskUserQuestions.delete(questionId);
-                this.logSecurity('[pollForAskUserQuestionResponse] Found response message:', {
-                  questionId,
-                  answersCount: Object.keys(response.answers).length,
-                  respondedBy: response.respondedBy
-                });
+                if (response.cancelled) {
+                  // User cancelled - reject the promise
+                  pending.reject(new Error('User cancelled the question'));
+                  this.pendingAskUserQuestions.delete(questionId);
+                  this.logSecurity('[pollForAskUserQuestionResponse] Question cancelled:', {
+                    questionId,
+                    respondedBy: response.respondedBy
+                  });
+                } else {
+                  // Normal response - resolve with answers
+                  pending.resolve(response.answers);
+                  this.pendingAskUserQuestions.delete(questionId);
+                  this.logSecurity('[pollForAskUserQuestionResponse] Found response message:', {
+                    questionId,
+                    answersCount: Object.keys(response.answers).length,
+                    respondedBy: response.respondedBy
+                  });
+                }
               }
               return;
             }

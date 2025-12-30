@@ -223,6 +223,19 @@
   filter: brightness(1.1);
 }
 
+.interactive-prompt__button--cancel {
+  background: var(--surface-tertiary);
+  color: var(--text-secondary);
+  border-color: var(--border-primary);
+  padding: 10px 24px;
+  font-size: 14px;
+}
+
+.interactive-prompt__button--cancel:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--border-secondary);
+}
+
 /* Pattern info */
 .interactive-prompt__pattern-info {
   font-size: 11px;

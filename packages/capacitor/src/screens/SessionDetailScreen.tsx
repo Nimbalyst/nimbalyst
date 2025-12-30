@@ -543,6 +543,9 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
 
     setIsSubmittingPrompt(true);
     try {
+      const messageId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      const timestamp = Date.now();
+
       // Encrypt the response
       const responseContent = JSON.stringify({
         content: JSON.stringify(response),
@@ -554,16 +557,34 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
       const msg: ClientMessage = {
         type: 'append_message',
         message: {
+          id: messageId,
+          sequence: 0, // Server will assign proper sequence
+          created_at: timestamp,
           source: 'system',
           direction: 'input',
           encrypted_content: encrypted,
           iv,
-          metadata: { isPromptResponse: true },
+          metadata: {},
         },
       };
       wsRef.current.send(JSON.stringify(msg));
 
-      console.log('[SessionDetail] Submitted prompt response:', response.type);
+      // Optimistically add to local messages so pendingPrompt clears immediately
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: messageId,
+          createdAt: timestamp,
+          source: 'system',
+          direction: 'input',
+          content: JSON.stringify(response),
+          metadata: {},
+          hidden: false,
+        },
+      ]);
+
+      const isCancelled = response.type === 'ask_user_question_response' && (response as AskUserQuestionResponseContent).cancelled;
+      console.log('[SessionDetail]', isCancelled ? 'Cancelled' : 'Submitted', 'prompt response:', response.type);
     } catch (err) {
       console.error('[SessionDetail] Failed to submit prompt response:', err);
       setError('Failed to submit response');
