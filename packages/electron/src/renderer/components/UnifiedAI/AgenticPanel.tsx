@@ -2462,21 +2462,6 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     };
   }, [activeTabId, handleSendMessage]);
 
-  // Handle file click - use the canonical file opening path
-  const handleFileClick = useCallback(async (filePath: string) => {
-    try {
-      if (onFileOpen) {
-        // Use the canonical file opening function from App
-        // This goes through App.handleWorkspaceFileSelect -> editorModeRef.selectFile -> handleWorkspaceFileSelect -> addTab
-        await onFileOpen(filePath);
-      } else {
-        console.error('[AgenticPanel] onFileOpen not provided - cannot open file');
-      }
-    } catch (err) {
-      console.error('[AgenticPanel] Failed to open file:', err);
-    }
-  }, [onFileOpen]);
-
   // Track sessions currently being processed to prevent duplicate processing
   const processingQueueRef = useRef(new Set<string>());
 
