@@ -1061,16 +1061,41 @@ async function tryCreateServer(port: number): Promise<any> {
               ipcMain.once(resultChannel, (_event, result) => {
                 clearTimeout(timeout);
 
-                const success = result?.success ?? false;
-                const message = result?.message || result?.error || (success ? 'Tool executed successfully' : 'Tool execution failed');
+                // Handle different result formats:
+                // 1. { success: true/false, message?, data?, error? } - explicit format
+                // 2. { error: "message" } - error format
+                // 3. { ...data } - implicit success (any object without error field)
+                const hasExplicitSuccess = typeof result?.success === 'boolean';
+                const hasError = !!result?.error;
+                const success = hasExplicitSuccess ? result.success : !hasError;
+
+                // For successful results without explicit message, show the data
+                let responseText: string;
+                if (success) {
+                  if (result?.message) {
+                    responseText = result.message;
+                    if (result?.data) {
+                      responseText += '\n\nData: ' + JSON.stringify(result.data, null, 2);
+                    }
+                  } else {
+                    // No explicit message - the result itself is the data
+                    // Filter out success field if present
+                    const dataToShow = { ...result };
+                    delete dataToShow.success;
+                    delete dataToShow.message;
+                    responseText = JSON.stringify(dataToShow, null, 2);
+                  }
+                } else {
+                  responseText = `Error: ${result?.error || result?.message || 'Tool execution failed'}`;
+                }
+
+                console.log(`[MCP Server] Extension tool result:`, { success, hasError, result: JSON.stringify(result).substring(0, 200) });
 
                 resolve({
                   content: [
                     {
                       type: 'text',
-                      text: success
-                        ? `${message}${result?.data ? '\n\nData: ' + JSON.stringify(result.data, null, 2) : ''}`
-                        : `Error: ${message}`
+                      text: responseText
                     }
                   ],
                   isError: !success
