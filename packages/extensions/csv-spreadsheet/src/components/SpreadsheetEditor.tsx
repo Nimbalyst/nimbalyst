@@ -16,6 +16,7 @@ import { FormulaBar } from './FormulaBar';
 import { ContextMenu, type ContextMenuItem } from './ContextMenu';
 import { ColumnFormatDialog } from './ColumnFormatDialog';
 import { registerEditorStore, unregisterEditorStore } from '../aiTools';
+import { SheetsTextEditor } from '../editors/SheetsTextEditor';
 
 // Buffer of extra empty rows/columns to show beyond actual data
 const DISPLAY_BUFFER_ROWS = 20;
@@ -151,6 +152,8 @@ function generateColumns(
       prop: letter,
       name: letter,
       size: 120,
+      // Use custom editor that saves on arrow keys (like Google Sheets)
+      editor: 'sheets',
       // Pin columns that are within the frozen count
       ...(index < frozenColumnCount ? { pin: 'colPinStart' as const } : {}),
       // Add cell class for alignment based on format type
@@ -1360,6 +1363,8 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
           resize={true}
           autoSizeColumn={false}
           range={true}
+          applyOnClose={true}
+          editors={{ sheets: SheetsTextEditor }}
           rowClass="_rowClass"
           onBeforeeditstart={handleBeforeEdit}
           onAfteredit={handleAfterEdit}

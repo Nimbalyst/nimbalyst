@@ -63,7 +63,7 @@ export function FormulaBar({ cellRef, value, onChange, isFormula }: FormulaBarPr
         onChange={handleChange}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
-        placeholder={cellRef ? 'Enter value or formula (start with =)' : 'Select a cell'}
+        placeholder={cellRef ? 'Enter value' : 'Select a cell'}
         disabled={!cellRef}
       />
     </div>
