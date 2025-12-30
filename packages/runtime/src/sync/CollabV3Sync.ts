@@ -1557,10 +1557,9 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
           if ('queuedPrompts' in change.metadata) {
             if (change.metadata.queuedPrompts && change.metadata.queuedPrompts.length > 0) {
               if (!session.encryptionKey) {
-                console.error('[CollabV3] Cannot send queued prompts: no encryption key');
-              } else {
-                metadata.encryptedQueuedPrompts = await encryptQueuedPrompts(change.metadata.queuedPrompts, session.encryptionKey);
+                throw new Error('[CollabV3] Cannot send queued prompts: no encryption key available');
               }
+              metadata.encryptedQueuedPrompts = await encryptQueuedPrompts(change.metadata.queuedPrompts, session.encryptionKey);
             } else {
               // Explicitly cleared (undefined, null, or empty array)
               metadata.encryptedQueuedPrompts = undefined;

@@ -865,13 +865,13 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
       // Encrypt queued prompts - encryption is required
       if (update.queuedPrompts && update.queuedPrompts.length > 0) {
         if (!encryptionKeyRef.current) {
-          console.error('[CollabV3] Cannot send queued prompts: no encryption key');
-        } else {
-          try {
-            serverSession.encryptedQueuedPrompts = await encryptQueuedPrompts(update.queuedPrompts, encryptionKeyRef.current);
-          } catch (err) {
-            console.error('[CollabV3] Failed to encrypt queued prompts:', err);
-          }
+          throw new Error('[CollabV3] Cannot send queued prompts: no encryption key available');
+        }
+        try {
+          serverSession.encryptedQueuedPrompts = await encryptQueuedPrompts(update.queuedPrompts, encryptionKeyRef.current);
+        } catch (err) {
+          console.error('[CollabV3] Failed to encrypt queued prompts:', err);
+          throw err;
         }
       }
 
