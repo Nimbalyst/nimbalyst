@@ -3,6 +3,10 @@
  *
  * Manages workspace trust for AI agents. Pattern storage is now handled by
  * Claude Code's native settings files (.claude/settings.local.json).
+ *
+ * WORKTREE SUPPORT: When a workspace is a git worktree, permissions are looked up
+ * using the parent project path. This ensures worktrees inherit trust from their
+ * parent project. Use resolveWorkspacePathForPermissions() to resolve paths.
  */
 
 import {
@@ -10,8 +14,39 @@ import {
   saveAgentPermissions,
 } from '../utils/store';
 import { logger } from '../utils/logger';
+import { getDatabase } from '../database/initialize';
+import { createWorktreeStore } from './WorktreeStore';
 
 type PermissionMode = 'ask' | 'allow-all' | 'bypass-all';
+
+/**
+ * Resolve a workspace path for permission lookups.
+ * If the path is a worktree, returns the parent project path.
+ * Otherwise returns the original path.
+ *
+ * This ensures worktrees share permissions with their parent project.
+ *
+ * @throws Error if database is not initialized
+ * @returns The parent project path for worktrees, or the original path for regular workspaces
+ */
+export async function resolveWorkspacePathForPermissions(workspacePath: string): Promise<string> {
+  const db = getDatabase();
+  if (!db) {
+    throw new Error('Database not initialized - cannot resolve worktree path for permissions');
+  }
+
+  const worktreeStore = createWorktreeStore(db);
+  const worktree = await worktreeStore.getByPath(workspacePath);
+
+  if (worktree) {
+    const workspaceName = workspacePath.split('/').pop() || workspacePath;
+    logger.main.info(`[PermissionService:${workspaceName}] Resolved worktree to parent project: ${worktree.projectPath}`);
+    return worktree.projectPath;
+  }
+
+  // Not a worktree, return original path
+  return workspacePath;
+}
 
 /**
  * Check if a test permission mode is set via environment variable.

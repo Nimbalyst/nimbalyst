@@ -30,6 +30,7 @@ export interface CreateSessionPayload {
   filePath?: string;
   worktreeId?: string;  // ID of the associated worktree
   worktreePath?: string;  // Path to the worktree directory
+  worktreeProjectPath?: string;  // Path to the parent project (for permission lookups)
   providerConfig?: Record<string, unknown>;
   providerSessionId?: string;
   documentContext?: Record<string, unknown> | undefined;

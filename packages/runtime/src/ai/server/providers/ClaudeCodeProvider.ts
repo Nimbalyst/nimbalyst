@@ -142,6 +142,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   // Trust checker (injected from electron main process)
   // Checks if a workspace is trusted before allowing tool execution
   // Modes: 'ask' = prompt for each command, 'allow-all' = auto-approve file edits, 'bypass-all' = auto-approve everything
+  // NOTE: For worktree sessions, pass the parent project path (permissionsPath) instead of workspacePath
   private static trustChecker: ((
     workspacePath: string
   ) => { trusted: boolean; mode: 'ask' | 'allow-all' | 'bypass-all' | null }) | null = null;
@@ -239,7 +240,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
   /**
    * Set the trust checker function (called from electron main process)
-   * Checks if a workspace is trusted before allowing tool execution
+   * Checks if a workspace is trusted before allowing tool execution.
+   * NOTE: For worktree sessions, the caller should pass the parent project path.
    */
   public static setTrustChecker(checker: ((
     workspacePath: string
@@ -258,7 +260,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
   async initialize(config: ProviderConfig): Promise<void> {
     const safeConfig = { ...config, apiKey: config.apiKey ? '***' : undefined };
-    // console.log('[CLAUDE-CODE] Initializing provider with config:', JSON.stringify({
     //   model: config.model,
     //   configKeys: Object.keys(config),
     //   config: safeConfig
@@ -267,7 +268,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     this.config = config;
 
     // Claude Code manages its own authentication - do not require or use API key
-    // console.log('[CLAUDE-CODE] Claude Code manages authentication internally');
   }
 
   /**
@@ -302,13 +302,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     attachments?: any[]
   ): AsyncIterableIterator<StreamChunk> {
     const startTime = Date.now();
-    // console.log(`[CLAUDE-CODE] ========== START sendMessage ==========`);
-    // console.log(`[CLAUDE-CODE] Message length: ${message.length}`);
-    // console.log(`[CLAUDE-CODE] Has document context: ${!!documentContext}`);
-    // console.log(`[CLAUDE-CODE] Session ID: ${sessionId || 'new session'}`);
-    // console.log(`[CLAUDE-CODE] Workspace path: ${workspacePath}`);
-    // console.log(`[CLAUDE-CODE] First 200 chars of message:`, message.substring(0, 200));
-    // console.log(`[CLAUDE-CODE] Has attachments: ${!!attachments && attachments.length > 0}`);
 
     // CRITICAL: Capture hidden mode flag at START and reset immediately
     // This prevents race conditions when concurrent sendMessage calls overlap
@@ -318,15 +311,12 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
     // Track session mode for MCP server configuration and tool filtering
     this.currentMode = (documentContext as any)?.mode || 'agent';
-    // console.log(`[CLAUDE-CODE] Session mode: ${this.currentMode}`);
 
     // Build content blocks for attachments (sent directly to Claude, not via file paths)
     const imageContentBlocks: ImageBlockParam[] = [];
     const documentContentBlocks: DocumentBlockParam[] = [];
     // Debug logging - uncomment if needed for attachment troubleshooting
-    // console.log(`[CLAUDE-CODE] Attachments received:`, attachments?.length || 0, attachments);
     if (attachments && attachments.length > 0) {
-      // console.log(`[CLAUDE-CODE] Processing ${attachments.length} attachments as direct content blocks`);
 
       for (const attachment of attachments) {
         if (attachment.type === 'image' && attachment.filepath) {
@@ -358,7 +348,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                 data: base64Data
               }
             });
-            // console.log(`[CLAUDE-CODE] Created image content block for ${attachment.filename || path.basename(attachment.filepath)}, size: ${base64Data.length} bytes`);
           } catch (error) {
             console.error(`[CLAUDE-CODE] Failed to read image attachment:`, error);
           }
@@ -376,7 +365,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               },
               title: filename
             });
-            // console.log(`[CLAUDE-CODE] Created document content block for ${filename}, ${textContent.length} chars`);
           } catch (error) {
             console.error(`[CLAUDE-CODE] Failed to read document attachment:`, error);
           }
@@ -386,7 +374,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
     // Abort any existing request before starting a new one
     if (this.abortController) {
-      // console.log(`[CLAUDE-CODE] Aborting existing request for session ${sessionId}`);
       this.abortController.abort();
     }
 
@@ -428,17 +415,17 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // Build system prompt with document context
       const promptBuildStart = Date.now();
       const systemPrompt = this.buildSystemPrompt(documentContext);
-      // console.log(`[CLAUDE-CODE] System prompt build took ${Date.now() - promptBuildStart}ms, length: ${systemPrompt.length}`);
-      // console.log(`[CLAUDE-CODE] System prompt first 300 chars:`, systemPrompt.substring(0, 300));
 
       // Require workspace path
       if (!workspacePath) {
         throw new Error('[CLAUDE-CODE] workspacePath is required but was not provided');
       }
-      // console.log(`[CLAUDE-CODE] Working directory (cwd): ${workspacePath}`);
+
+      // For worktree sessions, use the parent project path for permission lookups
+      // This is passed via documentContext.permissionsPath from AIService
+      const permissionsPath = (documentContext as any)?.permissionsPath || workspacePath;
 
       // Build options for claude-code SDK
-      // console.log('[CLAUDE-CODE] Building SDK options...');
 
       // Determine which settings sources to use based on user preferences
       // 'local' is always included (machine-level settings)
@@ -484,13 +471,13 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         permissionMode: 'default',
         // canUseTool callback handles permission requests
         // Auto-approves most tools, but checks Bash commands and blocks on AskUserQuestion
-        canUseTool: this.createCanUseToolHandler(sessionId, workspacePath),
+        canUseTool: this.createCanUseToolHandler(sessionId, workspacePath, permissionsPath),
         // PHASE 3: PreToolUse hook for tagging "before" state
         // PostToolUse hook for triggering file watcher (no snapshot creation)
         hooks: {
           'PreToolUse': [
             {
-              hooks: [this.createPreToolUseHook(workspacePath, sessionId)]
+              hooks: [this.createPreToolUseHook(workspacePath, sessionId, permissionsPath)]
             }
           ],
           'PostToolUse': [
@@ -562,7 +549,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         (options as any).blockedTools = disallowed;
       }
 
-      // console.log('[CLAUDE-CODE] Options built without API key (Claude Code manages auth internally)');
 
       // Set up environment variables for the SDK
       // If user has configured a claude-code API key, pass it via environment
@@ -572,10 +558,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       };
 
       if (this.config.apiKey) {
-        // console.log('[CLAUDE-CODE] Using API key from config');
         env.ANTHROPIC_API_KEY = this.config.apiKey;
       } else {
-        // console.log('[CLAUDE-CODE] No API key in config - SDK will use claude login credentials or system env var');
       }
 
       // In production, we need to spawn claude-code differently
@@ -589,7 +573,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         const executableOptions = getClaudeCodeExecutableOptions();
         Object.assign(options, executableOptions);
 
-        // console.log('[CLAUDE-CODE] Enhanced environment for packaged build:', {
         //   platform: process.platform,
         //   HOME: env.HOME || env.USERPROFILE,
         //   USER: env.USER || env.USERNAME,
@@ -609,9 +592,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         const claudeSessionId = this.claudeSessionIds.get(sessionId);
         if (claudeSessionId) {
           options.resume = claudeSessionId;
-          // console.log(`[CLAUDE-CODE] Resuming claude-code session: ${claudeSessionId}`);
         } else {
-          // console.log(`[CLAUDE-CODE] No existing Claude session for ID: ${sessionId}`);
         }
       }
 
@@ -630,12 +611,9 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       //   hasEnv: !!options.env,
       //   envKeys: options.env ? Object.keys(options.env).filter(k => k.includes('ANTHROPIC') || k.includes('NODE') || k.includes('ELECTRON') || k.includes('HOME') || k.includes('PATH')) : []
       // };
-      // console.log(`[CLAUDE-CODE] Calling query with options:`, JSON.stringify(optionsSummary, null, 2));
 
       const queryStartTime = Date.now();
 
-      // console.log('[CLAUDE-CODE] Calling query with prompt length:', message.length);
-      // console.log('[CLAUDE-CODE] Creating query iterator...');
 
       // Log the raw input to the SDK (include attachments in metadata for UI restoration)
       if (sessionId) {
@@ -658,7 +636,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
       // TODO: Debug logging - uncomment if needed for MCP troubleshooting
       // Log MCP servers being passed to SDK (CONTAINS SENSITIVE CONFIG - commented out for production)
-      // console.log('[CLAUDE-CODE] Final MCP config for SDK:', JSON.stringify(options.mcpServers, null, 2));
 
       // Build the prompt - use streaming input mode when we have attachments (images or documents)
       // This allows us to send content directly as content blocks instead of file paths
@@ -682,7 +659,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         ];
 
         // Debug logging - uncomment if needed for troubleshooting
-        // console.log(`[CLAUDE-CODE] Content blocks structure:`, JSON.stringify(contentBlocks.map(b => ({
         //   type: b.type,
         //   ...(b.type === 'image' ? { media_type: (b as any).source?.media_type, data_length: (b as any).source?.data?.length } : {}),
         //   ...(b.type === 'document' ? { title: (b as any).title, data_length: (b as any).source?.data?.length } : {}),
@@ -699,12 +675,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             },
             parent_tool_use_id: null
           };
-          // console.log(`[CLAUDE-CODE] Yielding streaming message with ${contentBlocks.length} content blocks`);
           yield msg;
         }
 
         promptInput = createStreamingInput();
-        // console.log(`[CLAUDE-CODE] Using streaming input with ${imageContentBlocks.length} image(s), ${documentContentBlocks.length} document(s) + text`);
       } else {
         // Simple string prompt when no attachments
         promptInput = message;
@@ -715,8 +689,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         options
       }) as AsyncIterable<any>;
 
-      // console.log('[CLAUDE-CODE] Query iterator created, type:', typeof queryIterator);
-      // console.log('[CLAUDE-CODE] Has Symbol.asyncIterator:', !!queryIterator?.[Symbol.asyncIterator]);
 
       let fullContent = '';
       let chunkCount = 0;
@@ -747,7 +719,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       let hasYieldedContent = false;
       let hasYieldedError = false;
 
-      // console.log('[CLAUDE-CODE] Starting to iterate over query response...');
 
       // Stream the response
       try {
@@ -767,7 +738,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           }
 
           // if (chunkCount <= 5) {
-          //   console.log(`[CLAUDE-CODE] Chunk #${chunkCount}:`,
           //     typeof chunk === 'string'
           //       ? { type: 'string', length: chunk.length, preview: chunk.substring(0, 100) }
           //       : JSON.stringify(chunk, null, 2)
@@ -777,12 +747,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           if (!firstChunkTime) {
             firstChunkTime = Date.now();
             const timeToFirstChunk = firstChunkTime - queryStartTime;
-            // console.log(`[CLAUDE-CODE] First chunk received after ${timeToFirstChunk}ms (total: ${firstChunkTime - startTime}ms from start)`);
           }
           if (typeof chunk === 'string') {
             // Text chunk - always display it
             // if (chunkCount <= 3) {
-            //   console.log(`[CLAUDE-CODE] Text chunk #${chunkCount}, length: ${chunk.length}, first 100 chars:`, chunk.substring(0, 100));
             // }
             fullContent += chunk;
             yield {
@@ -799,12 +767,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           } else if (chunk && typeof chunk === 'object') {
             // Handle different message types from the SDK
             // if (chunkCount <= 5) {
-            //   console.log(`[CLAUDE-CODE] Object chunk #${chunkCount}:`, JSON.stringify(chunk, null, 2));
             // }
 
             if (chunk.session_id && sessionId) {
               // Store the claude session ID
-              // console.log(`[CLAUDE-CODE] Storing session ID mapping: ${sessionId} -> ${chunk.session_id}`);
               this.claudeSessionIds.set(sessionId, chunk.session_id);
             }
 
@@ -842,8 +808,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                   // Handle tool calls from Claude
                   toolCallCount++;
                   const toolId = block.id || `tool-${toolCallCount}`;
-                  // console.log(`[CLAUDE-CODE] Tool use #${toolCallCount} detected: ${block.name} (id: ${toolId})`);
-                  // console.log(`[CLAUDE-CODE] Tool arguments:`, JSON.stringify(block.input || block.arguments, null, 2).substring(0, 500));
 
                   const toolName = block.name;
                   const toolArgs = block.input;
@@ -851,7 +815,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
                   // Detect TodoWrite tool invocations and extract todos
                   if (toolName === 'TodoWrite' && toolArgs && toolArgs.todos) {
-                    // console.log(`[CLAUDE-CODE] TodoWrite detected with ${toolArgs.todos.length} todos`);
                     // Emit todo update event to renderer via IPC (don't await - let it happen async)
                     this.emitTodoUpdate(sessionId, toolArgs.todos).catch(err => {
                       console.error('[CLAUDE-CODE] Failed to emit todo update:', err);
@@ -867,23 +830,16 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                   let executionResult: any | undefined;
 
                   if (!toolName) {
-                    // console.warn('[CLAUDE-CODE] Tool use block missing name');
                   } else if (isMcpTool) {
-                    // console.log(`[CLAUDE-CODE] MCP tool detected: ${toolName} - handled by MCP server`);
                   } else if (isSdkNativeTool) {
-                    // console.log(`[CLAUDE-CODE] SDK-native tool detected: ${toolName} - executed by Claude Code SDK, result will come in tool_result block`);
                     // SDK executes these tools itself, result will come in a tool_result block
                   } else if (this.toolHandler) {
-                    // console.log(`[CLAUDE-CODE] Executing tool: ${toolName}`);
                     const toolStartTime = Date.now();
                     try {
                       executionResult = await this.executeToolCall(toolName, toolArgs);
-                      // console.log(`[CLAUDE-CODE] ${toolName} execution completed in ${Date.now() - toolStartTime}ms`);
                       // if (executionResult !== undefined) {
                       //   try {
-                      //     console.log(`[CLAUDE-CODE] ${toolName} result:`, JSON.stringify(executionResult, null, 2));
                       //   } catch (stringifyError) {
-                      //     console.log(`[CLAUDE-CODE] ${toolName} result could not be stringified`, stringifyError);
                       //   }
                       // }
                     } catch (error) {
@@ -902,7 +858,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                       };
                     }
                   } else {
-                    // console.warn(`[CLAUDE-CODE] No tool handler registered - skipping execution for ${toolName}`);
                   }
 
                   // Create tool call object
@@ -953,7 +908,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                       toolCall
                     };
                   } else {
-                    // console.log(`[CLAUDE-CODE] Deferring tool call emission for ${toolName} until result arrives`);
                   }
                 } else if (block.type === 'tool_result') {
                   // Handle tool results from Claude Code SDK
@@ -961,8 +915,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                   const toolResult = block.content;
                   const isError = block.is_error || false;
 
-                  // console.log(`[CLAUDE-CODE] Tool result received for tool ID: ${toolResultId}`);
-                  // console.log(`[CLAUDE-CODE] Tool result (first 500 chars):`,
                   //   typeof toolResult === 'string'
                   //     ? toolResult.substring(0, 500)
                   //     : JSON.stringify(toolResult, null, 2).substring(0, 500)
@@ -973,7 +925,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                   if (toolCall) {
                     // Check if tool already has a result - if so, skip duplicate
                     if (toolCall.result !== undefined) {
-                      // console.log(`[CLAUDE-CODE] Tool call ${toolResultId} already has result, skipping duplicate`);
                       continue; // Skip this tool_result block
                     }
 
@@ -986,10 +937,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
                     if (hasErrorFlag || hasErrorContent) {
                       toolCall.isError = true;
-                      // console.log(`[CLAUDE-CODE] Marked tool call ${toolResultId} as error`);
                     }
 
-                    // console.log(`[CLAUDE-CODE] Updated tool call ${toolResultId} with result (isError: ${toolCall.isError || false})`);
 
                     // Log ONLY the tool_result block to database
                     // The tool_use block was already logged by raw chunk logging at line 264
@@ -1013,7 +962,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                       toolCall
                     };
                   } else {
-                    // console.warn(`[CLAUDE-CODE] Received tool result for unknown tool ID: ${toolResultId}`);
                   }
                 }
               }
@@ -1028,8 +976,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             // Standalone tool call event
             toolCallCount++;
             const toolChunk = chunk as any;
-            // console.log(`[CLAUDE-CODE] Standalone tool call #${toolCallCount}: ${toolChunk.name}`);
-            // console.log(`[CLAUDE-CODE] Standalone tool arguments:`, JSON.stringify(toolChunk.input || toolChunk.arguments, null, 2).substring(0, 500));
 
             const toolName = toolChunk.name || 'unknown';
             const toolArgs = toolChunk.input;
@@ -1044,21 +990,15 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             let executionResult: any | undefined;
 
             if (isMcpTool) {
-              // console.log(`[CLAUDE-CODE] MCP tool (standalone): ${toolName} - handled by MCP server`);
             } else if (isSdkNativeTool) {
-              // console.log(`[CLAUDE-CODE] SDK-native tool (standalone): ${toolName} - executed by Claude Code SDK`);
               // SDK executes these tools itself, we just observe them
             } else if (this.toolHandler) {
-              // console.log(`[CLAUDE-CODE] Executing tool (standalone): ${toolName}`);
               const toolStartTime = Date.now();
               try {
                 executionResult = await this.executeToolCall(toolName, toolArgs);
-                // console.log(`[CLAUDE-CODE] ${toolName} execution completed in ${Date.now() - toolStartTime}ms`);
                 // if (executionResult !== undefined) {
                 //   try {
-                //     console.log(`[CLAUDE-CODE] ${toolName} result:`, JSON.stringify(executionResult, null, 2));
                 //   } catch (stringifyError) {
-                //     console.log(`[CLAUDE-CODE] ${toolName} result could not be stringified`, stringifyError);
                 //   }
                 // }
               } catch (error) {
@@ -1077,7 +1017,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                 };
               }
             } else {
-              // console.warn(`[CLAUDE-CODE] No tool handler registered - skipping execution for ${toolName}`);
             }
 
             // Create tool call object
@@ -1129,7 +1068,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                 toolCall
               };
             } else {
-              // console.log(`[CLAUDE-CODE] Deferring standalone tool call emission for ${toolName} until result arrives`);
             }
           } else if (chunk.type === 'text') {
             const text = chunk.text || chunk.content || '';
@@ -1212,17 +1150,14 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             // Only errors need to be displayed from result chunks
           } else if (chunk.type === 'system') {
             // Handle system messages from Claude Code (initialization, etc.)
-            // console.log(`[CLAUDE-CODE] System chunk received:`, chunk);
 
             // Store session_id if present
             if (chunk.session_id && sessionId) {
-              // console.log(`[CLAUDE-CODE] Storing session ID from system message: ${sessionId} -> ${chunk.session_id}`);
               this.claudeSessionIds.set(sessionId, chunk.session_id);
             }
 
             // System messages like 'init' are informational - don't display to user
             if (chunk.subtype === 'init') {
-              // console.log('[CLAUDE-CODE] Claude Code initialized with:', {
               //   cwd: chunk.cwd,
               //   model: chunk.model,
               //   session_id: chunk.session_id,
@@ -1236,12 +1171,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               // });
 
               // Log all chunk properties to discover what's available
-              // console.log('[CLAUDE-CODE] Full init chunk keys:', Object.keys(chunk));
 
               // Capture available slash commands
               if (chunk.slash_commands && Array.isArray(chunk.slash_commands)) {
                 this.slashCommands = chunk.slash_commands;
-                // console.log('[CLAUDE-CODE] Available slash commands:', this.slashCommands);
               }
 
               // Track session initialization with MCP, slash commands, agents, skills, and plugins counts
@@ -1262,7 +1195,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                 toolCount: chunk.tools?.length || 0
               };
 
-              // console.log('[CLAUDE-CODE] Session initialization data:', {
               //   mcpServerCount,
               //   slashCommandCount,
               //   agentCount,
@@ -1273,17 +1205,9 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
               // Warn if API key source is "none" - this means Claude Code didn't find credentials
               if (chunk.apiKeySource === 'none') {
-                  // console.log('[CLAUDE-CODE] no api key: using system configured claude-code credentials');
-                // console.error('[CLAUDE-CODE] ⚠️  API Key Source is "none" - Claude Code did not detect any API key!');
-                // console.error('[CLAUDE-CODE] This likely means:');
-                // console.error('[CLAUDE-CODE]   1. Environment variable ANTHROPIC_API_KEY is not set or not visible to the spawned process');
-                // console.error('[CLAUDE-CODE]   2. API key in options is not being recognized by Claude Code SDK');
-                // console.error('[CLAUDE-CODE]   3. No stored credentials from `claude login` command');
-                // console.error('[CLAUDE-CODE] Subsequent API calls will likely fail with authentication errors');
               }
             } else if (chunk.subtype === 'compact_boundary') {
               // Handle /compact command response
-              // console.log('[CLAUDE-CODE] Compact boundary received:', {
               //   pre_tokens: chunk.compact_metadata?.pre_tokens,
               //   trigger: chunk.compact_metadata?.trigger
               // });
@@ -1299,7 +1223,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               };
             } else {
               // Other system messages might be relevant
-              // console.log('[CLAUDE-CODE] Other system message:', chunk.subtype, chunk);
 
               // Check if this system message has displayable content
               if (chunk.message || chunk.text || chunk.content) {
@@ -1313,7 +1236,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             // Don't yield most system messages to UI - they're internal
           } else if (chunk.type === 'user') {
             // Handle user messages (including tool results and slash command output)
-            // console.log(`[CLAUDE-CODE] User chunk received:`, {
             //   role: chunk.message?.role,
             //   hasContent: !!chunk.message?.content,
             //   contentType: Array.isArray(chunk.message?.content) ? 'array' : typeof chunk.message?.content
@@ -1330,8 +1252,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                   const toolResult = block.content;
                   const isError = block.is_error || false;
 
-                  // console.log(`[CLAUDE-CODE] Tool result in user message for tool ID: ${toolResultId}`);
-                  // console.log(`[CLAUDE-CODE] Tool result (first 500 chars):`,
                   //   typeof toolResult === 'string'
                   //     ? toolResult.substring(0, 500)
                   //     : JSON.stringify(toolResult, null, 2).substring(0, 500)
@@ -1342,7 +1262,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                   if (toolCall) {
                     // Check if tool already has a result - if so, skip duplicate
                     if (toolCall.result !== undefined) {
-                      // console.log(`[CLAUDE-CODE] Tool call ${toolResultId} already has result from user message, skipping duplicate`);
                       continue; // Skip this tool_result
                     }
 
@@ -1355,10 +1274,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
                     if (hasErrorFlag || hasErrorContent) {
                       toolCall.isError = true;
-                      // console.log(`[CLAUDE-CODE] Marked tool call ${toolResultId} as error (from user message)`);
                     }
 
-                    // console.log(`[CLAUDE-CODE] Updated tool call ${toolResultId} with result from user message (isError: ${toolCall.isError || false})`);
 
                     // Log ONLY the tool_result block to database
                     // The tool_use block was already logged when the tool was first called
@@ -1382,7 +1299,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                       toolCall
                     };
                   } else {
-                    // console.warn(`[CLAUDE-CODE] Received tool result for unknown tool ID: ${toolResultId}`);
                   }
                 }
               }
@@ -1394,7 +1310,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               const match = content.match(/<local-command-stdout>([\s\S]*?)<\/local-command-stdout>/);
               if (match && match[1]) {
                 const commandOutput = match[1].trim();
-                // console.log('[CLAUDE-CODE] Slash command output detected, length:', commandOutput.length);
 
                 // Yield as a system message type
                 yield {
@@ -1475,7 +1390,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               break;
             } else {
               // Non-error summary - always display it
-              // console.log('[CLAUDE-CODE] Informational summary:', summary);
 
               // Always yield summaries to the UI with context
               const displayMessage = summary ?
@@ -1507,8 +1421,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             }
           } else {
             // Unknown chunk type - display it anyway so nothing is lost
-            // console.log(`[CLAUDE-CODE] Unknown chunk type at #${chunkCount}:`, chunk);
-            // console.log(`[CLAUDE-CODE] Full unknown chunk:`, JSON.stringify(chunk, null, 2));
 
             // Try to extract any text content from the unknown chunk
             let extractedContent = '';
@@ -1562,7 +1474,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
             // If we extracted any content, yield it to the UI
             if (extractedContent) {
-              // console.log(`[CLAUDE-CODE] Yielding unknown chunk content to UI:`, extractedContent.substring(0, 200));
               yield {
                 type: 'text',
                 content: extractedContent
@@ -1572,7 +1483,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             // Also check if this looks like an error
             const chunkStr = JSON.stringify(chunk).toLowerCase();
             if (chunkStr.includes('error') || chunkStr.includes('fail') || chunkStr.includes('invalid')) {
-              // console.warn('[CLAUDE-CODE] Unknown chunk might contain an error');
             }
           }
           }
@@ -1604,24 +1514,13 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
       // Send completion event
       const totalTime = Date.now() - startTime;
-      // console.log(`[CLAUDE-CODE] ========== END sendMessage ==========`);
-      // console.log(`[CLAUDE-CODE] Stream complete - Total time: ${totalTime}ms`);
-      // console.log(`[CLAUDE-CODE] Stats - Chunks: ${chunkCount}, Tool calls: ${toolCallCount}, Content length: ${fullContent.length}`);
-      // console.log(`[CLAUDE-CODE] First 500 chars of response:`, fullContent.substring(0, 500));
 
       // Create snapshots for all files edited during this turn
-      // console.log(`[CLAUDE-CODE] ========== TURN ENDING ==========`);
-      // console.log(`[CLAUDE-CODE] editedFilesThisTurn size:`, this.editedFilesThisTurn.size);
-      // console.log(`[CLAUDE-CODE] editedFilesThisTurn contents:`, Array.from(this.editedFilesThisTurn));
 
       if (this.editedFilesThisTurn.size > 0) {
-        // console.log(`[CLAUDE-CODE] Creating ai-edit snapshots for ${this.editedFilesThisTurn.size} files edited this turn`);
         await this.createTurnEndSnapshots(workspacePath!, sessionId);
-        // console.log(`[CLAUDE-CODE] Turn-end snapshots complete`);
       } else {
-        // console.log(`[CLAUDE-CODE] WARNING: No files in editedFilesThisTurn set - no snapshots will be created`);
       }
-      // console.log(`[CLAUDE-CODE] ========== TURN END COMPLETE ==========`);
 
       // Calculate total input/output tokens from modelUsage if available (more accurate than usageData)
       let totalInputTokens = usageData?.input_tokens || 0;
@@ -1658,7 +1557,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         ...(modelUsageData ? { modelUsage: modelUsageData } : {})
       };
 
-      // console.log('[CLAUDE-CODE] Complete event yielded');
 
     } catch (error: any) {
       const errorTime = Date.now() - startTime;
@@ -1720,7 +1618,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         };
       }
     } finally {
-      // console.log('[CLAUDE-CODE] Cleaning up abort controller');
       this.abortController = null;
       // Note: markMessagesAsHidden is reset at the START of sendMessage to prevent race conditions
     }
@@ -1745,32 +1642,23 @@ export class ClaudeCodeProvider extends BaseAIProvider {
    * Uses the existing metadata update mechanism instead of custom IPC events
    */
   private async emitTodoUpdate(sessionId: string | undefined, todos: any[]): Promise<void> {
-    // console.log(`[CLAUDE-CODE] emitTodoUpdate called with sessionId: ${sessionId}, todos count: ${todos?.length}`);
 
     if (!sessionId) {
-      // console.warn('[CLAUDE-CODE] Cannot update todos: no session ID');
       return;
     }
 
     try {
       // Update session metadata with the current todos
       // This will trigger session reloads which will update the UI
-      // console.log(`[CLAUDE-CODE] Updating session metadata with ${todos.length} todos for session ${sessionId}`);
 
       // Import AISessionsRepository dynamically
-      // console.log('[CLAUDE-CODE] Importing AISessionsRepository...');
       const { AISessionsRepository } = await import('../../../storage/repositories/AISessionsRepository');
-      // console.log('[CLAUDE-CODE] AISessionsRepository imported successfully');
 
       // Get current session to merge metadata
-      // console.log(`[CLAUDE-CODE] Getting current session ${sessionId}...`);
       const currentSession = await AISessionsRepository.get(sessionId);
-      // console.log(`[CLAUDE-CODE] Current session retrieved:`, currentSession ? 'found' : 'not found');
 
       const currentMetadata = currentSession?.metadata || {};
-      // console.log(`[CLAUDE-CODE] Current metadata:`, JSON.stringify(currentMetadata, null, 2));
 
-      // console.log(`[CLAUDE-CODE] Updating metadata with merged todos...`);
       await AISessionsRepository.updateMetadata(sessionId, {
         metadata: {
           ...currentMetadata,
@@ -1778,16 +1666,13 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         }
       });
 
-      // console.log(`[CLAUDE-CODE] Session metadata updated successfully with todos:`, JSON.stringify(todos, null, 2));
 
       // Emit message:logged event to trigger UI reload
       // This will cause the AgenticPanel to reload the session and pick up the new todos
-      // console.log(`[CLAUDE-CODE] Emitting message:logged event...`);
       this.emit('message:logged', {
         sessionId,
         direction: 'output'
       });
-      // console.log(`[CLAUDE-CODE] Emitted message:logged event to trigger UI reload`);
     } catch (error) {
       console.error('[CLAUDE-CODE] Failed to update session metadata with todos:', error);
       console.error('[CLAUDE-CODE] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
@@ -1806,16 +1691,13 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   }
 
   setProviderSessionData(sessionId: string, data: any): void {
-    // console.log(`[CLAUDE-CODE] Setting provider session data for ${sessionId}:`, data);
     if (data.claudeSessionId) {
       this.claudeSessionIds.set(sessionId, data.claudeSessionId);
-      // console.log(`[CLAUDE-CODE] Stored Claude session ID: ${data.claudeSessionId}`);
     }
   }
 
   getProviderSessionData(sessionId: string): any {
     const claudeSessionId = this.claudeSessionIds.get(sessionId);
-    // console.log(`[CLAUDE-CODE] Getting provider session data for ${sessionId}: ${claudeSessionId || 'none'}`);
     return {
       claudeSessionId
     };
@@ -1831,7 +1713,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       pending.resolve(approved);
       this.pendingExitPlanModeConfirmations.delete(requestId);
       // TODO: Debug logging - uncomment if needed
-      // console.log(`[CLAUDE-CODE] ExitPlanMode confirmation resolved: ${approved ? 'approved' : 'denied'}`);
     } else {
       console.warn(`[CLAUDE-CODE] No pending ExitPlanMode confirmation found for requestId: ${requestId}`);
     }
@@ -1884,7 +1765,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         });
       }
       // Debug logging - uncomment if needed
-      // console.log(`[CLAUDE-CODE] AskUserQuestion resolved for ID: ${questionId}`);
     } else {
       console.warn(`[CLAUDE-CODE] No pending AskUserQuestion found for questionId: ${questionId}`);
     }
@@ -1973,7 +1853,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           console.error('[CLAUDE-CODE] Failed to persist permission response:', err);
         });
       }
-      // console.log(`[CLAUDE-CODE] Tool permission resolved for ID: ${requestId}`);
     } else {
       console.warn(`[CLAUDE-CODE] No pending tool permission found for requestId: ${requestId}`);
     }
@@ -2148,7 +2027,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         transport: 'sse',
         url: `http://127.0.0.1:${ClaudeCodeProvider.mcpServerPort}/mcp?workspacePath=${encodeURIComponent(workspacePath)}`
       };
-      // console.log('[CLAUDE-CODE] Shared MCP server configured on port', ClaudeCodeProvider.mcpServerPort, 'for workspace', workspacePath);
     }
 
     // Include session naming MCP server if it's started
@@ -2511,7 +2389,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
    *
    * Our job is to show UI, wait for user response, and save patterns if "Always" is chosen.
    */
-  private createCanUseToolHandler(sessionId?: string, workspacePath?: string) {
+  private createCanUseToolHandler(sessionId?: string, workspacePath?: string, permissionsPath?: string) {
+    // Use permissionsPath for trust checks (parent project for worktrees), workspacePath for everything else
+    const pathForTrust = permissionsPath || workspacePath;
+
     return async (
       toolName: string,
       input: any,
@@ -2521,6 +2402,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       this.logSecurity('[canUseTool] Tool call received:', {
         toolName,
         workspacePath: workspacePath?.slice(-30),
+        permissionsPath: permissionsPath?.slice(-30),
       });
 
       // Internal Nimbalyst MCP tools that should always be allowed without permission prompts
@@ -2541,8 +2423,9 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       }
 
       // Check workspace trust before allowing any tools
-      if (workspacePath && ClaudeCodeProvider.trustChecker) {
-        const trustStatus = ClaudeCodeProvider.trustChecker(workspacePath);
+      // Use permissionsPath (parent project for worktrees) for trust checks
+      if (pathForTrust && ClaudeCodeProvider.trustChecker) {
+        const trustStatus = ClaudeCodeProvider.trustChecker(pathForTrust);
         if (!trustStatus.trusted) {
           this.logSecurity('[canUseTool] Workspace not trusted, denying tool:', { toolName });
           return {
@@ -2764,7 +2647,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     options: { signal: AbortSignal }
   ): Promise<{ behavior: 'allow' | 'deny'; updatedInput?: any; message?: string }> {
       // Debug logging - uncomment if needed
-      // console.log('[CLAUDE-CODE] AskUserQuestion tool invoked, waiting for user answers');
 
       const questions = input?.questions || [];
       if (questions.length === 0) {
@@ -2842,7 +2724,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         const answers = await answersPromise;
 
         // Debug logging - uncomment if needed
-        // console.log('[CLAUDE-CODE] AskUserQuestion answered:', answers);
 
         // Emit event with answers so UI can update the tool call display
         this.emit('askUserQuestion:answered', {
@@ -2877,25 +2758,24 @@ export class ClaudeCodeProvider extends BaseAIProvider {
    * This hook intercepts Edit/Write/MultiEdit tools, tags the current file state,
    * and tracks files for end-of-turn snapshot creation.
    */
-  private createPreToolUseHook(workspacePath: string, sessionId?: string) {
+  private createPreToolUseHook(workspacePath: string, sessionId?: string, permissionsPath?: string) {
     const fs = require('fs');
     const path = require('path');
+    // Use permissionsPath for trust checks (parent project for worktrees)
+    const pathForTrust = permissionsPath || workspacePath;
 
     return async (input: any, toolUseID: string | undefined, options: { signal: AbortSignal }) => {
       const toolName = input.tool_name;
       const toolInput = input.tool_input;
 
-      // console.log(`[CLAUDE-CODE] PreToolUse hook: ${toolName}`, { toolUseID, toolInput });
 
       // EXITPLANMODE CONFIRMATION: Intercept ExitPlanMode tool calls in planning mode
       // TODO: Debug logging - uncomment if needed for ExitPlanMode troubleshooting
       // if (toolName === 'ExitPlanMode') {
-      //   console.log(`[CLAUDE-CODE] ExitPlanMode tool called, currentMode=${this.currentMode}`);
       // }
 
       if (toolName === 'ExitPlanMode' && this.currentMode === 'planning') {
         // TODO: Debug logging - uncomment if needed
-        // console.log(`[CLAUDE-CODE] ExitPlanMode intercepted - requesting user confirmation`);
 
         // Generate unique request ID for this confirmation
         const requestId = `exit-plan-${sessionId}-${Date.now()}`;
@@ -2928,7 +2808,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           if (approved) {
             // User approved - update our mode state and allow ExitPlanMode to proceed
             // TODO: Debug logging - uncomment if needed
-            // console.log(`[CLAUDE-CODE] ExitPlanMode approved by user, switching to agent mode`);
             this.currentMode = 'agent';
             return {
               hookSpecificOutput: {
@@ -2939,7 +2818,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           } else {
             // User denied - keep in planning mode
             // TODO: Debug logging - uncomment if needed
-            // console.log(`[CLAUDE-CODE] ExitPlanMode denied by user, staying in planning mode`);
             return {
               hookSpecificOutput: {
                 hookEventName: 'PreToolUse' as const,
@@ -2951,7 +2829,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         } catch (error) {
           // Handle abort or other errors
           // TODO: Debug logging - uncomment if needed
-          // console.log(`[CLAUDE-CODE] ExitPlanMode confirmation failed:`, error);
           return {
             hookSpecificOutput: {
               hookEventName: 'PreToolUse' as const,
@@ -2968,8 +2845,9 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // See: https://github.com/anthropics/claude-code/issues/4956
       if (toolName === 'Bash') {
         // In bypass-all mode, skip compound command checking entirely
-        if (workspacePath && ClaudeCodeProvider.trustChecker) {
-          const trustStatus = ClaudeCodeProvider.trustChecker(workspacePath);
+        // Use pathForTrust (parent project for worktrees) for trust checks
+        if (pathForTrust && ClaudeCodeProvider.trustChecker) {
+          const trustStatus = ClaudeCodeProvider.trustChecker(pathForTrust);
           if (trustStatus.trusted && trustStatus.mode === 'bypass-all') {
             this.logSecurity(`[PreToolUse] Bypass-all mode, skipping compound command check`);
             return {};
@@ -3117,7 +2995,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // Handle non-file-editing tools (except ExitPlanMode which is handled above)
       // Return empty object to let the request continue through permission flow to canUseTool
       if (toolName !== 'Edit' && toolName !== 'Write' && toolName !== 'MultiEdit') {
-        // console.log(`[CLAUDE-CODE] PreToolUse: Not a file editing tool, deferring to canUseTool`);
         return {};
       }
 
@@ -3157,7 +3034,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             }
           }
           // TODO: Debug logging - uncomment if needed for planning mode troubleshooting
-          // console.log(`[CLAUDE-CODE] Planning mode validation passed for: ${filePaths.join(', ')}`);
         }
 
         // Tag each file and track for end-of-turn snapshot
@@ -3219,11 +3095,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
         // CRITICAL: Check if there are already pending tags for this file
         // If yes, skip creating a new tag - we want to show ALL edits together as one diff
-        // console.log(`[CLAUDE-CODE] PreToolUse: Checking for existing pending tags for:`, filePath);
         const pendingTags = await historyManager.getPendingTags(filePath);
-        // console.log(`[CLAUDE-CODE] PreToolUse: Found ${pendingTags?.length || 0} pending tags for ${filePath}`);
         // if (pendingTags && pendingTags.length > 0) {
-        //   console.log(`[CLAUDE-CODE] PreToolUse: Existing tag details:`, JSON.stringify(pendingTags[0], null, 2));
         // }
 
         if (pendingTags && pendingTags.length > 0) {
@@ -3272,12 +3145,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           sessionId || 'unknown',
           toolUseId
         );
-        // console.log(`[CLAUDE-CODE] PreToolUse: Tag created successfully`);
 
         // Small delay to ensure tag is committed to database before next edit check
         await new Promise(resolve => setTimeout(resolve, 10));
       } catch (importError) {
-        // console.warn('[CLAUDE-CODE] PreToolUse: Could not import historyManager (might be in renderer process):',  importError);
         // If we're not in the main process, we'll need to use IPC
         // This will be implemented when we integrate with the IPC layer
       }
@@ -3286,7 +3157,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // Check if this is a unique constraint violation (expected if tag already exists)
       const errorStr = String(error);
       if (errorStr.includes('unique') || errorStr.includes('UNIQUE') || errorStr.includes('duplicate')) {
-        // console.log(`[CLAUDE-CODE] PreToolUse: Tag already exists (unique constraint), skipping:`, filePath);
         // This is fine - means another rapid edit already created the tag
         return;
       }
@@ -3309,14 +3179,12 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         return {};
       }
 
-      // console.log(`[CLAUDE-CODE] PostToolUse hook: ${toolName} completed`, { toolUseID });
 
       // Small delay to ensure file system has flushed the write
       // This gives chokidar time to detect the change and trigger diff update
       // Increased from 50ms to 200ms to ensure file watcher can process each edit
       await new Promise(resolve => setTimeout(resolve, 200));
 
-      // console.log(`[CLAUDE-CODE] PostToolUse hook: Delay complete, file watcher should have detected change`);
       return {};
     };
   }
@@ -3329,7 +3197,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     const fs = require('fs');
     const path = require('path');
 
-    // console.log(`[CLAUDE-CODE] Creating turn-end snapshots for ${this.editedFilesThisTurn.size} files`);
 
     for (const filePath of this.editedFilesThisTurn) {
       try {
@@ -3354,7 +3221,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             `AI edit turn complete (session: ${sessionId || 'unknown'})`,
             sessionId ? { sessionId } : undefined
           );
-          // console.log(`[CLAUDE-CODE] Turn-end snapshot created for ${filePath}`);
         } catch (importError) {
           console.warn('[CLAUDE-CODE] Could not import historyManager:', importError);
         }
@@ -3383,7 +3249,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           throw new Error(error);
         }
 
-        // console.log(`[CLAUDE-CODE] ✓ Using unpacked CLI at: ${unpackedCliPath}`);
 
         // Verify the unpacked node_modules directory exists
         const appPath = app.getAppPath();
@@ -3398,7 +3263,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           console.error(`[CLAUDE-CODE] ✗ CRITICAL ERROR: ${error}`);
           throw new Error(error);
         }
-        // console.log(`[CLAUDE-CODE] ✓ Unpacked node_modules directory exists`);
 
         // Verify the SDK directory specifically
         const unpackedSdkDir = path.join(unpackedNodeModules, '@anthropic-ai', 'claude-agent-sdk');
@@ -3408,7 +3272,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           console.error(`[CLAUDE-CODE] ✗ CRITICAL ERROR: ${error}`);
           throw new Error(error);
         }
-        // console.log(`[CLAUDE-CODE] ✓ Unpacked SDK directory verified`);
 
         cliPath = unpackedCliPath;
       }
@@ -3417,7 +3280,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         throw new Error(`CLI not found at expected path: ${cliPath}`);
       }
 
-      // console.log(`[CLAUDE-CODE] Found CLI at: ${cliPath}`);
       return cliPath;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -3472,7 +3334,6 @@ Do NOT call this tool more than once per session. It should be called early, typ
 
     if (!process.env.PATH?.includes(electronDir)) {
       process.env.PATH = `${electronDir}:${process.env.PATH}`;
-      // console.log('[CLAUDE-CODE] Added Electron dir to PATH:', electronDir);
     }
   }
 
@@ -3493,7 +3354,6 @@ Do NOT call this tool more than once per session. It should be called early, typ
    * Get Claude Code model
    */
   static getModels(): AIModel[] {
-    // console.log('[ClaudeCodeProvider.getModels] Building models from CLAUDE_CODE_VARIANTS:', CLAUDE_CODE_VARIANTS);
     const models = CLAUDE_CODE_VARIANTS.map(variant => ({
       id: `claude-code:${variant}`,
       name: `Claude Agent · ${CLAUDE_CODE_MODEL_LABELS[variant]} ${CLAUDE_CODE_VARIANT_VERSIONS[variant]}`,
@@ -3501,7 +3361,6 @@ Do NOT call this tool more than once per session. It should be called early, typ
       maxTokens: 8192,
       contextWindow: 200000
     }));
-    // console.log('[ClaudeCodeProvider.getModels] Returning models:', models.map(m => ({ id: m.id, name: m.name })));
     return models;
   }
 

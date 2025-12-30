@@ -615,7 +615,7 @@ class PGLiteWorker {
             SELECT 1 FROM information_schema.columns
             WHERE table_name = 'ai_sessions' AND column_name = 'worktree_id'
           ) THEN
-            ALTER TABLE ai_sessions ADD COLUMN worktree_id TEXT REFERENCES worktrees(id);
+            ALTER TABLE ai_sessions ADD COLUMN worktree_id TEXT REFERENCES worktrees(id) ON DELETE SET NULL;
           END IF;
         END $$;
       `);

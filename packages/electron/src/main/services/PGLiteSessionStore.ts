@@ -333,7 +333,8 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       const { rows } = await db.query<any>(
         `SELECT s.*,
          EXTRACT(EPOCH FROM s.last_read_timestamp) * 1000 AS last_read_ms,
-         w.path AS worktree_path
+         w.path AS worktree_path,
+         w.workspace_id AS worktree_project_path
          FROM ai_sessions s
          LEFT JOIN worktrees w ON s.worktree_id = w.id
          WHERE s.id=$1 LIMIT 1`,
@@ -358,6 +359,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
         workspacePath: row.workspace_id,
         worktreeId: row.worktree_id ?? undefined,
         worktreePath: row.worktree_path ?? undefined,
+        worktreeProjectPath: row.worktree_project_path ?? undefined,
         createdAt: toMillis(row.created_at),
         updatedAt: toMillis(row.updated_at),
         metadata,

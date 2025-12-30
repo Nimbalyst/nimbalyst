@@ -517,6 +517,10 @@ app.whenReady().then(async () => {
 
     // Inject trust checker
     // Checks if a workspace is trusted before allowing tool execution
+    // NOTE: For worktree sessions, AIService pre-resolves the worktree path to the parent
+    // project (worktreeProjectPath) and passes it via documentContext.permissionsPath.
+    // ClaudeCodeProvider then uses permissionsPath for trust checks, ensuring this
+    // checker receives the parent project path, not the worktree path.
     const permissionService = getPermissionService();
     ClaudeCodeProvider.setTrustChecker((workspacePath) => {
       const mode = permissionService.getPermissionMode(workspacePath);

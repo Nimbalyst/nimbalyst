@@ -526,7 +526,8 @@ export class SessionManager {
     sessionType?: 'chat' | 'planning' | 'coding' | 'terminal',
     mode?: 'planning' | 'agent',
     worktreeId?: string,
-    worktreePath?: string
+    worktreePath?: string,
+    worktreeProjectPath?: string
   ): Promise<SessionData> {
     // workspacePath is REQUIRED - sessions cannot exist outside of a workspace
     if (!workspacePath) {
@@ -548,6 +549,7 @@ export class SessionManager {
       documentContext: documentContext ? { ...documentContext } : undefined,
       worktreeId,
       worktreePath,
+      worktreeProjectPath,
     });
 
     const now = Date.now();
@@ -566,6 +568,7 @@ export class SessionManager {
       providerConfig,
       worktreeId,
       worktreePath,
+      worktreeProjectPath,
     };
 
     this.currentSession = session;

@@ -121,6 +121,7 @@ export interface SessionData {
   // Worktree association
   worktreeId?: string;  // ID of the associated worktree
   worktreePath?: string;  // Path to the worktree directory
+  worktreeProjectPath?: string;  // Path to the parent project (for permission lookups)
 
   // Time tracking
   createdAt: number;  // Creation timestamp

@@ -49,9 +49,11 @@ CREATE INDEX idx_worktrees_path ON worktrees(path);
 The `ai_sessions` table includes a foreign key to associate sessions with worktrees.
 
 ```sql
-ALTER TABLE ai_sessions ADD COLUMN worktree_id TEXT REFERENCES worktrees(id);
+ALTER TABLE ai_sessions ADD COLUMN worktree_id TEXT REFERENCES worktrees(id) ON DELETE SET NULL;
 CREATE INDEX idx_ai_sessions_worktree ON ai_sessions(worktree_id);
 ```
+
+When a worktree is deleted, the `worktree_id` is set to NULL for all associated sessions. This preserves the session history while marking that the worktree no longer exists.
 
 ## Architecture
 
