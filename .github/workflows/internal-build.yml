@@ -75,12 +75,14 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         working-directory: packages/electron
         run: |
+          npm run build
+          npm run build:extensions
           if [ "${{ matrix.os }}" == "macos-latest" ]; then
-            npm run build:mac:local
+            electron-builder --mac --publish never
           elif [ "${{ matrix.os }}" == "windows-latest" ]; then
-            npm run build:win
+            electron-builder --win --x64 --publish never
           else
-            npm run build:linux
+            electron-builder --linux --publish never
           fi
         shell: bash
 
