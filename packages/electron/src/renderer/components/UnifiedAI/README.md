@@ -1,6 +1,14 @@
 # Unified AI Interface Components
 
-This directory contains the new unified AI interface components that merge the functionality of `AgenticCodingWindow` and `AIChat` into a cohesive, reusable architecture.
+This directory contains the unified AI interface components that merge the functionality of `AgenticCodingWindow` and `AIChat` into a cohesive, reusable architecture.
+
+## Agent Mode vs Chat Mode
+
+The UI supports two distinct modes:
+
+**Agent Mode** (`mode="agent"`) uses the Claude Code SDK with a few extensions for added functionality in Nimbalyst. It has full MCP support with file system access, multi-file operations, and session persistence. Best for complex coding tasks. Features full tab bar, session history panel, and multi-file editing capabilities.
+
+**Chat Mode** (`mode="chat"`) is a quicker, more focused tool that is limited to reading and writing your currently open file. Uses direct API calls with files attached as context for faster responses. Best for quick edits and tasks that do not require multi-file operations. Features a simpler dropdown-based session selector.
 
 ## Architecture Overview
 

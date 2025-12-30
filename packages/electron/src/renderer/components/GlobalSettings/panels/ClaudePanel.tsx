@@ -29,10 +29,10 @@ export function ClaudePanel({
   return (
     <div className="provider-panel">
       <div className="provider-panel-header">
-        <h3 className="provider-panel-title">Claude (Anthropic)</h3>
+        <h3 className="provider-panel-title">Claude Chat</h3>
         <p className="provider-panel-description">
-          Direct API access to Claude models including Claude 3 Opus, Sonnet, and Haiku.
-          Requires an Anthropic API key.
+          Chat mode is a quicker, more focused tool that is limited to reading and writing your currently open file.
+          Uses direct API calls with files attached as context for faster responses. Requires an Anthropic API key.
         </p>
       </div>
 

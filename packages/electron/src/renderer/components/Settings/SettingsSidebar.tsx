@@ -88,9 +88,9 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
     },
     {
       title: 'Agent Providers',
-      infoTooltip: `Agent providers have full MCP support with file system access, multi-file operations, and session persistence.
+      infoTooltip: `Agent mode uses the Claude Code SDK with a few extensions for added functionality in Nimbalyst.
 
-Uses the same agent as Claude Code, and can use a Claude Code monthly plan from Anthropic.
+Has full MCP support with file system access, multi-file operations, and session persistence. Can use a Claude Code monthly plan from Anthropic.
 
 Best for complex coding tasks.`,
       items: [
@@ -111,11 +111,11 @@ Best for complex coding tasks.`,
     },
     {
       title: 'Chat Providers',
-      infoTooltip: `Chat providers use direct API calls with files attached as context. Faster responses, simpler behavior.
+      infoTooltip: `Chat mode is a quicker, more focused tool that is limited to reading and writing your currently open file.
 
-Includes local model support via LM Studio.
+Uses direct API calls with files attached as context. Faster responses, simpler behavior. Includes local model support via LM Studio.
 
-Best for tasks that do not require deep code analysis.`,
+Best for quick edits and tasks that do not require multi-file operations.`,
       items: [
         {
           id: 'claude',

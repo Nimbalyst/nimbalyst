@@ -93,7 +93,7 @@ export function ModelSelector({
   const getProviderLabel = (provider: string) => {
     switch (provider) {
       case 'claude': return 'Claude Chat';
-      case 'claude-code': return 'Claude Agent';
+      case 'claude-code': return 'Claude Agent (Claude Code Based)';
       case 'openai': return 'OpenAI';
       case 'openai-codex': return 'OpenAI Codex';
       case 'lmstudio': return 'LMStudio';
@@ -178,13 +178,13 @@ export function ModelSelector({
                 </>
               )}
 
-              {/* Models Section */}
+              {/* Chat with open document Section */}
               {groupedProviders.models && Object.keys(groupedProviders.models).length > 0 && (
                 <>
                   {groupedProviders.agents && Object.keys(groupedProviders.agents).length > 0 && (
                     <div className="model-selector-divider" />
                   )}
-                  <div className="model-selector-section-header">Models</div>
+                  <div className="model-selector-section-header">Chat with open document</div>
                   {Object.entries(groupedProviders.models).map(([provider, providerModels]) => (
                     <div key={provider} className="model-selector-provider-group">
                       <div className="model-selector-provider-header">

@@ -110,7 +110,7 @@ export function NewSessionButton({
   const getProviderLabel = (provider: string) => {
     switch (provider) {
       case 'claude': return 'Claude Chat';
-      case 'claude-code': return 'Claude Agent';
+      case 'claude-code': return 'Claude Agent (Claude Code Based)';
       case 'openai': return 'OpenAI';
       case 'openai-codex': return 'OpenAI Codex';
       case 'lmstudio': return 'LMStudio';
@@ -243,13 +243,13 @@ export function NewSessionButton({
                 </>
               )}
 
-              {/* Models Section */}
+              {/* Chat with open document Section */}
               {groupedProviders.models && Object.keys(groupedProviders.models).length > 0 && (
                 <>
                   {groupedProviders.agents && Object.keys(groupedProviders.agents).length > 0 && (
                     <div className="new-session-divider" />
                   )}
-                  <div className="new-session-section-header">Models</div>
+                  <div className="new-session-section-header">Chat with open document</div>
                   {Object.entries(groupedProviders.models).map(([provider, providerModels]) => (
                     <div key={provider} className="new-session-provider-group">
                       <div className="new-session-provider-header">

@@ -133,8 +133,8 @@ export function ClaudeCodePanel({
       <div className="provider-panel-header">
         <h3 className="provider-panel-title">Claude Agent</h3>
         <p className="provider-panel-description">
-          Uses the same agent as Claude Code, with Model Context Protocol (MCP) support for advanced code editing.
-          Provides tool use, file editing, and session resumption capabilities.
+          Agent mode uses the Claude Code SDK with a few extensions for added functionality in Nimbalyst.
+          Has full MCP support with file system access, multi-file operations, and session persistence.
         </p>
       </div>
 
