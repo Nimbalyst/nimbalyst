@@ -97,6 +97,15 @@ interface SyncContextValue {
   connectedDevices: DeviceInfo[];
   /** Whether any desktop device is currently connected */
   isDesktopConnected: boolean;
+  /**
+   * Send a session control message to other devices.
+   * Used for cancel, question responses, etc.
+   */
+  sendSessionControlMessage: (
+    sessionId: string,
+    type: string,
+    payload?: Record<string, unknown>
+  ) => void;
 }
 
 // ============================================================================
@@ -190,7 +199,8 @@ type ClientMessage =
   | { type: 'index_sync_request'; project_id?: string }
   | { type: 'index_update'; session: ServerSessionEntry }
   | { type: 'device_announce'; device: DeviceInfo }
-  | { type: 'create_session_request'; request: EncryptedCreateSessionRequest };
+  | { type: 'create_session_request'; request: EncryptedCreateSessionRequest }
+  | { type: 'session_control'; message: { session_id: string; message_type: string; payload?: Record<string, unknown>; timestamp: number; sent_by: 'desktop' | 'mobile' } };
 
 type ServerMessage =
   | {
@@ -880,7 +890,11 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
         session: serverSession,
       };
 
-      // console.log('[CollabV3] Sending index_update for session:', sessionId, 'queuedPrompts:', update.queuedPrompts?.length ?? 0, 'encrypted:', !!encryptionKeyRef.current);
+      console.log('[CollabV3] DEBUG Sending index_update for session:', sessionId, {
+        queuedPrompts: update.queuedPrompts?.length ?? 0,
+        hasEncryptedQueuedPrompts: !!serverSession.encryptedQueuedPrompts,
+        encryptedQueuedPromptsCount: serverSession.encryptedQueuedPrompts?.length ?? 0,
+      });
       wsRef.current.send(JSON.stringify(msg));
     },
     [allSessions]
@@ -936,6 +950,31 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
 
         sendRequest();
       });
+    },
+    []
+  );
+
+  // Send a generic session control message to other devices
+  const sendSessionControlMessage = useCallback(
+    (sessionId: string, type: string, payload?: Record<string, unknown>) => {
+      if (wsRef.current?.readyState !== WebSocket.OPEN) {
+        console.warn('[CollabV3] Cannot send session control message - not connected');
+        return;
+      }
+
+      const msg: ClientMessage = {
+        type: 'session_control',
+        message: {
+          session_id: sessionId,
+          message_type: type,
+          payload,
+          timestamp: Date.now(),
+          sent_by: 'mobile',
+        },
+      };
+
+      console.log('[CollabV3] Sending session_control:', sessionId, type);
+      wsRef.current.send(JSON.stringify(msg));
     },
     []
   );
@@ -1286,6 +1325,7 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
     isCreatingSession,
     connectedDevices,
     isDesktopConnected,
+    sendSessionControlMessage,
   };
 
   return <SyncContext.Provider value={value}>{children}</SyncContext.Provider>;

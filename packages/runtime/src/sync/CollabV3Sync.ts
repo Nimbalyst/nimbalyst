@@ -28,6 +28,7 @@ import type {
   DeviceInfo,
   CreateSessionRequest,
   CreateSessionResponse,
+  SessionControlMessage,
 } from './types';
 
 // ============================================================================
@@ -156,7 +157,8 @@ type ClientMessage =
   | { type: 'index_delete'; session_id: string }
   | { type: 'device_announce'; device: DeviceInfo }
   | { type: 'create_session_request'; request: EncryptedCreateSessionRequest }
-  | { type: 'create_session_response'; response: EncryptedCreateSessionResponse };
+  | { type: 'create_session_response'; response: EncryptedCreateSessionResponse }
+  | { type: 'session_control'; message: { session_id: string; message_type: string; payload?: Record<string, unknown>; timestamp: number; sent_by: 'desktop' | 'mobile' } };
 
 type ServerMessage =
   | { type: 'sync_response'; messages: EncryptedMessage[]; metadata: SessionMetadata | null; has_more: boolean; cursor: string | null }
@@ -170,6 +172,7 @@ type ServerMessage =
   | { type: 'device_left'; device_id: string }
   | { type: 'create_session_request_broadcast'; request: EncryptedCreateSessionRequest; from_connection_id?: string }
   | { type: 'create_session_response_broadcast'; response: EncryptedCreateSessionResponse; from_connection_id?: string }
+  | { type: 'session_control_broadcast'; message: { session_id: string; message_type: string; payload?: Record<string, unknown>; timestamp: number; sent_by: 'desktop' | 'mobile' }; from_connection_id?: string }
   | { type: 'error'; code: string; message: string };
 
 // ============================================================================
@@ -437,6 +440,9 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
   // Listeners for session creation responses (for mobile to receive response from desktop)
   const createSessionResponseListeners = new Set<(response: CreateSessionResponse) => void>();
+
+  // Listeners for generic session control messages (cancel, question_response, etc.)
+  const sessionControlMessageListeners = new Set<(message: SessionControlMessage) => void>();
 
   // Connected devices tracking
   const connectedDevices = new Map<string, DeviceInfo>();
@@ -1029,10 +1035,18 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
             // Decrypt queued prompts - encrypted prompts are required
             if (entry.encryptedQueuedPrompts && entry.encryptedQueuedPrompts.length > 0 && config.encryptionKey) {
               try {
+                console.log('[CollabV3] DEBUG decrypting queued prompts:', entry.encryptedQueuedPrompts.length);
                 decryptedEntry.queuedPrompts = await decryptQueuedPrompts(entry.encryptedQueuedPrompts, config.encryptionKey);
+                console.log('[CollabV3] DEBUG decrypted:', decryptedEntry.queuedPrompts?.length, 'prompts');
               } catch (err) {
                 console.error('[CollabV3] Failed to decrypt index entry queued prompts:', err);
               }
+            } else {
+              console.log('[CollabV3] DEBUG no encrypted prompts to decrypt:', {
+                hasEncryptedPrompts: !!entry.encryptedQueuedPrompts,
+                length: entry.encryptedQueuedPrompts?.length ?? 0,
+                hasEncryptionKey: !!config.encryptionKey,
+              });
             }
             // If no encrypted prompts, queuedPrompts stays undefined
 
@@ -1142,6 +1156,29 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                 callback(response);
               } catch (err) {
                 console.error('[CollabV3] Error in create session response listener:', err);
+              }
+            });
+            break;
+          }
+
+          case 'session_control_broadcast': {
+            // Generic session control message from another device
+            const controlMessage: SessionControlMessage = {
+              sessionId: message.message.session_id,
+              type: message.message.message_type,
+              payload: message.message.payload,
+              timestamp: message.message.timestamp,
+              sentBy: message.message.sent_by,
+            };
+
+            console.log('[CollabV3] Received session_control:', controlMessage.sessionId, controlMessage.type);
+
+            // Notify all listeners
+            sessionControlMessageListeners.forEach((callback) => {
+              try {
+                callback(controlMessage);
+              } catch (err) {
+                console.error('[CollabV3] Error in session control message listener:', err);
               }
             });
             break;
@@ -1855,6 +1892,35 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       callback(Array.from(connectedDevices.values()));
       return () => {
         deviceStatusListeners.delete(callback);
+      };
+    },
+
+    /** Send a generic session control message (cross-device via IndexRoom) */
+    sendSessionControlMessage(message: SessionControlMessage): void {
+      if (!indexWs || !indexConnected) {
+        console.error('[CollabV3] Cannot send session control message - not connected');
+        return;
+      }
+
+      const msg: ClientMessage = {
+        type: 'session_control',
+        message: {
+          session_id: message.sessionId,
+          message_type: message.type,
+          payload: message.payload,
+          timestamp: message.timestamp,
+          sent_by: message.sentBy,
+        },
+      };
+      console.log('[CollabV3] Sending session_control:', message.sessionId, message.type);
+      indexWs.send(JSON.stringify(msg));
+    },
+
+    /** Subscribe to session control messages from other devices */
+    onSessionControlMessage(callback: (message: SessionControlMessage) => void): () => void {
+      sessionControlMessageListeners.add(callback);
+      return () => {
+        sessionControlMessageListeners.delete(callback);
       };
     },
   };

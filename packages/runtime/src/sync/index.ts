@@ -42,6 +42,7 @@ export type {
   DeviceInfo,
   CreateSessionRequest,
   CreateSessionResponse,
+  SessionControlMessage,
 } from './types';
 
 export { createCollabV3Sync } from './CollabV3Sync';

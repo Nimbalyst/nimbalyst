@@ -187,6 +187,12 @@ export interface SyncProvider {
   /** Subscribe to session creation responses (for mobile to receive response from desktop) */
   onCreateSessionResponse?(callback: (response: CreateSessionResponse) => void): () => void;
 
+  /** Send a generic session control message (cross-device via IndexRoom) */
+  sendSessionControlMessage?(message: SessionControlMessage): void;
+
+  /** Subscribe to session control messages from other devices */
+  onSessionControlMessage?(callback: (message: SessionControlMessage) => void): () => void;
+
   /** Get list of currently connected devices */
   getConnectedDevices?(): DeviceInfo[];
 
@@ -320,4 +326,21 @@ export interface CreateSessionResponse {
   sessionId?: string;
   /** Error message if creation failed */
   error?: string;
+}
+
+/**
+ * Generic session control message.
+ * The sync layer just passes these through - interpretation is up to the receiver.
+ */
+export interface SessionControlMessage {
+  /** Session ID this message is for */
+  sessionId: string;
+  /** Message type - receiver decides how to handle */
+  type: string;
+  /** Arbitrary payload - receiver interprets based on type */
+  payload?: Record<string, unknown>;
+  /** Timestamp when message was sent */
+  timestamp: number;
+  /** Device that sent the message */
+  sentBy: 'desktop' | 'mobile';
 }

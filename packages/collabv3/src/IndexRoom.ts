@@ -21,6 +21,8 @@ import type {
   EncryptedCreateSessionResponse,
   CreateSessionRequestBroadcastMessage,
   CreateSessionResponseBroadcastMessage,
+  SessionControlMessage,
+  SessionControlBroadcastMessage,
 } from './types';
 import { createLogger } from './logger';
 
@@ -242,6 +244,10 @@ export class IndexRoom implements DurableObject {
 
         case 'create_session_response':
           await this.handleCreateSessionResponse(ws, connState, message.response);
+          break;
+
+        case 'session_control':
+          await this.handleSessionControl(ws, connState, message.message);
           break;
 
         default:
@@ -514,6 +520,27 @@ export class IndexRoom implements DurableObject {
     this.broadcast(broadcastMessage, ws);
 
     log.debug('Broadcast create_session_response to', this.connections.size - 1, 'other connections');
+  }
+
+  /**
+   * Handle generic session control message - just broadcast to other devices
+   */
+  private async handleSessionControl(
+    ws: WebSocket,
+    connState: ConnectionState,
+    message: SessionControlMessage
+  ): Promise<void> {
+    log.debug('Received session_control:', message.session_id, message.message_type);
+
+    // Just broadcast - we don't interpret the message
+    const broadcastMessage: SessionControlBroadcastMessage = {
+      type: 'session_control_broadcast',
+      message,
+      from_connection_id: this.getConnectionId(ws),
+    };
+    this.broadcast(broadcastMessage, ws);
+
+    log.debug('Broadcast session_control to', this.connections.size - 1, 'other connections');
   }
 
   /**

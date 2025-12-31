@@ -21,6 +21,7 @@ import type {
 } from '@nimbalyst/runtime/ai/server/types';
 // MCP imports removed - no longer using MCP HTTP server
 import { ToolExecutor, toolRegistry, BUILT_IN_TOOLS } from './tools';
+import { initMobileSessionControlHandler } from './MobileSessionControlHandler';
 import { SoundNotificationService } from '../SoundNotificationService';
 import { notificationService } from '../NotificationService';
 import { logger } from '../../utils/logger';
@@ -816,6 +817,10 @@ export class AIService {
       } else {
         logger.main.info('[AIService] onCreateSessionRequest not available on sync provider');
       }
+
+      // Initialize mobile session control handler (cancel, question responses, etc.)
+      // This is in a separate module to keep AIService focused
+      initMobileSessionControlHandler(syncProvider, findWindowByWorkspace);
     } catch (error) {
       logger.main.error('[AIService] Failed to initialize mobile sync handler:', error);
     }

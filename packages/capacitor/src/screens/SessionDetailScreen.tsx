@@ -211,7 +211,7 @@ interface SessionDetailScreenProps {
 export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenProps) {
   const navigate = useNavigate();
   const { sessionId } = useParams<{ sessionId: string }>();
-  const { config, sendIndexUpdate, sessions } = useSync();
+  const { config, sendIndexUpdate, sessions, sendSessionControlMessage } = useSync();
 
   const [messages, setMessages] = useState<SyncedMessage[]>([]);
   const [metadata, setMetadata] = useState<Partial<WireSessionMetadata>>({});
@@ -583,15 +583,33 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
         },
       ]);
 
-      const isCancelled = response.type === 'ask_user_question_response' && (response as AskUserQuestionResponseContent).cancelled;
-      console.log('[SessionDetail]', isCancelled ? 'Cancelled' : 'Submitted', 'prompt response:', response.type);
+      // For AskUserQuestion responses, also send via IndexRoom so desktop receives it immediately
+      if (response.type === 'ask_user_question_response' && sessionId) {
+        const questionResponse = response as AskUserQuestionResponseContent;
+        const isCancelled = questionResponse.cancelled;
+        console.log('[SessionDetail]', isCancelled ? 'Cancelled' : 'Submitted', 'question response via IndexRoom:', questionResponse.questionId);
+
+        if (isCancelled) {
+          // For cancellation, send the cancel control message
+          sendSessionControlMessage(sessionId, 'cancel');
+        } else {
+          // For normal responses, send the question response control message
+          sendSessionControlMessage(sessionId, 'question_response', {
+            questionId: questionResponse.questionId,
+            answers: questionResponse.answers,
+            cancelled: false,
+          });
+        }
+      } else {
+        console.log('[SessionDetail] Submitted prompt response:', response.type);
+      }
     } catch (err) {
       console.error('[SessionDetail] Failed to submit prompt response:', err);
       setError('Failed to submit response');
     } finally {
       setIsSubmittingPrompt(false);
     }
-  }, []);
+  }, [sessionId, sendSessionControlMessage]);
 
   // Generate unique ID for messages
   const generateId = () => {
@@ -604,11 +622,18 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
     // Note: Draft sync via metadata is not yet implemented in CollabV3
   };
 
+  // Handle cancel - abort the running session on desktop
+  const handleCancel = useCallback(() => {
+    if (sessionId) {
+      console.log('[SessionDetail] Cancelling session:', sessionId);
+      sendSessionControlMessage(sessionId, 'cancel');
+    }
+  }, [sessionId, sendSessionControlMessage]);
+
   // Handle sending a message by adding it to the queue
   // Desktop will process the queue and create both user message and AI response
   const handleSendMessage = async (message: string) => {
     if (!message.trim() || !sessionId || !wsRef.current) {
-      console.log('[SessionDetail] Cannot send: missing data');
       return;
     }
 
@@ -633,7 +658,8 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
       wsRef.current.send(JSON.stringify(queueMsg));
 
       // Also send index update so desktop (listening to index) can get the full queue
-      sendIndexUpdate(sessionId, { queuedPrompts: newQueue });
+      console.log('[SessionDetail] DEBUG Calling sendIndexUpdate with queuedPrompts:', newQueue.length, 'prompts');
+      await sendIndexUpdate(sessionId, { queuedPrompts: newQueue });
 
       // Update local metadata state
       setMetadata((prev) => ({ ...prev, queuedPrompts: newQueue }));
@@ -641,8 +667,6 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
       // Clear input
       setInputValue('');
       setAttachments([]);
-
-      console.log('[SessionDetail] Added prompt to queue:', queuedPrompt.id, 'total:', newQueue.length);
     } catch (err) {
       console.error('[SessionDetail] Failed to queue message:', err);
       setError('Failed to queue message');
@@ -745,7 +769,8 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
           onChange={handleInputChange}
           onSend={handleSendMessage}
           disabled={!connected || isSending || !!pendingPrompt}
-          isLoading={isSending}
+          isLoading={isSending || metadata.isExecuting}
+          onCancel={metadata.isExecuting ? handleCancel : undefined}
           placeholder={pendingPrompt ? 'Respond to prompt above...' : (connected ? 'Type your message...' : 'Connecting...')}
           attachments={attachments}
           onAttachmentAdd={handleAttachmentAdd}

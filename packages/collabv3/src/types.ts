@@ -33,7 +33,8 @@ export type ClientMessage =
   | IndexDeleteMessage
   | DeviceAnnounceMessage
   | CreateSessionRequestMessage
-  | CreateSessionResponseMessage;
+  | CreateSessionResponseMessage
+  | SessionControlCommandMessage;
 
 /** Request messages since a cursor */
 export interface SyncRequestMessage {
@@ -120,6 +121,23 @@ export interface EncryptedCreateSessionResponse {
   error?: string;
 }
 
+/** Generic session control command - the sync layer just passes these through */
+export interface SessionControlCommandMessage {
+  type: 'session_control';
+  message: SessionControlMessage;
+}
+
+/** Generic session control message payload */
+export interface SessionControlMessage {
+  session_id: string;
+  /** Message type - receiver decides how to handle */
+  message_type: string;
+  /** Arbitrary payload - receiver interprets based on message_type */
+  payload?: Record<string, unknown>;
+  timestamp: number;
+  sent_by: 'desktop' | 'mobile';
+}
+
 // ============================================================================
 // Server → Client Messages
 // ============================================================================
@@ -137,6 +155,7 @@ export type ServerMessage =
   | DeviceLeftMessage
   | CreateSessionRequestBroadcastMessage
   | CreateSessionResponseBroadcastMessage
+  | SessionControlBroadcastMessage
   | ErrorMessage;
 
 /** Response to sync_request */
@@ -219,6 +238,13 @@ export interface CreateSessionRequestBroadcastMessage {
 export interface CreateSessionResponseBroadcastMessage {
   type: 'create_session_response_broadcast';
   response: EncryptedCreateSessionResponse;
+  from_connection_id?: string;
+}
+
+/** Broadcast generic session control message to other devices */
+export interface SessionControlBroadcastMessage {
+  type: 'session_control_broadcast';
+  message: SessionControlMessage;
   from_connection_id?: string;
 }
 

@@ -145,6 +145,36 @@
   outline-offset: 2px;
 }
 
+/* Cancel Button */
+.ai-input-cancel-button {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--error-color, #dc3545);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: opacity 0.2s ease, transform 0.1s ease;
+  outline: none;
+}
+
+.ai-input-cancel-button:hover {
+  opacity: 0.9;
+}
+
+.ai-input-cancel-button:active {
+  transform: scale(0.95);
+}
+
+.ai-input-cancel-button:focus-visible {
+  outline: 2px solid var(--error-color, #dc3545);
+  outline-offset: 2px;
+}
+
 /* Spinner animation */
 .ai-input-spinner {
   animation: spin 1s linear infinite;
@@ -170,7 +200,8 @@
     max-height: 150px;
   }
 
-  .ai-input-send-button {
+  .ai-input-send-button,
+  .ai-input-cancel-button {
     width: 40px;
     height: 40px;
   }

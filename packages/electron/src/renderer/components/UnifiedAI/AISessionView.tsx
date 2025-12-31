@@ -394,6 +394,23 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
     };
   }, [sessionId]);
 
+  // Listen for session cancelled events (from mobile cancellation)
+  useEffect(() => {
+    const handleSessionCancelled = (data: { sessionId: string }) => {
+      // Only process for this session
+      if (data.sessionId === sessionId) {
+        console.log(`[AISessionView] Session cancelled from mobile for session ${sessionId}`);
+        // Clear any pending question UI
+        setPendingAskUserQuestion(null);
+      }
+    };
+
+    const cleanup = window.electronAPI.on('ai:sessionCancelled', handleSessionCancelled);
+    return () => {
+      cleanup?.();
+    };
+  }, [sessionId]);
+
   // Handle ExitPlanMode confirmation response
   const handleExitPlanModeApprove = useCallback(async (requestId: string, confirmSessionId: string) => {
     // TODO: Debug logging - uncomment if needed
