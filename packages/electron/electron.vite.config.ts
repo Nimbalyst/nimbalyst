@@ -228,7 +228,7 @@ export default defineConfig({
       })()
     ].filter(Boolean),
     server: {
-      port: process.env.VITE_DEV_SERVER_PORT ? parseInt(process.env.VITE_DEV_SERVER_PORT) : 5273,
+      port: 5273,
       strictPort: true,
       watch: {
         // Force watching rexical and runtime source files in dev mode

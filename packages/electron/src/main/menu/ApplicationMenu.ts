@@ -38,7 +38,7 @@ import { getFileWatcherStatus, refreshWorkspaceFileTree, getGlobalFileWatcherSta
 import { getFolderContents } from '../utils/FileTree';
 import { logger } from '../utils/logger';
 import { getFocusedWindow } from '../utils/windowFocus';
-import { getAutoUpdaterService } from '../services/autoUpdater';
+import { autoUpdaterService } from '../services/autoUpdater';
 import { KeyboardShortcuts } from './KeyboardShortcuts';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { FeatureTrackingService } from '../services/analytics/FeatureTrackingService';
@@ -1262,7 +1262,7 @@ export async function createApplicationMenu() {
                 {
                     label: 'Check for Updates...',
                     click: async () => {
-                        getAutoUpdaterService().checkForUpdatesWithUI();
+                        autoUpdaterService.checkForUpdatesWithUI();
                     }
                 },
                 { type: 'separator' },
@@ -1475,7 +1475,7 @@ export async function createApplicationMenu() {
                 {
                     label: 'Check for Updates...',
                     click: async () => {
-                        getAutoUpdaterService().checkForUpdatesWithUI();
+                        autoUpdaterService.checkForUpdatesWithUI();
                     }
                 }
             ]

@@ -62,18 +62,13 @@ import { startPerformanceMonitoring, stopPerformanceMonitoring } from './utils/p
 import { setupForceQuit } from './utils/forceQuit';
 import { stopAllFileWatchers } from './file/FileWatcher';
 import { stopAllWorkspaceWatchers } from './file/WorkspaceWatcher.ts';
-import { getAutoUpdaterService, AutoUpdaterService } from './services/autoUpdater';
+import { autoUpdaterService, AutoUpdaterService } from './services/autoUpdater';
 import { initializeDatabase } from './database/initialize';
 import { AnalyticsService } from "./services/analytics/AnalyticsService.ts";
 import { registerAnalyticsHandlers } from "./ipc/AnalyticsHandlers.ts";
 import { shutdownStytchAuth, handleAuthCallback } from './services/StytchAuthService';
 import { getPermissionService } from './services/PermissionService';
 import { ClaudeSettingsManager } from './services/ClaudeSettingsManager';
-import { initializeDevDataStore, isDevDataStoreActive, getDevDataStoreId } from './utils/devDataStore';
-
-// CRITICAL: Initialize dev data store isolation BEFORE any other app operations
-// This must happen before app.whenReady() to properly override userData paths
-initializeDevDataStore();
 
 // CRITICAL: Hide dock icon when running as background Node process
 // This prevents Terminal icon from appearing when Claude Code spawns child processes
@@ -369,14 +364,6 @@ app.whenReady().then(async () => {
     overrideConsole();
 
     logger.main.info('App ready');
-
-    // Log dev data store status if active
-    if (isDevDataStoreActive()) {
-        const devId = getDevDataStoreId();
-        logger.main.info(`DEV DATA STORE ACTIVE: Using isolated datastore ${devId}`);
-        logger.main.info(`  User Data Path: ${app.getPath('userData')}`);
-        logger.main.info(`  App Name: ${app.getName()}`);
-    }
 
     // Track app launch for Discord invitation
     const launchCount = incrementLaunchCount();
@@ -750,9 +737,7 @@ app.whenReady().then(async () => {
     // Initialize auto-updater (only in production)
     if (app.isPackaged) {
         logger.main.info('Starting auto-updater service');
-        const autoUpdater = getAutoUpdaterService();
-        autoUpdater.initialize(); // Configure feed URL (accesses store)
-        autoUpdater.startAutoUpdateCheck(60); // Check every hour
+        autoUpdaterService.startAutoUpdateCheck(60); // Check every hour
     } else {
         logger.main.info('Skipping auto-updater in development mode');
     }

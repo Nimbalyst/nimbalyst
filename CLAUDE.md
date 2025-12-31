@@ -41,10 +41,6 @@ For detailed information about specific packages, see their CLAUDE.md files:
 - **Build for Mac**: `cd packages/electron && npm run build:mac:local`
 - **Build for Mac (notarized)**: `cd packages/electron && npm run build:mac:notarized`
 
-### Development Data Store Isolation
-
-For running multiple isolated instances of Nimbalyst for development/testing, see [DEV_DATA_STORE.md](./docs/DEV_DATA_STORE.md).
-
 ### Testing
 - **Unit tests**: `npm run test:unit` - Uses vitest
 - **Test UI**: `npm run test:unit:ui`
@@ -62,7 +58,7 @@ See `/docs/PLAYWRIGHT.md` for comprehensive E2E testing documentation.
 
 ## Releases
 
-For detailed release instructions, see [RELEASING.md](./RELEASING.md).
+For detailed release instructions, see [RELEASING.md](RELEASING.md).
 
 **Quick reference:**
 - Use the `/release [patch|minor|major]` command
@@ -206,7 +202,7 @@ planStatus:
 - **Never commit changes unless explicitly asked**
 - **Never provide time or effort estimates**
 - **Don't disable tests without asking first**
-- **Don't run \****`npm run dev`**\*\* yourself** - User always does that
+- **Don't run `npm run dev` yourself** - User always does that
 - **Never release without being explicitly instructed**
 - **Don't git reset or git add -A without asking**
 - **Don't add Co-Authored-By lines to commit messages**
@@ -218,7 +214,7 @@ When working on extensions in `packages/extensions/`:
 - Use `mcp__nimbalyst-extension-dev__extension_reload` to rebuild and reload extensions
 - Use `mcp__nimbalyst-extension-dev__extension_get_logs` to check for errors
 - Use `mcp__nimbalyst-extension-dev__extension_get_status` to verify extension state
-- **Never use manual \****`npm run build`** - always use the MCP tools for extension builds
+- **Never use manual `npm run build`** - always use the MCP tools for extension builds
 
 ## Testing Guidelines
 
@@ -229,11 +225,11 @@ When working on extensions in `packages/extensions/`:
 
 ## Documentation
 
-- **ANALYTICS\_GUIDE.md**: How to add PostHog analytics events
-- **POSTHOG\_EVENTS.md**: Canonical reference for all analytics events
+- **ANALYTICS_GUIDE.md**: How to add PostHog analytics events
+- **POSTHOG_EVENTS.md**: Canonical reference for all analytics events
 - **PLAYWRIGHT.md**: E2E testing patterns and best practices
-- **AI\_PROVIDER\_TYPES.md**: AI provider architecture
-- **CUSTOM\_TOOL\_WIDGETS.md**: Custom MCP tool widget implementation
-- **INTERNAL\_MCP\_SERVERS.md**: How to implement internal MCP servers
+- **AI_PROVIDER_TYPES.md**: AI provider architecture
+- **CUSTOM_TOOL_WIDGETS.md**: Custom MCP tool widget implementation
+- **INTERNAL_MCP_SERVERS.md**: How to implement internal MCP servers
 - **THEMING.md**: Theming system documentation (in electron package)
 - **RELEASING.md**: Release process

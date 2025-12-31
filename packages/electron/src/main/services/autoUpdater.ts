@@ -22,20 +22,14 @@ export class AutoUpdaterService {
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
 
+    // Configure feed URL based on release channel
+    this.configureFeedURL();
+
     // Set up event handlers
     this.setupEventHandlers();
 
     // Set up IPC handlers for renderer communication
     this.setupIpcHandlers();
-  }
-
-  /**
-   * Initialize the auto-updater service.
-   * MUST be called after app.setName() if using DEV_DATA_STORE isolation.
-   */
-  public initialize() {
-    // Configure feed URL based on release channel (accesses store)
-    this.configureFeedURL();
   }
 
   private configureFeedURL() {
@@ -450,19 +444,8 @@ export class AutoUpdaterService {
   }
 }
 
-// Lazy singleton instance to avoid accessing store during module initialization
-let autoUpdaterServiceInstance: AutoUpdaterService | null = null;
-
-/**
- * Get the auto-updater service singleton.
- * Lazily instantiated to avoid accessing the store before app.setName() is called.
- */
-export function getAutoUpdaterService(): AutoUpdaterService {
-  if (!autoUpdaterServiceInstance) {
-    autoUpdaterServiceInstance = new AutoUpdaterService();
-  }
-  return autoUpdaterServiceInstance;
-}
+// Export singleton instance
+export const autoUpdaterService = new AutoUpdaterService();
 
 // Test helpers - only used in test environment
 if (process.env.NODE_ENV === 'test' || process.env.PLAYWRIGHT === '1') {

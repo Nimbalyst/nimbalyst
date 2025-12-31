@@ -15,7 +15,6 @@ import { navigationHistoryService } from '../services/NavigationHistoryService';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { FeatureTrackingService } from '../services/analytics/FeatureTrackingService';
 import { ExtensionLogService } from '../services/ExtensionLogService';
-import { getDevDataStoreId } from '../utils/devDataStore';
 
 // Window management
 export const windows = new Map<number, BrowserWindow>();
@@ -703,12 +702,6 @@ export function updateWindowTitle(window: BrowserWindow) {
         if (state.documentEdited) {
             title = `${title} •`;
         }
-    }
-
-    // Add dev data store indicator if active
-    const devDataStoreId = getDevDataStoreId();
-    if (devDataStoreId) {
-        title = `[DS${devDataStoreId}] ${title}`;
     }
 
     window.setTitle(title);
