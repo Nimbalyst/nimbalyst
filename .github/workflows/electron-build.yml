@@ -70,17 +70,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: '**/package-lock.json'
+          # npm cache disabled - was causing esbuild binary version mismatches
+          # cache: 'npm'
+          # cache-dependency-path: '**/package-lock.json'
 
       - name: Upgrade npm to 10.x
         run: npm install -g npm@10
-
-      # Remove packages not needed for electron build that have esbuild cache issues
-      - name: Remove unneeded packages
-        run: |
-          node -e "require('fs').rmSync('packages/capacitor', {recursive:true, force:true})"
-          node -e "require('fs').rmSync('packages/collabv3', {recursive:true, force:true})"
 
       - name: Install dependencies
         run: npm ci
