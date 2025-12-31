@@ -79,6 +79,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Rebuild esbuild in capacitor to ensure correct binary for this platform
+      # Fixes version mismatch when npm cache restores wrong binary
+      - name: Rebuild esbuild for capacitor
+        working-directory: packages/capacitor
+        run: npm rebuild esbuild
+
       - name: Build rexical package
         working-directory: packages/rexical
         env:
