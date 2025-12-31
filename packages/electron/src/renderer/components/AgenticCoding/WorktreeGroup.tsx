@@ -26,6 +26,7 @@ interface GitStatus {
 interface WorktreeData {
   id: string;
   name: string;
+  displayName?: string;
   path: string;
   branch: string;
 }
@@ -131,7 +132,7 @@ export const WorktreeGroup: React.FC<WorktreeGroupProps> = ({
             <path d="M8 9v4a2 2 0 0 0 2 2"/>
           </svg>
         </div>
-        <span className="worktree-group-name">{worktree.name}</span>
+        <span className="worktree-group-name">{worktree.displayName || worktree.name}</span>
         <div className="worktree-group-badges">
           {gitStatus?.ahead && gitStatus.ahead > 0 && (
             <span className="worktree-group-badge ahead">

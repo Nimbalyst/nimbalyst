@@ -15,6 +15,7 @@ const logger = log.scope('WorktreeStore');
 export interface Worktree {
   id: string;
   name: string;
+  displayName?: string; // User-friendly display name (set from first session named in this worktree)
   path: string;
   branch: string;
   baseBranch: string;
@@ -133,6 +134,7 @@ export function createWorktreeStore(db: PGliteLike, ensureDbReady?: EnsureReadyF
       const worktree: Worktree = {
         id: row.id,
         name: row.name,
+        displayName: row.display_name ?? undefined,
         path: row.path,
         branch: row.branch,
         baseBranch: row.base_branch,
@@ -166,6 +168,7 @@ export function createWorktreeStore(db: PGliteLike, ensureDbReady?: EnsureReadyF
       const worktree: Worktree = {
         id: row.id,
         name: row.name,
+        displayName: row.display_name ?? undefined,
         path: row.path,
         branch: row.branch,
         baseBranch: row.base_branch,
@@ -195,6 +198,7 @@ export function createWorktreeStore(db: PGliteLike, ensureDbReady?: EnsureReadyF
       const worktrees = rows.map(row => ({
         id: row.id,
         name: row.name,
+        displayName: row.display_name ?? undefined,
         path: row.path,
         branch: row.branch,
         baseBranch: row.base_branch,
@@ -241,6 +245,11 @@ export function createWorktreeStore(db: PGliteLike, ensureDbReady?: EnsureReadyF
       if (updates.projectPath !== undefined) {
         fields.push(`workspace_id = $${values.length + 1}`);
         values.push(updates.projectPath);
+      }
+
+      if (updates.displayName !== undefined) {
+        fields.push(`display_name = $${values.length + 1}`);
+        values.push(updates.displayName);
       }
 
       // Always update updated_at timestamp
@@ -314,6 +323,31 @@ export function createWorktreeStore(db: PGliteLike, ensureDbReady?: EnsureReadyF
       logger.info('Found sessions for worktree', { worktreeId, count: sessionIds.length });
 
       return sessionIds;
+    },
+
+    /**
+     * Update display name only if it hasn't been set yet (atomic conditional update).
+     * This is used to set the worktree's display name from the first session that gets named.
+     *
+     * @returns true if the display name was updated, false if it was already set
+     */
+    async updateDisplayNameIfEmpty(id: string, displayName: string): Promise<boolean> {
+      await ensureReady();
+
+      logger.info('Updating worktree display name if empty', { id, displayName });
+
+      const { rows } = await db.query<{ affected: number }>(
+        `UPDATE worktrees
+         SET display_name = $2, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1 AND display_name IS NULL
+         RETURNING 1 as affected`,
+        [id, displayName]
+      );
+
+      const updated = rows.length > 0;
+      logger.info('Worktree display name update result', { id, updated });
+
+      return updated;
     },
   };
 }

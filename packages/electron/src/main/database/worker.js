@@ -630,6 +630,25 @@ class PGLiteWorker {
       console.error('[PGLite Worker] Failed to add worktree_id column:', error);
       throw error;
     }
+
+    // Add display_name column to worktrees (migration)
+    try {
+      await this.db.exec(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'worktrees' AND column_name = 'display_name'
+          ) THEN
+            ALTER TABLE worktrees ADD COLUMN display_name TEXT;
+          END IF;
+        END $$;
+      `);
+      console.log('[PGLite Worker] display_name column added to worktrees');
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to add display_name column:', error);
+      throw error;
+    }
   }
 
   async query(message) {

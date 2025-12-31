@@ -26,6 +26,7 @@ interface SessionItem {
 interface WorktreeData {
   id: string;
   name: string;
+  displayName?: string;
   path: string;
   branch: string;
   base_branch?: string;
@@ -47,6 +48,7 @@ interface SessionHistoryProps {
   unreadSessions?: Set<string>; // IDs of sessions with unread messages
   pendingPromptSessions?: Set<string>; // IDs of sessions with pending permission/question prompts
   renamedSession?: { id: string; title: string } | null; // Session that was just renamed
+  renamedWorktree?: { worktreeId: string; displayName: string } | null; // Worktree that just got a display name
   updatedSession?: { id: string; timestamp: number } | null; // Session that was just updated
   onSessionSelect: (sessionId: string) => void;
   onSessionDelete?: (sessionId: string) => void;
@@ -151,6 +153,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   unreadSessions = new Set(),
   pendingPromptSessions = new Set(),
   renamedSession = null,
+  renamedWorktree = null,
   updatedSession = null,
   onSessionSelect,
   onSessionDelete,
@@ -406,6 +409,24 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       }));
     }
   }, [renamedSession]);
+
+  // Update worktree display name when first session in worktree is named
+  useEffect(() => {
+    if (renamedWorktree) {
+      setWorktreeCache(prev => {
+        const existing = prev.get(renamedWorktree.worktreeId);
+        if (existing) {
+          const updated = new Map(prev);
+          updated.set(renamedWorktree.worktreeId, {
+            ...existing,
+            displayName: renamedWorktree.displayName
+          });
+          return updated;
+        }
+        return prev;
+      });
+    }
+  }, [renamedWorktree]);
 
   // Update session timestamp when updated (efficient update without database reload)
   useEffect(() => {

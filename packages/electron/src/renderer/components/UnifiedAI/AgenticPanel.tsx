@@ -161,6 +161,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   const [sessionHistoryRefreshTrigger, setSessionHistoryRefreshTrigger] = useState(0);
   const [renamedSession, setRenamedSession] = useState<{ id: string; title: string } | null>(null);
   const [updatedSession, setUpdatedSession] = useState<{ id: string; timestamp: number } | null>(null);
+  const [renamedWorktree, setRenamedWorktree] = useState<{ worktreeId: string; displayName: string } | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [worktreeSessionModes, setWorktreeSessionModes] = useState<Map<string, WorktreeContentMode>>(new Map());
   const worktreeSessionModesRef = useRef(worktreeSessionModes);
@@ -1754,6 +1755,24 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     };
   }, [mode, isActive]);
 
+  // Listen for worktree display name updates (when first session in worktree is named)
+  useEffect(() => {
+    const handleWorktreeDisplayNameUpdated = (data: { worktreeId: string; displayName: string }) => {
+      if (!data || !data.worktreeId) return;
+
+      console.log('[AgenticPanel] Worktree display name updated:', data.worktreeId, '->', data.displayName);
+
+      // Update session history to reflect the new worktree display name
+      setRenamedWorktree({ worktreeId: data.worktreeId, displayName: data.displayName });
+    };
+
+    const cleanup = window.electronAPI.on('worktree:display-name-updated', handleWorktreeDisplayNameUpdated);
+
+    return () => {
+      cleanup?.();
+    };
+  }, []);
+
   // Listen for queued prompts notification - triggers processing from the queued_prompts table
   // The actual prompts are fetched from the database, not from the IPC payload
   useEffect(() => {
@@ -3209,6 +3228,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             unreadSessions={unreadSessions}
             pendingPromptSessions={pendingPromptSessions}
             renamedSession={renamedSession}
+            renamedWorktree={renamedWorktree}
             updatedSession={updatedSession}
             onSessionSelect={openSessionInTab}
             onSessionDelete={deleteSession}
