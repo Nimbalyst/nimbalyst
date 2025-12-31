@@ -20,6 +20,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.50.3] - 2025-12-31
+
+### Added
+- Mobile can cancel running sessions and answer questions via sync
+- Mobile AskUserQuestion prompts can now be cancelled
+- Extension dev menu shows process uptime
+- CSV cells save on click-away like Google Sheets
+- Extension errors now visible with detailed diagnostics
+- iOS development tools extension
+
+### Fixed
+- Encrypt project_id in mobile sync for privacy
+- Markdown view mode switch no longer crashes on diff header
+- CSV spreadsheet keyboard focus preserved after cell edits
+- Mobile sync commands now fail if encryption unavailable
+- CSV requires alpha release channel
+- Extension AI tools now return useful data instead of failing
+- PDF viewer no longer freezes in infinite loading loop
+- Opening already-open project focuses existing window instead of creating duplicate
+- Validate todos is an array before calling .filter()
+- Permissions on internal build
+
 ## [0.50.2] - 2025-12-29
 
 
