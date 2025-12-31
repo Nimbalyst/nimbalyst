@@ -96,6 +96,13 @@ jobs:
       - name: Install dependencies
         run: |
           echo "npm version for ci: $(npm --version)"
+          echo "npm prefix: $(npm prefix)"
+          echo "npm root: $(npm root)"
+          echo "Contents of npm prefix:"
+          ls -la "$(npm prefix)" | head -10
+          echo "npm config list:"
+          npm config list
+          echo "Running npm ci..."
           npm ci
 
       - name: Build rexical package
