@@ -79,18 +79,24 @@ jobs:
       - name: Debug - Check for package-lock.json
         run: |
           echo "Current directory: $(pwd)"
+          echo "npm version: $(npm --version)"
+          echo "node version: $(node --version)"
           echo "Listing root files:"
           ls -la
           echo "Checking package-lock.json:"
           if [ -f package-lock.json ]; then
             echo "package-lock.json exists"
             head -5 package-lock.json
+            echo "Validating JSON..."
+            node -e "JSON.parse(require('fs').readFileSync('package-lock.json'))" && echo "JSON is valid" || echo "JSON is INVALID"
           else
             echo "package-lock.json NOT FOUND!"
           fi
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          echo "npm version for ci: $(npm --version)"
+          npm ci
 
       - name: Build rexical package
         working-directory: packages/rexical
