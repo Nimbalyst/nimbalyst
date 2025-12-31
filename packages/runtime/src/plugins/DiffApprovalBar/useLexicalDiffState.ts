@@ -57,6 +57,9 @@ export function useLexicalDiffState(editor: LexicalEditor | undefined): LexicalD
   const updateGroups = useCallback(() => {
     if (!editor) return;
 
+    // Guard against non-Lexical editors (e.g., Monaco editor passed by mistake during view mode switch)
+    if (typeof editor.getEditorState !== 'function') return;
+
     const groups = groupDiffChanges(editor);
     setChangeGroups(groups);
 
@@ -77,6 +80,9 @@ export function useLexicalDiffState(editor: LexicalEditor | undefined): LexicalD
   // Apply/remove highlighting based on current group
   useEffect(() => {
     if (!editor || changeGroups.length === 0) return;
+
+    // Guard against non-Lexical editors
+    if (typeof editor.getEditorState !== 'function') return;
 
     const removeHighlights = () => {
       editor.update(() => {
@@ -147,6 +153,9 @@ export function useLexicalDiffState(editor: LexicalEditor | undefined): LexicalD
   useEffect(() => {
     if (!editor) return;
 
+    // Guard against non-Lexical editors
+    if (typeof editor.registerUpdateListener !== 'function') return;
+
     updateGroups();
 
     const removeUpdateListener = editor.registerUpdateListener(() => {
@@ -161,6 +170,9 @@ export function useLexicalDiffState(editor: LexicalEditor | undefined): LexicalD
   // Selection detection to update current group
   useEffect(() => {
     if (!editor || changeGroups.length === 0) return;
+
+    // Guard against non-Lexical editors
+    if (typeof editor.getEditorState !== 'function') return;
 
     const handleSelectionChange = () => {
       if (isNavigatingRef.current) return;
