@@ -75,7 +75,8 @@ describe('Message protocol', () => {
       metadata: {
         title: 'Test Session',
         provider: 'claude',
-        project_id: 'project-1',
+        encrypted_project_id: 'base64-encrypted-project-id',
+        project_id_iv: 'base64-iv',
         created_at: Date.now(),
         updated_at: Date.now(),
       },
@@ -84,13 +85,16 @@ describe('Message protocol', () => {
     };
 
     expect(msg.type).toBe('sync_response');
-    expect(msg.metadata?.title).toBe('Test Session');
+    if (msg.type === 'sync_response') {
+      expect(msg.metadata?.title).toBe('Test Session');
+    }
   });
 
   it('should create valid index_sync_response message', () => {
     const session: SessionIndexEntry = {
       session_id: 'sess-123',
-      project_id: 'proj-456',
+      encrypted_project_id: 'base64-encrypted-project-id',
+      project_id_iv: 'base64-iv',
       encrypted_title: 'base64-encrypted-title',
       title_iv: 'base64-iv',
       provider: 'claude',
@@ -105,8 +109,10 @@ describe('Message protocol', () => {
       sessions: [session],
       projects: [
         {
-          project_id: 'proj-456',
-          name: 'My Project',
+          encrypted_project_id: 'base64-encrypted-project-id',
+          project_id_iv: 'base64-iv',
+          encrypted_name: 'base64-encrypted-name',
+          name_iv: 'base64-iv',
           session_count: 1,
           last_activity_at: Date.now(),
           sync_enabled: true,
@@ -115,8 +121,10 @@ describe('Message protocol', () => {
     };
 
     expect(msg.type).toBe('index_sync_response');
-    expect(msg.sessions).toHaveLength(1);
-    expect(msg.projects).toHaveLength(1);
+    if (msg.type === 'index_sync_response') {
+      expect(msg.sessions).toHaveLength(1);
+      expect(msg.projects).toHaveLength(1);
+    }
   });
 });
 

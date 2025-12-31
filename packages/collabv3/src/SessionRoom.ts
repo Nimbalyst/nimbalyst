@@ -102,6 +102,21 @@ export class SessionRoom implements DurableObject {
       );
     `);
 
+    // Migration: Delete old sessions that have plaintext project_id
+    // New sessions use encrypted_project_id instead
+    const hasOldProjectId = sql.exec<{ value: string }>(
+      `SELECT value FROM metadata WHERE key = 'project_id'`
+    ).toArray()[0];
+    const hasNewProjectId = sql.exec<{ value: string }>(
+      `SELECT value FROM metadata WHERE key = 'encrypted_project_id'`
+    ).toArray()[0];
+
+    if (hasOldProjectId && !hasNewProjectId) {
+      // Old unencrypted session - clear all data
+      sql.exec(`DELETE FROM messages`);
+      sql.exec(`DELETE FROM metadata`);
+    }
+
     this.initialized = true;
   }
 
@@ -109,6 +124,9 @@ export class SessionRoom implements DurableObject {
    * Handle HTTP requests (WebSocket upgrades and REST endpoints)
    */
   async fetch(request: Request): Promise<Response> {
+    // Ensure tables exist and old data is cleaned up
+    await this.ensureInitialized();
+
     const url = new URL(request.url);
 
     // Handle WebSocket upgrade
@@ -453,7 +471,9 @@ export class SessionRoom implements DurableObject {
       provider: metadata.provider ?? 'unknown',
       model: metadata.model,
       mode: metadata.mode as SessionMetadata['mode'],
-      project_id: metadata.project_id ?? 'default',
+      // Server stores encrypted values opaquely - pass through as-is
+      encrypted_project_id: metadata.encrypted_project_id ?? '',
+      project_id_iv: metadata.project_id_iv ?? '',
       created_at: parseInt(metadata.created_at ?? '0', 10),
       updated_at: parseInt(metadata.updated_at ?? '0', 10),
     };

@@ -77,7 +77,10 @@ interface SessionMetadata {
   provider: string;
   model?: string;
   mode?: 'agent' | 'planning';
-  project_id: string;
+  /** Encrypted project ID (base64) - required for wire protocol */
+  encrypted_project_id: string;
+  /** IV for project_id decryption (base64) */
+  project_id_iv: string;
   created_at: number;
   updated_at: number;
   pendingExecution?: {
@@ -92,7 +95,10 @@ interface SessionMetadata {
 
 interface SessionIndexEntry {
   session_id: string;
-  project_id: string;
+  /** Encrypted project ID (base64) - required for wire protocol */
+  encrypted_project_id: string;
+  /** IV for project_id decryption (base64) */
+  project_id_iv: string;
   /** Encrypted title (base64) */
   encrypted_title?: string;
   /** IV for title decryption (base64) */
@@ -121,16 +127,20 @@ interface SessionIndexEntry {
   hasPendingPrompt?: boolean;
 }
 
-/** Decrypted session index entry with required title - used for return values */
-type DecryptedSessionIndexEntry = Omit<SessionIndexEntry, 'title' | 'encrypted_title' | 'title_iv' | 'encryptedQueuedPrompts'> & {
+/** Decrypted session index entry with required title and project_id - used for return values */
+type DecryptedSessionIndexEntry = Omit<SessionIndexEntry, 'title' | 'encrypted_title' | 'title_iv' | 'encrypted_project_id' | 'project_id_iv' | 'encryptedQueuedPrompts'> & {
   title: string;  // Required after decryption
+  project_id: string;  // Decrypted project ID
   queuedPrompts?: PlaintextQueuedPrompt[];  // Decrypted queued prompts
 };
 
 /** Encrypted create session request for wire protocol */
 interface EncryptedCreateSessionRequest {
   request_id: string;
-  project_id: string;
+  /** Encrypted project ID (base64) - required for wire protocol */
+  encrypted_project_id: string;
+  /** IV for project_id decryption (base64) */
+  project_id_iv: string;
   /** Encrypted initial prompt (base64), optional */
   encrypted_initial_prompt?: string;
   /** IV for prompt decryption (base64), required if encrypted_initial_prompt present */
@@ -160,13 +170,26 @@ type ClientMessage =
   | { type: 'create_session_response'; response: EncryptedCreateSessionResponse }
   | { type: 'session_control'; message: { session_id: string; message_type: string; payload?: Record<string, unknown>; timestamp: number; sent_by: 'desktop' | 'mobile' } };
 
+/** Encrypted project index entry from server */
+interface ServerProjectEntry {
+  encrypted_project_id: string;
+  project_id_iv: string;
+  encrypted_name: string;
+  name_iv: string;
+  encrypted_path?: string;
+  path_iv?: string;
+  session_count: number;
+  last_activity_at: number;
+  sync_enabled: boolean;
+}
+
 type ServerMessage =
   | { type: 'sync_response'; messages: EncryptedMessage[]; metadata: SessionMetadata | null; has_more: boolean; cursor: string | null }
   | { type: 'message_broadcast'; message: EncryptedMessage; from_connection_id?: string }
   | { type: 'metadata_broadcast'; metadata: Partial<SessionMetadata>; from_connection_id?: string }
-  | { type: 'index_sync_response'; sessions: SessionIndexEntry[]; projects: Array<{ project_id: string; name: string; session_count: number; last_activity_at: number; sync_enabled: boolean }> }
+  | { type: 'index_sync_response'; sessions: SessionIndexEntry[]; projects: ServerProjectEntry[] }
   | { type: 'index_broadcast'; session: SessionIndexEntry; from_connection_id?: string }
-  | { type: 'project_broadcast'; project: { project_id: string; name: string; session_count: number; last_activity_at: number; sync_enabled: boolean }; from_connection_id?: string }
+  | { type: 'project_broadcast'; project: ServerProjectEntry; from_connection_id?: string }
   | { type: 'devices_list'; devices: DeviceInfo[] }
   | { type: 'device_joined'; device: DeviceInfo }
   | { type: 'device_left'; device_id: string }
@@ -357,6 +380,102 @@ async function decryptTitle(
   return decrypt(encrypted_title, title_iv, key);
 }
 
+/**
+ * Fixed IV for project_id encryption.
+ * Using a fixed IV makes encryption deterministic so the same project_id always
+ * produces the same ciphertext, allowing the server to deduplicate by encrypted value.
+ * This is acceptable because project_ids are not secret (just privacy-sensitive)
+ * and the encryption key itself provides the security.
+ */
+const PROJECT_ID_FIXED_IV = new Uint8Array([
+  0x70, 0x72, 0x6f, 0x6a, 0x65, 0x63, 0x74, 0x5f, 0x69, 0x64, 0x5f, 0x69 // "project_id_i"
+]);
+
+/**
+ * Encrypt a project ID for wire transmission.
+ * Uses a fixed IV so the same project_id always produces the same ciphertext,
+ * enabling server-side deduplication.
+ */
+async function encryptProjectId(
+  projectId: string,
+  key: CryptoKey
+): Promise<{ encrypted_project_id: string; project_id_iv: string }> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(projectId);
+
+  const encrypted = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv: PROJECT_ID_FIXED_IV },
+    key,
+    data
+  );
+
+  return {
+    encrypted_project_id: btoa(String.fromCharCode(...new Uint8Array(encrypted))),
+    project_id_iv: btoa(String.fromCharCode(...PROJECT_ID_FIXED_IV)),
+  };
+}
+
+/**
+ * Decrypt a project ID received from wire.
+ */
+async function decryptProjectId(
+  encrypted_project_id: string,
+  project_id_iv: string,
+  key: CryptoKey
+): Promise<string> {
+  return decrypt(encrypted_project_id, project_id_iv, key);
+}
+
+/**
+ * Encrypt a project name for wire transmission.
+ */
+async function encryptProjectName(
+  name: string,
+  key: CryptoKey
+): Promise<{ encrypted_name: string; name_iv: string }> {
+  const { encrypted, iv } = await encrypt(name, key);
+  return {
+    encrypted_name: encrypted,
+    name_iv: iv,
+  };
+}
+
+/**
+ * Decrypt a project name received from wire.
+ */
+async function decryptProjectName(
+  encrypted_name: string,
+  name_iv: string,
+  key: CryptoKey
+): Promise<string> {
+  return decrypt(encrypted_name, name_iv, key);
+}
+
+/**
+ * Encrypt a project path for wire transmission.
+ */
+async function encryptProjectPath(
+  path: string,
+  key: CryptoKey
+): Promise<{ encrypted_path: string; path_iv: string }> {
+  const { encrypted, iv } = await encrypt(path, key);
+  return {
+    encrypted_path: encrypted,
+    path_iv: iv,
+  };
+}
+
+/**
+ * Decrypt a project path received from wire.
+ */
+async function decryptProjectPath(
+  encrypted_path: string,
+  path_iv: string,
+  key: CryptoKey
+): Promise<string> {
+  return decrypt(encrypted_path, path_iv, key);
+}
+
 // ============================================================================
 // Session Connection
 // ============================================================================
@@ -433,7 +552,8 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
   let deviceAnnounceInterval: ReturnType<typeof setInterval> | null = null;
 
   // Listeners for index changes (session updates broadcast to all connected clients)
-  const indexChangeListeners = new Set<(sessionId: string, entry: SessionIndexEntry) => void>();
+  // Listeners receive decrypted data (CachedSessionIndex format)
+  const indexChangeListeners = new Set<(sessionId: string, entry: CachedSessionIndex) => void>();
 
   // Listeners for session creation requests (from mobile)
   const createSessionRequestListeners = new Set<(request: CreateSessionRequest) => void>();
@@ -502,10 +622,20 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
     // Update cache with decrypted values
     sessionIndexCache.set(sessionId, updatedCache);
 
-    // Build wire entry - DO NOT include plaintext title
+    // For wire transmission, encrypt sensitive fields - encryption is required
+    if (!config.encryptionKey) {
+      console.error('[CollabV3] Cannot send session update: no encryption key');
+      return;
+    }
+
+    // Encrypt project_id
+    const { encrypted_project_id, project_id_iv } = await encryptProjectId(updatedCache.project_id, config.encryptionKey);
+
+    // Build wire entry - DO NOT include plaintext values
     const indexEntry: SessionIndexEntry = {
       session_id: updatedCache.session_id,
-      project_id: updatedCache.project_id,
+      encrypted_project_id,
+      project_id_iv,
       provider: updatedCache.provider,
       model: updatedCache.model,
       mode: updatedCache.mode,
@@ -517,15 +647,11 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       isExecuting: updatedCache.isExecuting,
     };
 
-    // For wire transmission, encrypt the title - encryption is required
+    // Encrypt title
     if (updatedCache.title) {
-      if (!config.encryptionKey) {
-        console.error('[CollabV3] Cannot send session title: no encryption key');
-      } else {
-        const { encrypted_title, title_iv } = await encryptTitle(updatedCache.title, config.encryptionKey);
-        indexEntry.encrypted_title = encrypted_title;
-        indexEntry.title_iv = title_iv;
-      }
+      const { encrypted_title, title_iv } = await encryptTitle(updatedCache.title, config.encryptionKey);
+      indexEntry.encrypted_title = encrypted_title;
+      indexEntry.title_iv = title_iv;
     }
 
     // Send to server
@@ -924,12 +1050,26 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
           case 'index_sync_response': {
             // console.log('[CollabV3] Received index_sync_response:', message.sessions.length, 'sessions');
             if (pendingIndexFetch) {
-              // Decrypt titles and queued prompts before returning
+              // Decrypt sensitive fields before returning
               const decryptedSessions: DecryptedSessionIndexEntry[] = await Promise.all(
                 message.sessions.map(async (entry): Promise<DecryptedSessionIndexEntry> => {
                   // Start with base fields that don't need transformation
                   let title: string;
+                  let projectId: string;
                   let queuedPrompts: Array<{ id: string; prompt: string; timestamp: number }> | undefined;
+
+                  // Decrypt project_id - encrypted project_id is required
+                  if (entry.encrypted_project_id && entry.project_id_iv && config.encryptionKey) {
+                    try {
+                      projectId = await decryptProjectId(entry.encrypted_project_id, entry.project_id_iv, config.encryptionKey);
+                    } catch (err) {
+                      console.error('[CollabV3] Failed to decrypt session project_id:', err);
+                      projectId = 'unknown';
+                    }
+                  } else {
+                    // No encrypted project_id - use placeholder
+                    projectId = 'unknown';
+                  }
 
                   // Decrypt title - encrypted titles are required
                   if (entry.encrypted_title && entry.title_iv && config.encryptionKey) {
@@ -955,7 +1095,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
                   const decrypted: DecryptedSessionIndexEntry = {
                     session_id: entry.session_id,
-                    project_id: entry.project_id,
+                    project_id: projectId,
                     title,
                     provider: entry.provider,
                     model: entry.model,
@@ -993,9 +1133,49 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                 })
               );
 
+              // Decrypt project entries
+              const decryptedProjects = await Promise.all(
+                message.projects.map(async (proj) => {
+                  let projectId: string;
+                  let name: string;
+
+                  // Decrypt project_id
+                  if (proj.encrypted_project_id && proj.project_id_iv && config.encryptionKey) {
+                    try {
+                      projectId = await decryptProjectId(proj.encrypted_project_id, proj.project_id_iv, config.encryptionKey);
+                    } catch (err) {
+                      console.error('[CollabV3] Failed to decrypt project_id:', err);
+                      projectId = 'unknown';
+                    }
+                  } else {
+                    projectId = 'unknown';
+                  }
+
+                  // Decrypt name
+                  if (proj.encrypted_name && proj.name_iv && config.encryptionKey) {
+                    try {
+                      name = await decryptProjectName(proj.encrypted_name, proj.name_iv, config.encryptionKey);
+                    } catch (err) {
+                      console.error('[CollabV3] Failed to decrypt project name:', err);
+                      name = projectId.split('/').pop() ?? 'Unknown';
+                    }
+                  } else {
+                    name = projectId.split('/').pop() ?? 'Unknown';
+                  }
+
+                  return {
+                    project_id: projectId,
+                    name,
+                    session_count: proj.session_count,
+                    last_activity_at: proj.last_activity_at,
+                    sync_enabled: proj.sync_enabled,
+                  };
+                })
+              );
+
               pendingIndexFetch.resolve({
                 sessions: decryptedSessions,
-                projects: message.projects,
+                projects: decryptedProjects,
               });
               pendingIndexFetch = null;
             }
@@ -1005,9 +1185,23 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
           case 'index_broadcast': {
             // Another device updated a session - decrypt sensitive fields first
             const entry = message.session;
+
+            // Decrypt project_id - encrypted project_id is required
+            let projectId: string;
+            if (entry.encrypted_project_id && entry.project_id_iv && config.encryptionKey) {
+              try {
+                projectId = await decryptProjectId(entry.encrypted_project_id, entry.project_id_iv, config.encryptionKey);
+              } catch (err) {
+                console.error('[CollabV3] Failed to decrypt index entry project_id:', err);
+                projectId = 'unknown';
+              }
+            } else {
+              projectId = 'unknown';
+            }
+
             const decryptedEntry: CachedSessionIndex = {
               session_id: entry.session_id,
-              project_id: entry.project_id,
+              project_id: projectId,
               title: 'Untitled', // Will be overwritten if encrypted title present
               provider: entry.provider,
               model: entry.model,
@@ -1080,7 +1274,8 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
             // New project created by another device - log for now
             // Desktop clients currently don't need to update local state since projects are
             // derived from local workspace folders, not server state
-            console.log('[CollabV3] New project received from another device:', message.project.name);
+            // Note: Cannot log decrypted name as it would require async decryption
+            console.log('[CollabV3] New project received from another device');
             break;
 
           case 'devices_list':
@@ -1107,6 +1302,19 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
           case 'create_session_request_broadcast': {
             // Another device (mobile) requested session creation
+            // Decrypt project_id - required for encrypted wire protocol
+            let projectId: string;
+            if (message.request.encrypted_project_id && message.request.project_id_iv && config.encryptionKey) {
+              try {
+                projectId = await decryptProjectId(message.request.encrypted_project_id, message.request.project_id_iv, config.encryptionKey);
+              } catch (err) {
+                console.error('[CollabV3] Failed to decrypt project_id in create request:', err);
+                projectId = 'unknown';
+              }
+            } else {
+              projectId = 'unknown';
+            }
+
             // Decrypt the initial prompt if present
             let initialPrompt: string | undefined;
             if (message.request.encrypted_initial_prompt && message.request.initial_prompt_iv && config.encryptionKey) {
@@ -1119,7 +1327,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
             const decryptedRequest: CreateSessionRequest = {
               requestId: message.request.request_id,
-              projectId: message.request.project_id,
+              projectId,
               initialPrompt,
               timestamp: message.request.timestamp,
             };
@@ -1339,11 +1547,20 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
     // console.log('[CollabV3] Syncing', sessionsData.length, 'sessions to index');
 
-    // Build all entries, encrypting titles if we have an encryption key
+    // Build all entries, encrypting sensitive fields
     const entries: SessionIndexEntry[] = await Promise.all(sessionsData.map(async session => {
+      const projectId = session.workspaceId ?? 'default';
+
+      // Encrypt project_id - encryption is required
+      if (!config.encryptionKey) {
+        throw new Error('[CollabV3] Cannot send session: no encryption key for project_id');
+      }
+      const { encrypted_project_id, project_id_iv } = await encryptProjectId(projectId, config.encryptionKey);
+
       const entry: SessionIndexEntry = {
         session_id: session.id,
-        project_id: session.workspaceId ?? 'default',
+        encrypted_project_id,
+        project_id_iv,
         provider: session.provider,
         model: session.model,
         mode: session.mode as SessionIndexEntry['mode'],
@@ -1355,19 +1572,15 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
       // Encrypt title - encryption is required
       if (session.title) {
-        if (!config.encryptionKey) {
-          console.error('[CollabV3] Cannot send session title: no encryption key');
-        } else {
-          const { encrypted_title, title_iv } = await encryptTitle(session.title, config.encryptionKey);
-          entry.encrypted_title = encrypted_title;
-          entry.title_iv = title_iv;
-        }
+        const { encrypted_title, title_iv } = await encryptTitle(session.title, config.encryptionKey);
+        entry.encrypted_title = encrypted_title;
+        entry.title_iv = title_iv;
       }
 
-      // Cache the entry with DECRYPTED title for local use
+      // Cache the entry with DECRYPTED values for local use
       const cacheEntry: CachedSessionIndex = {
         session_id: session.id,
-        project_id: session.workspaceId ?? 'default',
+        project_id: projectId, // Store decrypted
         title: session.title, // Store decrypted
         provider: session.provider,
         model: session.model,
@@ -1635,10 +1848,20 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
           // Helper to build and send encrypted index entry
           const sendIndexUpdate = async (baseEntry: CachedSessionIndex) => {
+            // Encryption is required for all entries
+            if (!session.encryptionKey) {
+              console.error('[CollabV3] Cannot send session update: no encryption key');
+              return;
+            }
+
+            // Encrypt project_id for wire
+            const { encrypted_project_id, project_id_iv } = await encryptProjectId(baseEntry.project_id, session.encryptionKey);
+
             // Start with the cache entry (stores decrypted values)
             const indexEntry: SessionIndexEntry = {
               session_id: baseEntry.session_id,
-              project_id: baseEntry.project_id,
+              encrypted_project_id,
+              project_id_iv,
               provider: baseEntry.provider,
               model: baseEntry.model,
               mode: baseEntry.mode,
@@ -1650,15 +1873,11 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               isExecuting: baseEntry.isExecuting,
             };
 
-            // Encrypt title for wire - encryption is required
+            // Encrypt title for wire
             if (baseEntry.title) {
-              if (!session.encryptionKey) {
-                console.error('[CollabV3] Cannot send session title: no encryption key');
-              } else {
-                const { encrypted_title, title_iv } = await encryptTitle(baseEntry.title, session.encryptionKey);
-                indexEntry.encrypted_title = encrypted_title;
-                indexEntry.title_iv = title_iv;
-              }
+              const { encrypted_title, title_iv } = await encryptTitle(baseEntry.title, session.encryptionKey);
+              indexEntry.encrypted_title = encrypted_title;
+              indexEntry.title_iv = title_iv;
             }
 
             // Update local cache with decrypted values
@@ -1794,7 +2013,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       });
     },
 
-    onIndexChange(callback: (sessionId: string, entry: SessionIndexEntry) => void): () => void {
+    onIndexChange(callback: (sessionId: string, entry: CachedSessionIndex) => void): () => void {
       indexChangeListeners.add(callback);
       // console.log('[CollabV3] Added index change listener, total:', indexChangeListeners.size);
       return () => {
@@ -1849,14 +2068,24 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         return;
       }
 
+      // Encryption is required
+      if (!config.encryptionKey) {
+        console.error('[CollabV3] Cannot send create session request - no encryption key');
+        return;
+      }
+
+      // Encrypt project_id
+      const { encrypted_project_id, project_id_iv } = await encryptProjectId(request.projectId, config.encryptionKey);
+
       const wireRequest: EncryptedCreateSessionRequest = {
         request_id: request.requestId,
-        project_id: request.projectId,
+        encrypted_project_id,
+        project_id_iv,
         timestamp: request.timestamp,
       };
 
       // Encrypt initial prompt if present
-      if (request.initialPrompt && config.encryptionKey) {
+      if (request.initialPrompt) {
         try {
           const { encrypted, iv } = await encrypt(request.initialPrompt, config.encryptionKey);
           wireRequest.encrypted_initial_prompt = encrypted;

@@ -90,10 +90,12 @@ export class IndexRoom implements DurableObject {
     const sql = this.state.storage.sql;
 
     // Session index table
+    // Note: project_id column stores encrypted value (encrypted_project_id)
     sql.exec(`
       CREATE TABLE IF NOT EXISTS session_index (
         session_id TEXT PRIMARY KEY,
         project_id TEXT NOT NULL,
+        project_id_iv TEXT,
         title TEXT,
         encrypted_title TEXT,
         title_iv TEXT,
@@ -106,7 +108,6 @@ export class IndexRoom implements DurableObject {
         updated_at INTEGER NOT NULL
       );
 
-      CREATE INDEX IF NOT EXISTS idx_session_project ON session_index(project_id, updated_at DESC);
       CREATE INDEX IF NOT EXISTS idx_session_updated ON session_index(updated_at DESC);
     `);
 
@@ -121,18 +122,69 @@ export class IndexRoom implements DurableObject {
     } catch {
       // Column already exists
     }
+    // Migration: Add project_id_iv column for encrypted project_id
+    try {
+      sql.exec(`ALTER TABLE session_index ADD COLUMN project_id_iv TEXT`);
+    } catch {
+      // Column already exists
+    }
 
     // Project index table
+    // Note: project_id column stores encrypted value (encrypted_project_id)
+    // Note: name column stores encrypted value (encrypted_name)
     sql.exec(`
       CREATE TABLE IF NOT EXISTS project_index (
         project_id TEXT PRIMARY KEY,
+        project_id_iv TEXT,
         name TEXT NOT NULL,
+        name_iv TEXT,
         path TEXT,
+        path_iv TEXT,
         session_count INTEGER DEFAULT 0,
         last_activity_at INTEGER,
         sync_enabled INTEGER DEFAULT 1
       );
     `);
+
+    // Migration: Add IV columns for project_index
+    try {
+      sql.exec(`ALTER TABLE project_index ADD COLUMN project_id_iv TEXT`);
+    } catch {
+      // Column already exists
+    }
+    try {
+      sql.exec(`ALTER TABLE project_index ADD COLUMN name_iv TEXT`);
+    } catch {
+      // Column already exists
+    }
+    try {
+      sql.exec(`ALTER TABLE project_index ADD COLUMN path_iv TEXT`);
+    } catch {
+      // Column already exists
+    }
+
+    // Migration: Delete old unencrypted sessions and projects
+    // Old data has NULL project_id_iv (encrypted data always has an IV)
+    // First, get the session IDs so we can clean up their SessionRooms
+    const oldSessions = sql.exec<{ session_id: string }>(
+      `SELECT session_id FROM session_index WHERE project_id_iv IS NULL`
+    ).toArray();
+
+    // Trigger cleanup of old SessionRooms by calling them (this triggers their initialization)
+    for (const { session_id } of oldSessions) {
+      try {
+        const sessionRoomId = this.env.SESSION_ROOM.idFromName(session_id);
+        const sessionRoom = this.env.SESSION_ROOM.get(sessionRoomId);
+        // Just fetch status to trigger initialization, which will clean up old data
+        await sessionRoom.fetch(new Request('https://dummy/status'));
+      } catch (err) {
+        log.error('Failed to clean up old session room:', session_id, err);
+      }
+    }
+
+    // Now delete from index
+    sql.exec(`DELETE FROM session_index WHERE project_id_iv IS NULL`);
+    sql.exec(`DELETE FROM project_index WHERE project_id_iv IS NULL`);
 
     this.initialized = true;
   }
@@ -316,13 +368,14 @@ export class IndexRoom implements DurableObject {
   ): Promise<void> {
     const sql = this.state.storage.sql;
 
-    // Upsert session - titles are always encrypted
+    // Upsert session - titles and project_ids are always encrypted
     sql.exec(
       `INSERT OR REPLACE INTO session_index
-       (session_id, project_id, encrypted_title, title_iv, provider, model, mode, message_count, last_message_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (session_id, project_id, project_id_iv, encrypted_title, title_iv, provider, model, mode, message_count, last_message_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       session.session_id,
-      session.project_id,
+      session.encrypted_project_id,
+      session.project_id_iv,
       session.encrypted_title ?? null,
       session.title_iv ?? null,
       session.provider,
@@ -335,7 +388,8 @@ export class IndexRoom implements DurableObject {
     );
 
     // Update project stats (and broadcast if new project)
-    await this.updateProjectStats(session.project_id, ws);
+    // Pass encrypted_project_id as the opaque key for matching
+    await this.updateProjectStats(session.encrypted_project_id, session.project_id_iv, ws);
 
     // Broadcast to other connections
     this.broadcast(
@@ -360,15 +414,19 @@ export class IndexRoom implements DurableObject {
     const sql = this.state.storage.sql;
     const affectedProjects = new Set<string>();
 
+    // Track affected projects with their IVs for stats update
+    const affectedProjectIvs = new Map<string, string>();
+
     // Use Durable Objects transaction API for atomic batch update
     this.state.storage.transactionSync(() => {
       for (const session of sessions) {
         sql.exec(
           `INSERT OR REPLACE INTO session_index
-           (session_id, project_id, encrypted_title, title_iv, provider, model, mode, message_count, last_message_at, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (session_id, project_id, project_id_iv, encrypted_title, title_iv, provider, model, mode, message_count, last_message_at, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           session.session_id,
-          session.project_id,
+          session.encrypted_project_id,
+          session.project_id_iv,
           session.encrypted_title ?? null,
           session.title_iv ?? null,
           session.provider,
@@ -379,14 +437,16 @@ export class IndexRoom implements DurableObject {
           session.created_at,
           session.updated_at
         );
-        affectedProjects.add(session.project_id);
+        affectedProjects.add(session.encrypted_project_id);
+        affectedProjectIvs.set(session.encrypted_project_id, session.project_id_iv);
       }
     });
     log.debug('Batch update committed successfully');
 
     // Update project stats for all affected projects (and broadcast if new projects)
-    for (const projectId of affectedProjects) {
-      await this.updateProjectStats(projectId, ws);
+    for (const encryptedProjectId of affectedProjects) {
+      const projectIdIv = affectedProjectIvs.get(encryptedProjectId)!;
+      await this.updateProjectStats(encryptedProjectId, projectIdIv, ws);
     }
 
     // Broadcast each session update to other connections
@@ -416,9 +476,9 @@ export class IndexRoom implements DurableObject {
   ): Promise<void> {
     const sql = this.state.storage.sql;
 
-    // Get the project ID before deleting (needed for stats update)
-    const session = sql.exec<{ project_id: string }>(
-      `SELECT project_id FROM session_index WHERE session_id = ?`,
+    // Get the encrypted project ID before deleting (needed for stats update)
+    const session = sql.exec<{ project_id: string; project_id_iv: string }>(
+      `SELECT project_id, project_id_iv FROM session_index WHERE session_id = ?`,
       sessionId
     ).toArray()[0];
 
@@ -432,7 +492,7 @@ export class IndexRoom implements DurableObject {
     sql.exec(`DELETE FROM session_index WHERE session_id = ?`, sessionId);
 
     // Update project stats (no broadcast needed for deletion - project already exists)
-    await this.updateProjectStats(session.project_id, ws);
+    await this.updateProjectStats(session.project_id, session.project_id_iv, ws);
 
     // Broadcast deletion to other connections
     this.broadcast(
@@ -488,7 +548,7 @@ export class IndexRoom implements DurableObject {
     connState: ConnectionState,
     request: EncryptedCreateSessionRequest
   ): Promise<void> {
-    log.debug('Received create_session_request:', request.request_id, 'for project:', request.project_id);
+    log.debug('Received create_session_request:', request.request_id);
 
     // Broadcast the request to all other connections (desktop will pick it up)
     const broadcastMessage: CreateSessionRequestBroadcastMessage = {
@@ -563,21 +623,25 @@ export class IndexRoom implements DurableObject {
   /**
    * Update project statistics (session count, last activity)
    * Broadcasts project updates to all connected clients when a new project is created.
+   *
+   * @param encryptedProjectId - The encrypted project ID (used as opaque key)
+   * @param projectIdIv - The IV for the encrypted project ID
+   * @param originatingWs - The WebSocket that originated this update (excluded from broadcast)
    */
-  private async updateProjectStats(projectId: string, originatingWs?: WebSocket): Promise<void> {
+  private async updateProjectStats(encryptedProjectId: string, projectIdIv: string, originatingWs?: WebSocket): Promise<void> {
     const sql = this.state.storage.sql;
 
-    // Calculate stats from sessions
+    // Calculate stats from sessions using encrypted project_id as opaque key
     const stats = sql.exec<{ count: number; last_activity: number | null }>(
       `SELECT COUNT(*) as count, MAX(updated_at) as last_activity
        FROM session_index WHERE project_id = ?`,
-      projectId
+      encryptedProjectId
     ).toArray()[0];
 
     // Check if project exists before upserting
     const existing = sql.exec<ProjectIndexRow>(
       `SELECT * FROM project_index WHERE project_id = ?`,
-      projectId
+      encryptedProjectId
     ).toArray()[0];
 
     const isNewProject = !existing;
@@ -587,16 +651,20 @@ export class IndexRoom implements DurableObject {
         `UPDATE project_index SET session_count = ?, last_activity_at = ? WHERE project_id = ?`,
         stats?.count ?? 0,
         stats?.last_activity ?? Date.now(),
-        projectId
+        encryptedProjectId
       );
     } else {
-      // Create project entry with default name (derived from ID)
-      const name = projectId.split('/').pop() ?? projectId;
+      // Create project entry - name will be encrypted same as project_id
+      // The server stores encrypted values opaquely, clients decrypt
+      // Use the encrypted project_id as both the key and as a placeholder for name
+      // (clients will provide proper encrypted name in subsequent updates)
       sql.exec(
-        `INSERT INTO project_index (project_id, name, session_count, last_activity_at, sync_enabled)
-         VALUES (?, ?, ?, ?, 1)`,
-        projectId,
-        name,
+        `INSERT INTO project_index (project_id, project_id_iv, name, name_iv, session_count, last_activity_at, sync_enabled)
+         VALUES (?, ?, ?, ?, ?, ?, 1)`,
+        encryptedProjectId,
+        projectIdIv,
+        encryptedProjectId, // Use encrypted project_id as placeholder for encrypted name
+        projectIdIv, // Use same IV as placeholder (will be updated by client)
         stats?.count ?? 0,
         stats?.last_activity ?? Date.now()
       );
@@ -607,7 +675,7 @@ export class IndexRoom implements DurableObject {
     if (isNewProject) {
       const updatedProject = sql.exec<ProjectIndexRow>(
         `SELECT * FROM project_index WHERE project_id = ?`,
-        projectId
+        encryptedProjectId
       ).toArray()[0];
 
       if (updatedProject) {
@@ -620,7 +688,7 @@ export class IndexRoom implements DurableObject {
           },
           originatingWs
         );
-        log.debug('Broadcast new project:', projectId);
+        log.debug('Broadcast new project');
       }
     }
   }
@@ -632,16 +700,20 @@ export class IndexRoom implements DurableObject {
     await this.ensureInitialized();
     const sql = this.state.storage.sql;
 
+    // Track affected projects with their IVs
+    const affectedProjectIvs = new Map<string, string>();
+
     // Use a transaction for bulk insert
     sql.exec('BEGIN TRANSACTION');
     try {
       for (const session of sessions) {
         sql.exec(
           `INSERT OR REPLACE INTO session_index
-           (session_id, project_id, encrypted_title, title_iv, provider, model, mode, message_count, last_message_at, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (session_id, project_id, project_id_iv, encrypted_title, title_iv, provider, model, mode, message_count, last_message_at, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           session.session_id,
-          session.project_id,
+          session.encrypted_project_id,
+          session.project_id_iv,
           session.encrypted_title ?? null,
           session.title_iv ?? null,
           session.provider,
@@ -652,6 +724,7 @@ export class IndexRoom implements DurableObject {
           session.created_at,
           session.updated_at
         );
+        affectedProjectIvs.set(session.encrypted_project_id, session.project_id_iv);
       }
       sql.exec('COMMIT');
     } catch (err) {
@@ -660,9 +733,8 @@ export class IndexRoom implements DurableObject {
     }
 
     // Update all affected project stats
-    const projectIds = new Set(sessions.map((s) => s.project_id));
-    for (const projectId of projectIds) {
-      await this.updateProjectStats(projectId);
+    for (const [encryptedProjectId, projectIdIv] of affectedProjectIvs) {
+      await this.updateProjectStats(encryptedProjectId, projectIdIv);
     }
   }
 
@@ -776,7 +848,8 @@ export class IndexRoom implements DurableObject {
 type SessionIndexRow = {
   [key: string]: SqlStorageValue;
   session_id: string;
-  project_id: string;
+  project_id: string; // Stores encrypted_project_id
+  project_id_iv: string | null;
   title: string | null;
   encrypted_title: string | null;
   title_iv: string | null;
@@ -791,9 +864,12 @@ type SessionIndexRow = {
 
 type ProjectIndexRow = {
   [key: string]: SqlStorageValue;
-  project_id: string;
-  name: string;
-  path: string | null;
+  project_id: string; // Stores encrypted_project_id
+  project_id_iv: string | null;
+  name: string; // Stores encrypted_name
+  name_iv: string | null;
+  path: string | null; // Stores encrypted_path
+  path_iv: string | null;
   session_count: number;
   last_activity_at: number | null;
   sync_enabled: number;
@@ -802,7 +878,9 @@ type ProjectIndexRow = {
 function rowToSessionEntry(row: SessionIndexRow): SessionIndexEntry {
   return {
     session_id: row.session_id,
-    project_id: row.project_id,
+    // Pass through encrypted project_id - clients decrypt as needed
+    encrypted_project_id: row.project_id,
+    project_id_iv: row.project_id_iv ?? '',
     // Pass through encrypted title - clients decrypt as needed
     encrypted_title: row.encrypted_title ?? undefined,
     title_iv: row.title_iv ?? undefined,
@@ -818,9 +896,13 @@ function rowToSessionEntry(row: SessionIndexRow): SessionIndexEntry {
 
 function rowToProjectEntry(row: ProjectIndexRow): ProjectIndexEntry {
   return {
-    project_id: row.project_id,
-    name: row.name,
-    path: row.path ?? undefined,
+    // Pass through encrypted values - clients decrypt as needed
+    encrypted_project_id: row.project_id,
+    project_id_iv: row.project_id_iv ?? '',
+    encrypted_name: row.name,
+    name_iv: row.name_iv ?? '',
+    encrypted_path: row.path ?? undefined,
+    path_iv: row.path_iv ?? undefined,
     session_count: row.session_count,
     last_activity_at: row.last_activity_at ?? 0,
     sync_enabled: row.sync_enabled === 1,

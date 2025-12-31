@@ -105,7 +105,10 @@ export interface CreateSessionResponseMessage {
 /** Encrypted session creation request (sent over wire) */
 export interface EncryptedCreateSessionRequest {
   request_id: string;
-  project_id: string;
+  /** Encrypted project ID (base64) - required for wire protocol */
+  encrypted_project_id: string;
+  /** IV for project_id decryption (base64) */
+  project_id_iv: string;
   /** Base64 encoded encrypted initial prompt (optional) */
   encrypted_initial_prompt?: string;
   /** Base64 encoded IV for initial prompt decryption */
@@ -309,7 +312,10 @@ export interface SessionMetadata {
   provider: string;
   model?: string;
   mode?: 'agent' | 'planning';
-  project_id: string;
+  /** Encrypted project ID (base64) - required for wire protocol */
+  encrypted_project_id: string;
+  /** IV for project_id decryption (base64) */
+  project_id_iv: string;
   created_at: number;
   updated_at: number;
 }
@@ -317,7 +323,10 @@ export interface SessionMetadata {
 /** Session entry in the IndexRoom */
 export interface SessionIndexEntry {
   session_id: string;
-  project_id: string;
+  /** Encrypted project ID (base64) - required for wire protocol */
+  encrypted_project_id: string;
+  /** IV for project_id decryption (base64) */
+  project_id_iv: string;
   /** Encrypted title (base64) */
   encrypted_title?: string;
   /** IV for title decryption (base64) */
@@ -333,9 +342,18 @@ export interface SessionIndexEntry {
 
 /** Project entry in the IndexRoom */
 export interface ProjectIndexEntry {
-  project_id: string;
-  name: string;
-  path?: string;
+  /** Encrypted project ID (base64) - required for wire protocol */
+  encrypted_project_id: string;
+  /** IV for project_id decryption (base64) */
+  project_id_iv: string;
+  /** Encrypted project name (base64) - required for wire protocol */
+  encrypted_name: string;
+  /** IV for name decryption (base64) */
+  name_iv: string;
+  /** Encrypted project path (base64) - optional */
+  encrypted_path?: string;
+  /** IV for path decryption (base64) */
+  path_iv?: string;
   session_count: number;
   last_activity_at: number;
   sync_enabled: boolean;
