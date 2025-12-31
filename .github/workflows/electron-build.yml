@@ -70,9 +70,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          # Disabled npm cache - was causing npm ci failures
-          # cache: 'npm'
-          # cache-dependency-path: '**/package-lock.json'
+          cache: 'npm'
+          cache-dependency-path: '**/package-lock.json'
 
       - name: Upgrade npm to 10.8.2
         run: npm install -g npm@10.8.2
