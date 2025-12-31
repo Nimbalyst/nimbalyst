@@ -176,6 +176,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // Ref to hold processQueuedPrompts function (defined later, used in openSessionInTab)
   const processQueuedPromptsRef = useRef<((sessionId: string, tab: SessionTab) => Promise<void>) | null>(null);
   const openSessionInTabRef = useRef<((sessionId: string) => Promise<void>) | null>(null);
+
+  // Track sessions currently being loaded to prevent duplicate loading from rapid clicks
+  const loadingSessionsRef = useRef<Set<string>>(new Set());
   // NOTE: Prompt ID tracking is now done via globalProcessingPromptIds (module-level)
   // to prevent duplicate execution across multiple AgenticPanel instances
 
@@ -776,10 +779,17 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       }
     }
 
+    // Prevent duplicate loading from rapid clicks
+    if (loadingSessionsRef.current.has(sessionId)) {
+      // console.log('[AgenticPanel] Session already loading, ignoring duplicate request');
+      return;
+    }
+
     // Chat mode or new session: always load fresh data
     // Pass trackAsResume: true because user intentionally opened this session from history
 
     // console.log('[AgenticPanel] Loading session from database...');
+    loadingSessionsRef.current.add(sessionId);
     try {
       const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspacePath, true);
       // console.log('[AgenticPanel] Session data loaded:', sessionData);
@@ -840,6 +850,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       }
     } catch (err) {
       console.error('[AgenticPanel] Failed to load session:', err);
+    } finally {
+      loadingSessionsRef.current.delete(sessionId);
     }
   }, [sessionTabs, workspacePath, mode, updateWindowTitle, markSessionAsRead]);
 
@@ -1216,6 +1228,89 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       setLoading(false);
     }
   }, [workspacePath, mode, loadSessions, onSessionChange, triggerSessionHistoryRefresh, sessionTabs]);
+
+  // Add a new session to an existing worktree
+  const handleAddSessionToWorktree = useCallback(async (worktreeId: string) => {
+    setLoading(true);
+
+    try {
+      // Get worktree data
+      const worktreeResult = await window.electronAPI.invoke('worktree:get', worktreeId);
+      if (!worktreeResult.success || !worktreeResult.worktree) {
+        throw new Error(worktreeResult.error || 'Worktree not found');
+      }
+
+      const worktree = worktreeResult.worktree;
+
+      // Create session with worktree association using default provider
+      const defaultModel = 'claude-code:sonnet';
+      const provider = 'claude-code';
+
+      const session = await window.electronAPI.aiCreateSession(
+        provider as 'claude' | 'claude-code' | 'openai' | 'lmstudio',
+        undefined,
+        workspacePath,
+        defaultModel,
+        'coding',
+        worktree.id
+      );
+
+      // Add metadata for worktree session
+      await window.electronAPI.invoke('sessions:update-session-metadata', session.id, {
+        sessionType: 'coding',
+        fileEdits: [],
+        todos: [],
+        worktreeId: worktree.id,
+        worktreePath: worktree.path,
+      });
+
+      const tabName = `Worktree: ${worktree.name}`;
+
+      // Load the session
+      const sessionData = await window.electronAPI.aiLoadSession(session.id, workspacePath);
+      if (!sessionData) {
+        throw new Error('Failed to load newly created worktree session');
+      }
+
+      const newTab: SessionTab = {
+        id: sessionData.id,
+        name: tabName,
+        sessionData,
+        draftInput: sessionData.draftInput,
+        mode: 'agent',
+        model: defaultModel
+      };
+
+      if (mode === 'chat') {
+        setSessionTabs([newTab]);
+      } else {
+        setSessionTabs(prev => [...prev, newTab]);
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+      setActiveTabId(sessionData.id);
+
+      await loadSessions();
+      triggerSessionHistoryRefresh('new-session');
+
+      if (onSessionChange) {
+        onSessionChange(sessionData.id, tabName);
+      }
+
+      setTimeout(() => {
+        const ref = sessionViewRefsRef.current.get(sessionData.id);
+        ref?.current?.focusInput();
+      }, 100);
+
+      return sessionData;
+    } catch (error) {
+      console.error('[AgenticPanel] Failed to add session to worktree:', error);
+      errorNotificationService.showError('Failed to Add Session', String(error));
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  }, [workspacePath, mode, loadSessions, onSessionChange, triggerSessionHistoryRefresh]);
 
   // Load or create initial session
   useEffect(() => {
@@ -3122,6 +3217,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             onNewSession={() => createNewSession()}
             onNewTerminal={releaseChannel === 'alpha' ? () => createNewTerminal() : undefined}
             onNewWorktreeSession={createNewWorktreeSession}
+            onAddSessionToWorktree={handleAddSessionToWorktree}
             onImportSessions={handleOpenImportDialog}
             onOpenQuickSearch={onOpenQuickSearch}
             collapsedGroups={collapsedGroups}

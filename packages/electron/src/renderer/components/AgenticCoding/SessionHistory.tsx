@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CollapsibleGroup } from './CollapsibleGroup';
 import { SessionListItem } from './SessionListItem';
-import { WorktreeSingle } from './WorktreeSingle';
+import { WorktreeGroup } from './WorktreeGroup';
 import { groupSessionsByTime, TimeGroupKey } from '../../utils/dateFormatting';
 import { getFileName } from '../../utils/pathUtils';
 import { KeyboardShortcuts, getShortcutDisplay } from '../../../shared/KeyboardShortcuts';
@@ -55,6 +55,7 @@ interface SessionHistoryProps {
   onNewSession?: () => void;
   onNewTerminal?: () => void; // Callback for creating a new terminal session
   onNewWorktreeSession?: () => void; // Callback for creating new worktree session
+  onAddSessionToWorktree?: (worktreeId: string) => void; // Callback for adding session to existing worktree
   onImportSessions?: () => void; // Callback for opening import dialog
   onOpenQuickSearch?: () => void; // Callback for opening session quick search (Cmd+L)
   collapsedGroups: string[];
@@ -158,6 +159,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   onNewSession,
   onNewTerminal,
   onNewWorktreeSession,
+  onAddSessionToWorktree,
   onImportSessions,
   onOpenQuickSearch,
   collapsedGroups,
@@ -204,57 +206,6 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   // Extract workspace name from path
   const workspaceName = getFileName(workspacePath) || 'Workspace';
   const workspaceColor = generateWorkspaceColor(workspacePath);
-
-  // Fetch worktree data by ID (with caching)
-  const fetchWorktreeData = useCallback(async (worktreeId: string): Promise<WorktreeWithStatus | null> => {
-    // Check cache first
-    if (worktreeCache.has(worktreeId)) {
-      const cached = worktreeCache.get(worktreeId);
-      if (cached) {
-        return cached;
-      }
-    }
-
-    try {
-      // Fetch worktree from database
-      const result = await window.electronAPI.invoke('worktree:get', worktreeId);
-      if (!result.success || !result.worktree) {
-        console.error(`[SessionHistory] Worktree not found: ${worktreeId}`);
-        return null;
-      }
-
-      const worktreeData: WorktreeData = result.worktree;
-
-      // Fetch git status for the worktree
-      let gitStatus: { ahead?: number; behind?: number; uncommitted?: boolean } | undefined;
-      try {
-        const statusResult = await window.electronAPI.invoke('worktree:get-status', worktreeData.path);
-        if (statusResult.success && statusResult.status) {
-          gitStatus = {
-            ahead: statusResult.status.ahead,
-            behind: statusResult.status.behind,
-            uncommitted: statusResult.status.hasUncommittedChanges,
-          };
-        }
-      } catch (err) {
-        console.warn(`[SessionHistory] Failed to get git status for worktree ${worktreeId}:`, err);
-        // Continue without git status - it's not critical
-      }
-
-      const worktreeWithStatus: WorktreeWithStatus = {
-        ...worktreeData,
-        gitStatus,
-      };
-
-      // Cache the result
-      setWorktreeCache(prev => new Map(prev).set(worktreeId, worktreeWithStatus));
-
-      return worktreeWithStatus;
-    } catch (err) {
-      console.error(`[SessionHistory] Failed to fetch worktree data for ${worktreeId}:`, err);
-      return null;
-    }
-  }, [worktreeCache]);
 
   // Load all sessions from database (no search query)
   const loadAllSessions = useCallback(async () => {
@@ -633,9 +584,78 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [sortDropdownOpen]);
 
-  // Group sessions by time - use the selected sort field
-  const groupedSessions = groupSessionsByTime(sessions, sortBy === 'updated' ? 'updatedAt' : 'createdAt');
+  // Separate worktree sessions from regular sessions
+  const { worktreeSessions, regularSessions } = useMemo(() => {
+    const worktree: SessionItem[] = [];
+    const regular: SessionItem[] = [];
+    for (const session of sessions) {
+      if (session.worktree_id) {
+        worktree.push(session);
+      } else {
+        regular.push(session);
+      }
+    }
+    return { worktreeSessions: worktree, regularSessions: regular };
+  }, [sessions]);
+
+  // Group worktree sessions by worktree_id
+  const worktreeGroupsData = useMemo(() => {
+    const groups = new Map<string, SessionItem[]>();
+    for (const session of worktreeSessions) {
+      if (session.worktree_id) {
+        const existing = groups.get(session.worktree_id) || [];
+        existing.push(session);
+        groups.set(session.worktree_id, existing);
+      }
+    }
+    return groups;
+  }, [worktreeSessions]);
+
+  // Get worktree IDs sorted by most recent session activity
+  const sortedWorktreeIds = useMemo(() => {
+    const ids = Array.from(worktreeGroupsData.keys());
+    return ids.sort((a, b) => {
+      const sessionsA = worktreeGroupsData.get(a) || [];
+      const sessionsB = worktreeGroupsData.get(b) || [];
+      const latestA = Math.max(...sessionsA.map(s => s.updatedAt || s.createdAt));
+      const latestB = Math.max(...sessionsB.map(s => s.updatedAt || s.createdAt));
+      return latestB - latestA; // Most recent first
+    });
+  }, [worktreeGroupsData]);
+
+  // Group regular sessions by time - use the selected sort field
+  const groupedSessions = groupSessionsByTime(regularSessions, sortBy === 'updated' ? 'updatedAt' : 'createdAt');
   const groupKeys = Object.keys(groupedSessions) as TimeGroupKey[];
+
+  // Batch fetch all worktree data when sortedWorktreeIds changes (prevents N+1 query problem)
+  useEffect(() => {
+    const missingWorktreeIds = sortedWorktreeIds.filter(id => !worktreeCache.has(id));
+
+    if (missingWorktreeIds.length === 0) {
+      return;
+    }
+
+    const fetchBatch = async () => {
+      try {
+        const result = await window.electronAPI.invoke('worktree:get-batch', missingWorktreeIds);
+
+        if (result.success && result.worktrees) {
+          // Update cache with all fetched worktrees at once
+          setWorktreeCache(prev => {
+            const updated = new Map(prev);
+            for (const [worktreeId, worktreeData] of Object.entries(result.worktrees)) {
+              updated.set(worktreeId, worktreeData as WorktreeWithStatus);
+            }
+            return updated;
+          });
+        }
+      } catch (err) {
+        console.error('[SessionHistory] Failed to batch fetch worktrees:', err);
+      }
+    };
+
+    fetchBatch();
+  }, [sortedWorktreeIds, worktreeCache]);
 
   if (loading) {
     return (
@@ -1099,7 +1119,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
         </div>
       )}
       <div className="session-history-list" ref={scrollContainerRef}>
-        {groupKeys.length === 0 && hasSearchQuery ? (
+        {groupKeys.length === 0 && sortedWorktreeIds.length === 0 && hasSearchQuery ? (
           // No search results - show message with option to clear
           <div className="session-history-empty">
             <p>No matching sessions found</p>
@@ -1115,35 +1135,44 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
             </p>
           </div>
         ) : (
-          groupKeys.map(groupKey => {
-            const groupSessions = groupedSessions[groupKey];
-            const isExpanded = !collapsedGroups.includes(groupKey);
+          <>
+            {/* Worktree groups at the top */}
+            {sortedWorktreeIds.map(worktreeId => {
+              const worktreeSessionsList = worktreeGroupsData.get(worktreeId) || [];
+              const worktreeData = worktreeCache.get(worktreeId);
+              const isExpanded = !collapsedGroups.includes(`worktree:${worktreeId}`);
 
-            return (
-              <CollapsibleGroup
-                key={groupKey}
-                title={groupKey}
-                isExpanded={isExpanded}
-                onToggle={() => handleToggleGroup(groupKey)}
-                count={groupSessions.length}
-              >
-                {groupSessions.map(session => {
-                  // Check if this is a worktree session (defensive null check)
-                  if (session.worktree_id && typeof session.worktree_id === 'string') {
-                    return (
-                      <WorktreeSessionItem
-                        key={session.id}
-                        session={session}
-                        worktreeId={session.worktree_id}
-                        isActive={session.id === activeSessionId}
-                        onSessionSelect={onSessionSelect}
-                        fetchWorktreeData={fetchWorktreeData}
-                      />
-                    );
-                  }
+              return (
+                <WorktreeGroup
+                  key={worktreeId}
+                  worktree={worktreeData || { id: worktreeId, name: 'Loading...', path: '', branch: '' }}
+                  gitStatus={worktreeData?.gitStatus}
+                  sessions={worktreeSessionsList}
+                  activeSessionId={activeSessionId}
+                  isExpanded={isExpanded}
+                  onToggle={() => handleToggleGroup(`worktree:${worktreeId}`)}
+                  onSessionSelect={onSessionSelect}
+                  onAddSession={onAddSessionToWorktree || (() => {})}
+                  onSessionDelete={onSessionDelete ? handleDeleteSession : undefined}
+                  onSessionArchive={handleArchiveSession}
+                />
+              );
+            })}
 
-                  // Regular session - use SessionListItem
-                  return (
+            {/* Regular sessions in time groups */}
+            {groupKeys.map(groupKey => {
+              const groupSessions = groupedSessions[groupKey];
+              const isExpanded = !collapsedGroups.includes(groupKey);
+
+              return (
+                <CollapsibleGroup
+                  key={groupKey}
+                  title={groupKey}
+                  isExpanded={isExpanded}
+                  onToggle={() => handleToggleGroup(groupKey)}
+                  count={groupSessions.length}
+                >
+                  {groupSessions.map(session => (
                     <SessionListItem
                       key={session.id}
                       id={session.id}
@@ -1168,11 +1197,11 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                       hasPendingPrompt={session.hasPendingPrompt}
                       sessionType={session.sessionType}
                     />
-                  );
-                })}
-              </CollapsibleGroup>
-            );
-          })
+                  ))}
+                </CollapsibleGroup>
+              );
+            })}
+          </>
         )}
       </div>
     </div>

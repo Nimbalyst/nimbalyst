@@ -224,5 +224,101 @@ export function registerWorktreeHandlers(): void {
     }
   });
 
+  /**
+   * Batch fetch worktrees with their git status
+   * Efficiently fetches multiple worktrees and their status in a single IPC call
+   *
+   * @param worktreeIds - Array of worktree IDs to fetch
+   * @returns Map of worktree ID to worktree data with status
+   */
+  ipcMain.handle('worktree:get-batch', async (_event, worktreeIds: string[]) => {
+    try {
+      if (!worktreeIds || !Array.isArray(worktreeIds)) {
+        throw new Error('worktreeIds must be an array');
+      }
+
+      if (worktreeIds.length === 0) {
+        return {
+          success: true,
+          worktrees: {},
+        };
+      }
+
+      logger.info('Batch fetching worktrees', { count: worktreeIds.length, ids: worktreeIds });
+
+      const db = getDatabase();
+      if (!db) {
+        throw new Error('Database not initialized');
+      }
+
+      const worktreeStore = createWorktreeStore(db);
+      const results: Record<string, {
+        id: string;
+        name: string;
+        path: string;
+        branch: string;
+        baseBranch: string;
+        projectPath: string;
+        createdAt: number;
+        updatedAt?: number;
+        gitStatus?: {
+          ahead?: number;
+          behind?: number;
+          uncommitted?: boolean;
+        };
+      }> = {};
+
+      // Fetch all worktrees and their statuses in parallel
+      await Promise.all(
+        worktreeIds.map(async (worktreeId) => {
+          try {
+            // Fetch worktree metadata
+            const worktree = await worktreeStore.get(worktreeId);
+            if (!worktree) {
+              logger.warn('Worktree not found in batch fetch', { worktreeId });
+              return;
+            }
+
+            // Fetch git status
+            let gitStatus: { ahead?: number; behind?: number; uncommitted?: boolean } | undefined;
+            try {
+              const statusResult = await gitWorktreeService.getWorktreeStatus(worktree.path);
+              gitStatus = {
+                ahead: statusResult.commitsAhead,
+                behind: statusResult.commitsBehind,
+                uncommitted: statusResult.hasUncommittedChanges,
+              };
+            } catch (err) {
+              logger.warn('Failed to get git status in batch fetch', { worktreeId, error: err });
+              // Continue without git status - it's not critical
+            }
+
+            results[worktreeId] = {
+              ...worktree,
+              gitStatus,
+            };
+          } catch (err) {
+            logger.error('Failed to fetch worktree in batch', { worktreeId, error: err });
+            // Continue with other worktrees
+          }
+        })
+      );
+
+      logger.info('Batch fetch completed', { requested: worktreeIds.length, fetched: Object.keys(results).length });
+
+      return {
+        success: true,
+        worktrees: results,
+      };
+    } catch (error) {
+      logger.error('Failed to batch fetch worktrees:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to batch fetch worktrees',
+        worktrees: {},
+      };
+    }
+  });
+
   logger.info('Worktree handlers registered');
 }

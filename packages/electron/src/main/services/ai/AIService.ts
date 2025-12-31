@@ -1070,8 +1070,17 @@ export class AIService {
         const worktreeStore = createWorktreeStore(db);
         const worktree = await worktreeStore.get(worktreeId);
         if (!worktree) {
-          throw new Error(`Worktree ${worktreeId} not found`);
+          throw new Error(`Worktree ${worktreeId} not found in database`);
         }
+
+        // Validate that the worktree directory actually exists
+        if (!fs.existsSync(worktree.path)) {
+          throw new Error(
+            `Worktree directory does not exist: ${worktree.path}\n` +
+            `The worktree may have been deleted manually. Please remove the worktree from the UI and create a new one.`
+          );
+        }
+
         worktreePath = worktree.path;
         worktreeProjectPath = worktree.projectPath;  // Store for permission lookups
       }
