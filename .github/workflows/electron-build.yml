@@ -73,8 +73,8 @@ jobs:
           cache: 'npm'
           cache-dependency-path: '**/package-lock.json'
 
-      - name: Upgrade npm to 10.x
-        run: npm install -g npm@10
+      - name: Upgrade npm to 10.8.2
+        run: npm install -g npm@10.8.2
 
       - name: Debug - Check for package-lock.json
         run: |
