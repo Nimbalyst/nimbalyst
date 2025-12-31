@@ -587,9 +587,10 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
 
   // Extract todos from session metadata when sessionData changes
   useEffect(() => {
-    if (sessionData.metadata?.currentTodos) {
-      // console.log(`[AISessionView] Extracting todos for session ${sessionId}:`, sessionData.metadata.currentTodos);
-      setTodos(sessionData.metadata.currentTodos);
+    const currentTodos = sessionData.metadata?.currentTodos;
+    if (Array.isArray(currentTodos)) {
+      // console.log(`[AISessionView] Extracting todos for session ${sessionId}:`, currentTodos);
+      setTodos(currentTodos);
     } else {
       // console.log(`[AISessionView] No todos found in session metadata for ${sessionId}`);
       setTodos([]);

@@ -350,7 +350,7 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
               </div>
 
               {/* TodoList below tab content */}
-              {todos && todos.length > 0 && (
+              {Array.isArray(todos) && todos.length > 0 && (
                 <div style={{
                   borderTop: '1px solid var(--border-primary)',
                   backgroundColor: 'var(--surface-secondary)',
