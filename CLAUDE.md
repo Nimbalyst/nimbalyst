@@ -554,6 +554,7 @@ When working on extensions in `packages/extensions/`:
 
 ## Documentation
 
+- **AGENT\_PERMISSIONS.md**: Agent tool permission system and approval flow
 - **ANALYTICS\_GUIDE.md**: How to add PostHog analytics events
 - **POSTHOG\_EVENTS.md**: Canonical reference for all analytics events
 - **PLAYWRIGHT.md**: E2E testing patterns and best practices
