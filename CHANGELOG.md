@@ -12,10 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <!-- New features go here -->
 
 ### Changed
-<!-- Changes to existing functionality go here -->
+- Commented out debug logging statements for cleaner console output
 
 ### Fixed
-<!-- Bug fixes go here -->
+- Re-enabled npm cache in CI builds
 
 ### Removed
 <!-- Removed features go here -->
