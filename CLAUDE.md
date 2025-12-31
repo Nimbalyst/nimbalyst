@@ -564,3 +564,8 @@ When working on extensions in `packages/extensions/`:
 - **WORKTREES.md**: Git worktree integration for isolated AI coding sessions
 - **THEMING.md**: Theming system documentation (in electron package)
 - **RELEASING.md**: Release process
+
+## Support
+
+User support documentation is located in the `support/` folder:
+- **force-restore-database-backup.md**: Instructions for manually restoring the database from backup
