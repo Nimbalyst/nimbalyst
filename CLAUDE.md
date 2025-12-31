@@ -560,5 +560,6 @@ When working on extensions in `packages/extensions/`:
 - **AI\_PROVIDER\_TYPES.md**: AI provider architecture
 - **CUSTOM\_TOOL\_WIDGETS.md**: Custom MCP tool widget implementation
 - **INTERNAL\_MCP\_SERVERS.md**: How to implement internal MCP servers
+- **WORKTREES.md**: Git worktree integration for isolated AI coding sessions
 - **THEMING.md**: Theming system documentation (in electron package)
 - **RELEASING.md**: Release process

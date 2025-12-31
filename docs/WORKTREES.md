@@ -55,6 +55,23 @@ CREATE INDEX idx_ai_sessions_worktree ON ai_sessions(worktree_id);
 
 When a worktree is deleted, the `worktree_id` is set to NULL for all associated sessions. This preserves the session history while marking that the worktree no longer exists.
 
+### TypeScript Interface
+
+The `Worktree` interface used in both main and renderer processes:
+
+```typescript
+interface Worktree {
+  id: string;           // Unique identifier (ULID)
+  name: string;         // Adjective-noun name (e.g., "swift-falcon")
+  path: string;         // Absolute filesystem path to worktree
+  branch: string;       // Git branch (e.g., "worktree/swift-falcon")
+  baseBranch: string;   // Base branch for comparison (e.g., "main")
+  projectPath: string;  // Path to main workspace (maps to workspace_id in DB)
+  createdAt: number;    // Creation timestamp in milliseconds
+  updatedAt?: number;   // Last update timestamp in milliseconds
+}
+```
+
 ## Architecture
 
 ### Main Process Services
@@ -67,16 +84,22 @@ Manages git worktree operations using the `simple-git` library.
 
 **Key methods:**
 - `createWorktree(workspacePath, options?)`: Creates a new git worktree
-  - Generates unique branch name using ULID
+  - Generates unique name using adjective-noun pattern (e.g., `swift-falcon`)
+  - Creates branch with `worktree/` prefix (e.g., `worktree/swift-falcon`)
   - Creates worktree in `../{project_name}_worktrees/` directory
+  - Handles name conflicts by appending incrementing numbers
   - Returns worktree metadata
 - `getWorktreeStatus(worktreePath)`: Fetches git status for a worktree
-  - Returns uncommitted changes count
-  - Returns commits ahead/behind relative to base branch
-  - Returns merge conflict status
+  - Returns `hasUncommittedChanges` boolean
+  - Returns `modifiedFileCount` for number of changed files
+  - Returns `commitsAhead`/`commitsBehind` relative to base branch
+  - Returns `isMerged` status
 - `deleteWorktree(worktreePath, workspacePath)`: Removes a git worktree
   - Deletes the worktree directory
   - Removes git worktree registration
+  - Deletes the associated branch
+- `listWorktrees(workspacePath)`: Lists all git worktrees for a repository
+  - Returns array of worktree paths, branches, and isMain flag
 
 #### WorktreeStore
 
@@ -87,9 +110,13 @@ Database persistence layer for worktree metadata.
 **Key methods:**
 - `create(worktree)`: Insert new worktree record
 - `get(id)`: Retrieve worktree by ID
+- `getByPath(path)`: Retrieve worktree by filesystem path
 - `list(workspaceId)`: List all worktrees for a workspace
-- `delete(id)`: Delete worktree record
-- `getWorktreeSessions(worktreeId)`: Get all sessions associated with a worktree
+- `update(id, updates)`: Update worktree fields (name, path, branch, etc.)
+- `delete(id)`: Delete worktree record by ID
+- `deleteByPath(path)`: Delete worktree record by filesystem path
+- `exists(path)`: Check if worktree exists by path
+- `getWorktreeSessions(worktreeId)`: Get all session IDs associated with a worktree
 
 ### IPC Communication
 
@@ -106,11 +133,11 @@ Exposes worktree operations to the renderer process via IPC.
 
 **Preload API** (`packages/electron/src/preload/index.ts`):
 ```typescript
-window.electronAPI.createWorktree(workspacePath, name?)
-window.electronAPI.getWorktreeStatus(worktreePath)
-window.electronAPI.deleteWorktree(worktreeId, workspacePath)
-window.electronAPI.listWorktrees(workspacePath)
-window.electronAPI.getWorktree(worktreeId)
+window.electronAPI.worktreeCreate(workspacePath, name?)
+window.electronAPI.worktreeGetStatus(worktreePath)
+window.electronAPI.worktreeDelete(worktreeId, workspacePath)
+window.electronAPI.worktreeList(workspacePath)
+window.electronAPI.worktreeGet(worktreeId)
 ```
 
 ### Renderer Services
@@ -132,19 +159,25 @@ Returns consistent `{ success, data?, error? }` shape for all operations.
 Displays a worktree session with distinctive visual treatment:
 
 **Visual elements:**
-- AI provider icon (28x28px) with small worktree badge overlay in bottom-right corner
+- Worktree icon (git branch SVG) with small AI provider badge overlay in bottom-right corner
 - Session title on first line
-- Meta row showing: worktree name (blue, `--primary-color`) + git status badge
+- Meta row showing: worktree name (blue) + git status badges (ahead/behind/uncommitted)
 - Message count badge on right
-- Background: `--surface-tertiary` to distinguish from regular sessions
 
 **Props:**
 ```typescript
 interface WorktreeSingleProps {
   session: SessionListItemData;
-  worktree: Worktree;
+  worktreeName: string;
+  worktreePath: string;
+  gitStatus?: {
+    ahead?: number;
+    behind?: number;
+    uncommitted?: boolean;
+  };
   isActive: boolean;
   onClick: () => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
 }
 ```
 
@@ -206,10 +239,12 @@ Worktrees are created outside the main workspace:
 ```
 /path/to/project/                    # Main workspace
 /path/to/project_worktrees/          # Worktrees directory
-  └── worktree-01JBCD3FG2H5K6M7N8P9QR/  # Individual worktree
+  └── swift-falcon/                  # Individual worktree (adjective-noun name)
       ├── .git (file pointing to main repo)
       └── ... (project files)
 ```
+
+The branch name follows the pattern `worktree/{worktree-name}` (e.g., `worktree/swift-falcon`).
 
 This keeps worktrees separate from the main workspace while maintaining git connectivity.
 
@@ -239,11 +274,13 @@ Tests verify:
 5. Claude Code runs in the worktree directory (when provider is configured)
 
 **Test selectors** (`packages/electron/e2e/utils/testHelpers.ts`):
-- `newWorktreeSessionButton`: The "New Worktree" button
-- `worktreeSingle`: Worktree session container
-- `worktreeSingleBadge`: Worktree badge overlay on AI icon
-- `worktreeSingleName`: Worktree name display
-- `worktreeSingleTitle`: Session title
+- `newWorktreeSessionButton`: `[data-testid="new-worktree-session-button"]`
+- `worktreeSingle`: `.worktree-single`
+- `worktreeSingleActive`: `.worktree-single.active`
+- `worktreeSingleBadge`: `.worktree-single-wt-badge` (worktree icon badge)
+- `worktreeSingleName`: `.worktree-single-name`
+- `worktreeSingleTitle`: `.worktree-single-title`
+- `worktreeSingleMessageCount`: `.worktree-single-message-count`
 
 ## Platform Compatibility
 
