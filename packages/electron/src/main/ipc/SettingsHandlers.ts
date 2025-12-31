@@ -3,7 +3,7 @@ import * as os from 'os';
 import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel, getRecentItems, getDefaultAIModel, setDefaultAIModel, isAnalyticsEnabled, setAnalyticsEnabled, isMockupLMEnabled, setMockupLMEnabled, getSessionSyncConfig, setSessionSyncConfig, SessionSyncConfig, isExtensionDevToolsEnabled, setExtensionDevToolsEnabled } from '../utils/store';
 import { logger } from '../utils/logger';
 import { SoundNotificationService } from '../services/SoundNotificationService';
-import { autoUpdaterService } from '../services/autoUpdater';
+import { getAutoUpdaterService } from '../services/autoUpdater';
 import type { OnboardingState } from '../utils/store';
 import { getCredentials, resetCredentials, generateQRPairingPayload, isUsingSecureStorage } from '../services/CredentialService';
 import { onSyncStatusChange } from '../services/SyncManager';
@@ -131,7 +131,7 @@ export function registerSettingsHandlers() {
     ipcMain.handle('release-channel:set', (_event, channel: ReleaseChannel) => {
         setReleaseChannel(channel);
         // Reconfigure auto-updater with new channel
-        autoUpdaterService.reconfigureFeedURL();
+        getAutoUpdaterService().reconfigureFeedURL();
         logger.store.info(`[SettingsHandlers] Release channel changed to ${channel}, auto-updater reconfigured`);
     });
 

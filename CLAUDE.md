@@ -41,6 +41,10 @@ For detailed information about specific packages, see their CLAUDE.md files:
 - **Build for Mac**: `cd packages/electron && npm run build:mac:local`
 - **Build for Mac (notarized)**: `cd packages/electron && npm run build:mac:notarized`
 
+### Development Data Store Isolation
+
+For running multiple isolated instances of Nimbalyst for development/testing, see [DEV_DATA_STORE.md](./docs/DEV_DATA_STORE.md).
+
 ### Testing
 - **Unit tests**: `npm run test:unit` - Uses vitest
 - **Test UI**: `npm run test:unit:ui`

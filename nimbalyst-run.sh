@@ -1,0 +1,163 @@
+#!/bin/bash
+
+# Get the directory where this script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Change to the repository root (where the script is located)
+cd "$SCRIPT_DIR" || exit 1
+
+# Parse datastore ID from first parameter (default: 1)
+DATASTORE_ID="${1:-1}"
+
+# Validate datastore ID (must be alphanumeric)
+if ! [[ "$DATASTORE_ID" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+  echo "Error: Invalid datastore ID '$DATASTORE_ID'"
+  echo "Must be alphanumeric with underscores/hyphens"
+  exit 1
+fi
+
+# Set DEV_DATA_STORE environment variable for isolation
+export DEV_DATA_STORE="$DATASTORE_ID"
+
+echo "Running from: $SCRIPT_DIR"
+echo "Using isolated datastore: DEV_DATA_STORE=$DEV_DATA_STORE"
+echo "This will use ~/.config/nimbalyst_$DEV_DATA_STORE (or ~/Library/Application Support/nimbalyst_$DEV_DATA_STORE on macOS)"
+echo ""
+
+# Compute a hash of all source files that affect the build
+# This is worktree-safe because it's based on content, not timestamps
+compute_source_hash() {
+  local pkg_dir="$1"
+  # Hash all source files + config files that affect the build
+  # Using git ls-files to only include tracked files, sorted for consistency
+  (
+    cd "$pkg_dir"
+    # Get content hash of all relevant files
+    find src -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.css" -o -name "*.js" \) -print0 2>/dev/null | \
+      sort -z | \
+      xargs -0 cat 2>/dev/null | \
+      shasum -a 256 | \
+      cut -d' ' -f1
+    # Also include config files in the hash
+    cat vite.config.ts package.json 2>/dev/null | shasum -a 256 | cut -d' ' -f1
+  ) | shasum -a 256 | cut -d' ' -f1
+}
+
+# Check if a package needs rebuilding based on content hash
+# Returns 0 (true) if rebuild needed, 1 (false) if up-to-date
+needs_rebuild() {
+  local pkg_dir="$1"
+  local hash_file="$pkg_dir/dist/.build-hash"
+
+  # If dist or hash file doesn't exist, definitely need to build
+  if [ ! -f "$hash_file" ]; then
+    return 0
+  fi
+
+  local current_hash
+  current_hash=$(compute_source_hash "$pkg_dir")
+  local stored_hash
+  stored_hash=$(cat "$hash_file" 2>/dev/null)
+
+  if [ "$current_hash" != "$stored_hash" ]; then
+    return 0
+  fi
+
+  # No rebuild needed
+  return 1
+}
+
+# Save the current source hash after a successful build
+save_build_hash() {
+  local pkg_dir="$1"
+  local hash_file="$pkg_dir/dist/.build-hash"
+  compute_source_hash "$pkg_dir" > "$hash_file"
+}
+
+# Install dependencies if node_modules doesn't exist
+needs_npm_install=false
+if [ ! -d "node_modules" ]; then
+  needs_npm_install=true
+fi
+
+# Determine what needs to be built
+build_rexical=false
+build_runtime=false
+build_runtime_reason=""
+
+if needs_rebuild "packages/rexical"; then
+  build_rexical=true
+fi
+
+if needs_rebuild "packages/runtime"; then
+  build_runtime=true
+elif [ "$build_rexical" = true ]; then
+  build_runtime=true
+  build_runtime_reason=" (rexical changed)"
+fi
+
+# Print build plan
+echo ""
+echo "Build plan:"
+echo "  rexical: $([ "$build_rexical" = true ] && echo "BUILD" || echo "skip (up-to-date)")"
+echo "  runtime: $([ "$build_runtime" = true ] && echo "BUILD$build_runtime_reason" || echo "skip (up-to-date)")"
+echo ""
+
+# Execute build plan
+if [ "$needs_npm_install" = true ]; then
+  echo "Installing dependencies..."
+  npm install
+fi
+
+if [ "$build_rexical" = true ]; then
+  echo "Building rexical package..."
+  cd packages/rexical
+  npm run build
+  cd ../..
+  save_build_hash "packages/rexical"
+fi
+
+if [ "$build_runtime" = true ]; then
+  echo "Building runtime package..."
+  cd packages/runtime
+  npm run build
+  cd ../..
+  save_build_hash "packages/runtime"
+fi
+
+# Use a dedicated dev port for /run command
+# Base port 8460 + numeric datastore ID (if it's a number)
+if [[ "$DATASTORE_ID" =~ ^[0-9]+$ ]]; then
+  # Numeric ID: use base port + ID
+  CALCULATED_PORT=$((8460 + DATASTORE_ID))
+else
+  # Non-numeric ID: use fixed port 8463
+  CALCULATED_PORT=8463
+fi
+
+if [ -z "$VITE_DEV_SERVER_PORT" ]; then
+  export VITE_DEV_SERVER_PORT=$CALCULATED_PORT
+fi
+
+echo "Using dedicated dev port: $VITE_DEV_SERVER_PORT"
+
+# Kill any process running on the target port
+PID=$(lsof -ti:$VITE_DEV_SERVER_PORT 2>/dev/null)
+if [ -n "$PID" ]; then
+  echo "Killing existing process $PID on port $VITE_DEV_SERVER_PORT..."
+  kill -9 $PID 2>/dev/null || true
+  sleep 1
+fi
+
+echo "DEV_DATA_STORE isolation is active (datastore: $DEV_DATA_STORE)"
+echo "All data will be stored separately from your production Nimbalyst"
+echo ""
+
+# Navigate to the electron package directory
+cd packages/electron
+
+# Run the dev app (stays in foreground to show output and allow multiple instances)
+echo "Starting Nimbalyst..."
+echo "Press Ctrl+C to stop"
+echo ""
+exec npm run dev
