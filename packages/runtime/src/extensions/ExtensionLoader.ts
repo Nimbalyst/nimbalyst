@@ -107,9 +107,9 @@ function validateManifest(
       field: 'main',
       suggestion: 'Add the entry point path, e.g., "main": "dist/index.js"',
     });
-  } else if (!(m.main as string).endsWith('.js')) {
+  } else if (!(m.main as string).endsWith('.js') && !(m.main as string).endsWith('.mjs')) {
     errors.push({
-      error: `Invalid 'main' format: "${m.main}" should end with .js`,
+      error: `Invalid 'main' format: "${m.main}" should end with .js or .mjs`,
       field: 'main',
       suggestion: 'The main entry point should be a JavaScript file, e.g., "main": "dist/index.js"',
     });

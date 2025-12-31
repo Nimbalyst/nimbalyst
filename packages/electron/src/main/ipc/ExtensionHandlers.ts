@@ -407,7 +407,7 @@ async function scanDirectoryForClaudePlugins(
           type: 'local' as const,
           path: pluginPath,
         });
-        logger.main.info(`[ExtensionHandlers] Found Claude plugin: ${extensionId} at ${pluginPath}`);
+        // logger.main.info(`[ExtensionHandlers] Found Claude plugin: ${extensionId} at ${pluginPath}`);
       } catch {
         logger.main.warn(`[ExtensionHandlers] Claude plugin path not found: ${pluginPath}`);
       }

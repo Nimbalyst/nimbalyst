@@ -1332,10 +1332,11 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               timestamp: message.request.timestamp,
             };
 
-            // Debug logging - uncomment if needed
-            // console.log('[CollabV3] Received create_session_request from mobile:', decryptedRequest.requestId);
+            // Debug logging
+            console.log('[CollabV3] Received create_session_request from mobile:', decryptedRequest.requestId, 'projectId:', projectId);
 
             // Notify all listeners (desktop will handle this)
+            console.log('[CollabV3] Notifying', createSessionRequestListeners.size, 'listeners');
             createSessionRequestListeners.forEach((callback) => {
               try {
                 callback(decryptedRequest);

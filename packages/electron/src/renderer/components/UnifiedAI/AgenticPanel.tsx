@@ -1422,12 +1422,12 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // - Final completion triggers database reload for consistency
   useEffect(() => {
     const handleStreamResponse = async (data: any) => {
-      console.log('[AgenticPanel] handleStreamResponse called:', {
-        hasData: !!data,
-        sessionId: data?.sessionId,
-        isComplete: data?.isComplete,
-        autoContextPending: data?.autoContextPending
-      });
+      // console.log('[AgenticPanel] handleStreamResponse called:', {
+      //   hasData: !!data,
+      //   sessionId: data?.sessionId,
+      //   isComplete: data?.isComplete,
+      //   autoContextPending: data?.autoContextPending
+      // });
       if (!data || !data.sessionId) return;
       // Check if this session is relevant to this panel (any open tab)
       const isRelevantSession = sessionTabsRef.current.some(tab => tab.id === data.sessionId);
@@ -1456,10 +1456,10 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           // (but NOT the UI state - user can still interact immediately)
           // Using global set so any panel instance can process the queue when auto-context ends
           globalAutoContextSessions.add(data.sessionId);
-          console.log('[AgenticPanel] Added session to globalAutoContextSessions:', {
-            sessionId: data.sessionId,
-            trackedSessions: Array.from(globalAutoContextSessions)
-          });
+          // console.log('[AgenticPanel] Added session to globalAutoContextSessions:', {
+          //   sessionId: data.sessionId,
+          //   trackedSessions: Array.from(globalAutoContextSessions)
+          // });
 
           // FALLBACK: If auto-context-end doesn't fire within 5 seconds, process queue anyway
           // This prevents queued prompts from getting stuck if auto-context fails or IPC is lost
@@ -1619,11 +1619,11 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     const handleAutoContextEnd = (data: { sessionId: string }) => {
       if (!data || !data.sessionId) return;
 
-      console.log('[AgenticPanel] handleAutoContextEnd received:', {
-        sessionId: data.sessionId,
-        isTracked: globalAutoContextSessions.has(data.sessionId),
-        trackedSessions: Array.from(globalAutoContextSessions)
-      });
+      // console.log('[AgenticPanel] handleAutoContextEnd received:', {
+      //   sessionId: data.sessionId,
+      //   isTracked: globalAutoContextSessions.has(data.sessionId),
+      //   trackedSessions: Array.from(globalAutoContextSessions)
+      // });
 
       // Only process if this session was tracked as waiting for auto-context
       // This prevents duplicate processing across multiple AgenticPanel instances
@@ -2175,7 +2175,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     // Use GLOBAL set to prevent duplicate processing across AgenticPanel instances
     // This is critical when both agent mode and files mode have the same session open
     if (globalProcessingSessionQueues.has(sessionId)) {
-      console.log(`[AgenticPanel] Another panel is already processing queue for session ${sessionId}, skipping`);
+      // console.log(`[AgenticPanel] Another panel is already processing queue for session ${sessionId}, skipping`);
       return;
     }
     globalProcessingSessionQueues.add(sessionId);
@@ -2266,15 +2266,15 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           claimedPrompt.attachments || [],
           claimedPrompt.id  // Pass for logging/tracking purposes
         );
-        console.log(`[AgenticPanel] handleSendMessage completed for queued prompt:`, claimedPrompt.id);
+        // console.log(`[AgenticPanel] handleSendMessage completed for queued prompt:`, claimedPrompt.id);
 
         // Wait for response to complete before processing next prompt
         // The sendingSessions state will clear when response finishes
-        console.log(`[AgenticPanel] Waiting for response to complete for prompt:`, claimedPrompt.id);
+        // console.log(`[AgenticPanel] Waiting for response to complete for prompt:`, claimedPrompt.id);
         await new Promise<void>(resolve => {
           const checkDone = () => {
             if (!sendingSessionsRef.current.has(sessionId)) {
-              console.log(`[AgenticPanel] Response completed for prompt:`, claimedPrompt.id);
+              // console.log(`[AgenticPanel] Response completed for prompt:`, claimedPrompt.id);
               resolve();
             } else {
               setTimeout(checkDone, 500);

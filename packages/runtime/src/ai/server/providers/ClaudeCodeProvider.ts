@@ -2175,7 +2175,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     if (ClaudeCodeProvider.mcpConfigLoader) {
       try {
         const mergedServers = await ClaudeCodeProvider.mcpConfigLoader(workspacePath);
-        console.log('[CLAUDE-CODE] Loaded MCP servers from config loader:', Object.keys(mergedServers));
+        // console.log('[CLAUDE-CODE] Loaded MCP servers from config loader:', Object.keys(mergedServers));
 
         // Process each server config
         for (const [serverName, serverConfig] of Object.entries(mergedServers)) {

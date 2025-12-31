@@ -859,11 +859,11 @@ export class AIService {
 
     const sendAutoContextEvent = (phase: 'start' | 'end') => {
       try {
-        console.log(`[AIService] Sending ai:auto-context-${phase} event for session:`, session.id);
+        // console.log(`[AIService] Sending ai:auto-context-${phase} event for session:`, session.id);
         event.sender.send(`ai:auto-context-${phase}`, {
           sessionId: session.id
         });
-        console.log(`[AIService] Successfully sent ai:auto-context-${phase} event`);
+        // console.log(`[AIService] Successfully sent ai:auto-context-${phase} event`);
       } catch (err) {
         console.error('[AIService] Failed to send auto-context lifecycle event:', err);
       }
@@ -2105,7 +2105,7 @@ export class AIService {
         // Clean up queued prompt tracking
         if (queuedPromptId) {
           this.processingQueuedPromptIds.delete(queuedPromptId);
-          logger.main.info(`[AIService] Cleared prompt tracking for ${queuedPromptId}`);
+          // logger.main.info(`[AIService] Cleared prompt tracking for ${queuedPromptId}`);
         }
 
         return { content: fullResponse };
