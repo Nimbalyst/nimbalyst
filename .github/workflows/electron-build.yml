@@ -70,40 +70,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: '**/package-lock.json'
+          # Disabled npm cache - was causing npm ci failures
+          # cache: 'npm'
+          # cache-dependency-path: '**/package-lock.json'
 
       - name: Upgrade npm to 10.8.2
         run: npm install -g npm@10.8.2
 
-      - name: Debug - Check for package-lock.json
-        run: |
-          echo "Current directory: $(pwd)"
-          echo "npm version: $(npm --version)"
-          echo "node version: $(node --version)"
-          echo "Listing root files:"
-          ls -la
-          echo "Checking package-lock.json:"
-          if [ -f package-lock.json ]; then
-            echo "package-lock.json exists"
-            head -5 package-lock.json
-            echo "Validating JSON..."
-            node -e "JSON.parse(require('fs').readFileSync('package-lock.json'))" && echo "JSON is valid" || echo "JSON is INVALID"
-          else
-            echo "package-lock.json NOT FOUND!"
-          fi
-
       - name: Install dependencies
-        run: |
-          echo "npm version for ci: $(npm --version)"
-          echo "npm prefix: $(npm prefix)"
-          echo "npm root: $(npm root)"
-          echo "Contents of npm prefix:"
-          ls -la "$(npm prefix)" | head -10
-          echo "npm config list:"
-          npm config list
-          echo "Running npm ci..."
-          npm ci
+        run: npm ci
 
       - name: Build rexical package
         working-directory: packages/rexical
