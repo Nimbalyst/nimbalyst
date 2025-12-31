@@ -76,6 +76,10 @@ jobs:
       - name: Upgrade npm to 10.x
         run: npm install -g npm@10
 
+      # Remove capacitor package - not needed for electron build and has esbuild cache issues
+      - name: Remove capacitor package
+        run: rm -rf packages/capacitor
+
       - name: Install dependencies
         run: npm ci
 
