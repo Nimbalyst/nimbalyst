@@ -19,6 +19,7 @@ import * as path from 'path';
 import { watch, FSWatcher } from 'fs';
 import { logger } from '../utils/logger';
 import { resolveWorkspacePathForPermissions } from './PermissionService';
+import { resolveProjectPath } from '../utils/workspaceDetection';
 
 const log = logger.main;
 
@@ -83,17 +84,21 @@ export class ClaudeSettingsManager {
   }
 
   /**
-   * Get the path to the project-level shared settings file
+   * Get the path to the project-level shared settings file.
+   * Resolves worktree paths to parent project so settings are inherited.
    */
   private getProjectSharedPath(workspacePath: string): string {
-    return path.join(workspacePath, '.claude', 'settings.json');
+    const projectPath = resolveProjectPath(workspacePath);
+    return path.join(projectPath, '.claude', 'settings.json');
   }
 
   /**
-   * Get the path to the project-level local settings file
+   * Get the path to the project-level local settings file.
+   * Resolves worktree paths to parent project so settings are inherited.
    */
   private getProjectLocalPath(workspacePath: string): string {
-    return path.join(workspacePath, '.claude', 'settings.local.json');
+    const projectPath = resolveProjectPath(workspacePath);
+    return path.join(projectPath, '.claude', 'settings.local.json');
   }
 
   /**

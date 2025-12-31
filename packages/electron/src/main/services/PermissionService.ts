@@ -16,6 +16,7 @@ import {
 import { logger } from '../utils/logger';
 import { getDatabase } from '../database/initialize';
 import { createWorktreeStore } from './WorktreeStore';
+import { resolveProjectPath } from '../utils/workspaceDetection';
 
 type PermissionMode = 'ask' | 'allow-all' | 'bypass-all';
 
@@ -83,31 +84,37 @@ export class PermissionService {
    * @param mode - The permission mode to set (defaults to 'ask')
    */
   public trustWorkspace(workspacePath: string, mode: PermissionMode = 'ask'): void {
-    const workspaceName = workspacePath.split('/').pop() || workspacePath;
+    // Resolve worktree paths to parent project so trust is shared
+    const projectPath = resolveProjectPath(workspacePath);
+    const workspaceName = projectPath.split('/').pop() || projectPath;
     logger.main.info(`[PermissionService:${workspaceName}] Trusting workspace with mode: ${mode}`);
 
-    const stored = getAgentPermissions(workspacePath) || { permissionMode: null };
+    const stored = getAgentPermissions(projectPath) || { permissionMode: null };
     stored.permissionMode = mode;
-    saveAgentPermissions(workspacePath, stored);
+    saveAgentPermissions(projectPath, stored);
   }
 
   /**
    * Revoke workspace trust
    */
   public revokeWorkspaceTrust(workspacePath: string): void {
-    const workspaceName = workspacePath.split('/').pop() || workspacePath;
+    // Resolve worktree paths to parent project so trust is shared
+    const projectPath = resolveProjectPath(workspacePath);
+    const workspaceName = projectPath.split('/').pop() || projectPath;
     logger.main.info(`[PermissionService:${workspaceName}] Revoking workspace trust`);
 
-    const stored = getAgentPermissions(workspacePath) || { permissionMode: null };
+    const stored = getAgentPermissions(projectPath) || { permissionMode: null };
     stored.permissionMode = null;
-    saveAgentPermissions(workspacePath, stored);
+    saveAgentPermissions(projectPath, stored);
   }
 
   /**
    * Check if a workspace is trusted
    */
   public isWorkspaceTrusted(workspacePath: string): boolean {
-    const stored = getAgentPermissions(workspacePath);
+    // Resolve worktree paths to parent project so trust is shared
+    const projectPath = resolveProjectPath(workspacePath);
+    const stored = getAgentPermissions(projectPath);
     return stored?.permissionMode !== null && stored?.permissionMode !== undefined;
   }
 
@@ -122,7 +129,9 @@ export class PermissionService {
       return testMode;
     }
 
-    const stored = getAgentPermissions(workspacePath);
+    // Resolve worktree paths to parent project so trust is shared
+    const projectPath = resolveProjectPath(workspacePath);
+    const stored = getAgentPermissions(projectPath);
     return stored?.permissionMode ?? null;
   }
 
@@ -130,12 +139,14 @@ export class PermissionService {
    * Set the permission mode (setting to null revokes trust)
    */
   public setPermissionMode(workspacePath: string, mode: PermissionMode | null): void {
-    const workspaceName = workspacePath.split('/').pop() || workspacePath;
+    // Resolve worktree paths to parent project so trust is shared
+    const projectPath = resolveProjectPath(workspacePath);
+    const workspaceName = projectPath.split('/').pop() || projectPath;
     logger.main.info(`[PermissionService:${workspaceName}] Setting permission mode: ${mode}`);
 
-    const stored = getAgentPermissions(workspacePath) || { permissionMode: null };
+    const stored = getAgentPermissions(projectPath) || { permissionMode: null };
     stored.permissionMode = mode;
-    saveAgentPermissions(workspacePath, stored);
+    saveAgentPermissions(projectPath, stored);
   }
 }
 

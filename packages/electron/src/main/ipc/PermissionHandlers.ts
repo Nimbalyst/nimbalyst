@@ -10,14 +10,25 @@ import { getPermissionService, resolveWorkspacePathForPermissions } from '../ser
 import { ClaudeSettingsManager } from '../services/ClaudeSettingsManager';
 import { logger } from '../utils/logger';
 import { safeHandle, safeOn } from '../utils/ipcRegistry';
+import { resolveProjectPath, isWorktreePath } from '../utils/workspaceDetection';
 
 /**
- * Broadcast permission changes to all renderer processes
+ * Broadcast permission changes to all renderer processes.
+ * If the path is a worktree, broadcasts to both the worktree path and the parent project path.
  */
 function broadcastPermissionChange(workspacePath: string): void {
   const windows = BrowserWindow.getAllWindows();
+  const projectPath = resolveProjectPath(workspacePath);
+
   for (const window of windows) {
+    // Always broadcast for the original path
     window.webContents.send('permissions:changed', { workspacePath });
+
+    // If this was a worktree, also broadcast for the parent project
+    // so windows viewing the main project are notified too
+    if (isWorktreePath(workspacePath)) {
+      window.webContents.send('permissions:changed', { workspacePath: projectPath });
+    }
   }
 }
 
