@@ -76,6 +76,19 @@ jobs:
       - name: Upgrade npm to 10.x
         run: npm install -g npm@10
 
+      - name: Debug - Check for package-lock.json
+        run: |
+          echo "Current directory: $(pwd)"
+          echo "Listing root files:"
+          ls -la
+          echo "Checking package-lock.json:"
+          if [ -f package-lock.json ]; then
+            echo "package-lock.json exists"
+            head -5 package-lock.json
+          else
+            echo "package-lock.json NOT FOUND!"
+          fi
+
       - name: Install dependencies
         run: npm ci
 
