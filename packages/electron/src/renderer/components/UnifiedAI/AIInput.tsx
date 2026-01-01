@@ -620,7 +620,9 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
       }
 
       // Queue on Cmd+Shift+Enter (if loading and queue handler exists)
-      if (e.key === 'Enter' && e.shiftKey && (e.metaKey || e.ctrlKey) && !typeaheadMatch) {
+      // Allow queueing when typeahead has no matching options (dropdown not visible)
+      const isTypeaheadVisible = typeaheadMatch && currentOptions.length > 0;
+      if (e.key === 'Enter' && e.shiftKey && (e.metaKey || e.ctrlKey) && !isTypeaheadVisible) {
         e.preventDefault();
         if (value.trim() && !disabled && isLoading && onQueue) {
           handleQueue();
@@ -628,8 +630,9 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
         return;
       }
 
-      // Handle Enter to send (Shift+Enter for new line, but not when typeaheadis open)
-      if (e.key === 'Enter' && !e.shiftKey && !typeaheadMatch) {
+      // Handle Enter to send (Shift+Enter for new line, but not when typeahead is open)
+      // Allow sending when typeahead has no matching options (dropdown not visible)
+      if (e.key === 'Enter' && !e.shiftKey && !isTypeaheadVisible) {
         e.preventDefault();
         if (value.trim() && !disabled) {
           onSend(value);
