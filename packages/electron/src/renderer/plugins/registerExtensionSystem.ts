@@ -151,40 +151,87 @@ function setupEditorScreenshotListener(): void {
     try {
       // Find the editor element to capture
       let targetElement: HTMLElement | null = null;
+      let selectorUsed = '';
 
       if (data.selector) {
         // Capture specific element if selector provided
         targetElement = document.querySelector(data.selector);
+        selectorUsed = data.selector;
         if (!targetElement) {
           throw new Error(`Element not found for selector: ${data.selector}`);
         }
       } else {
-        // Find the active editor container
-        // Try to find the multi-editor-instance that's active
-        targetElement = document.querySelector('.multi-editor-instance.active .editor-content');
+        // Try selectors in order of specificity
+        const selectors = [
+          // For Lexical/markdown editors
+          '.multi-editor-instance.active .editor-content',
+          // For custom extension editors (CSV, etc.) - look for their content
+          '.multi-editor-instance.active .spreadsheet-editor',
+          '.multi-editor-instance.active .custom-editor',
+          // Main editor area (works for most cases)
+          '.multi-editor-instance.active',
+          // Fallbacks
+          '.tab-editor-content',
+          '.editor',
+        ];
 
-        // Fallback to the main editor area
-        if (!targetElement) {
-          targetElement = document.querySelector('.multi-editor-instance.active');
-        }
-
-        // Fallback to the tab editor content area
-        if (!targetElement) {
-          targetElement = document.querySelector('.tab-editor-content');
-        }
-
-        // Last resort - find any visible editor
-        if (!targetElement) {
-          targetElement = document.querySelector('.editor');
+        for (const selector of selectors) {
+          const el = document.querySelector(selector) as HTMLElement | null;
+          if (el) {
+            // Check if element has actual dimensions
+            const rect = el.getBoundingClientRect();
+            if (rect.width > 0 && rect.height > 0) {
+              targetElement = el;
+              selectorUsed = selector;
+              break;
+            }
+          }
         }
       }
 
       if (!targetElement) {
-        throw new Error('No editor element found to capture');
+        // Collect diagnostic info about what we found
+        const diagnostics: string[] = [];
+        const selectors = [
+          '.multi-editor-instance.active .editor-content',
+          '.multi-editor-instance.active .spreadsheet-editor',
+          '.multi-editor-instance.active .custom-editor',
+          '.multi-editor-instance.active',
+          '.tab-editor-content',
+          '.editor',
+        ];
+        for (const selector of selectors) {
+          const el = document.querySelector(selector) as HTMLElement | null;
+          if (el) {
+            const rect = el.getBoundingClientRect();
+            diagnostics.push(`${selector}: found (${rect.width}x${rect.height})`);
+          } else {
+            diagnostics.push(`${selector}: not found`);
+          }
+        }
+        throw new Error(`No editor element found to capture. Diagnostics:\n${diagnostics.join('\n')}`);
       }
+
+      // Log element info for debugging
+      const rect = targetElement.getBoundingClientRect();
+      console.log(`[ExtensionSystem] Capturing element:`, {
+        selector: selectorUsed,
+        tagName: targetElement.tagName,
+        className: targetElement.className,
+        boundingRect: { width: rect.width, height: rect.height },
+        scrollDimensions: { width: targetElement.scrollWidth, height: targetElement.scrollHeight },
+      });
 
       // Dynamically import html2canvas
       const html2canvas = (await import('html2canvas')).default;
+
+      // Use bounding rect dimensions if scroll dimensions are 0
+      const captureWidth = targetElement.scrollWidth || rect.width;
+      const captureHeight = targetElement.scrollHeight || rect.height;
+
+      if (captureWidth === 0 || captureHeight === 0) {
+        throw new Error(`Element has zero dimensions (${captureWidth}x${captureHeight}). The editor may not be visible.`);
+      }
 
       // Capture the element
       const canvas = await html2canvas(targetElement, {
@@ -193,8 +240,8 @@ function setupEditorScreenshotListener(): void {
         useCORS: true,
         allowTaint: true,
         logging: false,
-        windowWidth: targetElement.scrollWidth,
-        windowHeight: targetElement.scrollHeight,
+        windowWidth: captureWidth,
+        windowHeight: captureHeight,
       });
 
       // Validate canvas dimensions
