@@ -85,8 +85,9 @@ export function createEditorHost(options: EditorHostOptions): EditorHost {
     // ============ FILE INFO ============
     filePath: options.filePath,
     fileName: options.fileName,
-    theme: options.theme,
-    isActive: options.isActive,
+    // Use getters for reactive properties that can change after creation
+    get theme() { return options.theme; },
+    get isActive() { return options.isActive; },
     workspaceId: options.workspaceId,
 
     // ============ CONTENT LOADING ============
