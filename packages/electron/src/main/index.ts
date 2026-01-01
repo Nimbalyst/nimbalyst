@@ -45,6 +45,7 @@ import {
 import { registerMCPConfigHandlers } from './ipc/MCPConfigHandlers';
 import { MCPConfigService } from './services/MCPConfigService';
 import { registerDatabaseBrowserHandlers } from './ipc/DatabaseBrowserHandlers';
+import { registerTerminalHandlers, shutdownTerminalHandlers } from './ipc/TerminalHandlers';
 import { AIService } from './services/ai/AIService';
 import { detectFileWorkspace, suggestWorkspaceForFile, getAdditionalDirectoriesForWorkspace } from './utils/workspaceDetection';
 // import { AgentService } from './services/agents/AgentService';
@@ -439,6 +440,7 @@ app.whenReady().then(async () => {
     registerGitStatusHandlers();
     registerMCPConfigHandlers();
     registerDatabaseBrowserHandlers();
+    registerTerminalHandlers();
 
     // Inject MCP config loader into ClaudeCodeProvider
     // This allows the runtime package to load merged user + workspace MCP configs
@@ -1017,6 +1019,10 @@ app.on('before-quit', async (event) => {
         await shutdownSessionStateHandlers();
         const t3_6 = Date.now();
         console.log(`[QUIT] [${t3_6}] Session state manager shutdown (${t3_6-t3_5}ms)`);
+
+        // Shutdown terminal sessions
+        shutdownTerminalHandlers();
+        console.log(`[QUIT] Terminal sessions shutdown`);
     } catch (error) {
         console.error('[QUIT] Error shutting down session state manager:', error);
         if (canWriteLogs && debugLog) {

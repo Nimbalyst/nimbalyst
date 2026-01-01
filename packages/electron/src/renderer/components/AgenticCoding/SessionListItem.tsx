@@ -23,6 +23,7 @@ interface SessionListItemProps {
   provider?: string;
   model?: string;
   messageCount?: number;
+  sessionType?: 'chat' | 'planning' | 'coding' | 'terminal'; // Type of session
 }
 
 export const SessionListItem: React.FC<SessionListItemProps> = ({
@@ -44,7 +45,8 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
   onUnarchive,
   provider,
   model,
-  messageCount
+  messageCount,
+  sessionType
 }) => {
   const [isHovering, setIsHovering] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
@@ -155,8 +157,12 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
       aria-label={`Session: ${truncatedTitle}, ${timestampLabel} ${relativeTime}${isLoaded ? ' (loaded in tab)' : ''}${isArchived ? ' (archived)' : ''}`}
       aria-current={isActive ? 'page' : undefined}
     >
-      <div className="session-list-item-icon">
-        <ProviderIcon provider={provider || 'claude'} size={16} />
+      <div className={`session-list-item-icon ${sessionType === 'terminal' ? 'terminal-icon' : ''}`}>
+        {sessionType === 'terminal' ? (
+          <MaterialSymbol icon="terminal" size={16} />
+        ) : (
+          <ProviderIcon provider={provider || 'claude'} size={16} />
+        )}
         {isLoaded && !isActive && (
           <div className="session-list-item-loaded-indicator" title="Loaded in tab" />
         )}

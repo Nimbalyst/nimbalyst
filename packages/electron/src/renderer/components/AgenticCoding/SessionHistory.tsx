@@ -13,7 +13,7 @@ interface SessionItem {
   updatedAt: number;
   provider: string;
   model?: string;
-  sessionType?: 'chat' | 'planning' | 'coding';
+  sessionType?: 'chat' | 'planning' | 'coding' | 'terminal';
   messageCount: number;
   isProcessing?: boolean;
   hasUnread?: boolean;
@@ -34,6 +34,7 @@ interface SessionHistoryProps {
   onSessionDelete?: (sessionId: string) => void;
   onSessionArchive?: (sessionId: string) => void; // Callback when session is archived (to close tab)
   onNewSession?: () => void;
+  onNewTerminal?: () => void; // Callback for creating a new terminal session
   onImportSessions?: () => void; // Callback for opening import dialog
   onOpenQuickSearch?: () => void; // Callback for opening session quick search (Cmd+L)
   collapsedGroups: string[];
@@ -68,6 +69,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   onSessionDelete,
   onSessionArchive,
   onNewSession,
+  onNewTerminal,
   onImportSessions,
   onOpenQuickSearch,
   collapsedGroups,
@@ -525,6 +527,20 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
                 </svg>
               </button>
             )}
+            {onNewTerminal && (
+              <button
+                className="session-history-new-terminal-button"
+                data-testid="new-terminal-button"
+                onClick={() => onNewTerminal()}
+                title="New terminal"
+                aria-label="Create new terminal"
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M3 5L7 9L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M9 13H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+              </button>
+            )}
           </div>
         </div>
         <div className="session-history-section-label">Agent Sessions</div>
@@ -709,6 +725,20 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
               </svg>
             </button>
           )}
+          {onNewTerminal && (
+            <button
+              className="session-history-new-terminal-button"
+              data-testid="new-terminal-button"
+              onClick={() => onNewTerminal()}
+              title="New terminal"
+              aria-label="Create new terminal"
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M3 5L7 9L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M9 13H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+            </button>
+          )}
         </div>
       </div>
       <div className="session-history-section-label">Agent Sessions</div>
@@ -879,6 +909,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
                     isProcessing={session.isProcessing}
                     hasUnread={session.hasUnread}
                     hasPendingPrompt={session.hasPendingPrompt}
+                    sessionType={session.sessionType}
                   />
                 ))}
               </CollapsibleGroup>

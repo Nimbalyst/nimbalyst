@@ -13,6 +13,7 @@ import type { AIMode } from './ModeTag';
 import { DiffTestDropdown } from "../AIChat/DiffTestDropdown.tsx";
 import { getFileName } from '../../utils/pathUtils';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
+import { TerminalPanel } from '../Terminal/TerminalPanel';
 
 export interface AgenticPanelRef {
   createNewSession: (planPath?: string) => Promise<void>;
@@ -957,6 +958,62 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       return sessionData;
     } catch (error) {
       console.error('[AgenticPanel] Failed to create session:', error);
+      throw error;
+    }
+  }, [sessionTabs, workspacePath, mode, loadSessions, onSessionChange, triggerSessionHistoryRefresh]);
+
+  // Create a new terminal session
+  const createNewTerminal = useCallback(async () => {
+    try {
+      console.log('[AgenticPanel] Creating new terminal session');
+
+      // Create terminal session via IPC
+      const result = await window.electronAPI.terminal.createSession(workspacePath);
+
+      if (!result.success || !result.sessionId) {
+        throw new Error(result.error || 'Failed to create terminal session');
+      }
+
+      // Load the session data
+      const sessionData = await window.electronAPI.aiLoadSession(result.sessionId, workspacePath);
+      if (!sessionData) {
+        throw new Error('Failed to load newly created terminal session');
+      }
+
+      // Count existing terminals for naming
+      const terminalCount = sessionTabs.filter(t => t.sessionData.sessionType === 'terminal').length;
+      const tabName = terminalCount > 0 ? `Terminal ${terminalCount + 1}` : 'Terminal';
+
+      const newTab: SessionTab = {
+        id: sessionData.id,
+        name: tabName,
+        sessionData: {
+          ...sessionData,
+          sessionType: 'terminal',
+        },
+        mode: 'agent',
+      };
+
+      if (mode === 'chat') {
+        setSessionTabs([newTab]);
+      } else {
+        setSessionTabs(prev => [...prev, newTab]);
+      }
+
+      setActiveTabId(sessionData.id);
+
+      await loadSessions();
+
+      // Trigger SessionHistory refresh
+      triggerSessionHistoryRefresh('new-terminal');
+
+      if (onSessionChange) {
+        onSessionChange(sessionData.id, tabName);
+      }
+
+      return sessionData;
+    } catch (error) {
+      console.error('[AgenticPanel] Failed to create terminal session:', error);
       throw error;
     }
   }, [sessionTabs, workspacePath, mode, loadSessions, onSessionChange, triggerSessionHistoryRefresh]);
@@ -2330,10 +2387,22 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     }
   }, [onSessionChange, markSessionAsRead, sessionTabs]);
 
-  const handleTabClose = useCallback((tabId: string) => {
+  const handleTabClose = useCallback(async (tabId: string) => {
     const validTabs = sessionTabs.filter(t => t != null);
     const closingTab = validTabs.find(t => t.id === tabId);
-    if (closingTab) {
+
+    // If this is a terminal session, destroy the PTY process
+    // Terminal sessions should not be reopenable from history since PTY state is lost
+    if (closingTab && closingTab.sessionData.sessionType === 'terminal') {
+      try {
+        await window.electronAPI.terminal.destroy(tabId);
+        console.log(`[AgenticPanel] Destroyed PTY for terminal session ${tabId}`);
+      } catch (error) {
+        console.error('[AgenticPanel] Failed to destroy terminal PTY:', error);
+      }
+      // Don't add terminal sessions to closedSessions (they can't be reopened)
+    } else if (closingTab) {
+      // For non-terminal sessions, add to closed sessions for reopening
       setClosedSessions(prev => [closingTab, ...prev].slice(0, MAX_CLOSED_SESSION_HISTORY));
     }
 
@@ -2759,6 +2828,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             onSessionDelete={deleteSession}
             onSessionArchive={closeArchivedSession}
             onNewSession={() => createNewSession()}
+            onNewTerminal={() => createNewTerminal()}
             onImportSessions={handleOpenImportDialog}
             onOpenQuickSearch={onOpenQuickSearch}
             collapsedGroups={collapsedGroups}
@@ -2790,43 +2860,63 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
             {/* Session views */}
             {sessionTabs.filter(tab => tab != null).map(tab => (
-              <AISessionView
-                key={tab.id}
-                ref={getSessionViewRef(tab.id)}
-                sessionId={tab.id}
-                sessionData={tab.sessionData}
-                isActive={tab.id === activeTabId}
-                mode="agent"
-                workspacePath={workspacePath}
-                documentContext={documentContext}
-                draftInput={tab.draftInput}
-                draftAttachments={tab.draftAttachments}
-                onDraftInputChange={handleDraftInputChange}
-                onDraftAttachmentsChange={handleDraftAttachmentsChange}
-                onSendMessage={handleSendMessage}
-                onCancelRequest={handleCancelRequest}
-                onNavigateHistory={handleNavigateHistory}
-                fileMentionOptions={fileMentionOptions}
-                onFileMentionSearch={handleFileMentionSearch}
-                onFileMentionSelect={handleFileMentionSelect}
-                onFileClick={handleFileClick}
-                isLoading={processingSessions.has(tab.id)}
-                aiMode={tab.mode || 'agent'}
-                onAIModeChange={(newMode) => handleModeChange(tab.id, newMode)}
-                currentModel={tab.model || tab.sessionData.model || 'claude-code'}
-                onModelChange={(newModel) => handleModelChange(tab.id, newModel)}
-                sessionHasMessages={(tab.sessionData.messages?.length ?? 0) > 0}
-                currentProviderType={
-                  tab.sessionData.provider === 'claude-code' || tab.sessionData.provider === 'openai-codex'
-                    ? 'agent'
-                    : tab.sessionData.provider
-                      ? 'model'
-                      : null
-                }
-                isArchived={tab.isArchived}
-                onCloseAndArchive={handleCloseAndArchive}
-                onUnarchive={handleUnarchive}
-              />
+              tab.sessionData.sessionType === 'terminal' ? (
+                <div
+                  key={tab.id}
+                  style={{
+                    flex: 1,
+                    display: tab.id === activeTabId ? 'flex' : 'none',
+                    flexDirection: 'column',
+                    height: '100%',
+                    overflow: 'hidden',
+                  }}
+                  data-testid={`terminal-session-${tab.id}`}
+                >
+                  <TerminalPanel
+                    sessionId={tab.id}
+                    workspacePath={workspacePath}
+                    isActive={tab.id === activeTabId}
+                  />
+                </div>
+              ) : (
+                <AISessionView
+                  key={tab.id}
+                  ref={getSessionViewRef(tab.id)}
+                  sessionId={tab.id}
+                  sessionData={tab.sessionData}
+                  isActive={tab.id === activeTabId}
+                  mode="agent"
+                  workspacePath={workspacePath}
+                  documentContext={documentContext}
+                  draftInput={tab.draftInput}
+                  draftAttachments={tab.draftAttachments}
+                  onDraftInputChange={handleDraftInputChange}
+                  onDraftAttachmentsChange={handleDraftAttachmentsChange}
+                  onSendMessage={handleSendMessage}
+                  onCancelRequest={handleCancelRequest}
+                  onNavigateHistory={handleNavigateHistory}
+                  fileMentionOptions={fileMentionOptions}
+                  onFileMentionSearch={handleFileMentionSearch}
+                  onFileMentionSelect={handleFileMentionSelect}
+                  onFileClick={handleFileClick}
+                  isLoading={processingSessions.has(tab.id)}
+                  aiMode={tab.mode || 'agent'}
+                  onAIModeChange={(newMode) => handleModeChange(tab.id, newMode)}
+                  currentModel={tab.model || tab.sessionData.model || 'claude-code'}
+                  onModelChange={(newModel) => handleModelChange(tab.id, newModel)}
+                  sessionHasMessages={(tab.sessionData.messages?.length ?? 0) > 0}
+                  currentProviderType={
+                    tab.sessionData.provider === 'claude-code' || tab.sessionData.provider === 'openai-codex'
+                      ? 'agent'
+                      : tab.sessionData.provider
+                        ? 'model'
+                        : null
+                  }
+                  isArchived={tab.isArchived}
+                  onCloseAndArchive={handleCloseAndArchive}
+                  onUnarchive={handleUnarchive}
+                />
+              )
             ))}
 
             {/* Empty state */}
