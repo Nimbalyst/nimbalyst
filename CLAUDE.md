@@ -58,7 +58,7 @@ See `/docs/PLAYWRIGHT.md` for comprehensive E2E testing documentation.
 
 ## Releases
 
-For detailed release instructions, see [RELEASING.md](RELEASING.md).
+For detailed release instructions, see [RELEASING.md](./RELEASING.md).
 
 **Quick reference:**
 - Use the `/release [patch|minor|major]` command
@@ -108,6 +108,29 @@ if (!window) {
   - Throw on missing required fields, don't provide defaults
 
 **Rule of thumb:** If you're adding code to "handle" missing required data, you're probably hiding a bug. Throw instead.
+
+### Shared UI Patterns
+
+These patterns apply across all packages (electron, capacitor, runtime) that contain UI code.
+
+#### Responsive CSS: Use Container Queries
+
+**Use \****`@container`***\* queries, not \****`@media`**\*\* queries** for responsive layouts. Since panels are resizable, viewport-based media queries don't respond to actual container width.
+
+```css
+.my-component {
+  container-type: inline-size;
+  container-name: my-component;
+}
+
+@container my-component (max-width: 500px) {
+  .my-component-child {
+    /* Styles when container is narrow */
+  }
+}
+```
+
+Container queries respond to the actual container width, making them work correctly with resizable panels and split views on both desktop and mobile.
 
 ## Analytics
 
@@ -179,7 +202,7 @@ planStatus:
 - **Never commit changes unless explicitly asked**
 - **Never provide time or effort estimates**
 - **Don't disable tests without asking first**
-- **Don't run `npm run dev` yourself** - User always does that
+- **Don't run \****`npm run dev`**\*\* yourself** - User always does that
 - **Never release without being explicitly instructed**
 - **Don't git reset or git add -A without asking**
 - **Don't add Co-Authored-By lines to commit messages**
@@ -191,7 +214,7 @@ When working on extensions in `packages/extensions/`:
 - Use `mcp__nimbalyst-extension-dev__extension_reload` to rebuild and reload extensions
 - Use `mcp__nimbalyst-extension-dev__extension_get_logs` to check for errors
 - Use `mcp__nimbalyst-extension-dev__extension_get_status` to verify extension state
-- **Never use manual `npm run build`** - always use the MCP tools for extension builds
+- **Never use manual \****`npm run build`** - always use the MCP tools for extension builds
 
 ## Testing Guidelines
 
@@ -202,11 +225,11 @@ When working on extensions in `packages/extensions/`:
 
 ## Documentation
 
-- **ANALYTICS_GUIDE.md**: How to add PostHog analytics events
-- **POSTHOG_EVENTS.md**: Canonical reference for all analytics events
+- **ANALYTICS\_GUIDE.md**: How to add PostHog analytics events
+- **POSTHOG\_EVENTS.md**: Canonical reference for all analytics events
 - **PLAYWRIGHT.md**: E2E testing patterns and best practices
-- **AI_PROVIDER_TYPES.md**: AI provider architecture
-- **CUSTOM_TOOL_WIDGETS.md**: Custom MCP tool widget implementation
-- **INTERNAL_MCP_SERVERS.md**: How to implement internal MCP servers
+- **AI\_PROVIDER\_TYPES.md**: AI provider architecture
+- **CUSTOM\_TOOL\_WIDGETS.md**: Custom MCP tool widget implementation
+- **INTERNAL\_MCP\_SERVERS.md**: How to implement internal MCP servers
 - **THEMING.md**: Theming system documentation (in electron package)
 - **RELEASING.md**: Release process

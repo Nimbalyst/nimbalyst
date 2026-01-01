@@ -14,6 +14,8 @@
   background: var(--surface-secondary);
   border-bottom: 1px solid var(--border-primary);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  container-type: inline-size;
+  container-name: diff-header;
 }
 
 .unified-diff-header-content {
@@ -30,7 +32,9 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .unified-diff-header-label {
@@ -53,14 +57,18 @@
   gap: 6px;
   font-size: 13px;
   color: var(--text-primary);
+  min-width: 0;
+  overflow: hidden;
 }
 
 .unified-diff-header-edit-text {
   color: var(--text-secondary);
+  flex-shrink: 0;
 }
 
 .unified-diff-header-timestamp {
   color: var(--text-tertiary);
+  flex-shrink: 0;
 }
 
 .unified-diff-header-timestamp::before {
@@ -83,6 +91,9 @@
   color: var(--text-primary);
   cursor: default;
   transition: background-color 0.15s ease;
+  min-width: 0;
+  overflow: hidden;
+  flex-shrink: 1;
 }
 
 .unified-diff-header-session-link--clickable {
@@ -100,6 +111,9 @@
 .unified-diff-header-session-name {
   font-weight: 600;
   color: var(--accent-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Open icon - hidden by default, shown on hover */
@@ -160,6 +174,7 @@
   align-items: center;
   gap: 8px;
   margin-left: auto;
+  flex-shrink: 0;
 }
 
 .unified-diff-header-button {
@@ -226,23 +241,69 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
-/* Responsive layout */
-@media (max-width: 768px) {
+/* Responsive layout using container queries (responds to container width, not viewport) */
+
+/* Hide timestamp first when container is narrower */
+@container diff-header (max-width: 700px) {
+  .unified-diff-header-timestamp {
+    display: none;
+  }
+}
+
+/* At smaller container widths, hide the "edited file" text */
+@container diff-header (max-width: 550px) {
+  .unified-diff-header-edit-text {
+    display: none;
+  }
+}
+
+/* At narrow container widths, wrap to two rows */
+@container diff-header (max-width: 450px) {
   .unified-diff-header-content {
     flex-wrap: wrap;
+    padding: 8px 12px;
+    gap: 8px;
   }
 
   .unified-diff-header-info {
     flex: 1 1 100%;
-    margin-bottom: 8px;
+    order: 1;
   }
 
   .unified-diff-header-navigation {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
+    order: 2;
   }
 
   .unified-diff-header-actions {
-    margin-left: 0;
+    margin-left: auto;
+    order: 3;
+    gap: 6px;
+  }
+
+  .unified-diff-header-button {
+    padding: 6px 10px;
+  }
+}
+
+/* At very narrow container widths, compact the buttons further */
+@container diff-header (max-width: 350px) {
+  .unified-diff-header-content {
+    padding: 6px 8px;
+  }
+
+  .unified-diff-header-button {
+    padding: 5px 8px;
+    font-size: 12px;
+  }
+
+  .unified-diff-header-change-counter {
+    min-width: 60px;
+    font-size: 12px;
+  }
+
+  .unified-diff-header-session-name {
+    max-width: 120px;
   }
 }
 

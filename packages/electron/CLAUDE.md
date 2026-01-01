@@ -77,11 +77,11 @@ The app uses **PGLite** (PostgreSQL in WebAssembly) for all data storage.
 - **Bundling**: PGLite is fully bundled in packaged apps
 
 ### Database Tables
-- **ai_sessions**: AI chat conversations with full message history, document context, and provider configurations
-- **app_settings**: Global application settings (theme, providers, shortcuts, etc.)
-- **project_state**: Per-project state including window bounds, UI layout, open tabs, file tree, and editor settings
-- **session_state**: Global session restoration data for windows and focus order
-- **document_history**: Compressed document edit history with binary content storage
+- **ai\_sessions**: AI chat conversations with full message history, document context, and provider configurations
+- **app\_settings**: Global application settings (theme, providers, shortcuts, etc.)
+- **project\_state**: Per-project state including window bounds, UI layout, open tabs, file tree, and editor settings
+- **session\_state**: Global session restoration data for windows and focus order
+- **document\_history**: Compressed document edit history with binary content storage
 
 ### Data Locations (macOS)
 - **Database**: `~/Library/Application Support/@nimbalyst/electron/pglite-db/`
