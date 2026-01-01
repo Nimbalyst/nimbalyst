@@ -19,4 +19,19 @@ export default mergeExtensionConfig(baseConfig, {
       '@': resolve(__dirname, 'src'),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // Required: Extensions load via blob URLs which can't resolve relative imports
+        inlineDynamicImports: true,
+        // Vite 7 changed how CSS files are named - force it to use index.css
+        assetFileNames: (assetInfo) => {
+          if (assetInfo.names?.some((name) => name.endsWith('.css'))) {
+            return 'index.css';
+          }
+          return assetInfo.names?.[0] || 'asset';
+        },
+      },
+    },
+  },
 });
