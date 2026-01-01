@@ -127,6 +127,25 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
       args: ['-y', '@modelcontextprotocol/server-gdrive'],
       env: {}
     }
+  },
+  {
+    id: 'posthog',
+    name: 'PostHog',
+    description: 'Product analytics, feature flags, and error tracking',
+    docsUrl: 'https://posthog.com/docs/model-context-protocol',
+    config: {
+      command: 'npx',
+      args: [
+        '-y',
+        'mcp-remote@latest',
+        'https://mcp.posthog.com/sse',
+        '--header',
+        'Authorization:Bearer ${POSTHOG_PERSONAL_API_KEY}'
+      ],
+      env: {
+        POSTHOG_PERSONAL_API_KEY: ''
+      }
+    }
   }
 ];
 
@@ -398,14 +417,24 @@ export function MCPServersPanel({ scope = 'user', workspacePath }: MCPServersPan
     }
 
     setTestStatus('testing');
-    setTestMessage('');
+    setTestMessage('Starting...');
+
+    // Subscribe to progress updates
+    const unsubscribe = window.electronAPI.on(
+      'mcp-config:test-progress',
+      (data: { status: string; message: string }) => {
+        if (data.message) {
+          setTestMessage(data.message);
+        }
+      }
+    );
 
     try {
       // Build temporary server config for testing
       const testConfig: MCPServerConfig = {
         type: formType,
         env: Object.fromEntries(
-          formEnv.filter(({ key, value }) => key.trim()).map(({ key, value }) => [key.trim(), value])
+          formEnv.filter(({ key }) => key.trim()).map(({ key, value }) => [key.trim(), value])
         )
       };
 
@@ -429,6 +458,9 @@ export function MCPServersPanel({ scope = 'user', workspacePath }: MCPServersPan
     } catch (error: any) {
       setTestStatus('error');
       setTestMessage(error.message || 'Test failed');
+    } finally {
+      // Clean up progress listener
+      unsubscribe();
     }
   };
 
@@ -585,6 +617,7 @@ export function MCPServersPanel({ scope = 'user', workspacePath }: MCPServersPan
                     </div>
                     {testMessage && (
                       <div className={`mcp-test-message ${testStatus}`}>
+                        {testStatus === 'testing' && <span className="mcp-test-spinner" />}
                         {testMessage}
                       </div>
                     )}
@@ -632,6 +665,7 @@ export function MCPServersPanel({ scope = 'user', workspacePath }: MCPServersPan
                   </div>
                   {testMessage && (
                     <div className={`mcp-test-message ${testStatus}`}>
+                      {testStatus === 'testing' && <span className="mcp-test-spinner" />}
                       {testMessage}
                     </div>
                   )}

@@ -328,6 +328,15 @@
   padding: 0.5rem;
   border-radius: 4px;
   font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.mcp-test-message.testing {
+  background: rgba(52, 152, 219, 0.1);
+  color: var(--text-secondary);
+  border: 1px solid rgba(52, 152, 219, 0.3);
 }
 
 .mcp-test-message.success {
@@ -340,6 +349,23 @@
   background: rgba(231, 76, 60, 0.1);
   color: #e74c3c;
   border: 1px solid rgba(231, 76, 60, 0.3);
+}
+
+.mcp-test-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(52, 152, 219, 0.3);
+  border-top-color: #3498db;
+  border-radius: 50%;
+  animation: mcp-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes mcp-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .mcp-form-hint {

@@ -13,10 +13,14 @@ import { logger } from '../utils/logger';
  *
  * This service reads/writes Claude Code's native config files for full compatibility.
  */
+export interface TestProgressCallback {
+  (status: 'downloading' | 'connecting' | 'testing' | 'done', message: string): void;
+}
+
 export class MCPConfigService {
   private userConfigPath: string;
 
-  private CONNECTION_TIMEOUT_MS = 20000;
+  private CONNECTION_TIMEOUT_MS = 30000; // Increased for package downloads
 
   constructor() {
 
@@ -219,7 +223,10 @@ export class MCPConfigService {
    * For stdio: attempts to spawn and communicate with the process.
    * For SSE: attempts to connect to the URL endpoint.
    */
-  async testServerConnection(config: MCPServerConfig): Promise<{ success: boolean; error?: string }> {
+  async testServerConnection(
+    config: MCPServerConfig,
+    onProgress?: TestProgressCallback
+  ): Promise<{ success: boolean; error?: string }> {
     try {
       // Validate config first
       const tempConfig: MCPConfig = {
@@ -232,7 +239,7 @@ export class MCPConfigService {
       if (transportType === 'sse') {
         return await this.testSSEConnection(config);
       } else {
-        return await this.testStdioConnection(config);
+        return await this.testStdioConnection(config, onProgress);
       }
     } catch (error: any) {
       logger.mcp.error('MCP server test error:', error);
@@ -305,8 +312,12 @@ export class MCPConfigService {
 
   /**
    * Test stdio server connection by spawning the process.
+   * Detects npx package downloads and reports progress.
    */
-  private async testStdioConnection(config: MCPServerConfig): Promise<{ success: boolean; error?: string }> {
+  private async testStdioConnection(
+    config: MCPServerConfig,
+    onProgress?: TestProgressCallback
+  ): Promise<{ success: boolean; error?: string }> {
     const { spawn } = await import('child_process');
 
     if (!config.command) {
@@ -323,40 +334,109 @@ export class MCPConfigService {
           }
         }
 
+        logger.mcp.info('[MCP Test] Starting stdio connection test');
+        logger.mcp.info(`[MCP Test] Command: ${config.command}`);
+        logger.mcp.info(`[MCP Test] Args: ${JSON.stringify(config.args)}`);
+        logger.mcp.info(`[MCP Test] Env keys: ${Object.keys(config.env || {}).join(', ')}`);
+
+        onProgress?.('connecting', 'Starting server...');
+
         // Spawn the process (command is validated above)
         const child = spawn(config.command!, config.args || [], {
           env,
           stdio: ['pipe', 'pipe', 'pipe']
         });
 
+        logger.mcp.info(`[MCP Test] Process spawned with PID: ${child.pid}`);
+
         let output = '';
         let errorOutput = '';
+        let isDownloading = false;
+        let resolved = false;
+
+        const resolveOnce = (result: { success: boolean; error?: string }) => {
+          if (!resolved) {
+            resolved = true;
+            clearTimeout(timeout);
+            child.kill();
+            onProgress?.('done', '');
+            resolve(result);
+          }
+        };
+
         const timeout = setTimeout(() => {
-          child.kill();
-          resolve({ success: false, error: 'Connection timeout (20s)' });
+          logger.mcp.warn('[MCP Test] Connection timeout reached (30s)');
+          logger.mcp.info(`[MCP Test] stdout so far: ${output.slice(0, 500)}`);
+          logger.mcp.info(`[MCP Test] stderr so far: ${errorOutput.slice(0, 1000)}`);
+          resolveOnce({ success: false, error: 'Connection timeout (30s)' });
         }, this.CONNECTION_TIMEOUT_MS);
 
         child.stdout?.on('data', (data) => {
-          output += data.toString();
+          const chunk = data.toString();
+          output += chunk;
+          logger.mcp.debug(`[MCP Test] stdout: ${chunk.slice(0, 200)}`);
+          // MCP servers output JSON-RPC, detect initialization
+          if (output.includes('"jsonrpc"') || output.includes('initialize')) {
+            logger.mcp.info('[MCP Test] Detected JSON-RPC response');
+            onProgress?.('testing', 'Server responding...');
+          }
         });
 
         child.stderr?.on('data', (data) => {
-          errorOutput += data.toString();
+          const chunk = data.toString();
+          errorOutput += chunk;
+          logger.mcp.info(`[MCP Test] stderr: ${chunk.slice(0, 500)}`);
+
+          // Detect npx/npm download progress patterns
+          if (chunk.includes('npm warn') || chunk.includes('npm notice') ||
+              chunk.includes('added') || chunk.includes('packages in') ||
+              chunk.includes('reify:') || chunk.includes('timing')) {
+            if (!isDownloading) {
+              isDownloading = true;
+              logger.mcp.info('[MCP Test] Detected package download');
+              onProgress?.('downloading', 'Downloading packages...');
+            }
+          }
+
+          // Detect mcp-remote specific messages
+          if (chunk.includes('Connecting to remote server')) {
+            logger.mcp.info('[MCP Test] mcp-remote connecting to remote server');
+            onProgress?.('connecting', 'Connecting to remote server...');
+          }
+
+          // Detect mcp-remote successful connection
+          if (chunk.includes('Proxy established successfully') ||
+              chunk.includes('Connected to remote server')) {
+            logger.mcp.info('[MCP Test] mcp-remote connected successfully');
+            onProgress?.('testing', 'Connected to remote server...');
+            // Give it a moment to fully establish, then succeed
+            setTimeout(() => {
+              logger.mcp.info('[MCP Test] Test successful (mcp-remote proxy established)');
+              resolveOnce({ success: true });
+            }, 500);
+          }
+
+          if (chunk.includes('Connection error') || chunk.includes('Fatal error')) {
+            logger.mcp.error(`[MCP Test] Connection error detected: ${chunk}`);
+          }
         });
 
         child.on('error', (error) => {
-          clearTimeout(timeout);
-          logger.mcp.error('MCP server spawn error:', error);
-          resolve({ success: false, error: error.message });
+          logger.mcp.error('[MCP Test] Spawn error:', error);
+          resolveOnce({ success: false, error: error.message });
         });
 
-        child.on('exit', (code) => {
-          clearTimeout(timeout);
+        child.on('exit', (code, signal) => {
+          logger.mcp.info(`[MCP Test] Process exited with code: ${code}, signal: ${signal}`);
+          logger.mcp.info(`[MCP Test] Final stdout length: ${output.length}`);
+          logger.mcp.info(`[MCP Test] Final stderr: ${errorOutput.slice(0, 500)}`);
           if (code === 0 || output.length > 0) {
             // If process exits cleanly or produced output, consider it a success
-            resolve({ success: true });
-          } else {
-            resolve({
+            logger.mcp.info('[MCP Test] Test successful');
+            resolveOnce({ success: true });
+          } else if (!resolved) {
+            logger.mcp.warn(`[MCP Test] Test failed: ${errorOutput || `exit code ${code}`}`);
+            resolveOnce({
               success: false,
               error: errorOutput || `Process exited with code ${code}`
             });
@@ -365,15 +445,15 @@ export class MCPConfigService {
 
         // Try to detect if server started successfully by looking for initialization
         setTimeout(() => {
+          logger.mcp.debug(`[MCP Test] 2s check - stdout: ${output.length} bytes, stderr includes initialize: ${errorOutput.includes('initialize')}`);
           if (output.length > 0 || errorOutput.includes('initialize')) {
-            clearTimeout(timeout);
-            child.kill();
-            resolve({ success: true });
+            logger.mcp.info('[MCP Test] Early success detection');
+            resolveOnce({ success: true });
           }
         }, 2000);
 
       } catch (error: any) {
-        logger.mcp.error('MCP server test error:', error);
+        logger.mcp.error('[MCP Test] Unexpected error:', error);
         resolve({ success: false, error: error.message });
       }
     });

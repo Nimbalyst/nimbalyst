@@ -1,5 +1,5 @@
-import { ipcMain } from 'electron';
-import { MCPConfigService } from '../services/MCPConfigService';
+import { ipcMain, BrowserWindow } from 'electron';
+import { MCPConfigService, TestProgressCallback } from '../services/MCPConfigService';
 import { MCPConfig } from '@nimbalyst/runtime/types/MCPServerConfig';
 import { logger } from '../utils/logger';
 
@@ -88,10 +88,19 @@ export function registerMCPConfigHandlers() {
     return mcpConfigService.getWorkspaceConfigPath(workspacePath);
   });
 
-  // Test MCP server connection
-  ipcMain.handle('mcp-config:test-server', async (_event, config: any) => {
+  // Test MCP server connection with progress updates
+  ipcMain.handle('mcp-config:test-server', async (event, config: any) => {
     try {
-      const result = await mcpConfigService.testServerConnection(config);
+      // Get the window that sent this request to send progress updates
+      const window = BrowserWindow.fromWebContents(event.sender);
+
+      const onProgress: TestProgressCallback = (status, message) => {
+        if (window && !window.isDestroyed()) {
+          window.webContents.send('mcp-config:test-progress', { status, message });
+        }
+      };
+
+      const result = await mcpConfigService.testServerConnection(config, onProgress);
       return result;
     } catch (error: any) {
       logger.main.error('[MCP] Failed to test server:', error);
