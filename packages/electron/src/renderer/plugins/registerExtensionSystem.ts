@@ -197,10 +197,21 @@ function setupEditorScreenshotListener(): void {
         windowHeight: targetElement.scrollHeight,
       });
 
-      // Convert to base64
-      const base64Data = canvas.toDataURL('image/png').split(',')[1];
+      // Validate canvas dimensions
+      if (canvas.width === 0 || canvas.height === 0) {
+        throw new Error(`Canvas has zero dimensions (${canvas.width}x${canvas.height}). The editor element may not be visible or rendered.`);
+      }
 
-      console.log(`[ExtensionSystem] Editor screenshot captured successfully`);
+      // Convert to base64
+      const dataUrl = canvas.toDataURL('image/png');
+      const base64Data = dataUrl.split(',')[1];
+
+      // Validate that we got actual image data
+      if (!base64Data || base64Data.length === 0) {
+        throw new Error('Canvas produced empty image data. This may indicate a rendering issue with the editor element.');
+      }
+
+      console.log(`[ExtensionSystem] Editor screenshot captured successfully (${canvas.width}x${canvas.height}, ${base64Data.length} bytes)`);
 
       // Send result back to main process - use send since main uses ipcMain.once
       electronAPI.send(data.requestId, {

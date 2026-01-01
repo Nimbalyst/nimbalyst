@@ -821,12 +821,27 @@ async function tryCreateServer(port: number): Promise<any> {
                 };
               }
 
+              // Validate that we actually got image data
+              // This prevents the API error: "image cannot be empty"
+              if (!result.imageBase64 || result.imageBase64.length === 0) {
+                console.error('[MCP Server] Mockup screenshot returned empty base64 data');
+                return {
+                  content: [
+                    {
+                      type: 'text',
+                      text: 'Error: Screenshot capture returned empty image data. The mockup may not have rendered properly or the capture failed silently.'
+                    }
+                  ],
+                  isError: true
+                };
+              }
+
               console.log(`[MCP Server] Captured screenshot for ${filePath}`);
 
               // Compress image if needed to work around Claude bug with large images
               // See: https://discord.com/channels/1072196207201501266/1451693213931933846
               const compressed = compressImageIfNeeded(
-                result.imageBase64!,
+                result.imageBase64,
                 result.mimeType || 'image/png'
               );
 
@@ -956,11 +971,26 @@ async function tryCreateServer(port: number): Promise<any> {
                 };
               }
 
+              // Validate that we actually got image data
+              // This prevents the API error: "image cannot be empty"
+              if (!result.imageBase64 || result.imageBase64.length === 0) {
+                console.error('[MCP Server] Editor screenshot returned empty base64 data');
+                return {
+                  content: [
+                    {
+                      type: 'text',
+                      text: 'Error: Screenshot capture returned empty image data. The editor element may not have rendered properly or the capture failed silently.'
+                    }
+                  ],
+                  isError: true
+                };
+              }
+
               console.log(`[MCP Server] Captured editor screenshot for ${filePath}`);
 
               // Compress image if needed (reuse mockup compression logic)
               const compressed = compressImageIfNeeded(
-                result.imageBase64!,
+                result.imageBase64,
                 result.mimeType || 'image/png'
               );
 

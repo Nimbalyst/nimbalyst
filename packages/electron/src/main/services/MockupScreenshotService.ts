@@ -168,10 +168,28 @@ export class MockupScreenshotService {
 
       // Capture the screenshot
       const image = await headlessWindow.webContents.capturePage();
-      const pngBuffer = image.toPNG();
-      const base64Data = pngBuffer.toString('base64');
 
-      console.log('[MockupScreenshotService] Headless screenshot captured successfully');
+      // Validate that we got a non-empty image
+      if (image.isEmpty()) {
+        throw new Error('capturePage returned an empty image. The page may not have rendered correctly.');
+      }
+
+      const size = image.getSize();
+      if (size.width === 0 || size.height === 0) {
+        throw new Error(`Screenshot has zero dimensions (${size.width}x${size.height}). The page may not have rendered correctly.`);
+      }
+
+      const pngBuffer = image.toPNG();
+      if (pngBuffer.length === 0) {
+        throw new Error('PNG conversion produced empty buffer.');
+      }
+
+      const base64Data = pngBuffer.toString('base64');
+      if (base64Data.length === 0) {
+        throw new Error('Base64 encoding produced empty string.');
+      }
+
+      console.log(`[MockupScreenshotService] Headless screenshot captured successfully (${size.width}x${size.height}, ${base64Data.length} bytes)`);
 
       return {
         success: true,
