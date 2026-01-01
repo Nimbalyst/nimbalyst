@@ -51,12 +51,12 @@ export default defineConfig({
           'react-dom': 'ReactDOM',
           'react/jsx-runtime': 'jsxRuntime',
         },
-        // Ensure CSS is extracted
+        // Vite 7 changed how CSS files are named - force it to use index.css
         assetFileNames: (assetInfo) => {
-          if (assetInfo.name === 'style.css') {
+          if (assetInfo.names?.some((name) => name.endsWith('.css'))) {
             return 'index.css';
           }
-          return assetInfo.name || 'asset';
+          return assetInfo.names?.[0] || 'asset';
         },
       },
     },

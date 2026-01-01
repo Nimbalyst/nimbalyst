@@ -66,6 +66,13 @@ export default defineConfig({
           'pdfjs-dist': 'pdfjsLib',
           virtua: 'Virtua',
         },
+        // Vite 7 changed how CSS files are named - force it to use style.css
+        assetFileNames: (assetInfo) => {
+          if (assetInfo.names?.some((name) => name.endsWith('.css'))) {
+            return 'style.css';
+          }
+          return assetInfo.names?.[0] || 'asset';
+        },
       },
     },
     outDir: 'dist',

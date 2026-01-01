@@ -1,8 +1,63 @@
 /**
  * Vite configuration helpers for Nimbalyst extensions.
  */
-import type { UserConfig, PluginOption } from 'vite';
+import type { UserConfig, PluginOption, Plugin } from 'vite';
+import { existsSync, readFileSync } from 'fs';
+import { resolve } from 'path';
 import { ROLLUP_EXTERNALS } from './externals.js';
+
+/**
+ * Creates a Vite plugin that validates the build output matches the manifest.
+ * This catches issues like CSS files not being named correctly.
+ */
+function createManifestValidationPlugin(): Plugin {
+  let outDir = 'dist';
+  let rootDir = process.cwd();
+
+  return {
+    name: 'nimbalyst-manifest-validation',
+    configResolved(config) {
+      outDir = config.build.outDir;
+      rootDir = config.root;
+    },
+    closeBundle() {
+      const manifestPath = resolve(rootDir, 'manifest.json');
+      if (!existsSync(manifestPath)) {
+        return; // No manifest to validate against
+      }
+
+      try {
+        const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'));
+        const errors: string[] = [];
+
+        // Validate main JS file
+        if (manifest.main) {
+          const mainPath = resolve(rootDir, manifest.main);
+          if (!existsSync(mainPath)) {
+            errors.push(`manifest.main "${manifest.main}" not found in build output`);
+          }
+        }
+
+        // Validate styles CSS file
+        if (manifest.styles) {
+          const stylesPath = resolve(rootDir, manifest.styles);
+          if (!existsSync(stylesPath)) {
+            errors.push(`manifest.styles "${manifest.styles}" not found in build output`);
+          }
+        }
+
+        if (errors.length > 0) {
+          console.error('\n\x1b[31m[nimbalyst-extension] Build validation failed:\x1b[0m');
+          errors.forEach((err) => console.error(`  - ${err}`));
+          console.error('\nMake sure your vite.config.ts output filenames match manifest.json\n');
+          process.exitCode = 1;
+        }
+      } catch {
+        // Ignore JSON parse errors - manifest might be invalid for other reasons
+      }
+    },
+  };
+}
 
 export interface ExtensionConfigOptions {
   /**
@@ -84,6 +139,8 @@ export function createExtensionConfig(options: ExtensionConfigOptions): UserConf
       // Note: User must add @vitejs/plugin-react themselves with proper config:
       // react({ jsxRuntime: 'automatic', jsxImportSource: 'react' })
       ...plugins,
+      // Validate build output matches manifest.json
+      createManifestValidationPlugin(),
     ],
 
     build: {
@@ -107,11 +164,12 @@ export function createExtensionConfig(options: ExtensionConfigOptions): UserConf
           },
 
           // Name CSS output consistently
+          // Vite 7 changed assetInfo.name to assetInfo.names (array)
           assetFileNames: (assetInfo) => {
-            if (assetInfo.name === 'style.css') {
+            if (assetInfo.names?.some((name) => name.endsWith('.css'))) {
               return `${fileName}.css`;
             }
-            return assetInfo.name || 'asset';
+            return assetInfo.names?.[0] || 'asset';
           },
         },
       },
