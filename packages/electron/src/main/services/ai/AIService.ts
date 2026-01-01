@@ -2771,7 +2771,7 @@ export class AIService {
           const defaultModel = await ModelRegistry.getDefaultModel('claude');
           console.log('[AIService] testConnection - Got default model:', defaultModel);
           config.model = defaultModel;
-          console.log('[AIService] testConnection - Initializing with config:', config);
+          console.log('[AIService] testConnection - Initializing with config:', { hasApiKey: !!config.apiKey, model: config.model });
           await testProvider.initialize(config);
 
           console.log('[AIService] Testing connection by sending a simple message...');

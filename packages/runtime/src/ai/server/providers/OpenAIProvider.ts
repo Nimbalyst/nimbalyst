@@ -257,7 +257,7 @@ export class OpenAIProvider extends BaseAIProvider {
 
       console.log(`[OpenAIProvider] About to call OpenAI completions.create...`);
       console.log(`[OpenAIProvider] Full API URL: https://api.openai.com/v1/chat/completions`);
-      console.log(`[OpenAIProvider] Headers: Authorization: Bearer ${this.config.apiKey?.substring(0, 10)}...`);
+      console.log(`[OpenAIProvider] Headers: Authorization: Bearer [REDACTED]`);
 
       let response;
       try {
