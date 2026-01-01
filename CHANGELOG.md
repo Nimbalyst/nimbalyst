@@ -12,10 +12,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <!-- New features go here -->
 
 ### Changed
-- Commented out debug logging statements for cleaner console output
+<!-- Changes to existing functionality go here -->
 
 ### Fixed
-- Re-enabled npm cache in CI builds
+<!-- Bug fixes go here -->
+
+### Removed
+<!-- Removed features go here -->
+
+## [0.50.5] - 2026-01-01
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+- Split CLAUDE.md into per-package documentation
+
+### Fixed
+- Editor screenshots now work for CSV and custom extension editors
+- CSV spreadsheet styles now load correctly after Vite 7 upgrade
+- Screenshot tools return proper errors instead of crashing sessions
+- Enter key now sends messages containing @ or / characters
+- Diff header buttons now visible in narrow panels
 
 ### Removed
 <!-- Removed features go here -->
