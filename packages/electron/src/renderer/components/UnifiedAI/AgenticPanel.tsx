@@ -130,6 +130,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   const [error, setError] = useState<string | null>(null);
   const [sendingSessions, setSendingSessions] = useState<Set<string>>(new Set());
   const sendingSessionsRef = useRef<Set<string>>(new Set());
+  const [releaseChannel, setReleaseChannel] = useState<'stable' | 'alpha'>('stable');
 
   // Track sessions that are actively running (from session state manager)
   const [runningSessions, setRunningSessions] = useState<Set<string>>(new Set());
@@ -181,6 +182,13 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   useEffect(() => {
     workspacePathRef.current = workspacePath;
   }, [workspacePath]);
+
+  // Fetch release channel for feature gating
+  useEffect(() => {
+    window.electronAPI.invoke('release-channel:get').then((channel: 'stable' | 'alpha') => {
+      setReleaseChannel(channel);
+    });
+  }, []);
 
   // Focus input when panel becomes active (e.g., Cmd+K to switch to agent mode)
   // or when switching between session tabs
@@ -2828,7 +2836,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             onSessionDelete={deleteSession}
             onSessionArchive={closeArchivedSession}
             onNewSession={() => createNewSession()}
-            onNewTerminal={() => createNewTerminal()}
+            onNewTerminal={releaseChannel === 'alpha' ? () => createNewTerminal() : undefined}
             onImportSessions={handleOpenImportDialog}
             onOpenQuickSearch={onOpenQuickSearch}
             collapsedGroups={collapsedGroups}
