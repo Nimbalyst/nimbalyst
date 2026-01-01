@@ -31,6 +31,8 @@ For detailed information about specific packages, see their CLAUDE.md files:
 - `/packages/electron/CLAUDE.md` - Electron desktop app specifics
 - `/packages/runtime/CLAUDE.md` - AI providers and runtime services
 - `/packages/rexical/CLAUDE.md` - Lexical editor architecture
+- `/packages/capacitor/CLAUDE.md` - Mobile app (iOS/iPadOS)
+- `/packages/collabv3/CLAUDE.md` - Sync server (Cloudflare Workers)
 
 ## Development Commands
 
@@ -41,12 +43,12 @@ For detailed information about specific packages, see their CLAUDE.md files:
 
 ### Testing
 - **Unit tests**: `npm run test:unit` - Uses vitest
-- **E2E tests**: `npm run test:e2e` - Uses Playwright
 - **Test UI**: `npm run test:unit:ui`
 - **Run specific E2E test file**: `npx playwright test e2e/monaco/file-watcher-updates.spec.ts`
 - **Run E2E tests in a directory**: `npx playwright test e2e/monaco/`
+- **Run all E2E tests**: `npx playwright test`
 
-**IMPORTANT**: Always use `npx playwright test` to run specific tests - never use `npm run test:e2e -- --grep` as this runs tests in parallel which corrupts PGLite.
+**IMPORTANT**: Always use `npx playwright test` directly for E2E tests. Never use parallel execution as it corrupts PGLite.
 
 See `/docs/PLAYWRIGHT.md` for comprehensive E2E testing documentation.
 
