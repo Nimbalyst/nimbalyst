@@ -54,12 +54,16 @@ export function registerTerminalHandlers(): void {
         const terminalInfo = manager.getTerminalInfo(sessionId);
 
         // Update session with terminal metadata
+        const scrollbackBuffer = manager.getScrollbackBuffer(sessionId) || undefined;
         await AISessionsRepository.updateMetadata(sessionId, {
           metadata: {
             terminal: {
               shell: terminalInfo?.shell.name || 'unknown',
               shellPath: terminalInfo?.shell.path || '',
               cwd: terminalInfo?.cwd || payload.workspacePath,
+              historyFile: terminalInfo?.historyFile || '',
+              scrollback: scrollbackBuffer,
+              scrollbackUpdatedAt: scrollbackBuffer ? Date.now() : undefined,
             },
           },
         });
@@ -137,14 +141,22 @@ export function registerTerminalHandlers(): void {
    * Get scrollback buffer for restoration
    */
   ipcMain.handle('terminal:get-scrollback', async (_event, sessionId: string) => {
-    return manager.getScrollbackBuffer(sessionId);
+    if (!sessionId || typeof sessionId !== 'string') {
+      throw new Error('sessionId is required and must be a string');
+    }
+
+    const inMemory = manager.getScrollbackBuffer(sessionId);
+    if (inMemory !== null) {
+      return inMemory;
+    }
+    return await manager.getStoredScrollback(sessionId);
   });
 
   /**
    * Destroy a terminal
    */
   ipcMain.handle('terminal:destroy', async (_event, sessionId: string) => {
-    manager.destroyTerminal(sessionId);
+    await manager.destroyTerminal(sessionId);
     return { success: true };
   });
 
@@ -161,7 +173,7 @@ export function registerTerminalHandlers(): void {
 /**
  * Shutdown handler - destroy all terminals on app quit
  */
-export function shutdownTerminalHandlers(): void {
+export async function shutdownTerminalHandlers(): Promise<void> {
   const manager = getTerminalSessionManager();
-  manager.destroyAllTerminals();
+  await manager.destroyAllTerminals();
 }

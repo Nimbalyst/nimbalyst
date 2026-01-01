@@ -19,7 +19,9 @@ declare global {
         write: (sessionId: string, data: string) => Promise<{ success: boolean }>;
         resize: (sessionId: string, cols: number, rows: number) => Promise<{ success: boolean }>;
         getScrollback: (sessionId: string) => Promise<string | null>;
-        getInfo: (sessionId: string) => Promise<{ shell: { name: string; path: string }; cwd: string; cols: number; rows: number } | null>;
+        getInfo: (
+          sessionId: string
+        ) => Promise<{ shell: { name: string; path: string }; cwd: string; cols: number; rows: number; historyFile?: string } | null>;
         destroy: (sessionId: string) => Promise<{ success: boolean }>;
         onOutput: (callback: (data: { sessionId: string; data: string }) => void) => () => void;
         onExited: (callback: (data: { sessionId: string; exitCode: number }) => void) => () => void;

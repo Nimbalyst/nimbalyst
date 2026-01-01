@@ -1021,7 +1021,7 @@ app.on('before-quit', async (event) => {
         console.log(`[QUIT] [${t3_6}] Session state manager shutdown (${t3_6-t3_5}ms)`);
 
         // Shutdown terminal sessions
-        shutdownTerminalHandlers();
+        await shutdownTerminalHandlers();
         console.log(`[QUIT] Terminal sessions shutdown`);
     } catch (error) {
         console.error('[QUIT] Error shutting down session state manager:', error);
