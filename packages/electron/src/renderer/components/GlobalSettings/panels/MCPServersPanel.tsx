@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { ErrorBoundary } from '../../ErrorBoundary';
 import './MCPServersPanel.css';
 
 interface MCPServerConfig {
@@ -28,11 +29,96 @@ interface MCPServerTemplate {
   config: MCPServerConfig;
 }
 
+// Helper to get a simple icon/emoji for each template
+const TEMPLATE_ICONS: Record<string, string> = {
+  linear: 'L',
+  github: 'GH',
+  gitlab: 'GL',
+  slack: 'S',
+  postgres: 'PG',
+  filesystem: 'FS',
+  'brave-search': 'B',
+  'google-drive': 'GD',
+  posthog: 'PH',
+  atlassian: 'A',
+  notion: 'N',
+  asana: 'As'
+};
+
+// Template categories
+type TemplateCategory = 'development' | 'productivity' | 'data' | 'search' | 'files';
+
+const TEMPLATE_CATEGORIES: Record<string, TemplateCategory> = {
+  github: 'development',
+  gitlab: 'development',
+  linear: 'productivity',
+  asana: 'productivity',
+  atlassian: 'productivity',
+  notion: 'productivity',
+  slack: 'productivity',
+  postgres: 'data',
+  posthog: 'data',
+  'brave-search': 'search',
+  'google-drive': 'files',
+  filesystem: 'files'
+};
+
+const CATEGORY_LABELS: Record<TemplateCategory, string> = {
+  development: 'Development',
+  productivity: 'Productivity & Project Management',
+  data: 'Data & Analytics',
+  search: 'Search',
+  files: 'Files & Storage'
+};
+
+const CATEGORY_ORDER: TemplateCategory[] = ['development', 'productivity', 'data', 'search', 'files'];
+
+// Help text for common env vars
+const ENV_VAR_HELP: Record<string, { label: string; help: string; link?: string }> = {
+  GITHUB_PERSONAL_ACCESS_TOKEN: {
+    label: 'GitHub Personal Access Token',
+    help: 'Create at Settings > Developer settings > Personal access tokens',
+    link: 'https://github.com/settings/tokens'
+  },
+  GITLAB_PERSONAL_ACCESS_TOKEN: {
+    label: 'GitLab Personal Access Token',
+    help: 'Create at User Settings > Access Tokens',
+    link: 'https://gitlab.com/-/user_settings/personal_access_tokens'
+  },
+  GITLAB_API_URL: {
+    label: 'GitLab API URL',
+    help: 'Your GitLab instance URL (default: https://gitlab.com)'
+  },
+  SLACK_BOT_TOKEN: {
+    label: 'Slack Bot Token',
+    help: 'Get from your Slack app settings',
+    link: 'https://api.slack.com/apps'
+  },
+  SLACK_TEAM_ID: {
+    label: 'Slack Team ID',
+    help: 'Find in Slack workspace settings'
+  },
+  POSTGRES_CONNECTION_STRING: {
+    label: 'PostgreSQL Connection String',
+    help: 'Format: postgresql://user:password@host:5432/database'
+  },
+  BRAVE_API_KEY: {
+    label: 'Brave Search API Key',
+    help: 'Get from Brave Search API dashboard',
+    link: 'https://brave.com/search/api/'
+  },
+  POSTHOG_PERSONAL_API_KEY: {
+    label: 'PostHog Personal API Key',
+    help: 'Get from PostHog > Settings > Personal API Keys',
+    link: 'https://app.posthog.com/settings/user-api-keys'
+  }
+};
+
 const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
   {
     id: 'linear',
     name: 'Linear',
-    description: 'Issue tracking and project management (OAuth)',
+    description: 'Issue tracking and project management',
     docsUrl: 'https://linear.app/docs/mcp',
     authType: 'oauth',
     config: {
@@ -127,7 +213,7 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
   {
     id: 'google-drive',
     name: 'Google Drive',
-    description: 'Access files and documents in Google Drive (OAuth)',
+    description: 'Access files and documents in Google Drive',
     docsUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/gdrive',
     authType: 'oauth',
     config: {
@@ -141,6 +227,7 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     name: 'PostHog',
     description: 'Product analytics, feature flags, and error tracking',
     docsUrl: 'https://posthog.com/docs/model-context-protocol',
+    authType: 'api-key',
     config: {
       command: 'npx',
       args: [
@@ -158,7 +245,7 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
   {
     id: 'atlassian',
     name: 'Atlassian',
-    description: 'Jira and Confluence access (OAuth)',
+    description: 'Jira and Confluence access',
     docsUrl: 'https://www.atlassian.com/blog/announcements/remote-mcp-server',
     authType: 'oauth',
     config: {
@@ -169,7 +256,7 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
   {
     id: 'notion',
     name: 'Notion',
-    description: 'Workspace and page management (OAuth)',
+    description: 'Workspace and page management',
     docsUrl: 'https://developers.notion.com/docs/mcp',
     authType: 'oauth',
     config: {
@@ -180,7 +267,7 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
   {
     id: 'asana',
     name: 'Asana',
-    description: 'Task and project management (OAuth)',
+    description: 'Task and project management',
     docsUrl: 'https://developers.asana.com/docs/mcp-server',
     authType: 'oauth',
     config: {
@@ -190,6 +277,8 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
   }
 ];
 
+type ViewState = 'list' | 'template-selection' | 'server-config';
+
 interface MCPServersPanelProps {
   /** Scope for MCP config: 'user' for global, 'workspace' for project-specific. */
   scope?: 'user' | 'workspace';
@@ -197,10 +286,11 @@ interface MCPServersPanelProps {
   workspacePath?: string;
 }
 
-export function MCPServersPanel({ scope = 'user', workspacePath }: MCPServersPanelProps = {}) {
+function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanelProps = {}) {
   const [servers, setServers] = useState<MCPServerWithName[]>([]);
   const [selectedServer, setSelectedServer] = useState<MCPServerWithName | null>(null);
-  const [isNewServer, setIsNewServer] = useState(false);
+  const [viewState, setViewState] = useState<ViewState>('list');
+  const [selectedTemplate, setSelectedTemplate] = useState<MCPServerTemplate | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -212,13 +302,15 @@ export function MCPServersPanel({ scope = 'user', workspacePath }: MCPServersPan
   const [formUrl, setFormUrl] = useState('');
   const [formArgs, setFormArgs] = useState<string[]>([]);
   const [formEnv, setFormEnv] = useState<Array<{ key: string; value: string }>>([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [testMessage, setTestMessage] = useState<string>('');
 
   // OAuth state
   const [oauthStatus, setOauthStatus] = useState<'unknown' | 'checking' | 'authorized' | 'not-authorized'>('unknown');
   const [oauthAction, setOauthAction] = useState<'idle' | 'authorizing' | 'revoking'>('idle');
+
+  // Template search
+  const [templateSearch, setTemplateSearch] = useState('');
 
   // Reload servers when scope or workspace path changes
   useEffect(() => {
@@ -230,7 +322,6 @@ export function MCPServersPanel({ scope = 'user', workspacePath }: MCPServersPan
       setLoading(true);
       setError(null);
 
-      // Load from the appropriate scope
       const config: MCPConfig = scope === 'workspace' && workspacePath
         ? await window.electronAPI.invoke('mcp-config:read-workspace', workspacePath)
         : await window.electronAPI.invoke('mcp-config:read-user');
@@ -243,9 +334,10 @@ export function MCPServersPanel({ scope = 'user', workspacePath }: MCPServersPan
       );
 
       setServers(serverList);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to load MCP servers:', err);
-      setError(err.message || 'Failed to load MCP servers');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load MCP servers';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -253,8 +345,11 @@ export function MCPServersPanel({ scope = 'user', workspacePath }: MCPServersPan
 
   const handleServerSelect = (server: MCPServerWithName) => {
     setSelectedServer(server);
-    setIsNewServer(false);
+    setSelectedTemplate(null);
+    setViewState('list');
     setSaveStatus('idle');
+    setTestStatus('idle');
+    setTestMessage('');
 
     // Populate form
     setFormName(server.name);
@@ -265,56 +360,75 @@ export function MCPServersPanel({ scope = 'user', workspacePath }: MCPServersPan
     setFormEnv(
       Object.entries(server.env || {}).map(([key, value]) => ({ key, value }))
     );
-    setSelectedTemplateId(null);
+
+    // Check OAuth status for mcp-remote servers
+    if (isOAuthServer(server)) {
+      checkOAuthStatus(server.args || []);
+    } else {
+      setOauthStatus('unknown');
+    }
   };
 
   const handleNewServer = () => {
+    setViewState('template-selection');
     setSelectedServer(null);
-    setIsNewServer(true);
+    setSelectedTemplate(null);
     setSaveStatus('idle');
-
-    // Clear form
-    setFormName('');
-    setFormType('stdio');
-    setFormCommand('');
-    setFormUrl('');
-    setFormArgs([]);
-    setFormEnv([]);
-    setSelectedTemplateId(null);
+    setTestStatus('idle');
+    setTestMessage('');
   };
 
-  const handleTemplateSelect = (templateId: string) => {
-    if (!templateId) {
-      setSelectedTemplateId(null);
-      return;
+  const handleTemplateSelect = (template: MCPServerTemplate | null) => {
+    setSelectedTemplate(template);
+    setViewState('server-config');
+    setSelectedServer(null);
+
+    if (template) {
+      // Populate form with template
+      setFormName(template.id);
+      setFormType(template.config.type || 'stdio');
+      setFormCommand(template.config.command || '');
+      setFormUrl(template.config.url || '');
+      setFormArgs(template.config.args || []);
+      // For env vars, extract required ones with empty values for user to fill
+      setFormEnv(
+        Object.entries(template.config.env || {}).map(([key, value]) => ({
+          key,
+          value: value.startsWith('${') ? '' : value
+        }))
+      );
+
+      if (template.authType === 'oauth') {
+        checkOAuthStatus(template.config.args || []);
+      } else {
+        setOauthStatus('unknown');
+      }
+    } else {
+      // Start from scratch
+      setFormName('');
+      setFormType('stdio');
+      setFormCommand('');
+      setFormUrl('');
+      setFormArgs([]);
+      setFormEnv([]);
+      setOauthStatus('unknown');
     }
+  };
 
-    const template = MCP_SERVER_TEMPLATES.find(t => t.id === templateId);
-    if (!template) return;
+  const handleBackToTemplates = () => {
+    setViewState('template-selection');
+    setSelectedTemplate(null);
+  };
 
-    // Populate form with template
-    setFormName(template.id);
-    setFormType(template.config.type || 'stdio');
-    setFormCommand(template.config.command || '');
-    setFormUrl(template.config.url || '');
-    setFormArgs(template.config.args || []);
-    setFormEnv(
-      Object.entries(template.config.env || {}).map(([key, value]) => ({ key, value }))
-    );
-    setSelectedTemplateId(templateId);
-
-    // Check OAuth status for OAuth templates
-    if (template.authType === 'oauth') {
-      checkOAuthStatus(template.config.args || []);
-    }
+  const handleBackToList = () => {
+    setViewState('list');
+    setSelectedTemplate(null);
   };
 
   /**
    * Extract the server URL from mcp-remote args
    */
   const getOAuthServerUrl = (args: string[]): string | null => {
-    // mcp-remote args are typically ['-y', 'mcp-remote', 'https://...']
-    // or just ['https://...'] after the package name
     for (const arg of args) {
       if (arg.startsWith('http://') || arg.startsWith('https://')) {
         return arg;
@@ -363,13 +477,21 @@ export function MCPServersPanel({ scope = 'user', workspacePath }: MCPServersPan
       const result = await window.electronAPI.invoke('mcp-config:trigger-oauth', serverUrl);
       if (result.success) {
         setOauthStatus('authorized');
+        setTestStatus('idle');
+        setTestMessage('');
       } else {
-        console.error('OAuth failed:', result.error);
-        // Recheck status in case it succeeded but we missed it
+        const errorMsg = result.error || 'Authorization failed';
+        console.error('OAuth authorization failed:', errorMsg);
+        setTestStatus('error');
+        setTestMessage(`Authorization failed: ${errorMsg}`);
         await checkOAuthStatus(formArgs);
       }
-    } catch (error) {
-      console.error('Failed to trigger OAuth:', error);
+    } catch (error: unknown) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error occurred';
+      console.error('Failed to trigger OAuth:', errorMsg);
+      setTestStatus('error');
+      setTestMessage(`Authorization error: ${errorMsg}`);
+      setOauthStatus('not-authorized');
     } finally {
       setOauthAction('idle');
     }
@@ -391,36 +513,32 @@ export function MCPServersPanel({ scope = 'user', workspacePath }: MCPServersPan
       const result = await window.electronAPI.invoke('mcp-config:revoke-oauth', serverUrl);
       if (result.success) {
         setOauthStatus('not-authorized');
+        setTestMessage('Authorization revoked successfully');
+      } else {
+        const errorMsg = result.error || 'Failed to revoke authorization';
+        console.error('Failed to revoke OAuth:', errorMsg);
+        setTestStatus('error');
+        setTestMessage(errorMsg);
       }
-    } catch (error) {
-      console.error('Failed to revoke OAuth:', error);
+    } catch (error: unknown) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error occurred';
+      console.error('Failed to revoke OAuth:', errorMsg);
+      setTestStatus('error');
+      setTestMessage(`Revocation error: ${errorMsg}`);
     } finally {
       setOauthAction('idle');
     }
   };
 
-  // Check OAuth status when selecting an existing server
-  useEffect(() => {
-    if (selectedServer && isOAuthServer(selectedServer)) {
-      checkOAuthStatus(selectedServer.args || []);
-    } else if (!isNewServer || !selectedTemplateId) {
-      setOauthStatus('unknown');
-    }
-  }, [selectedServer]);
-
-  // Auto-save function - called on blur from form fields
+  // Auto-save function
   const autoSave = async () => {
-    // Don't save if form is incomplete
     if (!formName.trim()) return;
-
-    // Validate based on transport type
     if (formType === 'stdio' && !formCommand.trim()) return;
     if (formType === 'sse' && !formUrl.trim()) return;
 
     try {
       setSaveStatus('saving');
 
-      // Build server config based on type
       const serverConfig: MCPServerConfig = {
         type: formType,
         env: Object.fromEntries(
@@ -431,8 +549,6 @@ export function MCPServersPanel({ scope = 'user', workspacePath }: MCPServersPan
       if (formType === 'stdio') {
         serverConfig.command = formCommand.trim();
         serverConfig.args = formArgs.filter(arg => arg.trim()).map(arg => arg.trim());
-
-        // Remove empty args if not needed
         if (serverConfig.args?.length === 0) {
           delete serverConfig.args;
         }
@@ -440,31 +556,26 @@ export function MCPServersPanel({ scope = 'user', workspacePath }: MCPServersPan
         serverConfig.url = formUrl.trim();
       }
 
-      // Remove empty env if not needed
       if (Object.keys(serverConfig.env || {}).length === 0) {
         delete serverConfig.env;
       }
 
-      // Build new config - read from the appropriate scope
       const config: MCPConfig = scope === 'workspace' && workspacePath
         ? await window.electronAPI.invoke('mcp-config:read-workspace', workspacePath)
         : await window.electronAPI.invoke('mcp-config:read-user');
 
-      // If renaming, delete old entry
       if (selectedServer && selectedServer.name !== formName.trim()) {
         delete config.mcpServers[selectedServer.name];
       }
 
       config.mcpServers[formName.trim()] = serverConfig;
 
-      // Validate
       const validation = await window.electronAPI.invoke('mcp-config:validate', config);
       if (!validation.valid) {
         setSaveStatus('error');
         return;
       }
 
-      // Save to the appropriate scope
       const result = scope === 'workspace' && workspacePath
         ? await window.electronAPI.invoke('mcp-config:write-workspace', workspacePath, config)
         : await window.electronAPI.invoke('mcp-config:write-user', config);
@@ -474,21 +585,22 @@ export function MCPServersPanel({ scope = 'user', workspacePath }: MCPServersPan
         return;
       }
 
-      // Reload servers list and update selected server
       await loadServers();
       const savedServer = {
         name: formName.trim(),
         ...serverConfig
       };
       setSelectedServer(savedServer);
-      setIsNewServer(false);
+      setViewState('list');
       setSaveStatus('saved');
 
-      // Reset status after a delay
       setTimeout(() => setSaveStatus('idle'), 2000);
-    } catch (err: any) {
-      console.error('Failed to save server:', err);
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to save server';
+      console.error('Failed to save server:', errorMsg);
       setSaveStatus('error');
+      setTestStatus('error');
+      setTestMessage(`Save error: ${errorMsg}`);
     }
   };
 
@@ -500,7 +612,6 @@ export function MCPServersPanel({ scope = 'user', workspacePath }: MCPServersPan
     }
 
     try {
-      // Delete from the appropriate scope
       const config: MCPConfig = scope === 'workspace' && workspacePath
         ? await window.electronAPI.invoke('mcp-config:read-workspace', workspacePath)
         : await window.electronAPI.invoke('mcp-config:read-user');
@@ -510,6 +621,7 @@ export function MCPServersPanel({ scope = 'user', workspacePath }: MCPServersPan
       const result = scope === 'workspace' && workspacePath
         ? await window.electronAPI.invoke('mcp-config:write-workspace', workspacePath, config)
         : await window.electronAPI.invoke('mcp-config:write-user', config);
+
       if (!result.success) {
         alert(`Failed to delete: ${result.error}`);
         return;
@@ -517,21 +629,19 @@ export function MCPServersPanel({ scope = 'user', workspacePath }: MCPServersPan
 
       await loadServers();
       setSelectedServer(null);
-      setIsNewServer(false);
-    } catch (err: any) {
-      console.error('Failed to delete server:', err);
-      alert(`Error: ${err.message || 'Failed to delete server'}`);
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to delete server';
+      console.error('Failed to delete server:', errorMsg);
+      alert(`Error: ${errorMsg}`);
     }
   };
 
   const handleToggleDisabled = async (serverName: string, disabled: boolean) => {
     try {
-      // Read current config
       const config: MCPConfig = scope === 'workspace' && workspacePath
         ? await window.electronAPI.invoke('mcp-config:read-workspace', workspacePath)
         : await window.electronAPI.invoke('mcp-config:read-user');
 
-      // Update the disabled state
       if (config.mcpServers[serverName]) {
         if (disabled) {
           config.mcpServers[serverName].disabled = true;
@@ -540,7 +650,6 @@ export function MCPServersPanel({ scope = 'user', workspacePath }: MCPServersPan
         }
       }
 
-      // Write back
       const result = scope === 'workspace' && workspacePath
         ? await window.electronAPI.invoke('mcp-config:write-workspace', workspacePath, config)
         : await window.electronAPI.invoke('mcp-config:write-user', config);
@@ -550,10 +659,11 @@ export function MCPServersPanel({ scope = 'user', workspacePath }: MCPServersPan
         return;
       }
 
-      // Reload servers list
       await loadServers();
-    } catch (err: any) {
-      console.error('Failed to toggle server:', err);
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to toggle server';
+      console.error('Failed to toggle server:', errorMsg);
+      alert(`Error: ${errorMsg}`);
     }
   };
 
@@ -586,7 +696,6 @@ export function MCPServersPanel({ scope = 'user', workspacePath }: MCPServersPan
   };
 
   const handleTestConnection = async () => {
-    // Validate based on type
     if (formType === 'stdio' && !formCommand.trim()) {
       setTestStatus('error');
       setTestMessage('Command is required');
@@ -601,7 +710,6 @@ export function MCPServersPanel({ scope = 'user', workspacePath }: MCPServersPan
     setTestStatus('testing');
     setTestMessage('Starting...');
 
-    // Subscribe to progress updates
     const unsubscribe = window.electronAPI.on(
       'mcp-config:test-progress',
       (data: { status: string; message: string }) => {
@@ -612,7 +720,6 @@ export function MCPServersPanel({ scope = 'user', workspacePath }: MCPServersPan
     );
 
     try {
-      // Build temporary server config for testing
       const testConfig: MCPServerConfig = {
         type: formType,
         env: Object.fromEntries(
@@ -627,7 +734,6 @@ export function MCPServersPanel({ scope = 'user', workspacePath }: MCPServersPan
         testConfig.url = formUrl.trim();
       }
 
-      // Test the MCP server connection
       const result = await window.electronAPI.invoke('mcp-config:test-server', testConfig);
 
       if (result.success) {
@@ -637,13 +743,24 @@ export function MCPServersPanel({ scope = 'user', workspacePath }: MCPServersPan
         setTestStatus('error');
         setTestMessage(result.error || 'Connection failed');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMsg = error instanceof Error ? error.message : 'Test failed';
       setTestStatus('error');
-      setTestMessage(error.message || 'Test failed');
+      setTestMessage(errorMsg);
     } finally {
-      // Clean up progress listener
       unsubscribe();
     }
+  };
+
+  // Get required env vars for a template (ones that need user input)
+  const getRequiredEnvVars = (): Array<{ key: string; index: number }> => {
+    if (!selectedTemplate || selectedTemplate.authType === 'oauth' || selectedTemplate.authType === 'none') {
+      return [];
+    }
+
+    return formEnv
+      .map((env, index) => ({ key: env.key, index }))
+      .filter(({ key }) => key && ENV_VAR_HELP[key]);
   };
 
   if (loading) {
@@ -665,6 +782,573 @@ export function MCPServersPanel({ scope = 'user', workspacePath }: MCPServersPan
     );
   }
 
+  // Template Selection View
+  const renderTemplateSelection = () => {
+    const searchLower = templateSearch.toLowerCase().trim();
+
+    // Filter templates by search
+    const filteredTemplates = searchLower
+      ? MCP_SERVER_TEMPLATES.filter(t =>
+          t.name.toLowerCase().includes(searchLower) ||
+          t.description.toLowerCase().includes(searchLower)
+        )
+      : MCP_SERVER_TEMPLATES;
+
+    // Group templates by category
+    const templatesByCategory: Record<TemplateCategory, MCPServerTemplate[]> = {
+      development: [],
+      productivity: [],
+      data: [],
+      search: [],
+      files: []
+    };
+
+    filteredTemplates.forEach(template => {
+      const category = TEMPLATE_CATEGORIES[template.id] || 'files';
+      templatesByCategory[category].push(template);
+    });
+
+    const getAuthBadge = (authType: string | undefined) => {
+      if (authType === 'oauth') return { className: 'oauth', label: 'OAuth' };
+      if (authType === 'api-key') return { className: 'api-key', label: 'API Key' };
+      return { className: 'no-auth', label: 'No Auth' };
+    };
+
+    return (
+      <div className="mcp-template-selection" role="main" aria-label="Template selection">
+        <button
+          onClick={handleBackToList}
+          className="mcp-back-button"
+          aria-label="Back to server list"
+        >
+          ← Back to servers
+        </button>
+
+        <div className="mcp-template-selection-header">
+          <h3 className="mcp-template-selection-title">Add MCP Server</h3>
+          <p className="mcp-template-selection-description">
+            Choose a template to get started quickly, or create a custom configuration.
+          </p>
+        </div>
+
+        {/* Search Bar */}
+        <div className="mcp-template-search" role="search">
+          <input
+            type="text"
+            value={templateSearch}
+            onChange={(e) => setTemplateSearch(e.target.value)}
+            placeholder="Search templates..."
+            className="mcp-template-search-input"
+            aria-label="Search MCP server templates"
+            autoFocus
+          />
+          {templateSearch && (
+            <button
+              className="mcp-template-search-clear"
+              onClick={() => setTemplateSearch('')}
+              aria-label="Clear search"
+              title="Clear search"
+            >
+              x
+            </button>
+          )}
+        </div>
+
+        {/* Templates by Category */}
+        {CATEGORY_ORDER.map(category => {
+          const templates = templatesByCategory[category];
+          if (templates.length === 0) return null;
+
+          return (
+            <div key={category} className="mcp-template-category">
+              <h4 className="mcp-template-category-title">{CATEGORY_LABELS[category]}</h4>
+              <div className="mcp-template-grid" role="list" aria-label={CATEGORY_LABELS[category]}>
+                {templates.map((template) => {
+                  const badge = getAuthBadge(template.authType);
+                  return (
+                    <div
+                      key={template.id}
+                      className="mcp-template-card"
+                      onClick={() => handleTemplateSelect(template)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleTemplateSelect(template);
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`${template.name} - ${template.description} - ${badge.label} authentication`}
+                    >
+                      <div className="mcp-template-card-header">
+                        <div className="mcp-template-card-icon" aria-hidden="true">
+                          {TEMPLATE_ICONS[template.id] || template.name[0]}
+                        </div>
+                        <div className="mcp-template-card-name">{template.name}</div>
+                      </div>
+                      <div className="mcp-template-card-description">{template.description}</div>
+                      <div className={`mcp-template-card-badge ${badge.className}`} aria-label={`Authentication type: ${badge.label}`}>
+                        {badge.label}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+
+        {/* No results */}
+        {filteredTemplates.length === 0 && templateSearch && (
+          <div className="mcp-template-no-results" role="status" aria-live="polite">
+            No templates match "{templateSearch}"
+          </div>
+        )}
+
+        {/* Custom/Scratch - always show unless searching */}
+        {!templateSearch && (
+          <div className="mcp-template-category">
+            <h4 className="mcp-template-category-title">Custom Configuration</h4>
+            <div className="mcp-template-grid">
+              <div
+                className="mcp-template-card mcp-template-scratch-card"
+                onClick={() => handleTemplateSelect(null)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleTemplateSelect(null);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+                aria-label="Start from scratch - Configure all settings manually"
+              >
+                <div className="mcp-template-scratch-text">
+                  + Start from scratch<br />
+                  <small>Configure all settings manually</small>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Server Configuration Form
+  const renderServerConfig = () => {
+    const isFromTemplate = Boolean(selectedTemplate);
+    const requiredEnvVars = getRequiredEnvVars();
+    const isOAuth = selectedTemplate?.authType === 'oauth';
+    const isNewConfig = !selectedServer;
+
+    return (
+      <div className="mcp-server-form" role="form" aria-label="MCP Server Configuration">
+        {isNewConfig && (
+          <button
+            onClick={handleBackToTemplates}
+            className="mcp-back-button"
+            aria-label="Back to template selection"
+          >
+            ← Back to templates
+          </button>
+        )}
+
+        {/* Header */}
+        {selectedTemplate && (
+          <div className="mcp-config-header">
+            <div className="mcp-config-title">
+              <div className="mcp-config-title-icon" aria-hidden="true">
+                {TEMPLATE_ICONS[selectedTemplate.id] || selectedTemplate.name[0]}
+              </div>
+              <div className="mcp-config-title-text">
+                <h4>{selectedTemplate.name}</h4>
+                <p>{selectedTemplate.description}</p>
+              </div>
+            </div>
+            {selectedTemplate.docsUrl && (
+              <a
+                href={selectedTemplate.docsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mcp-docs-link-button"
+                aria-label={`View documentation for ${selectedTemplate.name}`}
+              >
+                View Docs
+              </a>
+            )}
+          </div>
+        )}
+
+        {/* Server Name */}
+        <div className="mcp-form-group">
+          <label htmlFor="server-name">Server Name</label>
+          <input
+            id="server-name"
+            type="text"
+            value={formName}
+            onChange={(e) => setFormName(e.target.value)}
+            onBlur={!isNewConfig ? autoSave : undefined}
+            placeholder="my-server"
+            aria-required="true"
+          />
+        </div>
+
+        {/* OAuth Section */}
+        {isOAuth && (
+          <div className="mcp-oauth-section" role="group" aria-label="OAuth Authorization">
+            <div className="mcp-oauth-status">
+              <span className="mcp-oauth-label">Authorization:</span>
+              {oauthStatus === 'checking' && (
+                <span className="mcp-oauth-badge checking" role="status" aria-live="polite">Checking...</span>
+              )}
+              {oauthStatus === 'authorized' && (
+                <span className="mcp-oauth-badge authorized" role="status" aria-live="polite">Authorized</span>
+              )}
+              {oauthStatus === 'not-authorized' && (
+                <span className="mcp-oauth-badge not-authorized" role="status" aria-live="polite">Not authorized</span>
+              )}
+              {oauthStatus === 'unknown' && (
+                <span className="mcp-oauth-badge unknown" role="status">Unknown</span>
+              )}
+            </div>
+            <div className="mcp-oauth-actions">
+              {oauthStatus !== 'authorized' && (
+                <button
+                  onClick={handleAuthorize}
+                  disabled={oauthAction !== 'idle'}
+                  className="mcp-oauth-button authorize"
+                  aria-label="Authorize OAuth connection"
+                  aria-busy={oauthAction === 'authorizing'}
+                >
+                  {oauthAction === 'authorizing' ? 'Authorizing...' : 'Authorize'}
+                </button>
+              )}
+              {oauthStatus === 'authorized' && (
+                <button
+                  onClick={handleRevoke}
+                  disabled={oauthAction !== 'idle'}
+                  className="mcp-oauth-button revoke"
+                  aria-label="Revoke OAuth authorization"
+                  aria-busy={oauthAction === 'revoking'}
+                >
+                  {oauthAction === 'revoking' ? 'Revoking...' : 'Revoke'}
+                </button>
+              )}
+            </div>
+            <div className="mcp-oauth-hint" role="note">
+              {oauthStatus === 'authorized'
+                ? 'You are authorized to use this server.'
+                : 'Click Authorize to open a browser window and log in.'}
+            </div>
+            {testStatus === 'error' && testMessage && (
+              <div className="mcp-oauth-error" role="alert" aria-live="assertive">
+                {testMessage}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Required Fields Section (API Key templates) */}
+        {requiredEnvVars.length > 0 && (
+          <div className="mcp-required-section">
+            <div className="mcp-required-section-header">
+              <span className="mcp-required-icon">!</span>
+              <h4 className="mcp-required-section-title">Required: Enter Your Credentials</h4>
+            </div>
+            <p className="mcp-required-section-hint">
+              These values are required for the server to connect.
+            </p>
+
+            {requiredEnvVars.map(({ key, index }) => {
+              const help = ENV_VAR_HELP[key];
+              return (
+                <div key={key} className="mcp-required-field">
+                  <label>
+                    {help?.label || key}
+                    <span className="required-asterisk">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={formEnv[index].value}
+                    onChange={(e) => updateEnvVar(index, 'value', e.target.value)}
+                    onBlur={!isNewConfig ? autoSave : undefined}
+                    placeholder={`Enter your ${help?.label || key}`}
+                  />
+                  {help && (
+                    <span className="mcp-field-help">
+                      {help.help}
+                      {help.link && (
+                        <>
+                          {' - '}
+                          <a href={help.link} target="_blank" rel="noopener noreferrer">
+                            Get one here
+                          </a>
+                        </>
+                      )}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Advanced Configuration (collapsed for templates) */}
+        {isFromTemplate ? (
+          <details className="mcp-advanced-section">
+            <summary>
+              Advanced Configuration
+              <span className="mcp-advanced-hint">Pre-configured, typically no changes needed</span>
+            </summary>
+            <div className="mcp-advanced-content">
+              {renderAdvancedFields(true)}
+            </div>
+          </details>
+        ) : (
+          // Show all fields expanded for custom config
+          renderAdvancedFields(false)
+        )}
+
+        {/* Actions */}
+        <div className="mcp-form-actions">
+          {selectedServer && (
+            <button
+              onClick={handleDelete}
+              className="mcp-delete-button"
+              aria-label={`Delete ${selectedServer.name} server`}
+            >
+              Delete
+            </button>
+          )}
+          {isNewConfig && formName.trim() && (formCommand.trim() || formUrl.trim()) && (
+            <button
+              onClick={autoSave}
+              className="mcp-save-button"
+              disabled={saveStatus === 'saving'}
+              aria-label="Add new MCP server"
+              aria-busy={saveStatus === 'saving'}
+            >
+              {saveStatus === 'saving' ? 'Saving...' : 'Add Server'}
+            </button>
+          )}
+          <span
+            className={`mcp-save-status ${saveStatus}`}
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            {saveStatus === 'saving' && !isNewConfig && 'Saving...'}
+            {saveStatus === 'saved' && 'Saved'}
+            {saveStatus === 'error' && 'Error saving'}
+          </span>
+        </div>
+      </div>
+    );
+  };
+
+  // Advanced form fields (shared between template and custom config)
+  const renderAdvancedFields = (readonly: boolean) => {
+    const isExistingServer = Boolean(selectedServer);
+
+    return (
+      <>
+        <div className={`mcp-form-group ${readonly ? 'mcp-readonly-group' : ''}`}>
+          <label>Transport Type</label>
+          <select
+            value={formType}
+            onChange={(e) => {
+              setFormType(e.target.value as 'stdio' | 'sse');
+              if (isExistingServer) setTimeout(autoSave, 0);
+            }}
+            className="mcp-type-select"
+            disabled={readonly}
+          >
+            <option value="stdio">stdio (Local executable)</option>
+            <option value="sse">SSE (Remote server)</option>
+          </select>
+          <div className="mcp-form-hint">
+            {formType === 'stdio'
+              ? 'Runs a local executable that communicates via stdin/stdout'
+              : 'Connects to a remote server via Server-Sent Events'}
+          </div>
+        </div>
+
+        {formType === 'stdio' ? (
+          <>
+            <div className={`mcp-form-group ${readonly ? 'mcp-readonly-group' : ''}`}>
+              <label>Command</label>
+              <div className="mcp-command-row">
+                <input
+                  type="text"
+                  value={formCommand}
+                  onChange={(e) => setFormCommand(e.target.value)}
+                  onBlur={isExistingServer ? autoSave : undefined}
+                  placeholder="/path/to/server or npx @modelcontextprotocol/server-name"
+                  className="mcp-command-input"
+                  disabled={readonly}
+                />
+                <button
+                  onClick={handleTestConnection}
+                  disabled={testStatus === 'testing' || !formCommand.trim()}
+                  className={`mcp-test-button ${testStatus}`}
+                  aria-label="Test server connection"
+                  aria-busy={testStatus === 'testing'}
+                >
+                  {testStatus === 'testing' ? 'Testing...' :
+                   testStatus === 'success' ? 'Connected' :
+                   testStatus === 'error' ? 'Failed' : 'Test'}
+                </button>
+              </div>
+              {testMessage && (
+                <div
+                  className={`mcp-test-message ${testStatus}`}
+                  role={testStatus === 'error' ? 'alert' : 'status'}
+                  aria-live="polite"
+                >
+                  {testStatus === 'testing' && <span className="mcp-test-spinner" aria-hidden="true" />}
+                  {testMessage}
+                </div>
+              )}
+            </div>
+
+            <div className={`mcp-form-group ${readonly ? 'mcp-readonly-group' : ''}`}>
+              <label>Arguments</label>
+              {formArgs.map((arg, index) => (
+                <div key={index} className="mcp-array-item">
+                  <input
+                    type="text"
+                    value={arg}
+                    onChange={(e) => updateArg(index, e.target.value)}
+                    onBlur={isExistingServer ? autoSave : undefined}
+                    placeholder="argument"
+                    disabled={readonly}
+                  />
+                  {!readonly && (
+                    <button onClick={() => { removeArg(index); if (isExistingServer) setTimeout(autoSave, 0); }} className="mcp-remove-button">x</button>
+                  )}
+                </div>
+              ))}
+              {!readonly && (
+                <button onClick={addArg} className="mcp-add-button">+ Add Argument</button>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className={`mcp-form-group ${readonly ? 'mcp-readonly-group' : ''}`}>
+            <label>Server URL</label>
+            <div className="mcp-command-row">
+              <input
+                type="url"
+                value={formUrl}
+                onChange={(e) => setFormUrl(e.target.value)}
+                onBlur={isExistingServer ? autoSave : undefined}
+                placeholder="https://example.com/mcp/sse"
+                className="mcp-command-input"
+                disabled={readonly}
+              />
+              <button
+                onClick={handleTestConnection}
+                disabled={testStatus === 'testing' || !formUrl.trim()}
+                className={`mcp-test-button ${testStatus}`}
+                aria-label="Test server connection"
+                aria-busy={testStatus === 'testing'}
+              >
+                {testStatus === 'testing' ? 'Testing...' :
+                 testStatus === 'success' ? 'Connected' :
+                 testStatus === 'error' ? 'Failed' : 'Test'}
+              </button>
+            </div>
+            {testMessage && (
+              <div
+                className={`mcp-test-message ${testStatus}`}
+                role={testStatus === 'error' ? 'alert' : 'status'}
+                aria-live="polite"
+              >
+                {testStatus === 'testing' && <span className="mcp-test-spinner" aria-hidden="true" />}
+                {testMessage}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Additional env vars (not in required section) */}
+        {!readonly && (
+          <div className="mcp-form-group">
+            <label>Environment Variables</label>
+            {formEnv.map((envVar, index) => (
+              <div key={index} className="mcp-env-item">
+                <input
+                  type="text"
+                  value={envVar.key}
+                  onChange={(e) => updateEnvVar(index, 'key', e.target.value)}
+                  onBlur={isExistingServer ? autoSave : undefined}
+                  placeholder="KEY"
+                  className="mcp-env-key"
+                />
+                <input
+                  type="text"
+                  value={envVar.value}
+                  onChange={(e) => updateEnvVar(index, 'value', e.target.value)}
+                  onBlur={isExistingServer ? autoSave : undefined}
+                  placeholder="value"
+                  className="mcp-env-value"
+                />
+                <button onClick={() => { removeEnvVar(index); if (isExistingServer) setTimeout(autoSave, 0); }} className="mcp-remove-button">x</button>
+              </div>
+            ))}
+            <button onClick={addEnvVar} className="mcp-add-button">+ Add Environment Variable</button>
+          </div>
+        )}
+
+        {/* OAuth section for existing mcp-remote servers */}
+        {isExistingServer && formCommand === 'npx' && formArgs.some(arg => arg === 'mcp-remote' || arg.includes('mcp-remote')) && (
+          <div className="mcp-form-group">
+            <label>OAuth Authorization</label>
+            <div className="mcp-oauth-section">
+              <div className="mcp-oauth-status">
+                <span className="mcp-oauth-label">Status:</span>
+                {oauthStatus === 'checking' && (
+                  <span className="mcp-oauth-badge checking">Checking...</span>
+                )}
+                {oauthStatus === 'authorized' && (
+                  <span className="mcp-oauth-badge authorized">Authorized</span>
+                )}
+                {oauthStatus === 'not-authorized' && (
+                  <span className="mcp-oauth-badge not-authorized">Not authorized</span>
+                )}
+                {oauthStatus === 'unknown' && (
+                  <span className="mcp-oauth-badge unknown">Unknown</span>
+                )}
+              </div>
+              <div className="mcp-oauth-actions">
+                {oauthStatus !== 'authorized' && (
+                  <button
+                    onClick={handleAuthorize}
+                    disabled={oauthAction !== 'idle'}
+                    className="mcp-oauth-button authorize"
+                  >
+                    {oauthAction === 'authorizing' ? 'Authorizing...' : 'Authorize'}
+                  </button>
+                )}
+                {oauthStatus === 'authorized' && (
+                  <button
+                    onClick={handleRevoke}
+                    disabled={oauthAction !== 'idle'}
+                    className="mcp-oauth-button revoke"
+                  >
+                    {oauthAction === 'revoking' ? 'Revoking...' : 'Revoke'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  };
+
+  // Main render
   return (
     <div className="provider-panel">
       <div className="provider-panel-header">
@@ -677,332 +1361,123 @@ export function MCPServersPanel({ scope = 'user', workspacePath }: MCPServersPan
       </div>
 
       <div className="mcp-servers-container">
-        <div className="mcp-servers-sidebar">
-          <div className="mcp-servers-header">
-            <h4>Servers</h4>
-            <button onClick={handleNewServer} className="mcp-new-button">+</button>
-          </div>
-
-          <div className="mcp-servers-list">
-            {servers.length === 0 ? (
-              <div className="mcp-empty-state">No MCP servers configured</div>
-            ) : (
-              servers.map((server) => (
-                <div
-                  key={server.name}
-                  className={`mcp-server-item ${selectedServer?.name === server.name ? 'active' : ''} ${server.disabled ? 'disabled' : ''}`}
-                  onClick={() => handleServerSelect(server)}
-                >
-                  <label
-                    className="mcp-server-toggle"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={!server.disabled}
-                      onChange={(e) => handleToggleDisabled(server.name, !e.target.checked)}
-                    />
-                    <span className="mcp-toggle-slider"></span>
-                  </label>
-                  <div className="mcp-server-item-info">
-                    <div className="mcp-server-item-name">{server.name}</div>
-                    <div className="mcp-server-item-command">{server.command || server.url}</div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        <div className="mcp-server-details">
-          {!selectedServer && !isNewServer ? (
-            <div className="mcp-no-selection">
-              Select a server or create a new one
+        {/* Sidebar - always visible in list view */}
+        {viewState === 'list' && (
+          <aside className="mcp-servers-sidebar" aria-label="MCP servers list">
+            <div className="mcp-servers-header">
+              <h4>Servers</h4>
+              <button
+                onClick={handleNewServer}
+                className="mcp-add-server-button"
+                aria-label="Add new MCP server"
+              >
+                <span className="mcp-add-icon" aria-hidden="true">+</span>
+                <span>Add</span>
+              </button>
             </div>
-          ) : (
-            <div className="mcp-server-form">
-              {isNewServer && (
-                <>
-                  <div className="mcp-form-group">
-                    <label>Start from Template</label>
-                    <select
-                      onChange={(e) => handleTemplateSelect(e.target.value)}
-                      defaultValue=""
-                      className="mcp-template-select"
-                    >
-                      <option value="">Choose a template or create from scratch</option>
-                      {MCP_SERVER_TEMPLATES.map((template) => (
-                        <option key={template.id} value={template.id}>
-                          {template.name} - {template.description}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  {selectedTemplateId && (
-                    <>
-                      <div className="mcp-docs-link">
-                        {MCP_SERVER_TEMPLATES.find(t => t.id === selectedTemplateId)?.docsUrl && (
-                          <a
-                            href={MCP_SERVER_TEMPLATES.find(t => t.id === selectedTemplateId)?.docsUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="mcp-docs-link-button"
-                          >
-                            View {MCP_SERVER_TEMPLATES.find(t => t.id === selectedTemplateId)?.name} Documentation
-                          </a>
-                        )}
-                      </div>
-                      {MCP_SERVER_TEMPLATES.find(t => t.id === selectedTemplateId)?.authType === 'oauth' && (
-                        <div className="mcp-oauth-section">
-                          <div className="mcp-oauth-status">
-                            <span className="mcp-oauth-label">Authorization:</span>
-                            {oauthStatus === 'checking' && (
-                              <span className="mcp-oauth-badge checking">Checking...</span>
-                            )}
-                            {oauthStatus === 'authorized' && (
-                              <span className="mcp-oauth-badge authorized">Authorized</span>
-                            )}
-                            {oauthStatus === 'not-authorized' && (
-                              <span className="mcp-oauth-badge not-authorized">Not authorized</span>
-                            )}
-                            {oauthStatus === 'unknown' && (
-                              <span className="mcp-oauth-badge unknown">Unknown</span>
-                            )}
-                          </div>
-                          <div className="mcp-oauth-actions">
-                            {oauthStatus !== 'authorized' && (
-                              <button
-                                onClick={handleAuthorize}
-                                disabled={oauthAction !== 'idle'}
-                                className="mcp-oauth-button authorize"
-                              >
-                                {oauthAction === 'authorizing' ? 'Authorizing...' : 'Authorize'}
-                              </button>
-                            )}
-                            {oauthStatus === 'authorized' && (
-                              <button
-                                onClick={handleRevoke}
-                                disabled={oauthAction !== 'idle'}
-                                className="mcp-oauth-button revoke"
-                              >
-                                {oauthAction === 'revoking' ? 'Revoking...' : 'Revoke'}
-                              </button>
-                            )}
-                          </div>
-                          <div className="mcp-oauth-hint">
-                            {oauthStatus === 'authorized'
-                              ? 'You are authorized to use this server.'
-                              : 'Click Authorize to open a browser window and log in.'}
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </>
-              )}
 
-              <div className="mcp-form-group">
-                <label>Server Name</label>
-                <input
-                  type="text"
-                  value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
-                  onBlur={autoSave}
-                  placeholder="my-server"
-                />
-              </div>
-
-              <div className="mcp-form-group">
-                <label>Transport Type</label>
-                <select
-                  value={formType}
-                  onChange={(e) => {
-                    setFormType(e.target.value as 'stdio' | 'sse');
-                    // Auto-save after type change
-                    setTimeout(autoSave, 0);
-                  }}
-                  className="mcp-type-select"
-                >
-                  <option value="stdio">stdio (Local executable)</option>
-                  <option value="sse">SSE (Remote server)</option>
-                </select>
-                <div className="mcp-form-hint">
-                  {formType === 'stdio'
-                    ? 'Runs a local executable that communicates via stdin/stdout'
-                    : 'Connects to a remote server via Server-Sent Events (more secure)'}
-                </div>
-              </div>
-
-              {formType === 'stdio' ? (
-                <>
-                  <div className="mcp-form-group">
-                    <label>Command</label>
-                    <div className="mcp-command-row">
-                      <input
-                        type="text"
-                        value={formCommand}
-                        onChange={(e) => setFormCommand(e.target.value)}
-                        onBlur={autoSave}
-                        placeholder="/path/to/server or npx @modelcontextprotocol/server-name"
-                        className="mcp-command-input"
-                      />
-                      <button
-                        onClick={handleTestConnection}
-                        disabled={testStatus === 'testing' || !formCommand.trim()}
-                        className={`mcp-test-button ${testStatus}`}
-                      >
-                        {testStatus === 'testing' ? 'Testing...' :
-                         testStatus === 'success' ? '✓ Connected' :
-                         testStatus === 'error' ? '✗ Failed' : 'Test'}
-                      </button>
-                    </div>
-                    {testMessage && (
-                      <div className={`mcp-test-message ${testStatus}`}>
-                        {testStatus === 'testing' && <span className="mcp-test-spinner" />}
-                        {testMessage}
-                      </div>
-                    )}
-                    <div className="mcp-form-hint">Supports ${'{VAR}'} and ${'{VAR:-default}'} syntax</div>
-                  </div>
-
-                  <div className="mcp-form-group">
-                    <label>Arguments</label>
-                    {formArgs.map((arg, index) => (
-                      <div key={index} className="mcp-array-item">
-                        <input
-                          type="text"
-                          value={arg}
-                          onChange={(e) => updateArg(index, e.target.value)}
-                          onBlur={autoSave}
-                          placeholder="argument"
-                        />
-                        <button onClick={() => { removeArg(index); setTimeout(autoSave, 0); }} className="mcp-remove-button">×</button>
-                      </div>
-                    ))}
-                    <button onClick={addArg} className="mcp-add-button">+ Add Argument</button>
-                  </div>
-                </>
-              ) : (
-                <div className="mcp-form-group">
-                  <label>Server URL</label>
-                  <div className="mcp-command-row">
-                    <input
-                      type="url"
-                      value={formUrl}
-                      onChange={(e) => setFormUrl(e.target.value)}
-                      onBlur={autoSave}
-                      placeholder="https://example.com/mcp/sse"
-                      className="mcp-command-input"
-                    />
-                    <button
-                      onClick={handleTestConnection}
-                      disabled={testStatus === 'testing' || !formUrl.trim()}
-                      className={`mcp-test-button ${testStatus}`}
-                    >
-                      {testStatus === 'testing' ? 'Testing...' :
-                       testStatus === 'success' ? '✓ Connected' :
-                       testStatus === 'error' ? '✗ Failed' : 'Test'}
-                    </button>
-                  </div>
-                  {testMessage && (
-                    <div className={`mcp-test-message ${testStatus}`}>
-                      {testStatus === 'testing' && <span className="mcp-test-spinner" />}
-                      {testMessage}
-                    </div>
-                  )}
-                  <div className="mcp-form-hint">Remote MCP server endpoint (HTTPS recommended)</div>
-                </div>
-              )}
-
-              <div className="mcp-form-group">
-                <label>Environment Variables</label>
-                {formEnv.map((envVar, index) => (
-                  <div key={index} className="mcp-env-item">
-                    <input
-                      type="text"
-                      value={envVar.key}
-                      onChange={(e) => updateEnvVar(index, 'key', e.target.value)}
-                      onBlur={autoSave}
-                      placeholder="KEY"
-                      className="mcp-env-key"
-                    />
-                    <input
-                      type="text"
-                      value={envVar.value}
-                      onChange={(e) => updateEnvVar(index, 'value', e.target.value)}
-                      onBlur={autoSave}
-                      placeholder="value or ${'{VAR}'}"
-                      className="mcp-env-value"
-                    />
-                    <button onClick={() => { removeEnvVar(index); setTimeout(autoSave, 0); }} className="mcp-remove-button">×</button>
-                  </div>
-                ))}
-                <button onClick={addEnvVar} className="mcp-add-button">+ Add Environment Variable</button>
-              </div>
-
-              {/* OAuth section for existing mcp-remote servers */}
-              {!isNewServer && formCommand === 'npx' && formArgs.some(arg => arg === 'mcp-remote' || arg.includes('mcp-remote')) && (
-                <div className="mcp-form-group">
-                  <label>OAuth Authorization</label>
-                  <div className="mcp-oauth-section">
-                    <div className="mcp-oauth-status">
-                      <span className="mcp-oauth-label">Status:</span>
-                      {oauthStatus === 'checking' && (
-                        <span className="mcp-oauth-badge checking">Checking...</span>
-                      )}
-                      {oauthStatus === 'authorized' && (
-                        <span className="mcp-oauth-badge authorized">Authorized</span>
-                      )}
-                      {oauthStatus === 'not-authorized' && (
-                        <span className="mcp-oauth-badge not-authorized">Not authorized</span>
-                      )}
-                      {oauthStatus === 'unknown' && (
-                        <span className="mcp-oauth-badge unknown">Unknown</span>
-                      )}
-                    </div>
-                    <div className="mcp-oauth-actions">
-                      {oauthStatus !== 'authorized' && (
-                        <button
-                          onClick={handleAuthorize}
-                          disabled={oauthAction !== 'idle'}
-                          className="mcp-oauth-button authorize"
-                        >
-                          {oauthAction === 'authorizing' ? 'Authorizing...' : 'Authorize'}
-                        </button>
-                      )}
-                      {oauthStatus === 'authorized' && (
-                        <button
-                          onClick={handleRevoke}
-                          disabled={oauthAction !== 'idle'}
-                          className="mcp-oauth-button revoke"
-                        >
-                          {oauthAction === 'revoking' ? 'Revoking...' : 'Revoke'}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="mcp-form-actions">
-                {selectedServer && (
-                  <button onClick={handleDelete} className="mcp-delete-button">Delete</button>
-                )}
-                {isNewServer && formName.trim() && (formCommand.trim() || formUrl.trim()) && (
-                  <button onClick={autoSave} className="mcp-save-button" disabled={saveStatus === 'saving'}>
-                    {saveStatus === 'saving' ? 'Saving...' : 'Add Server'}
+            <div className="mcp-servers-list" role="list">
+              {servers.length === 0 ? (
+                <div className="mcp-empty-state" role="status">
+                  <span className="mcp-empty-state-text">No MCP servers configured</span>
+                  <button
+                    onClick={handleNewServer}
+                    className="mcp-empty-state-cta"
+                    aria-label="Add your first MCP server"
+                  >
+                    + Add Your First Server
                   </button>
-                )}
-                <span className={`mcp-save-status ${saveStatus}`}>
-                  {saveStatus === 'saving' && !isNewServer && 'Saving...'}
-                  {saveStatus === 'saved' && 'Saved'}
-                  {saveStatus === 'error' && 'Error saving'}
-                </span>
-              </div>
+                </div>
+              ) : (
+                servers.map((server) => (
+                  <div
+                    key={server.name}
+                    className={`mcp-server-item ${selectedServer?.name === server.name ? 'active' : ''} ${server.disabled ? 'disabled' : ''}`}
+                    onClick={() => handleServerSelect(server)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleServerSelect(server);
+                      }
+                    }}
+                    role="listitem button"
+                    tabIndex={0}
+                    aria-label={`${server.name} server - ${server.disabled ? 'disabled' : 'enabled'} - ${server.command || server.url}`}
+                    aria-current={selectedServer?.name === server.name ? 'true' : undefined}
+                  >
+                    <label
+                      className="mcp-server-toggle"
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label={`Toggle ${server.name} server ${server.disabled ? 'on' : 'off'}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={!server.disabled}
+                        onChange={(e) => handleToggleDisabled(server.name, !e.target.checked)}
+                        aria-label={`${server.name} enabled`}
+                      />
+                      <span className="mcp-toggle-slider" aria-hidden="true"></span>
+                    </label>
+                    <div className="mcp-server-item-info">
+                      <div className="mcp-server-item-name">{server.name}</div>
+                      <div className="mcp-server-item-command">{server.command || server.url}</div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </aside>
+        )}
+
+        {/* Details Panel */}
+        <div className="mcp-server-details">
+          {viewState === 'template-selection' && renderTemplateSelection()}
+
+          {viewState === 'server-config' && renderServerConfig()}
+
+          {viewState === 'list' && !selectedServer && (
+            <div className="mcp-no-selection">
+              Select a server or click "Add" to create a new one
             </div>
           )}
+
+          {viewState === 'list' && selectedServer && renderServerConfig()}
         </div>
       </div>
     </div>
+  );
+}
+
+export function MCPServersPanel(props: MCPServersPanelProps) {
+  return (
+    <ErrorBoundary
+      fallback={
+        <div className="provider-panel" role="alert" aria-live="assertive">
+          <div className="mcp-error" style={{ padding: '2rem', textAlign: 'center' }}>
+            <h3 style={{ marginTop: 0, marginBottom: '1rem' }}>Unable to load MCP Servers</h3>
+            <p style={{ marginBottom: '1.5rem', color: 'var(--text-secondary)' }}>
+              An unexpected error occurred while loading the MCP servers panel.
+              Please try refreshing the application.
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="mcp-retry-button"
+              style={{
+                padding: '0.5rem 1rem',
+                background: 'var(--primary-color)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer'
+              }}
+            >
+              Reload Application
+            </button>
+          </div>
+        </div>
+      }
+    >
+      <MCPServersPanelInner {...props} />
+    </ErrorBoundary>
   );
 }
