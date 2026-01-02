@@ -136,6 +136,9 @@ export interface SessionData {
   // Archive state
   isArchived?: boolean;  // Whether the session is archived
 
+  // Pin state
+  isPinned?: boolean;  // Whether the session is pinned to the top of the list
+
   // Token usage tracking (for providers that support it)
   tokenUsage?: {
     inputTokens: number;      // Cumulative input tokens across session lifetime

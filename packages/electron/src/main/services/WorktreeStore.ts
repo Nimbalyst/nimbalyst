@@ -22,6 +22,7 @@ export interface Worktree {
   projectPath: string; // Maps to workspace_id in database
   createdAt: number;
   updatedAt?: number;
+  isPinned?: boolean; // Whether this worktree is pinned to the top of the list
 }
 
 /**
@@ -141,6 +142,7 @@ export function createWorktreeStore(db: PGliteLike, ensureDbReady?: EnsureReadyF
         projectPath: row.workspace_id,
         createdAt: toMillis(row.created_at),
         updatedAt: toMillis(row.updated_at),
+        isPinned: row.is_pinned ?? false,
       };
 
       return worktree;
@@ -175,6 +177,7 @@ export function createWorktreeStore(db: PGliteLike, ensureDbReady?: EnsureReadyF
         projectPath: row.workspace_id,
         createdAt: toMillis(row.created_at),
         updatedAt: toMillis(row.updated_at),
+        isPinned: row.is_pinned ?? false,
       };
 
       return worktree;
@@ -205,6 +208,7 @@ export function createWorktreeStore(db: PGliteLike, ensureDbReady?: EnsureReadyF
         projectPath: row.workspace_id,
         createdAt: toMillis(row.created_at),
         updatedAt: toMillis(row.updated_at),
+        isPinned: row.is_pinned ?? false,
       }));
 
       logger.info('Found worktrees', { count: worktrees.length });
@@ -348,6 +352,24 @@ export function createWorktreeStore(db: PGliteLike, ensureDbReady?: EnsureReadyF
       logger.info('Worktree display name update result', { id, updated });
 
       return updated;
+    },
+
+    /**
+     * Update the pinned status of a worktree
+     */
+    async updatePinned(id: string, isPinned: boolean): Promise<void> {
+      await ensureReady();
+
+      logger.info('Updating worktree pinned status', { id, isPinned });
+
+      await db.query(
+        `UPDATE worktrees
+         SET is_pinned = $2, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1`,
+        [id, isPinned]
+      );
+
+      logger.info('Worktree pinned status updated', { id, isPinned });
     },
   };
 }

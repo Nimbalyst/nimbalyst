@@ -20,6 +20,7 @@ interface SessionItem {
   hasUnread?: boolean;
   hasPendingPrompt?: boolean;
   isArchived?: boolean;
+  isPinned?: boolean; // Whether this session is pinned to the top
   worktree_id?: string | null; // Associated worktree ID if this is a worktree session
 }
 
@@ -30,6 +31,7 @@ interface WorktreeData {
   path: string;
   branch: string;
   base_branch?: string;
+  isPinned?: boolean; // Whether this worktree is pinned to the top
 }
 
 interface WorktreeWithStatus extends WorktreeData {
@@ -237,6 +239,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
           isProcessing: false,  // Will be updated by visual indicator effect
           hasUnread: false,     // Will be updated by visual indicator effect
           isArchived: s.isArchived || false,
+          isPinned: s.isPinned || false,
           worktree_id: s.worktreeId || null
         }));
 
@@ -585,6 +588,36 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     clearSelection();
   };
 
+  // Toggle pin status for a session
+  const handleSessionPinToggle = useCallback(async (sessionId: string, isPinned: boolean) => {
+    try {
+      await window.electronAPI.invoke('sessions:update-pinned', sessionId, isPinned);
+      // Update local state
+      setAllSessions(prev => prev.map(s => s.id === sessionId ? { ...s, isPinned } : s));
+      setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, isPinned } : s));
+    } catch (error) {
+      console.error('[SessionHistory] Failed to toggle session pin:', error);
+    }
+  }, []);
+
+  // Toggle pin status for a worktree
+  const handleWorktreePinToggle = useCallback(async (worktreeId: string, isPinned: boolean) => {
+    try {
+      await window.electronAPI.invoke('worktree:update-pinned', worktreeId, isPinned);
+      // Update worktree cache
+      setWorktreeCache(prev => {
+        const updated = new Map(prev);
+        const worktree = updated.get(worktreeId);
+        if (worktree) {
+          updated.set(worktreeId, { ...worktree, isPinned });
+        }
+        return updated;
+      });
+    } catch (error) {
+      console.error('[SessionHistory] Failed to toggle worktree pin:', error);
+    }
+  }, []);
+
   const toggleSortDropdown = () => {
     setSortDropdownOpen(!sortDropdownOpen);
   };
@@ -654,8 +687,23 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       items.push({ type: 'worktree', worktreeId, sessions: data.sessions, timestamp: data.latestTimestamp });
     }
 
-    // Sort all items by timestamp (newest first)
-    items.sort((a, b) => b.timestamp - a.timestamp);
+    // Sort items: pinned items first (worktrees and sessions), then by timestamp
+    items.sort((a, b) => {
+      // Determine pinned status for each item
+      const aPinned = a.type === 'session'
+        ? (a.session.isPinned ?? false)
+        : (worktreeCache.get(a.worktreeId)?.isPinned ?? false);
+      const bPinned = b.type === 'session'
+        ? (b.session.isPinned ?? false)
+        : (worktreeCache.get(b.worktreeId)?.isPinned ?? false);
+
+      // Pinned items come first
+      if (aPinned && !bPinned) return -1;
+      if (!aPinned && bPinned) return 1;
+
+      // Within same pinned status, sort by timestamp (newest first)
+      return b.timestamp - a.timestamp;
+    });
 
     // Group into time buckets
     const groups: Record<TimeGroupKey, UnifiedListItem[]> = {
@@ -677,7 +725,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     return Object.fromEntries(
       Object.entries(groups).filter(([_, items]) => items.length > 0)
     ) as Record<TimeGroupKey, UnifiedListItem[]>;
-  }, [sessions, worktreeGroupsData, sortBy]);
+  }, [sessions, worktreeGroupsData, sortBy, worktreeCache]);
 
   const groupKeys = Object.keys(groupedItems) as TimeGroupKey[];
 
@@ -1221,6 +1269,8 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                           onAddSession={onAddSessionToWorktree || (() => {})}
                           onSessionDelete={onSessionDelete ? handleDeleteSession : undefined}
                           onSessionArchive={handleArchiveSession}
+                          onWorktreePinToggle={handleWorktreePinToggle}
+                          onSessionPinToggle={handleSessionPinToggle}
                         />
                       );
                     } else {
@@ -1235,6 +1285,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                           isActive={session.id === activeSessionId}
                           isLoaded={loadedSessionIds.includes(session.id)}
                           isArchived={session.isArchived}
+                          isPinned={session.isPinned}
                           isSelected={selectedSessionIds.has(session.id)}
                           sortBy={sortBy}
                           onClick={(e) => handleSessionClick(session.id, e)}
@@ -1242,6 +1293,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                           onArchive={() => handleArchiveSession(session.id)}
                           onUnarchive={() => handleUnarchiveSession(session.id)}
                           onRename={onSessionRename ? (newName: string) => onSessionRename(session.id, newName) : undefined}
+                          onPinToggle={(isPinned) => handleSessionPinToggle(session.id, isPinned)}
                           provider={session.provider}
                           model={session.model}
                           messageCount={session.messageCount}

@@ -17,6 +17,7 @@ export interface SessionListItem {
   updatedAt: number;
   messageCount?: number;
   isArchived?: boolean;
+  isPinned?: boolean;  // Whether this session is pinned to the top of the list
 }
 
 export interface CreateSessionPayload {

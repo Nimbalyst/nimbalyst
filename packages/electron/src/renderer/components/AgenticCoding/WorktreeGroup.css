@@ -233,3 +233,23 @@
 .worktree-group-context-menu-item.destructive:hover {
   background: rgba(239, 68, 68, 0.1);
 }
+
+/* Pin icons */
+.worktree-group-pin-icon {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  opacity: 0.7;
+  margin-left: 0.25rem;
+}
+
+.worktree-session-item-pin-icon {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  opacity: 0.7;
+  margin-left: -0.25rem;
+}
+
+.worktree-session-item.active .worktree-session-item-pin-icon {
+  color: var(--primary-color);
+  opacity: 0.8;
+}

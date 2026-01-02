@@ -255,12 +255,14 @@ export function registerWorktreeHandlers(): void {
       const results: Record<string, {
         id: string;
         name: string;
+        displayName?: string;
         path: string;
         branch: string;
         baseBranch: string;
         projectPath: string;
         createdAt: number;
         updatedAt?: number;
+        isPinned?: boolean;
         gitStatus?: {
           ahead?: number;
           behind?: number;
@@ -316,6 +318,41 @@ export function registerWorktreeHandlers(): void {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to batch fetch worktrees',
         worktrees: {},
+      };
+    }
+  });
+
+  /**
+   * Update worktree pinned status
+   *
+   * @param worktreeId - ID of the worktree to update
+   * @param isPinned - Whether the worktree should be pinned
+   * @returns Success status
+   */
+  ipcMain.handle('worktree:update-pinned', async (_event, worktreeId: string, isPinned: boolean) => {
+    try {
+      if (!worktreeId) {
+        throw new Error('worktreeId is required');
+      }
+
+      logger.info('Updating worktree pinned status', { worktreeId, isPinned });
+
+      const db = getDatabase();
+      if (!db) {
+        throw new Error('Database not initialized');
+      }
+
+      const worktreeStore = createWorktreeStore(db);
+      await worktreeStore.updatePinned(worktreeId, isPinned);
+
+      return {
+        success: true,
+      };
+    } catch (error) {
+      logger.error('Failed to update worktree pinned status:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update worktree pinned status',
       };
     }
   });

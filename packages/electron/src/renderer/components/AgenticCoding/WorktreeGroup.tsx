@@ -15,6 +15,7 @@ interface SessionItem {
   hasUnread?: boolean;
   hasPendingPrompt?: boolean;
   isArchived?: boolean;
+  isPinned?: boolean;
 }
 
 interface GitStatus {
@@ -29,6 +30,7 @@ interface WorktreeData {
   displayName?: string;
   path: string;
   branch: string;
+  isPinned?: boolean;
 }
 
 interface WorktreeGroupProps {
@@ -42,6 +44,8 @@ interface WorktreeGroupProps {
   onAddSession: (worktreeId: string) => void;
   onSessionDelete?: (sessionId: string) => void;
   onSessionArchive?: (sessionId: string) => void;
+  onWorktreePinToggle?: (worktreeId: string, isPinned: boolean) => void;
+  onSessionPinToggle?: (sessionId: string, isPinned: boolean) => void;
 }
 
 export const WorktreeGroup: React.FC<WorktreeGroupProps> = ({
@@ -54,12 +58,25 @@ export const WorktreeGroup: React.FC<WorktreeGroupProps> = ({
   onSessionSelect,
   onAddSession,
   onSessionDelete,
-  onSessionArchive
+  onSessionArchive,
+  onWorktreePinToggle,
+  onSessionPinToggle
 }) => {
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
   const [adjustedContextMenuPosition, setAdjustedContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+
+  // Sort sessions: pinned first, then by updatedAt
+  const sortedSessions = React.useMemo(() => {
+    return [...sessions].sort((a, b) => {
+      // Pinned sessions first
+      if (a.isPinned && !b.isPinned) return -1;
+      if (!a.isPinned && b.isPinned) return 1;
+      // Then by updatedAt (most recent first)
+      return (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt);
+    });
+  }, [sessions]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -78,6 +95,12 @@ export const WorktreeGroup: React.FC<WorktreeGroupProps> = ({
     setShowContextMenu(false);
     onAddSession(worktree.id);
   }, [onAddSession, worktree.id]);
+
+  const handlePinToggle = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    onWorktreePinToggle?.(worktree.id, !worktree.isPinned);
+  }, [onWorktreePinToggle, worktree.id, worktree.isPinned]);
 
   // Adjust context menu position to keep it within viewport
   useEffect(() => {
@@ -133,6 +156,9 @@ export const WorktreeGroup: React.FC<WorktreeGroupProps> = ({
           </svg>
         </div>
         <span className="worktree-group-name">{worktree.displayName || worktree.name}</span>
+        {worktree.isPinned && (
+          <MaterialSymbol icon="push_pin" size={12} className="worktree-group-pin-icon" />
+        )}
         <div className="worktree-group-badges">
           {gitStatus?.ahead && gitStatus.ahead > 0 && (
             <span className="worktree-group-badge ahead">
@@ -156,7 +182,7 @@ export const WorktreeGroup: React.FC<WorktreeGroupProps> = ({
       {/* Sessions List */}
       {isExpanded && (
         <div className="worktree-group-content">
-          {sessions.map(session => (
+          {sortedSessions.map(session => (
             <WorktreeSessionItem
               key={session.id}
               session={session}
@@ -164,6 +190,7 @@ export const WorktreeGroup: React.FC<WorktreeGroupProps> = ({
               onClick={() => onSessionSelect(session.id)}
               onDelete={onSessionDelete ? () => onSessionDelete(session.id) : undefined}
               onArchive={onSessionArchive ? () => onSessionArchive(session.id) : undefined}
+              onPinToggle={onSessionPinToggle ? (isPinned) => onSessionPinToggle(session.id, isPinned) : undefined}
             />
           ))}
         </div>
@@ -180,6 +207,15 @@ export const WorktreeGroup: React.FC<WorktreeGroupProps> = ({
           }}
           onClick={(e) => e.stopPropagation()}
         >
+          {onWorktreePinToggle && (
+            <button
+              className="worktree-group-context-menu-item"
+              onClick={handlePinToggle}
+            >
+              <MaterialSymbol icon={worktree.isPinned ? 'push_pin' : 'push_pin'} size={14} />
+              {worktree.isPinned ? 'Unpin' : 'Pin'}
+            </button>
+          )}
           <button
             className="worktree-group-context-menu-item"
             onClick={handleAddSession}
@@ -200,6 +236,7 @@ interface WorktreeSessionItemProps {
   onClick: () => void;
   onDelete?: () => void;
   onArchive?: () => void;
+  onPinToggle?: (isPinned: boolean) => void;
 }
 
 const WorktreeSessionItem: React.FC<WorktreeSessionItemProps> = ({
@@ -207,7 +244,8 @@ const WorktreeSessionItem: React.FC<WorktreeSessionItemProps> = ({
   isActive,
   onClick,
   onDelete,
-  onArchive
+  onArchive,
+  onPinToggle
 }) => {
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
@@ -234,6 +272,12 @@ const WorktreeSessionItem: React.FC<WorktreeSessionItemProps> = ({
     onArchive?.();
   };
 
+  const handlePinToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    onPinToggle?.(!session.isPinned);
+  };
+
   return (
     <div
       className={`worktree-session-item ${isActive ? 'active' : ''}`}
@@ -254,6 +298,9 @@ const WorktreeSessionItem: React.FC<WorktreeSessionItemProps> = ({
       <div className="worktree-session-item-icon">
         <ProviderIcon provider={session.provider || 'claude'} size={14} />
       </div>
+      {session.isPinned && (
+        <MaterialSymbol icon="push_pin" size={10} className="worktree-session-item-pin-icon" />
+      )}
       <span className="worktree-session-item-title">{displayTitle}</span>
       <div className="worktree-session-item-right">
         {session.isProcessing ? (
@@ -284,6 +331,15 @@ const WorktreeSessionItem: React.FC<WorktreeSessionItemProps> = ({
           }}
           onClick={(e) => e.stopPropagation()}
         >
+          {onPinToggle && (
+            <button
+              className="worktree-group-context-menu-item"
+              onClick={handlePinToggle}
+            >
+              <MaterialSymbol icon="push_pin" size={14} />
+              {session.isPinned ? 'Unpin' : 'Pin'}
+            </button>
+          )}
           {onArchive && (
             <button
               className="worktree-group-context-menu-item"

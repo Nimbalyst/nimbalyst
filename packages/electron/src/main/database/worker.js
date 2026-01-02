@@ -649,6 +649,44 @@ class PGLiteWorker {
       console.error('[PGLite Worker] Failed to add display_name column:', error);
       throw error;
     }
+
+    // Add is_pinned column to ai_sessions (migration)
+    try {
+      await this.db.exec(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'ai_sessions' AND column_name = 'is_pinned'
+          ) THEN
+            ALTER TABLE ai_sessions ADD COLUMN is_pinned BOOLEAN DEFAULT FALSE;
+          END IF;
+        END $$;
+      `);
+      console.log('[PGLite Worker] is_pinned column added to ai_sessions');
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to add is_pinned column to ai_sessions:', error);
+      throw error;
+    }
+
+    // Add is_pinned column to worktrees (migration)
+    try {
+      await this.db.exec(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'worktrees' AND column_name = 'is_pinned'
+          ) THEN
+            ALTER TABLE worktrees ADD COLUMN is_pinned BOOLEAN DEFAULT FALSE;
+          END IF;
+        END $$;
+      `);
+      console.log('[PGLite Worker] is_pinned column added to worktrees');
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to add is_pinned column to worktrees:', error);
+      throw error;
+    }
   }
 
   async query(message) {

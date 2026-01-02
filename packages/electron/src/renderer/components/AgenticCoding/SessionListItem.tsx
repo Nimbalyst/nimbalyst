@@ -61,6 +61,7 @@ interface SessionListItemProps {
   /** @deprecated Uses Jotai atom subscription - do not pass */
   hasPendingPrompt?: boolean;
   isArchived?: boolean; // Whether session is archived
+  isPinned?: boolean; // Whether session is pinned to the top
   isSelected?: boolean; // Whether session is selected for bulk actions
   sortBy?: 'updated' | 'created'; // Which timestamp to display based on sort order
   onClick: (e: React.MouseEvent) => void;
@@ -68,6 +69,7 @@ interface SessionListItemProps {
   onArchive?: () => void;
   onUnarchive?: () => void;
   onRename?: (newName: string) => void; // Callback when session is renamed
+  onPinToggle?: (isPinned: boolean) => void; // Callback when pin status changes
   provider?: string;
   model?: string;
   messageCount?: number;
@@ -85,6 +87,7 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
   hasUnread = false,
   hasPendingPrompt = false,
   isArchived = false,
+  isPinned = false,
   isSelected = false,
   sortBy = 'updated',
   onClick,
@@ -92,6 +95,7 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
   onArchive,
   onUnarchive,
   onRename,
+  onPinToggle,
   provider,
   model,
   messageCount,
@@ -121,6 +125,14 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
       onUnarchive();
     } else if (!isArchived && onArchive) {
       onArchive();
+    }
+  };
+
+  const handlePinToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    if (onPinToggle) {
+      onPinToggle(!isPinned);
     }
   };
 
@@ -228,7 +240,7 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
   return (
     <div
         id={"session-list-item-" + id}
-      className={`session-list-item ${isActive ? 'active' : ''} ${isLoaded ? 'loaded' : ''} ${isArchived ? 'archived' : ''} ${isSelected ? 'selected' : ''}`}
+      className={`session-list-item ${isActive ? 'active' : ''} ${isLoaded ? 'loaded' : ''} ${isArchived ? 'archived' : ''} ${isSelected ? 'selected' : ''} ${isPinned ? 'pinned' : ''}`}
       onClick={onClick}
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => { setIsHovering(false); setShowContextMenu(false); }}
@@ -254,6 +266,9 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
           <div className="session-list-item-loaded-indicator" title="Loaded in tab" />
         )}
       </div>
+      {isPinned && (
+        <MaterialSymbol icon="push_pin" size={12} className="session-list-item-pin-icon" />
+      )}
       <div className="session-list-item-content">
         {isRenaming ? (
           <input
@@ -312,6 +327,15 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
             >
               <MaterialSymbol icon="edit" size={14} />
               Rename
+            </button>
+          )}
+          {onPinToggle && (
+            <button
+              className="session-list-item-context-menu-item"
+              onClick={handlePinToggle}
+            >
+              <MaterialSymbol icon="push_pin" size={14} />
+              {isPinned ? 'Unpin' : 'Pin'}
             </button>
           )}
           <button
