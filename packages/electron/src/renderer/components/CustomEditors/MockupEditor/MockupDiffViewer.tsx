@@ -28,9 +28,14 @@ export const MockupDiffViewer: React.FC<MockupDiffViewerProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const isDraggingRef = useRef(false);
 
+  // Detect if this is a new file (no original content to diff against)
+  const isNewFile = useMemo(() => !originalHtml || originalHtml.trim() === '', [originalHtml]);
+
   const loadBefore = useCallback(() => {
-    renderMockupHtml(beforeFrameRef.current, originalHtml);
-  }, [originalHtml]);
+    if (!isNewFile) {
+      renderMockupHtml(beforeFrameRef.current, originalHtml);
+    }
+  }, [originalHtml, isNewFile]);
 
   const loadAfter = useCallback(() => {
     renderMockupHtml(afterFrameRef.current, updatedHtml);
@@ -80,13 +85,19 @@ export const MockupDiffViewer: React.FC<MockupDiffViewerProps> = ({
     updateSliderFromPointer(event.clientX);
   }, [updateSliderFromPointer]);
 
-  const toolbarLabel = useMemo(() => `AI Changes · ${fileName}`, [fileName]);
+  const toolbarLabel = useMemo(() => `${isNewFile ? 'New File' : 'AI Changes'} · ${fileName}`, [fileName, isNewFile]);
 
   return (
     <div className="mockup-diff-viewer">
       <div className="mockup-diff-heading">
-        <div className="mockup-diff-heading-label">Previewing AI Changes</div>
-        <p>Review the proposed mockup updates before accepting them.</p>
+        <div className="mockup-diff-heading-label">
+          {isNewFile ? 'Previewing New Mockup' : 'Previewing AI Changes'}
+        </div>
+        <p>
+          {isNewFile
+            ? 'Review the new mockup before accepting it.'
+            : 'Review the proposed mockup updates before accepting them.'}
+        </p>
       </div>
       <div className="mockup-diff-toolbar">
         <div className="mockup-diff-title">
@@ -111,48 +122,62 @@ export const MockupDiffViewer: React.FC<MockupDiffViewerProps> = ({
         </div>
       </div>
 
-      <div className="mockup-diff-content" role="region" aria-label="Mockup diff preview">
-        <div className="mockup-diff-slider-wrapper">
-          <div
-            className={`mockup-diff-slider-stage ${isDragging ? 'dragging' : ''}`}
-            ref={sliderStageRef}
-          >
-            <iframe
-              ref={afterFrameRef}
-              title="Updated mockup preview"
-              sandbox="allow-scripts allow-same-origin"
-            />
-            <div
-              className="mockup-diff-slider-before"
-              style={{ clipPath: `inset(0 ${100 - sliderPosition}% 0 0)` }}
-            >
+      <div className="mockup-diff-content" role="region" aria-label={isNewFile ? 'New mockup preview' : 'Mockup diff preview'}>
+        {isNewFile ? (
+          // New file: simple preview without slider
+          <div className="mockup-diff-new-file-wrapper">
+            <div className="mockup-diff-new-file-stage">
               <iframe
-                ref={beforeFrameRef}
-                title="Original mockup preview"
+                ref={afterFrameRef}
+                title="New mockup preview"
                 sandbox="allow-scripts allow-same-origin"
               />
             </div>
-            <div
-              className="mockup-diff-slider-handle"
-              style={{ left: `${sliderPosition}%` }}
-              role="slider"
-              aria-valuenow={sliderPosition}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              onPointerDown={handleSliderPointerDown}
-            >
-              <div className="mockup-diff-slider-handle-bar" />
-            </div>
-            <div className="mockup-diff-slider-label before">Before</div>
-            <div className="mockup-diff-slider-label after">After</div>
-            <div className="mockup-diff-slider-hint">Drag anywhere to compare</div>
-            <div
-              className="mockup-diff-slider-overlay"
-              onPointerDown={handleSliderPointerDown}
-              aria-hidden="true"
-            />
           </div>
-        </div>
+        ) : (
+          // Modified file: show slider diff view
+          <div className="mockup-diff-slider-wrapper">
+            <div
+              className={`mockup-diff-slider-stage ${isDragging ? 'dragging' : ''}`}
+              ref={sliderStageRef}
+            >
+              <iframe
+                ref={afterFrameRef}
+                title="Updated mockup preview"
+                sandbox="allow-scripts allow-same-origin"
+              />
+              <div
+                className="mockup-diff-slider-before"
+                style={{ clipPath: `inset(0 ${100 - sliderPosition}% 0 0)` }}
+              >
+                <iframe
+                  ref={beforeFrameRef}
+                  title="Original mockup preview"
+                  sandbox="allow-scripts allow-same-origin"
+                />
+              </div>
+              <div
+                className="mockup-diff-slider-handle"
+                style={{ left: `${sliderPosition}%` }}
+                role="slider"
+                aria-valuenow={sliderPosition}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                onPointerDown={handleSliderPointerDown}
+              >
+                <div className="mockup-diff-slider-handle-bar" />
+              </div>
+              <div className="mockup-diff-slider-label before">Before</div>
+              <div className="mockup-diff-slider-label after">After</div>
+              <div className="mockup-diff-slider-hint">Drag anywhere to compare</div>
+              <div
+                className="mockup-diff-slider-overlay"
+                onPointerDown={handleSliderPointerDown}
+                aria-hidden="true"
+              />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

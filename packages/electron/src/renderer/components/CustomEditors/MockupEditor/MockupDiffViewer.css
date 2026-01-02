@@ -94,6 +94,30 @@
   gap: 12px;
 }
 
+/* New file preview (no slider) */
+.mockup-diff-new-file-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+}
+
+.mockup-diff-new-file-stage {
+  position: relative;
+  flex: 1;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #000;
+}
+
+.mockup-diff-new-file-stage iframe {
+  position: absolute;
+  inset: 0;
+  border: none;
+  width: 100%;
+  height: 100%;
+}
+
 .mockup-diff-slider-stage {
   position: relative;
   flex: 1;
