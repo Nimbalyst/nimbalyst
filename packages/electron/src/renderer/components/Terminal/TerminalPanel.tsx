@@ -266,6 +266,24 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
     }
   }, [isActive, sessionId]);
 
+  // Listen for theme changes and update terminal colors
+  useEffect(() => {
+    if (!window.electronAPI?.on) return;
+
+    const handleThemeChange = () => {
+      if (xtermRef.current) {
+        // Re-read CSS variables and apply new theme to terminal
+        xtermRef.current.options.theme = getTerminalTheme();
+      }
+    };
+
+    window.electronAPI.on('theme-change', handleThemeChange);
+
+    return () => {
+      window.electronAPI.off?.('theme-change', handleThemeChange);
+    };
+  }, []);
+
   return (
     <div
       className="terminal-panel"
@@ -273,7 +291,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
         height: '100%',
         width: '100%',
         position: 'relative',
-        backgroundColor: '#0d0d0d',
+        backgroundColor: 'var(--terminal-bg)',
         display: 'flex',
         flexDirection: 'column',
       }}
@@ -297,7 +315,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#6b7280',
+            color: 'var(--text-tertiary)',
             fontSize: '14px',
           }}
         >
@@ -314,7 +332,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#ef4444',
+            color: 'var(--error-color)',
             fontSize: '14px',
             padding: '20px',
             textAlign: 'center',
@@ -327,10 +345,10 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             onClick={handleRestart}
             style={{
               padding: '6px 12px',
-              backgroundColor: '#374151',
+              backgroundColor: 'var(--surface-tertiary)',
               border: 'none',
               borderRadius: '4px',
-              color: '#ffffff',
+              color: 'var(--text-primary)',
               fontSize: '12px',
               cursor: 'pointer',
             }}
@@ -348,9 +366,9 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             left: '8px',
             right: '8px',
             padding: '8px 12px',
-            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            backgroundColor: 'var(--surface-secondary)',
             borderRadius: '4px',
-            color: '#9ca3af',
+            color: 'var(--text-secondary)',
             fontSize: '12px',
             display: 'flex',
             alignItems: 'center',
@@ -364,10 +382,10 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             onClick={handleRestart}
             style={{
               padding: '4px 8px',
-              backgroundColor: '#374151',
+              backgroundColor: 'var(--surface-tertiary)',
               border: 'none',
               borderRadius: '4px',
-              color: '#ffffff',
+              color: 'var(--text-primary)',
               fontSize: '12px',
               cursor: 'pointer',
             }}

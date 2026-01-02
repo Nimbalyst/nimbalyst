@@ -76,6 +76,29 @@
 
   /* Lexical-specific */
   --lexical-indent-base-value: 40px;
+
+  /* Terminal - Light theme */
+  --terminal-bg: #ffffff;
+  --terminal-fg: #1e1e1e;
+  --terminal-cursor: #3b82f6;
+  --terminal-cursor-accent: #ffffff;
+  --terminal-selection: rgba(59, 130, 246, 0.3);
+  --terminal-ansi-black: #1e1e1e;
+  --terminal-ansi-red: #dc2626;
+  --terminal-ansi-green: #16a34a;
+  --terminal-ansi-yellow: #ca8a04;
+  --terminal-ansi-blue: #2563eb;
+  --terminal-ansi-magenta: #9333ea;
+  --terminal-ansi-cyan: #0891b2;
+  --terminal-ansi-white: #e5e5e5;
+  --terminal-ansi-bright-black: #6b7280;
+  --terminal-ansi-bright-red: #ef4444;
+  --terminal-ansi-bright-green: #22c55e;
+  --terminal-ansi-bright-yellow: #eab308;
+  --terminal-ansi-bright-blue: #3b82f6;
+  --terminal-ansi-bright-magenta: #a855f7;
+  --terminal-ansi-bright-cyan: #06b6d4;
+  --terminal-ansi-bright-white: #ffffff;
 }
 
 .PlaygroundEditorTheme__ltr {

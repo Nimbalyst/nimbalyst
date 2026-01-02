@@ -76,6 +76,29 @@
 
   /* Lexical-specific */
   --lexical-indent-base-value: 40px;
+
+  /* Terminal - Dark theme */
+  --terminal-bg: #0d0d0d;
+  --terminal-fg: #e5e5e5;
+  --terminal-cursor: #60a5fa;
+  --terminal-cursor-accent: #0d0d0d;
+  --terminal-selection: rgba(255, 255, 255, 0.3);
+  --terminal-ansi-black: #000000;
+  --terminal-ansi-red: #ef4444;
+  --terminal-ansi-green: #22c55e;
+  --terminal-ansi-yellow: #eab308;
+  --terminal-ansi-blue: #3b82f6;
+  --terminal-ansi-magenta: #a855f7;
+  --terminal-ansi-cyan: #06b6d4;
+  --terminal-ansi-white: #ffffff;
+  --terminal-ansi-bright-black: #6b7280;
+  --terminal-ansi-bright-red: #f87171;
+  --terminal-ansi-bright-green: #4ade80;
+  --terminal-ansi-bright-yellow: #facc15;
+  --terminal-ansi-bright-blue: #60a5fa;
+  --terminal-ansi-bright-magenta: #c084fc;
+  --terminal-ansi-bright-cyan: #22d3ee;
+  --terminal-ansi-bright-white: #ffffff;
 }
 
 /* Global dark theme overrides */
