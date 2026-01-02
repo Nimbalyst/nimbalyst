@@ -113,6 +113,12 @@ export function ModelSelector({
     return targetType !== currentProviderType;
   };
 
+  // Check if an entire section (agent or model) is disabled
+  const isSectionDisabled = (sectionType: 'agent' | 'model'): boolean => {
+    if (!sessionHasMessages || !currentProviderType) return false;
+    return sectionType !== currentProviderType;
+  };
+
   // Group providers by type (agents vs models)
   const groupedProviders = Object.entries(models).reduce((acc, [provider, providerModels]) => {
     const isAgent = provider === 'claude-code' || provider === 'openai-codex';
@@ -146,6 +152,11 @@ export function ModelSelector({
               {groupedProviders.agents && Object.keys(groupedProviders.agents).length > 0 && (
                 <>
                   <div className="model-selector-section-header">Agents</div>
+                  {isSectionDisabled('agent') && (
+                    <div className="model-selector-disabled-notice">
+                      Start a new session to use agents
+                    </div>
+                  )}
                   {Object.entries(groupedProviders.agents).map(([provider, providerModels]) => (
                     <div key={provider} className="model-selector-provider-group">
                       <div className="model-selector-provider-header">
@@ -185,6 +196,11 @@ export function ModelSelector({
                     <div className="model-selector-divider" />
                   )}
                   <div className="model-selector-section-header">Chat with open document</div>
+                  {isSectionDisabled('model') && (
+                    <div className="model-selector-disabled-notice">
+                      Start a new session to use chat models
+                    </div>
+                  )}
                   {Object.entries(groupedProviders.models).map(([provider, providerModels]) => (
                     <div key={provider} className="model-selector-provider-group">
                       <div className="model-selector-provider-header">

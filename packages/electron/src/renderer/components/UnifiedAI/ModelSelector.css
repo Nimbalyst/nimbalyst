@@ -74,6 +74,13 @@
   color: var(--text-tertiary);
 }
 
+.model-selector-disabled-notice {
+  padding: 4px 8px 6px;
+  font-size: 11px;
+  font-style: italic;
+  color: var(--text-tertiary);
+}
+
 .model-selector-provider-group {
   margin-bottom: 4px;
 }
