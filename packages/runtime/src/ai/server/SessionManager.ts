@@ -33,6 +33,7 @@ function chatMessageFromServerMessage(msg: any): Message {
     edits: msg.edits,
     toolCall: (msg as any).toolCall,
     isError: msg.isError,
+    isAuthError: msg.isAuthError,
     errorMessage: msg.errorMessage,
     isStreamingStatus: msg.isStreamingStatus,
     streamingData: msg.streamingData,
