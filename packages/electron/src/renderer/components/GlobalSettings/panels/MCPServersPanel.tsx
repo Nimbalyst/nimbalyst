@@ -29,38 +29,96 @@ interface MCPServerTemplate {
   config: MCPServerConfig;
 }
 
-// Helper to get a simple icon/emoji for each template
-const TEMPLATE_ICONS: Record<string, string> = {
-  linear: 'L',
-  github: 'GH',
-  gitlab: 'GL',
-  slack: 'S',
-  postgres: 'PG',
-  filesystem: 'FS',
-  'brave-search': 'B',
-  'google-drive': 'GD',
-  posthog: 'PH',
-  atlassian: 'A',
-  notion: 'N',
-  asana: 'As',
-  playwright: 'PW',
-  context7: 'C7',
-  n8n: 'N8',
-  zapier: 'ZP',
-  aws: 'AW',
-  stripe: 'ST',
-  snowflake: 'SF',
-  'sequential-thinking': 'SQ',
-  shopify: 'SH',
-  fetch: 'FE',
-  'chrome-devtools': 'CD',
-  'claude-flow': 'CF',
-  blender: 'BL',
-  'knowledge-graph-memory': 'KG',
-  'task-master': 'TM',
-  serena: 'SR',
-  'desktop-commander': 'DC'
+// Icon configuration for MCP server templates
+// Uses Simple Icons CDN for brand icons, Material Symbols for generic tools
+type IconConfig =
+  | { type: 'simple-icons'; slug: string }
+  | { type: 'material-symbol'; icon: string }
+  | { type: 'url'; url: string };
+
+const TEMPLATE_ICON_CONFIG: Record<string, IconConfig> = {
+  // Brand icons from Simple Icons CDN
+  linear: { type: 'simple-icons', slug: 'linear' },
+  github: { type: 'simple-icons', slug: 'github' },
+  gitlab: { type: 'simple-icons', slug: 'gitlab' },
+  slack: { type: 'simple-icons', slug: 'slack' },
+  postgres: { type: 'simple-icons', slug: 'postgresql' },
+  'brave-search': { type: 'simple-icons', slug: 'brave' },
+  'google-drive': { type: 'simple-icons', slug: 'googledrive' },
+  posthog: { type: 'simple-icons', slug: 'posthog' },
+  atlassian: { type: 'simple-icons', slug: 'atlassian' },
+  notion: { type: 'simple-icons', slug: 'notion' },
+  asana: { type: 'simple-icons', slug: 'asana' },
+  n8n: { type: 'simple-icons', slug: 'n8n' },
+  zapier: { type: 'simple-icons', slug: 'zapier' },
+  aws: { type: 'simple-icons', slug: 'amazonaws' },
+  stripe: { type: 'simple-icons', slug: 'stripe' },
+  snowflake: { type: 'simple-icons', slug: 'snowflake' },
+  shopify: { type: 'simple-icons', slug: 'shopify' },
+  blender: { type: 'simple-icons', slug: 'blender' },
+  'chrome-devtools': { type: 'simple-icons', slug: 'googlechrome' },
+  playwright: { type: 'simple-icons', slug: 'playwright' },
+  context7: { type: 'simple-icons', slug: 'upstash' },
+
+  // Generic tools using Material Symbols
+  filesystem: { type: 'material-symbol', icon: 'folder' },
+  fetch: { type: 'material-symbol', icon: 'cloud_download' },
+  'sequential-thinking': { type: 'material-symbol', icon: 'psychology' },
+  'claude-flow': { type: 'material-symbol', icon: 'account_tree' },
+  'knowledge-graph-memory': { type: 'material-symbol', icon: 'hub' },
+  'task-master': { type: 'material-symbol', icon: 'task_alt' },
+  serena: { type: 'material-symbol', icon: 'code' },
+  'desktop-commander': { type: 'material-symbol', icon: 'terminal' }
 };
+
+// Component to render MCP server icon
+function MCPServerIcon({ templateId, name }: { templateId: string; name: string }) {
+  const config = TEMPLATE_ICON_CONFIG[templateId];
+
+  if (!config) {
+    // Fallback to first letter
+    return <span className="mcp-icon-fallback">{name[0]}</span>;
+  }
+
+  if (config.type === 'simple-icons') {
+    return (
+      <img
+        src={`https://cdn.simpleicons.org/${config.slug}`}
+        alt=""
+        className="mcp-icon-img"
+        loading="lazy"
+        onError={(e) => {
+          // Hide image on error and show fallback
+          const target = e.target as HTMLImageElement;
+          target.style.display = 'none';
+          const fallback = target.nextElementSibling as HTMLElement;
+          if (fallback) fallback.style.display = 'flex';
+        }}
+      />
+    );
+  }
+
+  if (config.type === 'material-symbol') {
+    return (
+      <span className="material-symbols-outlined mcp-icon-material">
+        {config.icon}
+      </span>
+    );
+  }
+
+  if (config.type === 'url') {
+    return (
+      <img
+        src={config.url}
+        alt=""
+        className="mcp-icon-img"
+        loading="lazy"
+      />
+    );
+  }
+
+  return <span className="mcp-icon-fallback">{name[0]}</span>;
+}
 
 // Template categories
 type TemplateCategory = 'development' | 'productivity' | 'automation' | 'ai' | 'commerce' | 'data' | 'search' | 'files';
@@ -1194,7 +1252,8 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
                     >
                       <div className="mcp-template-card-header">
                         <div className="mcp-template-card-icon" aria-hidden="true">
-                          {TEMPLATE_ICONS[template.id] || template.name[0]}
+                          <MCPServerIcon templateId={template.id} name={template.name} />
+                          <span className="mcp-icon-fallback" style={{ display: 'none' }}>{template.name[0]}</span>
                         </div>
                         <div className="mcp-template-card-name">{template.name}</div>
                       </div>
@@ -1271,7 +1330,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
           <div className="mcp-config-header">
             <div className="mcp-config-title">
               <div className="mcp-config-title-icon" aria-hidden="true">
-                {TEMPLATE_ICONS[selectedTemplate.id] || selectedTemplate.name[0]}
+                <MCPServerIcon templateId={selectedTemplate.id} name={selectedTemplate.name} />
               </div>
               <div className="mcp-config-title-text">
                 <h4>{selectedTemplate.name}</h4>
