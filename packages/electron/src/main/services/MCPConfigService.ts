@@ -20,7 +20,8 @@ export interface TestProgressCallback {
 export class MCPConfigService {
   private userConfigPath: string;
 
-  private CONNECTION_TIMEOUT_MS = 30000; // Increased for package downloads
+  private CONNECTION_TIMEOUT_MS = 30000; // Base timeout
+  private DOWNLOAD_TIMEOUT_MS = 120000; // Extended timeout when downloading packages
 
   constructor() {
 
@@ -351,34 +352,105 @@ export class MCPConfigService {
 
         let output = '';
         let errorOutput = '';
-        let isDownloading = false;
+        let hasExtendedTimeout = false;
+        let hasSentInitialize = false;
         let resolved = false;
+        let timeoutId: NodeJS.Timeout;
+        let currentTimeoutMs = this.CONNECTION_TIMEOUT_MS;
 
         const resolveOnce = (result: { success: boolean; error?: string }) => {
           if (!resolved) {
             resolved = true;
-            clearTimeout(timeout);
+            clearTimeout(timeoutId);
             child.kill();
             onProgress?.('done', '');
             resolve(result);
           }
         };
 
-        const timeout = setTimeout(() => {
-          logger.mcp.warn('[MCP Test] Connection timeout reached (30s)');
-          logger.mcp.info(`[MCP Test] stdout so far: ${output.slice(0, 500)}`);
-          logger.mcp.info(`[MCP Test] stderr so far: ${errorOutput.slice(0, 1000)}`);
-          resolveOnce({ success: false, error: 'Connection timeout (30s)' });
-        }, this.CONNECTION_TIMEOUT_MS);
+        const resetTimeout = (newTimeoutMs: number) => {
+          clearTimeout(timeoutId);
+          currentTimeoutMs = newTimeoutMs;
+          timeoutId = setTimeout(() => {
+            if (!resolved) {
+              const timeoutSec = Math.round(currentTimeoutMs / 1000);
+              logger.mcp.warn(`[MCP Test] Connection timeout reached (${timeoutSec}s)`);
+              logger.mcp.info(`[MCP Test] stdout so far: ${output.slice(0, 500)}`);
+              logger.mcp.info(`[MCP Test] stderr so far: ${errorOutput.slice(0, 1000)}`);
+              resolveOnce({ success: false, error: `Connection timeout (${timeoutSec}s)` });
+            }
+          }, newTimeoutMs);
+        };
+
+        // Send initialize request to test JSON-RPC communication
+        const sendInitializeRequest = () => {
+          if (resolved || hasSentInitialize || !child.stdin) return;
+
+          hasSentInitialize = true;
+          const initRequest = {
+            jsonrpc: "2.0",
+            id: 1,
+            method: "initialize",
+            params: {
+              protocolVersion: "2024-11-05",
+              capabilities: {},
+              clientInfo: {
+                name: "nimbalyst-test",
+                version: "1.0.0"
+              }
+            }
+          };
+
+          try {
+            logger.mcp.info('[MCP Test] Sending initialize request');
+            onProgress?.('testing', 'Testing server connection...');
+            child.stdin.write(JSON.stringify(initRequest) + '\n');
+          } catch (error: any) {
+            logger.mcp.error('[MCP Test] Failed to send initialize request:', error);
+          }
+        };
+
+        // Start with base timeout
+        resetTimeout(this.CONNECTION_TIMEOUT_MS);
 
         child.stdout?.on('data', (data) => {
           const chunk = data.toString();
           output += chunk;
           logger.mcp.debug(`[MCP Test] stdout: ${chunk.slice(0, 200)}`);
-          // MCP servers output JSON-RPC, detect initialization
-          if (output.includes('"jsonrpc"') || output.includes('initialize')) {
-            logger.mcp.info('[MCP Test] Detected JSON-RPC response');
-            onProgress?.('testing', 'Server responding...');
+
+          // Try to parse JSON-RPC responses
+          // MCP servers may send multiple JSON objects separated by newlines
+          const lines = output.split('\n');
+          for (let i = 0; i < lines.length - 1; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+
+            try {
+              const msg = JSON.parse(line);
+
+              // Check if this is a valid JSON-RPC response to our initialize request
+              if (msg.jsonrpc === '2.0' && msg.id === 1) {
+                if (msg.result) {
+                  logger.mcp.info('[MCP Test] Received valid initialize response');
+                  logger.mcp.debug(`[MCP Test] Response: ${JSON.stringify(msg.result).slice(0, 200)}`);
+                  resolveOnce({ success: true });
+                  return;
+                } else if (msg.error) {
+                  logger.mcp.error(`[MCP Test] Initialize failed: ${JSON.stringify(msg.error)}`);
+                  resolveOnce({ success: false, error: msg.error.message || 'Initialize failed' });
+                  return;
+                }
+              }
+
+              // If we see any valid JSON-RPC on stdout, the server is responding
+              // Send initialize request if we haven't already
+              if (msg.jsonrpc === '2.0' && !hasSentInitialize) {
+                logger.mcp.info('[MCP Test] Detected JSON-RPC output, sending initialize');
+                sendInitializeRequest();
+              }
+            } catch (e) {
+              // Not valid JSON, keep accumulating
+            }
           }
         });
 
@@ -387,33 +459,34 @@ export class MCPConfigService {
           errorOutput += chunk;
           logger.mcp.info(`[MCP Test] stderr: ${chunk.slice(0, 500)}`);
 
-          // Detect npx/npm download progress patterns
-          if (chunk.includes('npm warn') || chunk.includes('npm notice') ||
+          // Detect npx/npm/uvx download progress patterns
+          // Only extend timeout once to avoid race conditions
+          if (!hasExtendedTimeout &&
+              (chunk.includes('npm warn') || chunk.includes('npm notice') ||
               chunk.includes('added') || chunk.includes('packages in') ||
-              chunk.includes('reify:') || chunk.includes('timing')) {
-            if (!isDownloading) {
-              isDownloading = true;
-              logger.mcp.info('[MCP Test] Detected package download');
-              onProgress?.('downloading', 'Downloading packages...');
-            }
+              chunk.includes('reify:') || chunk.includes('timing') ||
+              chunk.includes('Resolved') || chunk.includes('Prepared') ||
+              chunk.includes('Installed') || chunk.includes('Building') ||
+              chunk.includes('Cloning') || chunk.includes('Fetching'))) {
+            hasExtendedTimeout = true;
+            logger.mcp.info('[MCP Test] Detected package download, extending timeout to 120s');
+            onProgress?.('downloading', 'Downloading packages...');
+            resetTimeout(this.DOWNLOAD_TIMEOUT_MS);
           }
 
-          // Detect mcp-remote specific messages
-          if (chunk.includes('Connecting to remote server')) {
-            logger.mcp.info('[MCP Test] mcp-remote connecting to remote server');
-            onProgress?.('connecting', 'Connecting to remote server...');
-          }
-
-          // Detect mcp-remote successful connection
-          if (chunk.includes('Proxy established successfully') ||
-              chunk.includes('Connected to remote server')) {
-            logger.mcp.info('[MCP Test] mcp-remote connected successfully');
-            onProgress?.('testing', 'Connected to remote server...');
-            // Give it a moment to fully establish, then succeed
+          // After packages are downloaded or server starts logging, try to communicate
+          // Look for common server startup patterns to know when to send initialize
+          if (!hasSentInitialize &&
+              (chunk.includes('MCP server') ||
+              chunk.includes('server_lifespan') ||
+              chunk.includes('Starting') ||
+              chunk.includes('Listening') ||
+              chunk.includes('Ready'))) {
+            logger.mcp.info('[MCP Test] Server startup detected, will send initialize request');
+            // Wait a moment for server to fully initialize, then send request
             setTimeout(() => {
-              logger.mcp.info('[MCP Test] Test successful (mcp-remote proxy established)');
-              resolveOnce({ success: true });
-            }, 500);
+              sendInitializeRequest();
+            }, 1000);
           }
 
           if (chunk.includes('Connection error') || chunk.includes('Fatal error')) {
@@ -421,36 +494,49 @@ export class MCPConfigService {
           }
         });
 
-        child.on('error', (error) => {
+        child.on('error', (error: NodeJS.ErrnoException) => {
           logger.mcp.error('[MCP Test] Spawn error:', error);
-          resolveOnce({ success: false, error: error.message });
+
+          // Provide helpful error message for command not found
+          if (error.code === 'ENOENT') {
+            const helpfulMessage = config.command === 'uvx'
+              ? `Command '${config.command}' not found. Please install uv (https://docs.astral.sh/uv/) to use this MCP server.`
+              : `Command '${config.command}' not found. Please ensure it is installed and available in your PATH.`;
+            resolveOnce({ success: false, error: helpfulMessage });
+          } else {
+            resolveOnce({ success: false, error: error.message });
+          }
         });
 
         child.on('exit', (code, signal) => {
           logger.mcp.info(`[MCP Test] Process exited with code: ${code}, signal: ${signal}`);
           logger.mcp.info(`[MCP Test] Final stdout length: ${output.length}`);
           logger.mcp.info(`[MCP Test] Final stderr: ${errorOutput.slice(0, 500)}`);
-          if (code === 0 || output.length > 0) {
-            // If process exits cleanly or produced output, consider it a success
-            logger.mcp.info('[MCP Test] Test successful');
-            resolveOnce({ success: true });
-          } else if (!resolved) {
-            logger.mcp.warn(`[MCP Test] Test failed: ${errorOutput || `exit code ${code}`}`);
-            resolveOnce({
-              success: false,
-              error: errorOutput || `Process exited with code ${code}`
-            });
+
+          if (!resolved) {
+            // Process exited before we got a valid JSON-RPC response
+            if (code === 0) {
+              // Clean exit but no response - might be a one-shot command
+              logger.mcp.info('[MCP Test] Process exited cleanly but no JSON-RPC response');
+              resolveOnce({ success: false, error: 'Server exited without responding to initialize request' });
+            } else {
+              logger.mcp.warn(`[MCP Test] Test failed: ${errorOutput || `exit code ${code}`}`);
+              resolveOnce({
+                success: false,
+                error: errorOutput || `Process exited with code ${code}`
+              });
+            }
           }
         });
 
-        // Try to detect if server started successfully by looking for initialization
+        // If we haven't detected server startup patterns after a few seconds, try sending initialize anyway
+        // Some servers might be ready but just not logging anything to stderr
         setTimeout(() => {
-          logger.mcp.debug(`[MCP Test] 2s check - stdout: ${output.length} bytes, stderr includes initialize: ${errorOutput.includes('initialize')}`);
-          if (output.length > 0 || errorOutput.includes('initialize')) {
-            logger.mcp.info('[MCP Test] Early success detection');
-            resolveOnce({ success: true });
+          if (!hasSentInitialize && !resolved) {
+            logger.mcp.info('[MCP Test] No startup patterns detected, attempting initialize anyway');
+            sendInitializeRequest();
           }
-        }, 2000);
+        }, 3000);
 
       } catch (error: any) {
         logger.mcp.error('[MCP Test] Unexpected error:', error);

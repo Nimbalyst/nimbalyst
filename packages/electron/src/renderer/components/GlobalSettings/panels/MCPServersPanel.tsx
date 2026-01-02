@@ -42,23 +42,57 @@ const TEMPLATE_ICONS: Record<string, string> = {
   posthog: 'PH',
   atlassian: 'A',
   notion: 'N',
-  asana: 'As'
+  asana: 'As',
+  playwright: 'PW',
+  context7: 'C7',
+  n8n: 'N8',
+  zapier: 'ZP',
+  aws: 'AW',
+  stripe: 'ST',
+  snowflake: 'SF',
+  'sequential-thinking': 'SQ',
+  shopify: 'SH',
+  fetch: 'FE',
+  'chrome-devtools': 'CD',
+  'claude-flow': 'CF',
+  blender: 'BL',
+  'knowledge-graph-memory': 'KG',
+  'task-master': 'TM',
+  serena: 'SR',
+  'desktop-commander': 'DC'
 };
 
 // Template categories
-type TemplateCategory = 'development' | 'productivity' | 'data' | 'search' | 'files';
+type TemplateCategory = 'development' | 'productivity' | 'automation' | 'ai' | 'commerce' | 'data' | 'search' | 'files';
 
 const TEMPLATE_CATEGORIES: Record<string, TemplateCategory> = {
   github: 'development',
   gitlab: 'development',
+  playwright: 'development',
+  context7: 'development',
+  'chrome-devtools': 'development',
   linear: 'productivity',
   asana: 'productivity',
   atlassian: 'productivity',
   notion: 'productivity',
   slack: 'productivity',
+  'task-master': 'productivity',
+  serena: 'development',
+  'desktop-commander': 'automation',
+  n8n: 'automation',
+  zapier: 'automation',
+  'sequential-thinking': 'ai',
+  'claude-flow': 'ai',
+  'knowledge-graph-memory': 'ai',
+  blender: 'ai',
+  stripe: 'commerce',
+  shopify: 'commerce',
   postgres: 'data',
   posthog: 'data',
+  snowflake: 'data',
+  aws: 'data',
   'brave-search': 'search',
+  fetch: 'search',
   'google-drive': 'files',
   filesystem: 'files'
 };
@@ -66,12 +100,15 @@ const TEMPLATE_CATEGORIES: Record<string, TemplateCategory> = {
 const CATEGORY_LABELS: Record<TemplateCategory, string> = {
   development: 'Development',
   productivity: 'Productivity & Project Management',
+  automation: 'Automation & Workflows',
+  ai: 'AI & Reasoning',
+  commerce: 'Commerce & Payments',
   data: 'Data & Analytics',
   search: 'Search',
   files: 'Files & Storage'
 };
 
-const CATEGORY_ORDER: TemplateCategory[] = ['development', 'productivity', 'data', 'search', 'files'];
+const CATEGORY_ORDER: TemplateCategory[] = ['development', 'productivity', 'automation', 'ai', 'commerce', 'data', 'search', 'files'];
 
 // Help text for common env vars
 const ENV_VAR_HELP: Record<string, { label: string; help: string; link?: string }> = {
@@ -111,6 +148,58 @@ const ENV_VAR_HELP: Record<string, { label: string; help: string; link?: string 
     label: 'PostHog Personal API Key',
     help: 'Get from PostHog > Settings > Personal API Keys',
     link: 'https://app.posthog.com/settings/user-api-keys'
+  },
+  N8N_API_KEY: {
+    label: 'n8n API Key',
+    help: 'Get from n8n Settings > API',
+    link: 'https://docs.n8n.io/api/'
+  },
+  N8N_BASE_URL: {
+    label: 'n8n Base URL',
+    help: 'Your n8n instance URL (e.g., https://your-instance.n8n.cloud)'
+  },
+  AWS_ACCESS_KEY_ID: {
+    label: 'AWS Access Key ID',
+    help: 'Get from AWS IAM console',
+    link: 'https://console.aws.amazon.com/iam/'
+  },
+  AWS_SECRET_ACCESS_KEY: {
+    label: 'AWS Secret Access Key',
+    help: 'Get from AWS IAM console when creating access key'
+  },
+  AWS_REGION: {
+    label: 'AWS Region',
+    help: 'AWS region (default: us-east-1)'
+  },
+  STRIPE_API_KEY: {
+    label: 'Stripe API Key',
+    help: 'Get from Stripe Dashboard > Developers > API keys',
+    link: 'https://dashboard.stripe.com/apikeys'
+  },
+  SNOWFLAKE_ACCOUNT: {
+    label: 'Snowflake Account',
+    help: 'Your Snowflake account identifier'
+  },
+  SNOWFLAKE_USER: {
+    label: 'Snowflake Username',
+    help: 'Your Snowflake username'
+  },
+  SNOWFLAKE_PASSWORD: {
+    label: 'Snowflake Password',
+    help: 'Your Snowflake password'
+  },
+  SNOWFLAKE_WAREHOUSE: {
+    label: 'Snowflake Warehouse',
+    help: 'The warehouse to use for queries'
+  },
+  SHOPIFY_ACCESS_TOKEN: {
+    label: 'Shopify Access Token',
+    help: 'Get from Shopify Admin > Apps > Develop apps',
+    link: 'https://shopify.dev/docs/apps/auth/admin-app-access-tokens'
+  },
+  SHOPIFY_STORE_URL: {
+    label: 'Shopify Store URL',
+    help: 'Your store URL (e.g., your-store.myshopify.com)'
   }
 };
 
@@ -273,6 +362,226 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     config: {
       command: 'npx',
       args: ['-y', 'mcp-remote', 'https://mcp.asana.com/sse']
+    }
+  },
+  {
+    id: 'playwright',
+    name: 'Playwright',
+    description: 'Browser automation and testing',
+    docsUrl: 'https://github.com/anthropics/anthropic-quickstarts/tree/main/mcp-server-playwright',
+    authType: 'none',
+    config: {
+      command: 'npx',
+      args: ['-y', '@anthropic/mcp-server-playwright'],
+      env: {}
+    }
+  },
+  {
+    id: 'context7',
+    name: 'Context7',
+    description: 'Up-to-date documentation context for LLMs',
+    docsUrl: 'https://github.com/upstash/context7',
+    authType: 'none',
+    config: {
+      command: 'npx',
+      args: ['-y', '@upstash/context7-mcp@latest'],
+      env: {}
+    }
+  },
+  {
+    id: 'n8n',
+    name: 'n8n',
+    description: 'Workflow automation platform',
+    docsUrl: 'https://docs.n8n.io/integrations/mcp/',
+    authType: 'api-key',
+    config: {
+      command: 'npx',
+      args: ['-y', '@anthropic/mcp-server-n8n'],
+      env: {
+        N8N_API_KEY: '${N8N_API_KEY}',
+        N8N_BASE_URL: '${N8N_BASE_URL}'
+      }
+    }
+  },
+  {
+    id: 'zapier',
+    name: 'Zapier',
+    description: 'Automation and app integrations',
+    docsUrl: 'https://zapier.com/mcp',
+    authType: 'oauth',
+    config: {
+      command: 'npx',
+      args: ['-y', 'mcp-remote', 'https://mcp.zapier.com/sse']
+    }
+  },
+  {
+    id: 'aws',
+    name: 'AWS',
+    description: 'Amazon Web Services cloud management',
+    docsUrl: 'https://github.com/aws/aws-mcp-server',
+    authType: 'api-key',
+    config: {
+      command: 'npx',
+      args: ['-y', '@aws/aws-mcp-server'],
+      env: {
+        AWS_ACCESS_KEY_ID: '${AWS_ACCESS_KEY_ID}',
+        AWS_SECRET_ACCESS_KEY: '${AWS_SECRET_ACCESS_KEY}',
+        AWS_REGION: '${AWS_REGION:-us-east-1}'
+      }
+    }
+  },
+  {
+    id: 'stripe',
+    name: 'Stripe',
+    description: 'Payment processing and management',
+    docsUrl: 'https://docs.stripe.com/mcp',
+    authType: 'api-key',
+    config: {
+      command: 'npx',
+      args: ['-y', '@stripe/mcp-server'],
+      env: {
+        STRIPE_API_KEY: '${STRIPE_API_KEY}'
+      }
+    }
+  },
+  {
+    id: 'snowflake',
+    name: 'Snowflake',
+    description: 'Cloud data warehouse queries',
+    docsUrl: 'https://github.com/Snowflake-Labs/mcp-server-snowflake',
+    authType: 'api-key',
+    config: {
+      command: 'npx',
+      args: ['-y', '@snowflake-labs/mcp-server-snowflake'],
+      env: {
+        SNOWFLAKE_ACCOUNT: '${SNOWFLAKE_ACCOUNT}',
+        SNOWFLAKE_USER: '${SNOWFLAKE_USER}',
+        SNOWFLAKE_PASSWORD: '${SNOWFLAKE_PASSWORD}',
+        SNOWFLAKE_WAREHOUSE: '${SNOWFLAKE_WAREHOUSE}'
+      }
+    }
+  },
+  {
+    id: 'sequential-thinking',
+    name: 'Sequential Thinking',
+    description: 'Step-by-step reasoning and problem solving',
+    docsUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking',
+    authType: 'none',
+    config: {
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-sequentialthinking'],
+      env: {}
+    }
+  },
+  {
+    id: 'shopify',
+    name: 'Shopify',
+    description: 'E-commerce store management',
+    docsUrl: 'https://shopify.dev/docs/api/mcp',
+    authType: 'api-key',
+    config: {
+      command: 'npx',
+      args: ['-y', '@shopify/mcp-server'],
+      env: {
+        SHOPIFY_ACCESS_TOKEN: '${SHOPIFY_ACCESS_TOKEN}',
+        SHOPIFY_STORE_URL: '${SHOPIFY_STORE_URL}'
+      }
+    }
+  },
+  {
+    id: 'fetch',
+    name: 'Fetch',
+    description: 'HTTP requests and web content retrieval',
+    docsUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/fetch',
+    authType: 'none',
+    config: {
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-fetch'],
+      env: {}
+    }
+  },
+  {
+    id: 'chrome-devtools',
+    name: 'Chrome DevTools',
+    description: 'Browser debugging and inspection',
+    docsUrl: 'https://github.com/anthropics/anthropic-quickstarts/tree/main/mcp-server-chrome-devtools',
+    authType: 'none',
+    config: {
+      command: 'npx',
+      args: ['-y', '@anthropic/mcp-server-chrome-devtools'],
+      env: {}
+    }
+  },
+  {
+    id: 'claude-flow',
+    name: 'Claude Flow',
+    description: 'Multi-agent orchestration and workflows',
+    docsUrl: 'https://github.com/anthropics/claude-flow',
+    authType: 'none',
+    config: {
+      command: 'npx',
+      args: ['-y', '@anthropic/claude-flow-mcp'],
+      env: {}
+    }
+  },
+  {
+    id: 'blender',
+    name: 'Blender',
+    description: '3D modeling and rendering control',
+    docsUrl: 'https://github.com/ahmedkhaleel2004/blender-mcp',
+    authType: 'none',
+    config: {
+      command: 'npx',
+      args: ['-y', 'blender-mcp'],
+      env: {}
+    }
+  },
+  {
+    id: 'knowledge-graph-memory',
+    name: 'Knowledge Graph Memory',
+    description: 'Persistent memory with knowledge graphs',
+    docsUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/memory',
+    authType: 'none',
+    config: {
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-memory'],
+      env: {}
+    }
+  },
+  {
+    id: 'task-master',
+    name: 'Task Master',
+    description: 'AI-powered task management and planning',
+    docsUrl: 'https://github.com/eyaltoledano/task-master-mcp',
+    authType: 'none',
+    config: {
+      command: 'npx',
+      args: ['-y', 'task-master-mcp'],
+      env: {}
+    }
+  },
+  {
+    id: 'serena',
+    name: 'Serena',
+    description: 'Semantic code retrieval and editing for codebases',
+    docsUrl: 'https://github.com/oraios/serena',
+    authType: 'none',
+    config: {
+      command: 'uvx',
+      args: ['--from', 'git+https://github.com/oraios/serena', 'serena', 'start-mcp-server'],
+      env: {}
+    }
+  },
+  {
+    id: 'desktop-commander',
+    name: 'Desktop Commander',
+    description: 'Terminal control, file search, and diff editing',
+    docsUrl: 'https://github.com/wonderwhy-er/DesktopCommanderMCP',
+    authType: 'none',
+    config: {
+      command: 'npx',
+      args: ['-y', '@wonderwhy-er/desktop-commander'],
+      env: {}
     }
   }
 ];
@@ -798,6 +1107,9 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
     const templatesByCategory: Record<TemplateCategory, MCPServerTemplate[]> = {
       development: [],
       productivity: [],
+      automation: [],
+      ai: [],
+      commerce: [],
       data: [],
       search: [],
       files: []
