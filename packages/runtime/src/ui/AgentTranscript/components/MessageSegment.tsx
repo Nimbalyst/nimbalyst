@@ -181,6 +181,10 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
   const renderTextContent = () => {
     if (!message.content.trim()) return null;
 
+    // Skip if this is an error message - renderError() will handle it
+    // This prevents duplicate LoginRequiredWidget rendering
+    if (message.isError) return null;
+
     // Check if this is a login-required error in the message content
     const isLoginRequired = isLoginRequiredError(message.content);
 
