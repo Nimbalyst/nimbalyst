@@ -1313,6 +1313,136 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     }
   }, [workspacePath, mode, loadSessions, onSessionChange, triggerSessionHistoryRefresh]);
 
+  // Create a new terminal session
+  const createNewTerminal = useCallback(async () => {
+    try {
+      console.log('[AgenticPanel] Creating new terminal session');
+
+      // Create terminal session via IPC
+      const result = await window.electronAPI.terminal.createSession(workspacePath, {});
+
+      if (!result.success || !result.sessionId) {
+        throw new Error(result.error || 'Failed to create terminal session');
+      }
+
+      // Load the session data
+      const sessionData = await window.electronAPI.aiLoadSession(result.sessionId, workspacePath);
+      if (!sessionData) {
+        throw new Error('Failed to load newly created terminal session');
+      }
+
+      // Count existing terminals for naming
+      const terminalCount = sessionTabs.filter(t => t.sessionData.sessionType === 'terminal').length;
+      const tabName = terminalCount > 0 ? `Terminal ${terminalCount + 1}` : 'Terminal';
+
+      const newTab: SessionTab = {
+        id: sessionData.id,
+        name: tabName,
+        sessionData: {
+          ...sessionData,
+          sessionType: 'terminal',
+        },
+        mode: 'agent',
+      };
+
+      if (mode === 'chat') {
+        setSessionTabs([newTab]);
+      } else {
+        setSessionTabs(prev => [...prev, newTab]);
+      }
+
+      setActiveTabId(sessionData.id);
+
+      await loadSessions();
+
+      // Trigger SessionHistory refresh
+      triggerSessionHistoryRefresh('new-terminal');
+
+      if (onSessionChange) {
+        onSessionChange(sessionData.id, tabName);
+      }
+
+      return sessionData;
+    } catch (error) {
+      console.error('[AgenticPanel] Failed to create terminal session:', error);
+      throw error;
+    }
+  }, [sessionTabs, workspacePath, mode, loadSessions, onSessionChange, triggerSessionHistoryRefresh]);
+
+  // Add a new terminal to an existing worktree
+  const handleAddTerminalToWorktree = useCallback(async (worktreeId: string) => {
+    try {
+      console.log('[AgenticPanel] Adding terminal to worktree:', worktreeId);
+
+      // Get worktree data
+      const worktreeResult = await window.electronAPI.invoke('worktree:get', worktreeId);
+      if (!worktreeResult.success || !worktreeResult.worktree) {
+        throw new Error(worktreeResult.error || 'Worktree not found');
+      }
+
+      const worktree = worktreeResult.worktree;
+
+      // Create terminal session with worktree association
+      const result = await window.electronAPI.terminal.createSession(workspacePath, {
+        worktreeId: worktree.id,
+        worktreePath: worktree.path,
+      });
+
+      if (!result.success || !result.sessionId) {
+        throw new Error(result.error || 'Failed to create terminal session');
+      }
+
+      // Load the session data
+      const sessionData = await window.electronAPI.aiLoadSession(result.sessionId, workspacePath);
+      if (!sessionData) {
+        throw new Error('Failed to load newly created terminal session');
+      }
+
+      // Count existing terminals in this worktree for naming
+      const worktreeTerminalCount = sessionTabs.filter(
+        t => t.sessionData.sessionType === 'terminal' && t.sessionData.worktreeId === worktreeId
+      ).length;
+      const tabName = worktreeTerminalCount > 0
+        ? `Terminal (${worktree.displayName || worktree.name}) ${worktreeTerminalCount + 1}`
+        : `Terminal (${worktree.displayName || worktree.name})`;
+
+      const newTab: SessionTab = {
+        id: sessionData.id,
+        name: tabName,
+        sessionData: {
+          ...sessionData,
+          sessionType: 'terminal',
+          worktreeId: worktree.id,
+          worktreePath: worktree.path,
+        },
+        mode: 'agent',
+      };
+
+      if (mode === 'chat') {
+        setSessionTabs([newTab]);
+      } else {
+        setSessionTabs(prev => [...prev, newTab]);
+      }
+
+      setActiveTabId(sessionData.id);
+
+      await loadSessions();
+
+      // Trigger SessionHistory refresh
+      triggerSessionHistoryRefresh('new-worktree-terminal');
+
+      if (onSessionChange) {
+        onSessionChange(sessionData.id, tabName);
+      }
+
+      return sessionData;
+    } catch (error) {
+      console.error('[AgenticPanel] Failed to add terminal to worktree:', error);
+      errorNotificationService.showError('Failed to Add Terminal', String(error));
+      throw error;
+    }
+  }, [sessionTabs, workspacePath, mode, loadSessions, onSessionChange, triggerSessionHistoryRefresh]);
+
   // Load or create initial session
   useEffect(() => {
     if (initializedRef.current) return;
@@ -3238,6 +3368,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             onNewTerminal={releaseChannel === 'alpha' ? () => createNewTerminal() : undefined}
             onNewWorktreeSession={createNewWorktreeSession}
             onAddSessionToWorktree={handleAddSessionToWorktree}
+            onAddTerminalToWorktree={releaseChannel === 'alpha' ? handleAddTerminalToWorktree : undefined}
             onImportSessions={handleOpenImportDialog}
             onOpenQuickSearch={onOpenQuickSearch}
             collapsedGroups={collapsedGroups}
@@ -3269,7 +3400,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
             {/* Session views */}
             {sessionTabs.filter(tab => tab != null).map(tab => {
-              // Terminal sessions
+              // Terminal sessions render TerminalPanel (check first, before worktree)
               if (tab.sessionData.sessionType === 'terminal') {
                 return (
                   <div
@@ -3352,6 +3483,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
               }
 
               // Non-worktree sessions render standalone AISessionView
+              // (Terminal sessions are handled at the top of the loop)
               return (
                 <AISessionView
                   key={tab.id}

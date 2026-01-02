@@ -720,8 +720,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Terminal operations
   terminal: {
-    createSession: (workspacePath: string, cwd?: string) =>
-      ipcRenderer.invoke('terminal:create-session', { workspacePath, cwd }),
+    createSession: (workspacePath: string, options?: { cwd?: string; worktreeId?: string; worktreePath?: string }) =>
+      ipcRenderer.invoke('terminal:create-session', { workspacePath, ...options }),
     initialize: (sessionId: string, options?: { cwd?: string; cols?: number; rows?: number }) =>
       ipcRenderer.invoke('terminal:initialize', sessionId, options || {}),
     isActive: (sessionId: string) =>

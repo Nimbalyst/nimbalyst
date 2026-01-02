@@ -42,6 +42,7 @@ interface WorktreeGroupProps {
   onToggle: () => void;
   onSessionSelect: (sessionId: string) => void;
   onAddSession: (worktreeId: string) => void;
+  onAddTerminal?: (worktreeId: string) => void;
   onSessionDelete?: (sessionId: string) => void;
   onSessionArchive?: (sessionId: string) => void;
   onWorktreePinToggle?: (worktreeId: string, isPinned: boolean) => void;
@@ -57,6 +58,7 @@ export const WorktreeGroup: React.FC<WorktreeGroupProps> = ({
   onToggle,
   onSessionSelect,
   onAddSession,
+  onAddTerminal,
   onSessionDelete,
   onSessionArchive,
   onWorktreePinToggle,
@@ -101,6 +103,12 @@ export const WorktreeGroup: React.FC<WorktreeGroupProps> = ({
     setShowContextMenu(false);
     onWorktreePinToggle?.(worktree.id, !worktree.isPinned);
   }, [onWorktreePinToggle, worktree.id, worktree.isPinned]);
+
+  const handleAddTerminal = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    onAddTerminal?.(worktree.id);
+  }, [onAddTerminal, worktree.id]);
 
   // Adjust context menu position to keep it within viewport
   useEffect(() => {
@@ -223,6 +231,15 @@ export const WorktreeGroup: React.FC<WorktreeGroupProps> = ({
             <MaterialSymbol icon="add" size={14} />
             Add Session
           </button>
+          {onAddTerminal && (
+            <button
+              className="worktree-group-context-menu-item"
+              onClick={handleAddTerminal}
+            >
+              <MaterialSymbol icon="terminal" size={14} />
+              Add Terminal
+            </button>
+          )}
         </div>
       )}
     </div>

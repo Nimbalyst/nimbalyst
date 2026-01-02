@@ -60,6 +60,7 @@ interface SessionHistoryProps {
   onNewTerminal?: () => void; // Callback for creating a new terminal session
   onNewWorktreeSession?: () => void; // Callback for creating new worktree session
   onAddSessionToWorktree?: (worktreeId: string) => void; // Callback for adding session to existing worktree
+  onAddTerminalToWorktree?: (worktreeId: string) => void; // Callback for adding terminal to existing worktree
   onImportSessions?: () => void; // Callback for opening import dialog
   onOpenQuickSearch?: () => void; // Callback for opening session quick search (Cmd+L)
   collapsedGroups: string[];
@@ -165,6 +166,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   onNewTerminal,
   onNewWorktreeSession,
   onAddSessionToWorktree,
+  onAddTerminalToWorktree,
   onImportSessions,
   onOpenQuickSearch,
   collapsedGroups,
@@ -1267,6 +1269,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                           onToggle={() => handleToggleGroup(`worktree:${item.worktreeId}`)}
                           onSessionSelect={onSessionSelect}
                           onAddSession={onAddSessionToWorktree || (() => {})}
+                          onAddTerminal={onAddTerminalToWorktree}
                           onSessionDelete={onSessionDelete ? handleDeleteSession : undefined}
                           onSessionArchive={handleArchiveSession}
                           onWorktreePinToggle={handleWorktreePinToggle}
