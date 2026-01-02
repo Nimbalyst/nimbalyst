@@ -20,6 +20,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.50.8] - 2026-01-02
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+- Added guidance for users to start a new session when using chat models
+
+### Fixed
+- Fixed broken build in PDF viewer package
+- Added module description to PDF viewer package for better clarity
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.50.7] - 2026-01-02
 
 
