@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "PDF viewer extension for Nimbalyst",
   "main": "dist/index.js",
+  "type": "module",
   "scripts": {
     "dev": "vite build --watch",
     "build": "vite build",
