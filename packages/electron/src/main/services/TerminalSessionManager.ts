@@ -14,6 +14,7 @@ import type { IPty } from '@homebridge/node-pty-prebuilt-multiarch';
 import { app, BrowserWindow } from 'electron';
 import path from 'path';
 import { promises as fs } from 'fs';
+import os from 'os';
 import { AISessionsRepository } from '@nimbalyst/runtime';
 import { ShellDetector, type ShellInfo } from './ShellDetector';
 
@@ -59,18 +60,18 @@ export interface TerminalProcess {
   isPersisting?: boolean;
   hasPendingPersist?: boolean;
   pendingForcePersist?: boolean;
-  historyInitialized?: boolean;
-  historyInitTimer?: NodeJS.Timeout | null;
-  // For buffering and filtering init command echo from output
-  initOutputBuffer?: string;
-  initBufferTimeout?: NodeJS.Timeout | null;
-  isBufferingInit?: boolean;
+}
+
+interface ShellBootstrapConfig {
+  args?: string[];
+  env?: Record<string, string>;
 }
 
 export class TerminalSessionManager {
   private terminals = new Map<string, TerminalProcess>();
   private scrollbackPersistTimers = new Map<string, NodeJS.Timeout>();
   private historyDirPromise: Promise<string> | null = null;
+  private bootstrapDirPromise: Promise<string> | null = null;
 
   private async getHistoryDirectory(): Promise<string> {
     if (!this.historyDirPromise) {
@@ -85,6 +86,18 @@ export class TerminalSessionManager {
     }
 
     return this.historyDirPromise;
+  }
+
+  private async getBootstrapDirectory(): Promise<string> {
+    if (!this.bootstrapDirPromise) {
+      this.bootstrapDirPromise = (async () => {
+        const dir = path.join(os.tmpdir(), 'nimbalyst-terminal-bootstrap');
+        await fs.mkdir(dir, { recursive: true });
+        return dir;
+      })();
+    }
+
+    return this.bootstrapDirPromise;
   }
 
   private async ensureHistoryFile(sessionId: string, existingPath?: string): Promise<string> {
@@ -222,130 +235,30 @@ export class TerminalSessionManager {
     }
   }
 
-  private scheduleHistoryInitialization(terminal: TerminalProcess, delayMs = 300): void {
-    if (terminal.historyInitTimer) {
-      clearTimeout(terminal.historyInitTimer);
+  private async prepareShellBootstrap(sessionId: string, shell: ShellInfo, historyFile: string): Promise<ShellBootstrapConfig | null> {
+    const shellName = shell.name?.toLowerCase() || '';
+    const initCommand = this.getHistoryInitCommand(shell, historyFile);
+    if (!initCommand) {
+      return null;
     }
 
-    terminal.historyInitTimer = setTimeout(() => {
-      terminal.historyInitTimer = null;
-      this.sendHistoryInitCommand(terminal);
-    }, delayMs);
+    if (shellName.includes('zsh')) {
+      return this.prepareZshBootstrap(sessionId, initCommand);
+    }
+
+    if (shellName.includes('bash')) {
+      return this.prepareBashBootstrap(sessionId, initCommand, shell.args);
+    }
+
+    if (shellName.includes('powershell') || shellName.includes('pwsh')) {
+      return this.preparePowerShellBootstrap(initCommand, shell.args);
+    }
+
+    return null;
   }
 
-  private sendHistoryInitCommand(terminal: TerminalProcess): void {
-    if (terminal.historyInitialized) {
-      return;
-    }
-
-    const command = this.getHistoryInitCommand(terminal);
-    if (!command) {
-      terminal.historyInitialized = true;
-      return;
-    }
-
-    try {
-      // Start buffering output so we can filter out the init command echo
-      terminal.isBufferingInit = true;
-      terminal.initOutputBuffer = '';
-
-      if (terminal.initBufferTimeout) {
-        clearTimeout(terminal.initBufferTimeout);
-      }
-
-      // After a delay, flush the buffer with filtering applied.
-      // 1000ms ensures the command has time to echo back.
-      terminal.initBufferTimeout = setTimeout(() => {
-        this.flushInitBuffer(terminal);
-      }, 1000);
-
-      terminal.pty.write(`${command}\r`);
-      terminal.historyInitialized = true;
-    } catch (error) {
-      console.warn(`[TerminalSessionManager] Failed to initialize history for ${terminal.sessionId}:`, error);
-    }
-  }
-
-  /**
-   * Flush the init buffer, filtering out the init command echo.
-   */
-  private flushInitBuffer(terminal: TerminalProcess): void {
-    if (!terminal.isBufferingInit) {
-      return;
-    }
-
-    const buffered = terminal.initOutputBuffer || '';
-    terminal.isBufferingInit = false;
-    terminal.initOutputBuffer = '';
-    terminal.initBufferTimeout = null;
-
-    // Filter the complete buffer
-    const filtered = this.filterInitCommandFromBuffer(buffered);
-
-    // Add to scrollback and broadcast
-    if (filtered) {
-      terminal.scrollbackBuffer += filtered;
-      if (terminal.scrollbackBuffer.length > MAX_SCROLLBACK_SIZE) {
-        terminal.scrollbackBuffer = terminal.scrollbackBuffer.slice(-MAX_SCROLLBACK_SIZE);
-      }
-
-      this.scheduleScrollbackPersist(terminal.sessionId);
-
-      this.broadcastToWindows('terminal:output', {
-        sessionId: terminal.sessionId,
-        data: filtered,
-      });
-    }
-  }
-
-  /**
-   * Filter init command echo from the complete buffered output.
-   * Terminal line wrapping can split commands across multiple lines,
-   * so we filter line by line looking for distinctive keywords.
-   */
-  private filterInitCommandFromBuffer(data: string): string {
-    // Keywords that indicate our init command (these won't appear in normal usage)
-    const initKeywords = [
-      'HISTFILE=',
-      'INC_APPEND_HISTORY',
-      'SHARE_HISTORY',
-      'terminal-history/',
-      '@nimbalyst',
-      'fc -R',
-      'history -c',
-      'history -r',
-      'Set-PSReadLineOption',
-      '-HistorySavePath',
-    ];
-
-    // Split into lines, filter out lines containing init keywords, rejoin
-    const lines = data.split(/(\r?\n)/);
-    const filteredLines: string[] = [];
-
-    for (const line of lines) {
-      // Check if this line contains any init command keywords
-      const isInitLine = initKeywords.some((keyword) => line.includes(keyword));
-      if (!isInitLine) {
-        filteredLines.push(line);
-      }
-    }
-
-    let filtered = filteredLines.join('');
-
-    // Also filter the "true" output that appears from || true
-    // Only if it appears at the start or after a newline, isolated
-    filtered = filtered.replace(/^true\r?\n/gm, '');
-
-    // Clean up excessive blank lines
-    filtered = filtered.replace(/(\r?\n){3,}/g, '\n\n');
-    filtered = filtered.replace(/^\s*\r?\n/, ''); // Remove leading blank line
-
-    return filtered;
-  }
-
-  private getHistoryInitCommand(terminal: TerminalProcess): string | null {
-    const shellName = terminal.shell?.name?.toLowerCase() || '';
-    const historyFile = terminal.historyFile;
+  private getHistoryInitCommand(shell: ShellInfo, historyFile: string): string | null {
+    const shellName = shell?.name?.toLowerCase() || '';
     if (!historyFile || !shellName) {
       return null;
     }
@@ -376,6 +289,102 @@ export class TerminalSessionManager {
     return `export HISTFILE=${escaped}; history -c; history -r ${escaped} 2>/dev/null || true`;
   }
 
+  private async prepareBashBootstrap(sessionId: string, initCommand: string, baseArgs: string[]): Promise<ShellBootstrapConfig> {
+    const bootstrapDir = await this.getBootstrapDirectory();
+    const rcfilePath = path.join(bootstrapDir, `${sessionId}-bashrc`);
+    const homeDir = app.getPath('home');
+    const userRcPath = path.join(homeDir, '.bashrc');
+    const userRcEscaped = escapeForPosixShell(userRcPath);
+
+    const rcfileContent = [
+      '# Auto-generated by TerminalSessionManager',
+      'if [ -f /etc/bashrc ]; then',
+      '  . /etc/bashrc',
+      'elif [ -f /etc/bash.bashrc ]; then',
+      '  . /etc/bash.bashrc',
+      'fi',
+      `if [ -f ${userRcEscaped} ]; then`,
+      `  . ${userRcEscaped}`,
+      'fi',
+      '',
+      'if [ -z "$NIMBALYST_HISTORY_BOOTSTRAPPED" ]; then',
+      '  export NIMBALYST_HISTORY_BOOTSTRAPPED=1',
+      `  ${initCommand}`,
+      'fi',
+      '',
+    ].join('\n');
+
+    await fs.writeFile(rcfilePath, rcfileContent, 'utf8');
+
+    const args = [...baseArgs];
+    args.push('--rcfile', rcfilePath);
+    if (!args.some(arg => arg === '-i' || arg === '--interactive')) {
+      args.push('-i');
+    }
+
+    return { args };
+  }
+
+  private async prepareZshBootstrap(sessionId: string, initCommand: string): Promise<ShellBootstrapConfig> {
+    const bootstrapDir = await this.getBootstrapDirectory();
+    const zshDir = path.join(bootstrapDir, `${sessionId}-zsh`);
+    await fs.mkdir(zshDir, { recursive: true });
+
+    const originalZdotdir = process.env.ZDOTDIR || app.getPath('home');
+    const escapedOriginal = escapeForPosixShell(originalZdotdir);
+
+    const zshenvContent = [
+      '# Auto-generated by TerminalSessionManager',
+      'if [ -z "$__NIMBALYST_ORIGINAL_ZDOTDIR" ]; then',
+      `  export __NIMBALYST_ORIGINAL_ZDOTDIR=${escapedOriginal}`,
+      'fi',
+      'if [ -f "$__NIMBALYST_ORIGINAL_ZDOTDIR/.zshenv" ]; then',
+      '  source "$__NIMBALYST_ORIGINAL_ZDOTDIR/.zshenv"',
+      'fi',
+      '',
+    ].join('\n');
+
+    const zshrcContent = [
+      '# Auto-generated by TerminalSessionManager',
+      'if [ -z "$__NIMBALYST_ORIGINAL_ZDOTDIR" ]; then',
+      `  export __NIMBALYST_ORIGINAL_ZDOTDIR=${escapedOriginal}`,
+      'fi',
+      'export ZDOTDIR="$__NIMBALYST_ORIGINAL_ZDOTDIR"',
+      'if [ -f "$__NIMBALYST_ORIGINAL_ZDOTDIR/.zshrc" ]; then',
+      '  source "$__NIMBALYST_ORIGINAL_ZDOTDIR/.zshrc"',
+      'fi',
+      '',
+      'if [ -z "$NIMBALYST_HISTORY_BOOTSTRAPPED" ]; then',
+      '  export NIMBALYST_HISTORY_BOOTSTRAPPED=1',
+      `  ${initCommand}`,
+      'fi',
+      '',
+    ].join('\n');
+
+    await fs.writeFile(path.join(zshDir, '.zshenv'), zshenvContent, 'utf8');
+    await fs.writeFile(path.join(zshDir, '.zshrc'), zshrcContent, 'utf8');
+
+    return {
+      env: {
+        ZDOTDIR: zshDir,
+      },
+    };
+  }
+
+  private preparePowerShellBootstrap(initCommand: string, baseArgs: string[]): ShellBootstrapConfig {
+    const bootstrapScript = [
+      'if (-not (Test-Path Env:NIMBALYST_HISTORY_BOOTSTRAPPED)) {',
+      "  $env:NIMBALYST_HISTORY_BOOTSTRAPPED = '1';",
+      `  ${initCommand}`,
+      '}',
+    ].join('\n');
+
+    const args = [...baseArgs];
+    args.push('-Command', `& { ${bootstrapScript} }`);
+
+    return { args };
+  }
+
   /**
    * Create a new terminal for a session
    */
@@ -399,24 +408,32 @@ export class TerminalSessionManager {
       scrollbackBuffer = scrollbackBuffer.slice(-MAX_SCROLLBACK_SIZE);
     }
 
+    const bootstrapConfig = await this.prepareShellBootstrap(sessionId, shell, historyFile);
+    const spawnArgs = bootstrapConfig?.args || shell.args;
+    const spawnEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      TERM: 'xterm-256color',
+      COLORTERM: 'truecolor',
+      LANG: process.env.LANG || 'en_US.UTF-8',
+      HISTFILE: historyFile,
+      HISTCONTROL: process.env.HISTCONTROL || 'ignoredups:erasedups',
+      HISTSIZE: process.env.HISTSIZE || '10000',
+      HISTFILESIZE: process.env.HISTFILESIZE || '20000',
+    };
+
+    if (bootstrapConfig?.env) {
+      Object.assign(spawnEnv, bootstrapConfig.env);
+    }
+
     console.log(`[TerminalSessionManager] Creating terminal ${sessionId} with shell: ${shell.path}`);
 
     // Create PTY process
-    const ptyProcess = pty.spawn(shell.path, shell.args, {
+    const ptyProcess = pty.spawn(shell.path, spawnArgs, {
       name: 'xterm-256color',
       cols,
       rows,
       cwd,
-      env: {
-        ...process.env,
-        TERM: 'xterm-256color',
-        COLORTERM: 'truecolor',
-        LANG: process.env.LANG || 'en_US.UTF-8',
-        HISTFILE: historyFile,
-        HISTCONTROL: process.env.HISTCONTROL || 'ignoredups:erasedups',
-        HISTSIZE: process.env.HISTSIZE || '10000',
-        HISTFILESIZE: process.env.HISTFILESIZE || '20000',
-      },
+      env: spawnEnv,
     });
 
     const terminalProcess: TerminalProcess = {
@@ -432,18 +449,10 @@ export class TerminalSessionManager {
       isPersisting: false,
       hasPendingPersist: false,
       pendingForcePersist: false,
-      historyInitialized: false,
-      historyInitTimer: null,
     };
 
     // Handle output from PTY
     ptyProcess.onData((data: string) => {
-      // During init phase, buffer output for later filtering
-      if (terminalProcess.isBufferingInit) {
-        terminalProcess.initOutputBuffer = (terminalProcess.initOutputBuffer || '') + data;
-        return;
-      }
-
       // Append to scrollback buffer (with size limit)
       terminalProcess.scrollbackBuffer += data;
       if (terminalProcess.scrollbackBuffer.length > MAX_SCROLLBACK_SIZE) {
@@ -464,18 +473,6 @@ export class TerminalSessionManager {
       console.log(`[TerminalSessionManager] Terminal ${sessionId} exited with code ${exitCode}`);
 
       this.clearScrollbackTimer(sessionId);
-      if (terminalProcess.historyInitTimer) {
-        clearTimeout(terminalProcess.historyInitTimer);
-        terminalProcess.historyInitTimer = null;
-      }
-      if (terminalProcess.initBufferTimeout) {
-        clearTimeout(terminalProcess.initBufferTimeout);
-        terminalProcess.initBufferTimeout = null;
-      }
-      // Flush any remaining buffered output before exit
-      if (terminalProcess.isBufferingInit) {
-        this.flushInitBuffer(terminalProcess);
-      }
       await this.persistScrollback(sessionId, { force: true });
 
       // Send exit event to all windows
@@ -492,7 +489,6 @@ export class TerminalSessionManager {
     await this.persistTerminalState(sessionId, terminalProcess, { force: true });
 
     this.terminals.set(sessionId, terminalProcess);
-    this.scheduleHistoryInitialization(terminalProcess);
   }
 
   /**
@@ -545,18 +541,6 @@ export class TerminalSessionManager {
 
     console.log(`[TerminalSessionManager] Destroying terminal ${sessionId}`);
     this.clearScrollbackTimer(sessionId);
-    if (terminal.historyInitTimer) {
-      clearTimeout(terminal.historyInitTimer);
-      terminal.historyInitTimer = null;
-    }
-    if (terminal.initBufferTimeout) {
-      clearTimeout(terminal.initBufferTimeout);
-      terminal.initBufferTimeout = null;
-    }
-    // Flush any remaining buffered output before destroy
-    if (terminal.isBufferingInit) {
-      this.flushInitBuffer(terminal);
-    }
     await this.persistScrollback(sessionId, { force: true });
 
     try {
