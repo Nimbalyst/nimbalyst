@@ -232,24 +232,30 @@ export const MockupViewer: React.FC<EditorHostProps> = ({ host }) => {
     }
   }, []);
 
-  // Update iframe when content changes
+  // Update iframe when content changes or when exiting diff mode
+  // Must include diffData in dependencies so the effect runs when diff mode exits,
+  // otherwise the iframe won't be populated after accepting changes
   useEffect(() => {
-    if (iframeRef.current && content) {
-      renderMockupHtml(iframeRef.current, content, {
-        onAfterRender: (iframeDoc) => {
-          const style = iframeDoc.createElement('style');
-          style.textContent = `
-            .nimbalyst-selected {
-              outline: 2px solid #007AFF !important;
-              outline-offset: 2px !important;
-              box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.2) !important;
-            }
-          `;
-          iframeDoc.head.appendChild(style);
-          iframeDoc.addEventListener('click', handleElementClick as any);
-        },
-      });
+    // Skip if in diff mode - MockupDiffViewer handles its own rendering
+    // Also skip if iframeRef not yet attached (will be null during diff mode)
+    if (diffData || !iframeRef.current || !content) {
+      return;
     }
+
+    renderMockupHtml(iframeRef.current, content, {
+      onAfterRender: (iframeDoc) => {
+        const style = iframeDoc.createElement('style');
+        style.textContent = `
+          .nimbalyst-selected {
+            outline: 2px solid #007AFF !important;
+            outline-offset: 2px !important;
+            box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.2) !important;
+          }
+        `;
+        iframeDoc.head.appendChild(style);
+        iframeDoc.addEventListener('click', handleElementClick as any);
+      },
+    });
 
     return () => {
       const iframeDoc = iframeRef.current?.contentDocument;
@@ -257,7 +263,7 @@ export const MockupViewer: React.FC<EditorHostProps> = ({ host }) => {
         iframeDoc.removeEventListener('click', handleElementClick as any);
       }
     };
-  }, [content, handleElementClick]);
+  }, [content, handleElementClick, diffData]);
 
   // Expose file path to window for AI context
   useEffect(() => {
