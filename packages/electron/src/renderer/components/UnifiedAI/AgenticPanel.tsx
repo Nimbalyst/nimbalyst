@@ -3338,7 +3338,11 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
   // Agent mode: multi-tab with session history
   const activeAgentTab = activeTabId ? sessionTabs.find(tab => tab.id === activeTabId) : null;
-  const showWorktreeToggle = Boolean(activeAgentTab?.sessionData.worktreeId && activeAgentTab?.sessionData.worktreePath);
+  const showWorktreeToggle = Boolean(
+    activeAgentTab?.sessionData.worktreeId &&
+    activeAgentTab?.sessionData.worktreePath &&
+    activeAgentTab?.sessionData.sessionType !== 'terminal'
+  );
   const activeAgentWorktreeMode: WorktreeContentMode = activeAgentTab ? (worktreeSessionModes.get(activeAgentTab.id) ?? 'agent') : 'agent';
 
   return (
