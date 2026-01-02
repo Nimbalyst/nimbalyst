@@ -766,6 +766,36 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
   },
 
+  // Terminal operations
+  terminal: {
+    createSession: (workspacePath: string, cwd?: string) =>
+      ipcRenderer.invoke('terminal:create-session', { workspacePath, cwd }),
+    initialize: (sessionId: string, options?: { cwd?: string; cols?: number; rows?: number }) =>
+      ipcRenderer.invoke('terminal:initialize', sessionId, options || {}),
+    isActive: (sessionId: string) =>
+      ipcRenderer.invoke('terminal:is-active', sessionId),
+    write: (sessionId: string, data: string) =>
+      ipcRenderer.invoke('terminal:write', sessionId, data),
+    resize: (sessionId: string, cols: number, rows: number) =>
+      ipcRenderer.invoke('terminal:resize', sessionId, cols, rows),
+    getScrollback: (sessionId: string) =>
+      ipcRenderer.invoke('terminal:get-scrollback', sessionId),
+    destroy: (sessionId: string) =>
+      ipcRenderer.invoke('terminal:destroy', sessionId),
+    getInfo: (sessionId: string) =>
+      ipcRenderer.invoke('terminal:get-info', sessionId),
+    onOutput: (callback: (data: { sessionId: string; data: string }) => void) => {
+      const handler = (_event: any, data: any) => callback(data);
+      ipcRenderer.on('terminal:output', handler);
+      return () => ipcRenderer.removeListener('terminal:output', handler);
+    },
+    onExited: (callback: (data: { sessionId: string; exitCode: number }) => void) => {
+      const handler = (_event: any, data: any) => callback(data);
+      ipcRenderer.on('terminal:exited', handler);
+      return () => ipcRenderer.removeListener('terminal:exited', handler);
+    },
+  },
+
   // Generic IPC methods for services that need them
   invoke: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args),
   send: (channel: string, ...args: any[]) => ipcRenderer.send(channel, ...args),

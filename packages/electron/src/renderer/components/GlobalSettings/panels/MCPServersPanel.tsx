@@ -23,6 +23,8 @@ interface MCPServerTemplate {
   name: string;
   description: string;
   docsUrl?: string;
+  /** Authentication type: 'oauth' uses mcp-remote for browser-based login, 'api-key' requires manual key */
+  authType?: 'oauth' | 'api-key' | 'none';
   config: MCPServerConfig;
 }
 
@@ -30,14 +32,12 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
   {
     id: 'linear',
     name: 'Linear',
-    description: 'Issue tracking and project management (Official Remote Server)',
+    description: 'Issue tracking and project management (OAuth)',
     docsUrl: 'https://linear.app/docs/mcp',
+    authType: 'oauth',
     config: {
-      type: 'sse',
-      url: 'https://mcp.linear.app/sse',
-      env: {
-        LINEAR_API_KEY: '${LINEAR_API_KEY}'
-      }
+      command: 'npx',
+      args: ['-y', 'mcp-remote', 'https://mcp.linear.app/mcp']
     }
   },
   {
@@ -45,6 +45,7 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     name: 'GitHub',
     description: 'Repository management and code collaboration',
     docsUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/github',
+    authType: 'api-key',
     config: {
       command: 'npx',
       args: ['-y', '@modelcontextprotocol/server-github'],
@@ -58,6 +59,7 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     name: 'GitLab',
     description: 'DevOps platform and repository management',
     docsUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/gitlab',
+    authType: 'api-key',
     config: {
       command: 'npx',
       args: ['-y', '@modelcontextprotocol/server-gitlab'],
@@ -72,6 +74,7 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     name: 'Slack',
     description: 'Team communication and messaging',
     docsUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/slack',
+    authType: 'api-key',
     config: {
       command: 'npx',
       args: ['-y', '@modelcontextprotocol/server-slack'],
@@ -86,6 +89,7 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     name: 'PostgreSQL',
     description: 'Database queries and management',
     docsUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/postgres',
+    authType: 'api-key',
     config: {
       command: 'npx',
       args: ['-y', '@modelcontextprotocol/server-postgres'],
@@ -99,6 +103,7 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     name: 'Filesystem',
     description: 'Local file system access',
     docsUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem',
+    authType: 'none',
     config: {
       command: 'npx',
       args: ['-y', '@modelcontextprotocol/server-filesystem'],
@@ -110,6 +115,7 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     name: 'Brave Search',
     description: 'Web search capabilities',
     docsUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/brave-search',
+    authType: 'api-key',
     config: {
       command: 'npx',
       args: ['-y', '@modelcontextprotocol/server-brave-search'],
@@ -121,8 +127,9 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
   {
     id: 'google-drive',
     name: 'Google Drive',
-    description: 'Access files and documents in Google Drive',
+    description: 'Access files and documents in Google Drive (OAuth)',
     docsUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/gdrive',
+    authType: 'oauth',
     config: {
       command: 'npx',
       args: ['-y', '@modelcontextprotocol/server-gdrive'],
@@ -146,6 +153,39 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
       env: {
         POSTHOG_PERSONAL_API_KEY: ''
       }
+    }
+  },
+  {
+    id: 'atlassian',
+    name: 'Atlassian',
+    description: 'Jira and Confluence access (OAuth)',
+    docsUrl: 'https://www.atlassian.com/blog/announcements/remote-mcp-server',
+    authType: 'oauth',
+    config: {
+      command: 'npx',
+      args: ['-y', 'mcp-remote', 'https://mcp.atlassian.com/v1/sse']
+    }
+  },
+  {
+    id: 'notion',
+    name: 'Notion',
+    description: 'Workspace and page management (OAuth)',
+    docsUrl: 'https://developers.notion.com/docs/mcp',
+    authType: 'oauth',
+    config: {
+      command: 'npx',
+      args: ['-y', 'mcp-remote', 'https://mcp.notion.com/mcp']
+    }
+  },
+  {
+    id: 'asana',
+    name: 'Asana',
+    description: 'Task and project management (OAuth)',
+    docsUrl: 'https://developers.asana.com/docs/mcp-server',
+    authType: 'oauth',
+    config: {
+      command: 'npx',
+      args: ['-y', 'mcp-remote', 'https://mcp.asana.com/sse']
     }
   }
 ];
@@ -175,6 +215,10 @@ export function MCPServersPanel({ scope = 'user', workspacePath }: MCPServersPan
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [testMessage, setTestMessage] = useState<string>('');
+
+  // OAuth state
+  const [oauthStatus, setOauthStatus] = useState<'unknown' | 'checking' | 'authorized' | 'not-authorized'>('unknown');
+  const [oauthAction, setOauthAction] = useState<'idle' | 'authorizing' | 'revoking'>('idle');
 
   // Reload servers when scope or workspace path changes
   useEffect(() => {
@@ -258,7 +302,111 @@ export function MCPServersPanel({ scope = 'user', workspacePath }: MCPServersPan
       Object.entries(template.config.env || {}).map(([key, value]) => ({ key, value }))
     );
     setSelectedTemplateId(templateId);
+
+    // Check OAuth status for OAuth templates
+    if (template.authType === 'oauth') {
+      checkOAuthStatus(template.config.args || []);
+    }
   };
+
+  /**
+   * Extract the server URL from mcp-remote args
+   */
+  const getOAuthServerUrl = (args: string[]): string | null => {
+    // mcp-remote args are typically ['-y', 'mcp-remote', 'https://...']
+    // or just ['https://...'] after the package name
+    for (const arg of args) {
+      if (arg.startsWith('http://') || arg.startsWith('https://')) {
+        return arg;
+      }
+    }
+    return null;
+  };
+
+  /**
+   * Check if this is an OAuth server (uses mcp-remote)
+   */
+  const isOAuthServer = (config: MCPServerConfig): boolean => {
+    return config.command === 'npx' &&
+           Boolean(config.args?.some(arg => arg === 'mcp-remote' || arg.includes('mcp-remote')));
+  };
+
+  /**
+   * Check OAuth authorization status
+   */
+  const checkOAuthStatus = async (args: string[]) => {
+    const serverUrl = getOAuthServerUrl(args);
+    if (!serverUrl) {
+      setOauthStatus('unknown');
+      return;
+    }
+
+    setOauthStatus('checking');
+    try {
+      const result = await window.electronAPI.invoke('mcp-config:check-oauth-status', serverUrl);
+      setOauthStatus(result.authorized ? 'authorized' : 'not-authorized');
+    } catch (error) {
+      console.error('Failed to check OAuth status:', error);
+      setOauthStatus('unknown');
+    }
+  };
+
+  /**
+   * Trigger OAuth authorization flow
+   */
+  const handleAuthorize = async () => {
+    const serverUrl = getOAuthServerUrl(formArgs);
+    if (!serverUrl) return;
+
+    setOauthAction('authorizing');
+    try {
+      const result = await window.electronAPI.invoke('mcp-config:trigger-oauth', serverUrl);
+      if (result.success) {
+        setOauthStatus('authorized');
+      } else {
+        console.error('OAuth failed:', result.error);
+        // Recheck status in case it succeeded but we missed it
+        await checkOAuthStatus(formArgs);
+      }
+    } catch (error) {
+      console.error('Failed to trigger OAuth:', error);
+    } finally {
+      setOauthAction('idle');
+    }
+  };
+
+  /**
+   * Revoke OAuth authorization
+   */
+  const handleRevoke = async () => {
+    const serverUrl = getOAuthServerUrl(formArgs);
+    if (!serverUrl) return;
+
+    if (!confirm('Revoke authorization? You will need to re-authorize to use this server.')) {
+      return;
+    }
+
+    setOauthAction('revoking');
+    try {
+      const result = await window.electronAPI.invoke('mcp-config:revoke-oauth', serverUrl);
+      if (result.success) {
+        setOauthStatus('not-authorized');
+      }
+    } catch (error) {
+      console.error('Failed to revoke OAuth:', error);
+    } finally {
+      setOauthAction('idle');
+    }
+  };
+
+  // Check OAuth status when selecting an existing server
+  useEffect(() => {
+    if (selectedServer && isOAuthServer(selectedServer)) {
+      checkOAuthStatus(selectedServer.args || []);
+    } else if (!isNewServer || !selectedTemplateId) {
+      setOauthStatus('unknown');
+    }
+  }, [selectedServer]);
 
   // Auto-save function - called on blur from form fields
   const autoSave = async () => {
@@ -591,18 +739,64 @@ export function MCPServersPanel({ scope = 'user', workspacePath }: MCPServersPan
                     </select>
                   </div>
                   {selectedTemplateId && (
-                    <div className="mcp-docs-link">
-                      {MCP_SERVER_TEMPLATES.find(t => t.id === selectedTemplateId)?.docsUrl && (
-                        <a
-                          href={MCP_SERVER_TEMPLATES.find(t => t.id === selectedTemplateId)?.docsUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="mcp-docs-link-button"
-                        >
-                          View {MCP_SERVER_TEMPLATES.find(t => t.id === selectedTemplateId)?.name} Documentation →
-                        </a>
+                    <>
+                      <div className="mcp-docs-link">
+                        {MCP_SERVER_TEMPLATES.find(t => t.id === selectedTemplateId)?.docsUrl && (
+                          <a
+                            href={MCP_SERVER_TEMPLATES.find(t => t.id === selectedTemplateId)?.docsUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mcp-docs-link-button"
+                          >
+                            View {MCP_SERVER_TEMPLATES.find(t => t.id === selectedTemplateId)?.name} Documentation
+                          </a>
+                        )}
+                      </div>
+                      {MCP_SERVER_TEMPLATES.find(t => t.id === selectedTemplateId)?.authType === 'oauth' && (
+                        <div className="mcp-oauth-section">
+                          <div className="mcp-oauth-status">
+                            <span className="mcp-oauth-label">Authorization:</span>
+                            {oauthStatus === 'checking' && (
+                              <span className="mcp-oauth-badge checking">Checking...</span>
+                            )}
+                            {oauthStatus === 'authorized' && (
+                              <span className="mcp-oauth-badge authorized">Authorized</span>
+                            )}
+                            {oauthStatus === 'not-authorized' && (
+                              <span className="mcp-oauth-badge not-authorized">Not authorized</span>
+                            )}
+                            {oauthStatus === 'unknown' && (
+                              <span className="mcp-oauth-badge unknown">Unknown</span>
+                            )}
+                          </div>
+                          <div className="mcp-oauth-actions">
+                            {oauthStatus !== 'authorized' && (
+                              <button
+                                onClick={handleAuthorize}
+                                disabled={oauthAction !== 'idle'}
+                                className="mcp-oauth-button authorize"
+                              >
+                                {oauthAction === 'authorizing' ? 'Authorizing...' : 'Authorize'}
+                              </button>
+                            )}
+                            {oauthStatus === 'authorized' && (
+                              <button
+                                onClick={handleRevoke}
+                                disabled={oauthAction !== 'idle'}
+                                className="mcp-oauth-button revoke"
+                              >
+                                {oauthAction === 'revoking' ? 'Revoking...' : 'Revoke'}
+                              </button>
+                            )}
+                          </div>
+                          <div className="mcp-oauth-hint">
+                            {oauthStatus === 'authorized'
+                              ? 'You are authorized to use this server.'
+                              : 'Click Authorize to open a browser window and log in.'}
+                          </div>
+                        </div>
                       )}
-                    </div>
+                    </>
                   )}
                 </>
               )}
@@ -746,12 +940,61 @@ export function MCPServersPanel({ scope = 'user', workspacePath }: MCPServersPan
                 <button onClick={addEnvVar} className="mcp-add-button">+ Add Environment Variable</button>
               </div>
 
+              {/* OAuth section for existing mcp-remote servers */}
+              {!isNewServer && formCommand === 'npx' && formArgs.some(arg => arg === 'mcp-remote' || arg.includes('mcp-remote')) && (
+                <div className="mcp-form-group">
+                  <label>OAuth Authorization</label>
+                  <div className="mcp-oauth-section">
+                    <div className="mcp-oauth-status">
+                      <span className="mcp-oauth-label">Status:</span>
+                      {oauthStatus === 'checking' && (
+                        <span className="mcp-oauth-badge checking">Checking...</span>
+                      )}
+                      {oauthStatus === 'authorized' && (
+                        <span className="mcp-oauth-badge authorized">Authorized</span>
+                      )}
+                      {oauthStatus === 'not-authorized' && (
+                        <span className="mcp-oauth-badge not-authorized">Not authorized</span>
+                      )}
+                      {oauthStatus === 'unknown' && (
+                        <span className="mcp-oauth-badge unknown">Unknown</span>
+                      )}
+                    </div>
+                    <div className="mcp-oauth-actions">
+                      {oauthStatus !== 'authorized' && (
+                        <button
+                          onClick={handleAuthorize}
+                          disabled={oauthAction !== 'idle'}
+                          className="mcp-oauth-button authorize"
+                        >
+                          {oauthAction === 'authorizing' ? 'Authorizing...' : 'Authorize'}
+                        </button>
+                      )}
+                      {oauthStatus === 'authorized' && (
+                        <button
+                          onClick={handleRevoke}
+                          disabled={oauthAction !== 'idle'}
+                          className="mcp-oauth-button revoke"
+                        >
+                          {oauthAction === 'revoking' ? 'Revoking...' : 'Revoke'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="mcp-form-actions">
                 {selectedServer && (
                   <button onClick={handleDelete} className="mcp-delete-button">Delete</button>
                 )}
+                {isNewServer && formName.trim() && (formCommand.trim() || formUrl.trim()) && (
+                  <button onClick={autoSave} className="mcp-save-button" disabled={saveStatus === 'saving'}>
+                    {saveStatus === 'saving' ? 'Saving...' : 'Add Server'}
+                  </button>
+                )}
                 <span className={`mcp-save-status ${saveStatus}`}>
-                  {saveStatus === 'saving' && 'Saving...'}
+                  {saveStatus === 'saving' && !isNewServer && 'Saving...'}
                   {saveStatus === 'saved' && 'Saved'}
                   {saveStatus === 'error' && 'Error saving'}
                 </span>
