@@ -7,6 +7,7 @@ interface MCPServerConfig {
   url?: string;
   type?: 'stdio' | 'sse';
   env?: Record<string, string>;
+  disabled?: boolean;
 }
 
 interface MCPServerWithName extends MCPServerConfig {
@@ -375,6 +376,39 @@ export function MCPServersPanel({ scope = 'user', workspacePath }: MCPServersPan
     }
   };
 
+  const handleToggleDisabled = async (serverName: string, disabled: boolean) => {
+    try {
+      // Read current config
+      const config: MCPConfig = scope === 'workspace' && workspacePath
+        ? await window.electronAPI.invoke('mcp-config:read-workspace', workspacePath)
+        : await window.electronAPI.invoke('mcp-config:read-user');
+
+      // Update the disabled state
+      if (config.mcpServers[serverName]) {
+        if (disabled) {
+          config.mcpServers[serverName].disabled = true;
+        } else {
+          delete config.mcpServers[serverName].disabled;
+        }
+      }
+
+      // Write back
+      const result = scope === 'workspace' && workspacePath
+        ? await window.electronAPI.invoke('mcp-config:write-workspace', workspacePath, config)
+        : await window.electronAPI.invoke('mcp-config:write-user', config);
+
+      if (!result.success) {
+        console.error('Failed to toggle server:', result.error);
+        return;
+      }
+
+      // Reload servers list
+      await loadServers();
+    } catch (err: any) {
+      console.error('Failed to toggle server:', err);
+    }
+  };
+
   const addArg = () => {
     setFormArgs([...formArgs, '']);
   };
@@ -508,11 +542,24 @@ export function MCPServersPanel({ scope = 'user', workspacePath }: MCPServersPan
               servers.map((server) => (
                 <div
                   key={server.name}
-                  className={`mcp-server-item ${selectedServer?.name === server.name ? 'active' : ''}`}
+                  className={`mcp-server-item ${selectedServer?.name === server.name ? 'active' : ''} ${server.disabled ? 'disabled' : ''}`}
                   onClick={() => handleServerSelect(server)}
                 >
-                  <div className="mcp-server-item-name">{server.name}</div>
-                  <div className="mcp-server-item-command">{server.command}</div>
+                  <label
+                    className="mcp-server-toggle"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={!server.disabled}
+                      onChange={(e) => handleToggleDisabled(server.name, !e.target.checked)}
+                    />
+                    <span className="mcp-toggle-slider"></span>
+                  </label>
+                  <div className="mcp-server-item-info">
+                    <div className="mcp-server-item-name">{server.name}</div>
+                    <div className="mcp-server-item-command">{server.command || server.url}</div>
+                  </div>
                 </div>
               ))
             )}

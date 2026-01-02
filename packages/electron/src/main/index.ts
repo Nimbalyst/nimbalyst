@@ -447,7 +447,16 @@ app.whenReady().then(async () => {
     const mcpConfigService = new MCPConfigService();
     ClaudeCodeProvider.setMCPConfigLoader(async (workspacePath?: string) => {
         const mergedConfig = await mcpConfigService.getMergedConfig(workspacePath);
-        return mergedConfig.mcpServers || {};
+        const allServers = mergedConfig.mcpServers || {};
+
+        // Filter out disabled servers
+        const enabledServers: Record<string, any> = {};
+        for (const [name, config] of Object.entries(allServers)) {
+            if (!(config as any).disabled) {
+                enabledServers[name] = config;
+            }
+        }
+        return enabledServers;
     });
 
     // Inject extension plugins loader into ClaudeCodeProvider

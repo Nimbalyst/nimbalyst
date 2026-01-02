@@ -32,6 +32,9 @@ export interface MCPServerConfig {
 
   /** Environment variables to set (supports ${VAR} and ${VAR:-default} syntax) */
   env?: MCPServerEnv;
+
+  /** Whether this server is disabled (default: false/enabled) */
+  disabled?: boolean;
 }
 
 /**

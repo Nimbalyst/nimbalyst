@@ -160,6 +160,9 @@
 }
 
 .mcp-server-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
   padding: 0.75rem 1rem;
   border-bottom: 1px solid var(--border-primary);
   cursor: pointer;
@@ -173,6 +176,75 @@
 .mcp-server-item.active {
   background: var(--primary-color);
   color: white;
+}
+
+.mcp-server-item.disabled {
+  opacity: 0.5;
+}
+
+.mcp-server-item.disabled .mcp-server-item-name {
+  text-decoration: line-through;
+}
+
+/* Toggle switch */
+.mcp-server-toggle {
+  position: relative;
+  display: inline-block;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.mcp-server-toggle input {
+  display: none;
+}
+
+.mcp-toggle-slider {
+  position: relative;
+  display: block;
+  width: 32px;
+  height: 18px;
+  background: var(--surface-tertiary);
+  border-radius: 9px;
+  transition: background 0.2s ease;
+}
+
+.mcp-toggle-slider::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.mcp-server-toggle input:checked + .mcp-toggle-slider {
+  background: var(--primary-color);
+}
+
+.mcp-server-toggle input:checked + .mcp-toggle-slider::before {
+  transform: translateX(14px);
+}
+
+.mcp-server-item.active .mcp-toggle-slider {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.mcp-server-item.active .mcp-server-toggle input:checked + .mcp-toggle-slider {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.mcp-server-item.active .mcp-server-toggle input:checked + .mcp-toggle-slider::before {
+  background: var(--primary-color);
+}
+
+/* Server item info */
+.mcp-server-item-info {
+  flex: 1;
+  min-width: 0;
 }
 
 .mcp-server-item-name {
