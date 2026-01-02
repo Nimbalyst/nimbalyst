@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CollapsibleGroup } from './CollapsibleGroup';
 import { SessionListItem } from './SessionListItem';
 import { WorktreeGroup } from './WorktreeGroup';
-import { groupSessionsByTime, TimeGroupKey } from '../../utils/dateFormatting';
+import { getTimeGroupKey, TimeGroupKey } from '../../utils/dateFormatting';
 import { getFileName } from '../../utils/pathUtils';
 import { KeyboardShortcuts, getShortcutDisplay } from '../../../shared/KeyboardShortcuts';
 import './SessionHistory.css';
@@ -514,9 +514,12 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       // Use lastSelectedId, or fall back to activeSessionId as the anchor
       const anchorId = lastSelectedId || activeSessionId;
       if (anchorId) {
-        // Get visual order from grouped sessions (flattened)
-        const grouped = groupSessionsByTime(sessions, sortBy === 'updated' ? 'updatedAt' : 'createdAt');
-        const visualOrderIds = (Object.keys(grouped) as TimeGroupKey[]).flatMap(key => grouped[key].map(s => s.id));
+        // Get visual order from grouped items (flattened) - only include regular sessions, not worktree sessions
+        const visualOrderIds = groupKeys.flatMap(key =>
+          groupedItems[key]
+            .filter(item => item.type === 'session')
+            .map(item => (item as { type: 'session'; session: SessionItem }).session.id)
+        );
 
         const anchorIndex = visualOrderIds.indexOf(anchorId);
         const currentIndex = visualOrderIds.indexOf(sessionId);
@@ -605,48 +608,78 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [sortDropdownOpen]);
 
-  // Separate worktree sessions from regular sessions
-  const { worktreeSessions, regularSessions } = useMemo(() => {
-    const worktree: SessionItem[] = [];
-    const regular: SessionItem[] = [];
+  // Group worktree sessions by worktree_id and compute worktree timestamps
+  const worktreeGroupsData = useMemo(() => {
+    const groups = new Map<string, { sessions: SessionItem[]; latestTimestamp: number }>();
     for (const session of sessions) {
       if (session.worktree_id) {
-        worktree.push(session);
-      } else {
-        regular.push(session);
-      }
-    }
-    return { worktreeSessions: worktree, regularSessions: regular };
-  }, [sessions]);
-
-  // Group worktree sessions by worktree_id
-  const worktreeGroupsData = useMemo(() => {
-    const groups = new Map<string, SessionItem[]>();
-    for (const session of worktreeSessions) {
-      if (session.worktree_id) {
-        const existing = groups.get(session.worktree_id) || [];
-        existing.push(session);
-        groups.set(session.worktree_id, existing);
+        const existing = groups.get(session.worktree_id);
+        const sessionTimestamp = sortBy === 'updated' ? (session.updatedAt || session.createdAt) : session.createdAt;
+        if (existing) {
+          existing.sessions.push(session);
+          existing.latestTimestamp = Math.max(existing.latestTimestamp, sessionTimestamp);
+        } else {
+          groups.set(session.worktree_id, { sessions: [session], latestTimestamp: sessionTimestamp });
+        }
       }
     }
     return groups;
-  }, [worktreeSessions]);
+  }, [sessions, sortBy]);
 
-  // Get worktree IDs sorted by most recent session activity
+  // Get all worktree IDs for batch fetching
   const sortedWorktreeIds = useMemo(() => {
-    const ids = Array.from(worktreeGroupsData.keys());
-    return ids.sort((a, b) => {
-      const sessionsA = worktreeGroupsData.get(a) || [];
-      const sessionsB = worktreeGroupsData.get(b) || [];
-      const latestA = Math.max(...sessionsA.map(s => s.updatedAt || s.createdAt));
-      const latestB = Math.max(...sessionsB.map(s => s.updatedAt || s.createdAt));
-      return latestB - latestA; // Most recent first
-    });
+    return Array.from(worktreeGroupsData.keys());
   }, [worktreeGroupsData]);
 
-  // Group regular sessions by time - use the selected sort field
-  const groupedSessions = groupSessionsByTime(regularSessions, sortBy === 'updated' ? 'updatedAt' : 'createdAt');
-  const groupKeys = Object.keys(groupedSessions) as TimeGroupKey[];
+  // Create unified list items that can be either a session or a worktree group
+  type UnifiedListItem =
+    | { type: 'session'; session: SessionItem; timestamp: number }
+    | { type: 'worktree'; worktreeId: string; sessions: SessionItem[]; timestamp: number };
+
+  // Build unified time-grouped data with both sessions and worktrees interleaved
+  const groupedItems = useMemo(() => {
+    const timestampField = sortBy === 'updated' ? 'updatedAt' : 'createdAt';
+    const items: UnifiedListItem[] = [];
+
+    // Add regular sessions (those without worktree_id)
+    for (const session of sessions) {
+      if (!session.worktree_id) {
+        const timestamp = timestampField === 'updatedAt' ? (session.updatedAt || session.createdAt) : session.createdAt;
+        items.push({ type: 'session', session, timestamp });
+      }
+    }
+
+    // Add worktree groups as single items
+    for (const [worktreeId, data] of worktreeGroupsData) {
+      items.push({ type: 'worktree', worktreeId, sessions: data.sessions, timestamp: data.latestTimestamp });
+    }
+
+    // Sort all items by timestamp (newest first)
+    items.sort((a, b) => b.timestamp - a.timestamp);
+
+    // Group into time buckets
+    const groups: Record<TimeGroupKey, UnifiedListItem[]> = {
+      'Today': [],
+      'Yesterday': [],
+      'This Week': [],
+      'Last Week': [],
+      'This Month': [],
+      'Last Month': [],
+      'Older': []
+    };
+
+    for (const item of items) {
+      const groupKey = getTimeGroupKey(item.timestamp);
+      groups[groupKey].push(item);
+    }
+
+    // Remove empty groups
+    return Object.fromEntries(
+      Object.entries(groups).filter(([_, items]) => items.length > 0)
+    ) as Record<TimeGroupKey, UnifiedListItem[]>;
+  }, [sessions, worktreeGroupsData, sortBy]);
+
+  const groupKeys = Object.keys(groupedItems) as TimeGroupKey[];
 
   // Batch fetch all worktree data when sortedWorktreeIds changes (prevents N+1 query problem)
   useEffect(() => {
@@ -1140,7 +1173,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
         </div>
       )}
       <div className="session-history-list" ref={scrollContainerRef}>
-        {groupKeys.length === 0 && sortedWorktreeIds.length === 0 && hasSearchQuery ? (
+        {groupKeys.length === 0 && hasSearchQuery ? (
           // No search results - show message with option to clear
           <div className="session-history-empty">
             <p>No matching sessions found</p>
@@ -1157,32 +1190,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
           </div>
         ) : (
           <>
-            {/* Worktree groups at the top */}
-            {sortedWorktreeIds.map(worktreeId => {
-              const worktreeSessionsList = worktreeGroupsData.get(worktreeId) || [];
-              const worktreeData = worktreeCache.get(worktreeId);
-              const isExpanded = !collapsedGroups.includes(`worktree:${worktreeId}`);
-
-              return (
-                <WorktreeGroup
-                  key={worktreeId}
-                  worktree={worktreeData || { id: worktreeId, name: 'Loading...', path: '', branch: '' }}
-                  gitStatus={worktreeData?.gitStatus}
-                  sessions={worktreeSessionsList}
-                  activeSessionId={activeSessionId}
-                  isExpanded={isExpanded}
-                  onToggle={() => handleToggleGroup(`worktree:${worktreeId}`)}
-                  onSessionSelect={onSessionSelect}
-                  onAddSession={onAddSessionToWorktree || (() => {})}
-                  onSessionDelete={onSessionDelete ? handleDeleteSession : undefined}
-                  onSessionArchive={handleArchiveSession}
-                />
-              );
-            })}
-
-            {/* Regular sessions in time groups */}
+            {/* Unified time groups with interleaved sessions and worktrees */}
             {groupKeys.map(groupKey => {
-              const groupSessions = groupedSessions[groupKey];
+              const items = groupedItems[groupKey];
               const isExpanded = !collapsedGroups.includes(groupKey);
 
               return (
@@ -1191,34 +1201,58 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                   title={groupKey}
                   isExpanded={isExpanded}
                   onToggle={() => handleToggleGroup(groupKey)}
-                  count={groupSessions.length}
+                  count={items.length}
                 >
-                  {groupSessions.map(session => (
-                    <SessionListItem
-                      key={session.id}
-                      id={session.id}
-                      title={session.title || 'Untitled Session'}
-                      createdAt={session.createdAt}
-                      updatedAt={session.updatedAt}
-                      isActive={session.id === activeSessionId}
-                      isLoaded={loadedSessionIds.includes(session.id)}
-                      isArchived={session.isArchived}
-                      isSelected={selectedSessionIds.has(session.id)}
-                      sortBy={sortBy}
-                      onClick={(e) => handleSessionClick(session.id, e)}
-                      onDelete={onSessionDelete ? () => handleDeleteSession(session.id) : undefined}
-                      onArchive={() => handleArchiveSession(session.id)}
-                      onUnarchive={() => handleUnarchiveSession(session.id)}
-                      onRename={onSessionRename ? (newName: string) => onSessionRename(session.id, newName) : undefined}
-                      provider={session.provider}
-                      model={session.model}
-                      messageCount={session.messageCount}
-                      isProcessing={session.isProcessing}
-                      hasUnread={session.hasUnread}
-                      hasPendingPrompt={session.hasPendingPrompt}
-                      sessionType={session.sessionType}
-                    />
-                  ))}
+                  {items.map(item => {
+                    if (item.type === 'worktree') {
+                      const worktreeData = worktreeCache.get(item.worktreeId);
+                      const isWorktreeExpanded = !collapsedGroups.includes(`worktree:${item.worktreeId}`);
+
+                      return (
+                        <WorktreeGroup
+                          key={`worktree-${item.worktreeId}`}
+                          worktree={worktreeData || { id: item.worktreeId, name: 'Loading...', path: '', branch: '' }}
+                          gitStatus={worktreeData?.gitStatus}
+                          sessions={item.sessions}
+                          activeSessionId={activeSessionId}
+                          isExpanded={isWorktreeExpanded}
+                          onToggle={() => handleToggleGroup(`worktree:${item.worktreeId}`)}
+                          onSessionSelect={onSessionSelect}
+                          onAddSession={onAddSessionToWorktree || (() => {})}
+                          onSessionDelete={onSessionDelete ? handleDeleteSession : undefined}
+                          onSessionArchive={handleArchiveSession}
+                        />
+                      );
+                    } else {
+                      const session = item.session;
+                      return (
+                        <SessionListItem
+                          key={session.id}
+                          id={session.id}
+                          title={session.title || 'Untitled Session'}
+                          createdAt={session.createdAt}
+                          updatedAt={session.updatedAt}
+                          isActive={session.id === activeSessionId}
+                          isLoaded={loadedSessionIds.includes(session.id)}
+                          isArchived={session.isArchived}
+                          isSelected={selectedSessionIds.has(session.id)}
+                          sortBy={sortBy}
+                          onClick={(e) => handleSessionClick(session.id, e)}
+                          onDelete={onSessionDelete ? () => handleDeleteSession(session.id) : undefined}
+                          onArchive={() => handleArchiveSession(session.id)}
+                          onUnarchive={() => handleUnarchiveSession(session.id)}
+                          onRename={onSessionRename ? (newName: string) => onSessionRename(session.id, newName) : undefined}
+                          provider={session.provider}
+                          model={session.model}
+                          messageCount={session.messageCount}
+                          isProcessing={session.isProcessing}
+                          hasUnread={session.hasUnread}
+                          hasPendingPrompt={session.hasPendingPrompt}
+                          sessionType={session.sessionType}
+                        />
+                      );
+                    }
+                  })}
                 </CollapsibleGroup>
               );
             })}
