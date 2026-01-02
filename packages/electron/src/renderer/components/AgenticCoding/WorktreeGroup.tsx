@@ -163,28 +163,32 @@ export const WorktreeGroup: React.FC<WorktreeGroupProps> = ({
             <path d="M8 9v4a2 2 0 0 0 2 2"/>
           </svg>
         </div>
-        <span className="worktree-group-name">{worktree.displayName || worktree.name}</span>
-        {worktree.isPinned && (
-          <MaterialSymbol icon="push_pin" size={12} className="worktree-group-pin-icon" />
-        )}
-        <div className="worktree-group-badges">
-          {gitStatus?.ahead && gitStatus.ahead > 0 && (
-            <span className="worktree-group-badge ahead">
-              {gitStatus.ahead} ahead
-            </span>
-          )}
-          {gitStatus?.behind && gitStatus.behind > 0 && (
-            <span className="worktree-group-badge behind">
-              {gitStatus.behind} behind
-            </span>
-          )}
-          {gitStatus?.uncommitted && (
-            <span className="worktree-group-badge uncommitted">
-              uncommitted
-            </span>
-          )}
+        <div className="worktree-group-content-wrapper">
+          <div className="worktree-group-row-primary">
+            <span className="worktree-group-name">{worktree.displayName || worktree.name}</span>
+            {worktree.isPinned && (
+              <MaterialSymbol icon="push_pin" size={12} className="worktree-group-pin-icon" />
+            )}
+          </div>
+          <div className="worktree-group-row-secondary">
+            {gitStatus?.ahead && gitStatus.ahead > 0 && (
+              <span className="worktree-group-badge ahead">
+                {gitStatus.ahead} ahead
+              </span>
+            )}
+            {gitStatus?.behind && gitStatus.behind > 0 && (
+              <span className="worktree-group-badge behind">
+                {gitStatus.behind} behind
+              </span>
+            )}
+            {gitStatus?.uncommitted && (
+              <span className="worktree-group-badge uncommitted">
+                uncommitted
+              </span>
+            )}
+            <span className="worktree-group-count">{sessions.length} session{sessions.length !== 1 ? 's' : ''}</span>
+          </div>
         </div>
-        <span className="worktree-group-count">{sessions.length}</span>
       </button>
 
       {/* Sessions List */}

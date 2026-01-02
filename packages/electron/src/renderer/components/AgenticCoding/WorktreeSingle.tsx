@@ -1,6 +1,5 @@
 import React from 'react';
 import { ProviderIcon } from '@nimbalyst/runtime';
-import { getRelativeTimeString } from '../../utils/dateFormatting';
 import './WorktreeSingle.css';
 
 interface SessionListItemData {
@@ -42,8 +41,6 @@ export const WorktreeSingle: React.FC<WorktreeSingleProps> = ({
   onClick,
   onContextMenu
 }) => {
-  const displayTitle = session.title || 'Untitled Session';
-
   return (
     <div
       className={`worktree-single ${isActive ? 'active' : ''}`}
@@ -57,7 +54,7 @@ export const WorktreeSingle: React.FC<WorktreeSingleProps> = ({
           onClick();
         }
       }}
-      aria-label={`Worktree session: ${displayTitle} in ${worktreeName}`}
+      aria-label={`Worktree: ${worktreeName}`}
       aria-current={isActive ? 'page' : undefined}
     >
       <div className="worktree-single-icon-wrapper">
@@ -76,9 +73,8 @@ export const WorktreeSingle: React.FC<WorktreeSingleProps> = ({
       </div>
 
       <div className="worktree-single-content">
-        <div className="worktree-single-title">{displayTitle}</div>
+        <div className="worktree-single-name-row">{worktreeName}</div>
         <div className="worktree-single-meta-row">
-          <span className="worktree-single-name">{worktreeName}</span>
           {gitStatus?.ahead && gitStatus.ahead > 0 && (
             <span className="worktree-single-badge ahead">
               {gitStatus.ahead} ahead
