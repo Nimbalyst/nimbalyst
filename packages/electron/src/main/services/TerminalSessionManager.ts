@@ -61,6 +61,10 @@ export interface TerminalProcess {
   pendingForcePersist?: boolean;
   historyInitialized?: boolean;
   historyInitTimer?: NodeJS.Timeout | null;
+  // For buffering and filtering init command echo from output
+  initOutputBuffer?: string;
+  initBufferTimeout?: NodeJS.Timeout | null;
+  isBufferingInit?: boolean;
 }
 
 export class TerminalSessionManager {
@@ -241,11 +245,102 @@ export class TerminalSessionManager {
     }
 
     try {
+      // Start buffering output so we can filter out the init command echo
+      terminal.isBufferingInit = true;
+      terminal.initOutputBuffer = '';
+
+      if (terminal.initBufferTimeout) {
+        clearTimeout(terminal.initBufferTimeout);
+      }
+
+      // After a delay, flush the buffer with filtering applied.
+      // 1000ms ensures the command has time to echo back.
+      terminal.initBufferTimeout = setTimeout(() => {
+        this.flushInitBuffer(terminal);
+      }, 1000);
+
       terminal.pty.write(`${command}\r`);
       terminal.historyInitialized = true;
     } catch (error) {
       console.warn(`[TerminalSessionManager] Failed to initialize history for ${terminal.sessionId}:`, error);
     }
+  }
+
+  /**
+   * Flush the init buffer, filtering out the init command echo.
+   */
+  private flushInitBuffer(terminal: TerminalProcess): void {
+    if (!terminal.isBufferingInit) {
+      return;
+    }
+
+    const buffered = terminal.initOutputBuffer || '';
+    terminal.isBufferingInit = false;
+    terminal.initOutputBuffer = '';
+    terminal.initBufferTimeout = null;
+
+    // Filter the complete buffer
+    const filtered = this.filterInitCommandFromBuffer(buffered);
+
+    // Add to scrollback and broadcast
+    if (filtered) {
+      terminal.scrollbackBuffer += filtered;
+      if (terminal.scrollbackBuffer.length > MAX_SCROLLBACK_SIZE) {
+        terminal.scrollbackBuffer = terminal.scrollbackBuffer.slice(-MAX_SCROLLBACK_SIZE);
+      }
+
+      this.scheduleScrollbackPersist(terminal.sessionId);
+
+      this.broadcastToWindows('terminal:output', {
+        sessionId: terminal.sessionId,
+        data: filtered,
+      });
+    }
+  }
+
+  /**
+   * Filter init command echo from the complete buffered output.
+   * Terminal line wrapping can split commands across multiple lines,
+   * so we filter line by line looking for distinctive keywords.
+   */
+  private filterInitCommandFromBuffer(data: string): string {
+    // Keywords that indicate our init command (these won't appear in normal usage)
+    const initKeywords = [
+      'HISTFILE=',
+      'INC_APPEND_HISTORY',
+      'SHARE_HISTORY',
+      'terminal-history/',
+      '@nimbalyst',
+      'fc -R',
+      'history -c',
+      'history -r',
+      'Set-PSReadLineOption',
+      '-HistorySavePath',
+    ];
+
+    // Split into lines, filter out lines containing init keywords, rejoin
+    const lines = data.split(/(\r?\n)/);
+    const filteredLines: string[] = [];
+
+    for (const line of lines) {
+      // Check if this line contains any init command keywords
+      const isInitLine = initKeywords.some((keyword) => line.includes(keyword));
+      if (!isInitLine) {
+        filteredLines.push(line);
+      }
+    }
+
+    let filtered = filteredLines.join('');
+
+    // Also filter the "true" output that appears from || true
+    // Only if it appears at the start or after a newline, isolated
+    filtered = filtered.replace(/^true\r?\n/gm, '');
+
+    // Clean up excessive blank lines
+    filtered = filtered.replace(/(\r?\n){3,}/g, '\n\n');
+    filtered = filtered.replace(/^\s*\r?\n/, ''); // Remove leading blank line
+
+    return filtered;
   }
 
   private getHistoryInitCommand(terminal: TerminalProcess): string | null {
@@ -343,6 +438,12 @@ export class TerminalSessionManager {
 
     // Handle output from PTY
     ptyProcess.onData((data: string) => {
+      // During init phase, buffer output for later filtering
+      if (terminalProcess.isBufferingInit) {
+        terminalProcess.initOutputBuffer = (terminalProcess.initOutputBuffer || '') + data;
+        return;
+      }
+
       // Append to scrollback buffer (with size limit)
       terminalProcess.scrollbackBuffer += data;
       if (terminalProcess.scrollbackBuffer.length > MAX_SCROLLBACK_SIZE) {
@@ -366,6 +467,14 @@ export class TerminalSessionManager {
       if (terminalProcess.historyInitTimer) {
         clearTimeout(terminalProcess.historyInitTimer);
         terminalProcess.historyInitTimer = null;
+      }
+      if (terminalProcess.initBufferTimeout) {
+        clearTimeout(terminalProcess.initBufferTimeout);
+        terminalProcess.initBufferTimeout = null;
+      }
+      // Flush any remaining buffered output before exit
+      if (terminalProcess.isBufferingInit) {
+        this.flushInitBuffer(terminalProcess);
       }
       await this.persistScrollback(sessionId, { force: true });
 
@@ -439,6 +548,14 @@ export class TerminalSessionManager {
     if (terminal.historyInitTimer) {
       clearTimeout(terminal.historyInitTimer);
       terminal.historyInitTimer = null;
+    }
+    if (terminal.initBufferTimeout) {
+      clearTimeout(terminal.initBufferTimeout);
+      terminal.initBufferTimeout = null;
+    }
+    // Flush any remaining buffered output before destroy
+    if (terminal.isBufferingInit) {
+      this.flushInitBuffer(terminal);
     }
     await this.persistScrollback(sessionId, { force: true });
 
