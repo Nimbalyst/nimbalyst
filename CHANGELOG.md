@@ -20,6 +20,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.50.6] - 2026-01-02
+
+
+### Added
+- PostHog MCP server slash command for analytics queries
+- OAuth authorization support for MCP remote servers
+- On/off toggle for MCP servers
+- Template selection flow for MCP server configuration
+- PostHog template with improved connection testing
+- Terminal session support in agent mode (Alpha)
+- Terminal scrollback and command history persistence
+
+### Changed
+- Redesigned MCP servers configuration UI with template selection flow
+- Document changes in PostHog events list
+
+### Fixed
+- Mockup screen no longer goes white on accept for new files
+- Mockup diff slider hidden on new files
+- API keys no longer logged in console
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.50.5] - 2026-01-01
 
 
