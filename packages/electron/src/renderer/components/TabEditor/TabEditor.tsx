@@ -181,8 +181,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const [content, setContent] = useState(initialContent);
   // NOTE: isDirty is tracked via ref only, not state, to avoid re-renders when dirty state changes.
   // The parent is notified via onDirtyChange callback.
-  const [lastSaveTime, setLastSaveTime] = useState<number | null>(null);
-  const [lastSavedContent, setLastSavedContent] = useState(initialContent);
+  // NOTE: lastSaveTime and lastSavedContent are refs, not state, to avoid re-renders on save
+  // They're only used for file watcher comparison, not for rendering
   const [reloadVersion, setReloadVersion] = useState(0);
   const [showConflictDialog, setShowConflictDialog] = useState(false);
   const [conflictDialogContent, setConflictDialogContent] = useState<string>('');
@@ -252,8 +252,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const getContentFnRef = useRef<(() => string) | null>(null);
   const editorRef = useRef<any>(null);
   const initialContentRef = useRef(initialContent);
-  const lastSaveTimeRef = useRef<number | null>(lastSaveTime);
-  const lastSavedContentRef = useRef<string>(lastSavedContent);
+  const lastSaveTimeRef = useRef<number | null>(null);
+  const lastSavedContentRef = useRef<string>(initialContent);
   const isSavingRef = useRef<boolean>(false);
   const saveIdRef = useRef<number>(0);
   const pendingSaveIdsRef = useRef<Set<number>>(new Set());
@@ -311,20 +311,12 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     }
   }, [onOpenSessionInChat]);
 
-  useEffect(() => {
-    lastSaveTimeRef.current = lastSaveTime;
-  }, [lastSaveTime]);
-
   // Keep EditorHost stability refs in sync
   useEffect(() => { themeRef.current = theme; }, [theme]);
   useEffect(() => { isActiveRef.current = isActive; }, [isActive]);
   useEffect(() => { customEditorSourceModeRef.current = customEditorSourceMode; }, [customEditorSourceMode]);
   useEffect(() => { customEditorSupportSourceModeRef.current = customEditorSupportsSourceMode; }, [customEditorSupportsSourceMode]);
   useEffect(() => { onViewHistoryRef.current = onViewHistory; }, [onViewHistory]);
-
-  useEffect(() => {
-    lastSavedContentRef.current = lastSavedContent;
-  }, [lastSavedContent]);
 
   // Clear Lexical editor selection when tab becomes inactive
   // This ensures no stale visual selection when switching back to the tab
@@ -601,7 +593,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               // Reset dirty state after diff application - user hasn't made any changes
               // This prevents false-positive autosaves from WYSIWYG rendering differences
               isDirtyRef.current = false;
-              isDirtyRef.current = false;
               onDirtyChange?.(false);
             }, 100);
           }
@@ -637,8 +628,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       const saveTime = Date.now();
       lastSaveTimeRef.current = saveTime;
       lastSavedContentRef.current = contentToSave;
-      setLastSaveTime(saveTime);
-      setLastSavedContent(contentToSave);
+      lastSaveTimeRef.current = saveTime;
+      lastSavedContentRef.current = contentToSave;
 
       logger.ui.info(`[TabEditor] Saving ${fileName}, saveId=${thisSaveId}, skipDiffCheck=${skipDiffCheck}`);
       // console.trace('[TabEditor] saveWithHistory called, stack trace:');
@@ -654,7 +645,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
       // IMMEDIATE: Clear dirty flag as soon as save succeeds
       if (result && result.success) {
-        isDirtyRef.current = false;
         isDirtyRef.current = false;
         // Update initialContentRef with current editor content to prevent false dirty flags
         if (getContentFnRef.current) {
@@ -680,8 +670,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             const forceResult = await window.electronAPI.saveFile(contentToSave, filePath);
             if (forceResult && forceResult.success) {
               initialContentRef.current = contentToSave;
-              setLastSaveTime(Date.now());
-              setLastSavedContent(contentToSave);
+              lastSaveTimeRef.current = Date.now();
+              lastSavedContentRef.current = contentToSave;
             }
           } else {
             // User chose to reload - update editor with disk content
@@ -703,7 +693,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
             setContent(result.diskContent);
             initialContentRef.current = result.diskContent;
-            setLastSavedContent(result.diskContent);
+            lastSavedContentRef.current = result.diskContent;
             isDirtyRef.current = false;
             return;
           }
@@ -760,7 +750,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     } catch (error) {
       logger.ui.error(`[TabEditor] Failed to save file ${filePath}:`, error);
       // Reset refs on error
-      setLastSaveTime(null);
+      lastSaveTimeRef.current = null;
       lastSaveTimeRef.current = null;
       isSavingRef.current = false;
       throw error;
@@ -1004,7 +994,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               contentRef.current = oldContent;
               initialContentRef.current = oldContent;
               isDirtyRef.current = false;
-              isDirtyRef.current = false;
               onDirtyChange?.(false);
             })();
           } else if (alreadyInDiffMode) {
@@ -1066,7 +1055,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
                     // Reset dirty state after diff application - user hasn't made any changes
                     // This prevents false-positive autosaves from WYSIWYG rendering differences
-                    isDirtyRef.current = false;
                     isDirtyRef.current = false;
                     onDirtyChange?.(false);
                   }
@@ -1136,7 +1124,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                       // Reset dirty state after diff application - user hasn't made any changes
                       // This prevents false-positive autosaves from WYSIWYG rendering differences
                       isDirtyRef.current = false;
-                      isDirtyRef.current = false;
                       onDirtyChange?.(false);
                     }
                   } else {
@@ -1202,7 +1189,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               // Update lastSavedContent to reflect what's on disk, but don't touch other state
               // The editor will report its state via callbacks if it actually updates
               lastSavedContentRef.current = newContent;
-              setLastSavedContent(newContent);
             } catch (error) {
               logger.ui.error(`[TabEditor] Failed to notify custom editor of file change:`, error);
             }
@@ -1227,10 +1213,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           // Update state
           setContent(newContent);
           initialContentRef.current = newContent;
-          setLastSavedContent(newContent);
           lastSavedContentRef.current = newContent;
           contentRef.current = newContent;
-          isDirtyRef.current = false;
           isDirtyRef.current = false;
           onDirtyChange?.(false);
 
@@ -1321,10 +1305,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             const newContent = result.content;
             setContent(newContent);
             initialContentRef.current = newContent;
-            setLastSavedContent(newContent);
             lastSavedContentRef.current = newContent;
             contentRef.current = newContent;
-            isDirtyRef.current = false;
             isDirtyRef.current = false;
             onDirtyChange?.(false);
 
@@ -1365,10 +1347,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     // Apply the reload
     setContent(newContent);
     initialContentRef.current = newContent;
-    setLastSavedContent(newContent);
     lastSavedContentRef.current = newContent;
     contentRef.current = newContent;
-    isDirtyRef.current = false;
     isDirtyRef.current = false;
     onDirtyChange?.(false);
 
@@ -1427,7 +1407,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           // Update React state and mark as dirty so autosave will persist
           setContent(newContent);
           contentRef.current = newContent;
-          isDirtyRef.current = true;
           isDirtyRef.current = true;
 
           // Notify parent that content changed and is dirty
@@ -1498,7 +1477,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           // Update our state
           setContent(approvedContent);
           contentRef.current = approvedContent;
-          setLastSavedContent(approvedContent);
           lastSavedContentRef.current = approvedContent;
         }
       } catch (error) {
@@ -1546,7 +1524,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             setContent(currentContent);
             contentRef.current = currentContent;
             initialContentRef.current = currentContent;
-            setLastSavedContent(currentContent);
             lastSavedContentRef.current = currentContent;
           }
 
@@ -1761,7 +1738,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
       // Update content and saved state
       setContent(newContent);
-      setLastSavedContent(newContent);
       lastSavedContentRef.current = newContent;
       contentRef.current = newContent;
       isDirtyRef.current = false;
@@ -1818,7 +1794,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
       // Update content and saved state
       setContent(oldContent);
-      setLastSavedContent(oldContent);
+      lastSavedContentRef.current = oldContent;
       lastSavedContentRef.current = oldContent;
       contentRef.current = oldContent;
       isDirtyRef.current = false;
@@ -1905,9 +1881,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         // Update our tracking of what's on disk
         if (typeof content === 'string') {
           lastSavedContentRef.current = content;
-          setLastSavedContent(content);
+          lastSavedContentRef.current = content;
         }
-        setLastSaveTime(Date.now());
+        lastSaveTimeRef.current = Date.now();
 
         // Mark clean
         isDirtyRef.current = false;
@@ -1958,7 +1934,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         // Update state
         setContent(result.content);
         contentRef.current = result.content;
-        setLastSavedContent(result.content);
+        lastSavedContentRef.current = result.content;
         lastSavedContentRef.current = result.content;
         isDirtyRef.current = false;
         onDirtyChange?.(false);
@@ -1988,10 +1964,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             await window.electronAPI.saveFile(monacoContent, filePath);
             // Update our tracking
             lastSavedContentRef.current = monacoContent;
-            setLastSavedContent(monacoContent);
+            lastSavedContentRef.current = monacoContent;
             setContent(monacoContent);
             contentRef.current = monacoContent;
-            isDirtyRef.current = false;
             isDirtyRef.current = false;
           }
         } else {
@@ -2010,7 +1985,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               setContent(result.content);
               contentRef.current = result.content;
               lastSavedContentRef.current = result.content;
-              setLastSavedContent(result.content);
+              lastSavedContentRef.current = result.content;
             }
           } catch (error) {
             logger.ui.error(`[TabEditor] Failed to load content for source mode: ${filePath}`, error);
