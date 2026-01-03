@@ -263,13 +263,16 @@ export default function App() {
   };
 
   // Track active session ID and name for agent mode (needed for search routing and window title)
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const [activeSessionName, setActiveSessionName] = useState<string | undefined>(undefined);
+  // Use refs instead of state to avoid re-rendering App on every session tab change
+  const activeSessionIdRef = useRef<string | null>(null);
+  const activeSessionNameRef = useRef<string | undefined>(undefined);
 
   // Combined handler for session changes from AgenticPanel
   const handleSessionChange = useCallback((sessionId: string | null, sessionName?: string) => {
-    setActiveSessionId(sessionId);
-    setActiveSessionName(sessionName);
+    activeSessionIdRef.current = sessionId;
+    activeSessionNameRef.current = sessionName;
+    // Update window title imperatively
+    updateWindowTitle();
   }, []);
 
   // Expose test helpers for testing
@@ -973,12 +976,12 @@ export default function App() {
     setShowCommandsToast(false);
   }, [workspacePath]);
 
-  // Update window title - reads currentFileName from ref
-  // This runs on mode changes; EditorMode updates the ref and calls setTitle directly for file changes
-  useEffect(() => {
+  // Update window title imperatively - can be called from handleSessionChange or effect
+  const updateWindowTitle = useCallback(() => {
     if (!window.electronAPI) return;
 
     const currentFileName = currentFileNameRef.current;
+    const activeSessionName = activeSessionNameRef.current;
     let title = 'Nimbalyst';
     if (workspaceMode && workspaceName) {
       // In agent mode, show the session name instead of file name
@@ -995,8 +998,13 @@ export default function App() {
     }
 
     window.electronAPI.setTitle(title);
+  }, [workspaceMode, workspaceName, activeMode]);
+
+  // Update window title on mode/workspace changes
+  useEffect(() => {
+    updateWindowTitle();
     // setDocumentEdited is called directly by TabEditor when dirty state changes
-  }, [workspaceMode, workspaceName, activeMode, activeSessionName]);
+  }, [updateWindowTitle]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -1201,7 +1209,7 @@ export default function App() {
 
     // State
     activeMode,
-    activeSessionId,
+    getActiveSessionId: () => activeSessionIdRef.current,
 
     // State setters
     setIsApiKeyDialogOpen,

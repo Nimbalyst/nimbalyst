@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { getFileName } from '../utils/pathUtils';
 
 export interface TabData {
@@ -594,8 +594,15 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
     return () => clearTimeout(timer);
   }, [enabled, workspacePath]); // Run when workspace path changes
 
-  const result = {
-    tabs: tabOrder.map(id => tabs.get(id)!).filter(Boolean),
+  // Memoize the tabs array to prevent re-renders when tabs Map hasn't changed
+  const tabsArray = useMemo(() =>
+    tabOrder.map(id => tabs.get(id)!).filter(Boolean),
+    [tabOrder, tabs]
+  );
+
+  // Memoize the result object to prevent re-renders
+  const result = useMemo(() => ({
+    tabs: tabsArray,
     activeTab,
     activeTabId,
     addTab,
@@ -610,7 +617,23 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
     closeAllTabs,
     closeSavedTabs,
     reopenLastClosedTab
-  };
+  }), [
+    tabsArray,
+    activeTab,
+    activeTabId,
+    addTab,
+    removeTab,
+    switchTab,
+    updateTab,
+    togglePin,
+    reorderTabs,
+    findTabByPath,
+    saveTabState,
+    getTabState,
+    closeAllTabs,
+    closeSavedTabs,
+    reopenLastClosedTab
+  ]);
 
   return result;
 }

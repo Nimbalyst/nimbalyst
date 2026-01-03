@@ -74,8 +74,8 @@ interface UseIPCHandlersProps {
   handleNextTab?: () => void;
   handlePreviousTab?: () => void;
 
-  // State
-  activeSessionId?: string | null; // Current active session ID in agent mode
+  // State getters (use functions to get current value from refs without causing re-renders)
+  getActiveSessionId?: () => string | null; // Get current active session ID in agent mode
 
   // State setters
   setIsApiKeyDialogOpen: (open: boolean) => void;
@@ -378,7 +378,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
         }
       } else if (mode === 'agent') {
         // Agent mode - dispatch event to active session's transcript
-        const sessionId = propsRef.current.activeSessionId;
+        const sessionId = propsRef.current.getActiveSessionId?.();
         if (sessionId) {
           window.dispatchEvent(new CustomEvent('menu:find', { detail: { sessionId } }));
         }
@@ -391,7 +391,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       const mode = propsRef.current.activeMode;
 
       if (mode === 'agent') {
-        const sessionId = propsRef.current.activeSessionId;
+        const sessionId = propsRef.current.getActiveSessionId?.();
         if (sessionId) {
           window.dispatchEvent(new CustomEvent('menu:find-next', { detail: { sessionId } }));
         }
@@ -405,7 +405,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       const mode = propsRef.current.activeMode;
 
       if (mode === 'agent') {
-        const sessionId = propsRef.current.activeSessionId;
+        const sessionId = propsRef.current.getActiveSessionId?.();
         if (sessionId) {
           window.dispatchEvent(new CustomEvent('menu:find-previous', { detail: { sessionId } }));
         }
