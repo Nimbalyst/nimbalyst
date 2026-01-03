@@ -80,15 +80,15 @@ export function registerPermissionHandlers(): void {
           };
         });
 
-      logger.main.info(`[PermissionHandlers:${workspaceName}] getWorkspacePermissions:`, {
-        workspace: workspacePath,
-        isTrusted,
-        permissionMode,
-        allowedPatternsCount: allowedPatterns.length,
-        additionalDirectoriesCount: additionalDirectories.length,
-        allowedUrlPatternsCount: allowedUrlPatterns.length,
-        sources: effectiveSettings.sources,
-      });
+      // logger.main.info(`[PermissionHandlers:${workspaceName}] getWorkspacePermissions:`, {
+      //   workspace: workspacePath,
+      //   isTrusted,
+      //   permissionMode,
+      //   allowedPatternsCount: allowedPatterns.length,
+      //   additionalDirectoriesCount: additionalDirectories.length,
+      //   allowedUrlPatternsCount: allowedUrlPatterns.length,
+      //   sources: effectiveSettings.sources,
+      // });
 
       return {
         isTrusted,

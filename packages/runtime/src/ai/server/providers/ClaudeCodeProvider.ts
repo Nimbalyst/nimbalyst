@@ -2156,7 +2156,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         transport: 'sse',
         url: `http://127.0.0.1:${ClaudeCodeProvider.sessionNamingServerPort}/mcp?sessionId=${encodeURIComponent(sessionId)}`
       };
-      console.log('[CLAUDE-CODE] Session naming MCP server configured on port', ClaudeCodeProvider.sessionNamingServerPort, 'for session', sessionId);
+      // console.log('[CLAUDE-CODE] Session naming MCP server configured on port', ClaudeCodeProvider.sessionNamingServerPort, 'for session', sessionId);
     }
 
     // Include extension dev MCP server if it's started (provides build, install, reload tools)
