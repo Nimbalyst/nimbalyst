@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.50.10] - 2026-01-03
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Fixed OpenAI model import mismatch causing connection errors
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.50.9] - 2026-01-02
 
 
