@@ -126,6 +126,12 @@ All events include `$session_id` property automatically. Dev users are marked wi
 | `mcp_server_test_result` | `MCPServersPanel.tsx:1134` | User tests MCP server connection | `templateId` (null if custom)<br/>`success`<br/>`errorType` (command_not_found/timeout/auth_failure/network/other/exception, only on failure)<br/>`durationMs` | (pending release as of 4734f601) | |
 | `mcp_oauth_result` | `MCPServersPanel.tsx:852` | OAuth authorization flow completes | `templateId` (null if custom)<br/>`success`<br/>`errorType` (auth_rejected/exception, only on failure) | (pending release as of 4734f601) | |
 
+### Terminal
+
+| Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |
+| --- | --- | --- | --- | --- | --- |
+| `terminal_session_created` | `TerminalHandlers.ts:75` | User creates a new terminal session | `shell` (zsh/bash/fish/unknown) | (pending release as of 9830e6b0) | |
+
 ### AI Tool Execution
 
 | Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |
@@ -211,8 +217,8 @@ All events include `$session_id` property automatically. Dev users are marked wi
 
 ## Event Summary Statistics
 
-- **Total Events**: 67 unique event names
-- **Main Process Events**: 39 (via AnalyticsService)
+- **Total Events**: 68 unique event names
+- **Main Process Events**: 40 (via AnalyticsService)
 - **Renderer Process Events**: 28 (via usePostHog hook)
 - **File Operations**: 7 events
 - **Workspace Operations**: 4 events
@@ -220,6 +226,7 @@ All events include `$session_id` property automatically. Dev users are marked wi
 - **File History**: 2 events
 - **AI-Related**: 20 events
 - **MCP Configuration**: 3 events
+- **Terminal**: 1 event
 - **Extensions**: 1 event
 - **Onboarding**: 8 events
 - **System/Infrastructure**: 10 events

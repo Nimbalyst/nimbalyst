@@ -8,6 +8,7 @@ import { ipcMain } from 'electron';
 import { getTerminalSessionManager } from '../services/TerminalSessionManager';
 import { AISessionsRepository } from '@nimbalyst/runtime';
 import { ulid } from 'ulid';
+import { AnalyticsService } from '../services/analytics/AnalyticsService';
 
 // Track if handlers are registered
 let handlersRegistered = false;
@@ -69,6 +70,11 @@ export function registerTerminalHandlers(): void {
         });
 
         console.log(`[TerminalHandlers] Created terminal session ${sessionId}`);
+
+        // Track terminal session creation
+        AnalyticsService.getInstance().sendEvent('terminal_session_created', {
+          shell: terminalInfo?.shell.name || 'unknown',
+        });
 
         return {
           success: true,
