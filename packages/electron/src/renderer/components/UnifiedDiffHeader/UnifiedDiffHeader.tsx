@@ -126,12 +126,12 @@ export const UnifiedDiffHeader: React.FC<UnifiedDiffHeaderProps> = ({
       return (
         <div className="unified-diff-header-session">
           {sessionLink}
-          <span className="unified-diff-header-edit-text">
-            edited {fileName || 'file'}
-          </span>
+          {/*<span className="unified-diff-header-edit-text">*/}
+          {/*  edited {fileName || 'file'}*/}
+          {/*</span>*/}
           {sessionInfo.editedAt && (
             <span className="unified-diff-header-timestamp">
-              {formatRelativeTime(sessionInfo.editedAt)}
+              edited {formatRelativeTime(sessionInfo.editedAt)}
             </span>
           )}
         </div>
