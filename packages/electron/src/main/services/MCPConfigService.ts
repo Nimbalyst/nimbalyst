@@ -285,23 +285,18 @@ export class MCPConfigService {
         };
       }
 
-      // For other errors (including 500), the server is reachable but may need
-      // proper MCP protocol handshake. Consider this as potentially working.
-      if (response.ok || (response.status >= 400 && response.status < 600)) {
-        logger.mcp.info('SSE endpoint reachable. Full validation happens during actual use.');
-        return {
-          success: true,
-          error: response.status >= 400
-            ? `Note: Test got HTTP ${response.status}, but server is reachable. Full test happens when Claude Code connects.`
-            : undefined
-        };
+      // Only consider 2xx responses as success
+      if (response.ok) {
+        logger.mcp.info('SSE endpoint reachable and responding successfully.');
+        return { success: true };
       }
 
+      // Any non-2xx response (that wasn't already caught as 401/403) is a failure
       const errorText = await response.text().catch(() => response.statusText);
-      logger.mcp.error(`SSE connection failed: ${response.status} ${errorText}`);
+      logger.mcp.error(`SSE endpoint returned error: ${response.status} ${errorText}`);
       return {
         success: false,
-        error: `HTTP ${response.status}: ${errorText || response.statusText}`
+        error: `Server returned HTTP ${response.status}. Check your configuration and API key.`
       };
     } catch (error: any) {
       if (error.name === 'TimeoutError' || error.name === 'AbortError') {

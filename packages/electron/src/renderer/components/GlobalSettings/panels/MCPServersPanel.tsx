@@ -771,6 +771,8 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
     setSelectedTemplate(template);
     setViewState('server-config');
     setSelectedServer(null);
+    setTestStatus('idle');
+    setTestMessage('');
 
     if (template) {
       // Populate form with template
