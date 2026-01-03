@@ -21,13 +21,11 @@ interface FileTreeItem {
 interface WorkspaceSidebarProps {
   workspaceName: string;
   workspacePath: string;
-  fileTree: FileTreeItem[];
   currentFilePath: string | null;
   currentView: 'files' | 'plans';
   onFileSelect: (filePath: string) => void;
   onCloseWorkspace: () => void;
   onOpenQuickSearch?: () => void;
-  onRefreshFileTree?: () => void;
   onViewHistory?: (filePath: string) => void;
   onViewWorkspaceHistory?: (folderPath: string) => void;
   onNewPlan?: () => void;
@@ -101,13 +99,11 @@ function generateWorkspaceColor(path: string): string {
 export function WorkspaceSidebar({
   workspaceName,
   workspacePath,
-  fileTree,
   currentFilePath,
   currentView,
   onFileSelect,
   onCloseWorkspace,
   onOpenQuickSearch,
-  onRefreshFileTree,
   onViewHistory,
   onViewWorkspaceHistory,
   onNewPlan,
@@ -115,6 +111,8 @@ export function WorkspaceSidebar({
   onSelectedFolderChange,
   currentAISessionId
 }: WorkspaceSidebarProps) {
+  // File tree state - managed internally to avoid parent re-renders
+  const [fileTree, setFileTree] = useState<FileTreeItem[]>([]);
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
   const [isDragOverRoot, setIsDragOverRoot] = useState(false);
@@ -159,6 +157,45 @@ export function WorkspaceSidebar({
     const unsubscribe = loader.subscribe(updateExtensionFileTypes);
     return unsubscribe;
   }, []);
+
+  // Load file tree and subscribe to updates
+  useEffect(() => {
+    if (!workspacePath || !window.electronAPI?.getFolderContents) return undefined;
+
+    const loadFileTree = async () => {
+      try {
+        const tree = await window.electronAPI.getFolderContents(workspacePath);
+        setFileTree(tree);
+      } catch (error) {
+        console.error('Error loading file tree:', error);
+      }
+    };
+
+    loadFileTree();
+
+    // Listen for file tree updates via the proper IPC handler
+    if (window.electronAPI?.onWorkspaceFileTreeUpdated) {
+      const cleanup = window.electronAPI.onWorkspaceFileTreeUpdated((data) => {
+        setFileTree(data.fileTree);
+      });
+
+      return cleanup;
+    }
+
+    return undefined;
+  }, [workspacePath]);
+
+  // Refresh file tree handler
+  const handleRefreshFileTree = useCallback(async () => {
+    if (workspacePath && window.electronAPI?.getFolderContents) {
+      try {
+        const tree = await window.electronAPI.getFolderContents(workspacePath);
+        setFileTree(tree);
+      } catch (error) {
+        console.error('Error refreshing file tree:', error);
+      }
+    }
+  }, [workspacePath]);
 
   // Load file tree settings from workspace state
   useEffect(() => {
@@ -327,9 +364,7 @@ export function WorkspaceSidebar({
       const result = await (window as any).electronAPI?.createFile?.(filePath, content);
       if (result?.success) {
         // Refresh file tree and open the new file
-        if (onRefreshFileTree) {
-          onRefreshFileTree();
-        }
+        handleRefreshFileTree();
         onFileSelect(filePath);
       } else {
         alert('Failed to create file: ' + (result?.error || 'Unknown error'));
@@ -352,9 +387,7 @@ export function WorkspaceSidebar({
       const result = await (window as any).electronAPI?.createFolder?.(folderPath);
       if (result?.success) {
         // Refresh file tree
-        if (onRefreshFileTree) {
-          onRefreshFileTree();
-        }
+        handleRefreshFileTree();
       } else {
         alert('Failed to create folder: ' + (result?.error || 'Unknown error'));
       }
@@ -413,9 +446,7 @@ export function WorkspaceSidebar({
       const result = await (window as any).electronAPI?.createFile?.(filePath, content);
 
       if (result?.success) {
-        if (onRefreshFileTree) {
-          onRefreshFileTree();
-        }
+        handleRefreshFileTree();
         onFileSelect(filePath);
       } else {
         alert('Failed to create file: ' + (result?.error || 'Unknown error'));
@@ -951,15 +982,15 @@ export function WorkspaceSidebar({
         const result = await (window as any).electronAPI.copyFile(sourcePath, workspacePath);
         if (!result.success) {
           console.error('Failed to copy to root:', result.error);
-        } else if (onRefreshFileTree) {
-          onRefreshFileTree();
+        } else {
+          handleRefreshFileTree();
         }
       } else {
         const result = await (window as any).electronAPI.moveFile(sourcePath, workspacePath);
         if (!result.success) {
           console.error('Failed to move to root:', result.error);
-        } else if (onRefreshFileTree) {
-          onRefreshFileTree();
+        } else {
+          handleRefreshFileTree();
         }
       }
     } catch (error) {
@@ -1112,7 +1143,7 @@ export function WorkspaceSidebar({
                 enableAutoScroll={enableAutoScroll}
                 onNewFile={handleNewFileInFolder}
                 onNewFolder={handleNewFolderInFolder}
-                onRefreshFileTree={onRefreshFileTree}
+                onRefreshFileTree={handleRefreshFileTree}
                 onViewHistory={onViewHistory}
                 onViewWorkspaceHistory={onViewWorkspaceHistory}
                 selectedFolder={selectedFolder}

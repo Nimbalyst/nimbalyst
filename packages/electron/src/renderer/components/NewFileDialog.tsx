@@ -11,6 +11,13 @@ interface FileTypeOption {
   defaultContent?: string;
 }
 
+interface FileTreeItem {
+  name: string;
+  path: string;
+  type: 'file' | 'directory';
+  children?: FileTreeItem[];
+}
+
 interface NewFileDialogProps {
   isOpen: boolean;
   onClose: () => void;
@@ -19,8 +26,6 @@ interface NewFileDialogProps {
   onCreateFile: (fileName: string, fileType: NewFileType) => void;
   /** Extension-contributed file types */
   extensionFileTypes?: ExtensionFileType[];
-  /** File tree for folder selection */
-  fileTree?: Array<{ name: string; path: string; type: 'file' | 'directory'; children?: any[] }>;
   /** Callback when directory changes */
   onDirectoryChange?: (directory: string) => void;
 }
@@ -32,15 +37,31 @@ export const NewFileDialog: React.FC<NewFileDialogProps> = ({
   workspacePath,
   onCreateFile,
   extensionFileTypes = [],
-  fileTree = [],
   onDirectoryChange,
 }) => {
   const [fileName, setFileName] = useState('');
   const [error, setError] = useState('');
   const [selectedFileType, setSelectedFileType] = useState<NewFileType>('markdown');
   const [showFolderPicker, setShowFolderPicker] = useState(false);
+  const [fileTree, setFileTree] = useState<FileTreeItem[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const folderPickerRef = useRef<HTMLDivElement>(null);
+
+  // Load file tree when dialog opens
+  useEffect(() => {
+    if (!isOpen || !workspacePath || !window.electronAPI?.getFolderContents) return;
+
+    const loadFileTree = async () => {
+      try {
+        const tree = await window.electronAPI.getFolderContents(workspacePath);
+        setFileTree(tree);
+      } catch (error) {
+        console.error('Error loading file tree:', error);
+      }
+    };
+
+    loadFileTree();
+  }, [isOpen, workspacePath]);
 
   // Build file type options
   const fileTypeOptions = useMemo<FileTypeOption[]>(() => {

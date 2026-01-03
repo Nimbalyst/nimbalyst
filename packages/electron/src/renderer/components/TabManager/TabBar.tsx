@@ -1,5 +1,158 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Tab } from './TabManager';
+import { useTabDirtyState } from '../../contexts/TabsContext';
+
+// Separate component for dirty indicator - subscribes to its own tab's dirty state
+// This allows only this component to re-render when dirty state changes
+const TabDirtyIndicator: React.FC<{ tabId: string; hasUnacceptedChanges: boolean }> = ({ tabId, hasUnacceptedChanges }) => {
+  const isDirty = useTabDirtyState(tabId, false);
+
+  if (hasUnacceptedChanges) {
+    return <span className="tab-unaccepted-indicator" title="Has unaccepted AI changes">•</span>;
+  }
+
+  if (isDirty) {
+    return <span className="tab-dirty-indicator" title="Unsaved changes">•</span>;
+  }
+
+  return null;
+};
+
+interface TabItemProps {
+  tab: Tab;
+  index: number;
+  activeTabId: string | null;
+  draggedIndex: number | null;
+  dragOverIndex: number | null;
+  editingTabId: string | null;
+  editingValue: string;
+  editInputRef: React.RefObject<HTMLInputElement | null>;
+  onTabClick: (e: React.MouseEvent, tabId: string) => void;
+  onCloseClick: (e: React.MouseEvent, tabId: string) => void;
+  onContextMenu: (e: React.MouseEvent, tabId: string) => void;
+  onDragStart: (e: React.DragEvent, index: number) => void;
+  onDragOver: (e: React.DragEvent, index: number) => void;
+  onDragLeave: (e: React.DragEvent) => void;
+  onDrop: (e: React.DragEvent, index: number) => void;
+  onDragEnd: (e: React.DragEvent) => void;
+  onEditChange: (value: string) => void;
+  onRenameKeyDown: (e: React.KeyboardEvent) => void;
+  onRenameBlur: () => void;
+  onTabRef: (tabId: string, el: HTMLDivElement | null) => void;
+}
+
+// Each tab is a separate component that subscribes to its own dirty state
+const TabItem: React.FC<TabItemProps> = ({
+  tab,
+  index,
+  activeTabId,
+  draggedIndex,
+  dragOverIndex,
+  editingTabId,
+  editingValue,
+  editInputRef,
+  onTabClick,
+  onCloseClick,
+  onContextMenu,
+  onDragStart,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  onDragEnd,
+  onEditChange,
+  onRenameKeyDown,
+  onRenameBlur,
+  onTabRef,
+}) => {
+  const isDirty = useTabDirtyState(tab.id, false);
+
+  return (
+    <div
+      ref={(el) => onTabRef(tab.id, el)}
+      className={`tab ${tab.id === activeTabId ? 'active' : ''} ${isDirty ? 'dirty' : ''} ${tab.isPinned ? 'pinned' : ''} ${draggedIndex === index ? 'dragging' : ''} ${dragOverIndex === index ? 'drag-over' : ''}`}
+      data-tab-type={tab.isVirtual ? 'session' : 'document'}
+      data-tab-id={tab.id}
+      data-filename={tab.fileName}
+      draggable={true}
+      onDragStart={(e) => onDragStart(e, index)}
+      onDragOver={(e) => onDragOver(e, index)}
+      onDragLeave={onDragLeave}
+      onDrop={(e) => onDrop(e, index)}
+      onDragEnd={onDragEnd}
+      onClick={(e) => {
+        if (e.button === 0) {
+          onTabClick(e, tab.id);
+        }
+      }}
+      onMouseDown={(e) => {
+        if (e.button === 1) {
+          onTabClick(e, tab.id);
+        }
+      }}
+      onContextMenu={(e) => onContextMenu(e, tab.id)}
+      title={tab.filePath}
+    >
+      {tab.isPinned && <span className="tab-pin-icon">📌</span>}
+      {tab.isProcessing && (
+        <span className="tab-processing-indicator" title="Processing...">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="32 16" strokeLinecap="round">
+              <animateTransform
+                attributeName="transform"
+                type="rotate"
+                from="0 12 12"
+                to="360 12 12"
+                dur="1s"
+                repeatCount="indefinite"
+              />
+            </circle>
+          </svg>
+        </span>
+      )}
+      {tab.hasUnread && !tab.isProcessing && (
+        <span className="tab-unread-indicator" title="Unread response"></span>
+      )}
+      {editingTabId === tab.id ? (
+        <input
+          ref={editInputRef}
+          type="text"
+          value={editingValue}
+          onChange={(e) => onEditChange(e.target.value)}
+          onKeyDown={onRenameKeyDown}
+          onBlur={onRenameBlur}
+          onClick={(e) => e.stopPropagation()}
+          className="tab-rename-input"
+          style={{
+            flex: 1,
+            fontSize: '13px',
+            padding: '2px 4px',
+            border: '1px solid var(--primary-color)',
+            borderRadius: '2px',
+            backgroundColor: 'var(--surface-primary)',
+            color: 'var(--text-primary)',
+            outline: 'none'
+          }}
+        />
+      ) : (
+        <span className="tab-title">
+          {tab.fileName}
+          <TabDirtyIndicator tabId={tab.id} hasUnacceptedChanges={tab.hasUnacceptedChanges || false} />
+        </span>
+      )}
+      {!tab.isPinned && (
+        <button
+          className="tab-close-button"
+          data-testid={`tab-close-button-${tab.id}`}
+          data-filename={tab.fileName}
+          onClick={(e) => onCloseClick(e, tab.id)}
+          title="Close tab"
+        >
+          ×
+        </button>
+      )}
+    </div>
+  );
+};
 
 interface TabBarProps {
   tabs: Tab[];
@@ -444,100 +597,35 @@ export const TabBar: React.FC<TabBarProps> = ({
       <div className="tab-bar-container">
         <div className="tab-bar-scrollable" ref={tabBarRef}>
           {tabs.map((tab, index) => (
-            <div
+            <TabItem
               key={tab.id}
-              ref={(el) => {
-                if (el) {
-                  tabRefs.current.set(tab.id, el);
-                } else {
-                  tabRefs.current.delete(tab.id);
-                }
-              }}
-              className={`tab ${tab.id === activeTabId ? 'active' : ''} ${tab.isDirty ? 'dirty' : ''} ${tab.isPinned ? 'pinned' : ''} ${draggedIndex === index ? 'dragging' : ''} ${dragOverIndex === index ? 'drag-over' : ''}`}
-              data-tab-type={tab.isVirtual ? 'session' : 'document'}
-              data-tab-id={tab.id}
-              data-filename={tab.fileName}
-              draggable={true}
-              onDragStart={(e) => handleDragStart(e, index)}
-              onDragOver={(e) => handleDragOver(e, index)}
+              tab={tab}
+              index={index}
+              activeTabId={activeTabId}
+              draggedIndex={draggedIndex}
+              dragOverIndex={dragOverIndex}
+              editingTabId={editingTabId}
+              editingValue={editingValue}
+              editInputRef={editInputRef}
+              onTabClick={handleTabClick}
+              onCloseClick={handleCloseClick}
+              onContextMenu={handleContextMenu}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDrop(e, index)}
+              onDrop={handleDrop}
               onDragEnd={handleDragEnd}
-              onClick={(e) => {
-                // Only handle left clicks
-                if (e.button === 0) {
-                  handleTabClick(e, tab.id);
+              onEditChange={setEditingValue}
+              onRenameKeyDown={handleRenameKeyDown}
+              onRenameBlur={handleRenameBlur}
+              onTabRef={(tabId, el) => {
+                if (el) {
+                  tabRefs.current.set(tabId, el);
+                } else {
+                  tabRefs.current.delete(tabId);
                 }
               }}
-              onMouseDown={(e) => {
-                // Handle middle mouse button for close
-                if (e.button === 1) {
-                  handleTabClick(e, tab.id);
-                }
-              }}
-              onContextMenu={(e) => handleContextMenu(e, tab.id)}
-              title={tab.filePath}
-            >
-              {tab.isPinned && <span className="tab-pin-icon">📌</span>}
-              {tab.isProcessing && (
-                <span className="tab-processing-indicator" title="Processing...">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="32 16" strokeLinecap="round">
-                      <animateTransform
-                        attributeName="transform"
-                        type="rotate"
-                        from="0 12 12"
-                        to="360 12 12"
-                        dur="1s"
-                        repeatCount="indefinite"
-                      />
-                    </circle>
-                  </svg>
-                </span>
-              )}
-              {tab.hasUnread && !tab.isProcessing && (
-                <span className="tab-unread-indicator" title="Unread response"></span>
-              )}
-              {editingTabId === tab.id ? (
-                <input
-                  ref={editInputRef}
-                  type="text"
-                  value={editingValue}
-                  onChange={(e) => setEditingValue(e.target.value)}
-                  onKeyDown={handleRenameKeyDown}
-                  onBlur={handleRenameBlur}
-                  onClick={(e) => e.stopPropagation()}
-                  className="tab-rename-input"
-                  style={{
-                    flex: 1,
-                    fontSize: '13px',
-                    padding: '2px 4px',
-                    border: '1px solid var(--primary-color)',
-                    borderRadius: '2px',
-                    backgroundColor: 'var(--surface-primary)',
-                    color: 'var(--text-primary)',
-                    outline: 'none'
-                  }}
-                />
-              ) : (
-                <span className="tab-title">
-                  {tab.fileName}
-                  {tab.hasUnacceptedChanges && <span className="tab-unaccepted-indicator" title="Has unaccepted AI changes">•</span>}
-                  {tab.isDirty && !tab.hasUnacceptedChanges && <span className="tab-dirty-indicator" title="Unsaved changes">•</span>}
-                </span>
-              )}
-              {!tab.isPinned && (
-                <button
-                  className="tab-close-button"
-                  data-testid={`tab-close-button-${tab.id}`}
-                  data-filename={tab.fileName}
-                  onClick={(e) => handleCloseClick(e, tab.id)}
-                  title="Close tab"
-                >
-                  ×
-                </button>
-              )}
-            </div>
+            />
           ))}
         </div>
         

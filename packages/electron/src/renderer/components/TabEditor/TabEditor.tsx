@@ -59,9 +59,8 @@ interface TabEditorProps {
   periodicSnapshotInterval?: number; // milliseconds, default 300000 (5 minutes)
 
   // Callbacks to parent
-  onDirtyChange?: (isDirty: boolean) => void;
+  onDirtyChange?: (isDirty: boolean) => void; // Used by custom editors to update tab store
   onSaveComplete?: (filePath: string) => void;
-  onContentChange?: () => void;
 
   // External control (exposed via imperative handle)
   onManualSaveReady?: (saveFunction: () => Promise<void>) => void;
@@ -89,7 +88,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                                                       periodicSnapshotInterval = 300000,
                                                       onDirtyChange,
                                                       onSaveComplete,
-                                                      onContentChange,
                                                       onManualSaveReady,
                                                       onGetContentReady,
                                                       onViewHistory,
@@ -98,6 +96,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                                                       onOpenSessionInChat,
                                                       workspaceId,
                                                     }) => {
+  // Debug: log every render to verify isDirty changes don't cause re-renders
+  console.log('[TabEditor] render', fileName);
+
   const posthog = usePostHog();
 
   // Subscribe to custom editor registry changes to re-evaluate file type
@@ -175,8 +176,12 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const [viewModeVersion, setViewModeVersion] = useState(0);
 
   // Internal state - fully owned by this component
+  // NOTE: content state is only updated for major content changes (file reload, diff apply/reject, etc.),
+  // NOT on every keystroke. contentRef tracks the current content for saving and comparisons.
+  // This prevents re-renders on every keystroke while still allowing content reload when needed.
   const [content, setContent] = useState(initialContent);
-  const [isDirty, setIsDirty] = useState(false);
+  // NOTE: isDirty is tracked via ref only, not state, to avoid re-renders when dirty state changes.
+  // The parent is notified via onDirtyChange callback.
   const [lastSaveTime, setLastSaveTime] = useState<number | null>(null);
   const [lastSavedContent, setLastSavedContent] = useState(initialContent);
   const [reloadVersion, setReloadVersion] = useState(0);
@@ -242,8 +247,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   }, [filePath]);
 
   // Refs for stable access in timers/callbacks
-  const contentRef = useRef(content);
-  const isDirtyRef = useRef(isDirty);
+  const contentRef = useRef(initialContent);
+  const isDirtyRef = useRef(false);
   const lastChangeTimeRef = useRef<number>(0);
   const getContentFnRef = useRef<(() => string) | null>(null);
   const editorRef = useRef<any>(null);
@@ -259,7 +264,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const isApplyingDiffRef = useRef<boolean>(false); // Track programmatic diff application
   const editorHostFileChangeCallbackRef = useRef<((newContent: string) => void) | null>(null); // For EditorHost file change subscription
   const diffRequestCallbackRef = useRef<((config: DiffConfig) => void) | null>(null); // For EditorHost diff request subscription
-  const editorHostSaveRequestCallbackRef = useRef<(() => void) | null>(null); // For EditorHost save request subscription
+  const editorHostSaveRequestCallbackRef = useRef<(() => void | Promise<void>) | null>(null); // For EditorHost save request subscription
   const sourceModeChangedCallbackRef = useRef<((isSourceMode: boolean) => void) | null>(null); // For EditorHost source mode subscription
 
   // Refs for EditorHost stability - these allow editorHost to access current values without recreating
@@ -268,16 +273,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const customEditorSourceModeRef = useRef(customEditorSourceMode);
   const customEditorSupportSourceModeRef = useRef(customEditorSupportsSourceMode);
   const onViewHistoryRef = useRef(onViewHistory);
-  const onDirtyChangeRef = useRef(onDirtyChange);
-
-  // Keep refs in sync with state
-  useEffect(() => {
-    contentRef.current = content;
-  }, [content]);
-
-  useEffect(() => {
-    isDirtyRef.current = isDirty;
-  }, [isDirty]);
 
   // NOTE: The old "check disk content on tab activation" polling logic has been removed.
   // File watchers are now active for all open tabs, so changes are detected in real-time
@@ -327,7 +322,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   useEffect(() => { customEditorSourceModeRef.current = customEditorSourceMode; }, [customEditorSourceMode]);
   useEffect(() => { customEditorSupportSourceModeRef.current = customEditorSupportsSourceMode; }, [customEditorSupportsSourceMode]);
   useEffect(() => { onViewHistoryRef.current = onViewHistory; }, [onViewHistory]);
-  useEffect(() => { onDirtyChangeRef.current = onDirtyChange; }, [onDirtyChange]);
 
   useEffect(() => {
     lastSavedContentRef.current = lastSavedContent;
@@ -554,7 +548,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             setContent(oldContent);
             contentRef.current = oldContent;
             initialContentRef.current = oldContent;
-            setIsDirty(false);
             isDirtyRef.current = false;
             onDirtyChange?.(false);
             return;
@@ -608,7 +601,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
               // Reset dirty state after diff application - user hasn't made any changes
               // This prevents false-positive autosaves from WYSIWYG rendering differences
-              setIsDirty(false);
+              isDirtyRef.current = false;
               isDirtyRef.current = false;
               onDirtyChange?.(false);
             }, 100);
@@ -620,7 +613,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     };
 
     checkAndApplyPendingDiffs();
-  }, [filePath, isMarkdown, isEditorReady, isMockupFile, onDirtyChange, customEditorSourceMode]); // Wait for editor to be ready before checking pending diffs
+  }, [filePath, isMarkdown, isEditorReady, isMockupFile, customEditorSourceMode]); // Wait for editor to be ready before checking pending diffs
 
 
   // Helper: Save file with history snapshot
@@ -662,7 +655,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
       // IMMEDIATE: Clear dirty flag as soon as save succeeds
       if (result && result.success) {
-        setIsDirty(false);
+        isDirtyRef.current = false;
         isDirtyRef.current = false;
         // Update initialContentRef with current editor content to prevent false dirty flags
         if (getContentFnRef.current) {
@@ -712,7 +705,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             setContent(result.diskContent);
             initialContentRef.current = result.diskContent;
             setLastSavedContent(result.diskContent);
-            setIsDirty(false);
+            isDirtyRef.current = false;
             return;
           }
         }
@@ -773,7 +766,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       isSavingRef.current = false;
       throw error;
     }
-  }, [filePath, fileName, onSaveComplete, onDirtyChange]);
+  }, [filePath, fileName, onSaveComplete]);
 
   // Manual save function
   const handleManualSave = useCallback(async () => {
@@ -816,8 +809,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     //   console.log(`[TabEditor] Initial: "${initialContentRef.current.substring(0, 50)}..."`);
     // }
 
-    setContent(currentContent);
-    setIsDirty(isContentDirty);
+    // NOTE: We don't call setContent() here - contentRef is the source of truth.
+    // The editor (Lexical/Monaco) owns its own display. We just track for saving.
+    isDirtyRef.current = isContentDirty;
     lastChangeTimeRef.current = Date.now();
 
     // CRITICAL: If user manually edits during diff mode, clear the pending tag
@@ -842,10 +836,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       }
     }
 
-    // Notify parent
+    // Update tab dirty indicator via DOM
     onDirtyChange?.(isContentDirty);
-    onContentChange?.();
-  }, [fileName, onDirtyChange, onContentChange]);
+  }, [fileName]);
 
 
   // Autosave timer
@@ -981,22 +974,11 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         }
 
         const newContent = result.content || '';
-        const currentContent = contentRef.current;
 
-        // CRITICAL FIX: For code files (Monaco), don't skip based on contentRef comparison
-        // Monaco updates contentRef synchronously via onDidChangeModelContent, but we still need
-        // to call setContent to update the Monaco editor itself. The setContent call is idempotent.
-        // For markdown files, we can safely skip if content matches.
-        if (isMarkdown && newContent === currentContent) {
-          // console.log('[TabEditor] Skipping - disk content matches current editor content', {
-          //   fileName,
-          //   diskLength: newContent.length,
-          //   editorLength: currentContent.length,
-          //   firstDiff: newContent.length > 0 ? newContent.substring(0, 100) : '(empty)',
-          // });
-          processingFileChangeRef.current = false;
-          return;
-        }
+        // NOTE: We no longer compare against contentRef for markdown files.
+        // With onDirtyChange (no serialization on keystroke), contentRef may be stale.
+        // The lastSavedContentRef comparison below is more reliable - it detects our own saves.
+        // External edits will be processed and editors will decide whether to reload.
 
         // console.log('[TabEditor] File content differs - will update editor', {
         //   fileName,
@@ -1081,7 +1063,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               setContent(oldContent);
               contentRef.current = oldContent;
               initialContentRef.current = oldContent;
-              setIsDirty(false);
+              isDirtyRef.current = false;
               isDirtyRef.current = false;
               onDirtyChange?.(false);
             })();
@@ -1144,7 +1126,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
                     // Reset dirty state after diff application - user hasn't made any changes
                     // This prevents false-positive autosaves from WYSIWYG rendering differences
-                    setIsDirty(false);
+                    isDirtyRef.current = false;
                     isDirtyRef.current = false;
                     onDirtyChange?.(false);
                   }
@@ -1213,7 +1195,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
                       // Reset dirty state after diff application - user hasn't made any changes
                       // This prevents false-positive autosaves from WYSIWYG rendering differences
-                      setIsDirty(false);
+                      isDirtyRef.current = false;
                       isDirtyRef.current = false;
                       onDirtyChange?.(false);
                     }
@@ -1308,7 +1290,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           setLastSavedContent(newContent);
           lastSavedContentRef.current = newContent;
           contentRef.current = newContent;
-          setIsDirty(false);
+          isDirtyRef.current = false;
           isDirtyRef.current = false;
           onDirtyChange?.(false);
 
@@ -1402,7 +1384,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             setLastSavedContent(newContent);
             lastSavedContentRef.current = newContent;
             contentRef.current = newContent;
-            setIsDirty(false);
+            isDirtyRef.current = false;
             isDirtyRef.current = false;
             onDirtyChange?.(false);
 
@@ -1432,7 +1414,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     return () => {
       unsubscribe();
     };
-  }, [filePath, isMarkdown, onDirtyChange]);
+  }, [filePath, isMarkdown]);
 
   // Handle conflict dialog actions
   const handleReloadFromDisk = useCallback(async () => {
@@ -1446,7 +1428,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     setLastSavedContent(newContent);
     lastSavedContentRef.current = newContent;
     contentRef.current = newContent;
-    setIsDirty(false);
+    isDirtyRef.current = false;
     isDirtyRef.current = false;
     onDirtyChange?.(false);
 
@@ -1471,7 +1453,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         logger.ui.error(`[TabEditor] Failed to update editor content:`, error);
       }
     }
-  }, [conflictDialogContent, fileName, onDirtyChange, isMarkdown]);
+  }, [conflictDialogContent, fileName, isMarkdown]);
 
   const handleKeepLocalChanges = useCallback(() => {
     setShowConflictDialog(false);
@@ -1505,18 +1487,17 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           // Update React state and mark as dirty so autosave will persist
           setContent(newContent);
           contentRef.current = newContent;
-          setIsDirty(true);
+          isDirtyRef.current = true;
           isDirtyRef.current = true;
 
           // Notify parent that content changed and is dirty
           onDirtyChange?.(true);
-          onContentChange?.();
         } catch (error) {
           logger.ui.error(`[TabEditor] Failed to update content from document header:`, error);
         }
       })();
     }
-  }, [onDirtyChange, onContentChange, isMarkdown]);
+  }, [isMarkdown]);
 
   // PHASE 5: Listen for diff approve/reject commands to update tag status
   useEffect(() => {
@@ -1596,7 +1577,16 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         const { tagId, filePath } = pendingAIEditTagRef.current;
         logger.ui.info('[TabEditor] handleClearDiffTag START:', { tagId, filePath });
 
-        // CRITICAL: Save current editor state to disk FIRST
+        // CRITICAL: Mark tag as reviewed BEFORE saving to disk
+        // This prevents the file watcher from re-entering diff mode when it detects the save
+        logger.ui.info('[TabEditor] About to call updateTagStatus:', { filePath, tagId, status: 'reviewed' });
+        await window.electronAPI.history.updateTagStatus(filePath, tagId, 'reviewed', workspaceId);
+        logger.ui.info(`[TabEditor] Successfully marked AI edit tag as reviewed: ${tagId}`);
+
+        // Clear the pending tag reference immediately so file watcher won't re-enter diff mode
+        pendingAIEditTagRef.current = null;
+
+        // Now save current editor state to disk
         // This preserves all the incremental accept/reject decisions the user made
         if (editorRef.current) {
             const transformers = getEditorTransformers();
@@ -1619,17 +1609,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             setLastSavedContent(currentContent);
             lastSavedContentRef.current = currentContent;
           }
-
-          // Mark the pre-edit tag as reviewed (all diffs processed)
-          // When handleClearDiffTag is called, ALL diffs have been cleared (session complete)
-          // We do NOT create an incremental-approval tag here because there are no more diffs
-          // Incremental-approval tags are only created during partial acceptance (via INCREMENTAL_APPROVAL_COMMAND)
-          logger.ui.info('[TabEditor] About to call updateTagStatus:', { filePath, tagId, status: 'reviewed' });
-          await window.electronAPI.history.updateTagStatus(filePath, tagId, 'reviewed', workspaceId);
-          logger.ui.info(`[TabEditor] Successfully marked AI edit tag as reviewed: ${tagId}`);
-
-          // Clear the pending tag reference (session is complete)
-          pendingAIEditTagRef.current = null;
 
           // Reload editor to exit diff mode and show clean final state
           const result = await window.electronAPI.readFileContent(filePath);
@@ -1660,8 +1639,60 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
     // Register command listeners
     // NOTE: APPROVE_DIFF_COMMAND and REJECT_DIFF_COMMAND are handled by DiffPlugin in rexical.
-    // TabEditor only handles CLEAR_DIFF_TAG_COMMAND which is dispatched by DiffPlugin
-    // after all diffs have been processed. This avoids duplicate handlers fighting over state.
+    // TabEditor ALSO listens to clear the tag BEFORE the save happens to prevent file watcher race.
+
+      // Handle APPROVE_DIFF_COMMAND - clear tag status immediately to prevent file watcher race
+      const unregisterApprove = editor.registerCommand(
+        APPROVE_DIFF_COMMAND,
+        () => {
+          // Clear the pending tag reference and update tag status IMMEDIATELY
+          // This prevents the file watcher from re-entering diff mode when it detects the save
+          if (pendingAIEditTagRef.current) {
+            const { tagId, filePath: tagFilePath } = pendingAIEditTagRef.current;
+            logger.ui.info('[TabEditor] APPROVE_DIFF_COMMAND - clearing tag before DiffPlugin handles it');
+
+            // Clear ref immediately so file watcher won't re-enter diff mode
+            pendingAIEditTagRef.current = null;
+
+            // Update tag status in database (async, but tag ref is already cleared)
+            window.electronAPI.history.updateTagStatus(tagFilePath, tagId, 'reviewed', workspaceId)
+              .then(() => {
+                logger.ui.info(`[TabEditor] Successfully marked AI edit tag as reviewed: ${tagId}`);
+              })
+              .catch((error: Error) => {
+                logger.ui.error('[TabEditor] Failed to update tag status:', error);
+              });
+          }
+          return false; // Let DiffPlugin handle the actual diff approval
+        },
+        COMMAND_PRIORITY_LOW
+      );
+
+      // Handle REJECT_DIFF_COMMAND - clear tag status immediately to prevent file watcher race
+      const unregisterReject = editor.registerCommand(
+        REJECT_DIFF_COMMAND,
+        () => {
+          // Clear the pending tag reference and update tag status IMMEDIATELY
+          if (pendingAIEditTagRef.current) {
+            const { tagId, filePath: tagFilePath } = pendingAIEditTagRef.current;
+            logger.ui.info('[TabEditor] REJECT_DIFF_COMMAND - clearing tag before DiffPlugin handles it');
+
+            // Clear ref immediately so file watcher won't re-enter diff mode
+            pendingAIEditTagRef.current = null;
+
+            // Update tag status in database (async, but tag ref is already cleared)
+            window.electronAPI.history.updateTagStatus(tagFilePath, tagId, 'reviewed', workspaceId)
+              .then(() => {
+                logger.ui.info(`[TabEditor] Successfully marked AI edit tag as reviewed: ${tagId}`);
+              })
+              .catch((error: Error) => {
+                logger.ui.error('[TabEditor] Failed to update tag status:', error);
+              });
+          }
+          return false; // Let DiffPlugin handle the actual diff rejection
+        },
+        COMMAND_PRIORITY_LOW
+      );
 
       const unregisterIncremental = editor.registerCommand(
         INCREMENTAL_APPROVAL_COMMAND,
@@ -1686,6 +1717,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       );
 
     return () => {
+      unregisterApprove();
+      unregisterReject();
       unregisterIncremental();
       unregisterClear();
     };
@@ -1791,7 +1824,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       setLastSavedContent(newContent);
       lastSavedContentRef.current = newContent;
       contentRef.current = newContent;
-      setIsDirty(false);
+      isDirtyRef.current = false;
 
       // CRITICAL: Update Monaco editor's content after exiting diff mode
       // Without this, Monaco will revert to the old content when it switches back to normal mode
@@ -1848,7 +1881,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       setLastSavedContent(oldContent);
       lastSavedContentRef.current = oldContent;
       contentRef.current = oldContent;
-      setIsDirty(false);
+      isDirtyRef.current = false;
 
       logger.ui.info('[TabEditor] Monaco diff rejected successfully');
     } catch (error) {
@@ -1901,9 +1934,17 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
       // Report dirty state change
       onDirtyChange: (isDirty: boolean) => {
-        setIsDirty(isDirty);
-        isDirtyRef.current = isDirty;
-        onDirtyChangeRef.current?.(isDirty);
+        if (isDirtyRef.current !== isDirty) {
+          isDirtyRef.current = isDirty;
+          // Update tab dirty indicator via DOM (no React state cascade)
+          onDirtyChange?.(isDirty);
+          // Notify parent to update tab store (for save-on-close to work)
+          onDirtyChange?.(isDirty);
+          // Update macOS window dirty indicator if this is the active tab
+          if (isActive && window.electronAPI?.setDocumentEdited) {
+            window.electronAPI.setDocumentEdited(isDirty);
+          }
+        }
       },
 
       // Save content to disk
@@ -1929,9 +1970,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         setLastSaveTime(Date.now());
 
         // Mark clean
-        setIsDirty(false);
         isDirtyRef.current = false;
-        onDirtyChangeRef.current?.(false);
+        onDirtyChange?.(false);
       },
 
       // Subscribe to save requests from host (autosave timer, manual save)
@@ -1980,9 +2020,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         contentRef.current = result.content;
         setLastSavedContent(result.content);
         lastSavedContentRef.current = result.content;
-        setIsDirty(false);
         isDirtyRef.current = false;
-        onDirtyChangeRef.current?.(false);
+        onDirtyChange?.(false);
       },
 
       // Check if diff mode is active
@@ -2012,7 +2051,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             setLastSavedContent(monacoContent);
             setContent(monacoContent);
             contentRef.current = monacoContent;
-            setIsDirty(false);
+            isDirtyRef.current = false;
             isDirtyRef.current = false;
           }
         } else {
@@ -2069,7 +2108,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     const customEditorSave = async () => {
       if (editorHostSaveRequestCallbackRef.current) {
         logger.ui.info(`[TabEditor] Triggering custom editor save on close: ${fileName}`);
-        editorHostSaveRequestCallbackRef.current();
+        await editorHostSaveRequestCallbackRef.current();
       }
     };
     onManualSaveReady(customEditorSave);
@@ -2136,7 +2175,16 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                     initialContent={content}
                     theme={theme}
                     isActive={isActive}
-                    onContentChange={handleContentChange}
+                    onDirtyChange={(isDirty: boolean) => {
+                      if (isDirtyRef.current !== isDirty) {
+                        isDirtyRef.current = isDirty;
+                        lastChangeTimeRef.current = Date.now();
+                        onDirtyChange?.(isDirty);
+                        if (isActive && window.electronAPI?.setDocumentEdited) {
+                          window.electronAPI.setDocumentEdited(isDirty);
+                        }
+                      }
+                    }}
                     onGetContent={(getContentFn) => {
                       getContentFnRef.current = getContentFn;
                       if (onGetContentReady) {
@@ -2234,7 +2282,20 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                   config={{
                     initialContent: content,
                     theme,
-                    onContentChange: handleContentChange,
+                    // Use onDirtyChange instead of onContentChange to avoid serialization on every keystroke
+                    onDirtyChange: (isDirty: boolean) => {
+                      // Only update if state actually changed
+                      if (isDirtyRef.current !== isDirty) {
+                        isDirtyRef.current = isDirty;
+                        lastChangeTimeRef.current = Date.now();
+                        // Update tab dirty indicator via DOM (no React state cascade)
+                        onDirtyChange?.(isDirty);
+                        // Update macOS window dirty indicator if this is the active tab
+                        if (isActive && window.electronAPI?.setDocumentEdited) {
+                          window.electronAPI.setDocumentEdited(isDirty);
+                        }
+                      }
+                    },
                     onGetContent: (getContentFn) => {
                       getContentFnRef.current = getContentFn;
                       if (onGetContentReady) {
@@ -2352,7 +2413,16 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                 initialContent={content}
                 theme={theme}
                 isActive={isActive}
-                onContentChange={handleContentChange}
+                onDirtyChange={(isDirty: boolean) => {
+                  if (isDirtyRef.current !== isDirty) {
+                    isDirtyRef.current = isDirty;
+                    lastChangeTimeRef.current = Date.now();
+                    onDirtyChange?.(isDirty);
+                    if (isActive && window.electronAPI?.setDocumentEdited) {
+                      window.electronAPI.setDocumentEdited(isDirty);
+                    }
+                  }
+                }}
                 onGetContent={(getContentFn) => {
                   getContentFnRef.current = getContentFn;
                   if (onGetContentReady) {
@@ -2361,12 +2431,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                   // Expose the manual save function
                   if (onManualSaveReady) {
                     onManualSaveReady(handleManualSave);
-                  }
-                  // Sync content once when editor is ready
-                  if (!hasInitialContentSyncRef.current) {
-                    hasInitialContentSyncRef.current = true;
-                    const currentContent = getContentFn();
-                    setContent(currentContent);
                   }
                 }}
                 onEditorReady={(editorWrapper) => {
@@ -2406,7 +2470,16 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                 initialContent={initialContent}
                 theme={theme}
                 isActive={isActive}
-                onContentChange={handleContentChange}
+                onDirtyChange={(isDirty: boolean) => {
+                  if (isDirtyRef.current !== isDirty) {
+                    isDirtyRef.current = isDirty;
+                    lastChangeTimeRef.current = Date.now();
+                    onDirtyChange?.(isDirty);
+                    if (isActive && window.electronAPI?.setDocumentEdited) {
+                      window.electronAPI.setDocumentEdited(isDirty);
+                    }
+                  }
+                }}
                 onGetContent={(getContentFn) => {
                   getContentFnRef.current = getContentFn;
                   if (onGetContentReady) {
@@ -2415,12 +2488,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                   // Expose the manual save function
                   if (onManualSaveReady) {
                     onManualSaveReady(handleManualSave);
-                  }
-                  // Sync content once when editor is ready
-                  if (!hasInitialContentSyncRef.current) {
-                    hasInitialContentSyncRef.current = true;
-                    const currentContent = getContentFn();
-                    setContent(currentContent);
                   }
                 }}
                 onEditorReady={(editorWrapper) => {

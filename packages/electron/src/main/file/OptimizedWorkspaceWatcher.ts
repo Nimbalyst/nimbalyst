@@ -126,7 +126,9 @@ export class OptimizedWorkspaceWatcher {
                     if (!window.isDestroyed()) {
                         window.webContents.send('file-changed-on-disk', { path });
                     }
-                    triggerUpdate();
+                    // NOTE: Do NOT call triggerUpdate() here!
+                    // File content changes do not affect file tree structure.
+                    // Only add/unlink/addDir/unlinkDir events need file tree updates.
                 })
                 .on('unlink', (path) => {
                     console.log(`[WorkspaceWatcher] File deleted: ${path}`);

@@ -62,9 +62,12 @@ export class SimpleWorkspaceWatcher {
                 const watcher = watch(dirPath, { recursive: false }, (eventType, filename) => {
                     if (!filename) return;
 
-                    // Watch all files and directories - filtering happens in the UI
-                    // logger.workspaceWatcher.debug(`Change detected: ${eventType} ${filename} in ${dirPath}`);
-                    triggerUpdate();
+                    // Only trigger file tree update for rename events (add/delete)
+                    // 'change' events are content modifications which don't affect tree structure
+                    if (eventType === 'rename') {
+                        // logger.workspaceWatcher.debug(`Change detected: ${eventType} ${filename} in ${dirPath}`);
+                        triggerUpdate();
+                    }
 
                     // If a new directory was created, watch it
                     if (eventType === 'rename' && !filename.includes('.')) {
