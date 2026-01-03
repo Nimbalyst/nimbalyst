@@ -1409,6 +1409,42 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     };
   }, [updateWindowTitle]);
 
+  // Handle menu:find events in agent mode - bridge IPC to custom events for RichTranscriptView
+  useEffect(() => {
+    if (mode !== 'agent') return;
+
+    const handleMenuFind = () => {
+      const sessionId = activeTabIdRef.current;
+      if (sessionId) {
+        window.dispatchEvent(new CustomEvent('menu:find', { detail: { sessionId } }));
+      }
+    };
+
+    const handleMenuFindNext = () => {
+      const sessionId = activeTabIdRef.current;
+      if (sessionId) {
+        window.dispatchEvent(new CustomEvent('menu:find-next', { detail: { sessionId } }));
+      }
+    };
+
+    const handleMenuFindPrevious = () => {
+      const sessionId = activeTabIdRef.current;
+      if (sessionId) {
+        window.dispatchEvent(new CustomEvent('menu:find-previous', { detail: { sessionId } }));
+      }
+    };
+
+    const cleanup1 = window.electronAPI.on('menu:find', handleMenuFind);
+    const cleanup2 = window.electronAPI.on('menu:find-next', handleMenuFindNext);
+    const cleanup3 = window.electronAPI.on('menu:find-previous', handleMenuFindPrevious);
+
+    return () => {
+      cleanup1?.();
+      cleanup2?.();
+      cleanup3?.();
+    };
+  }, [mode]);
+
   // Listen for queued prompts notification - triggers processing from the queued_prompts table
   // The actual prompts are fetched from the database, not from the IPC payload
   useEffect(() => {
