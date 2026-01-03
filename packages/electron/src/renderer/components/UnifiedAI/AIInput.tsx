@@ -908,7 +908,10 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
             onCancel && (
               <button
                 className="ai-chat-cancel-button"
-                onClick={onCancel}
+                onClick={() => {
+                  console.log('[AIInput] Cancel button clicked, onCancel:', !!onCancel);
+                  onCancel();
+                }}
                 title="Cancel request (Esc)"
                 aria-label="Cancel request"
               >

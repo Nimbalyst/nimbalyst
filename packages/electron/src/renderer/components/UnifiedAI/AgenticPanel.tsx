@@ -2192,8 +2192,10 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
   // Handle cancel request
   const handleCancelRequest = useCallback(async (sessionId: string) => {
+    console.log('[AgenticPanel] handleCancelRequest called for sessionId:', sessionId);
     try {
       const result = await window.electronAPI.aiCancelRequest(sessionId);
+      console.log('[AgenticPanel] aiCancelRequest result:', result);
       if (result.success) {
         sendingSessionsRef.current.delete(sessionId);
         globalSendingSessions.delete(sessionId);
@@ -2202,7 +2204,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           next.delete(sessionId);
           return next;
         });
-
+      } else {
+        console.warn('[AgenticPanel] Cancel request failed:', result.error);
       }
     } catch (err) {
       console.error('[AgenticPanel] Failed to cancel request:', err);

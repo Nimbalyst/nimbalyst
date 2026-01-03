@@ -1725,13 +1725,13 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   }
 
   abort(): void {
-    // console.log('[CLAUDE-CODE] Abort called');
+    console.log('[CLAUDE-CODE] Abort called, abortController:', this.abortController ? 'exists' : 'NULL');
     if (this.abortController) {
-      // console.log('[CLAUDE-CODE] Aborting active request');
+      console.log('[CLAUDE-CODE] Aborting active request');
       this.abortController.abort();
       this.abortController = null;
     } else {
-      // console.log('[CLAUDE-CODE] No active request to abort');
+      console.warn('[CLAUDE-CODE] No active request to abort - abortController is null!');
     }
 
     // Clean up any pending ExitPlanMode confirmations

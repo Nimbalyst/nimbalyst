@@ -2618,6 +2618,7 @@ export class AIService {
 
     // Cancel current request
     ipcMain.handle('ai:cancelRequest', async (event, sessionId: string, chunksReceived?: number) => {
+      console.log(`[AIService] ai:cancelRequest received for sessionId: ${sessionId}`);
       // Abort the provider for the specific session
       if (!sessionId) {
         throw new Error('Session ID is required to cancel request');
@@ -2625,10 +2626,13 @@ export class AIService {
 
       const session = await this.sessionManager.loadSession(sessionId);
       if (!session) {
+        console.warn(`[AIService] Cancel failed - session not found: ${sessionId}`);
         return { success: false, error: 'Session not found' };
       }
 
+      console.log(`[AIService] Session found, provider type: ${session.provider}`);
       const provider = ProviderFactory.getProvider(session.provider as AIProviderType, sessionId);
+      console.log(`[AIService] Provider lookup result: ${provider ? 'found' : 'NOT FOUND'}`);
       if (provider) {
         // Get provider type
         const providerType = (provider as any).providerType || 'unknown';
@@ -2645,6 +2649,7 @@ export class AIService {
         this.analytics.sendEvent('cancel_ai_request', {provider: providerType})
         return { success: true };
       }
+      console.warn(`[AIService] Cancel failed - no active provider for session: ${sessionId}`);
       return { success: false, error: 'No active provider for session' };
     });
 

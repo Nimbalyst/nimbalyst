@@ -721,8 +721,11 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
 
   // Handle cancel
   const handleCancel = useCallback(() => {
+    console.log('[AISessionView] handleCancel called, sessionId:', sessionId, 'onCancelRequest:', !!onCancelRequest);
     if (onCancelRequest) {
       onCancelRequest(sessionId);
+    } else {
+      console.warn('[AISessionView] onCancelRequest is undefined!');
     }
   }, [sessionId, onCancelRequest]);
 
