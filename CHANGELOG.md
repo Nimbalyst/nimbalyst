@@ -20,6 +20,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.50.11] - 2026-01-03
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+- Simplified diff header UI
+
+### Fixed
+- CSV and other custom editors no longer re-render on autosave
+- Diff mode table widths now display correctly in Lexical editor
+- CSV spreadsheet delete now correctly clears cells
+- AI session search now works correctly
+- Session state changes no longer trigger unnecessary App re-renders
+- CSV spreadsheet now saves edits when tab is closed
+- File tree updates and dirty state no longer trigger editor re-renders
+- Custom editors now interactive on session restore
+- PDF and DataModelLM extension styles now load correctly after Vite 7 upgrade
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.50.10] - 2026-01-03
 
 
