@@ -52,7 +52,7 @@ const TEMPLATE_ICON_CONFIG: Record<string, IconConfig> = {
   asana: { type: 'simple-icons', slug: 'asana' },
   n8n: { type: 'simple-icons', slug: 'n8n' },
   zapier: { type: 'simple-icons', slug: 'zapier' },
-  aws: { type: 'simple-icons', slug: 'amazonaws' },
+  aws: { type: 'url', url: 'https://cdn.jsdelivr.net/npm/simple-icons/icons/amazonwebservices.svg' },
   stripe: { type: 'simple-icons', slug: 'stripe' },
   snowflake: { type: 'simple-icons', slug: 'snowflake' },
   shopify: { type: 'simple-icons', slug: 'shopify' },
