@@ -746,6 +746,10 @@
   width: fit-content;
 }
 
+table.PlaygroundEditorTheme__diffAdd {
+  width: auto;
+}
+
 .PlaygroundEditorTheme__diffRemove {
   background-color: #ffebe9; /* Light red background */
   text-decoration: none;
