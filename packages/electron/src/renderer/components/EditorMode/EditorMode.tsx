@@ -64,7 +64,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   onSwitchToAgentMode
 }, ref) {
   // Debug: trace re-renders
-  console.log('[EditorMode] render');
+  if (import.meta.env.DEV) console.log('[EditorMode] render');
 
   // Sidebar state
   const [sidebarWidth, setSidebarWidth] = useState<number>(250);

@@ -98,8 +98,7 @@ if (!pluginsRegistered) {
 }
 
 export default function App() {
-  console.log('[App] render');
-  logger.ui.info('App component rendering');
+  if (import.meta.env.DEV) console.log('[App] render');
 
    // IMPORTANT: This state must be declared before the useEffect that uses it
   // and before any conditional early returns (workspace-manager, usage-report, etc.)

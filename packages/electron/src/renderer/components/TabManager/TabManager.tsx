@@ -40,7 +40,7 @@ export const TabManager: React.FC<TabManagerProps> = ({
   isAIChatCollapsed,
   children
 }) => {
-  console.log('[TabManager] render');
+  if (import.meta.env.DEV) console.log('[TabManager] render');
   // Get tabs from context - this component subscribes to tab changes
   const { tabs, activeTabId, switchTab, togglePin, reorderTabs } = useTabs();
 

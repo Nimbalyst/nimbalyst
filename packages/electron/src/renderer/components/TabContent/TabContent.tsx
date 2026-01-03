@@ -65,7 +65,7 @@ export const TabContent: React.FC<TabContentProps> = ({
   workspaceId,
 }) => {
   // Debug: trace re-renders - THIS SHOULD ONLY LOG ONCE ON MOUNT
-  console.log('[TabContent] render - THIS SHOULD ONLY HAPPEN ONCE');
+  if (import.meta.env.DEV) console.log('[TabContent] render - THIS SHOULD ONLY HAPPEN ONCE');
 
   // Use actions only - NO subscription that causes re-renders
   const tabsActions = useTabsActions();
