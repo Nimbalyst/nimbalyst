@@ -33,6 +33,7 @@ interface SessionHistoryProps {
   onSessionSelect: (sessionId: string) => void;
   onSessionDelete?: (sessionId: string) => void;
   onSessionArchive?: (sessionId: string) => void; // Callback when session is archived (to close tab)
+  onSessionRename?: (sessionId: string, newName: string) => void; // Callback when session is renamed
   onNewSession?: () => void;
   onNewTerminal?: () => void; // Callback for creating a new terminal session
   onImportSessions?: () => void; // Callback for opening import dialog
@@ -68,6 +69,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   onSessionSelect,
   onSessionDelete,
   onSessionArchive,
+  onSessionRename,
   onNewSession,
   onNewTerminal,
   onImportSessions,
@@ -903,6 +905,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
                     onDelete={onSessionDelete ? () => handleDeleteSession(session.id) : undefined}
                     onArchive={() => handleArchiveSession(session.id)}
                     onUnarchive={() => handleUnarchiveSession(session.id)}
+                    onRename={onSessionRename ? (newName: string) => onSessionRename(session.id, newName) : undefined}
                     provider={session.provider}
                     model={session.model}
                     messageCount={session.messageCount}

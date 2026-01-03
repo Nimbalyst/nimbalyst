@@ -265,3 +265,17 @@
 .session-list-item-context-menu-item svg {
   flex-shrink: 0;
 }
+
+/* Inline rename input */
+.session-list-item-rename-input {
+  width: 100%;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  border: 1px solid var(--primary-color);
+  border-radius: 0.25rem;
+  background: var(--surface-primary);
+  color: var(--text-primary);
+  outline: none;
+  box-sizing: border-box;
+}

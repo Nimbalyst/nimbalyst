@@ -20,6 +20,7 @@ interface SessionListItemProps {
   onDelete?: () => void;
   onArchive?: () => void;
   onUnarchive?: () => void;
+  onRename?: (newName: string) => void; // Callback when session is renamed
   provider?: string;
   model?: string;
   messageCount?: number;
@@ -43,6 +44,7 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
   onDelete,
   onArchive,
   onUnarchive,
+  onRename,
   provider,
   model,
   messageCount,
@@ -52,7 +54,10 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
   const [adjustedContextMenuPosition, setAdjustedContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
   const contextMenuRef = useRef<HTMLDivElement>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -82,7 +87,42 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
   const handleCloseContextMenu = useCallback(() => {
     setShowContextMenu(false);
     setAdjustedContextMenuPosition(null);
+    setIsRenaming(false);
   }, []);
+
+  const handleRenameClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    setRenameValue(title);
+    setIsRenaming(true);
+  };
+
+  const handleRenameSubmit = () => {
+    const trimmedValue = renameValue.trim();
+    if (trimmedValue && trimmedValue !== title && onRename) {
+      onRename(trimmedValue);
+    }
+    setIsRenaming(false);
+  };
+
+  const handleRenameKeyDown = (e: React.KeyboardEvent) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleRenameSubmit();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setIsRenaming(false);
+    }
+  };
+
+  // Auto-focus and select text when rename input appears
+  useEffect(() => {
+    if (isRenaming && renameInputRef.current) {
+      renameInputRef.current.focus();
+      renameInputRef.current.select();
+    }
+  }, [isRenaming]);
 
   // Adjust context menu position to keep it within viewport
   useEffect(() => {
@@ -168,11 +208,26 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
         )}
       </div>
       <div className="session-list-item-content">
-        <div className="session-list-item-title">{truncatedTitle}</div>
-        <div className="session-list-item-meta">
-          <span className="session-list-item-datetime" title={fullDateTime}>{relativeTime}</span>
-          {displayModel && <span className="session-list-item-model">{displayModel}</span>}
-        </div>
+        {isRenaming ? (
+          <input
+            ref={renameInputRef}
+            type="text"
+            className="session-list-item-rename-input"
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onKeyDown={handleRenameKeyDown}
+            onBlur={handleRenameSubmit}
+            onClick={(e) => e.stopPropagation()}
+          />
+        ) : (
+          <>
+            <div className="session-list-item-title">{truncatedTitle}</div>
+            <div className="session-list-item-meta">
+              <span className="session-list-item-datetime" title={fullDateTime}>{relativeTime}</span>
+              {displayModel && <span className="session-list-item-model">{displayModel}</span>}
+            </div>
+          </>
+        )}
       </div>
       <div className="session-list-item-right">
         {isProcessing ? (
@@ -217,6 +272,15 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
           }}
           onClick={(e) => e.stopPropagation()}
         >
+          {onRename && (
+            <button
+              className="session-list-item-context-menu-item"
+              onClick={handleRenameClick}
+            >
+              <MaterialSymbol icon="edit" size={14} />
+              Rename
+            </button>
+          )}
           <button
             className="session-list-item-context-menu-item"
             onClick={handleArchiveToggle}

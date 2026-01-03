@@ -2835,6 +2835,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             onSessionSelect={openSessionInTab}
             onSessionDelete={deleteSession}
             onSessionArchive={closeArchivedSession}
+            onSessionRename={handleTabRename}
             onNewSession={() => createNewSession()}
             onNewTerminal={releaseChannel === 'alpha' ? () => createNewTerminal() : undefined}
             onImportSessions={handleOpenImportDialog}
