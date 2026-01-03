@@ -872,100 +872,7 @@ export class CLIManager {
   }
 
   private getEnhancedPath(): string {
-    // Add common npm global paths to PATH
-    const paths = [];
-
-    // Start with existing PATH
-    if (process.env.PATH) {
-      paths.push(process.env.PATH);
-    }
-
-    if (process.platform === 'darwin' || process.platform === 'linux') {
-      // Common Unix paths
-      paths.push('/usr/local/bin');
-      paths.push('/usr/bin');
-      paths.push('/bin');
-      paths.push(path.join(os.homedir(), '.npm-global', 'bin'));
-      paths.push(path.join(os.homedir(), '.local', 'bin'));
-      paths.push(path.join(os.homedir(), 'bin'));
-
-      // Add Homebrew paths for macOS
-      if (process.platform === 'darwin') {
-        paths.push('/opt/homebrew/bin');
-        paths.push('/opt/homebrew/sbin');
-        paths.push('/usr/local/opt/node/bin');
-        paths.push('/usr/local/opt/node@20/bin');
-        paths.push('/usr/local/opt/node@18/bin');
-        // MacPorts
-        paths.push('/opt/local/bin');
-        paths.push('/opt/local/sbin');
-      }
-
-      // Linux specific
-      if (process.platform === 'linux') {
-        paths.push('/usr/local/sbin');
-        paths.push('/usr/sbin');
-        paths.push('/sbin');
-        // Snap packages
-        paths.push('/snap/bin');
-      }
-
-      // NVM paths
-      const nvmDir = process.env.NVM_DIR || path.join(os.homedir(), '.nvm');
-      try {
-        // Try to find current NVM node
-        const nvmCurrent = path.join(nvmDir, 'current', 'bin');
-        paths.push(nvmCurrent);
-      } catch (e) {
-        // Ignore
-      }
-
-      // Try to get npm prefix if npm exists somewhere
-      try {
-        const npmPrefix = execSync('npm config get prefix 2>/dev/null', {
-          encoding: 'utf8',
-          shell: '/bin/sh',
-          timeout: 2000
-        }).trim();
-        if (npmPrefix && npmPrefix !== 'undefined') {
-          paths.push(path.join(npmPrefix, 'bin'));
-        }
-      } catch (e) {
-        // Ignore if npm is not available
-      }
-    } else if (process.platform === 'win32') {
-      // Windows paths - use forward slashes or escaped backslashes
-      const programFiles = process.env['ProgramFiles'] || 'C:\\Program Files';
-      const programFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
-
-      paths.push(path.join(programFiles, 'nodejs'));
-      paths.push(path.join(programFilesX86, 'nodejs'));
-      paths.push(path.join(process.env.APPDATA || '', 'npm'));
-      paths.push('C:\\ProgramData\\chocolatey\\bin');
-      paths.push('C:\\tools\\nodejs');
-
-      // User profile paths
-      const userProfile = process.env.USERPROFILE || process.env.HOME;
-      if (userProfile) {
-        paths.push(path.join(userProfile, 'AppData', 'Roaming', 'npm'));
-        paths.push(path.join(userProfile, 'scoop', 'shims'));
-      }
-
-      // NVM for Windows
-      const nvmHome = process.env.NVM_HOME;
-      if (nvmHome) {
-        paths.push(nvmHome);
-      }
-      const nvmSymlink = process.env.NVM_SYMLINK;
-      if (nvmSymlink) {
-        paths.push(nvmSymlink);
-      }
-    }
-
-    const uniquePaths = [...new Set(paths.filter(Boolean))];
-    const pathString = uniquePaths.join(process.platform === 'win32' ? ';' : ':');
-
-    return pathString;
+    return getEnhancedPath();
   }
 
   // Clean up on app quit
@@ -976,6 +883,113 @@ export class CLIManager {
     });
     this.installingTools.clear();
   }
+}
+
+/**
+ * Get an enhanced PATH that includes common CLI installation locations.
+ * This is needed because GUI apps on macOS don't inherit the shell's PATH
+ * when launched from Finder/dock, so commands like npx, node, uvx etc.
+ * installed via Homebrew, nvm, or other tools won't be found.
+ *
+ * Used by:
+ * - CLIManager for CLI tool installation/detection
+ * - MCPConfigService for spawning MCP servers
+ */
+export function getEnhancedPath(): string {
+  // Add common npm global paths to PATH
+  const paths: string[] = [];
+
+  // Start with existing PATH
+  if (process.env.PATH) {
+    paths.push(process.env.PATH);
+  }
+
+  if (process.platform === 'darwin' || process.platform === 'linux') {
+    // Common Unix paths
+    paths.push('/usr/local/bin');
+    paths.push('/usr/bin');
+    paths.push('/bin');
+    paths.push(path.join(os.homedir(), '.npm-global', 'bin'));
+    paths.push(path.join(os.homedir(), '.local', 'bin'));
+    paths.push(path.join(os.homedir(), 'bin'));
+
+    // Add Homebrew paths for macOS
+    if (process.platform === 'darwin') {
+      paths.push('/opt/homebrew/bin');
+      paths.push('/opt/homebrew/sbin');
+      paths.push('/usr/local/opt/node/bin');
+      paths.push('/usr/local/opt/node@20/bin');
+      paths.push('/usr/local/opt/node@18/bin');
+      // MacPorts
+      paths.push('/opt/local/bin');
+      paths.push('/opt/local/sbin');
+    }
+
+    // Linux specific
+    if (process.platform === 'linux') {
+      paths.push('/usr/local/sbin');
+      paths.push('/usr/sbin');
+      paths.push('/sbin');
+      // Snap packages
+      paths.push('/snap/bin');
+    }
+
+    // NVM paths
+    const nvmDir = process.env.NVM_DIR || path.join(os.homedir(), '.nvm');
+    try {
+      // Try to find current NVM node
+      const nvmCurrent = path.join(nvmDir, 'current', 'bin');
+      paths.push(nvmCurrent);
+    } catch (e) {
+      // Ignore
+    }
+
+    // Try to get npm prefix if npm exists somewhere
+    try {
+      const npmPrefix = execSync('npm config get prefix 2>/dev/null', {
+        encoding: 'utf8',
+        shell: '/bin/sh',
+        timeout: 2000
+      }).trim();
+      if (npmPrefix && npmPrefix !== 'undefined') {
+        paths.push(path.join(npmPrefix, 'bin'));
+      }
+    } catch (e) {
+      // Ignore if npm is not available
+    }
+  } else if (process.platform === 'win32') {
+    // Windows paths - use forward slashes or escaped backslashes
+    const programFiles = process.env['ProgramFiles'] || 'C:\\Program Files';
+    const programFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
+
+    paths.push(path.join(programFiles, 'nodejs'));
+    paths.push(path.join(programFilesX86, 'nodejs'));
+    paths.push(path.join(process.env.APPDATA || '', 'npm'));
+    paths.push('C:\\ProgramData\\chocolatey\\bin');
+    paths.push('C:\\tools\\nodejs');
+
+    // User profile paths
+    const userProfile = process.env.USERPROFILE || process.env.HOME;
+    if (userProfile) {
+      paths.push(path.join(userProfile, 'AppData', 'Roaming', 'npm'));
+      paths.push(path.join(userProfile, 'scoop', 'shims'));
+    }
+
+    // NVM for Windows
+    const nvmHome = process.env.NVM_HOME;
+    if (nvmHome) {
+      paths.push(nvmHome);
+    }
+    const nvmSymlink = process.env.NVM_SYMLINK;
+    if (nvmSymlink) {
+      paths.push(nvmSymlink);
+    }
+  }
+
+  const uniquePaths = [...new Set(paths.filter(Boolean))];
+  const pathString = uniquePaths.join(process.platform === 'win32' ? ';' : ':');
+
+  return pathString;
 }
 
 // Export singleton

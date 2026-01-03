@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { MCPConfig, MCPServerConfig, MCPServerEnv } from '@nimbalyst/runtime/types/MCPServerConfig';
 import { logger } from '../utils/logger';
+import { getEnhancedPath } from './CLIManager';
 
 /**
  * Service for managing MCP server configurations.
@@ -327,8 +328,9 @@ export class MCPConfigService {
 
     return new Promise((resolve) => {
       try {
-        // Expand environment variables
-        const env = { ...process.env };
+        // Expand environment variables and use enhanced PATH for GUI apps
+        // (GUI apps on macOS don't inherit shell PATH, so npx/uvx/etc. may not be found)
+        const env: NodeJS.ProcessEnv = { ...process.env, PATH: getEnhancedPath() };
         if (config.env) {
           for (const [key, value] of Object.entries(config.env)) {
             env[key] = this.expandEnvVar(value, env);
