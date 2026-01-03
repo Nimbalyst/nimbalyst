@@ -213,9 +213,10 @@ const ENV_VAR_HELP: Record<string, { label: string; help: string; link?: string 
     help: 'Get from n8n Settings > API',
     link: 'https://docs.n8n.io/api/'
   },
-  N8N_BASE_URL: {
-    label: 'n8n Base URL',
-    help: 'Your n8n instance URL (e.g., https://your-instance.n8n.cloud)'
+  N8N_API_URL: {
+    label: 'n8n API URL',
+    help: 'Your n8n API URL (e.g., http://localhost:5678/api/v1)',
+    link: 'https://docs.n8n.io/api/'
   },
   AWS_ACCESS_KEY_ID: {
     label: 'AWS Access Key ID',
@@ -230,8 +231,8 @@ const ENV_VAR_HELP: Record<string, { label: string; help: string; link?: string 
     label: 'AWS Region',
     help: 'AWS region (default: us-east-1)'
   },
-  STRIPE_API_KEY: {
-    label: 'Stripe API Key',
+  STRIPE_SECRET_KEY: {
+    label: 'Stripe Secret Key',
     help: 'Get from Stripe Dashboard > Developers > API keys',
     link: 'https://dashboard.stripe.com/apikeys'
   },
@@ -259,6 +260,20 @@ const ENV_VAR_HELP: Record<string, { label: string; help: string; link?: string 
   SHOPIFY_STORE_URL: {
     label: 'Shopify Store URL',
     help: 'Your store URL (e.g., your-store.myshopify.com)'
+  },
+  ZAPIER_MCP_URL: {
+    label: 'Zapier MCP URL',
+    help: 'Get your personal MCP URL from Zapier MCP dashboard',
+    link: 'https://zapier.com/mcp'
+  },
+  FILESYSTEM_ALLOWED_DIR: {
+    label: 'Allowed Directory',
+    help: 'Directory path the server is allowed to access (e.g., /Users/you/projects)'
+  },
+  ANTHROPIC_API_KEY: {
+    label: 'Anthropic API Key',
+    help: 'Get from Anthropic Console',
+    link: 'https://console.anthropic.com/settings/keys'
   }
 };
 
@@ -322,37 +337,39 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     id: 'postgres',
     name: 'PostgreSQL',
     description: 'Database queries and management',
-    docsUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/postgres',
+    docsUrl: 'https://github.com/modelcontextprotocol/servers-archived/tree/main/src/postgres',
     authType: 'api-key',
     config: {
       command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-postgres'],
+      args: ['-y', '@modelcontextprotocol/server-postgres', '${POSTGRES_CONNECTION_STRING}'],
       env: {
-        POSTGRES_CONNECTION_STRING: '${POSTGRES_CONNECTION_STRING}'
+        POSTGRES_CONNECTION_STRING: ''
       }
     }
   },
   {
     id: 'filesystem',
     name: 'Filesystem',
-    description: 'Local file system access',
+    description: 'Local file system access (configure allowed directories)',
     docsUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem',
     authType: 'none',
     config: {
       command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-filesystem'],
-      env: {}
+      args: ['-y', '@modelcontextprotocol/server-filesystem', '${FILESYSTEM_ALLOWED_DIR}'],
+      env: {
+        FILESYSTEM_ALLOWED_DIR: ''
+      }
     }
   },
   {
     id: 'brave-search',
     name: 'Brave Search',
     description: 'Web search capabilities',
-    docsUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/brave-search',
+    docsUrl: 'https://github.com/brave/brave-search-mcp-server',
     authType: 'api-key',
     config: {
       command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-brave-search'],
+      args: ['-y', '@brave/brave-search-mcp-server'],
       env: {
         BRAVE_API_KEY: '${BRAVE_API_KEY}'
       }
@@ -451,37 +468,41 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     id: 'n8n',
     name: 'n8n',
     description: 'Workflow automation platform',
-    docsUrl: 'https://docs.n8n.io/integrations/mcp/',
+    docsUrl: 'https://github.com/czlonkowski/n8n-mcp',
     authType: 'api-key',
     config: {
       command: 'npx',
-      args: ['-y', '@anthropic/mcp-server-n8n'],
+      args: ['-y', 'n8n-mcp'],
       env: {
         N8N_API_KEY: '${N8N_API_KEY}',
-        N8N_BASE_URL: '${N8N_BASE_URL}'
+        N8N_API_URL: '${N8N_API_URL}',
+        MCP_MODE: 'stdio'
       }
     }
   },
   {
     id: 'zapier',
     name: 'Zapier',
-    description: 'Automation and app integrations',
+    description: 'Automation and app integrations (requires MCP URL from Zapier)',
     docsUrl: 'https://zapier.com/mcp',
-    authType: 'oauth',
+    authType: 'api-key',
     config: {
       command: 'npx',
-      args: ['-y', 'mcp-remote', 'https://mcp.zapier.com/sse']
+      args: ['-y', 'mcp-remote', '${ZAPIER_MCP_URL}'],
+      env: {
+        ZAPIER_MCP_URL: ''
+      }
     }
   },
   {
     id: 'aws',
     name: 'AWS',
     description: 'Amazon Web Services cloud management',
-    docsUrl: 'https://github.com/aws/aws-mcp-server',
+    docsUrl: 'https://github.com/awslabs/mcp',
     authType: 'api-key',
     config: {
-      command: 'npx',
-      args: ['-y', '@aws/aws-mcp-server'],
+      command: 'uvx',
+      args: ['awslabs.aws-api-mcp-server@latest'],
       env: {
         AWS_ACCESS_KEY_ID: '${AWS_ACCESS_KEY_ID}',
         AWS_SECRET_ACCESS_KEY: '${AWS_SECRET_ACCESS_KEY}',
@@ -497,9 +518,9 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     authType: 'api-key',
     config: {
       command: 'npx',
-      args: ['-y', '@stripe/mcp-server'],
+      args: ['-y', '@stripe/mcp', '--tools=all'],
       env: {
-        STRIPE_API_KEY: '${STRIPE_API_KEY}'
+        STRIPE_SECRET_KEY: '${STRIPE_SECRET_KEY}'
       }
     }
   },
@@ -507,11 +528,11 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     id: 'snowflake',
     name: 'Snowflake',
     description: 'Cloud data warehouse queries',
-    docsUrl: 'https://github.com/Snowflake-Labs/mcp-server-snowflake',
+    docsUrl: 'https://github.com/Snowflake-Labs/mcp',
     authType: 'api-key',
     config: {
-      command: 'npx',
-      args: ['-y', '@snowflake-labs/mcp-server-snowflake'],
+      command: 'uvx',
+      args: ['snowflake-labs-mcp'],
       env: {
         SNOWFLAKE_ACCOUNT: '${SNOWFLAKE_ACCOUNT}',
         SNOWFLAKE_USER: '${SNOWFLAKE_USER}',
@@ -528,23 +549,20 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     authType: 'none',
     config: {
       command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-sequentialthinking'],
+      args: ['-y', '@modelcontextprotocol/server-sequential-thinking'],
       env: {}
     }
   },
   {
     id: 'shopify',
-    name: 'Shopify',
-    description: 'E-commerce store management',
-    docsUrl: 'https://shopify.dev/docs/api/mcp',
-    authType: 'api-key',
+    name: 'Shopify Dev',
+    description: 'Shopify development documentation and API schemas',
+    docsUrl: 'https://shopify.dev/docs/apps/build/devmcp',
+    authType: 'none',
     config: {
       command: 'npx',
-      args: ['-y', '@shopify/mcp-server'],
-      env: {
-        SHOPIFY_ACCESS_TOKEN: '${SHOPIFY_ACCESS_TOKEN}',
-        SHOPIFY_STORE_URL: '${SHOPIFY_STORE_URL}'
-      }
+      args: ['-y', '@shopify/dev-mcp@latest'],
+      env: {}
     }
   },
   {
@@ -554,8 +572,8 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     docsUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/fetch',
     authType: 'none',
     config: {
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-fetch'],
+      command: 'uvx',
+      args: ['mcp-server-fetch'],
       env: {}
     }
   },
@@ -563,11 +581,11 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     id: 'chrome-devtools',
     name: 'Chrome DevTools',
     description: 'Browser debugging and inspection',
-    docsUrl: 'https://github.com/anthropics/anthropic-quickstarts/tree/main/mcp-server-chrome-devtools',
+    docsUrl: 'https://github.com/ChromeDevTools/chrome-devtools-mcp',
     authType: 'none',
     config: {
       command: 'npx',
-      args: ['-y', '@anthropic/mcp-server-chrome-devtools'],
+      args: ['-y', 'chrome-devtools-mcp@latest'],
       env: {}
     }
   },
@@ -575,11 +593,11 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     id: 'claude-flow',
     name: 'Claude Flow',
     description: 'Multi-agent orchestration and workflows',
-    docsUrl: 'https://github.com/anthropics/claude-flow',
+    docsUrl: 'https://github.com/ruvnet/claude-flow',
     authType: 'none',
     config: {
       command: 'npx',
-      args: ['-y', '@anthropic/claude-flow-mcp'],
+      args: ['claude-flow@alpha', 'mcp', 'start'],
       env: {}
     }
   },
@@ -587,11 +605,11 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     id: 'blender',
     name: 'Blender',
     description: '3D modeling and rendering control',
-    docsUrl: 'https://github.com/ahmedkhaleel2004/blender-mcp',
+    docsUrl: 'https://github.com/ahujasid/blender-mcp',
     authType: 'none',
     config: {
-      command: 'npx',
-      args: ['-y', 'blender-mcp'],
+      command: 'uvx',
+      args: ['blender-mcp'],
       env: {}
     }
   },
@@ -611,12 +629,14 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     id: 'task-master',
     name: 'Task Master',
     description: 'AI-powered task management and planning',
-    docsUrl: 'https://github.com/eyaltoledano/task-master-mcp',
-    authType: 'none',
+    docsUrl: 'https://github.com/eyaltoledano/claude-task-master',
+    authType: 'api-key',
     config: {
       command: 'npx',
-      args: ['-y', 'task-master-mcp'],
-      env: {}
+      args: ['-y', 'task-master-ai'],
+      env: {
+        ANTHROPIC_API_KEY: '${ANTHROPIC_API_KEY}'
+      }
     }
   },
   {
