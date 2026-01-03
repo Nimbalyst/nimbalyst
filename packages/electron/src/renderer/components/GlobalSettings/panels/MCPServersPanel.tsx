@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { usePostHog } from 'posthog-js/react';
 import { ErrorBoundary } from '../../ErrorBoundary';
+import { useTheme } from '../../../hooks/useTheme';
 import './MCPServersPanel.css';
 
 interface MCPServerConfig {
@@ -36,6 +37,10 @@ type IconConfig =
   | { type: 'simple-icons'; slug: string }
   | { type: 'material-symbol'; icon: string }
   | { type: 'url'; url: string };
+
+// Icons that are dark/black and need a light color override in dark mode
+// Most brand icons have colorful logos that work on both light and dark backgrounds
+const DARK_ICONS_NEEDING_LIGHT_OVERRIDE = new Set(['github', 'notion', 'n8n']);
 
 const TEMPLATE_ICON_CONFIG: Record<string, IconConfig> = {
   // Brand icons from Simple Icons CDN
@@ -73,7 +78,7 @@ const TEMPLATE_ICON_CONFIG: Record<string, IconConfig> = {
 };
 
 // Component to render MCP server icon
-function MCPServerIcon({ templateId, name }: { templateId: string; name: string }) {
+function MCPServerIcon({ templateId, name, isDark }: { templateId: string; name: string; isDark: boolean }) {
   const config = TEMPLATE_ICON_CONFIG[templateId];
 
   if (!config) {
@@ -82,9 +87,19 @@ function MCPServerIcon({ templateId, name }: { templateId: string; name: string 
   }
 
   if (config.type === 'simple-icons') {
+    // Simple Icons CDN supports color parameters:
+    // - Default brand color: https://cdn.simpleicons.org/{slug}
+    // - Custom color: https://cdn.simpleicons.org/{slug}/{color}
+    // Most brand icons have colorful logos that work on both backgrounds.
+    // Only override dark/black icons (like GitHub, Notion) in dark mode.
+    const needsLightOverride = isDark && DARK_ICONS_NEEDING_LIGHT_OVERRIDE.has(config.slug);
+    const iconUrl = needsLightOverride
+      ? `https://cdn.simpleicons.org/${config.slug}/ffffff`
+      : `https://cdn.simpleicons.org/${config.slug}`;
+
     return (
       <img
-        src={`https://cdn.simpleicons.org/${config.slug}`}
+        src={iconUrl}
         alt=""
         className="mcp-icon-img"
         loading="lazy"
@@ -676,6 +691,8 @@ interface MCPServersPanelProps {
 
 function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanelProps = {}) {
   const posthog = usePostHog();
+  const { theme } = useTheme();
+  const isDark = theme === 'dark' || theme === 'crystal-dark';
   const [servers, setServers] = useState<MCPServerWithName[]>([]);
   const [selectedServer, setSelectedServer] = useState<MCPServerWithName | null>(null);
   const [viewState, setViewState] = useState<ViewState>('list');
@@ -1336,7 +1353,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
                     >
                       <div className="mcp-template-card-header">
                         <div className="mcp-template-card-icon" aria-hidden="true">
-                          <MCPServerIcon templateId={template.id} name={template.name} />
+                          <MCPServerIcon templateId={template.id} name={template.name} isDark={isDark} />
                           <span className="mcp-icon-fallback" style={{ display: 'none' }}>{template.name[0]}</span>
                         </div>
                         <div className="mcp-template-card-name">{template.name}</div>
@@ -1414,7 +1431,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
           <div className="mcp-config-header">
             <div className="mcp-config-title">
               <div className="mcp-config-title-icon" aria-hidden="true">
-                <MCPServerIcon templateId={selectedTemplate.id} name={selectedTemplate.name} />
+                <MCPServerIcon templateId={selectedTemplate.id} name={selectedTemplate.name} isDark={isDark} />
               </div>
               <div className="mcp-config-title-text">
                 <h4>{selectedTemplate.name}</h4>
