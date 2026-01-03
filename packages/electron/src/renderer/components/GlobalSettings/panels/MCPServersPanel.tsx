@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { usePostHog } from 'posthog-js/react';
 import { ErrorBoundary } from '../../ErrorBoundary';
 import './MCPServersPanel.css';
 
@@ -654,6 +655,7 @@ interface MCPServersPanelProps {
 }
 
 function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanelProps = {}) {
+  const posthog = usePostHog();
   const [servers, setServers] = useState<MCPServerWithName[]>([]);
   const [selectedServer, setSelectedServer] = useState<MCPServerWithName | null>(null);
   const [viewState, setViewState] = useState<ViewState>('list');
@@ -846,12 +848,23 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
         setOauthStatus('authorized');
         setTestStatus('idle');
         setTestMessage('');
+        // Track successful OAuth
+        posthog?.capture('mcp_oauth_result', {
+          templateId: selectedTemplate?.id || null,
+          success: true
+        });
       } else {
         const errorMsg = result.error || 'Authorization failed';
         console.error('OAuth authorization failed:', errorMsg);
         setTestStatus('error');
         setTestMessage(`Authorization failed: ${errorMsg}`);
         await checkOAuthStatus(formArgs);
+        // Track failed OAuth
+        posthog?.capture('mcp_oauth_result', {
+          templateId: selectedTemplate?.id || null,
+          success: false,
+          errorType: 'auth_rejected'
+        });
       }
     } catch (error: unknown) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error occurred';
@@ -859,6 +872,12 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
       setTestStatus('error');
       setTestMessage(`Authorization error: ${errorMsg}`);
       setOauthStatus('not-authorized');
+      // Track OAuth exception
+      posthog?.capture('mcp_oauth_result', {
+        templateId: selectedTemplate?.id || null,
+        success: false,
+        errorType: 'exception'
+      });
     } finally {
       setOauthAction('idle');
     }
@@ -961,6 +980,15 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
       setViewState('list');
       setSaveStatus('saved');
 
+      // Track successful MCP server configuration
+      posthog?.capture('mcp_server_configured', {
+        templateId: selectedTemplate?.id || null,
+        scope,
+        isCustom: !selectedTemplate,
+        authType: selectedTemplate?.authType || 'none',
+        transportType: formType
+      });
+
       setTimeout(() => setSaveStatus('idle'), 2000);
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to save server';
@@ -1062,6 +1090,19 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
     setFormEnv(formEnv.filter((_, i) => i !== index));
   };
 
+  /**
+   * Categorize test connection errors for analytics
+   */
+  const categorizeTestError = (error: string | undefined): string => {
+    if (!error) return 'unknown';
+    const errorLower = error.toLowerCase();
+    if (errorLower.includes('not found') || errorLower.includes('enoent')) return 'command_not_found';
+    if (errorLower.includes('timeout')) return 'timeout';
+    if (errorLower.includes('401') || errorLower.includes('403') || errorLower.includes('auth')) return 'auth_failure';
+    if (errorLower.includes('network') || errorLower.includes('econnrefused') || errorLower.includes('enotfound')) return 'network';
+    return 'other';
+  };
+
   const handleTestConnection = async () => {
     if (formType === 'stdio' && !formCommand.trim()) {
       setTestStatus('error');
@@ -1101,19 +1142,40 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
         testConfig.url = formUrl.trim();
       }
 
+      const startTime = Date.now();
       const result = await window.electronAPI.invoke('mcp-config:test-server', testConfig);
+      const durationMs = Date.now() - startTime;
 
       if (result.success) {
         setTestStatus('success');
         setTestMessage('Connection successful');
+        // Track successful test
+        posthog?.capture('mcp_server_test_result', {
+          templateId: selectedTemplate?.id || null,
+          success: true,
+          durationMs
+        });
       } else {
         setTestStatus('error');
         setTestMessage(result.error || 'Connection failed');
+        // Track failed test
+        posthog?.capture('mcp_server_test_result', {
+          templateId: selectedTemplate?.id || null,
+          success: false,
+          errorType: categorizeTestError(result.error),
+          durationMs
+        });
       }
     } catch (error: unknown) {
       const errorMsg = error instanceof Error ? error.message : 'Test failed';
       setTestStatus('error');
       setTestMessage(errorMsg);
+      // Track test exception
+      posthog?.capture('mcp_server_test_result', {
+        templateId: selectedTemplate?.id || null,
+        success: false,
+        errorType: 'exception'
+      });
     } finally {
       unsubscribe();
     }

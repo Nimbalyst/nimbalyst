@@ -118,6 +118,14 @@ All events include `$session_id` property automatically. Dev users are marked wi
 | `claude_code_session_started` | `AIService.ts:1178` | Claude Code provider initializes session | `mcpServerCount`<br/>`slashCommandCount`<br/>`agentCount` | v0.45.25 (2025-11-14) | |
 | `slash_command_suggestion_clicked` | `SlashCommandSuggestions.tsx:117` | User clicks a slash command suggestion pill in empty session | `commandName`<br/>`packageId` | v0.47.2 (2025-12-10) | |
 
+### MCP Server Configuration
+
+| Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |
+| --- | --- | --- | --- | --- | --- |
+| `mcp_server_configured` | `MCPServersPanel.tsx:967` | User successfully saves an MCP server configuration | `templateId` (null if custom)<br/>`scope` (user/workspace)<br/>`isCustom`<br/>`authType` (oauth/api-key/none)<br/>`transportType` (stdio/sse) | (pending release as of 4734f601) | |
+| `mcp_server_test_result` | `MCPServersPanel.tsx:1134` | User tests MCP server connection | `templateId` (null if custom)<br/>`success`<br/>`errorType` (command_not_found/timeout/auth_failure/network/other/exception, only on failure)<br/>`durationMs` | (pending release as of 4734f601) | |
+| `mcp_oauth_result` | `MCPServersPanel.tsx:852` | OAuth authorization flow completes | `templateId` (null if custom)<br/>`success`<br/>`errorType` (auth_rejected/exception, only on failure) | (pending release as of 4734f601) | |
+
 ### AI Tool Execution
 
 | Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |
@@ -203,14 +211,15 @@ All events include `$session_id` property automatically. Dev users are marked wi
 
 ## Event Summary Statistics
 
-- **Total Events**: 64 unique event names
+- **Total Events**: 67 unique event names
 - **Main Process Events**: 39 (via AnalyticsService)
-- **Renderer Process Events**: 25 (via usePostHog hook)
+- **Renderer Process Events**: 28 (via usePostHog hook)
 - **File Operations**: 7 events
 - **Workspace Operations**: 4 events
 - **Navigation & Editor Mode**: 3 events
 - **File History**: 2 events
 - **AI-Related**: 20 events
+- **MCP Configuration**: 3 events
 - **Extensions**: 1 event
 - **Onboarding**: 8 events
 - **System/Infrastructure**: 10 events
