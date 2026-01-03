@@ -171,24 +171,22 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
     }
   }, [editor, config]);
 
-  // Handle content changes
+  // Handle content changes - report dirty state (no serialization)
   useEffect(() => {
     const removeUpdateListener = editor.registerUpdateListener(({dirtyElements, dirtyLeaves}) => {
       // Only trigger if there are actual changes
       if (dirtyElements.size === 0 && dirtyLeaves.size === 0) return;
 
-      if (config.onContentChange) {
-        const content = editor.read(() => {
-          return $convertToEnhancedMarkdownString(markdownTransformers);
-        });
-        config.onContentChange(content);
+      // Report dirty state - TabEditor handles deduplication
+      if (config.onDirtyChange) {
+        config.onDirtyChange(true);
       }
     });
 
     return () => {
       removeUpdateListener();
     };
-  }, [editor, config.onContentChange, markdownTransformers]);
+  }, [editor, config.onDirtyChange]);
 
   const onRef = (_floatingAnchorElem: HTMLDivElement) => {
     if (_floatingAnchorElem !== null) {

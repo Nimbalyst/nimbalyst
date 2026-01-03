@@ -38,8 +38,14 @@ export interface MonacoCodeEditorProps {
   // Whether this editor's tab is active
   isActive?: boolean;
 
-  // Callbacks matching StravuEditor interface
-  onContentChange?: () => void;
+  // Callbacks
+  /**
+   * Called when content changes (user makes edits).
+   * No serialization happens - just signals that content changed.
+   * TabEditor tracks dirty state and deduplicates calls.
+   */
+  onDirtyChange?: (isDirty: boolean) => void;
+
   onGetContent?: (getContentFn: () => string) => void;
   onEditorReady?: (editor: any) => void;
 
@@ -58,7 +64,7 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   initialContent,
   theme,
   isActive = true,
-  onContentChange,
+  onDirtyChange,
   onGetContent,
   onEditorReady,
   onDiffChangeCountUpdate,
@@ -366,12 +372,9 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
         return;
       }
 
-      const newContent = editor.getValue();
-      setContent(newContent);
-
-      // Notify parent of content change
-      if (onContentChange) {
-        onContentChange();
+      // Report dirty state - TabEditor handles deduplication
+      if (onDirtyChange) {
+        onDirtyChange(true);
       }
     });
 
@@ -414,7 +417,7 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
 
     // Focus editor on mount
     editor.focus();
-  }, [getContent, setEditorContent, onGetContent, onEditorReady, onContentChange, showDiff, exitDiffMode, acceptDiff, rejectDiff, goToNextDiff, goToPreviousDiff, getDiffChangeCount]);
+  }, [getContent, setEditorContent, onGetContent, onEditorReady, onDirtyChange, showDiff, exitDiffMode, acceptDiff, rejectDiff, goToNextDiff, goToPreviousDiff, getDiffChangeCount]);
 
   /**
    * Handle diff editor mount

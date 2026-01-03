@@ -188,8 +188,13 @@ function useRenderLoopDetection(
  * - Error boundary for catching render errors
  * - Render loop detection to prevent freezing
  * - Graceful error display with recovery options
+ *
+ * Memoized to prevent re-renders when TabEditor re-renders due to
+ * state changes (like isDirty) that don't affect custom editors.
+ * The host prop is stable (memoized in TabEditor), so this should
+ * only re-render when the component or file actually changes.
  */
-export const CustomEditorWrapper: React.FC<CustomEditorWrapperProps> = ({
+export const CustomEditorWrapper: React.FC<CustomEditorWrapperProps> = React.memo(({
   component: CustomEditorComponent,
   host,
   extensionId,
@@ -226,4 +231,4 @@ export const CustomEditorWrapper: React.FC<CustomEditorWrapperProps> = ({
       <CustomEditorComponent host={host} />
     </CustomEditorErrorBoundary>
   );
-};
+});

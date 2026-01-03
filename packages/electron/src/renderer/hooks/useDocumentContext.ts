@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { Tab } from './useTabs';
+import type { TabData } from '../contexts/TabsContext';
 import { getTextSelection } from '../components/UnifiedAI/TextSelectionIndicator';
 
 export interface DocumentContext {
@@ -29,7 +29,7 @@ export interface DocumentContext {
 }
 
 interface UseDocumentContextProps {
-  activeTab: Tab | null;
+  activeTab: TabData | null;
   getContentRef: React.MutableRefObject<(() => string) | null>;
 }
 

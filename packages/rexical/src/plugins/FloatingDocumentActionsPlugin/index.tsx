@@ -273,9 +273,9 @@ export default function FloatingDocumentActionsPlugin({
         const updatedMarkdown = applyTrackerTypeToMarkdown(markdown, trackerType);
         $convertFromEnhancedMarkdownString(updatedMarkdown, transformers);
 
-        // Trigger save if available
-        if (config?.onContentChange) {
-          config.onContentChange(updatedMarkdown);
+        // Mark as dirty - autosave will handle saving
+        if (config?.onDirtyChange) {
+          config.onDirtyChange(true);
         }
       } catch (error) {
         console.error('Failed to apply tracker type:', error);
@@ -295,9 +295,9 @@ export default function FloatingDocumentActionsPlugin({
         const updatedMarkdown = removeTrackerTypeFromMarkdown(markdown);
         $convertFromEnhancedMarkdownString(updatedMarkdown, transformers);
 
-        // Trigger save if available
-        if (config?.onContentChange) {
-          config.onContentChange(updatedMarkdown);
+        // Mark as dirty - autosave will handle saving
+        if (config?.onDirtyChange) {
+          config.onDirtyChange(true);
         }
       } catch (error) {
         console.error('Failed to remove tracker type:', error);

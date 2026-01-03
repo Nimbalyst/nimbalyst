@@ -89,7 +89,13 @@ export interface EditorConfig {
   markdownTransformers?: Transformer[];
 
   // Content callbacks
-  onContentChange?: (content: string) => void;
+  /**
+   * Called when content changes (user makes edits).
+   * No serialization happens - just signals that content changed.
+   * TabEditor tracks dirty state and deduplicates calls.
+   */
+  onDirtyChange?: (isDirty: boolean) => void;
+
   onGetContent?: (getContentFn: () => string) => void;
   onEditorReady?: (editor: any) => void;
   onSaveRequest?: () => void;
