@@ -1,26 +1,12 @@
 /**
- * Custom text editor that behaves like Google Sheets:
- * - Arrow keys save and move to adjacent cell in that direction
- * - Enter saves and moves down
- * - Tab saves and moves right
- * - Escape cancels without saving
+ * Custom text editor that behaves like Google Sheets.
+ *
+ * RevoGrid passes save() and close() callbacks to the editor constructor.
+ * We call save() on Enter/Tab/Arrow keys, and close() on Escape.
  */
 
 import type { VNode, FunctionalUtilities } from '@stencil/core';
 import type { EditCell, EditorBase, ColumnDataSchemaModel } from '@revolist/revogrid';
-
-/**
- * Callback triggered on cell editor save
- * @param value - the value to save
- * @param preventFocus - if true, don't move focus to next cell
- */
-export type SaveCallback = (value: unknown, preventFocus: boolean) => void;
-
-/**
- * Callback to cancel editing (for Escape key)
- * @param focusNext - if true, focus next cell after cancel
- */
-export type CancelCallback = (focusNext?: boolean) => void;
 
 export class SheetsTextEditor implements EditorBase {
   editInput: HTMLInputElement | null = null;
@@ -29,8 +15,8 @@ export class SheetsTextEditor implements EditorBase {
 
   constructor(
     public data: ColumnDataSchemaModel,
-    private saveCallback?: SaveCallback,
-    private cancelCallback?: CancelCallback,
+    private save: (value: any, preventFocus?: boolean) => void,
+    private close: (focusNext?: boolean) => void,
   ) {}
 
   /**
@@ -44,27 +30,17 @@ export class SheetsTextEditor implements EditorBase {
     }
   }
 
-  onKeyDown(e: KeyboardEvent) {
-    // Don't handle if composing (IME input)
-    if (e.isComposing) return;
-
+  /**
+   * Handle key events
+   */
+  private handleKeyDown = (e: KeyboardEvent) => {
     const key = e.key;
-
-    // Escape - cancel without saving
-    if (key === 'Escape') {
-      e.preventDefault();
-      e.stopPropagation();
-      this.beforeDisconnect();
-      this.cancelCallback?.(false);
-      return;
-    }
 
     // Enter - save and move down
     if (key === 'Enter') {
       e.preventDefault();
       e.stopPropagation();
-      this.beforeDisconnect();
-      this.saveCallback?.(this.getValue(), false);
+      this.save(this.getValue(), false);
       return;
     }
 
@@ -72,24 +48,29 @@ export class SheetsTextEditor implements EditorBase {
     if (key === 'Tab') {
       e.preventDefault();
       e.stopPropagation();
-      this.beforeDisconnect();
-      this.saveCallback?.(this.getValue(), true);
+      this.save(this.getValue(), false);
       return;
     }
 
-    // Let arrow keys work normally within the input for text editing
-    // Don't intercept them - just let the user navigate within the text
-  }
+    // Escape - close without saving
+    if (key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      this.close(false);
+      return;
+    }
+
+    // Arrow keys - save and let grid handle navigation
+    if (key === 'ArrowUp' || key === 'ArrowDown' || key === 'ArrowLeft' || key === 'ArrowRight') {
+      e.preventDefault();
+      e.stopPropagation();
+      this.save(this.getValue(), false);
+      return;
+    }
+  };
 
   /**
-   * Prevent scroll glitches when editor is closed
-   */
-  beforeDisconnect() {
-    this.editInput?.blur();
-  }
-
-  /**
-   * Get value from input
+   * Get value from input - RevoGrid calls this when editor closes
    */
   getValue() {
     return this.editInput?.value ?? '';
@@ -106,7 +87,7 @@ export class SheetsTextEditor implements EditorBase {
       ref: (el: HTMLInputElement | null) => {
         this.editInput = el;
       },
-      onKeyDown: (e: KeyboardEvent) => this.onKeyDown(e),
+      onKeyDown: this.handleKeyDown,
     });
   }
 }

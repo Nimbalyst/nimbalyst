@@ -7,12 +7,13 @@
 
 import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { RevoGrid, type RevoGridCustomEvent, type ColumnRegular } from '@revolist/react-datagrid';
+import type { HTMLRevoGridElement } from '@revolist/revogrid';
 import type { EditorHostProps, NormalizedSelectionRange, ColumnFormat } from '../types';
 import { useSpreadsheetData } from '../hooks/useSpreadsheetData';
 import { columnIndexToLetter, columnLetterToIndex, generateColumnHeaders } from '../utils/csvParser';
 import { isFormula } from '../utils/formulaEngine';
 import { formatCellValue, getColumnTypeName, DEFAULT_COLUMN_FORMAT } from '../utils/formatters';
-import { FormulaBar } from './FormulaBar';
+import { FormulaBar, type FormulaBarHandle } from './FormulaBar';
 import { ContextMenu, type ContextMenuItem } from './ContextMenu';
 import { ColumnFormatDialog } from './ColumnFormatDialog';
 import { registerEditorStore, unregisterEditorStore } from '../aiTools';
@@ -261,13 +262,12 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
   const editorRef = useRef<HTMLDivElement>(null);
 
 
-  // Selection state (owned locally, updated from RevoGrid events)
-  const [selectedCell, setSelectedCell] = useState<{ row: number; col: number } | null>(null);
-  const [selectionRange, setSelectionRange] = useState<NormalizedSelectionRange | null>(null);
+  // Selection state - use refs only to avoid re-renders on every selection change
+  const selectedCellRef = useRef<{ row: number; col: number } | null>(null);
+  const selectionRangeRef = useRef<NormalizedSelectionRange | null>(null);
 
-  // Refs for capture handlers (updated immediately, not waiting for React re-render)
-  const selectedCellRef = useRef(selectedCell);
-  const selectionRangeRef = useRef(selectionRange);
+  // FormulaBar ref for imperative updates
+  const formulaBarRef = useRef<FormulaBarHandle>(null);
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
@@ -302,13 +302,83 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
     };
   }, [filePath, spreadsheet]);
 
-  // Generate CSV from RevoGrid's current data (includes user edits)
+  // Display dimensions (data + buffer)
+  const displayColumnCount = spreadsheet.data.columnCount + DISPLAY_BUFFER_COLS;
+
+  // Frozen column count (columns pinned on the left)
+  const frozenColumnCount = spreadsheet.data.frozenColumnCount || 0;
+
+  // Column formats
+  const columnFormats = spreadsheet.data.columnFormats || {};
+
+  // Stable editors object - never changes
+  const editors = useMemo(() => ({ sheets: SheetsTextEditor }), []);
+
+  // Memoized grid data
+  const columns = useMemo(
+    () => generateColumns(displayColumnCount, frozenColumnCount, columnFormats),
+    [displayColumnCount, frozenColumnCount, columnFormats]
+  );
+
+  const headerRowCount = spreadsheet.data.headerRowCount || 0;
+
+  const source = useMemo(
+    () => toGridSource(spreadsheet.data.rows, spreadsheet.data.columnCount, headerRowCount, displayColumnCount, columnFormats),
+    [spreadsheet.data.rows, spreadsheet.data.columnCount, headerRowCount, displayColumnCount, columnFormats]
+  );
+
+  const pinnedTopSource = useMemo(
+    () => toPinnedTopSource(spreadsheet.data.rows, headerRowCount, displayColumnCount),
+    [spreadsheet.data.rows, headerRowCount, displayColumnCount]
+  );
+
+  // Stable theme for RevoGrid
+  const gridTheme = useMemo(
+    () => (theme === 'light' ? 'default' : 'darkCompact') as 'default' | 'darkCompact',
+    [theme]
+  );
+
+  /**
+   * Translate a row index from RevoGrid to the actual row index in our data.
+   * RevoGrid uses separate indices for pinned rows vs regular rows.
+   * - Rows in pinnedTopSource have indices 0 to headerRowCount-1 (in pinned context)
+   * - Rows in source have indices 0 to N (but map to headerRowCount to headerRowCount+N in our data)
+   */
+  const translateRowIndex = useCallback((gridRowIndex: number, isPinned: boolean): number => {
+    if (isPinned) {
+      // Pinned rows map directly to header rows (0 to headerRowCount-1)
+      return gridRowIndex;
+    }
+    // Regular rows need to be offset by the header row count
+    return gridRowIndex + headerRowCount;
+  }, [headerRowCount]);
+
+  // Helper to update selection refs and formula bar without causing re-render
+  const updateSelection = useCallback((
+    cell: { row: number; col: number } | null,
+    range: NormalizedSelectionRange | null
+  ) => {
+    // console.log('[CSV] updateSelection called:', cell, range);
+    selectedCellRef.current = cell;
+    selectionRangeRef.current = range;
+
+    // Update formula bar imperatively
+    if (cell && formulaBarRef.current) {
+      const cellValue = spreadsheetRef.current.data.rows[cell.row]?.[cell.col] ?? '';
+      const cellRef = range ? formatSelectionRef(range) : '';
+      formulaBarRef.current.update(cellRef, String(cellValue), isFormula(String(cellValue)));
+    } else if (formulaBarRef.current) {
+      formulaBarRef.current.update('', '', false);
+    }
+  }, []); // No deps - uses refs for everything
+
+  // Generate CSV from RevoGrid's current source data
   const generateCSVFromGrid = useCallback(async (): Promise<string> => {
     const grid = revoGridRef.current;
     const ss = spreadsheetRef.current;
 
     if (!grid) {
-      // Fallback to our store if grid not available
+      console.warn('[CSV] Grid ref not available, falling back to store');
       return ss.toCSV();
     }
 
@@ -376,79 +446,6 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
     return csvRows.join('\n');
   }, []);
 
-  // Subscribe to save requests from host (autosave timer triggers this)
-  useEffect(() => {
-    return host.onSaveRequested(async () => {
-      try {
-        const ss = spreadsheetRef.current;
-
-        // If we have grid edits, generate CSV from RevoGrid's data
-        let content: string;
-        if (hasGridEditsRef.current) {
-          content = await generateCSVFromGrid();
-          hasGridEditsRef.current = false;
-        } else {
-          content = ss.toCSV();
-        }
-
-        // Update disk content BEFORE saving to prevent echo
-        ss.updateDiskContent(content);
-        await host.saveContent(content);
-        ss.markClean();
-        console.log('[CSV] Saved');
-      } catch (error) {
-        console.error('[CSV] Save failed:', error);
-      }
-    });
-  }, [host, generateCSVFromGrid]); // Only depend on host, use ref for spreadsheet
-
-  // Display dimensions (data + buffer)
-  const displayColumnCount = spreadsheet.data.columnCount + DISPLAY_BUFFER_COLS;
-
-  // Frozen column count (columns pinned on the left)
-  const frozenColumnCount = spreadsheet.data.frozenColumnCount || 0;
-
-  // Column formats
-  const columnFormats = spreadsheet.data.columnFormats || {};
-
-  // Memoized grid data
-  const columns = useMemo(
-    () => generateColumns(displayColumnCount, frozenColumnCount, columnFormats),
-    [displayColumnCount, frozenColumnCount, columnFormats]
-  );
-
-  const headerRowCount = spreadsheet.data.headerRowCount || 0;
-
-  const source = useMemo(
-    () => {
-      console.log('[CSV source] columnFormats:', columnFormats);
-      const result = toGridSource(spreadsheet.data.rows, spreadsheet.data.columnCount, headerRowCount, displayColumnCount, columnFormats);
-      console.log('[CSV source] Recomputed, row 0:', result[0]);
-      return result;
-    },
-    [spreadsheet.data.rows, spreadsheet.data.columnCount, headerRowCount, displayColumnCount, columnFormats]
-  );
-
-  const pinnedTopSource = useMemo(
-    () => toPinnedTopSource(spreadsheet.data.rows, headerRowCount, displayColumnCount),
-    [spreadsheet.data.rows, headerRowCount, displayColumnCount]
-  );
-
-  /**
-   * Translate a row index from RevoGrid to the actual row index in our data.
-   * RevoGrid uses separate indices for pinned rows vs regular rows.
-   * - Rows in pinnedTopSource have indices 0 to headerRowCount-1 (in pinned context)
-   * - Rows in source have indices 0 to N (but map to headerRowCount to headerRowCount+N in our data)
-   */
-  const translateRowIndex = useCallback((gridRowIndex: number, isPinned: boolean): number => {
-    if (isPinned) {
-      // Pinned rows map directly to header rows (0 to headerRowCount-1)
-      return gridRowIndex;
-    }
-    // Regular rows need to be offset by the header row count
-    return gridRowIndex + headerRowCount;
-  }, [headerRowCount]);
-
   // Handle before edit - inject raw value for formulas
   const handleBeforeEdit = useCallback(
     (event: RevoGridCustomEvent<{
@@ -473,7 +470,7 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
 
       if (colIndex < 0) return;
 
-      // Get the raw value from our data - this ensures the edit starts with our current value
+      // Get raw value from our store (for formulas - show formula not computed value)
       const cell = spreadsheet.data.rows[actualRowIndex]?.[colIndex];
       const ourValue = cell?.raw ?? '';
       const modelValue = event.detail.model?.[prop];
@@ -489,10 +486,7 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
     [spreadsheet.data.rows, displayColumnCount, translateRowIndex]
   );
 
-  // Track that we have unsaved edits (RevoGrid owns the data, we sync on save)
-  const hasGridEditsRef = useRef(false);
-
-  // Handle cell edit - just mark dirty, don't update source (RevoGrid owns the data)
+  // Handle cell edit - just mark dirty, RevoGrid owns the data
   const handleAfterEdit = useCallback(
     (event: RevoGridCustomEvent<{
       rgRow?: { [key: string]: unknown };
@@ -506,23 +500,34 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
     } | null>) => {
       if (!event.detail) return;
 
-      const detail = event.detail;
-      const rowIndex = detail.rowIndex;
-      const prop = detail.prop;
-      const value = detail.val ?? detail.value;
-      const type = detail.type;
-
-
-      if (rowIndex === undefined || prop === undefined) return;
-
-      // Just mark that we have edits - don't update our data (which would cause source to be replaced)
-      hasGridEditsRef.current = true;
-
-      // Mark as dirty so save will be triggered
+      // Just mark dirty - RevoGrid already updated its internal state
+      // On save, we'll extract data from RevoGrid via getSource()
       host.setDirty(true);
     },
     [host]
   );
+
+  // Subscribe to save requests from host (autosave timer triggers this)
+  useEffect(() => {
+    return host.onSaveRequested(async () => {
+      try {
+        const ss = spreadsheetRef.current;
+
+        // Generate CSV from RevoGrid's current data
+        const content = await generateCSVFromGrid();
+
+        // Update disk content BEFORE saving to prevent echo
+        ss.updateDiskContent(content);
+        await host.saveContent(content);
+        ss.markClean();
+        // Clear host dirty state too (markClean only clears our internal state)
+        host.setDirty(false);
+        console.log('[CSV] Saved');
+      } catch (error) {
+        console.error('[CSV] Save failed:', error);
+      }
+    });
+  }, [host, generateCSVFromGrid]);
 
   // Handle cell focus (selection)
   const handleFocusCell = useCallback(
@@ -537,14 +542,9 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
       const newCell = { row: actualRowIndex, col: colIndex };
       const newRange = normalizeRange(actualRowIndex, colIndex, actualRowIndex, colIndex);
 
-      setSelectedCell(newCell);
-      setSelectionRange(newRange);
-
-      // Update refs immediately
-      selectedCellRef.current = newCell;
-      selectionRangeRef.current = newRange;
+      updateSelection(newCell, newRange);
     },
-    [translateRowIndex]
+    [translateRowIndex, updateSelection]
   );
 
   // Handle cell click as backup for selection
@@ -557,10 +557,9 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
       const isPinned = type === 'rowPinStart';
       const actualRow = translateRowIndex(row, isPinned);
 
-      setSelectedCell({ row: actualRow, col });
-      setSelectionRange(normalizeRange(actualRow, col, actualRow, col));
+      updateSelection({ row: actualRow, col }, normalizeRange(actualRow, col, actualRow, col));
     },
-    [translateRowIndex]
+    [translateRowIndex, updateSelection]
   );
 
   // Handle range selection from RevoGrid
@@ -588,31 +587,35 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
 
       const newRange = normalizeRange(actualY, x, actualY1, x1);
 
-      setSelectedCell({ row: actualY, col: x });
-      setSelectionRange(newRange);
-
-      // Update refs immediately so capture handlers have fresh values
-      selectedCellRef.current = { row: actualY, col: x };
-      selectionRangeRef.current = newRange;
+      updateSelection({ row: actualY, col: x }, newRange);
     },
-    [translateRowIndex]
+    [translateRowIndex, updateSelection]
   );
 
-  // Get raw value for formula bar
-  const getSelectedCellRaw = useCallback((): string => {
-    if (!selectedCell) return '';
-    const cell = spreadsheet.data.rows[selectedCell.row]?.[selectedCell.col];
-    return cell?.raw || '';
-  }, [selectedCell, spreadsheet.data.rows]);
+  // Handle keyboard events from RevoGrid - block if event originated outside grid
+  const handleGridBeforeKeydown = useCallback(
+    (e: RevoGridCustomEvent<{ original?: KeyboardEvent } | null>) => {
+      const gridContainer = gridContainerRef.current;
+      const originalEvent = e.detail?.original;
+      const target = originalEvent?.target as HTMLElement | null;
+
+      // If target is outside grid (e.g., quick open dialog), block keyboard handling
+      if (target && gridContainer && !gridContainer.contains(target)) {
+        e.preventDefault();
+      }
+    },
+    []
+  );
 
   // Handle formula bar input
   const handleFormulaChange = useCallback(
     (value: string) => {
-      if (selectedCell) {
-        spreadsheet.updateCell(selectedCell.row, selectedCell.col, value);
+      const cell = selectedCellRef.current;
+      if (cell) {
+        spreadsheet.updateCell(cell.row, cell.col, value);
       }
     },
-    [selectedCell, spreadsheet]
+    [spreadsheet]
   );
 
   // Context menu handler
@@ -659,8 +662,7 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
     if (rowHeader) {
       const rowIndex = parseInt(rowHeader.dataset.rgrow || '', 10);
       if (!isNaN(rowIndex)) {
-        setSelectedCell({ row: rowIndex, col: 0 });
-        setSelectionRange(normalizeRange(rowIndex, 0, rowIndex, spreadsheet.data.columnCount - 1));
+        updateSelection({ row: rowIndex, col: 0 }, normalizeRange(rowIndex, 0, rowIndex, spreadsheet.data.columnCount - 1));
         setContextMenu({
           x: event.clientX - rect.left,
           y: event.clientY - rect.top,
@@ -681,13 +683,13 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
       const colIndex = parseInt(cell.dataset.rgcol || '', 10);
 
       if (!isNaN(rowIndex) && !isNaN(colIndex)) {
-        const isInSelection = selectionRange &&
-          rowIndex >= selectionRange.startRow && rowIndex <= selectionRange.endRow &&
-          colIndex >= selectionRange.startCol && colIndex <= selectionRange.endCol;
+        const range = selectionRangeRef.current;
+        const isInSelection = range &&
+          rowIndex >= range.startRow && rowIndex <= range.endRow &&
+          colIndex >= range.startCol && colIndex <= range.endCol;
 
         if (!isInSelection) {
-          setSelectedCell({ row: rowIndex, col: colIndex });
-          setSelectionRange(normalizeRange(rowIndex, colIndex, rowIndex, colIndex));
+          updateSelection({ row: rowIndex, col: colIndex }, normalizeRange(rowIndex, colIndex, rowIndex, colIndex));
         }
       }
     }
@@ -700,7 +702,7 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
       isColumnHeader: false,
       colIndex: null,
     });
-  }, [spreadsheet.data.columnCount, selectionRange]);
+  }, [spreadsheet.data.columnCount]);
 
   const handleCloseContextMenu = useCallback(() => {
     setContextMenu(null);
@@ -759,40 +761,31 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
   // Handle column header selection
   const selectColumn = useCallback((colIndex: number) => {
     const totalRows = spreadsheet.data.rows.length;
-    setSelectedCell({ row: 0, col: colIndex });
-    setSelectionRange(normalizeRange(0, colIndex, totalRows - 1, colIndex));
-    selectedCellRef.current = { row: 0, col: colIndex };
-    selectionRangeRef.current = normalizeRange(0, colIndex, totalRows - 1, colIndex);
+    updateSelection({ row: 0, col: colIndex }, normalizeRange(0, colIndex, totalRows - 1, colIndex));
     // Update RevoGrid's visual selection
     revoGridRef.current?.setCellsFocus(
       { x: colIndex, y: 0 },
       { x: colIndex, y: totalRows - 1 - headerRowCount }
     );
-  }, [spreadsheet.data.rows.length, headerRowCount]);
+  }, [spreadsheet.data.rows.length, headerRowCount, updateSelection]);
 
   // Handle column range selection
   const selectColumnRange = useCallback((startCol: number, endCol: number) => {
     const totalRows = spreadsheet.data.rows.length;
     const minCol = Math.min(startCol, endCol);
     const maxCol = Math.max(startCol, endCol);
-    setSelectedCell({ row: 0, col: minCol });
-    setSelectionRange(normalizeRange(0, minCol, totalRows - 1, maxCol));
-    selectedCellRef.current = { row: 0, col: minCol };
-    selectionRangeRef.current = normalizeRange(0, minCol, totalRows - 1, maxCol);
+    updateSelection({ row: 0, col: minCol }, normalizeRange(0, minCol, totalRows - 1, maxCol));
     // Update RevoGrid's visual selection
     revoGridRef.current?.setCellsFocus(
       { x: minCol, y: 0 },
       { x: maxCol, y: totalRows - 1 - headerRowCount }
     );
-  }, [spreadsheet.data.rows.length, headerRowCount]);
+  }, [spreadsheet.data.rows.length, headerRowCount, updateSelection]);
 
   // Handle row header selection
   const selectRow = useCallback((rowIndex: number) => {
     const totalCols = spreadsheet.data.columnCount;
-    setSelectedCell({ row: rowIndex, col: 0 });
-    setSelectionRange(normalizeRange(rowIndex, 0, rowIndex, totalCols - 1));
-    selectedCellRef.current = { row: rowIndex, col: 0 };
-    selectionRangeRef.current = normalizeRange(rowIndex, 0, rowIndex, totalCols - 1);
+    updateSelection({ row: rowIndex, col: 0 }, normalizeRange(rowIndex, 0, rowIndex, totalCols - 1));
 
     // Update RevoGrid's visual selection
     if (rowIndex < headerRowCount) {
@@ -811,17 +804,14 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
         { x: totalCols - 1, y: gridRowIndex }
       );
     }
-  }, [spreadsheet.data.columnCount, headerRowCount]);
+  }, [spreadsheet.data.columnCount, headerRowCount, updateSelection]);
 
   // Handle row range selection
   const selectRowRange = useCallback((startRow: number, endRow: number) => {
     const totalCols = spreadsheet.data.columnCount;
     const minRow = Math.min(startRow, endRow);
     const maxRow = Math.max(startRow, endRow);
-    setSelectedCell({ row: minRow, col: 0 });
-    setSelectionRange(normalizeRange(minRow, 0, maxRow, totalCols - 1));
-    selectedCellRef.current = { row: minRow, col: 0 };
-    selectionRangeRef.current = normalizeRange(minRow, 0, maxRow, totalCols - 1);
+    updateSelection({ row: minRow, col: 0 }, normalizeRange(minRow, 0, maxRow, totalCols - 1));
 
     // Update RevoGrid's visual selection
     // Handle cases: all pinned, all regular, or mixed
@@ -929,6 +919,7 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
 
       // Don't handle keys if focus is outside the spreadsheet container
       const editor = editorRef.current;
+      // console.log('[CSV] handleKeyDown:', event.key, 'activeElement:', document.activeElement?.tagName, 'inEditor:', editor?.contains(document.activeElement));
       if (!editor || !editor.contains(document.activeElement)) return;
 
       const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
@@ -953,23 +944,24 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
             }
             break;
           case 'c':
-            if (!event.shiftKey && selectionRange) {
+            if (!event.shiftKey && selectionRangeRef.current) {
               event.preventDefault();
-              spreadsheet.copySelection(selectionRange);
+              spreadsheet.copySelection(selectionRangeRef.current);
             }
             return;
           case 'x':
-            if (!event.shiftKey && selectionRange) {
+            if (!event.shiftKey && selectionRangeRef.current) {
               event.preventDefault();
-              spreadsheet.cutSelection(selectionRange);
+              spreadsheet.cutSelection(selectionRangeRef.current);
             }
             return;
           case 'v':
-            if (!event.shiftKey && selectedCell) {
+            if (!event.shiftKey && selectedCellRef.current) {
               event.preventDefault();
+              const cell = selectedCellRef.current;
               navigator.clipboard.readText().then(text => {
                 if (text) {
-                  spreadsheet.pasteFromText(selectedCell.row, selectedCell.col, text);
+                  spreadsheet.pasteFromText(cell.row, cell.col, text);
                 }
               }).catch(() => {
                 // Clipboard access denied - nothing to do
@@ -979,12 +971,10 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
           case 'a':
             if (!event.shiftKey) {
               event.preventDefault();
-              setSelectionRange(normalizeRange(
-                0, 0,
-                spreadsheet.data.rows.length - 1,
-                spreadsheet.data.columnCount - 1
-              ));
-              setSelectedCell({ row: 0, col: 0 });
+              updateSelection(
+                { row: 0, col: 0 },
+                normalizeRange(0, 0, spreadsheet.data.rows.length - 1, spreadsheet.data.columnCount - 1)
+              );
             }
             return;
         }
@@ -995,24 +985,42 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
         const activeElement = document.activeElement;
         const isEditing = activeElement?.tagName === 'INPUT' ||
                           activeElement?.getAttribute('contenteditable') === 'true';
-        if (!isEditing && selectionRange) {
+        const range = selectionRangeRef.current;
+        console.log('[CSV] Delete key pressed, range:', range, 'isEditing:', isEditing);
+        if (!isEditing && range) {
           event.preventDefault();
-          spreadsheet.clearCells(selectionRange);
-          // Force RevoGrid to refresh after clearing cells
-          // Use setTimeout to ensure React has rendered the new source
-          setTimeout(() => {
-            revoGridRef.current?.refresh('all');
-          }, 0);
+          // Clear cells in RevoGrid using setDataAt
+          const grid = revoGridRef.current;
+          if (grid) {
+            const headerRowCount = spreadsheetRef.current.data.headerRowCount || 0;
+            const promises: Promise<void | undefined>[] = [];
+            for (let r = range.startRow; r <= range.endRow; r++) {
+              for (let c = range.startCol; c <= range.endCol; c++) {
+                const isPinned = r < headerRowCount;
+                const gridRow = isPinned ? r : r - headerRowCount;
+                const rowType = isPinned ? 'rowPinStart' : 'rgRow';
+                promises.push(grid.setDataAt({
+                  row: gridRow,
+                  col: c,
+                  val: '',
+                  rowType: rowType as 'rgRow',
+                  colType: 'rgCol',
+                }));
+              }
+            }
+            Promise.all(promises).then(() => {
+              host.setDirty(true);
+            });
+          }
         }
       }
 
       // Escape clears selection
       if (event.key === 'Escape') {
-        setSelectedCell(null);
-        setSelectionRange(null);
+        updateSelection(null, null);
       }
     },
-    [spreadsheet, selectedCell, selectionRange, isActive]
+    [isActive, updateSelection, host]
   );
 
   // Build row header context menu items
@@ -1074,14 +1082,13 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
         if (rowIndex < headerRowCount) {
           spreadsheet.setHeaderRowCount(Math.max(0, headerRowCount - 1));
         }
-        setSelectedCell(null);
-        setSelectionRange(null);
+        updateSelection(null, null);
       },
       disabled: spreadsheet.data.rows.length <= 1,
     });
 
     return items;
-  }, [spreadsheet]);
+  }, [spreadsheet, updateSelection]);
 
   // Build column header context menu items
   const getColumnHeaderContextMenuItems = useCallback((colIndex: number): ContextMenuItem[] => {
@@ -1164,20 +1171,21 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
         if (colIndex < currentFrozenCount) {
           spreadsheet.setFrozenColumnCount(Math.max(0, currentFrozenCount - 1));
         }
-        setSelectedCell(null);
-        setSelectionRange(null);
+        updateSelection(null, null);
       },
       disabled: spreadsheet.data.columnCount <= 1,
     });
 
     return items;
-  }, [spreadsheet, columnFormats]);
+  }, [spreadsheet, columnFormats, updateSelection]);
 
   // Build context menu items
   const getContextMenuItems = useCallback((): ContextMenuItem[] => {
-    const hasSelection = !!selectedCell;
-    const cellCount = selectionRange
-      ? (selectionRange.endRow - selectionRange.startRow + 1) * (selectionRange.endCol - selectionRange.startCol + 1)
+    const cell = selectedCellRef.current;
+    const range = selectionRangeRef.current;
+    const hasSelection = !!cell;
+    const cellCount = range
+      ? (range.endRow - range.startRow + 1) * (range.endCol - range.startCol + 1)
       : 0;
     const hasMultipleSelected = cellCount > 1;
 
@@ -1185,24 +1193,24 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
       {
         label: hasMultipleSelected ? `Cut (${cellCount} cells)` : 'Cut',
         action: () => {
-          if (selectionRange) spreadsheet.cutSelection(selectionRange);
+          if (range) spreadsheet.cutSelection(range);
         },
         disabled: !hasSelection,
       },
       {
         label: hasMultipleSelected ? `Copy (${cellCount} cells)` : 'Copy',
         action: () => {
-          if (selectionRange) spreadsheet.copySelection(selectionRange);
+          if (range) spreadsheet.copySelection(range);
         },
         disabled: !hasSelection,
       },
       {
         label: 'Paste',
         action: () => {
-          if (selectedCell) {
+          if (cell) {
             navigator.clipboard.readText().then(text => {
               if (text) {
-                spreadsheet.pasteFromText(selectedCell.row, selectedCell.col, text);
+                spreadsheet.pasteFromText(cell.row, cell.col, text);
               }
             }).catch(() => {
               // Clipboard access denied
@@ -1214,7 +1222,7 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
       {
         label: hasMultipleSelected ? `Clear (${cellCount} cells)` : 'Clear',
         action: () => {
-          if (selectionRange) spreadsheet.clearCells(selectionRange);
+          if (range) spreadsheet.clearCells(range);
         },
         disabled: !hasSelection,
       },
@@ -1222,24 +1230,23 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
       {
         label: 'Insert Row Above',
         action: () => {
-          if (selectedCell) spreadsheet.addRow(selectedCell.row);
+          if (cell) spreadsheet.addRow(cell.row);
         },
         disabled: !hasSelection,
       },
       {
         label: 'Insert Row Below',
         action: () => {
-          if (selectedCell) spreadsheet.addRow(selectedCell.row + 1);
+          if (cell) spreadsheet.addRow(cell.row + 1);
         },
         disabled: !hasSelection,
       },
       {
         label: 'Delete Row',
         action: () => {
-          if (selectedCell) {
-            spreadsheet.deleteRow(selectedCell.row);
-            setSelectedCell(null);
-            setSelectionRange(null);
+          if (cell) {
+            spreadsheet.deleteRow(cell.row);
+            updateSelection(null, null);
           }
         },
         disabled: !hasSelection,
@@ -1248,30 +1255,29 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
       {
         label: 'Insert Column Left',
         action: () => {
-          if (selectedCell) spreadsheet.addColumn(selectedCell.col);
+          if (cell) spreadsheet.addColumn(cell.col);
         },
         disabled: !hasSelection,
       },
       {
         label: 'Insert Column Right',
         action: () => {
-          if (selectedCell) spreadsheet.addColumn(selectedCell.col + 1);
+          if (cell) spreadsheet.addColumn(cell.col + 1);
         },
         disabled: !hasSelection,
       },
       {
         label: 'Delete Column',
         action: () => {
-          if (selectedCell) {
-            spreadsheet.deleteColumn(selectedCell.col);
-            setSelectedCell(null);
-            setSelectionRange(null);
+          if (cell) {
+            spreadsheet.deleteColumn(cell.col);
+            updateSelection(null, null);
           }
         },
         disabled: !hasSelection,
       },
     ];
-  }, [spreadsheet, selectedCell, selectionRange]);
+  }, [spreadsheet, updateSelection]);
 
   // Get fresh menu items when context menu opens
   const contextMenuItems = useMemo(() => {
@@ -1328,10 +1334,8 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
     >
       <div className="spreadsheet-toolbar">
         <FormulaBar
-          cellRef={formatSelectionRef(selectionRange)}
-          value={getSelectedCellRaw()}
+          ref={formulaBarRef}
           onChange={handleFormulaChange}
-          isFormula={isFormula(getSelectedCellRaw())}
         />
         {host.supportsSourceMode && (
           <button
@@ -1354,34 +1358,24 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
         onMouseDown={handleHeaderMouseDown}
       >
         <RevoGrid
-          ref={revoGridRef as unknown as React.Ref<HTMLRevoGridElement>}
+          ref={revoGridRef}
           columns={columns}
           source={source}
           pinnedTopSource={pinnedTopSource}
-          theme={theme === 'light' ? 'default' : 'darkCompact'}
+          theme={gridTheme}
           rowHeaders={true}
           resize={true}
           autoSizeColumn={false}
           range={true}
           applyOnClose={true}
-          editors={{ sheets: SheetsTextEditor }}
+          editors={editors}
           rowClass="_rowClass"
           onBeforeeditstart={handleBeforeEdit}
           onAfteredit={handleAfterEdit}
           onAfterfocus={handleFocusCell}
           onSetrange={handleSetRange}
           onBeforecellfocus={handleCellClick}
-          onBeforekeydown={(e) => {
-            // Block keyboard handling if the keyboard event originated outside the grid container
-            const gridContainer = gridContainerRef.current;
-            const originalEvent = e.detail?.original;
-            const target = originalEvent?.target as HTMLElement | null;
-
-            // If target is outside grid (e.g., quick open dialog), block keyboard handling
-            if (target && gridContainer && !gridContainer.contains(target)) {
-              e.preventDefault();
-            }
-          }}
+          onBeforekeydown={handleGridBeforeKeydown}
         />
         {contextMenu && (
           <ContextMenu

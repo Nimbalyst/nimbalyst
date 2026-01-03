@@ -41,7 +41,7 @@ export interface EditorHostOptions {
   saveContent: (content: string | ArrayBuffer) => Promise<void>;
 
   /** Subscribe to save requests from host */
-  subscribeToSaveRequests: (callback: () => void) => () => void;
+  subscribeToSaveRequests: (callback: () => void | Promise<void>) => () => void;
 
   /** Open history dialog */
   openHistory: () => void;
