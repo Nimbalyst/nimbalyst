@@ -16,10 +16,16 @@ Every analysis you perform MUST include all of the following:
 
 ### 1. Filter Out Test Data
 
-**ALWAYS filter out all users in the `all_filtered_cohorts` cohort.** This cohort contains test accounts, internal users, and other data that must be excluded.
+**ALWAYS filter out all users in cohort ID 200405.** This cohort contains test accounts, internal users, and other data that must be excluded.
 
-```
-WHERE NOT cohort = 'all_filtered_cohorts'
+Use this HogQL filter in all queries:
+
+```sql
+WHERE person_id NOT IN (
+  SELECT person_id
+  FROM cohort_people
+  WHERE cohort_id = 200405
+)
 ```
 
 If you forget this filter, your analysis is invalid.
