@@ -74,9 +74,6 @@ interface UseIPCHandlersProps {
   handleNextTab?: () => void;
   handlePreviousTab?: () => void;
 
-  // State getters (use functions to get current value from refs without causing re-renders)
-  getActiveSessionId?: () => string | null; // Get current active session ID in agent mode
-
   // State setters
   setIsApiKeyDialogOpen: (open: boolean) => void;
   setWorkspaceMode: (mode: boolean) => void;
@@ -365,9 +362,9 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
         window.electronAPI.setDocumentEdited(true);
       }
     }));
-    // Handle menu:find - route to appropriate component based on active mode
+    // Handle menu:find - route to editor's SearchReplace dialog
+    // Agent mode handles its own menu:find via AgenticPanel
     cleanupFns.push(window.electronAPI.on('menu:find', () => {
-      // console.log('[IPC] menu:find received, activeMode:', propsRef.current.activeMode);
       const mode = propsRef.current.activeMode;
 
       if (mode === 'files' || mode === 'plan') {
@@ -376,42 +373,12 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
         if (activeFilePath) {
           SearchReplaceStateManager.toggle(activeFilePath);
         }
-      } else if (mode === 'agent') {
-        // Agent mode - dispatch event to active session's transcript
-        const sessionId = propsRef.current.getActiveSessionId?.();
-        if (sessionId) {
-          window.dispatchEvent(new CustomEvent('menu:find', { detail: { sessionId } }));
-        }
       }
+      // Agent mode: AgenticPanel handles menu:find directly
     }));
 
-    // Handle menu:find-next - route to appropriate component
-    cleanupFns.push(window.electronAPI.on('menu:find-next', () => {
-      // console.log('[IPC] menu:find-next received, activeMode:', propsRef.current.activeMode);
-      const mode = propsRef.current.activeMode;
-
-      if (mode === 'agent') {
-        const sessionId = propsRef.current.getActiveSessionId?.();
-        if (sessionId) {
-          window.dispatchEvent(new CustomEvent('menu:find-next', { detail: { sessionId } }));
-        }
-      }
-      // Note: Editor search handles Cmd+G internally
-    }));
-
-    // Handle menu:find-previous - route to appropriate component
-    cleanupFns.push(window.electronAPI.on('menu:find-previous', () => {
-      // console.log('[IPC] menu:find-previous received, activeMode:', propsRef.current.activeMode);
-      const mode = propsRef.current.activeMode;
-
-      if (mode === 'agent') {
-        const sessionId = propsRef.current.getActiveSessionId?.();
-        if (sessionId) {
-          window.dispatchEvent(new CustomEvent('menu:find-previous', { detail: { sessionId } }));
-        }
-      }
-      // Note: Editor search handles Cmd+Shift+G internally
-    }));
+    // menu:find-next and menu:find-previous for editor mode are handled by Monaco/Lexical internally
+    // Agent mode: AgenticPanel handles these directly
     cleanupFns.push(window.electronAPI.onFileDeleted((data) => {
       console.log('[FILE_DELETED] File deleted event received:', data.filePath);
       // console.log('[FILE_DELETED] Tabs object:', editorModeRef.current?.tabs);

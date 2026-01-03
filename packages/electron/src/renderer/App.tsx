@@ -262,19 +262,6 @@ export default function App() {
     setActiveModeRaw(mode);
   };
 
-  // Track active session ID and name for agent mode (needed for search routing and window title)
-  // Use refs instead of state to avoid re-rendering App on every session tab change
-  const activeSessionIdRef = useRef<string | null>(null);
-  const activeSessionNameRef = useRef<string | undefined>(undefined);
-
-  // Combined handler for session changes from AgenticPanel
-  const handleSessionChange = useCallback((sessionId: string | null, sessionName?: string) => {
-    activeSessionIdRef.current = sessionId;
-    activeSessionNameRef.current = sessionName;
-    // Update window title imperatively
-    updateWindowTitle();
-  }, []);
-
   // Expose test helpers for testing
   useEffect(() => {
     // Always expose in development
@@ -976,19 +963,16 @@ export default function App() {
     setShowCommandsToast(false);
   }, [workspacePath]);
 
-  // Update window title imperatively - can be called from handleSessionChange or effect
-  const updateWindowTitle = useCallback(() => {
+  // Update window title for files mode - agent mode sets title directly from AgenticPanel
+  useEffect(() => {
     if (!window.electronAPI) return;
+    // Skip if in agent mode - AgenticPanel manages the title
+    if (activeMode === 'agent') return;
 
     const currentFileName = currentFileNameRef.current;
-    const activeSessionName = activeSessionNameRef.current;
     let title = 'Nimbalyst';
     if (workspaceMode && workspaceName) {
-      // In agent mode, show the session name instead of file name
-      if (activeMode === 'agent' && activeSessionName) {
-        title = `${activeSessionName} - ${workspaceName} - Nimbalyst`;
-      } else if (currentFileName) {
-        // Dirty indicator is added imperatively by updateWindowTitle
+      if (currentFileName) {
         title = `${currentFileName} - ${workspaceName} - Nimbalyst`;
       } else {
         title = `${workspaceName} - Nimbalyst`;
@@ -999,12 +983,6 @@ export default function App() {
 
     window.electronAPI.setTitle(title);
   }, [workspaceMode, workspaceName, activeMode]);
-
-  // Update window title on mode/workspace changes
-  useEffect(() => {
-    updateWindowTitle();
-    // setDocumentEdited is called directly by TabEditor when dirty state changes
-  }, [updateWindowTitle]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -1209,7 +1187,6 @@ export default function App() {
 
     // State
     activeMode,
-    getActiveSessionId: () => activeSessionIdRef.current,
 
     // State setters
     setIsApiKeyDialogOpen,
@@ -1549,10 +1526,10 @@ export default function App() {
                   ref={agenticPanelRef}
                   mode="agent"
                   workspacePath={workspacePath}
+                  workspaceName={workspaceName || ''}
                   documentContext={documentContext}
                   planDocumentPath={agentPlanReference || undefined}
                   onContentModeChange={setActiveMode as (mode: string) => void}
-                  onSessionChange={handleSessionChange}
                   onFileOpen={handleWorkspaceFileSelect}
                   isActive={activeMode === 'agent'}
                   onOpenQuickSearch={() => setIsSessionQuickOpenVisible(true)}

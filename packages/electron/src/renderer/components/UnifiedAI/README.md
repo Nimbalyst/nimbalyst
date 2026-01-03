@@ -156,7 +156,6 @@ import { AgenticPanel } from './UnifiedAI/AgenticPanel';
   workspacePath={workspacePath}
   initialSessionId={sessionId}
   planDocumentPath={planPath}
-  onSessionChange={handleSessionChange}
 />
 
 // Chat mode (sidebar with dropdown)
@@ -164,7 +163,6 @@ import { AgenticPanel } from './UnifiedAI/AgenticPanel';
   mode="chat"
   workspacePath={workspacePath}
   documentContext={documentContext}
-  onSessionChange={handleSessionChange}
 />
 ```
 
@@ -172,7 +170,6 @@ import { AgenticPanel } from './UnifiedAI/AgenticPanel';
 - `mode`: `'chat'` for sidebar mode, `'agent'` for full window mode
 - `workspacePath`: Required for session management
 - `documentContext`: Optional document context (chat mode)
-- `onSessionChange`: Callback when active session changes
 
 ## Migration Guide
 
@@ -194,7 +191,6 @@ import { AgenticPanel } from './UnifiedAI/AgenticPanel';
   workspacePath={workspacePath}
   initialSessionId={sessionId}
   planDocumentPath={planPath}
-  onSessionChange={handleSessionChange}
 />
 ```
 
@@ -220,7 +216,6 @@ import { AgenticPanel } from './UnifiedAI/AgenticPanel';
       mode="chat"
       workspacePath={workspacePath}
       documentContext={documentContext}
-      onSessionChange={handleSessionChange}
     />
   </div>
 )}
@@ -378,7 +373,6 @@ UnifiedAI/
 | `documentContext` | `DocumentContext` | ❌ | Document context |
 | `initialSessionId` | `string` | ❌ | Initial session ID |
 | `planDocumentPath` | `string` | ❌ | Plan document path |
-| `onSessionChange` | `(sessionId: string \| null) => void` | ❌ | Session change callback |
 
 ## Performance Considerations
 

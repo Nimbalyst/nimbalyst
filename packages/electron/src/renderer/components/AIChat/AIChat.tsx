@@ -136,7 +136,6 @@ export const AIChat = forwardRef<AIChatRef, AIChatProps>(function AIChat({
             mode="chat"
             workspacePath={workspacePath}
             documentContext={documentContext}
-            onSessionChange={onSessionIdChange}
             onContentModeChange={onContentModeChange}
             onFileOpen={onFileOpen}
           />
