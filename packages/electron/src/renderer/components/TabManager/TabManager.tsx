@@ -1,5 +1,7 @@
 import React from 'react';
 import { TabBar } from './TabBar';
+import { useTabs } from '../../contexts/TabsContext';
+import { editorRegistry } from '@nimbalyst/runtime/ai/EditorRegistry';
 import './TabManager.css';
 
 export interface Tab {
@@ -17,12 +19,8 @@ export interface Tab {
 }
 
 interface TabManagerProps {
-  tabs: Tab[];
-  activeTabId: string | null;
-  onTabSelect: (tabId: string) => void;
+  // NOTE: tabs, activeTabId, onTabSelect, onTogglePin, onTabReorder removed - now comes from useTabs() context
   onTabClose: (tabId: string) => void;
-  onTogglePin: (tabId: string) => void;
-  onTabReorder: (fromIndex: number, toIndex: number) => void;
   onNewTab: () => void;
   onViewHistory?: (tabId: string) => void;
   hideTabBar?: boolean;
@@ -33,12 +31,7 @@ interface TabManagerProps {
 }
 
 export const TabManager: React.FC<TabManagerProps> = ({
-  tabs,
-  activeTabId,
-  onTabSelect,
   onTabClose,
-  onTogglePin,
-  onTabReorder,
   onNewTab,
   onViewHistory,
   hideTabBar = false,
@@ -47,17 +40,27 @@ export const TabManager: React.FC<TabManagerProps> = ({
   isAIChatCollapsed,
   children
 }) => {
+  console.log('[TabManager] render');
+  // Get tabs from context - this component subscribes to tab changes
+  const { tabs, activeTabId, switchTab, togglePin, reorderTabs } = useTabs();
+
+  // Add hasUnacceptedChanges to tabs
+  const tabsWithPendingDiffs = tabs.map(tab => ({
+    ...tab,
+    hasUnacceptedChanges: editorRegistry.getEditor(tab.filePath)?.hasPendingDiffs() || false
+  }));
+
   return (
     <div className="tab-manager">
       {!hideTabBar && tabs.length > 0 && (
         <TabBar
-          tabs={tabs}
+          tabs={tabsWithPendingDiffs}
           activeTabId={activeTabId}
-          onTabSelect={onTabSelect}
+          onTabSelect={switchTab}
           onTabClose={onTabClose}
           onNewTab={onNewTab}
-          onTogglePin={onTogglePin}
-          onTabReorder={onTabReorder}
+          onTogglePin={togglePin}
+          onTabReorder={reorderTabs}
           onViewHistory={onViewHistory}
           isActive={isActive}
           onToggleAIChat={onToggleAIChat}

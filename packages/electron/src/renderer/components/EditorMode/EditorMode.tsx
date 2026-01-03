@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
 import type { ConfigTheme } from 'rexical';
-import { useTabs, type TabData } from '../../hooks/useTabs';
+import { useTabsActions, type TabData } from '../../contexts/TabsContext';
 import { useTabNavigation } from '../../hooks/useTabNavigation';
 import { useDocumentContext } from '../../hooks/useDocumentContext';
 import { handleWorkspaceFileSelect as handleWorkspaceFileSelectUtil } from '../../utils/workspaceFileOperations';
@@ -46,7 +46,6 @@ export interface EditorModeProps {
   theme: ConfigTheme;
   isActive: boolean;
   onModeChange?: (mode: string) => void;
-  onCurrentFileChange?: (filePath: string | null, fileName: string | null, isDirty: boolean) => void;
   onGetContentReady?: (getContentFn: (() => string) | null) => void;
   onCloseWorkspace?: () => void;
   onOpenQuickSearch?: () => void;
@@ -59,21 +58,21 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   theme,
   isActive,
   onModeChange,
-  onCurrentFileChange,
   onGetContentReady,
   onCloseWorkspace,
   onOpenQuickSearch,
   onSwitchToAgentMode
 }, ref) {
-  // File tree state
-  const [fileTree, setFileTree] = useState<FileTreeItem[]>([]);
+  // Debug: trace re-renders
+  console.log('[EditorMode] render');
+
+  // Sidebar state
   const [sidebarWidth, setSidebarWidth] = useState<number>(250);
   const [selectedFolderPath, setSelectedFolderPath] = useState<string | null>(null);
 
-  // Current file state - DERIVED from active tab (don't maintain separate state)
-  // This ensures currentFilePath is always in sync with the active tab
+  // Dirty state is tracked via ref to avoid re-render cascade
+  // TabEditor calls setDocumentEdited directly for the macOS indicator
   const isDirtyRef = useRef(false);
-  const [isDirty, setIsDirty] = useState(false);
 
   // Tab states tracking
   const tabStatesRef = useRef<Map<string, { isDirty: boolean }>>(new Map());
@@ -104,40 +103,89 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   const aiChatRef = useRef<AIChatRef>(null);
   const saveTabByIdRef = useRef<((tabId: string) => Promise<void>) | null>(null);
 
-  // Initialize tabs
-  const tabs = useTabs({
-    maxTabs: Infinity,
-    enabled: true,
-    workspacePath,
-    getNavigationState: () => getNavigationStateRef.current?.(),
-    onTabChange: async (tab) => {
-      if (tab.filePath) {
-        setIsDirty(tab.isDirty || false);
+  // Get tab actions from context (doesn't subscribe to state - no re-renders)
+  const tabsActions = useTabsActions();
 
-        // Notify parent of file change
-        if (onCurrentFileChange) {
-          onCurrentFileChange(tab.filePath, tab.fileName, tab.isDirty || false);
+  // Refs for imperative DOM updates - NO re-renders for tab visibility
+  const tabsContainerRef = useRef<HTMLDivElement>(null);
+  const welcomeContainerRef = useRef<HTMLDivElement>(null);
+
+  // Subscribe to changes and update visibility imperatively - NO state, NO re-renders
+  useEffect(() => {
+    const updateVisibility = () => {
+      const snapshot = tabsActions.getSnapshot();
+      const hasActiveTab = snapshot.activeTabId !== null;
+      if (tabsContainerRef.current) {
+        tabsContainerRef.current.style.display = hasActiveTab ? 'flex' : 'none';
+      }
+      if (welcomeContainerRef.current) {
+        welcomeContainerRef.current.style.display = hasActiveTab ? 'none' : 'flex';
+      }
+    };
+
+    // Initial update
+    updateVisibility();
+
+    // Subscribe to future changes
+    const unsubscribe = tabsActions.subscribe(updateVisibility);
+    return unsubscribe;
+  }, [tabsActions]);
+
+  // Keep tabsRef updated with actions
+  useEffect(() => {
+    tabsRef.current = tabsActions;
+  }, [tabsActions]);
+
+  // Update window title and sync current file with backend when active tab changes
+  // This is done imperatively to avoid re-renders in parent components
+  useEffect(() => {
+    const updateWindowTitleAndSync = () => {
+      const snapshot = tabsActions.getSnapshot();
+      const activeTab = snapshot.activeTabId ? snapshot.tabs.get(snapshot.activeTabId) : null;
+
+      // Update window title
+      if (window.electronAPI) {
+        let title = 'Nimbalyst';
+        if (workspaceName) {
+          if (activeTab?.fileName) {
+            title = `${activeTab.fileName} - ${workspaceName} - Nimbalyst`;
+          } else {
+            title = `${workspaceName} - Nimbalyst`;
+          }
+        } else if (activeTab?.fileName) {
+          title = `${activeTab.fileName} - Nimbalyst`;
+        }
+        window.electronAPI.setTitle(title);
+
+        // Sync current file with backend
+        if (activeTab?.filePath) {
+          window.electronAPI.setCurrentFile(activeTab.filePath);
+        } else {
+          window.electronAPI.setCurrentFile(null);
         }
       }
-    },
-    onTabClose: (tab) => {
-      // Just clear the isDirty flag - active tab tracking is automatic
-      setIsDirty(false);
 
-      if (onCurrentFileChange) {
-        onCurrentFileChange(null, null, false);
+      // Expose to window for plugins
+      if (typeof window !== 'undefined') {
+        (window as any).currentFilePath = activeTab?.filePath || null;
+        (window as any).__currentDocumentPath = activeTab?.filePath || null;
       }
-    }
-  });
+    };
 
-  // Keep tabsRef updated
-  useEffect(() => {
-    tabsRef.current = tabs;
-  }, [tabs]);
+    // Initial update
+    updateWindowTitleAndSync();
+
+    // Subscribe to future changes
+    const unsubscribe = tabsActions.subscribe(updateWindowTitleAndSync);
+    return unsubscribe;
+  }, [tabsActions, workspaceName]);
+
+
 
   // Handle tab close with save for dirty tabs
   // CRITICAL: Use tabsRef.current to avoid stale closure bug
   const handleTabClose = useCallback(async (tabId: string) => {
+    console.log('[EditorMode.handleTabClose] Closing tab:', tabId);
     const currentTabs = tabsRef.current;
     if (!currentTabs) {
       console.error('[EditorMode.handleTabClose] tabsRef.current is null!');
@@ -151,10 +199,23 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     currentTabs.removeTab(tabId);
   }, []); // No dependencies - uses refs for all mutable state
 
-  // Derive current file info from active tab - this is the SINGLE SOURCE OF TRUTH
-  // This prevents the state desynchronization bug where currentFilePath was out of sync
-  const currentFilePath = tabs.activeTab?.filePath || null;
-  const currentFileName = tabs.activeTab?.fileName || null;
+
+  // Get current file info imperatively from tabsActions
+  // Note: This doesn't subscribe to changes - TabContent will subscribe and pass data down
+  const getCurrentFileInfo = useCallback(() => {
+    const store = tabsActions.getSnapshot();
+    if (!store.activeTabId) return { filePath: null, fileName: null };
+    const activeTab = store.tabs.get(store.activeTabId);
+    return {
+      filePath: activeTab?.filePath || null,
+      fileName: activeTab?.fileName || null
+    };
+  }, [tabsActions]);
+
+  // For effects that need current file path, we read it imperatively
+  const currentFileInfo = getCurrentFileInfo();
+  const currentFilePath = currentFileInfo.filePath;
+  const currentFileName = currentFileInfo.fileName;
 
   // Expose current document path and workspace path to window for image paste/rendering
   useEffect(() => {
@@ -205,17 +266,19 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   }, [currentFilePath, workspacePath]);
 
   // Build document context for AI features
+  // NOTE: useDocumentContext will be updated to use context internally
   const documentContext = useDocumentContext({
-    activeTab: tabs.activeTab,
+    activeTab: null, // TabContent now handles this
     getContentRef
   });
 
   // Initialize tab navigation
+  // NOTE: useTabNavigation will be updated to use context internally
   const navigation = useTabNavigation({
     enabled: true,
-    tabs: tabs.tabs,
-    activeTabId: tabs.activeTabId,
-    switchTab: tabs.switchTab
+    tabs: [], // TabManager now handles this
+    activeTabId: null,
+    switchTab: tabsActions.switchTab
   });
 
   // Handle opening a file via system dialog
@@ -226,10 +289,10 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
       const result = await window.electronAPI.openFile();
       if (result) {
         // Close any existing tabs first (single-file mode = one tab only)
-        tabs.closeAllTabs();
+        tabsActions.closeAllTabs();
 
         // Create a tab for the new file
-        tabs.addTab(result.filePath, result.content);
+        tabsActions.addTab(result.filePath, result.content);
 
         // Create automatic snapshot when opening file
         if (window.electronAPI.history) {
@@ -269,7 +332,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     } catch (error) {
       console.error('Failed to open file:', error);
     }
-  }, [tabs]);
+  }, []);
 
   // Handle save as
   const handleSaveAs = useCallback(async () => {
@@ -280,28 +343,23 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     try {
       const result = await window.electronAPI.saveFileAs(content);
       if (result) {
-        // No need to set currentFilePath - it's derived from active tab
-        setIsDirty(false);
+        isDirtyRef.current = false;
 
         // Update tab state - this will automatically update currentFilePath
-        if (tabs.activeTabId) {
-          tabs.updateTab(tabs.activeTabId, {
+        const store = tabsActions.getSnapshot();
+        if (store.activeTabId) {
+          tabsActions.updateTab(store.activeTabId, {
             filePath: result.filePath,
             fileName: getFileName(result.filePath),
             isDirty: false,
             lastSaved: new Date()
           });
         }
-
-        // Notify parent of file change
-        if (onCurrentFileChange) {
-          onCurrentFileChange(result.filePath, getFileName(result.filePath), false);
-        }
       }
     } catch (error) {
       console.error('Failed to save file as:', error);
     }
-  }, [tabs, onCurrentFileChange]);
+  }, [tabsActions]);
 
   // Handle workspace file selection
   // CRITICAL: Use tabsRef.current to avoid stale closure bug
@@ -354,9 +412,16 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   useImperativeHandle(ref, () => ({
     closeActiveTab: () => {
       const currentTabs = tabsRef.current;
-      if (currentTabs?.activeTabId) {
-        handleTabClose(currentTabs.activeTabId);
+      const snapshot = currentTabs?.getSnapshot();
+      const tabIdToClose = snapshot?.activeTabId;
+      console.log('[EditorMode.closeActiveTab] tabIdToClose:', tabIdToClose);
+      if (!tabIdToClose) {
+        console.log('[EditorMode.closeActiveTab] No activeTabId to close');
+        return;
       }
+      // Pass the captured tab ID to handleTabClose - this is idempotent
+      // because handleTabClose will no-op if the tab doesn't exist
+      handleTabClose(tabIdToClose);
     },
     reopenLastClosedTab: async () => {
       const currentTabs = tabsRef.current;
@@ -384,36 +449,39 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
       },
       nextTab: () => {
         const currentTabs = tabsRef.current;
-        if (currentTabs && currentTabs.tabs.length > 1) {
-          const currentIndex = currentTabs.tabs.findIndex((tab: TabData) => tab.id === currentTabs.activeTabId);
+        const snapshot = currentTabs?.getSnapshot();
+        if (currentTabs && snapshot && snapshot.tabOrder.length > 1) {
+          const currentIndex = snapshot.tabOrder.indexOf(snapshot.activeTabId!);
           // Don't wrap - if we're at the end, stay there
-          if (currentIndex < currentTabs.tabs.length - 1) {
-            const nextIndex = currentIndex + 1;
-            const nextTab = currentTabs.tabs[nextIndex];
-            if (nextTab) {
-              currentTabs.switchTab(nextTab.id);
+          if (currentIndex >= 0 && currentIndex < snapshot.tabOrder.length - 1) {
+            const nextTabId = snapshot.tabOrder[currentIndex + 1];
+            if (nextTabId) {
+              currentTabs.switchTab(nextTabId);
             }
           }
         }
       },
       previousTab: () => {
         const currentTabs = tabsRef.current;
-        if (currentTabs && currentTabs.tabs.length > 1) {
-          const currentIndex = currentTabs.tabs.findIndex((tab: TabData) => tab.id === currentTabs.activeTabId);
+        const snapshot = currentTabs?.getSnapshot();
+        if (currentTabs && snapshot && snapshot.tabOrder.length > 1) {
+          const currentIndex = snapshot.tabOrder.indexOf(snapshot.activeTabId!);
           // Don't wrap - if we're at the beginning, stay there
           if (currentIndex > 0) {
-            const prevIndex = currentIndex - 1;
-            const prevTab = currentTabs.tabs[prevIndex];
-            if (prevTab) {
-              currentTabs.switchTab(prevTab.id);
+            const prevTabId = snapshot.tabOrder[currentIndex - 1];
+            if (prevTabId) {
+              currentTabs.switchTab(prevTabId);
             }
           }
         }
       },
-      // These getters will be stale, but they're used for snapshot reads which is acceptable
-      // The methods above that perform actions MUST use tabsRef.current
-      get tabs() { return tabsRef.current?.tabs ?? []; },
-      get activeTabId() { return tabsRef.current?.activeTabId ?? null; },
+      // These getters read from the snapshot for current state
+      get tabs() {
+        const snapshot = tabsRef.current?.getSnapshot();
+        if (!snapshot) return [];
+        return snapshot.tabOrder.map(id => snapshot.tabs.get(id)!).filter(Boolean);
+      },
+      get activeTabId() { return tabsRef.current?.getSnapshot()?.activeTabId ?? null; },
     }
   }), [handleOpen, handleSaveAs, handleWorkspaceFileSelect, handleTabClose]);
 
@@ -471,33 +539,6 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     };
 
     loadSidebarWidth();
-  }, [workspacePath]);
-
-  // Load file tree
-  useEffect(() => {
-    if (!workspacePath || !window.electronAPI?.getFolderContents) return undefined;
-
-    const loadFileTree = async () => {
-      try {
-        const tree = await window.electronAPI.getFolderContents(workspacePath);
-        setFileTree(tree);
-      } catch (error) {
-        console.error('Error loading file tree:', error);
-      }
-    };
-
-    loadFileTree();
-
-    // Listen for file tree updates via the proper IPC handler
-    if (window.electronAPI?.onWorkspaceFileTreeUpdated) {
-      const cleanup = window.electronAPI.onWorkspaceFileTreeUpdated((data) => {
-        setFileTree(data.fileTree);
-      });
-
-      return cleanup;
-    }
-
-    return undefined;
   }, [workspacePath]);
 
   // Load extension file type contributions
@@ -669,18 +710,6 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     }
   }, [workspacePath, newFileDirectory, handleWorkspaceFileSelect, extensionFileTypes]);
 
-  // Handle file tree refresh
-  const handleRefreshFileTree = useCallback(async () => {
-    if (workspacePath && window.electronAPI?.getFolderContents) {
-      try {
-        const tree = await window.electronAPI.getFolderContents(workspacePath);
-        setFileTree(tree);
-      } catch (error) {
-        console.error('Error refreshing file tree:', error);
-      }
-    }
-  }, [workspacePath]);
-
   // Handle restoring content from history
   const handleRestoreFromHistory = useCallback(async (content: string) => {
     if (!currentFilePath) {
@@ -692,8 +721,9 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
       await window.electronAPI.saveFile(content, currentFilePath);
 
       // Update tab state to reflect saved state
-      if (tabs.activeTabId) {
-        tabs.updateTab(tabs.activeTabId, {
+      const store = tabsActions.getSnapshot();
+      if (store.activeTabId) {
+        tabsActions.updateTab(store.activeTabId, {
           isDirty: false,
           lastSaved: new Date()
         });
@@ -704,7 +734,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
 
     // Close the history dialog
     setIsHistoryDialogOpen(false);
-  }, [currentFilePath, tabs]);
+  }, [currentFilePath, tabsActions]);
 
   return (
     <>
@@ -715,13 +745,11 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
           <WorkspaceSidebar
             workspaceName={workspaceName || ''}
             workspacePath={workspacePath}
-            fileTree={fileTree}
             currentFilePath={currentFilePath}
             currentView="files"
             onFileSelect={handleWorkspaceFileSelect}
             onCloseWorkspace={onCloseWorkspace || (() => {})}
             onOpenQuickSearch={onOpenQuickSearch}
-            onRefreshFileTree={handleRefreshFileTree}
             onViewHistory={(filePath) => {
               setIsHistoryDialogOpen(true);
             }}
@@ -758,86 +786,74 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
 
         {/* Center - editor tabs and content */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-          {tabs.activeTab ? (
-            <div className="file-tabs-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-              <TabManager
-                tabs={tabs.tabs.map(tab => ({
-                  ...tab,
-                  hasUnacceptedChanges: editorRegistry.getEditor(tab.filePath)?.hasPendingDiffs() || false
-                }))}
-                activeTabId={tabs.activeTabId}
-                onTabSelect={tabs.switchTab}
-                onTabClose={handleTabClose}
-                onNewTab={() => setIsNewFileDialogOpen(true)}
-                onTogglePin={tabs.togglePin}
-                onTabReorder={tabs.reorderTabs}
-                onViewHistory={(tabId) => {
-                  const tab = tabs.getTabState(tabId);
-                  if (tab && tab.filePath) {
-                    setIsHistoryDialogOpen(true);
+          {/* Always render both - visibility controlled imperatively via refs */}
+          <div
+            ref={tabsContainerRef}
+            className="file-tabs-container"
+            style={{ flex: 1, display: 'none', flexDirection: 'column', overflow: 'hidden' }}
+          >
+            <TabManager
+              onTabClose={handleTabClose}
+              onNewTab={() => setIsNewFileDialogOpen(true)}
+              onViewHistory={(tabId) => {
+                const tab = tabsActions.getTabState(tabId);
+                if (tab && tab.filePath) {
+                  setIsHistoryDialogOpen(true);
+                }
+              }}
+              hideTabBar={false}
+              isActive={isActive}
+              onToggleAIChat={() => setIsAIChatCollapsed(prev => !prev)}
+              isAIChatCollapsed={isAIChatCollapsed}
+            >
+              <TabContent
+                theme={theme}
+                onManualSaveReady={(saveFn) => {
+                  handleSaveRef.current = saveFn;
+                }}
+                onSaveTabByIdReady={(saveFn) => {
+                  saveTabByIdRef.current = saveFn;
+                }}
+                onSaveComplete={(filePath) => {
+                  isDirtyRef.current = false;
+
+                  const store = tabsActions.getSnapshot();
+                  if (store.activeTabId) {
+                    tabsActions.updateTab(store.activeTabId, {
+                      isDirty: false,
+                      lastSaved: new Date()
+                    });
                   }
                 }}
-                hideTabBar={false}
-                isActive={isActive}
-                onToggleAIChat={() => setIsAIChatCollapsed(prev => !prev)}
-                isAIChatCollapsed={isAIChatCollapsed}
-              >
-                <TabContent
-                  tabs={tabs.tabs}
-                  activeTabId={tabs.activeTabId}
-                  theme={theme}
-                  onManualSaveReady={(saveFn) => {
-                    handleSaveRef.current = saveFn;
-                  }}
-                  onSaveTabByIdReady={(saveFn) => {
-                    saveTabByIdRef.current = saveFn;
-                  }}
-                  onSaveComplete={(filePath) => {
-                    // No need to set currentFilePath - it's derived from active tab
-                    setIsDirty(false);
-
-                    if (tabs.activeTabId) {
-                      tabs.updateTab(tabs.activeTabId, {
-                        isDirty: false,
-                        lastSaved: new Date()
-                      });
+                onGetContentReady={(tabId, getContentFn) => {
+                  const store = tabsActions.getSnapshot();
+                  if (tabId === store.activeTabId) {
+                    getContentRef.current = getContentFn;
+                    aiToolService.setGetContentFunction(getContentFn);
+                    if (onGetContentReady) {
+                      onGetContentReady(getContentFn);
                     }
-                  }}
-                  onGetContentReady={(tabId, getContentFn) => {
-                    if (tabId === tabs.activeTabId) {
-                      getContentRef.current = getContentFn;
-                      aiToolService.setGetContentFunction(getContentFn);
-                      // Notify parent so App.tsx can update its getContentRef
-                      if (onGetContentReady) {
-                        onGetContentReady(getContentFn);
-                      }
-                    }
-                  }}
-                  onViewHistory={() => {
-                    setIsHistoryDialogOpen(true);
-                  }}
-                  onRenameDocument={() => {
-                    console.log('Rename document requested');
-                  }}
-                  onTabDirtyChange={(changedTabId, changedIsDirty) => {
-                    const tab = tabs.getTabState(changedTabId);
-                    if (tab && tab.isDirty !== changedIsDirty) {
-                      tabs.updateTab(changedTabId, { isDirty: changedIsDirty });
-                      if (changedTabId === tabs.activeTabId) {
-                        setIsDirty(changedIsDirty);
-                      }
-                    }
-                  }}
-                  onSwitchToAgentMode={onSwitchToAgentMode}
-                  onOpenSessionInChat={handleOpenSessionInChat}
-                  onTabClose={handleTabClose}
-                  workspaceId={workspacePath}
-                />
-              </TabManager>
-            </div>
-          ) : (
+                  }
+                }}
+                onViewHistory={() => {
+                  setIsHistoryDialogOpen(true);
+                }}
+                onRenameDocument={() => {
+                  console.log('Rename document requested');
+                }}
+                onSwitchToAgentMode={onSwitchToAgentMode}
+                onOpenSessionInChat={handleOpenSessionInChat}
+                onTabClose={handleTabClose}
+                workspaceId={workspacePath}
+              />
+            </TabManager>
+          </div>
+          <div
+            ref={welcomeContainerRef}
+            style={{ display: 'flex', flex: 1 }}
+          >
             <WorkspaceWelcome workspaceName={workspaceName || 'Open a file to get started'} />
-          )}
+          </div>
         </div>
 
         {/* Right sidebar - AI Chat */}
@@ -877,7 +893,6 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
           workspacePath={workspacePath}
           onCreateFile={handleNewFile}
           extensionFileTypes={extensionFileTypes}
-          fileTree={fileTree}
           onDirectoryChange={setNewFileDirectory}
         />
       )}
@@ -902,7 +917,6 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
             setWorkspaceHistoryPath(null);
           }}
           workspacePath={workspaceHistoryPath}
-          onFileRestored={handleRefreshFileTree}
           theme={theme === 'auto' ? 'dark' : theme}
         />
       )}

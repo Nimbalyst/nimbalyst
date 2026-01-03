@@ -34,6 +34,7 @@ import { AIUsageReport } from './components/AIUsageReport';
 import { DatabaseBrowser } from './components/DatabaseBrowser/DatabaseBrowser';
 import { AgenticPanel, type AgenticPanelRef } from './components/UnifiedAI';
 import EditorMode, { type EditorModeRef } from './components/EditorMode/EditorMode';
+import { TabsProvider } from './contexts/TabsContext';
 import { NavigationGutter, type SidebarView } from './components/NavigationGutter';
 // NOTE: useTabs and useTabNavigation removed - EditorMode manages tabs now
 import type { ContentMode } from './types/WindowModeTypes';
@@ -97,7 +98,7 @@ if (!pluginsRegistered) {
 }
 
 export default function App() {
-  // console.log('[APP RENDER]', new Date().toISOString(), 'App component rendering');
+  console.log('[App] render');
   logger.ui.info('App component rendering');
 
    // IMPORTANT: This state must be declared before the useEffect that uses it
@@ -185,12 +186,13 @@ export default function App() {
     return <DatabaseBrowser />;
   }
 
-  const [currentFilePath, setCurrentFilePath] = useState<string | null>(null);
-  const [currentFileName, setCurrentFileName] = useState<string | null>(null);
-  const isDirtyRef = useRef(false);  // Internal tracking for autosave
-  const [isDirty, setIsDirty] = useState(false);  // For UI updates
+  // IMPORTANT: These are refs, not state, to prevent re-renders when the active file changes.
+  // Window title and other side effects are updated imperatively via editorModeRef.
+  const currentFilePathRef = useRef<string | null>(null);
+  const currentFileNameRef = useRef<string | null>(null);
+  // NOTE: isDirty state removed - TabEditor owns dirty state and calls setDocumentEdited directly
   // NOTE: contentVersion removed - EditorContainer doesn't need version bumping for remounts
-  const tabStatesRef = useRef<Map<string, { isDirty: boolean }>>(new Map());  // Track tab dirty states without re-renders
+  // NOTE: tabStatesRef removed - TabEditor tracks its own dirty state
   const tabsRef = useRef<any>(null);  // Reference to current tabs object for use in intervals only
   const [isInitializing, setIsInitializing] = useState(true);
   // NOTE: extensionsReady state moved to top of component (before early returns)
@@ -608,33 +610,21 @@ export default function App() {
   }, [activeMode, bottomPanel, bottomPanelHeight]);
 
   // NOTE: Tab management moved to EditorMode. App.tsx no longer maintains tabs.
-  // EditorMode notifies us of currentFilePath changes via onCurrentFileChange callback.
+  // Current file info is stored in refs to prevent re-renders.
 
   // Declare refs needed by hooks below
   const getContentRef = useRef<(() => string) | null>(null);
 
-  // Build document context for AI features (without needing tabs)
-  const documentContext = useMemo(() => {
-    if (!currentFilePath) {
-      return {
-        filePath: '',
-        fileType: 'markdown',
-        content: '',
-        cursorPosition: undefined,
-        selection: undefined,
-        getLatestContent: undefined
-      };
-    }
-
-    return {
-      filePath: currentFilePath,
-      fileType: 'markdown',
-      content: '', // Don't call getContentRef during render - getLatestContent will be called when needed
-      cursorPosition: undefined,
-      selection: undefined,
-      getLatestContent: getContentRef.current || undefined
-    };
-  }, [currentFilePath]);
+  // Build document context for AI features - reads from refs, stable object reference
+  // Components that need to use this should call getLatestContent() to get current state
+  const documentContext = useMemo(() => ({
+    get filePath() { return currentFilePathRef.current || ''; },
+    fileType: 'markdown' as const,
+    content: '', // Don't call getContentRef during render - getLatestContent will be called when needed
+    cursorPosition: undefined,
+    selection: undefined,
+    getLatestContent: () => getContentRef.current?.() || ''
+  }), []); // Empty deps - never recreates, reads from refs
   const searchCommandRef = useRef<LexicalCommand<undefined> | null>(null);
   const isInitializedRef = useRef<boolean>(false);
   const agenticPanelRef = useRef<AgenticPanelRef>(null);
@@ -650,8 +640,7 @@ export default function App() {
   useWindowLifecycle({
     tabsRef,
     getContentRef,
-    isDirtyRef,
-    currentFilePath,
+    currentFilePathRef,
   });
 
   // NOTE: useHMRStateRestoration removed - no longer needed now that TabEditor
@@ -674,21 +663,17 @@ export default function App() {
     setExtensionWorkspacePath(workspacePath);
   }, [workspacePath]);
 
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      (window as any).currentFilePath = currentFilePath;
-    }
-  }, [currentFilePath]);
+  // NOTE: currentFilePath is now exposed to window via EditorMode's imperative updates
+  // The ref is updated when tabs change, and EditorMode handles the window exposure
 
   // NOTE: Sidebar resize handlers moved to EditorMode
 
 
   // Handle new file (legacy - used in single-file mode)
   const handleNew = useCallback(() => {
-    // Reset global UI state for new file
-    setCurrentFilePath(null);
-    setCurrentFileName(null);
-    setIsDirty(false);
+    // Reset refs for new file
+    currentFilePathRef.current = null;
+    currentFileNameRef.current = null;
 
     // Note: In workspace mode, this is handled by EditorMode via 'file-new-in-workspace' event
   }, []);
@@ -721,6 +706,26 @@ export default function App() {
     // NOTE: EditorContainer handles saving dirty files automatically
     // Close the window
     window.close();
+  }, []);
+
+  // Handle switch to agent mode - extracted to useCallback to prevent EditorMode re-renders
+  const handleSwitchToAgentMode = useCallback((planDocumentPath?: string, sessionId?: string) => {
+    // Switch to agent mode first
+    setActiveMode('agent');
+
+    // Wait for next tick to ensure AgenticPanel is mounted/visible
+    setTimeout(() => {
+      if (planDocumentPath) {
+        // Create new session with document reference
+        if (agenticPanelRef.current?.createNewSession) {
+          agenticPanelRef.current.createNewSession(planDocumentPath);
+        }
+      } else if (sessionId && agenticPanelRef.current) {
+        // Load existing session
+        console.log('Load session:', sessionId);
+        agenticPanelRef.current.openSessionInTab(sessionId);
+      }
+    }, 100);
   }, []);
 
   // Wrapper for workspace file selection - delegates to EditorMode
@@ -968,40 +973,30 @@ export default function App() {
     setShowCommandsToast(false);
   }, [workspacePath]);
 
-  // Update window title and dirty state
+  // Update window title - reads currentFileName from ref
+  // This runs on mode changes; EditorMode updates the ref and calls setTitle directly for file changes
   useEffect(() => {
     if (!window.electronAPI) return;
 
+    const currentFileName = currentFileNameRef.current;
     let title = 'Nimbalyst';
     if (workspaceMode && workspaceName) {
       // In agent mode, show the session name instead of file name
       if (activeMode === 'agent' && activeSessionName) {
         title = `${activeSessionName} - ${workspaceName} - Nimbalyst`;
       } else if (currentFileName) {
-        title = `${currentFileName}${isDirty ? ' •' : ''} - ${workspaceName} - Nimbalyst`;
+        // Dirty indicator is added imperatively by updateWindowTitle
+        title = `${currentFileName} - ${workspaceName} - Nimbalyst`;
       } else {
         title = `${workspaceName} - Nimbalyst`;
       }
     } else if (currentFileName) {
-      title = `${currentFileName}${isDirty ? ' •' : ''} - Nimbalyst`;
+      title = `${currentFileName} - Nimbalyst`;
     }
 
     window.electronAPI.setTitle(title);
-    // Only show document edited indicator for files mode (not agent mode)
-    window.electronAPI.setDocumentEdited(activeMode !== 'agent' && isDirty);
-  }, [currentFileName, isDirty, workspaceMode, workspaceName, activeMode, activeSessionName]);
-
-  // Create refs to hold current values without triggering re-setup of event listeners
-  const isDirtyRefForKeyboard = useRef(isDirty);
-  const currentFilePathRefForKeyboard = useRef(currentFilePath);
-
-  useEffect(() => {
-    isDirtyRefForKeyboard.current = isDirty;
-  }, [isDirty]);
-
-  useEffect(() => {
-    currentFilePathRefForKeyboard.current = currentFilePath;
-  }, [currentFilePath]);
+    // setDocumentEdited is called directly by TabEditor when dirty state changes
+  }, [workspaceMode, workspaceName, activeMode, activeSessionName]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -1051,31 +1046,10 @@ export default function App() {
       // Cmd+Y (Mac) or Ctrl+Y (Windows/Linux) for History
       if ((e.metaKey || e.ctrlKey) && e.key === 'y') {
         e.preventDefault();
-        // Use refs to get current values
-        const currentIsDirty = isDirtyRefForKeyboard.current;
-        const currentPath = currentFilePathRefForKeyboard.current;
-        // Save current state as manual snapshot before opening history (only if dirty)
-        const openHistoryDialog = async () => {
-          if (currentIsDirty && currentPath && getContentRef.current && window.electronAPI?.history) {
-            try {
-              const content = getContentRef.current();
-              // Wait for snapshot to be created before opening dialog to avoid race conditions
-              await window.electronAPI.history.createSnapshot(
-                currentPath,
-                content,
-                'manual',
-                'Before viewing history'
-              );
-            } catch (error) {
-              console.error('[App] Failed to create history snapshot before opening dialog:', error);
-            }
-          }
-          // Delegate to EditorMode
-          if (workspaceMode && editorModeRef.current) {
-            editorModeRef.current.openHistoryDialog();
-          }
-        };
-        openHistoryDialog();
+        // Delegate to EditorMode - it handles snapshot creation if needed
+        if (workspaceMode && editorModeRef.current) {
+          editorModeRef.current.openHistoryDialog();
+        }
       }
       // Bottom panel keyboard shortcuts
       // Cmd+Shift+P for Plans panel
@@ -1153,17 +1127,8 @@ export default function App() {
 
   // NOTE: handleCreateNewFile and handleRestoreFromHistory moved to EditorMode
 
-  // Sync current file path with backend for window title and session restore
-  useEffect(() => {
-    if (window.electronAPI && currentFilePath !== null) {
-      if (LOG_CONFIG.FILE_SYNC) console.log('[FILE_SYNC] Syncing current file path to backend:', currentFilePath);
-      window.electronAPI.setCurrentFile(currentFilePath);
-      if (LOG_CONFIG.FILE_SYNC) console.log('[FILE_SYNC] ✓ File path synced');
-    } else if (window.electronAPI && currentFilePath === null) {
-      if (LOG_CONFIG.FILE_SYNC) console.log('[FILE_SYNC] Clearing file path in backend');
-      window.electronAPI.setCurrentFile(null);
-    }
-  }, [currentFilePath]);
+  // NOTE: File path sync with backend is now handled imperatively by EditorMode
+  // when the active tab changes. See EditorMode's subscription to tabsActions.
 
   // NOTE: EditorContainer now handles all autosave functionality with per-editor timers
   // Old autosave useEffects removed - see EditorContainer.tsx lines 218-281
@@ -1243,9 +1208,6 @@ export default function App() {
     setWorkspaceMode,
     setWorkspacePath,
     setWorkspaceName,
-    setCurrentFilePath,
-    setCurrentFileName,
-    setIsDirty,
     setIsAIChatCollapsed,
     setAIChatWidth,
     setIsAIChatStateLoaded,
@@ -1257,17 +1219,16 @@ export default function App() {
 
     // Refs
     isInitializedRef,
-    isDirtyRef,
     getContentRef,
     searchCommandRef,
     editorModeRef,
+    currentFilePathRef,
+    currentFileNameRef,
 
     // State values
-    currentFilePath,
     workspaceMode,
     workspacePath,
     sessionToLoad,
-    isDirty,
 
     // Config
     LOG_CONFIG,
@@ -1329,22 +1290,23 @@ export default function App() {
   }, [handleWorkspaceFileSelect]);
 
   logger.ui.info('Rendering App with config:', {
-    currentFilePath,
-    currentFileName,
+    currentFilePath: currentFilePathRef.current,
+    currentFileName: currentFileNameRef.current,
     theme
   });
 
   logger.ui.info('About to render StravuEditor');
 
   // Debug: expose values for testing (in useEffect to run after state updates)
+  // NOTE: These are set imperatively and may not update on every render
   useEffect(() => {
     if (typeof window !== 'undefined') {
       (window as any).__tabPreferencesEnabled__ = true;
-      (window as any).__currentFilePath__ = currentFilePath;
-      (window as any).__currentFileName__ = currentFileName;
+      (window as any).__currentFilePath__ = currentFilePathRef.current;
+      (window as any).__currentFileName__ = currentFileNameRef.current;
       (window as any).__workspaceMode__ = workspaceMode;
     }
-  }, [currentFilePath, currentFileName, workspaceMode]);
+  }, [workspaceMode]); // Only re-run when workspaceMode changes
 
   // Handle close confirmation from main process
   useEffect(() => {
@@ -1381,9 +1343,20 @@ export default function App() {
 
   // Handle close-active-tab from menu - route to active panel
   // NOTE: Uses activeModeStateRef defined earlier near activeMode state
+  // Guard against duplicate IPC calls (React StrictMode can cause double-mounting)
+  const closeTabInProgressRef = useRef(false);
 
   useEffect(() => {
     const handleCloseActiveTab = () => {
+      // Debounce: if we're already processing a close, ignore duplicate calls
+      if (closeTabInProgressRef.current) {
+        console.log('[App] handleCloseActiveTab: ignoring duplicate call');
+        return;
+      }
+      closeTabInProgressRef.current = true;
+      // Reset the guard after a short delay to allow future closes
+      setTimeout(() => { closeTabInProgressRef.current = false; }, 100);
+
       console.log('[App] handleCloseActiveTab IPC received, activeMode:', activeModeStateRef.current);
       if (activeModeStateRef.current === 'agent') {
         console.log('[App] Routing to agenticPanelRef.closeActiveTab()');
@@ -1529,42 +1502,24 @@ export default function App() {
                   isFirstTime={false}
                 />
               ) : workspacePath ? (
-                <EditorMode
-                  ref={editorModeRef}
+                <TabsProvider
                   workspacePath={workspacePath}
-                  workspaceName={workspaceName}
-                  theme={theme}
-                  isActive={activeMode === 'files' || activeMode === 'plan'}
-                  onModeChange={setActiveMode as (mode: string) => void}
-                  onCurrentFileChange={(filePath, fileName, isDirty) => {
-                    setCurrentFilePath(filePath);
-                    setCurrentFileName(fileName);
-                    setIsDirty(isDirty);
-                  }}
-                  onGetContentReady={(getContentFn) => {
-                    getContentRef.current = getContentFn;
-                  }}
-                  onCloseWorkspace={handleCloseWorkspace}
-                  onOpenQuickSearch={() => setIsQuickOpenVisible(true)}
-                  onSwitchToAgentMode={(planDocumentPath, sessionId) => {
-                    // Switch to agent mode first
-                    setActiveMode('agent');
-
-                    // Wait for next tick to ensure AgenticPanel is mounted/visible
-                    setTimeout(() => {
-                      if (planDocumentPath) {
-                        // Create new session with document reference
-                        if (agenticPanelRef.current?.createNewSession) {
-                          agenticPanelRef.current.createNewSession(planDocumentPath);
-                        }
-                      } else if (sessionId && agenticPanelRef.current) {
-                        // Load existing session
-                        console.log('Load session:', sessionId);
-                        agenticPanelRef.current.openSessionInTab(sessionId);
-                      }
-                    }, 100);
-                  }}
-                />
+                >
+                  <EditorMode
+                    ref={editorModeRef}
+                    workspacePath={workspacePath}
+                    workspaceName={workspaceName}
+                    theme={theme}
+                    isActive={activeMode === 'files' || activeMode === 'plan'}
+                    onModeChange={setActiveMode as (mode: string) => void}
+                    onGetContentReady={(getContentFn) => {
+                      getContentRef.current = getContentFn;
+                    }}
+                    onCloseWorkspace={handleCloseWorkspace}
+                    onOpenQuickSearch={() => setIsQuickOpenVisible(true)}
+                    onSwitchToAgentMode={handleSwitchToAgentMode}
+                  />
+                </TabsProvider>
               ) : (
                 <WorkspaceWelcome workspaceName="Open a workspace to get started" />
               )}
@@ -1645,7 +1600,7 @@ export default function App() {
             isOpen={isQuickOpenVisible}
             onClose={() => setIsQuickOpenVisible(false)}
             workspacePath={workspacePath}
-            currentFilePath={currentFilePath}
+            currentFilePath={currentFilePathRef.current}
             onFileSelect={handleQuickOpenFileSelect}
           />
           <SessionQuickOpen
@@ -1660,7 +1615,7 @@ export default function App() {
             workspacePath={workspacePath}
             documentContext={{
               content: getContentRef.current ? getContentRef.current() : '',
-              filePath: currentFilePath || undefined
+              filePath: currentFilePathRef.current || undefined
             }}
           />
         </>

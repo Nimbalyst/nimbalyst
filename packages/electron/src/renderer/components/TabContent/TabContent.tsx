@@ -7,24 +7,24 @@
  * - Aggregating callbacks from TabEditors to parent
  * - Handling special virtual tabs (Plans, Bugs, etc.)
  *
- * Does NOT manage tab metadata (TabManager handles that).
+ * CRITICAL: This component renders ONCE and manages TabEditors imperatively.
+ * It must NEVER re-render or it will destroy all TabEditor state.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
+import { createRoot, Root } from 'react-dom/client';
 import type { ConfigTheme, TextReplacement } from 'rexical';
 import type { Tab } from '../TabManager/TabManager';
 import { TabEditor } from '../TabEditor/TabEditor';
 import { TabEditorErrorBoundary } from '../TabEditorErrorBoundary';
 import { logger } from '../../utils/logger';
+import { useTabsActions, type TabData, notifyDirtyStateChange } from '../../contexts/TabsContext';
 
 interface TabContentProps {
-  tabs: Tab[];
-  activeTabId: string | null;
   theme: ConfigTheme;
   textReplacements?: TextReplacement[];
 
   // Callbacks to parent
-  onTabDirtyChange?: (tabId: string, isDirty: boolean) => void;
   onManualSaveReady?: (saveFunction: () => Promise<void>) => void;
   onGetContentReady?: (tabId: string, getContentFunction: () => string) => void;
   onSaveComplete?: (filePath: string) => void;
@@ -43,12 +43,16 @@ interface TabContentProps {
   workspaceId?: string;
 }
 
+interface TabEditorInstance {
+  root: Root;
+  element: HTMLDivElement;
+  tabData: TabData;
+  content: string;
+}
+
 export const TabContent: React.FC<TabContentProps> = ({
-  tabs,
-  activeTabId,
   theme,
   textReplacements,
-  onTabDirtyChange,
   onManualSaveReady,
   onGetContentReady,
   onSaveComplete,
@@ -60,92 +64,56 @@ export const TabContent: React.FC<TabContentProps> = ({
   onTabClose,
   workspaceId,
 }) => {
-  // Track retry keys for error recovery - incrementing the key forces a remount
-  const [retryKeys, setRetryKeys] = useState<Map<string, number>>(new Map());
-  // Track manual save functions for each tab
+  // Debug: trace re-renders - THIS SHOULD ONLY LOG ONCE ON MOUNT
+  console.log('[TabContent] render - THIS SHOULD ONLY HAPPEN ONCE');
+
+  // Use actions only - NO subscription that causes re-renders
+  const tabsActions = useTabsActions();
+
+  // Container ref for imperative DOM updates
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // All state is in refs - NO useState allowed
+  const tabInstancesRef = useRef<Map<string, TabEditorInstance>>(new Map());
+  const activeTabIdRef = useRef<string | null>(null);
   const saveFunctionsRef = useRef<Map<string, () => Promise<void>>>(new Map());
-
-  // Track getContent functions for each tab
   const getContentFunctionsRef = useRef<Map<string, () => string>>(new Map());
+  const loadingRef = useRef<Set<string>>(new Set());
 
-  // Update manual save function for parent when active tab changes
-  useEffect(() => {
-    if (!activeTabId || !onManualSaveReady) return;
+  // Store props in refs so callbacks can access current values
+  const propsRef = useRef({
+    theme,
+    textReplacements,
+    onManualSaveReady,
+    onGetContentReady,
+    onSaveComplete,
+    onViewHistory,
+    onRenameDocument,
+    onSwitchToAgentMode,
+    onOpenSessionInChat,
+    onTabClose,
+    workspaceId,
+  });
+  propsRef.current = {
+    theme,
+    textReplacements,
+    onManualSaveReady,
+    onGetContentReady,
+    onSaveComplete,
+    onViewHistory,
+    onRenameDocument,
+    onSwitchToAgentMode,
+    onOpenSessionInChat,
+    onTabClose,
+    workspaceId,
+  };
 
-    const activeTab = tabs.find(t => t.id === activeTabId);
-    if (!activeTab) return;
-
-    const saveFn = saveFunctionsRef.current.get(activeTab.id);
-    if (saveFn) {
-      onManualSaveReady(saveFn);
-    }
-  }, [activeTabId, tabs, onManualSaveReady]);
-
-  // Handle file-save IPC event from menu (Cmd+S)
-  useEffect(() => {
-    if (!window.electronAPI) return;
-
-    const handleFileSave = async () => {
-      if (!activeTabId) return;
-
-      const saveFn = saveFunctionsRef.current.get(activeTabId);
-      if (saveFn) {
-        await saveFn();
-      }
-    };
-
-    window.electronAPI.on('file-save', handleFileSave);
-
-    return () => {
-      window.electronAPI.off('file-save', handleFileSave);
-    };
-  }, [activeTabId]);
-
-  // Handle manual save ready from TabEditor
-  const handleManualSaveReady = useCallback((tabId: string, saveFn: () => Promise<void>) => {
-    saveFunctionsRef.current.set(tabId, saveFn);
-
-    // If this is the active tab, notify parent immediately
-    if (tabId === activeTabId && onManualSaveReady) {
-      onManualSaveReady(saveFn);
-    }
-  }, [activeTabId, onManualSaveReady]);
-
-  // Handle getContent ready from TabEditor
-  const handleGetContentReady = useCallback((tabId: string, getContentFn: () => string) => {
-    getContentFunctionsRef.current.set(tabId, getContentFn);
-
-    // Notify parent
-    if (onGetContentReady) {
-      onGetContentReady(tabId, getContentFn);
-    }
-  }, [onGetContentReady]);
-
-  // Create saveTabById function and expose to parent
-  const saveTabById = useCallback(async (tabId: string): Promise<void> => {
-    const saveFn = saveFunctionsRef.current.get(tabId);
-    if (saveFn) {
-      logger.ui.info(`[TabContent] Saving tab ${tabId} before close`);
-      await saveFn();
-    }
-  }, []);
-
-  // Expose saveTabById to parent on mount and when it changes
-  useEffect(() => {
-    if (onSaveTabByIdReady) {
-      onSaveTabByIdReady(saveTabById);
-    }
-  }, [onSaveTabByIdReady, saveTabById]);
-
-  // Load content for physical or virtual files
+  // Load content for a file
   const loadContent = useCallback(async (filePath: string): Promise<string> => {
-    // Check if this is a virtual document
     if (filePath.startsWith('virtual://')) {
       if (!window.electronAPI?.documentService) {
-        logger.ui.error('[TabContent] No documentService available for virtual document');
         return '';
       }
-
       try {
         const content = await (window.electronAPI.documentService as any).loadVirtual(filePath);
         return content || '';
@@ -155,9 +123,7 @@ export const TabContent: React.FC<TabContentProps> = ({
       }
     }
 
-    // Load physical file
     if (!window.electronAPI?.readFileContent) {
-      logger.ui.error('[TabContent] No electronAPI.readFileContent available');
       return '';
     }
 
@@ -173,230 +139,214 @@ export const TabContent: React.FC<TabContentProps> = ({
     }
   }, []);
 
-  // Track loaded content for tabs
-  const [tabContents, setTabContents] = useState<Map<string, string>>(new Map());
-  const loadingRef = useRef<Set<string>>(new Set());
-  const hmrRestoredTabsRef = useRef<Set<string>>(new Set()); // Track which tabs were HMR-restored
+  // Create a TabEditor instance imperatively
+  const createTabEditor = useCallback((tab: TabData, content: string) => {
+    if (!containerRef.current) return;
+    if (tabInstancesRef.current.has(tab.id)) return;
 
-  // HMR: Save current content before unmount to preserve unsaved changes
-  useEffect(() => {
-    if (import.meta.hot) {
-      import.meta.hot.dispose(() => {
-        // Save all current tab contents to sessionStorage, keyed by filePath
-        const contentsToSave: Record<string, string> = {};
+    const element = document.createElement('div');
+    element.className = 'tab-editor-wrapper';
+    element.dataset.tabId = tab.id;
+    element.style.height = '100%';
+    element.style.display = 'none'; // Start hidden, updateVisibility will show active
+    containerRef.current.appendChild(element);
 
-        // Get ACTUAL current content from editors, not just initial content
-        tabs.forEach(tab => {
-          // Try to get current content from editor's getContent function
-          const getContentFn = getContentFunctionsRef.current.get(tab.id);
-          if (getContentFn) {
-            try {
-              const currentContent = getContentFn();
-              contentsToSave[tab.filePath] = currentContent;
-            } catch (error) {
-              logger.ui.error(`[TabContent HMR] Failed to get content for ${tab.fileName}:`, error);
-              // Fall back to cached content if available
-              const cachedContent = tabContents.get(tab.id);
-              if (cachedContent !== undefined) {
-                contentsToSave[tab.filePath] = cachedContent;
-              }
-            }
-          } else {
-            // Editor not ready yet, use cached content if available
-            const cachedContent = tabContents.get(tab.id);
-            if (cachedContent !== undefined) {
-              contentsToSave[tab.filePath] = cachedContent;
-            }
-          }
-        });
+    const root = createRoot(element);
 
-        if (Object.keys(contentsToSave).length > 0) {
-          try {
-            sessionStorage.setItem('hmr-tab-contents', JSON.stringify(contentsToSave));
-            logger.ui.info(`[TabContent HMR] Saved ${Object.keys(contentsToSave).length} tab contents`);
-          } catch (error) {
-            logger.ui.error('[TabContent HMR] Failed to save contents:', error);
-          }
-        }
-      });
-    }
-  }, [tabs, tabContents]); // Still depend on tabContents for fallback
-
-  // HMR: Restore content when tabs are available
-  const hasRestoredRef = useRef(false);
-  useEffect(() => {
-    if (import.meta.hot && !hasRestoredRef.current && tabs.length > 0) {
-      try {
-        const saved = sessionStorage.getItem('hmr-tab-contents');
-        if (saved) {
-          const savedContents = JSON.parse(saved) as Record<string, string>;
-
-          // Map restored content from filePath back to current tab IDs
-          const restoredMap = new Map<string, string>();
-          tabs.forEach(tab => {
-            const restoredContent = savedContents[tab.filePath];
-            if (restoredContent !== undefined) {
-              restoredMap.set(tab.id, restoredContent);
-              hmrRestoredTabsRef.current.add(tab.id); // Mark as HMR-restored
-            }
-          });
-
-          if (restoredMap.size > 0) {
-            setTabContents(restoredMap);
-            logger.ui.info(`[TabContent HMR] Restored ${restoredMap.size} tab contents`);
-          }
-
-          // Clear after restoration
-          sessionStorage.removeItem('hmr-tab-contents');
-          hasRestoredRef.current = true;
-        }
-      } catch (error) {
-        logger.ui.error('[TabContent HMR] Failed to restore contents:', error);
-      }
-    }
-  }, [tabs]); // Run when tabs change
-
-  // Load content for tabs that don't have it yet
-  useEffect(() => {
-    const loadMissingContent = async () => {
-      for (const tab of tabs) {
-        // Skip if we already have content (including HMR-restored content)
-        if (tabContents.has(tab.id)) {
-          continue;
-        }
-
-        // Skip if already loading
-        if (loadingRef.current.has(tab.id)) {
-          continue;
-        }
-
-        // Skip if this tab was restored from HMR (redundant check, but explicit)
-        if (hmrRestoredTabsRef.current.has(tab.id)) {
-          continue;
-        }
-
-        // Skip if tab already has content
-        if (tab.content && tab.content.length > 0) {
-          setTabContents(prev => new Map(prev).set(tab.id, tab.content));
-          continue;
-        }
-
-        // Mark as loading
-        loadingRef.current.add(tab.id);
-        logger.ui.info(`[TabContent] Loading content for tab: ${tab.fileName} (${tab.filePath})`);
-
-        // Load content
-        const content = await loadContent(tab.filePath);
-        logger.ui.info(`[TabContent] Loaded content for ${tab.fileName}, length: ${content.length}`);
-        setTabContents(prev => new Map(prev).set(tab.id, content));
-
-        // Mark as done loading
-        loadingRef.current.delete(tab.id);
+    const handleManualSaveReady = (saveFn: () => Promise<void>) => {
+      saveFunctionsRef.current.set(tab.id, saveFn);
+      if (tab.id === activeTabIdRef.current && propsRef.current.onManualSaveReady) {
+        propsRef.current.onManualSaveReady(saveFn);
       }
     };
 
-    loadMissingContent();
-  }, [tabs, loadContent]);
-
-  // Cleanup content for closed tabs
-  useEffect(() => {
-    const currentTabIds = new Set(tabs.map(t => t.id));
-
-    setTabContents(prev => {
-      const next = new Map(prev);
-      for (const tabId of next.keys()) {
-        if (!currentTabIds.has(tabId)) {
-          next.delete(tabId);
-        }
+    const handleGetContentReady = (getContentFn: () => string) => {
+      getContentFunctionsRef.current.set(tab.id, getContentFn);
+      if (propsRef.current.onGetContentReady) {
+        propsRef.current.onGetContentReady(tab.id, getContentFn);
       }
-      return next;
+    };
+
+    // Handle dirty state changes - update tab store and notify subscribers
+    const handleDirtyChange = (isDirty: boolean) => {
+      tabsActions.updateTab(tab.id, { isDirty });
+      // Notify the dirty state subscription system so TabItem can re-render
+      notifyDirtyStateChange(tab.id, isDirty);
+    };
+
+    // Always pass isActive={true} since visibility is controlled by the wrapper element's display style
+    // The wrapper is set to display:none for inactive tabs, display:block for active
+    const isActiveTab = tab.id === activeTabIdRef.current;
+
+    root.render(
+      <TabEditorErrorBoundary
+        filePath={tab.filePath}
+        fileName={tab.fileName}
+        onRetry={() => {
+          // Remove and recreate on retry
+          removeTabEditor(tab.id);
+          createTabEditor(tab, content);
+        }}
+        onClose={() => {
+          propsRef.current.onTabClose?.(tab.id);
+        }}
+      >
+        <TabEditor
+          filePath={tab.filePath}
+          fileName={tab.fileName}
+          initialContent={content}
+          theme={propsRef.current.theme}
+          isActive={true}  // Always true - wrapper controls visibility
+          textReplacements={isActiveTab ? propsRef.current.textReplacements : undefined}
+          onDirtyChange={handleDirtyChange}
+          onSaveComplete={propsRef.current.onSaveComplete}
+          onManualSaveReady={handleManualSaveReady}
+          onGetContentReady={handleGetContentReady}
+          onViewHistory={propsRef.current.onViewHistory}
+          onRenameDocument={propsRef.current.onRenameDocument}
+          onSwitchToAgentMode={propsRef.current.onSwitchToAgentMode}
+          onOpenSessionInChat={propsRef.current.onOpenSessionInChat}
+          workspaceId={propsRef.current.workspaceId}
+        />
+      </TabEditorErrorBoundary>
+    );
+
+    tabInstancesRef.current.set(tab.id, { root, element, tabData: tab, content });
+  }, []);
+
+  // Remove a TabEditor instance
+  const removeTabEditor = useCallback((tabId: string) => {
+    const instance = tabInstancesRef.current.get(tabId);
+    if (!instance) return;
+
+    instance.root.unmount();
+    instance.element.remove();
+    tabInstancesRef.current.delete(tabId);
+    saveFunctionsRef.current.delete(tabId);
+    getContentFunctionsRef.current.delete(tabId);
+  }, []);
+
+  // Update visibility of all tab editors based on active tab
+  const updateVisibility = useCallback(() => {
+    const activeId = activeTabIdRef.current;
+
+    tabInstancesRef.current.forEach((instance, tabId) => {
+      const isActive = tabId === activeId;
+      instance.element.style.display = isActive ? 'block' : 'none';
     });
 
-    // Cleanup save functions
-    for (const tabId of saveFunctionsRef.current.keys()) {
-      if (!currentTabIds.has(tabId)) {
-        saveFunctionsRef.current.delete(tabId);
+    // Update parent's save function
+    if (activeId) {
+      const saveFn = saveFunctionsRef.current.get(activeId);
+      if (saveFn && propsRef.current.onManualSaveReady) {
+        propsRef.current.onManualSaveReady(saveFn);
       }
     }
+  }, []);
 
-    // Cleanup getContent functions
-    for (const tabId of getContentFunctionsRef.current.keys()) {
-      if (!currentTabIds.has(tabId)) {
-        getContentFunctionsRef.current.delete(tabId);
-      }
-    }
-  }, [tabs]);
+  // Main effect: subscribe to tab changes and manage TabEditors imperatively
+  useEffect(() => {
+    const syncTabs = async () => {
+      const snapshot = tabsActions.getSnapshot();
+      const currentTabs = snapshot.tabOrder.map(id => snapshot.tabs.get(id)!).filter(Boolean);
+      const newActiveTabId = snapshot.activeTabId;
 
-  return (
-    <div className="tab-content-container" style={{ height: '100%', overflow: 'hidden' }}>
-      {tabs.map((tab) => {
-        const isActive = tab.id === activeTabId;
+      // Track which tabs we've seen
+      const currentTabIds = new Set(currentTabs.map(t => t.id));
 
-        // Regular editor tab
-        const content = tabContents.get(tab.id) ?? tab.content ?? '';
-
-        // Don't render editor until we have content loaded
-        // Check if content has been loaded (including empty files)
-        // Use .has() to distinguish between "not loaded" vs "loaded but empty"
-        const hasContent = tabContents.has(tab.id);
-        if (!hasContent) {
-          return (
-            <div
-              key={tab.id}
-              className="tab-editor-loading"
-              style={{
-                display: isActive ? 'flex' : 'none',
-                height: '100%',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-            >
-              <div>Loading {tab.fileName}...</div>
-            </div>
-          );
+      // Remove editors for closed tabs
+      for (const tabId of tabInstancesRef.current.keys()) {
+        if (!currentTabIds.has(tabId)) {
+          removeTabEditor(tabId);
         }
+      }
 
-        // Get the retry key for this tab (used to force remount on retry)
-        const retryKey = retryKeys.get(tab.id) ?? 0;
+      // Add editors for new tabs
+      for (const tab of currentTabs) {
+        if (!tabInstancesRef.current.has(tab.id) && !loadingRef.current.has(tab.id)) {
+          loadingRef.current.add(tab.id);
 
-        return (
-          <TabEditorErrorBoundary
-            key={`${tab.id}-boundary-${retryKey}`}
-            filePath={tab.filePath}
-            fileName={tab.fileName}
-            onRetry={() => {
-              // Increment retry key to force remount of the TabEditor
-              setRetryKeys(prev => new Map(prev).set(tab.id, (prev.get(tab.id) ?? 0) + 1));
-            }}
-            onClose={() => {
-              onTabClose?.(tab.id);
-            }}
-          >
-            <TabEditor
-              key={`${tab.id}-${retryKey}`}
-              filePath={tab.filePath}
-              fileName={tab.fileName}
-              initialContent={content}
-              theme={theme}
-              isActive={isActive}
-              textReplacements={isActive ? textReplacements : undefined}
-              onDirtyChange={(isDirty) => {
-                if (onTabDirtyChange) {
-                  onTabDirtyChange(tab.id, isDirty);
-                }
-              }}
-              onSaveComplete={onSaveComplete}
-              onManualSaveReady={(saveFn) => handleManualSaveReady(tab.id, saveFn)}
-              onGetContentReady={(getContentFn) => handleGetContentReady(tab.id, getContentFn)}
-              onViewHistory={onViewHistory}
-              onRenameDocument={onRenameDocument}
-              onSwitchToAgentMode={onSwitchToAgentMode}
-              onOpenSessionInChat={onOpenSessionInChat}
-              workspaceId={workspaceId}
-            />
-          </TabEditorErrorBoundary>
-        );
-      })}
-    </div>
+          // Load content then create editor
+          const content = tab.content || await loadContent(tab.filePath);
+          loadingRef.current.delete(tab.id);
+
+          // Check tab still exists after async load
+          const freshSnapshot = tabsActions.getSnapshot();
+          if (freshSnapshot.tabs.has(tab.id)) {
+            createTabEditor(tab, content);
+          }
+        }
+      }
+
+      // Update active tab and visibility
+      const activeChanged = activeTabIdRef.current !== newActiveTabId;
+      activeTabIdRef.current = newActiveTabId;
+
+      // Always update visibility after syncing tabs (editors may have been added)
+      updateVisibility();
+    };
+
+    // Initial sync
+    syncTabs();
+
+    // Subscribe to changes
+    const unsubscribe = tabsActions.subscribe(syncTabs);
+    return unsubscribe;
+  }, [tabsActions, loadContent, createTabEditor, removeTabEditor, updateVisibility]);
+
+  // Handle file-save IPC event from menu (Cmd+S)
+  useEffect(() => {
+    if (!window.electronAPI) return;
+
+    const handleFileSave = async () => {
+      const currentActiveTabId = activeTabIdRef.current;
+      if (!currentActiveTabId) return;
+
+      const saveFn = saveFunctionsRef.current.get(currentActiveTabId);
+      if (saveFn) {
+        await saveFn();
+      }
+    };
+
+    window.electronAPI.on('file-save', handleFileSave);
+    return () => {
+      window.electronAPI.off('file-save', handleFileSave);
+    };
+  }, []);
+
+  // Create saveTabById function and expose to parent
+  const saveTabById = useCallback(async (tabId: string): Promise<void> => {
+    const saveFn = saveFunctionsRef.current.get(tabId);
+    if (saveFn) {
+      logger.ui.info(`[TabContent] Saving tab ${tabId} before close`);
+      await saveFn();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (onSaveTabByIdReady) {
+      onSaveTabByIdReady(saveTabById);
+    }
+  }, [onSaveTabByIdReady, saveTabById]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      tabInstancesRef.current.forEach((instance) => {
+        instance.root.unmount();
+        instance.element.remove();
+      });
+      tabInstancesRef.current.clear();
+    };
+  }, []);
+
+  // Render ONLY the container - TabEditors are added imperatively
+  return (
+    <div
+      ref={containerRef}
+      className="tab-content-container"
+      style={{ height: '100%', overflow: 'hidden' }}
+    />
   );
 };
+

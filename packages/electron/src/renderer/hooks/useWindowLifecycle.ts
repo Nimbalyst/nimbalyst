@@ -1,11 +1,10 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { logger } from '../utils/logger';
 
 interface UseWindowLifecycleProps {
   tabsRef: React.MutableRefObject<any>;
   getContentRef: React.MutableRefObject<(() => string) | null>;
-  isDirtyRef: React.MutableRefObject<boolean>;
-  currentFilePath: string | null;
+  currentFilePathRef: React.MutableRefObject<string | null>;
 }
 
 /**
@@ -15,27 +14,25 @@ interface UseWindowLifecycleProps {
 export function useWindowLifecycle({
   tabsRef,
   getContentRef,
-  isDirtyRef,
-  currentFilePath
+  currentFilePathRef
 }: UseWindowLifecycleProps) {
   useEffect(() => {
     logger.ui.info('App component mounted');
 
     // Save on window close/reload
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      // Check if any tabs are dirty
+      const hasDirtyTabs = tabsRef.current?.tabs?.some((tab: any) => tab.isDirty) || false;
+      const activeTab = tabsRef.current?.tabs?.find((t: any) => t.id === tabsRef.current?.activeTabId);
+      const isActiveTabDirty = activeTab?.isDirty || false;
+
       // Save current tab content first
       if (tabsRef.current && tabsRef.current.activeTabId && getContentRef.current) {
         const currentContent = getContentRef.current();
         tabsRef.current.updateTab(tabsRef.current.activeTabId, {
           content: currentContent,
-          isDirty: isDirtyRef.current
+          isDirty: isActiveTabDirty
         });
-      }
-
-      // Check if any tabs are dirty
-      let hasDirtyTabs = isDirtyRef.current;
-      if (tabsRef.current && tabsRef.current.tabs) {
-        hasDirtyTabs = hasDirtyTabs || tabsRef.current.tabs.some((tab: any) => tab.isDirty);
       }
 
       if (hasDirtyTabs) {
@@ -45,7 +42,8 @@ export function useWindowLifecycle({
         e.returnValue = 'You have unsaved changes. Are you sure you want to quit?';
 
         // Try to save current file quickly
-        if (isDirtyRef.current && getContentRef.current && currentFilePath && window.electronAPI) {
+        const currentFilePath = currentFilePathRef.current;
+        if (isActiveTabDirty && getContentRef.current && currentFilePath && window.electronAPI) {
           const content = getContentRef.current();
           // Fire and forget - don't await
           // NOTE: lastSaveTime is tracked in EditorPool per-file now
@@ -67,12 +65,15 @@ export function useWindowLifecycle({
       window.removeEventListener('beforeunload', handleBeforeUnload);
 
       // Final save attempt on unmount
-      if (isDirtyRef.current && getContentRef.current && currentFilePath && window.electronAPI) {
+      const activeTab = tabsRef.current?.tabs?.find((t: any) => t.id === tabsRef.current?.activeTabId);
+      const isActiveTabDirty = activeTab?.isDirty || false;
+      const currentFilePath = currentFilePathRef.current;
+      if (isActiveTabDirty && getContentRef.current && currentFilePath && window.electronAPI) {
         const content = getContentRef.current();
         window.electronAPI.saveFile(content, currentFilePath).catch(error => {
           console.error('[UNMOUNT] Failed to save:', error);
         });
       }
     };
-  }, [currentFilePath, tabsRef, getContentRef, isDirtyRef]);
+  }, [tabsRef, getContentRef, currentFilePathRef]); // Refs don't change, so this effect runs once
 }

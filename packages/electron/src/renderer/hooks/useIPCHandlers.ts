@@ -75,7 +75,6 @@ interface UseIPCHandlersProps {
   handlePreviousTab?: () => void;
 
   // State
-  activeMode?: string; // Current active mode (files, agent, etc.)
   activeSessionId?: string | null; // Current active session ID in agent mode
 
   // State setters
@@ -84,9 +83,8 @@ interface UseIPCHandlersProps {
   setWorkspacePath: (path: string | null) => void;
   setWorkspaceName: (name: string | null) => void;
   // NOTE: setFileTree removed - EditorMode manages file tree
-  setCurrentFilePath: (path: string | null) => void;
-  setCurrentFileName: (name: string | null) => void;
-  setIsDirty: (dirty: boolean) => void;
+  // NOTE: setCurrentFilePath/setCurrentFileName removed - now using refs to prevent re-renders
+  // NOTE: setIsDirty removed - TabEditor owns dirty state and calls setDocumentEdited directly
   // NOTE: setIsNewFileDialogOpen removed - EditorMode manages dialogs
   setIsAIChatCollapsed: (collapsed: boolean) => void;
   setAIChatWidth: (width: number) => void;
@@ -101,18 +99,18 @@ interface UseIPCHandlersProps {
   // Refs
   // NOTE: initialContentRef removed - TabEditor tracks initialContent per-tab
   isInitializedRef: React.MutableRefObject<boolean>;
-  isDirtyRef: React.MutableRefObject<boolean>;
+  // NOTE: isDirtyRef removed - TabEditor owns dirty state and calls setDocumentEdited directly
   // NOTE: contentVersionRef removed - EditorContainer doesn't need version bumping
   getContentRef: React.MutableRefObject<(() => string) | null>;
   searchCommandRef: React.MutableRefObject<LexicalCommand<undefined> | null>;
   editorModeRef: React.RefObject<any>; // EditorModeRef from EditorMode component
+  currentFilePathRef: React.MutableRefObject<string | null>;
+  currentFileNameRef: React.MutableRefObject<string | null>;
 
   // State values
-  currentFilePath: string | null;
   workspaceMode: boolean;
   workspacePath: string | null;
   sessionToLoad: { sessionId: string; workspacePath?: string } | null;
-  isDirty: boolean;
   activeMode: 'files' | 'agent' | 'plan';
 
   // Logging configuration
@@ -147,9 +145,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setWorkspaceMode,
     setWorkspacePath,
     setWorkspaceName,
-    setCurrentFilePath,
-    setCurrentFileName,
-    setIsDirty,
     setIsAIChatCollapsed,
     setAIChatWidth,
     setIsAIChatStateLoaded,
@@ -161,18 +156,17 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
 
     // Refs
     isInitializedRef,
-    isDirtyRef,
     // NOTE: contentVersionRef removed - not needed for EditorContainer
     getContentRef,
     searchCommandRef,
     editorModeRef,
+    currentFilePathRef,
+    currentFileNameRef,
 
     // State values
-    currentFilePath,
     workspaceMode,
     workspacePath,
     sessionToLoad,
-    isDirty,
     activeMode,
 
     // Config
@@ -199,23 +193,22 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setWorkspaceMode,
     setWorkspacePath,
     setWorkspaceName,
-    setCurrentFilePath,
-    setCurrentFileName,
-    setIsDirty,
+    // NOTE: setCurrentFilePath/setCurrentFileName removed - using refs directly
+    // NOTE: setIsDirty removed - dirty state is tracked via isDirtyRef to avoid re-renders
     setIsAIChatCollapsed,
     setAIChatWidth,
     setIsAIChatStateLoaded,
     setSessionToLoad,
+    setIsKeyboardShortcutsDialogOpen,
     setIsAgentPaletteVisible,
     setAIPlanningMode,
+    setTheme,
   });
 
   const stateRef = useRef({
-    currentFilePath,
     workspaceMode,
     workspacePath,
     sessionToLoad,
-    isDirty,
     activeMode,
   });
 
@@ -233,9 +226,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setWorkspaceMode,
     setWorkspacePath,
     setWorkspaceName,
-    setCurrentFilePath,
-    setCurrentFileName,
-    setIsDirty,
     setIsAIChatCollapsed,
     setAIChatWidth,
     setIsAIChatStateLoaded,
@@ -247,11 +237,10 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
   };
 
   stateRef.current = {
-    currentFilePath,
     workspaceMode,
     workspacePath,
     sessionToLoad,
-    isDirty,
+    activeMode,
   };
 
   useEffect(() => {
@@ -294,11 +283,10 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       handlersRef.current.setWorkspacePath(data.workspacePath);
       handlersRef.current.setWorkspaceName(data.workspaceName);
       // NOTE: setFileTree removed - EditorMode loads file tree from workspacePath
-      // Clear current document (EditorContainer manages content now)
-      handlersRef.current.setCurrentFilePath(null);
-      handlersRef.current.setCurrentFileName(null);
-      isDirtyRef.current = false;
-      handlersRef.current.setIsDirty(false);
+      // Clear current document refs (no re-render needed)
+      currentFilePathRef.current = null;
+      currentFileNameRef.current = null;
+      // NOTE: isDirty is now managed by TabEditor
       // NOTE: contentVersion removed - EditorContainer handles remounting via destroy/create
       isInitializedRef.current = false;
 
@@ -367,8 +355,8 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
 
     cleanupFns.push(window.electronAPI.onNewUntitledDocument((data) => {
       console.log('Received new-untitled-document event:', data.untitledName);
-      handlersRef.current.setCurrentFilePath(null);
-      handlersRef.current.setCurrentFileName(data.untitledName);
+      currentFilePathRef.current = null;
+      currentFileNameRef.current = data.untitledName;
       // setIsDirty(true); // New documents start as dirty
       // NOTE: initialContentRef removed - TabEditor tracks this per-tab
       // Update the window title immediately
@@ -431,30 +419,17 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       // Find and close the tab for this file
       if (editorModeRef.current?.tabs) {
         const tabToClose = editorModeRef.current.tabs.findTabByPath(data.filePath);
-        // console.log('[FILE_DELETED] Tab to close:', tabToClose);
         if (tabToClose) {
-          // console.log('[FILE_DELETED] Closing tab for deleted file:', data.filePath, 'tab id:', tabToClose.id);
-
-          // If this is the active tab, we need to immediately clear state to prevent autosave
+          // If this is the active tab, clear the file path to prevent autosave
           if (editorModeRef.current.tabs.activeTabId === tabToClose.id) {
-            // console.log('[FILE_DELETED] This is the active tab, clearing file path immediately');
-            // Clear the file path immediately to prevent autosave from recreating the file
-            handlersRef.current.setCurrentFilePath(null);
-            isDirtyRef.current = false;
-            handlersRef.current.setIsDirty(false);
+            currentFilePathRef.current = null;
           }
 
           editorModeRef.current.tabs.removeTab(tabToClose.id);
-          // console.log('[FILE_DELETED] Tab removed');
-        } else {
-          // console.log('[FILE_DELETED] No tab found for path:', data.filePath);
         }
-      } else if (stateRef.current.currentFilePath === data.filePath) {
-        // console.log('[FILE_DELETED] Single-file mode, current file deleted');
-        // In single-file mode, current file was deleted, mark as dirty and clear the file path
-        handlersRef.current.setCurrentFilePath(null);
-        isDirtyRef.current = true;
-        handlersRef.current.setIsDirty(true);
+      } else if (currentFilePathRef.current === data.filePath) {
+        // In single-file mode, current file was deleted, clear the file path
+        currentFilePathRef.current = null;
       }
     }));
 
@@ -462,13 +437,13 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     // The legacy file change handler has been removed as it's no longer needed.
     cleanupFns.push(window.electronAPI.onFileMoved(async (data) => {
       console.log('File moved:', data);
-      if (stateRef.current.currentFilePath === data.sourcePath) {
+      if (currentFilePathRef.current === data.sourcePath) {
         // The current file was moved, update the path and reload it
         console.log('Current file was moved, updating to new path:', data.destinationPath);
 
-        // Update the current file path
-        handlersRef.current.setCurrentFilePath(data.destinationPath);
-        handlersRef.current.setCurrentFileName(getFileName(data.destinationPath));
+        // Update the current file path refs
+        currentFilePathRef.current = data.destinationPath;
+        currentFileNameRef.current = getFileName(data.destinationPath);
 
         // Update the file in main process
         if (window.electronAPI.setCurrentFile) {
@@ -514,9 +489,9 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       // NOTE: setFileTree removed - EditorMode handles file tree updates via onWorkspaceFileTreeUpdated
 
       // Update current file path if it was renamed
-      if (stateRef.current.currentFilePath === data.oldPath) {
-        handlersRef.current.setCurrentFilePath(data.newPath);
-        handlersRef.current.setCurrentFileName(getFileName(data.newPath));
+      if (currentFilePathRef.current === data.oldPath) {
+        currentFilePathRef.current = data.newPath;
+        currentFileNameRef.current = getFileName(data.newPath);
       }
     }));
     // NOTE: File tree updates handled by EditorMode directly via onWorkspaceFileTreeUpdated
@@ -545,22 +520,14 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       }));
     }
 
-    // View history menu handler
+    // View history menu handler - delegate to EditorMode
     if (window.electronAPI.onViewHistory) {
       cleanupFns.push(window.electronAPI.onViewHistory(() => {
         console.log('View history menu triggered');
-        // Save current state as manual snapshot before opening history (only if dirty)
-        if (stateRef.current.isDirty && stateRef.current.currentFilePath && getContentRef.current && window.electronAPI?.history) {
-          const content = getContentRef.current();
-          window.electronAPI.history.createSnapshot(
-            stateRef.current.currentFilePath,
-            content,
-            'manual',
-            'Before viewing history'
-          );
+        // EditorMode handles snapshot creation if needed (it has access to dirty state)
+        if (editorModeRef.current?.openHistoryDialog) {
+          editorModeRef.current.openHistoryDialog();
         }
-        // NOTE: setIsHistoryDialogOpen removed - EditorMode manages history dialog
-        // This IPC handler should delegate to EditorMode instead
       }));
     }
 
@@ -1009,7 +976,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
         const content = getContentRef.current();
         const docState = {
           content,
-          filePath: stateRef.current.currentFilePath || 'untitled.md',
+          filePath: currentFilePathRef.current || 'untitled.md',
           fileType: 'markdown',
           workspacePath: stateRef.current.workspacePath, // Use workspace path for window routing
           // TODO: Get actual cursor position and selection from editor
@@ -1029,9 +996,8 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       }
     };
 
-    // Update document state when file is opened or content changes
-    // We need to send the initial state when a file is opened, not just when it's dirty
-    if (stateRef.current.currentFilePath || stateRef.current.isDirty) {
+    // Update document state when file is opened
+    if (currentFilePathRef.current) {
       updateDocumentState();
     }
 
