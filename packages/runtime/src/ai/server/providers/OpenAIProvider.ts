@@ -5,8 +5,6 @@
 import OpenAI from 'openai';
 import { BaseAIProvider } from '../AIProvider';
 import fs from 'fs/promises';
-import path from 'path';
-import os from 'os';
 import {
   DocumentContext,
   ProviderConfig,
@@ -266,10 +264,6 @@ export class OpenAIProvider extends BaseAIProvider {
 
         const beforeAwait = Date.now();
 
-        // Write debug info to file
-        const debugFile = path.join(os.tmpdir(), 'openai-debug.log');
-        fs.appendFileSync(debugFile, `\n[${new Date().toISOString()}] About to call OpenAI API with model: ${completionParams.model}\n`);
-
         // Track if we're in Electron
         console.log(`[OpenAIProvider] Running in Electron: ${!!process.versions.electron}`);
         console.log(`[OpenAIProvider] Process type: ${process.type || 'node'}`);
@@ -279,7 +273,6 @@ export class OpenAIProvider extends BaseAIProvider {
         });
 
         const afterAwait = Date.now();
-        fs.appendFileSync(debugFile, `[${new Date().toISOString()}] API call returned after ${afterAwait - beforeAwait}ms\n`);
         console.log(`[OpenAIProvider] await returned after ${afterAwait - beforeAwait}ms`);
 
         console.log(`[OpenAIProvider] completions.create returned after ${Date.now() - createStartTime}ms`);
