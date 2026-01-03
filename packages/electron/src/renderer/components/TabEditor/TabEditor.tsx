@@ -781,65 +781,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     await saveWithHistory(currentContent, 'manual');
   }, [saveWithHistory, fileName]);
 
-  // Content change handler from editor
-  const handleContentChange = useCallback(() => {
-    if (!getContentFnRef.current) return;
-
-    const currentContent = getContentFnRef.current();
-
-    // Update content ref to track current editor state
-    // This is critical for file watcher comparisons
-    contentRef.current = currentContent;
-
-    // Check if content has changed from initial state
-    // In diff mode, we still track dirty state so manual edits can be autosaved
-    const isContentDirty = currentContent !== initialContentRef.current;
-
-    // const timeNow = Date.now();
-    // const timeSinceLastSave = lastSaveTimeRef.current ? timeNow - lastSaveTimeRef.current : Infinity;
-    // console.log(`[TabEditor] handleContentChange for ${fileName}, dirty=${isContentDirty}, inDiffMode=${!!pendingAIEditTagRef.current}, currentLength=${currentContent.length}, initialLength=${initialContentRef.current.length}, timeSinceLastSave=${timeSinceLastSave}ms`);
-    // if (isContentDirty && currentContent !== initialContentRef.current) {
-    //   // Log the actual difference
-    //   const diffChars = Math.abs(currentContent.length - initialContentRef.current.length);
-    //   console.log(`[TabEditor] Content differs by ${diffChars} characters`);
-    //
-    //   // Log first 50 chars of each to see the difference
-    //   console.log(`[TabEditor] Current: "${currentContent.substring(0, 50)}..."`);
-    //   console.log(`[TabEditor] Initial: "${initialContentRef.current.substring(0, 50)}..."`);
-    // }
-
-    // NOTE: We don't call setContent() here - contentRef is the source of truth.
-    // The editor (Lexical/Monaco) owns its own display. We just track for saving.
-    isDirtyRef.current = isContentDirty;
-    lastChangeTimeRef.current = Date.now();
-
-    // CRITICAL: If user manually edits during diff mode, clear the pending tag
-    // This means they've modified the AI's changes, so it's no longer a "pure" AI diff
-    // and we should allow autosave to prevent data loss
-    // Only do this for ACTUAL user edits, not:
-    // - Programmatic diff application (isApplyingDiffRef)
-    // - Content changes from file watcher reloads
-    // The safest check: Only clear if user is actively typing (currentContent != lastChangeTimeRef content)
-    // For now, DISABLE this clearing entirely - let user approve/reject handle it
-    if (false && pendingAIEditTagRef.current && !isApplyingDiffRef.current) {
-      logger.ui.info(`[TabEditor] User edited during diff mode - clearing pending tag for ${fileName}`);
-      const tagInfo = pendingAIEditTagRef.current;
-      pendingAIEditTagRef.current = null;
-
-      // Mark the tag as reviewed since user has manually intervened
-      if (window.electronAPI?.history) {
-        window.electronAPI.history.updateTagStatus(tagInfo.filePath, tagInfo.tagId, 'reviewed', workspaceId)
-          .catch(error => {
-            logger.ui.error(`[TabEditor] Failed to mark tag as reviewed after user edit:`, error);
-          });
-      }
-    }
-
-    // Update tab dirty indicator via DOM
-    onDirtyChange?.(isContentDirty);
-  }, [fileName]);
-
-
   // Autosave timer
   useEffect(() => {
     if (autosaveInterval <= 0) return;
