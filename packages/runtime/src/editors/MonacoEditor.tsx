@@ -1,80 +1,80 @@
 /**
- * MonacoEditor Wrapper
+ * MonacoEditor - EditorHost-aware wrapper for Monaco
  *
- * Adapts Monaco Editor to work with EditorHost.
- * This component follows the same pattern as MarkdownEditor and custom editors:
+ * Adapts MonacoCodeEditor to work with EditorHost interface.
+ * This component follows the same pattern as MarkdownEditor:
  * - Receives EditorHost as prop
  * - Loads content via host.loadContent()
  * - Saves content via host.saveContent()
  * - Reports dirty state via host.setDirty()
  *
- * NOTE: This is a placeholder for the full implementation.
- * Monaco Editor has platform-specific dependencies (@monaco-editor/react) that
- * currently live in the electron package. A full implementation would require:
- * 1. Either moving Monaco dependencies to runtime (increases bundle size)
- * 2. Or having platform-specific implementations with shared interface
- *
- * For now, TabEditor in electron can directly use MonacoCodeEditor with EditorHost
- * pattern, similar to how MarkdownEditor wraps Rexical.
+ * This creates a clean separation:
+ * - MonacoCodeEditor: Pure Monaco wrapper, handles diff mode
+ * - MonacoEditor: Adapts Monaco to EditorHost interface
+ * - TabEditor: Provides EditorHost, doesn't know about editor internals
  */
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { MonacoCodeEditor } from './MonacoCodeEditor';
 import type { EditorHost, DiffConfig } from '../extensions/editorHost';
+import type { Theme as ConfigTheme } from 'rexical';
 
 export interface MonacoEditorConfig {
   /** Theme for the editor */
-  theme?: 'light' | 'dark' | 'crystal-dark' | 'auto';
+  theme?: ConfigTheme;
 
-  /** Whether the editor is read-only */
-  readOnly?: boolean;
-
-  /** Language mode (auto-detected from file extension if not specified) */
-  language?: string;
+  /** Whether this editor's tab is active */
+  isActive?: boolean;
 }
 
 export interface MonacoEditorProps {
   /** Host service for all editor-host communication */
   host: EditorHost;
 
+  /** File name for language detection */
+  fileName: string;
+
   /** Optional configuration */
   config?: MonacoEditorConfig;
 
-  /** Callback when editor is ready (passes editor instance) */
+  /** Callback when editor is ready (passes editor instance with diff controls) */
   onEditorReady?: (editor: any) => void;
+
+  /** Callback when getContent function is available */
+  onGetContent?: (getContentFn: () => string) => void;
+
+  /** Callback when diff change count updates (for diff header UI) */
+  onDiffChangeCountUpdate?: (count: number) => void;
 }
 
 /**
  * MonacoEditor - EditorHost-aware wrapper for Monaco
  *
- * This is a placeholder implementation. The actual Monaco integration
- * happens in packages/electron where @monaco-editor/react is available.
- *
- * TabEditor should use the pattern established here:
- * 1. Create EditorHost with all callbacks wired up
- * 2. Pass EditorHost to the editor component
- * 3. Editor handles its own lifecycle (load, save, dirty state)
+ * This component handles all EditorHost integration:
+ * - Content loading on mount
+ * - Save request handling (autosave, manual save)
+ * - File change notifications
+ * - Dirty state reporting
+ * - Diff mode (for AI edit review)
  */
 export function MonacoEditor({
   host,
+  fileName,
   config = {},
   onEditorReady,
+  onGetContent: onGetContentProp,
+  onDiffChangeCountUpdate,
 }: MonacoEditorProps): React.ReactElement {
-  // Loading state
+  // Loading state - we load content via host.loadContent()
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [initialContent, setInitialContent] = useState<string>('');
 
-  // Editor instance ref
-  const editorRef = useRef<any>(null);
+  // Editor wrapper ref (contains editor, setContent, showDiff, etc.)
+  const editorWrapperRef = useRef<any>(null);
 
   // Function to get current content from editor
   const getContentFnRef = useRef<(() => string) | null>(null);
-
-  // Track if content has been modified
-  const isDirtyRef = useRef(false);
-
-  // Track initial content for dirty comparison
-  const initialContentRef = useRef<string>('');
 
   // Load initial content on mount
   useEffect(() => {
@@ -86,7 +86,6 @@ export function MonacoEditor({
         const content = await host.loadContent();
         if (mounted) {
           setInitialContent(content);
-          initialContentRef.current = content;
           setIsLoading(false);
         }
       } catch (error) {
@@ -104,7 +103,7 @@ export function MonacoEditor({
     };
   }, [host]);
 
-  // Subscribe to save requests from host
+  // Subscribe to save requests from host (autosave timer, manual Cmd+S)
   useEffect(() => {
     const handleSaveRequest = async () => {
       if (!getContentFnRef.current) {
@@ -115,9 +114,6 @@ export function MonacoEditor({
       try {
         const content = getContentFnRef.current();
         await host.saveContent(content);
-        // Reset dirty state after successful save
-        isDirtyRef.current = false;
-        initialContentRef.current = content;
       } catch (error) {
         console.error('[MonacoEditor] Save failed:', error);
       }
@@ -130,10 +126,9 @@ export function MonacoEditor({
   // Subscribe to file changes (external edits)
   useEffect(() => {
     const handleFileChanged = (newContent: string) => {
-      if (editorRef.current && editorRef.current.setContent) {
-        editorRef.current.setContent(newContent);
-        initialContentRef.current = newContent;
-        isDirtyRef.current = false;
+      // Use editor's setContent method to update content
+      if (editorWrapperRef.current?.setContent) {
+        editorWrapperRef.current.setContent(newContent);
       }
     };
 
@@ -141,29 +136,41 @@ export function MonacoEditor({
     return unsubscribe;
   }, [host]);
 
-  // Handle content change from Monaco
-  const handleContentChange = useCallback(() => {
-    if (!getContentFnRef.current) return;
+  // Subscribe to diff requests (for AI edit review)
+  useEffect(() => {
+    if (!host.onDiffRequested) return;
 
-    const currentContent = getContentFnRef.current();
-    const isDirty = currentContent !== initialContentRef.current;
+    const handleDiffRequest = (config: DiffConfig) => {
+      // Use editor's showDiff method
+      if (editorWrapperRef.current?.showDiff) {
+        editorWrapperRef.current.showDiff(config.oldContent, config.newContent);
+      }
+    };
 
-    if (isDirty !== isDirtyRef.current) {
-      isDirtyRef.current = isDirty;
-      host.setDirty(isDirty);
-    }
+    const unsubscribe = host.onDiffRequested(handleDiffRequest);
+    return unsubscribe;
   }, [host]);
+
+  // Handle dirty state changes from Monaco
+  const handleDirtyChange = useCallback(
+    (isDirty: boolean) => {
+      host.setDirty(isDirty);
+    },
+    [host]
+  );
 
   // Handle getContent callback from Monaco
   const handleGetContent = useCallback((getContentFn: () => string) => {
     getContentFnRef.current = getContentFn;
-  }, []);
+    // Also notify parent if they need the getContent function
+    onGetContentProp?.(getContentFn);
+  }, [onGetContentProp]);
 
-  // Handle editor ready
+  // Handle editor ready (Monaco wrapper with diff controls)
   const handleEditorReady = useCallback(
-    (editor: any) => {
-      editorRef.current = editor;
-      onEditorReady?.(editor);
+    (editorWrapper: any) => {
+      editorWrapperRef.current = editorWrapper;
+      onEditorReady?.(editorWrapper);
     },
     [onEditorReady]
   );
@@ -171,7 +178,13 @@ export function MonacoEditor({
   // Show loading state
   if (isLoading) {
     return (
-      <div className="monaco-editor-loading">
+      <div className="monaco-editor-loading" style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100%',
+        color: 'var(--text-secondary)'
+      }}>
         <span>Loading...</span>
       </div>
     );
@@ -180,24 +193,31 @@ export function MonacoEditor({
   // Show error state
   if (loadError) {
     return (
-      <div className="monaco-editor-error">
+      <div className="monaco-editor-error" style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100%',
+        color: 'var(--text-error)'
+      }}>
         <span>Failed to load: {loadError.message}</span>
       </div>
     );
   }
 
-  // Render placeholder
-  // In the actual implementation, this would render the Monaco Editor component
+  // Render MonacoCodeEditor with EditorHost integration
   return (
-    <div className="monaco-editor-wrapper" data-theme={host.theme}>
-      <div className="monaco-editor-placeholder">
-        MonacoEditor wrapper ready. Monaco integration pending.
-        <br />
-        File: {host.filePath}
-        <br />
-        Initial content length: {initialContent.length}
-      </div>
-    </div>
+    <MonacoCodeEditor
+      filePath={host.filePath}
+      fileName={fileName}
+      initialContent={initialContent}
+      theme={config.theme ?? host.theme}
+      isActive={config.isActive}
+      onDirtyChange={handleDirtyChange}
+      onGetContent={handleGetContent}
+      onEditorReady={handleEditorReady}
+      onDiffChangeCountUpdate={onDiffChangeCountUpdate}
+    />
   );
 }
 

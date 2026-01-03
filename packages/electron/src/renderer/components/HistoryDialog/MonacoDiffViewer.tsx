@@ -1,6 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import * as monaco from 'monaco-editor';
-import { getMonacoLanguage } from '../../utils/fileTypeDetector';
+import { getMonacoLanguage } from '@nimbalyst/runtime';
 import './MonacoDiffViewer.css';
 
 interface MonacoDiffViewerProps {

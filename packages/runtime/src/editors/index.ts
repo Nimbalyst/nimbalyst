@@ -18,3 +18,8 @@ export type { MarkdownEditorProps, MarkdownEditorConfig } from './MarkdownEditor
 
 export { MonacoEditor } from './MonacoEditor';
 export type { MonacoEditorProps, MonacoEditorConfig } from './MonacoEditor';
+
+export { MonacoCodeEditor } from './MonacoCodeEditor';
+export type { MonacoCodeEditorProps, MonacoDiffModeConfig } from './MonacoCodeEditor';
+
+export { getMonacoTheme, getMonacoLanguage } from './monacoUtils';

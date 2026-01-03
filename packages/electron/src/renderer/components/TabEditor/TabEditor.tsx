@@ -14,7 +14,7 @@
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { usePostHog } from 'posthog-js/react';
 import type { ConfigTheme, TextReplacement } from 'rexical';
-import { DocumentPathProvider, MarkdownEditor } from '@nimbalyst/runtime';
+import { DocumentPathProvider, MarkdownEditor, MonacoEditor, MonacoCodeEditor } from '@nimbalyst/runtime';
 import {
   StravuEditor,
   $convertFromEnhancedMarkdownString,
@@ -31,7 +31,6 @@ import { $getRoot, $getSelection, $isRangeSelection, SKIP_SCROLL_INTO_VIEW_TAG, 
 import { DocumentHeaderContainer } from '@nimbalyst/runtime/plugins/TrackerPlugin/documentHeader';
 import { setTextSelection, clearTextSelection } from '../UnifiedAI/TextSelectionIndicator';
 import { FixedTabHeaderContainer, FixedTabHeaderRegistry } from '@nimbalyst/runtime/plugins/shared/fixedTabHeader';
-import { MonacoCodeEditor } from '../MonacoCodeEditor';
 import { UnifiedDiffHeader, LexicalDiffHeaderAdapter } from '../UnifiedDiffHeader';
 import { ImageViewer } from '../ImageViewer';
 import { getFileType } from '../../utils/fileTypeDetector';
@@ -2168,22 +2167,13 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                       Editor
                     </button>
                   </div>
-                  <MonacoCodeEditor
+                  <MonacoEditor
                     key={`${filePath}-source`}
-                    filePath={filePath}
+                    host={editorHost}
                     fileName={fileName}
-                    initialContent={content}
-                    theme={theme}
-                    isActive={isActive}
-                    onDirtyChange={(isDirty: boolean) => {
-                      if (isDirtyRef.current !== isDirty) {
-                        isDirtyRef.current = isDirty;
-                        lastChangeTimeRef.current = Date.now();
-                        onDirtyChange?.(isDirty);
-                        if (isActive && window.electronAPI?.setDocumentEdited) {
-                          window.electronAPI.setDocumentEdited(isDirty);
-                        }
-                      }
+                    config={{
+                      theme,
+                      isActive,
                     }}
                     onGetContent={(getContentFn) => {
                       getContentFnRef.current = getContentFn;
@@ -2379,22 +2369,13 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                   Switch to Rich Text Editor
                 </button>
               </div>
-              <MonacoCodeEditor
+              <MonacoEditor
                 key={`${filePath}-monaco`}
-                filePath={filePath}
+                host={editorHost}
                 fileName={fileName}
-                initialContent={content}
-                theme={theme}
-                isActive={isActive}
-                onDirtyChange={(isDirty: boolean) => {
-                  if (isDirtyRef.current !== isDirty) {
-                    isDirtyRef.current = isDirty;
-                    lastChangeTimeRef.current = Date.now();
-                    onDirtyChange?.(isDirty);
-                    if (isActive && window.electronAPI?.setDocumentEdited) {
-                      window.electronAPI.setDocumentEdited(isDirty);
-                    }
-                  }
+                config={{
+                  theme,
+                  isActive,
                 }}
                 onGetContent={(getContentFn) => {
                   getContentFnRef.current = getContentFn;
@@ -2436,22 +2417,13 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                   editorType="monaco"
                 />
               )}
-              <MonacoCodeEditor
+              <MonacoEditor
                 key={filePath}
-                filePath={filePath}
+                host={editorHost}
                 fileName={fileName}
-                initialContent={initialContent}
-                theme={theme}
-                isActive={isActive}
-                onDirtyChange={(isDirty: boolean) => {
-                  if (isDirtyRef.current !== isDirty) {
-                    isDirtyRef.current = isDirty;
-                    lastChangeTimeRef.current = Date.now();
-                    onDirtyChange?.(isDirty);
-                    if (isActive && window.electronAPI?.setDocumentEdited) {
-                      window.electronAPI.setDocumentEdited(isDirty);
-                    }
-                  }
+                config={{
+                  theme,
+                  isActive,
                 }}
                 onGetContent={(getContentFn) => {
                   getContentFnRef.current = getContentFn;
