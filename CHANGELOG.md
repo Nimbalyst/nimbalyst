@@ -20,6 +20,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.50.9] - 2026-01-02
+
+
+### Added
+- Inline session rename functionality
+- PostHog tracking for terminal usage
+- PostHog tracking for MCP configuration
+
+### Changed
+- Improved MCP logo appearance in light/dark modes
+- Moved 'test' button outside hidden section in MCP templates
+
+### Fixed
+- Connection tested state not resetting
+- AWS logo in MCP templates
+- Many MCP server configuration issues
+- PATH handling for MCP servers
+- Playwright MCP configuration
+- Doubled up login widgets display issue
+- Claude Code login button not showing
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.50.8] - 2026-01-02
 
 
