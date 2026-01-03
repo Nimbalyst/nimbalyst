@@ -493,6 +493,17 @@
   }
 }
 
+/* Standalone test section for template configs */
+.mcp-test-standalone {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.mcp-test-standalone .mcp-test-button {
+  align-self: flex-start;
+}
+
 .mcp-form-hint {
   margin-top: 0.25rem;
   font-size: 0.75rem;

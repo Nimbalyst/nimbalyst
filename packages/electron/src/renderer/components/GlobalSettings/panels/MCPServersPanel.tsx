@@ -1465,6 +1465,36 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
           </div>
         )}
 
+        {/* Test Connection Button (visible for templates, outside Advanced section) */}
+        {isFromTemplate && (
+          <div className="mcp-form-group">
+            <label>Test Connection</label>
+            <div className="mcp-test-standalone">
+              <button
+                onClick={handleTestConnection}
+                disabled={testStatus === 'testing'}
+                className={`mcp-test-button ${testStatus}`}
+                aria-label="Test server connection"
+                aria-busy={testStatus === 'testing'}
+              >
+                {testStatus === 'testing' ? 'Testing...' :
+                 testStatus === 'success' ? 'Connected' :
+                 testStatus === 'error' ? 'Failed' : 'Test Connection'}
+              </button>
+              {testMessage && (
+                <div
+                  className={`mcp-test-message ${testStatus}`}
+                  role={testStatus === 'error' ? 'alert' : 'status'}
+                  aria-live="polite"
+                >
+                  {testStatus === 'testing' && <span className="mcp-test-spinner" aria-hidden="true" />}
+                  {testMessage}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Advanced Configuration (collapsed for templates) */}
         {isFromTemplate ? (
           <details className="mcp-advanced-section">
