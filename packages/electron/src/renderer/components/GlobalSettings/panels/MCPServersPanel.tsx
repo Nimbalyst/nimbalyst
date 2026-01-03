@@ -427,11 +427,11 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     id: 'playwright',
     name: 'Playwright',
     description: 'Browser automation and testing',
-    docsUrl: 'https://github.com/anthropics/anthropic-quickstarts/tree/main/mcp-server-playwright',
+    docsUrl: 'https://github.com/microsoft/playwright-mcp',
     authType: 'none',
     config: {
       command: 'npx',
-      args: ['-y', '@anthropic/mcp-server-playwright'],
+      args: ['-y', '@playwright/mcp@latest'],
       env: {}
     }
   },
