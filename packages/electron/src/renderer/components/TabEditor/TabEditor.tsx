@@ -14,7 +14,7 @@
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { usePostHog } from 'posthog-js/react';
 import type { ConfigTheme, TextReplacement } from 'rexical';
-import { DocumentPathProvider } from '@nimbalyst/runtime';
+import { DocumentPathProvider, MarkdownEditor } from '@nimbalyst/runtime';
 import {
   StravuEditor,
   $convertFromEnhancedMarkdownString,
@@ -2277,53 +2277,11 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               />
               <div className="tab-editor-wrapper" style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
               <DocumentPathProvider documentPath={filePath}>
-                <StravuEditor
+                <MarkdownEditor
                   key={`${filePath}-lexical-v${viewModeVersion}`}
+                  host={editorHost}
                   config={{
-                    initialContent: content,
                     theme,
-                    // Use onDirtyChange instead of onContentChange to avoid serialization on every keystroke
-                    onDirtyChange: (isDirty: boolean) => {
-                      // Only update if state actually changed
-                      if (isDirtyRef.current !== isDirty) {
-                        isDirtyRef.current = isDirty;
-                        lastChangeTimeRef.current = Date.now();
-                        // Update tab dirty indicator via DOM (no React state cascade)
-                        onDirtyChange?.(isDirty);
-                        // Update macOS window dirty indicator if this is the active tab
-                        if (isActive && window.electronAPI?.setDocumentEdited) {
-                          window.electronAPI.setDocumentEdited(isDirty);
-                        }
-                      }
-                    },
-                    onGetContent: (getContentFn) => {
-                      getContentFnRef.current = getContentFn;
-                      if (onGetContentReady) {
-                        onGetContentReady(getContentFn);
-                      }
-                      // Now that we have getContentFn, expose the manual save function
-                      if (onManualSaveReady) {
-                        onManualSaveReady(handleManualSave);
-                      }
-                      // Sync content once when editor is ready to ensure DocumentHeaderContainer
-                      // detects frontmatter on initial load
-                      if (!hasInitialContentSyncRef.current) {
-                        hasInitialContentSyncRef.current = true;
-                        const currentContent = getContentFn();
-                        setContent(currentContent);
-                      }
-                    },
-                    onEditorReady: (editor) => {
-                      editorRef.current = editor;
-                      setIsEditorReady(true);
-                      // Force FixedTabHeaderRegistry to re-evaluate after editor remounts
-                      // This ensures DiffApprovalBar appears when switching back from Monaco mode
-                      setTimeout(() => {
-                        FixedTabHeaderRegistry.getInstance().notifyChange();
-                      }, 150);
-                    },
-                    onSaveRequest: handleManualSave,
-                    onViewHistory,
                     onRenameDocument,
                     onSwitchToAgentMode,
                     onOpenSessionInChat,
@@ -2333,19 +2291,16 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                         const currentContent = getContentFnRef.current();
                         setContent(currentContent);
                       }
-                  // Track markdown view mode switch
-                  posthog?.capture('markdown_view_mode_switched', {
-                    fromMode: 'lexical',
-                    toMode: 'monaco',
-                  });
+                      // Track markdown view mode switch
+                      posthog?.capture('markdown_view_mode_switched', {
+                        fromMode: 'lexical',
+                        toMode: 'monaco',
+                      });
                       setMarkdownViewMode('monaco');
                       setViewModeVersion(v => v + 1);
                     },
-                    filePath,
-                    workspaceId,
                     onImageDoubleClick: handleImageDoubleClick,
                     onImageDragStart: handleImageDragStart,
-                    textReplacements: isActive ? textReplacements : undefined,
                     documentHeader: (
                       <DocumentHeaderContainer
                         filePath={filePath}
@@ -2355,6 +2310,24 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                         editor={editorRef.current}
                       />
                     ),
+                  }}
+                  onEditorReady={(editor) => {
+                    editorRef.current = editor;
+                    setIsEditorReady(true);
+                    // Force FixedTabHeaderRegistry to re-evaluate after editor remounts
+                    setTimeout(() => {
+                      FixedTabHeaderRegistry.getInstance().notifyChange();
+                    }, 150);
+                    // Expose manual save function
+                    if (onManualSaveReady) {
+                      onManualSaveReady(handleManualSave);
+                    }
+                  }}
+                  onGetContent={(getContentFn) => {
+                    getContentFnRef.current = getContentFn;
+                    if (onGetContentReady) {
+                      onGetContentReady(getContentFn);
+                    }
                   }}
                 />
               </DocumentPathProvider>
