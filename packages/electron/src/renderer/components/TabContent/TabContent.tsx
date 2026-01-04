@@ -13,7 +13,7 @@
 
 import React, { useCallback, useEffect, useRef } from 'react';
 import { createRoot, Root } from 'react-dom/client';
-import type { ConfigTheme, TextReplacement } from 'rexical';
+import type { TextReplacement } from 'rexical';
 import type { Tab } from '../TabManager/TabManager';
 import { TabEditor } from '../TabEditor/TabEditor';
 import { TabEditorErrorBoundary } from '../TabEditorErrorBoundary';
@@ -21,7 +21,6 @@ import { logger } from '../../utils/logger';
 import { useTabsActions, type TabData, notifyDirtyStateChange } from '../../contexts/TabsContext';
 
 interface TabContentProps {
-  theme: ConfigTheme;
   textReplacements?: TextReplacement[];
 
   // Callbacks to parent
@@ -51,7 +50,6 @@ interface TabEditorInstance {
 }
 
 export const TabContent: React.FC<TabContentProps> = ({
-  theme,
   textReplacements,
   onManualSaveReady,
   onGetContentReady,
@@ -82,7 +80,6 @@ export const TabContent: React.FC<TabContentProps> = ({
 
   // Store props in refs so callbacks can access current values
   const propsRef = useRef({
-    theme,
     textReplacements,
     onManualSaveReady,
     onGetContentReady,
@@ -95,7 +92,6 @@ export const TabContent: React.FC<TabContentProps> = ({
     workspaceId,
   });
   propsRef.current = {
-    theme,
     textReplacements,
     onManualSaveReady,
     onGetContentReady,
@@ -195,7 +191,6 @@ export const TabContent: React.FC<TabContentProps> = ({
           filePath={tab.filePath}
           fileName={tab.fileName}
           initialContent={content}
-          theme={propsRef.current.theme}
           isActive={true}  // Always true - wrapper controls visibility
           textReplacements={isActiveTab ? propsRef.current.textReplacements : undefined}
           onDirtyChange={handleDirtyChange}

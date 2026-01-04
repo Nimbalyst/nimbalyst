@@ -15,6 +15,7 @@ import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import { usePostHog } from 'posthog-js/react';
 import type { ConfigTheme, TextReplacement } from 'rexical';
 import { DocumentPathProvider, MarkdownEditor, MonacoEditor, MonacoCodeEditor } from '@nimbalyst/runtime';
+import { useTheme } from '../../hooks/useTheme';
 import {
   StravuEditor,
   $convertFromEnhancedMarkdownString,
@@ -48,7 +49,6 @@ interface TabEditorProps {
   initialContent: string;
 
   // Configuration
-  theme: ConfigTheme;
   isActive: boolean;
 
   // Optional features
@@ -79,7 +79,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                                                       filePath,
                                                       fileName,
                                                       initialContent,
-                                                      theme,
                                                       isActive,
                                                       textReplacements,
                                                       autosaveInterval = 2000,
@@ -95,6 +94,10 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                                                       onOpenSessionInChat,
                                                       workspaceId,
                                                     }) => {
+  // Use theme hook directly so we get live updates when theme changes
+  // (TabContent creates each TabEditor in a separate React root, so prop updates don't work)
+  const { theme } = useTheme();
+
   // Debug: log every render to verify isDirty changes don't cause re-renders
   console.log('[TabEditor] render', fileName);
 

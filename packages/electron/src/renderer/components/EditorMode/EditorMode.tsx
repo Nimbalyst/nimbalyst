@@ -807,7 +807,6 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
               isAIChatCollapsed={isAIChatCollapsed}
             >
               <TabContent
-                theme={theme}
                 onManualSaveReady={(saveFn) => {
                   handleSaveRef.current = saveFn;
                 }}

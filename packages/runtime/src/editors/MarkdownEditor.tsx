@@ -202,6 +202,8 @@ export function MarkdownEditor({
   }, [host]);
 
   // Build config for StravuEditor
+  // Note: We use config.theme directly in dependencies because host.theme is a getter
+  // that reads from a ref, so it won't trigger re-computation when the ref changes.
   const editorConfig = useMemo(
     (): EditorConfig => ({
       theme: config.theme ?? host.theme,
@@ -225,8 +227,16 @@ export function MarkdownEditor({
       onEditorReady: handleEditorReady,
     }),
     [
-      config,
-      host.theme,
+      config.theme,
+      config.editable,
+      config.showToolbar,
+      config.documentHeader,
+      config.onImageDoubleClick,
+      config.onImageDragStart,
+      config.onRenameDocument,
+      config.onSwitchToAgentMode,
+      config.onOpenSessionInChat,
+      config.onToggleMarkdownMode,
       host.filePath,
       host.workspaceId,
       initialContent,
