@@ -94,6 +94,10 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   const [isAIChatStateLoaded, setIsAIChatStateLoaded] = useState(false);
   const [currentAISessionId, setCurrentAISessionId] = useState<string | null>(null);
 
+  // Track active tab for document context (AI needs to know current file)
+  // This is state because we need to re-render when it changes
+  const [activeTabForContext, setActiveTabForContext] = useState<TabData | null>(null);
+
   // Refs
   const getContentRef = useRef<(() => string) | null>(null);
   const handleSaveRef = useRef<(() => Promise<void>) | null>(null);
@@ -180,7 +184,22 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     return unsubscribe;
   }, [tabsActions, workspaceName]);
 
+  // Subscribe to active tab changes for document context (AI needs to know current file)
+  // This triggers a re-render when active tab changes, which is necessary for AIChat
+  useEffect(() => {
+    const updateActiveTabForContext = () => {
+      const snapshot = tabsActions.getSnapshot();
+      const activeTab = snapshot.activeTabId ? snapshot.tabs.get(snapshot.activeTabId) : null;
+      setActiveTabForContext(activeTab || null);
+    };
 
+    // Initial update
+    updateActiveTabForContext();
+
+    // Subscribe to future changes
+    const unsubscribe = tabsActions.subscribe(updateActiveTabForContext);
+    return unsubscribe;
+  }, [tabsActions]);
 
   // Handle tab close with save for dirty tabs
   // CRITICAL: Use tabsRef.current to avoid stale closure bug
@@ -266,9 +285,9 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   }, [currentFilePath, workspacePath]);
 
   // Build document context for AI features
-  // NOTE: useDocumentContext will be updated to use context internally
+  // Uses activeTabForContext which is updated via subscription to trigger re-renders
   const documentContext = useDocumentContext({
-    activeTab: null, // TabContent now handles this
+    activeTab: activeTabForContext,
     getContentRef
   });
 
