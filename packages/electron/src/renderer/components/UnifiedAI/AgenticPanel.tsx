@@ -1410,8 +1410,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   }, [updateWindowTitle]);
 
   // Handle menu:find events in agent mode - bridge IPC to custom events for RichTranscriptView
+  // Only handle when both mode is 'agent' AND the panel is active (user is viewing agent mode)
   useEffect(() => {
-    if (mode !== 'agent') return;
+    if (mode !== 'agent' || !isActive) return;
 
     const handleMenuFind = () => {
       const sessionId = activeTabIdRef.current;
@@ -1443,7 +1444,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       cleanup2?.();
       cleanup3?.();
     };
-  }, [mode]);
+  }, [mode, isActive]);
 
   // Listen for queued prompts notification - triggers processing from the queued_prompts table
   // The actual prompts are fetched from the database, not from the IPC payload
