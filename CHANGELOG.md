@@ -20,6 +20,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.50.12] - 2026-01-04
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+- Extension SDK now exports complete EditorHost types
+
+### Fixed
+- Cmd+F in files mode now opens editor find instead of transcript find
+- AI chat in files mode now knows which document is open
+- Theme changes now apply to all open editors
+- Locally queued AI prompts now execute instead of sitting idle
+- Duplicate prompt queue submissions no longer possible
+- Removed outdated authentication error string matching logic
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.50.11] - 2026-01-03
 
 
