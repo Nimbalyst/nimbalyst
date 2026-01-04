@@ -122,30 +122,7 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
       return true;
     }
 
-    // Fallback to string matching for backwards compatibility
-    // IMPORTANT: Only match specific authentication error patterns, NOT generic words
-    const lowerText = text.toLowerCase();
-    const result = (
-      lowerText.includes('invalid api key') ||
-      lowerText.includes('please run /login') ||
-      // Match "401 unauthorized" or "unauthorized error" but not just "unauthorized" alone
-      lowerText.includes('401 unauthorized') ||
-      lowerText.includes('unauthorized error') ||
-      lowerText.includes('authentication required') ||
-      lowerText.includes('oauth token has expired') ||
-      lowerText.includes('token has expired') ||
-      lowerText.includes('expired token') ||
-      lowerText.includes('please obtain a new token') ||
-      lowerText.includes('refresh your existing token') ||
-      lowerText.includes('authentication_error') ||
-      // Match "/login" only at word boundary (not in URLs like "example.com/login-page")
-      /\b\/login\b/.test(lowerText)
-    );
-    // Log when login widget is triggered via string matching so we can debug false positives
-    if (result) {
-      console.warn('[MessageSegment] Login widget triggered via string matching. Text preview:', text.substring(0, 100));
-    }
-    return result;
+    return false;
   };
 
   // Helper function to check if content indicates context limit exceeded
