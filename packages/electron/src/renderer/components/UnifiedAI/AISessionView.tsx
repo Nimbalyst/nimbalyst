@@ -643,12 +643,22 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
     }
   }, [sessionId, draftAttachments, onDraftAttachmentsChange]);
 
+  // Track in-flight queue requests to prevent duplicate submissions
+  const queueingRef = useRef(false);
+
   // Handle queue message (must be before handleSend which uses it)
   // Uses the database queue (queued_prompts table) which is processed by processQueuedPrompts in AgenticPanel
   const handleQueue = useCallback(async (message: string) => {
     if (!message.trim()) {
       return;
     }
+
+    // Prevent duplicate queue submissions
+    if (queueingRef.current) {
+      console.log('[AISessionView] Already queueing a prompt, ignoring duplicate');
+      return;
+    }
+    queueingRef.current = true;
 
     try {
       // Only store serializable parts of documentContext
@@ -689,6 +699,8 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
       }
     } catch (error) {
       console.error('[AISessionView] Failed to queue prompt:', error);
+    } finally {
+      queueingRef.current = false;
     }
   }, [sessionId, documentContext, draftAttachments, onDraftInputChange, onDraftAttachmentsChange]);
 
