@@ -2370,6 +2370,13 @@ export class AIService {
 
       logger.main.info(`[AIService] createQueuedPrompt: created ${promptId} for session ${sessionId}`);
 
+      // Notify the renderer to process the queue
+      // This ensures locally-queued prompts get processed (same as mobile sync path)
+      event.sender.send('ai:queuedPromptsReceived', {
+        sessionId,
+        promptCount: 1
+      });
+
       return {
         id: created.id,
         prompt: created.prompt,
