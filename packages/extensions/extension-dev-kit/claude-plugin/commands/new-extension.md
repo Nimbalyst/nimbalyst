@@ -318,59 +318,92 @@ When updating the manifest during implementation, use these schemas:
 | `--border-primary` | Main borders |
 | `--primary-color` | Accent/brand color |
 
-## Reference: Custom Editor Props
+## Reference: EditorHost API
 
-Nimbalyst uses a **pull-based** content model. You receive initial content, track dirty state, and register a getter that Nimbalyst calls when saving.
+Custom editors receive an `EditorHost` object that handles all communication with Nimbalyst:
 
 ```typescript
-interface CustomEditorProps {
-  filePath: string;           // Absolute path to file
-  fileName: string;           // File basename
-  initialContent: string;     // Initial file content
-  theme: 'light' | 'dark' | 'crystal-dark';
-  isActive: boolean;          // Whether tab is focused
-  workspaceId?: string;       // Workspace path if applicable
+import type { EditorHostProps } from '@nimbalyst/extension-sdk';
 
-  // Call when user makes changes (triggers autosave timer)
-  onContentChange?: () => void;
+interface EditorHost {
+  // File info (read-only)
+  readonly filePath: string;      // Absolute path to file
+  readonly fileName: string;      // File basename
+  readonly theme: 'light' | 'dark' | 'crystal-dark';
+  readonly isActive: boolean;     // Whether tab is focused
+  readonly workspaceId?: string;  // Workspace path if applicable
 
-  // Call to update dirty indicator (dot on tab)
-  onDirtyChange?: (isDirty: boolean) => void;
+  // Content loading - call on mount instead of receiving initialContent
+  loadContent(): Promise<string>;
+  loadBinaryContent(): Promise<ArrayBuffer>;  // For binary files
 
-  // Register a function that returns current content for saving
-  // IMPORTANT: Don't call this for read-only editors
-  onGetContentReady?: (getContentFn: () => string) => void;
+  // File change notifications - subscribe to external changes
+  onFileChanged(callback: (newContent: string) => void): () => void;
 
-  onViewHistory?: () => void;
-  onRenameDocument?: () => void;
+  // Dirty state - call when editor has unsaved changes
+  setDirty(isDirty: boolean): void;
+
+  // Save - editor pushes content when save is requested
+  saveContent(content: string | ArrayBuffer): Promise<void>;
+  onSaveRequested(callback: () => void): () => void;
+
+  // History
+  openHistory(): void;
+
+  // Optional: Diff mode for AI edits
+  onDiffRequested?(callback: (config: DiffConfig) => void): () => void;
+  reportDiffResult?(result: DiffResult): void;
+
+  // Optional: Source mode toggle
+  toggleSourceMode?(): void;
+  onSourceModeChanged?(callback: (isSourceMode: boolean) => void): () => void;
+  readonly supportsSourceMode?: boolean;
 }
 ```
 
 ### Basic Pattern
 
 ```tsx
-export function MyEditor({
-  initialContent,
-  onContentChange,
-  onDirtyChange,
-  onGetContentReady,
-}: CustomEditorProps) {
-  const [data, setData] = useState(() => parse(initialContent));
+import type { EditorHostProps } from '@nimbalyst/extension-sdk';
+
+export function MyEditor({ host }: EditorHostProps) {
+  const [data, setData] = useState<MyData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const dataRef = useRef(data);
 
   useEffect(() => { dataRef.current = data; }, [data]);
 
-  // Register content getter for saving
+  // Load content on mount
   useEffect(() => {
-    onGetContentReady?.(() => serialize(dataRef.current));
-  }, [onGetContentReady]);
+    host.loadContent().then(content => {
+      setData(parse(content));
+      setIsLoading(false);
+    });
+  }, [host]);
 
-  const handleEdit = (newData) => {
+  // Handle save requests from host (autosave, Cmd+S)
+  useEffect(() => {
+    return host.onSaveRequested(async () => {
+      if (dataRef.current) {
+        const content = serialize(dataRef.current);
+        await host.saveContent(content);
+      }
+    });
+  }, [host]);
+
+  // Handle external file changes
+  useEffect(() => {
+    return host.onFileChanged(newContent => {
+      setData(parse(newContent));
+    });
+  }, [host]);
+
+  const handleEdit = (newData: MyData) => {
     setData(newData);
-    onDirtyChange?.(true);   // Mark dirty
-    onContentChange?.();     // Trigger autosave
+    host.setDirty(true);  // Mark dirty - triggers autosave
   };
 
+  if (isLoading) return <div>Loading...</div>;
   return <div>...</div>;
 }
 ```
