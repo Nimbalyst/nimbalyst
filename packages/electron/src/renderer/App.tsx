@@ -927,6 +927,51 @@ export default function App() {
     };
   }, []);
 
+  // Listen for show-windows-claude-code-warning IPC event (from Developer menu)
+  useEffect(() => {
+    if (!window.electronAPI?.on) return;
+
+    const handleShowWindowsWarning = () => {
+      setIsWindowsClaudeCodeWarningOpen(true);
+    };
+
+    window.electronAPI.on('show-windows-claude-code-warning', handleShowWindowsWarning);
+
+    return () => {
+      window.electronAPI.off?.('show-windows-claude-code-warning', handleShowWindowsWarning);
+    };
+  }, []);
+
+  // Listen for show-commands-toast IPC event (from Developer menu)
+  useEffect(() => {
+    if (!window.electronAPI?.on) return;
+
+    const handleShowCommandsToast = () => {
+      setShowCommandsToast(true);
+    };
+
+    window.electronAPI.on('show-commands-toast', handleShowCommandsToast);
+
+    return () => {
+      window.electronAPI.off?.('show-commands-toast', handleShowCommandsToast);
+    };
+  }, []);
+
+  // Listen for show-trust-toast IPC event (from Developer menu)
+  useEffect(() => {
+    if (!window.electronAPI?.on) return;
+
+    const handleShowTrustToast = () => {
+      setForceShowTrustToast(true);
+    };
+
+    window.electronAPI.on('show-trust-toast', handleShowTrustToast);
+
+    return () => {
+      window.electronAPI.off?.('show-trust-toast', handleShowTrustToast);
+    };
+  }, []);
+
   // Check if Claude commands need to be installed (show toast)
   useEffect(() => {
     const checkCommands = async () => {

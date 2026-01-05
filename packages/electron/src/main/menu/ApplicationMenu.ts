@@ -1232,6 +1232,42 @@ export async function createApplicationMenu() {
                                     focused.webContents.send('show-onboarding-dialog');
                                 }
                             }
+                        },
+                        {
+                            label: 'Show Discord Invitation',
+                            click: async () => {
+                                const focused = getFocusedWindow();
+                                if (focused) {
+                                    focused.webContents.send('show-discord-invitation');
+                                }
+                            }
+                        },
+                        {
+                            label: 'Show Windows Warning',
+                            click: async () => {
+                                const focused = getFocusedWindow();
+                                if (focused) {
+                                    focused.webContents.send('show-windows-claude-code-warning');
+                                }
+                            }
+                        },
+                        {
+                            label: 'Show Commands Toast',
+                            click: async () => {
+                                const focused = getFocusedWindow();
+                                if (focused) {
+                                    focused.webContents.send('show-commands-toast');
+                                }
+                            }
+                        },
+                        {
+                            label: 'Show Trust Toast',
+                            click: async () => {
+                                const focused = getFocusedWindow();
+                                if (focused) {
+                                    focused.webContents.send('show-trust-toast');
+                                }
+                            }
                         }
                     ]
                 },
