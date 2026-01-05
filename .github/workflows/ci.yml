@@ -74,6 +74,10 @@ jobs:
         working-directory: packages/collabv3
         run: npx tsc --noEmit
 
-      # Note: These packages have pre-existing type issues
-      # - datamodellm: ReactFlow type constraint changes
-      # - csv-spreadsheet: RevoGrid type changes
+      - name: TypeScript check - extensions/datamodellm
+        working-directory: packages/extensions/datamodellm
+        run: npx tsc --noEmit
+
+      - name: TypeScript check - extensions/csv-spreadsheet
+        working-directory: packages/extensions/csv-spreadsheet
+        run: npx tsc --noEmit

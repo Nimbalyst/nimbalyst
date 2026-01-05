@@ -84,8 +84,8 @@ export function parseCSV(content: string): { data: SpreadsheetData; delimiter: '
   });
 
   // Convert to Cell format and evaluate formulas
-  const rows = normalizedRows.map((row, rowIndex) =>
-    row.map((value, colIndex) => {
+  const rows = normalizedRows.map((row) =>
+    row.map((value) => {
       const cell = createCell(value);
       // Formula evaluation will happen in recalculateFormulas after data is fully built
       return cell;

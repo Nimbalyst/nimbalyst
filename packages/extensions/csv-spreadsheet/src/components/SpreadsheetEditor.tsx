@@ -13,14 +13,14 @@
 
 import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { RevoGrid, type RevoGridCustomEvent, type ColumnRegular } from '@revolist/react-datagrid';
-import type { HTMLRevoGridElement } from '@revolist/revogrid';
+import type { RevoGridElement } from '../revogrid-types';
 import type { EditorHostProps, NormalizedSelectionRange, ColumnFormat } from '../types';
 import { useSpreadsheetMetadata } from '../hooks/useSpreadsheetMetadata';
 import { createGridOperations, type GridOperations } from '../utils/gridOperations';
 import { UndoRedoPlugin } from '../plugins/UndoRedoPlugin';
 import { columnIndexToLetter, columnLetterToIndex, generateColumnHeaders, parseCSV } from '../utils/csvParser';
 import { isFormula } from '../utils/formulaEngine';
-import { formatCellValue, getColumnTypeName, DEFAULT_COLUMN_FORMAT } from '../utils/formatters';
+import { getColumnTypeName } from '../utils/formatters';
 import { FormulaBar, type FormulaBarHandle } from './FormulaBar';
 import { ContextMenu, type ContextMenuItem } from './ContextMenu';
 import { ColumnFormatDialog } from './ColumnFormatDialog';
@@ -122,7 +122,7 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
   // Refs
   const editorRef = useRef<HTMLDivElement>(null);
   const gridContainerRef = useRef<HTMLDivElement>(null);
-  const revoGridRef = useRef<HTMLRevoGridElement | null>(null);
+  const revoGridRef = useRef<RevoGridElement | null>(null);
   const formulaBarRef = useRef<FormulaBarHandle>(null);
   const undoPluginRef = useRef<UndoRedoPlugin | null>(null);
   const gridOpsRef = useRef<GridOperations | null>(null);
@@ -183,15 +183,20 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
   useEffect(() => {
     if (!revoGridRef.current) return;
 
-    // Create undo plugin
-    const plugin = new UndoRedoPlugin(revoGridRef.current, revoGridRef.current.providers || {} as any, {
-      onStateChange: () => {
-        // Could update UI here if needed
-      },
-    });
-    undoPluginRef.current = plugin;
+    let plugin: UndoRedoPlugin | null = null;
 
-    // Create grid operations
+    // Create undo plugin (get providers asynchronously)
+    revoGridRef.current.getProviders().then((providers) => {
+      if (!revoGridRef.current) return;
+      plugin = new UndoRedoPlugin(revoGridRef.current, providers || {} as any, {
+        onStateChange: () => {
+          // Could update UI here if needed
+        },
+      });
+      undoPluginRef.current = plugin;
+    });
+
+    // Create grid operations - use undoPluginRef instead of local plugin
     const gridOps = createGridOperations(revoGridRef, {
       getHeaderRowCount: () => spreadsheetMeta.metadata.headerRowCount,
       getColumnCount: () => spreadsheetMeta.metadata.columnCount,
@@ -199,12 +204,14 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
       getColumnFormats: () => spreadsheetMeta.metadata.columnFormats,
       getFrozenColumnCount: () => spreadsheetMeta.metadata.frozenColumnCount,
       onDirty: () => host.setDirty(true),
-      undoPlugin: plugin,
+      undoPlugin: undoPluginRef.current,
     });
     gridOpsRef.current = gridOps;
 
     return () => {
-      plugin.destroy();
+      if (plugin) {
+        plugin.destroy();
+      }
       undoPluginRef.current = null;
       gridOpsRef.current = null;
     };
@@ -222,7 +229,7 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
         hasLoadedRef.current = true;
 
         // Parse content and set grid data
-        const { data, delimiter } = parseCSV(content);
+        const { data } = parseCSV(content);
         const gridData = convertToGridSource(data.rows, data.headerRowCount);
 
         setGridSource(gridData.source);
@@ -400,17 +407,9 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
   }, []);
 
   // Handle after edit - just mark dirty, RevoGrid owns the data
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleAfterEdit = useCallback(
-    (event: RevoGridCustomEvent<{
-      rgRow?: { [key: string]: unknown };
-      model?: Record<string, unknown>;
-      value?: unknown;
-      val?: unknown;
-      rowIndex?: number;
-      prop?: string;
-      colIndex?: number;
-      type?: string;
-    } | null>) => {
+    (event: RevoGridCustomEvent<any>) => {
       if (!event.detail) return;
       host.setDirty(true);
     },
@@ -418,8 +417,9 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
   );
 
   // Handle cell focus (selection)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleFocusCell = useCallback(
-    (event: RevoGridCustomEvent<{ rowIndex: number; colIndex: number; type?: string } | null>) => {
+    (event: RevoGridCustomEvent<any>) => {
       if (!event.detail) return;
       const { rowIndex, colIndex, type } = event.detail;
 
@@ -435,8 +435,9 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
   );
 
   // Handle cell click as backup for selection
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleCellClick = useCallback(
-    (event: RevoGridCustomEvent<{ row: number; col: number; type?: string } | null>) => {
+    (event: RevoGridCustomEvent<any>) => {
       if (!event.detail) return;
       const { row, col, type } = event.detail;
 
@@ -472,20 +473,6 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
       updateSelection({ row: actualY, col: x }, newRange);
     },
     [translateRowIndex, updateSelection]
-  );
-
-  // Handle keyboard events from RevoGrid
-  const handleGridBeforeKeydown = useCallback(
-    (e: RevoGridCustomEvent<{ original?: KeyboardEvent } | null>) => {
-      const gridContainer = gridContainerRef.current;
-      const originalEvent = e.detail?.original;
-      const target = originalEvent?.target as HTMLElement | null;
-
-      if (target && gridContainer && !gridContainer.contains(target)) {
-        e.preventDefault();
-      }
-    },
-    []
   );
 
   // Handle formula bar input
@@ -1167,9 +1154,8 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
           rowClass="_rowClass"
           onAfteredit={handleAfterEdit}
           onAfterfocus={handleFocusCell}
-          onSetrange={handleSetRange}
+          onBeforerange={handleSetRange as any}
           onBeforecellfocus={handleCellClick}
-          onBeforekeydown={handleGridBeforeKeydown}
         />
         {contextMenu && (
           <ContextMenu

@@ -7,7 +7,7 @@
 
 import { useState, useCallback, useRef, useMemo } from 'react';
 import type { SortConfig, ColumnFormat, CSVMetadata } from '../types';
-import { parseCSV, serializeMetadata, parseMetadata } from '../utils/csvParser';
+import { parseCSV, serializeMetadata } from '../utils/csvParser';
 
 export interface SpreadsheetMetadata {
   headerRowCount: number;
@@ -61,7 +61,7 @@ export interface UseSpreadsheetMetadataResult {
  * Convert parsed CSV rows to RevoGrid source format
  */
 function toGridSource(
-  rows: { raw: string; computed: string | number | null }[][],
+  rows: { raw: string; computed: string | number | null; error?: string }[][],
   headerRowCount: number,
   bufferRows: number = 20,
   bufferCols: number = 20
@@ -161,7 +161,7 @@ function createEmptyGridData(
 
 export function useSpreadsheetMetadata(
   initialContent: string,
-  filePath: string,
+  _filePath: string,
   options: UseSpreadsheetMetadataOptions = {}
 ): UseSpreadsheetMetadataResult {
   const { onDirtyChange } = options;
@@ -272,7 +272,7 @@ export function useSpreadsheetMetadata(
 
   // Load new content (for file reload)
   const loadFromCSV = useCallback((content: string) => {
-    const { data, delimiter: newDelimiter } = parseCSV(content);
+    const { data } = parseCSV(content);
     const gridData = toGridSource(data.rows, data.headerRowCount);
 
     setMetadata({

@@ -28,7 +28,7 @@ const DATE_FORMATS: DateFormat[] = ['MM/DD/YYYY', 'DD/MM/YYYY', 'YYYY-MM-DD', 'M
 
 export function ColumnFormatDialog({
   isOpen,
-  columnIndex,
+  columnIndex: _columnIndex,
   columnLetter,
   currentFormat,
   onSave,

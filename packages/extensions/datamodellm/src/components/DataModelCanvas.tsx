@@ -167,7 +167,7 @@ export const DataModelCanvas = forwardRef<DataModelCanvasRef, DataModelCanvasPro
     (changes: NodeChange[]) => {
       // Filter out remove changes (we don't want to delete on backspace for now)
       const nonRemoveChanges = changes.filter((change) => change.type !== 'remove');
-      setLocalNodes((nds) => applyNodeChanges(nonRemoveChanges, nds));
+      setLocalNodes((nds) => applyNodeChanges(nonRemoveChanges, nds) as Node<EntityNodeData>[]);
     },
     [setLocalNodes]
   );
@@ -184,7 +184,7 @@ export const DataModelCanvas = forwardRef<DataModelCanvasRef, DataModelCanvasPro
     (changes: EdgeChange[]) => {
       // Filter out remove changes
       const nonRemoveChanges = changes.filter((change) => change.type !== 'remove');
-      setLocalEdges((eds) => applyEdgeChanges(nonRemoveChanges, eds));
+      setLocalEdges((eds) => applyEdgeChanges(nonRemoveChanges, eds) as Edge<RelationshipEdgeData>[]);
     },
     [setLocalEdges]
   );

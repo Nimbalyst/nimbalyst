@@ -6,8 +6,7 @@
  */
 
 import { BasePlugin } from '@revolist/revogrid';
-import type { PluginProviders } from '@revolist/revogrid';
-import type { DimensionRows } from '@revolist/revogrid';
+import type { PluginProviders, DimensionRows, BeforeSaveDataDetails, AfterEditEvent, BeforeRangeSaveDataDetails } from '@revolist/revogrid';
 
 interface CellChange {
   rowIndex: number;
@@ -34,25 +33,6 @@ interface UndoEntry {
   selectionBefore: SelectionState | null;
   // Selection state after the change (to restore on redo)
   selectionAfter: SelectionState | null;
-}
-
-// Event detail types based on RevoGrid's internal structure
-interface BeforeEditDetail {
-  rowIndex: number;
-  colIndex: number;
-  prop: string;
-  val?: unknown;
-  model?: Record<string, unknown>;
-  type?: DimensionRows;
-}
-
-interface AfterEditDetail {
-  rowIndex: number;
-  colIndex: number;
-  prop: string;
-  val?: unknown;
-  model?: Record<string, unknown>;
-  type?: DimensionRows;
 }
 
 // Maximum undo stack size to prevent memory issues
@@ -128,7 +108,7 @@ export class UndoRedoPlugin extends BasePlugin {
       if (!selection) return null;
 
       const focus = selection.focused;
-      const range = selection.ranged;
+      const range = selection.selectedRange;
 
       if (!focus) return null;
 
@@ -145,10 +125,15 @@ export class UndoRedoPlugin extends BasePlugin {
   /**
    * Capture the old value before edit starts
    */
-  private handleBeforeEdit(e: CustomEvent<BeforeEditDetail | null>): void {
+  private handleBeforeEdit(e: CustomEvent<BeforeSaveDataDetails>): void {
     if (this.isUndoRedoOperation || !e.detail) return;
 
-    const { rowIndex, colIndex, prop, model, type } = e.detail;
+    const detail = e.detail;
+    const rowIndex = detail.rowIndex ?? 0;
+    const colIndex = detail.colIndex ?? 0;
+    const prop = String(detail.prop ?? '');
+    const model = detail.model;
+    const type = detail.type;
 
     // Capture selection state before the edit
     if (this.selectionBeforeChange === null) {
@@ -171,10 +156,16 @@ export class UndoRedoPlugin extends BasePlugin {
   /**
    * After edit completes, record the change with old and new values
    */
-  private handleAfterEdit(e: CustomEvent<AfterEditDetail | null>): void {
+  private handleAfterEdit(e: CustomEvent<AfterEditEvent>): void {
     if (this.isUndoRedoOperation || !e.detail) return;
 
-    const { rowIndex, colIndex, prop, val, type } = e.detail;
+    // AfterEditEvent can be BeforeSaveDataDetails or BeforeRangeSaveDataDetails
+    const detail = e.detail as BeforeSaveDataDetails;
+    const rowIndex = detail.rowIndex ?? 0;
+    const colIndex = detail.colIndex ?? 0;
+    const prop = String(detail.prop ?? '');
+    const val = detail.val;
+    const type = detail.type;
     const rowType: DimensionRows = (type as DimensionRows) || 'rgRow';
 
     // Get the old value from our pending capture
@@ -206,11 +197,7 @@ export class UndoRedoPlugin extends BasePlugin {
    * Handle range edits (paste operations)
    * RevoGrid fires this before applying pasted data
    */
-  private handleBeforeRangeEdit(e: CustomEvent<{
-    data: Record<string, unknown>[];
-    models: Record<string, unknown>[];
-    type?: DimensionRows;
-  } | null>): void {
+  private handleBeforeRangeEdit(e: CustomEvent<BeforeRangeSaveDataDetails>): void {
     if (this.isUndoRedoOperation || !e.detail) return;
 
     // Range edits contain multiple cell changes
@@ -222,11 +209,8 @@ export class UndoRedoPlugin extends BasePlugin {
   /**
    * Handle clear region events (delete key, cut operations)
    */
-  private handleClearRegion(e: CustomEvent<{
-    data: Record<string, unknown>[];
-    range: { x: number; y: number; x1: number; y1: number };
-    type?: DimensionRows;
-  } | null>): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private handleClearRegion(e: CustomEvent<any>): void {
     if (this.isUndoRedoOperation || !e.detail) return;
 
     // The data contains the old values before clearing

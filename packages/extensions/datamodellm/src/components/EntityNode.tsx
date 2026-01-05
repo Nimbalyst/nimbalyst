@@ -6,12 +6,12 @@
  */
 
 import { memo, useState, useRef, useEffect, useMemo } from 'react';
-import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
 import type { Entity, Field, EntityViewMode, Database } from '../types';
 import { computeHandleState } from '../utils/handleUtils';
 import type { DataModelStoreApi } from '../store';
 
-export interface EntityNodeData {
+export interface EntityNodeData extends Record<string, unknown> {
   entity: Entity;
   isSelected: boolean;
   isHovered: boolean;
@@ -245,8 +245,8 @@ const FieldRow = memo(function FieldRow({
   );
 });
 
-function EntityNodeComponent({ data, selected }: NodeProps<EntityNodeData>) {
-  const { entity, isSelected, isHovered, viewMode, database, store } = data;
+function EntityNodeComponent({ data, selected }: NodeProps<Node<EntityNodeData>>) {
+  const { entity, isSelected, isHovered, viewMode, database, store } = data as EntityNodeData;
 
   // Compute handle state for all fields in this entity
   const state = store.getState();

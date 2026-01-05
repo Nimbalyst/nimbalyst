@@ -3,28 +3,11 @@
  * Replaces the Zustand store with a simpler approach using use-undoable
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import useUndoable from 'use-undoable';
 import type { SpreadsheetData, Cell, SortDirection, SortConfig, NormalizedSelectionRange, ColumnFormat } from '../types';
 import { parseCSV, serializeToCSV, createCell } from '../utils/csvParser';
 import { recalculateFormulas, isFormula, evaluateFormula } from '../utils/formulaEngine';
-
-/**
- * Normalize a selection range so start is top-left and end is bottom-right
- */
-function normalizeRange(
-  startRow: number,
-  startCol: number,
-  endRow: number,
-  endCol: number
-): NormalizedSelectionRange {
-  return {
-    startRow: Math.min(startRow, endRow),
-    startCol: Math.min(startCol, endCol),
-    endRow: Math.max(startRow, endRow),
-    endCol: Math.max(startCol, endCol),
-  };
-}
 
 /**
  * Trim trailing empty rows and columns from data for saving
@@ -138,7 +121,7 @@ export interface UseSpreadsheetDataResult {
 
 export function useSpreadsheetData(
   initialContent: string,
-  filePath: string,
+  _filePath: string,
   options: UseSpreadsheetDataOptions = {}
 ): UseSpreadsheetDataResult {
   const { onDirtyChange, onContentChange } = options;

@@ -6,10 +6,10 @@
  */
 
 import { memo } from 'react';
-import { type EdgeProps, getSmoothStepPath } from '@xyflow/react';
+import { type EdgeProps, type Edge, getSmoothStepPath } from '@xyflow/react';
 import type { Relationship } from '../types';
 
-export interface RelationshipEdgeData {
+export interface RelationshipEdgeData extends Record<string, unknown> {
   relationship: Relationship;
 }
 
@@ -28,7 +28,7 @@ function RelationshipEdgeComponent({
   targetPosition,
   data,
   selected,
-}: EdgeProps<RelationshipEdgeData>) {
+}: EdgeProps<Edge<RelationshipEdgeData>>) {
   const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX,
     sourceY,

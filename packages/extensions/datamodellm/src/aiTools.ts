@@ -38,7 +38,7 @@ function getStore(filePath?: string): DataModelStoreApi | null {
   }
   // If no specific path, try to get the first/only active store
   if (activeStores.size === 1) {
-    return activeStores.values().next().value;
+    return activeStores.values().next().value ?? null;
   }
   return null;
 }

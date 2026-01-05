@@ -51,10 +51,11 @@ interface ParsedPrismaType {
   fields: ParsedPrismaField[];
 }
 
-interface ParsedPrismaEnum {
-  name: string;
-  values: string[];
-}
+// Note: Enum type kept for future enum support
+// interface ParsedPrismaEnum {
+//   name: string;
+//   values: string[];
+// }
 
 interface ParsedDatasource {
   provider: string;
@@ -84,7 +85,7 @@ export function parsePrismaSchema(content: string): DataModelFile {
   const types = parseTypes(lines);
 
   // Parse enums (for reference, not fully supported yet)
-  const enums = parseEnums(lines);
+  // Note: parseEnums(lines) is available but not currently used
 
   // Convert to internal format
   const entities = convertModelsToEntities(models, types, metadata.positions);
@@ -334,46 +335,6 @@ function parseTypes(lines: string[]): ParsedPrismaType[] {
 }
 
 /**
- * Parse enum blocks
- */
-function parseEnums(lines: string[]): ParsedPrismaEnum[] {
-  const enums: ParsedPrismaEnum[] = [];
-  let currentEnum: ParsedPrismaEnum | null = null;
-  let braceDepth = 0;
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-
-    if (trimmed.startsWith('//') || trimmed === '') continue;
-
-    const enumMatch = trimmed.match(/^enum\s+(\w+)\s*\{/);
-    if (enumMatch) {
-      currentEnum = { name: enumMatch[1], values: [] };
-      braceDepth = 1;
-      continue;
-    }
-
-    if (currentEnum) {
-      braceDepth += (trimmed.match(/\{/g) || []).length;
-      braceDepth -= (trimmed.match(/\}/g) || []).length;
-
-      if (braceDepth === 0) {
-        enums.push(currentEnum);
-        currentEnum = null;
-        continue;
-      }
-
-      // Enum value (just a word on its own line)
-      if (/^\w+$/.test(trimmed)) {
-        currentEnum.values.push(trimmed);
-      }
-    }
-  }
-
-  return enums;
-}
-
-/**
  * Convert parsed models to internal Entity format
  */
 function convertModelsToEntities(
@@ -486,7 +447,7 @@ function mapPrismaTypeToDataType(prismaType: string): string {
  */
 function extractRelationships(
   models: ParsedPrismaModel[],
-  entities: Entity[]
+  _entities: Entity[]
 ): Relationship[] {
   const relationships: Relationship[] = [];
   const modelNames = new Set(models.map((m) => m.name));

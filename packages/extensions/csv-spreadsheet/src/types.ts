@@ -88,6 +88,17 @@ export interface SpreadsheetData {
 }
 
 /**
+ * Minimal data structure needed for formula evaluation
+ * This is a subset of SpreadsheetData used when we only need row data
+ */
+export interface FormulaEvalData {
+  /** Array of rows, each row is an array of cells */
+  rows: Row[];
+  /** Number of columns */
+  columnCount: number;
+}
+
+/**
  * Column definition for RevoGrid
  */
 export interface ColumnDefinition {

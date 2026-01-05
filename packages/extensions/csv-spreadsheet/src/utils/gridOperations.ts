@@ -5,8 +5,9 @@
  * All operations work directly with RevoGrid as the single source of truth.
  */
 
-import type { HTMLRevoGridElement, DimensionRows } from '@revolist/revogrid';
-import type { NormalizedSelectionRange, ColumnFormat, CSVMetadata } from '../types';
+import type { DimensionRows } from '@revolist/revogrid';
+import type { RevoGridElement } from '../revogrid-types';
+import type { NormalizedSelectionRange, ColumnFormat, CSVMetadata, FormulaEvalData } from '../types';
 import { columnIndexToLetter, serializeMetadata } from './csvParser';
 import { isFormula, evaluateFormula } from './formulaEngine';
 import type { UndoRedoPlugin } from '../plugins/UndoRedoPlugin';
@@ -53,7 +54,7 @@ export interface GridOperations {
  * Create grid operations bound to a specific grid element
  */
 export function createGridOperations(
-  gridRef: React.RefObject<HTMLRevoGridElement>,
+  gridRef: React.RefObject<RevoGridElement>,
   options: GridOperationsOptions
 ): GridOperations {
   const {
@@ -96,7 +97,7 @@ export function createGridOperations(
     if (isFormula(value)) {
       // For formulas, we need to evaluate them
       // Store raw formula and display computed result
-      const data = await getAllGridData(grid, getHeaderRowCount());
+      const data = await getAllGridData(grid);
       const { value: computed, error } = evaluateFormula(value, data, row, col);
       displayValue = error ? error : (computed ?? value);
     }
@@ -132,7 +133,6 @@ export function createGridOperations(
     const grid = gridRef.current;
     if (!grid) throw new Error('Grid not available');
 
-    const headerRowCount = getHeaderRowCount();
     const changes: Array<{
       rowIndex: number;
       colIndex: number;
@@ -303,7 +303,7 @@ export function createGridOperations(
   /**
    * Add a new column at the specified index
    */
-  const addColumn = async (index?: number): Promise<void> => {
+  const addColumn = async (_index?: number): Promise<void> => {
     const grid = gridRef.current;
     if (!grid) throw new Error('Grid not available');
 
@@ -317,7 +317,7 @@ export function createGridOperations(
   /**
    * Delete a column at the specified index
    */
-  const deleteColumn = async (index: number): Promise<void> => {
+  const deleteColumn = async (_index: number): Promise<void> => {
     const grid = gridRef.current;
     if (!grid) throw new Error('Grid not available');
 
@@ -337,7 +337,6 @@ export function createGridOperations(
       grid.getSource('rowPinStart'),
     ]);
 
-    const headerRowCount = getHeaderRowCount();
     const values: string[][] = [];
 
     for (let r = range.startRow; r <= range.endRow; r++) {
@@ -379,7 +378,6 @@ export function createGridOperations(
 
     if (values.length === 0) return;
 
-    const headerRowCount = getHeaderRowCount();
     const changes: Array<{
       rowIndex: number;
       colIndex: number;
@@ -443,22 +441,21 @@ export function createGridOperations(
   /**
    * Get all grid data for formula evaluation
    */
-  async function getAllGridData(
-    grid: HTMLRevoGridElement,
-    headerRowCount: number
-  ): Promise<{ rows: Array<{ raw: string; computed: string | number | null }[]> }> {
+  async function getAllGridData(grid: RevoGridElement): Promise<FormulaEvalData> {
     const [source, pinnedTop] = await Promise.all([
       grid.getSource('rgRow'),
       grid.getSource('rowPinStart'),
     ]);
 
     const rows: Array<{ raw: string; computed: string | number | null }[]> = [];
+    let columnCount = 0;
 
     // Add pinned (header) rows first
     if (pinnedTop) {
       for (const rowData of pinnedTop) {
         const row: { raw: string; computed: string | number | null }[] = [];
         const keys = Object.keys(rowData).filter(k => !k.startsWith('_'));
+        columnCount = Math.max(columnCount, keys.length);
         for (const key of keys) {
           const value = rowData[key];
           row.push({
@@ -475,6 +472,7 @@ export function createGridOperations(
       for (const rowData of source) {
         const row: { raw: string; computed: string | number | null }[] = [];
         const keys = Object.keys(rowData).filter(k => !k.startsWith('_'));
+        columnCount = Math.max(columnCount, keys.length);
         for (const key of keys) {
           const value = rowData[key];
           row.push({
@@ -486,7 +484,7 @@ export function createGridOperations(
       }
     }
 
-    return { rows };
+    return { rows, columnCount };
   }
 
   /**

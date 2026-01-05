@@ -5,7 +5,7 @@
  */
 
 import * as formulajs from '@formulajs/formulajs';
-import type { SpreadsheetData, Cell, CellValue } from '../types';
+import type { SpreadsheetData, FormulaEvalData, CellValue } from '../types';
 import { parseCellReference, parseRangeReference } from './csvParser';
 
 /**
@@ -18,7 +18,7 @@ export function isFormula(value: string): boolean {
 /**
  * Get the computed value of a cell, evaluating formulas if needed
  */
-export function getCellValue(data: SpreadsheetData, row: number, col: number): CellValue {
+export function getCellValue(data: FormulaEvalData, row: number, col: number): CellValue {
   if (row < 0 || row >= data.rows.length || col < 0 || col >= data.columnCount) {
     return null;
   }
@@ -31,7 +31,7 @@ export function getCellValue(data: SpreadsheetData, row: number, col: number): C
  * Get a range of cell values for formula functions
  */
 function getCellRange(
-  data: SpreadsheetData,
+  data: FormulaEvalData,
   startRow: number,
   startCol: number,
   endRow: number,
@@ -58,7 +58,7 @@ function getCellRange(
  */
 function resolveReferences(
   formula: string,
-  data: SpreadsheetData,
+  data: FormulaEvalData,
   currentRow: number,
   currentCol: number
 ): { resolved: string; error?: string } {
@@ -119,7 +119,7 @@ function resolveReferences(
  */
 export function evaluateFormula(
   formula: string,
-  data: SpreadsheetData,
+  data: FormulaEvalData,
   currentRow: number,
   currentCol: number
 ): { value: CellValue; error?: string } {
@@ -164,7 +164,7 @@ export function evaluateFormula(
       return { value: null, error: String(result.error) };
     }
 
-    return { value: result };
+    return { value: result as CellValue };
   } catch (err) {
     console.error('[Formula] Evaluation error:', err);
     return { value: null, error: '#ERROR!' };
@@ -209,8 +209,8 @@ function getFormulaFunction(name: string): ((...args: unknown[]) => unknown) | n
     COUNTA: formulajs.COUNTA,
     COUNTBLANK: formulajs.COUNTBLANK,
     MEDIAN: formulajs.MEDIAN,
-    STDEV: formulajs.STDEV,
-    VAR: formulajs.VAR,
+    STDEV: formulajs.STDEV.S as (...args: unknown[]) => unknown,
+    VAR: formulajs.VAR.S as (...args: unknown[]) => unknown,
   };
 
   return funcMap[name] || null;

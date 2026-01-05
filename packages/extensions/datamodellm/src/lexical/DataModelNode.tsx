@@ -18,7 +18,6 @@ import type {
 import type { JSX } from 'react';
 
 import { $applyNodeReplacement, DecoratorNode } from 'lexical';
-import * as React from 'react';
 
 // Import directly instead of lazy loading - blob URLs don't support relative dynamic imports
 import DataModelComponent from './DataModelComponent';

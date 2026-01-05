@@ -5,8 +5,7 @@
  * We call save() on Enter/Tab/Arrow keys, and close() on Escape.
  */
 
-import type { VNode, FunctionalUtilities } from '@stencil/core';
-import type { EditCell, EditorBase, ColumnDataSchemaModel } from '@revolist/revogrid';
+import type { EditCell, EditorBase, ColumnDataSchemaModel, VNode, HyperFunc } from '@revolist/revogrid';
 
 export class SheetsTextEditor implements EditorBase {
   editInput: HTMLInputElement | null = null;
@@ -79,7 +78,7 @@ export class SheetsTextEditor implements EditorBase {
   /**
    * Render the editor input
    */
-  render(createElement: FunctionalUtilities['h']): VNode | VNode[] {
+  render(createElement: HyperFunc<VNode>): VNode | VNode[] {
     return createElement('input', {
       type: 'text',
       enterKeyHint: 'enter',

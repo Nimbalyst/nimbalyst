@@ -131,7 +131,7 @@ function createDataModelScreenshotCapture() {
     document.body.appendChild(headlessContainer);
 
     // Get React from host - use react-dom/client for createRoot
-    const React = (window as any).__nimbalyst_extensions?.react;
+    const React = (window as any).__nimbalyst_extensions?.react as typeof import('react');
     const ReactDOMClient = (window as any).__nimbalyst_extensions?.['react-dom/client'] ||
                            (window as any).__nimbalyst_extensions?.['react-dom'];
 
