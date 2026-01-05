@@ -14,6 +14,7 @@
     "build": "cross-env NODE_OPTIONS='--max-old-space-size=8192' electron-vite build && npm run build:worker",
     "build:worker": "node build/build-worker.js",
     "build:extensions": "node build/build-extensions.js",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "postinstall": "electron-builder install-app-deps || true",

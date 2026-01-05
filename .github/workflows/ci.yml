@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  typecheck:
+    name: TypeScript Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: '**/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Build packages that export types (required before typecheck)
+      - name: Build rexical
+        working-directory: packages/rexical
+        run: npm run build
+
+      - name: Build extension-sdk
+        working-directory: packages/extension-sdk
+        run: npm run build
+
+      # Typecheck core packages
+      # Note: capacitor, collabv3, and extensions have pre-existing type issues
+      # They can be added here once those are fixed
+      - name: TypeScript check - electron
+        working-directory: packages/electron
+        run: npx tsc --noEmit
+
+      - name: TypeScript check - runtime
+        working-directory: packages/runtime
+        run: npx tsc --noEmit
+
+      - name: TypeScript check - rexical
+        working-directory: packages/rexical
+        run: npx tsc --noEmit
+
+      - name: TypeScript check - extension-sdk
+        working-directory: packages/extension-sdk
+        run: npx tsc --noEmit
