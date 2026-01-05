@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.50.15] - 2026-01-05
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- AI diffs now show only new changes after approving with Keep All
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.50.14] - 2026-01-05
 
 
