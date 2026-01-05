@@ -30,6 +30,31 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
   const [selectedMode, setSelectedMode] = useState<TrustChoice>('allow-all');
   const toastRef = useRef<HTMLDivElement>(null);
   const justSavedRef = useRef(false);
+  const permissionChangeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const projectName = workspacePath?.split(/[\\/]/).pop() || 'this project';
+
+  const releasePermissionChangeSuppression = useCallback(() => {
+    if (permissionChangeTimeoutRef.current) {
+      clearTimeout(permissionChangeTimeoutRef.current);
+      permissionChangeTimeoutRef.current = null;
+    }
+    justSavedRef.current = false;
+  }, [permissionChangeTimeoutRef, justSavedRef]);
+
+  const suppressPermissionChangeEvents = useCallback(() => {
+    releasePermissionChangeSuppression();
+    justSavedRef.current = true;
+    permissionChangeTimeoutRef.current = setTimeout(() => {
+      justSavedRef.current = false;
+      permissionChangeTimeoutRef.current = null;
+    }, 500);
+  }, [permissionChangeTimeoutRef, releasePermissionChangeSuppression, justSavedRef]);
+
+  useEffect(() => {
+    return () => {
+      releasePermissionChangeSuppression();
+    };
+  }, [releasePermissionChangeSuppression]);
 
   // Handle forceShow prop - show toast when parent wants to change mode
   useEffect(() => {
@@ -134,8 +159,8 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
     if (!workspacePath || isSubmitting) return;
 
     setIsSubmitting(true);
-    // Mark that we just saved to prevent race conditions with permission change listener
-    justSavedRef.current = true;
+    // Temporarily ignore permission change broadcasts triggered by this save
+    suppressPermissionChangeEvents();
 
     try {
       // Set the permission mode directly - this also trusts the workspace
@@ -154,19 +179,56 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
       onDismiss?.();
     } catch (error) {
       console.error('[ProjectTrustToast] Failed to set trust:', error);
-      // Only reset justSavedRef on error so we can try again
-      justSavedRef.current = false;
+      // Allow future permission change events if this attempt failed
+      releasePermissionChangeSuppression();
     } finally {
       setIsSubmitting(false);
     }
-  }, [workspacePath, isSubmitting, selectedMode, onDismiss, posthog, isChangingMode]);
+  }, [
+    workspacePath,
+    isSubmitting,
+    selectedMode,
+    onDismiss,
+    posthog,
+    isChangingMode,
+    suppressPermissionChangeEvents,
+    releasePermissionChangeSuppression,
+  ]);
 
-  const handleDontTrust = useCallback(() => {
-    // Just dismiss without trusting - the project remains untrusted
+  const handleDontTrust = useCallback(async () => {
+    if (!workspacePath || isSubmitting) return;
+
+    const confirmed = window.confirm(
+      `Stop trusting "${projectName}"?\n\nThe AI agent won't run any tools in this workspace until you trust it again.`
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    suppressPermissionChangeEvents();
     setIsVisible(false);
     setIsChangingMode(false);
     onDismiss?.();
-  }, [onDismiss]);
+
+    try {
+      await window.electronAPI.invoke('permissions:revokeWorkspaceTrust', workspacePath);
+      posthog?.capture('permission_setting_changed', { action: 'revoke_trust', source: 'trust_toast' });
+    } catch (error) {
+      console.error('[ProjectTrustToast] Failed to revoke trust:', error);
+      releasePermissionChangeSuppression();
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [
+    workspacePath,
+    isSubmitting,
+    projectName,
+    suppressPermissionChangeEvents,
+    onDismiss,
+    posthog,
+    releasePermissionChangeSuppression,
+  ]);
 
   const handleOpenSettings = useCallback(() => {
     setIsVisible(false);
@@ -178,9 +240,6 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
   if (!isVisible || !workspacePath) {
     return null;
   }
-
-  // Get project name from path
-  const projectName = workspacePath.split('/').pop() || 'this project';
 
   return (
     <div className="project-trust-toast-overlay">
