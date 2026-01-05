@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.50.13] - 2026-01-05
+
+
+### Added
+- PDF extension build support for crystal-run
+
+### Changed
+- More efficient Nimbalyst build in worktrees
+
+### Fixed
+- PDF viewer now outputs ES module with .mjs extension
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.50.12] - 2026-01-04
 
 
