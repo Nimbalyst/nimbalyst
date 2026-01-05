@@ -22,7 +22,7 @@ interface WorkspaceSidebarProps {
   workspaceName: string;
   workspacePath: string;
   currentFilePath: string | null;
-  currentView: 'files' | 'plans';
+  currentView: 'files';
   onFileSelect: (filePath: string) => void;
   onCloseWorkspace: () => void;
   onOpenQuickSearch?: () => void;
@@ -550,7 +550,7 @@ export function WorkspaceSidebar({
       }
       const normalizedPaths = response.files
         .map((file: any) => resolveSessionFilePath(file.filePath, workspacePath))
-        .filter((value): value is string => Boolean(value));
+        .filter((value: string | undefined): value is string => Boolean(value));
 
       return Array.from(new Set(normalizedPaths));
     };
@@ -657,7 +657,7 @@ export function WorkspaceSidebar({
         // Files are already absolute paths from the service, just normalize them
         const normalizedFiles = result.files
           .map((file: string) => normalizeFilePath(file))
-          .filter((value): value is string => Boolean(value));
+          .filter((value: string | undefined): value is string => Boolean(value));
         setGitUncommittedFiles(Array.from(new Set(normalizedFiles)));
       } else {
         setGitUncommittedFiles([]);
@@ -704,7 +704,7 @@ export function WorkspaceSidebar({
         // Files are already absolute paths from the service, just normalize them
         const normalizedFiles = result.files
           .map((file: string) => normalizeFilePath(file))
-          .filter((value): value is string => Boolean(value));
+          .filter((value: string | undefined): value is string => Boolean(value));
         setGitWorktreeModifiedFiles(Array.from(new Set(normalizedFiles)));
       } else {
         setGitWorktreeModifiedFiles([]);
@@ -1127,34 +1127,6 @@ export function WorkspaceSidebar({
               </button>
             </>
           )}
-          {currentView === 'plans' && (
-            <>
-              {onNewPlan && (
-                <button
-                  className="workspace-action-button"
-                  onClick={onNewPlan}
-                  title="New plan"
-                  aria-label="New plan"
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
-                    note_add
-                  </span>
-                </button>
-              )}
-              {onOpenPlansTable && (
-                <button
-                  className="workspace-action-button"
-                  onClick={onOpenPlansTable}
-                  title="Open planning table"
-                  aria-label="Open planning table"
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
-                    table_view
-                  </span>
-                </button>
-              )}
-            </>
-          )}
         </div>
       </div>
 
@@ -1310,7 +1282,6 @@ export function WorkspaceSidebar({
         workspacePath={workspacePath}
         onCreateFile={handleNewFileDialogCreate}
         extensionFileTypes={extensionFileTypes}
-        fileTree={fileTree}
         onDirectoryChange={setNewFileDialogDirectory}
       />
     </div>

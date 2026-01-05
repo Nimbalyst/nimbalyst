@@ -10,7 +10,7 @@ import type { InstalledPackage } from '../../shared/toolPackages';
 export type AppTheme = 'dark' | 'light' | 'system' | 'auto' | 'crystal-dark';
 export type { SessionState, SessionWindow } from '../types';
 
-export type CompletionSoundType = 'chime' | 'bell' | 'pop' | 'none';
+export type CompletionSoundType = 'chime' | 'bell' | 'pop' | 'alert' | 'none';
 export type ReleaseChannel = 'stable' | 'alpha';
 export type WorkspaceFileTreeFilter = 'all' | 'markdown' | 'known' | 'git-uncommitted' | 'git-worktree' | 'ai-read' | 'ai-written';
 
@@ -84,6 +84,9 @@ interface AppStoreSchema {
     projectId: string;
     publicToken: string;
   };
+  // Auto-update suppression (when user dismisses an update)
+  updateDismissedVersion?: string;
+  updateDismissedAt?: number;
 }
 
 export interface TabState {
@@ -1111,13 +1114,13 @@ export function getAgentPermissions(workspacePath: string): AgentPermissions | u
   const key = workspaceKey(workspacePath);
   const workspaceName = workspacePath.split('/').pop() || workspacePath;
   const permissions = getWorkspaceState(workspacePath).agentPermissions;
-  console.log(`[Store:${workspaceName}] getAgentPermissions:`, {
-    workspacePath,
-    key,
-    storePath: workspaceStore.path,
-    hasPermissions: !!permissions,
-    permissionMode: permissions?.permissionMode,
-  });
+  // console.log(`[Store:${workspaceName}] getAgentPermissions:`, {
+  //   workspacePath,
+  //   key,
+  //   storePath: workspaceStore.path,
+  //   hasPermissions: !!permissions,
+  //   permissionMode: permissions?.permissionMode,
+  // });
   return permissions;
 }
 

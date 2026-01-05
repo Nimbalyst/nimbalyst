@@ -118,6 +118,12 @@ export const GLOB_EXCLUDE_PATTERNS = [
 export const RIPGREP_EXCLUDE_ARGS = '--glob !**/node_modules/** --glob !**/.git/** --glob !**/.worktrees/** --glob !**/worktrees/** --glob !**/dist/** --glob !**/build/** --glob !**/out/** --glob !**/.next/** --glob !**/.nuxt/** --glob !**/.cache/** --glob !**/coverage/** --glob !**/.vscode/** --glob !**/.idea/** --glob !**/__pycache__/** --glob !**/.DS_Store/** --glob !**/.venv/** --glob !**/venv/** --glob !**/.env/** --glob !**/env/** --glob !**/.tox/** --glob !**/target/** --glob !**/.gradle/** --glob !**/.maven/** --glob !**/vendor/** --glob !**/Pods/**';
 
 /**
+ * Ripgrep file type arguments for QuickOpen content search
+ * Currently empty - relies on exclude globs for filtering
+ */
+export const QUICKOPEN_FILE_TYPE_ARGS: string[] = [];
+
+/**
  * Ripgrep glob arguments as array for use with execFile (cross-platform)
  */
 export const RIPGREP_EXCLUDE_ARGS_ARRAY = [

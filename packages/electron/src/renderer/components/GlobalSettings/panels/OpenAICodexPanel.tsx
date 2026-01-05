@@ -98,7 +98,7 @@ export function OpenAICodexPanel({
             ...prev,
             progress: progress.percent,
             status: progress.status,
-            logs: [...prev.logs, progress.log].filter(Boolean)
+            logs: [...prev.logs, progress.log].filter((log): log is string => Boolean(log))
           }));
         }
       });
@@ -147,7 +147,7 @@ export function OpenAICodexPanel({
             ...prev,
             progress: progress.percent,
             status: progress.status,
-            logs: [...prev.logs, progress.log].filter(Boolean).slice(-10)
+            logs: [...prev.logs, progress.log].filter((log): log is string => Boolean(log)).slice(-10)
           }));
         }
       });

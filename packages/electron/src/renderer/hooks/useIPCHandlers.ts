@@ -13,6 +13,7 @@ import { SearchReplaceStateManager } from '@nimbalyst/runtime';
 import { aiApi } from '../services/aiApi';
 import { getSoundPlayer } from '../services/SoundPlayer';
 import { getFileName } from '../utils/pathUtils';
+import type { ContentMode } from '../types/WindowModeTypes';
 
 const PLAN_STATUS_KEYS = new Set([
   'planId',
@@ -108,7 +109,7 @@ interface UseIPCHandlersProps {
   workspaceMode: boolean;
   workspacePath: string | null;
   sessionToLoad: { sessionId: string; workspacePath?: string } | null;
-  activeMode: 'files' | 'agent' | 'plan';
+  activeMode: ContentMode;
 
   // Logging configuration
   LOG_CONFIG: {
@@ -367,7 +368,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     cleanupFns.push(window.electronAPI.on('menu:find', () => {
       const mode = propsRef.current.activeMode;
 
-      if (mode === 'files' || mode === 'plan') {
+      if (mode === 'files') {
         // Editor mode - open SearchReplace dialog
         const activeFilePath = editorRegistry.getActiveFilePath();
         if (activeFilePath) {

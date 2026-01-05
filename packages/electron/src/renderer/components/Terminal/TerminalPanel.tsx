@@ -109,7 +109,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
 
         if (disposed) return;
 
-        if (!result.success && !result.alreadyActive) {
+        if (!result.success && !('alreadyActive' in result && result.alreadyActive)) {
           const errorMessage = result.error || 'Failed to initialize PTY';
           console.error('[TerminalPanel] Failed to initialize PTY:', errorMessage);
           setInitError(errorMessage);

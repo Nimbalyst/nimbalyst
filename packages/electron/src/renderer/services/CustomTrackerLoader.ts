@@ -31,7 +31,7 @@ export async function loadCustomTrackers(workspacePath: string): Promise<void> {
         const filePath = `${trackersDir}/${fileName}`;
         const result = await window.electronAPI.readFileContent(filePath);
 
-        if (result && result.content) {
+        if (result && result.success) {
           const model = parseTrackerYAML(result.content);
           globalRegistry.register(model);
           log.info(`[CustomTrackers] Registered: ${model.type} (${model.displayName})`);
@@ -55,7 +55,7 @@ export async function loadCustomTrackers(workspacePath: string): Promise<void> {
           const filePath = `${trackersDir}/${file.name}`;
           const result = await window.electronAPI.readFileContent(filePath);
 
-          if (result && result.content) {
+          if (result && result.success && result.content) {
             const model = parseTrackerYAML(result.content);
             globalRegistry.register(model);
             log.info(`[CustomTrackers] Registered: ${model.type} (${model.displayName})`);

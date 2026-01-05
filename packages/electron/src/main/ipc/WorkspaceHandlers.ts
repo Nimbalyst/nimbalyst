@@ -17,7 +17,7 @@ const execFileAsync = promisify(execFile);
 import { windowStates, getWindowId, createWindow } from '../window/WindowManager';
 import { startFileWatcher, stopFileWatcher } from '../file/FileWatcher';
 import { getFolderContents } from '../utils/FileTree';
-import { RIPGREP_EXCLUDE_ARGS_ARRAY } from '../utils/fileFilters';
+import { RIPGREP_EXCLUDE_ARGS_ARRAY, QUICKOPEN_FILE_TYPE_ARGS } from '../utils/fileFilters';
 import {
     getWorkspaceRecentFiles,
     addWorkspaceRecentFile,

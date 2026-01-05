@@ -87,8 +87,6 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
   const [syncConfig, setSyncConfig] = useState<SyncConfig>({
     enabled: false,
     serverUrl: '',
-    userId: '',
-    authToken: '',
   });
   const [syncTestStatus, setSyncTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [syncTestMessage, setSyncTestMessage] = useState<string | undefined>();
@@ -552,7 +550,7 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
         return (
           <MCPServersPanel
             scope={scope === 'project' ? 'workspace' : 'user'}
-            workspacePath={scope === 'project' ? workspacePath : undefined}
+            workspacePath={scope === 'project' ? workspacePath ?? undefined : undefined}
           />
         );
       case 'sync':

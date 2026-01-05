@@ -224,6 +224,7 @@ export const  TrackerBottomPanel: React.FC<BottomPanelProps> = ({
         document.body.style.userSelect = '';
       };
     }
+    return undefined;
   }, [isResizing, handleMouseMove, handleMouseUp]);
 
   const handlePanelClick = (panel: TrackerBottomPanelType) => {
@@ -271,7 +272,7 @@ export const  TrackerBottomPanel: React.FC<BottomPanelProps> = ({
               {activePanel && (
                 <TrackerTable
                   key={refreshKey}
-                  filterType={activePanel}
+                  filterType={activePanel as 'all' | 'bug' | 'task' | 'plan' | 'idea' | 'decision'}
                   sortBy={trackerSortBy}
                   sortDirection={trackerSortDirection}
                   hideTypeTabs={true}

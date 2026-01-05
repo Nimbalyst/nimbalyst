@@ -2,6 +2,7 @@ import React, { useRef, useEffect, KeyboardEvent, useState, useCallback, forward
 import { GenericTypeahead, TypeaheadOption } from '../Typeahead/GenericTypeahead';
 import { extractTriggerMatch, insertAtTrigger, TriggerMatch } from '../Typeahead/typeaheadUtils';
 import type { ChatAttachment } from '@nimbalyst/runtime';
+import type { TokenUsageCategory } from '@nimbalyst/runtime/ai/server/types';
 import { AttachmentPreviewList } from '../AgenticCoding/AttachmentPreviewList';
 import { ModeTag, AIMode } from './ModeTag';
 import { ModelSelector } from './ModelSelector';
@@ -65,6 +66,7 @@ interface AIInputProps {
     outputTokens: number;
     totalTokens: number;
     contextWindow?: number;
+    categories?: TokenUsageCategory[];
   };
   provider?: string; // Provider ID to determine if we should show token usage
 
@@ -111,7 +113,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
     onAttachmentAdd,
     onAttachmentRemove,
     enableSlashCommands = false,
-    mode = 'plan',
+    mode = 'planning' as AIMode,
     onModeChange,
     currentModel,
     onModelChange,
@@ -433,6 +435,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
         setSelectedIndex(null);
         setSelectedOption(null);
       }
+      return undefined;
     }, [value, cursorPosition, onFileMentionSearch, filterSlashCommands, enableSlashCommands, fileMentionOptions.length]);
 
     // Update cursor position on selection change
@@ -866,7 +869,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
             padding: '4px 0',
             marginBottom: '4px'
           }}>
-            {onModeChange && provider === 'claude-code' && <ModeTag mode={mode} onModeChange={onModeChange} />}
+            {onModeChange && provider === 'claude-code' && mode && <ModeTag mode={mode} onModeChange={onModeChange} />}
 
             {onModelChange && currentModel && (
               <ModelSelector

@@ -544,7 +544,7 @@ export class PackageService {
       } else {
         const fullPath = `${this.workspacePath}/.claude/commands/${commandName}.md`;
         const result = await window.electronAPI.readFileContent(fullPath);
-        content = result?.success ? result.content : undefined;
+        content = result?.success ? result.content : null;
       }
 
       if (!content) {

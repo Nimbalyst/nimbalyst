@@ -1,21 +1,5 @@
 import { Document, DocumentService, DocumentOpenOptions } from '@nimbalyst/runtime';
-
-// Access the electronAPI exposed by the preload script
-declare global {
-  interface Window {
-    electronAPI: {
-      documentService: {
-        list: () => Promise<Document[]>;
-        search: (query: string) => Promise<Document[]>;
-        get: (id: string) => Promise<Document | null>;
-        open: (id: string, fallback?: DocumentOpenOptions) => Promise<void>;
-        watch: () => void;
-        onDocumentsChanged: (callback: (documents: Document[]) => void) => () => void;
-        loadVirtual: (virtualPath: string) => Promise<string | null>;
-      };
-    };
-  }
-}
+// electronAPI is declared in electron.d.ts
 
 /**
  * Electron renderer-side implementation of DocumentService

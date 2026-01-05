@@ -43,7 +43,7 @@ interface PromptPayload {
  */
 export function initMobileSessionControlHandler(
   syncProvider: SyncProvider,
-  findWindowByWorkspace: (workspacePath: string) => BrowserWindow | undefined
+  findWindowByWorkspace: (workspacePath: string) => BrowserWindow | null | undefined
 ): () => void {
   if (!syncProvider.onSessionControlMessage) {
     log.warn('Sync provider does not support session control messages');
@@ -64,7 +64,7 @@ export function initMobileSessionControlHandler(
  */
 function handleControlMessage(
   message: SessionControlMessage,
-  findWindowByWorkspace: (workspacePath: string) => BrowserWindow | undefined
+  findWindowByWorkspace: (workspacePath: string) => BrowserWindow | null | undefined
 ): void {
   log.info('Received control message:', message.type, 'for session:', message.sessionId);
 
@@ -74,7 +74,7 @@ function handleControlMessage(
       break;
 
     case 'question_response': {
-      const payload = message.payload as QuestionResponsePayload;
+      const payload = message.payload as unknown as QuestionResponsePayload;
       handleQuestionResponse(
         message.sessionId,
         payload.questionId,
@@ -121,7 +121,7 @@ function handleQuestionResponse(
   questionId: string,
   answers: Record<string, string>,
   cancelled: boolean,
-  findWindowByWorkspace: (workspacePath: string) => BrowserWindow | undefined
+  _findWindowByWorkspace: (workspacePath: string) => BrowserWindow | null | undefined
 ): void {
   const provider = ProviderFactory.getProvider('claude-code', sessionId);
 

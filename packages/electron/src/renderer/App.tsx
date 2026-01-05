@@ -730,7 +730,7 @@ export default function App() {
     }
 
     // Switch to files mode if needed
-    if (currentMode !== 'files' && currentMode !== 'plan') {
+    if (currentMode !== 'files') {
       setActiveMode('files');
     }
 
@@ -1132,7 +1132,7 @@ export default function App() {
   // Handle QuickOpen file selection - delegates to EditorMode and switches mode if needed
   const handleQuickOpenFileSelect = useCallback(async (filePath: string) => {
     // Switch to files mode if we're in a different mode
-    if (activeMode !== 'files' && activeMode !== 'plan') {
+    if (activeMode !== 'files') {
       setActiveMode('files');
     }
 
@@ -1390,7 +1390,7 @@ export default function App() {
       if (activeModeStateRef.current === 'agent') {
         console.log('[App] Routing to agenticPanelRef.closeActiveTab()');
         agenticPanelRef.current?.closeActiveTab();
-      } else if (activeModeStateRef.current === 'files' || activeModeStateRef.current === 'plan') {
+      } else if (activeModeStateRef.current === 'files') {
         console.log('[App] Routing to editorModeRef.closeActiveTab()');
         editorModeRef.current?.closeActiveTab();
       }
@@ -1410,7 +1410,7 @@ export default function App() {
       if (activeModeStateRef.current === 'agent') {
         // console.log('[App] Calling agenticPanelRef.current?.reopenLastClosedSession()');
         agenticPanelRef.current?.reopenLastClosedSession?.();
-      } else if (activeModeStateRef.current === 'files' || activeModeStateRef.current === 'plan') {
+      } else if (activeModeStateRef.current === 'files') {
         // console.log('[App] Calling editorModeRef.current?.reopenLastClosedTab()');
         editorModeRef.current?.reopenLastClosedTab?.();
       }
@@ -1510,12 +1510,12 @@ export default function App() {
         <div data-layout="top-content-row" style={{ flex: 1, display: 'flex', flexDirection: 'row', minHeight: 0 }}>
           {/* Center: Editor/Agent/Settings area */}
           <div data-layout="center-content-wrapper" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
-            {/* Files/Plan Mode - always mounted, visibility controlled by display */}
+            {/* Files Mode - always mounted, visibility controlled by display */}
             <div
               data-layout="files-mode-wrapper"
               style={{
                 flex: 1,
-                display: (activeMode === 'files' || activeMode === 'plan') ? 'flex' : 'none',
+                display: activeMode === 'files' ? 'flex' : 'none',
                 flexDirection: 'row',
                 overflow: 'hidden',
                 minHeight: 0
@@ -1539,7 +1539,7 @@ export default function App() {
                     workspacePath={workspacePath}
                     workspaceName={workspaceName}
                     theme={theme}
-                    isActive={activeMode === 'files' || activeMode === 'plan'}
+                    isActive={activeMode === 'files'}
                     onModeChange={setActiveMode as (mode: string) => void}
                     onGetContentReady={(getContentFn) => {
                       getContentRef.current = getContentFn;

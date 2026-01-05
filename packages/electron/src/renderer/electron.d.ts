@@ -83,6 +83,7 @@ interface ElectronAPI {
   setDocumentEdited: (edited: boolean) => void;
   setTitle: (title: string) => void;
   setCurrentFile: (filePath: string | null) => void;
+  sendToMainWindow?: (channel: string, data: unknown) => Promise<void>;
 
   // Get initial window state
   getInitialState: () => Promise<{ mode: string; workspacePath?: string; workspaceName?: string; fileTree?: FileTreeItem[] } | null>;
@@ -156,7 +157,7 @@ interface ElectronAPI {
 
   // Session state tracking operations
   sessionState: {
-    getActiveSessionIds: () => Promise<string[]>;
+    getActiveSessionIds: () => Promise<{ success: boolean; sessionIds: string[]; error?: string }>;
     getSessionState: (sessionId: string) => Promise<any>;
     isSessionActive: (sessionId: string) => Promise<boolean>;
     subscribe: () => Promise<void>;
@@ -262,8 +263,8 @@ interface ElectronAPI {
   workspaceManager: {
     getRecentWorkspaces: () => Promise<any[]>;
     getWorkspaceStats: (workspacePath: string) => Promise<any>;
-    openFolderDialog: () => Promise<{ success: boolean; path?: string }>;
-    createWorkspaceDialog: () => Promise<{ success: boolean; path?: string; error?: string }>;
+    openFolderDialog: () => Promise<{ success: true; path: string } | { success: false }>;
+    createWorkspaceDialog: () => Promise<{ success: true; path: string } | { success: false; error?: string }>;
     openWorkspace: (workspacePath: string) => Promise<{ success: boolean }>;
     removeRecent: (workspacePath: string) => Promise<{ success: boolean }>;
   };
@@ -396,7 +397,7 @@ interface ElectronAPI {
 
   // Terminal operations
   terminal: {
-    createSession: (workspacePath: string, cwd?: string) => Promise<{ sessionId: string }>;
+    createSession: (workspacePath: string, cwd?: string) => Promise<{ success: boolean; sessionId: string; error?: string }>;
     initialize: (sessionId: string, options?: { cwd?: string; cols?: number; rows?: number }) => Promise<{ success: boolean; alreadyActive?: boolean; error?: string }>;
     isActive: (sessionId: string) => Promise<boolean>;
     write: (sessionId: string, data: string) => Promise<void>;

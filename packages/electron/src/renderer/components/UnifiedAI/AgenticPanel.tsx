@@ -429,6 +429,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         };
       } catch (err) {
         console.error('[AgenticPanel] Failed to subscribe to session state:', err);
+        return undefined;
       }
     };
 
@@ -555,7 +556,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
             // Find the latest timestamp in DB messages
             const latestDbTimestamp = dbMessages.length > 0
-              ? Math.max(...dbMessages.map(m => m.timestamp || 0))
+              ? Math.max(...dbMessages.map((m: Message) => m.timestamp || 0))
               : 0;
 
             // Keep any local messages that are newer than the latest DB message
@@ -564,7 +565,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
               const localTs = localMsg.timestamp || 0;
               // Keep if it's newer than DB and not already in DB (by timestamp match)
               return localTs > latestDbTimestamp &&
-                !dbMessages.some(dbMsg => dbMsg.timestamp === localTs);
+                !dbMessages.some((dbMsg: Message) => dbMsg.timestamp === localTs);
             });
 
             // Merge: DB messages + any local-only messages

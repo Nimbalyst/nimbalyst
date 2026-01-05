@@ -45,6 +45,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
       document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
+    return undefined;
   }, [isOpen]);
 
   const handleSelect = (optionValue: string) => {

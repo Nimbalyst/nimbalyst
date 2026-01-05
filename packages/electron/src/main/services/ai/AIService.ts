@@ -723,7 +723,7 @@ export class AIService {
             // If no workspace path found yet, get it from the target window
             if (!workspacePath) {
               const targetState = windowStates.get(targetWindow.id);
-              workspacePath = targetState?.workspacePath;
+              workspacePath = targetState?.workspacePath ?? undefined;
             }
 
             // Create the session using the SessionManager
@@ -746,7 +746,7 @@ export class AIService {
             if (session && syncProvider.syncSessionsToIndex) {
               syncProvider.syncSessionsToIndex([{
                 id: session.id,
-                title: session.title,
+                title: session.title ?? 'Untitled',
                 provider: session.provider,
                 model: session.model,
                 mode: session.mode,

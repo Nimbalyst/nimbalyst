@@ -40,7 +40,7 @@ export async function registerTrackerPlugin(workspacePath?: string | null): Prom
           const filePath = path.join(trackersDir, file.name);
           const result = await window.electronAPI.readFileContent(filePath);
 
-          if (result && result.content) {
+          if (result && result.success) {
             const model = parseTrackerYAML(result.content);
             globalRegistry.register(model);
             console.log(`[TrackerPlugin] Registered custom tracker: ${model.type} (${model.displayName})`);

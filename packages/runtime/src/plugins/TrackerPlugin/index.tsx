@@ -555,6 +555,7 @@ function TrackerPlugin(): JSX.Element | null {
       document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
+    return undefined;
   }, [editorState]);
 
   // Update tracker data

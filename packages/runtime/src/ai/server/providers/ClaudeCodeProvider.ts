@@ -709,7 +709,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       }
 
       const queryIterator = query({
-        prompt: promptInput,
+        prompt: promptInput as any,
         options
       }) as AsyncIterable<any>;
 

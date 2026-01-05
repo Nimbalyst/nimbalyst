@@ -211,7 +211,7 @@ export function MonacoEditor({
       filePath={host.filePath}
       fileName={fileName}
       initialContent={initialContent}
-      theme={config.theme ?? host.theme}
+      theme={(config.theme ?? host.theme) as ConfigTheme}
       isActive={config.isActive}
       onDirtyChange={handleDirtyChange}
       onGetContent={handleGetContent}

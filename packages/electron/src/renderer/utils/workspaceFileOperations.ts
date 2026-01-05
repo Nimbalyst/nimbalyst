@@ -109,10 +109,7 @@ export async function handleWorkspaceFileSelect(options: FileSelectOptions): Pro
 
     // Update current file in main process for window title and session restore
     if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] Updating active file in backend');
-    const syncResult = window.electronAPI.setCurrentFile(filePath);
-    if (syncResult && typeof syncResult.then === 'function') {
-      await syncResult;
-    }
+    window.electronAPI.setCurrentFile(filePath);
 
     // Create automatic snapshot when switching to file
     if (window.electronAPI.history) {

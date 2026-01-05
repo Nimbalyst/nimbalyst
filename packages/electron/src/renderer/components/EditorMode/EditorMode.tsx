@@ -498,7 +498,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
       get tabs() {
         const snapshot = tabsRef.current?.getSnapshot();
         if (!snapshot) return [];
-        return snapshot.tabOrder.map(id => snapshot.tabs.get(id)!).filter(Boolean);
+        return snapshot.tabOrder.map((id: string) => snapshot.tabs.get(id)!).filter(Boolean);
       },
       get activeTabId() { return tabsRef.current?.getSnapshot()?.activeTabId ?? null; },
     }

@@ -306,11 +306,12 @@ export const ExtensionErrorConsole: React.FC<ExtensionErrorConsoleProps> = ({
                 onClick={() => log.stack && toggleExpand(index)}
               >
                 <div className="log-entry-header">
-                  <MaterialSymbol
-                    icon={LOG_LEVEL_ICONS[log.level]}
-                    size={16}
-                    style={{ color: LOG_LEVEL_COLORS[log.level] }}
-                  />
+                  <span style={{ color: LOG_LEVEL_COLORS[log.level] }}>
+                    <MaterialSymbol
+                      icon={LOG_LEVEL_ICONS[log.level]}
+                      size={16}
+                    />
+                  </span>
                   <span className="log-time">{formatTime(log.timestamp)}</span>
                   <span className="log-source">[{log.source}]</span>
                   {log.extensionId && (

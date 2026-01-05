@@ -21,6 +21,7 @@ interface Todo {
 
 export interface AISessionViewRef {
   focusInput: () => void;
+  getInputElement?: () => HTMLInputElement | HTMLTextAreaElement | null;
 }
 
 export interface AISessionViewProps {
@@ -223,7 +224,6 @@ const TranscriptSectionComponent: React.FC<TranscriptSectionProps> = ({
           todos={todos}
           isProcessing={isProcessing}
           onFileClick={onFileClick}
-          onTodoClick={onTodoClick}
           hideSidebar={mode === 'chat'} // Hide sidebar in chat mode
           workspacePath={workspacePath}
           initialSettings={{

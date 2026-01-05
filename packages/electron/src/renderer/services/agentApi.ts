@@ -5,9 +5,11 @@ class AgentApi {
 
   async getAllAgents(workspacePath?: string): Promise<Agent[]> {
     try {
+      // TODO: Implement agents:getAll IPC handler
       // const agents = await window.electronAPI.invoke('agents:getAll', workspacePath);
       // this.cache.set(workspacePath || 'global', agents);
       // return agents;
+      return this.cache.get(workspacePath || 'global') || [];
     } catch (error) {
       console.error('[AgentApi] Failed to get agents:', error);
       return this.cache.get(workspacePath || 'global') || [];

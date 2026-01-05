@@ -75,6 +75,7 @@ export function GenericTypeahead({
       }, 100);
       return () => clearTimeout(timer);
     }
+    return undefined;
   }, [isPositioned]);
 
   // Only allow hover selection after mouse interaction is enabled

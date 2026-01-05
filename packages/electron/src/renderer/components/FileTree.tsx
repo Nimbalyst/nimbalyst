@@ -217,6 +217,7 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
         treeElement.removeEventListener('scroll', handleUserInteraction);
       };
     }
+    return undefined;
   }, [level]);
 
   // Scroll to active file only when currentFilePath actually changes

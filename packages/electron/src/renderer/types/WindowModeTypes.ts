@@ -8,9 +8,9 @@
 /**
  * Content modes available in workspace windows
  */
-export type ContentMode = 'files' | 'agent' | 'plan' | 'tracker' | 'settings';
+export type ContentMode = 'files' | 'agent' | 'tracker' | 'settings';
 
 /**
  * Sidebar views (orthogonal to content modes)
  */
-export type SidebarView = 'files' | 'plans' | 'settings';
+export type SidebarView = 'files' | 'settings';

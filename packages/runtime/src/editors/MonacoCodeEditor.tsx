@@ -16,7 +16,7 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import Editor, { DiffEditor, type OnMount } from '@monaco-editor/react';
 import type { editor as MonacoEditorType, Selection } from 'monaco-editor';
-import type { Theme as ConfigTheme } from 'rexical';
+import type { ConfigTheme } from 'rexical';
 import { getMonacoTheme, getMonacoLanguage } from './monacoUtils';
 import './MonacoCodeEditor.css';
 

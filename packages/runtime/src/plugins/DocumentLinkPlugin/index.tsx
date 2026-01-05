@@ -156,6 +156,7 @@ export function DocumentLinkPlugin({
           rootElement.removeEventListener('auxclick', onAuxClick, true);
         };
       }
+      return undefined;
     });
   }, [editor, documentService]);
 

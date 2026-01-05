@@ -226,7 +226,7 @@ export const AgentCommandPalette: React.FC<AgentCommandPaletteProps> = ({
 
       if (!currentSession) {
         // Create a new session if none exists
-        await aiApi.createSession(workspacePathRef.current);
+        await aiApi.createSessionWithProvider('claude-code', undefined, workspacePathRef.current ?? undefined);
         const updatedSessions = await aiApi.getSessions(workspacePathRef.current);
         currentSession = updatedSessions?.[0];
       }

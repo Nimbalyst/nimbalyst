@@ -10,7 +10,7 @@ import { TrustIndicator } from '../TrustIndicator';
 import { ExtensionDevIndicator } from '../ExtensionDevIndicator';
 
 export type NavigationMode = 'planning' | 'coding';
-export type SidebarView = 'files' | 'plans' | 'settings';
+export type SidebarView = 'files' | 'settings';
 
 export type TrackerBottomPanelType = 'plan' | 'bug' | 'task' | 'idea' | 'decision';
 
