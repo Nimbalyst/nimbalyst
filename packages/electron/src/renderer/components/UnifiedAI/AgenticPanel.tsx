@@ -1141,9 +1141,6 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
   // Create a new worktree session
   const createNewWorktreeSession = useCallback(async () => {
-    // Set loading state to prevent UI interactions during creation
-    setLoading(true);
-
     try {
       // Step 1: Create the worktree
       const worktreeResult = await window.electronAPI.worktreeCreate(workspacePath);
@@ -1222,16 +1219,11 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       console.error('[AgenticPanel] Failed to create worktree session:', error);
       errorNotificationService.showError('Worktree Creation Failed', String(error));
       throw error;
-    } finally {
-      // Always clear loading state
-      setLoading(false);
     }
-  }, [workspacePath, mode, loadSessions, updateWindowTitle, triggerSessionHistoryRefresh, sessionTabs]);
+  }, [workspacePath, mode, loadSessions, updateWindowTitle, triggerSessionHistoryRefresh]);
 
   // Add a new session to an existing worktree
   const handleAddSessionToWorktree = useCallback(async (worktreeId: string) => {
-    setLoading(true);
-
     try {
       // Get worktree data
       const worktreeResult = await window.electronAPI.invoke('worktree:get', worktreeId);
@@ -1304,8 +1296,6 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       console.error('[AgenticPanel] Failed to add session to worktree:', error);
       errorNotificationService.showError('Failed to Add Session', String(error));
       throw error;
-    } finally {
-      setLoading(false);
     }
   }, [workspacePath, mode, loadSessions, updateWindowTitle, triggerSessionHistoryRefresh]);
 
