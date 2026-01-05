@@ -186,22 +186,35 @@ function TableActionMenu({
       const dropDownElementRect = dropDownElement.getBoundingClientRect();
       const margin = 5;
 
-      // Calculate position relative to anchorElem
-      let leftPosition = menuButtonRect.right - anchorRect.left + margin;
+      // Calculate position relative to anchorElem, accounting for scroll offset
+      // Add anchorElem.scrollTop/Left to position correctly when document is scrolled
+      let leftPosition = menuButtonRect.right - anchorRect.left + anchorElem.scrollLeft + margin;
       if (
         menuButtonRect.right + margin + dropDownElementRect.width > window.innerWidth ||
         menuButtonRect.right + margin + dropDownElementRect.width > rootEleRect.right
       ) {
-        const position = menuButtonRect.left - anchorRect.left - dropDownElementRect.width - margin;
+        const position = menuButtonRect.left - anchorRect.left + anchorElem.scrollLeft - dropDownElementRect.width - margin;
         leftPosition = position < 0 ? margin : position;
       }
       dropDownElement.style.left = `${leftPosition}px`;
 
-      let topPosition = menuButtonRect.top - anchorRect.top;
+      // For vertical positioning, we need to ensure the menu stays within the visible viewport
+      // Calculate the ideal position (aligned to top of button)
+      let topPosition = menuButtonRect.top - anchorRect.top + anchorElem.scrollTop;
+
+      // Check if menu would overflow bottom of viewport
       if (menuButtonRect.top + dropDownElementRect.height > window.innerHeight) {
-        const position = menuButtonRect.bottom - anchorRect.top - dropDownElementRect.height;
-        topPosition = position < 0 ? margin : position;
+        // Position menu above the button instead, or at minimum visible position
+        const position = menuButtonRect.bottom - anchorRect.top + anchorElem.scrollTop - dropDownElementRect.height;
+        topPosition = position < anchorElem.scrollTop ? anchorElem.scrollTop + margin : position;
       }
+
+      // Check if menu would overflow top of viewport (when scrolled down)
+      if (menuButtonRect.top < 0) {
+        // Clamp to the top of the visible viewport
+        topPosition = anchorElem.scrollTop + margin;
+      }
+
       dropDownElement.style.top = `${topPosition}px`;
     }
   }, [contextRef, dropDownRef, editor, anchorElem]);
