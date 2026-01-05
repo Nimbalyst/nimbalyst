@@ -153,10 +153,13 @@ fi
 #   2. Main repo has the dist folder built (we'll copy it)
 build_rexical=false
 build_runtime=false
+build_extensions=false
 build_rexical_reason=""
 build_runtime_reason=""
+build_extensions_reason=""
 copy_rexical_from_main=false
 copy_runtime_from_main=false
+copy_extensions_from_main=false
 
 # Check rexical
 if [ "$WORKTREE_MODE" = "true" ]; then
@@ -222,6 +225,32 @@ else
   fi
 fi
 
+# Check extensions (packages/extensions/pdf-viewer)
+if [ "$WORKTREE_MODE" = "true" ]; then
+  if package_has_worktree_changes "packages/extensions/pdf-viewer"; then
+    # Has local changes, need to check if rebuild required
+    if needs_rebuild "packages/extensions/pdf-viewer"; then
+      build_extensions=true
+      build_extensions_reason=" (local changes)"
+    fi
+  elif main_repo_has_dist "packages/extensions/pdf-viewer"; then
+    # No local changes and main repo has dist - copy it
+    if [ ! -d "packages/extensions/pdf-viewer/dist" ]; then
+      copy_extensions_from_main=true
+    fi
+  else
+    # No local changes but main repo doesn't have dist - need to build
+    if needs_rebuild "packages/extensions/pdf-viewer"; then
+      build_extensions=true
+    fi
+  fi
+else
+  # Not in worktree, use standard rebuild check
+  if needs_rebuild "packages/extensions/pdf-viewer"; then
+    build_extensions=true
+  fi
+fi
+
 # Print build plan
 echo ""
 echo "Build plan:"
@@ -238,6 +267,13 @@ elif [ "$build_runtime" = true ]; then
   echo "  runtime: BUILD$build_runtime_reason"
 else
   echo "  runtime: skip (up-to-date)"
+fi
+if [ "$copy_extensions_from_main" = true ]; then
+  echo "  extensions: COPY from main repo (no local changes)"
+elif [ "$build_extensions" = true ]; then
+  echo "  extensions: BUILD$build_extensions_reason"
+else
+  echo "  extensions: skip (up-to-date)"
 fi
 echo ""
 
@@ -267,6 +303,17 @@ elif [ "$build_runtime" = true ]; then
   npm run build
   cd ../..
   save_build_hash "packages/runtime"
+fi
+
+# Handle extensions
+if [ "$copy_extensions_from_main" = true ]; then
+  copy_dist_from_main_repo "packages/extensions/pdf-viewer"
+elif [ "$build_extensions" = true ]; then
+  echo "Building extensions..."
+  cd packages/extensions/pdf-viewer
+  npm run build
+  cd ../../..
+  save_build_hash "packages/extensions/pdf-viewer"
 fi
 
 # Navigate to the electron package directory
