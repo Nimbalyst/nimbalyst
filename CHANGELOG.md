@@ -20,20 +20,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
-## [0.50.15] - 2026-01-05
+## [0.50.16] - 2026-01-05
 
 
 ### Added
-<!-- New features go here -->
+- PostHog analytics tracking for permissions system interactions
 
 ### Changed
-<!-- Changes to existing functionality go here -->
+- Developer tools now include all one-time modals for testing
+
+### Fixed
+- Permissions modal UX improvements to prevent race conditions
+- Users can no longer click outside permissions modal to dismiss it
+- Permissions modal messaging made less intimidating
+
+## [0.50.15] - 2026-01-05
 
 ### Fixed
 - AI diffs now show only new changes after approving with Keep All
-
-### Removed
-<!-- Removed features go here -->
 
 ## [0.50.14] - 2026-01-05
 
