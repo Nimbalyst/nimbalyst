@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { ChatAttachment } from '@nimbalyst/runtime';
 import { getFileIcon } from '@nimbalyst/runtime';
 import './AttachmentPreview.css';
@@ -6,10 +6,14 @@ import './AttachmentPreview.css';
 interface AttachmentPreviewProps {
   attachment: ChatAttachment;
   onRemove: (attachmentId: string) => void;
+  onConvertToText?: (attachment: ChatAttachment) => void;
 }
 
-export function AttachmentPreview({ attachment, onRemove }: AttachmentPreviewProps) {
+export function AttachmentPreview({ attachment, onRemove, onConvertToText }: AttachmentPreviewProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [showContextMenu, setShowContextMenu] = useState(false);
+  const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
+  const contextMenuRef = useRef<HTMLDivElement>(null);
 
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;
@@ -31,20 +35,60 @@ export function AttachmentPreview({ attachment, onRemove }: AttachmentPreviewPro
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isExpanded]);
 
+  // Handle click outside to close context menu
+  useEffect(() => {
+    if (!showContextMenu) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        setShowContextMenu(false);
+      }
+    };
+
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowContextMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [showContextMenu]);
+
   const handleThumbnailClick = () => {
     if (attachment.type === 'image') {
       setIsExpanded(true);
     }
   };
 
+  const handleContextMenu = (e: React.MouseEvent) => {
+    // Only show context menu for document attachments (text files)
+    if (attachment.type !== 'document' || !onConvertToText) return;
+
+    e.preventDefault();
+    setContextMenuPosition({ x: e.clientX, y: e.clientY });
+    setShowContextMenu(true);
+  };
+
+  const handleConvertToText = () => {
+    setShowContextMenu(false);
+    if (onConvertToText) {
+      onConvertToText(attachment);
+    }
+  };
+
   return (
     <>
-      <div className="attachment-preview">
+      <div className="attachment-preview" onContextMenu={handleContextMenu}>
         <div
           className="attachment-preview-thumbnail"
           onClick={handleThumbnailClick}
-          style={{ cursor: attachment.type === 'image' ? 'pointer' : 'default' }}
-          title={attachment.type === 'image' ? 'Click to enlarge' : undefined}
+          style={{ cursor: attachment.type === 'image' ? 'pointer' : attachment.type === 'document' ? 'context-menu' : 'default' }}
+          title={attachment.type === 'image' ? 'Click to enlarge' : attachment.type === 'document' ? 'Right-click for options' : undefined}
         >
           {attachment.type === 'image' ? (
             <img
@@ -108,6 +152,27 @@ export function AttachmentPreview({ attachment, onRemove }: AttachmentPreviewPro
               {attachment.filename}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Context menu for text attachments */}
+      {showContextMenu && (
+        <div
+          ref={contextMenuRef}
+          className="attachment-context-menu"
+          style={{
+            position: 'fixed',
+            left: contextMenuPosition.x,
+            top: contextMenuPosition.y,
+            zIndex: 10000
+          }}
+        >
+          <button
+            className="attachment-context-menu-item"
+            onClick={handleConvertToText}
+          >
+            Insert as text
+          </button>
         </div>
       )}
     </>

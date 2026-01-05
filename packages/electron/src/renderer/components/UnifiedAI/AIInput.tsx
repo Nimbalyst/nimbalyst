@@ -706,9 +706,9 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
       }
     }, [onAttachmentAdd, handleFileAttachment]);
 
-    // Threshold for converting large text pastes to attachments (25 lines or 1000 characters)
+    // Threshold for converting large text pastes to attachments (25 lines or 2000 characters)
     const LARGE_PASTE_LINE_THRESHOLD = 25;
-    const LARGE_PASTE_CHAR_THRESHOLD = 1000;
+    const LARGE_PASTE_CHAR_THRESHOLD = 2000;
 
     // Paste handler for images and text
     const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
@@ -770,6 +770,30 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
       }
     }, [onAttachmentRemove]);
 
+    // Handle converting a text attachment back to prompt text
+    const handleConvertToText = useCallback(async (attachment: ChatAttachment) => {
+      try {
+        const result = await window.electronAPI.invoke('attachment:readAsText', {
+          filepath: attachment.filepath
+        }) as { success: boolean; data?: string; error?: string };
+
+        if (result.success && result.data) {
+          // Append the text to the current input value
+          const newValue = value ? `${value}\n${result.data}` : result.data;
+          onChange(newValue);
+
+          // Remove the attachment
+          if (onAttachmentRemove) {
+            onAttachmentRemove(attachment.id);
+          }
+        } else {
+          console.error('[AIInput] Failed to read attachment as text:', result.error);
+        }
+      } catch (error) {
+        console.error('[AIInput] Failed to convert attachment to text:', error);
+      }
+    }, [value, onChange, onAttachmentRemove]);
+
     const handleSend = () => {
       if (value.trim() && !disabled) {
         onSend(value);
@@ -817,6 +841,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
           <AttachmentPreviewList
             attachments={attachments}
             onRemove={handleRemoveAttachment}
+            onConvertToText={handleConvertToText}
           />
         )}
 

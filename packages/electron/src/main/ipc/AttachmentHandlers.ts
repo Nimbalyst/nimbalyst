@@ -150,6 +150,41 @@ export function registerAttachmentHandlers() {
   });
 
   /**
+   * Read attachment as text (for converting back to prompt text)
+   */
+  ipcMain.handle('attachment:readAsText', async (event, {
+    filepath
+  }: {
+    filepath: string;
+  }) => {
+    try {
+      const window = BrowserWindow.fromWebContents(event.sender);
+      if (!window) {
+        return { success: false, error: 'No window found' };
+      }
+
+      const windowId = getWindowId(window);
+      if (windowId === null) {
+        return { success: false, error: 'No window ID found' };
+      }
+
+      const state = windowStates.get(windowId);
+      if (!state?.workspacePath) {
+        return { success: false, error: 'No workspace open' };
+      }
+
+      const service = getAttachmentService(state.workspacePath);
+      return await service.readAttachmentAsText(filepath);
+    } catch (error) {
+      console.error('[AttachmentHandlers] Read attachment as text failed', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to read attachment'
+      };
+    }
+  });
+
+  /**
    * Validate a file before uploading
    */
   ipcMain.handle('attachment:validate', async (event, {

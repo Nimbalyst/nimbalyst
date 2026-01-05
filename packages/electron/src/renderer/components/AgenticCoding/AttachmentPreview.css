@@ -180,3 +180,30 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Context menu for attachments */
+.attachment-context-menu {
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 4px 0;
+  min-width: 140px;
+}
+
+.attachment-context-menu-item {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: none;
+  font-size: 13px;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.1s ease;
+}
+
+.attachment-context-menu-item:hover {
+  background: var(--surface-hover);
+}

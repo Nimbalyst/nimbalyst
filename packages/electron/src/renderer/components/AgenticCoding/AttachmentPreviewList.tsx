@@ -6,9 +6,10 @@ import './AttachmentPreview.css';
 interface AttachmentPreviewListProps {
   attachments: ChatAttachment[];
   onRemove: (attachmentId: string) => void;
+  onConvertToText?: (attachment: ChatAttachment) => void;
 }
 
-export function AttachmentPreviewList({ attachments, onRemove }: AttachmentPreviewListProps) {
+export function AttachmentPreviewList({ attachments, onRemove, onConvertToText }: AttachmentPreviewListProps) {
   if (attachments.length === 0) {
     return null;
   }
@@ -20,6 +21,7 @@ export function AttachmentPreviewList({ attachments, onRemove }: AttachmentPrevi
           key={attachment.id}
           attachment={attachment}
           onRemove={onRemove}
+          onConvertToText={onConvertToText}
         />
       ))}
     </div>

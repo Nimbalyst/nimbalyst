@@ -230,6 +230,22 @@ export class AttachmentService {
   }
 
   /**
+   * Read attachment file as text (for converting back to prompt text)
+   */
+  async readAttachmentAsText(filepath: string): Promise<{ success: boolean; data?: string; error?: string }> {
+    try {
+      const text = await fs.readFile(filepath, 'utf-8');
+      return { success: true, data: text };
+    } catch (error) {
+      console.error('[AttachmentService] Failed to read attachment as text', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to read attachment'
+      };
+    }
+  }
+
+  /**
    * Clean up orphaned attachments (attachments for deleted sessions)
    */
   async cleanupOrphanedAttachments(validSessionIds: string[]): Promise<{ success: boolean; deletedCount: number }> {
