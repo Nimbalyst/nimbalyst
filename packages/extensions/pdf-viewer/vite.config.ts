@@ -46,7 +46,7 @@ export default defineConfig({
     lib: {
       entry: resolve(__dirname, 'src/index.tsx'),
       formats: ['es'],
-      fileName: 'index',
+      fileName: () => 'index.mjs',
     },
     rollupOptions: {
       // pdf-viewer uses pdfjs-dist and virtua from the host via __nimbalyst_extensions
