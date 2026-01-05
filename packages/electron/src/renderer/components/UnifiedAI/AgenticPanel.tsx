@@ -16,6 +16,7 @@ import { getFileName } from '../../utils/pathUtils';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
 import { TerminalPanel } from '../Terminal/TerminalPanel';
 import { store, sessionProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom } from '../../store';
+import { WorktreeOnboardingModal } from '../WorktreeOnboardingModal';
 
 export interface AgenticPanelRef {
   createNewSession: (planPath?: string) => Promise<void>;
@@ -164,6 +165,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   const [renamedWorktree, setRenamedWorktree] = useState<{ worktreeId: string; displayName: string } | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [worktreeSessionModes, setWorktreeSessionModes] = useState<Map<string, WorktreeContentMode>>(new Map());
+  const [worktreeOnboardingOpen, setWorktreeOnboardingOpen] = useState(false);
   const worktreeSessionModesRef = useRef(worktreeSessionModes);
 
   // Reload coordination for database-backed session state
@@ -1139,8 +1141,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     }
   }, [sessionTabs, workspacePath, mode, loadSessions, updateWindowTitle, triggerSessionHistoryRefresh]);
 
-  // Create a new worktree session
-  const createNewWorktreeSession = useCallback(async () => {
+  // Internal function to actually create the worktree session
+  const doCreateWorktreeSession = useCallback(async () => {
     try {
       // Step 1: Create the worktree
       const worktreeResult = await window.electronAPI.worktreeCreate(workspacePath);
@@ -1221,6 +1223,37 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       throw error;
     }
   }, [workspacePath, mode, loadSessions, updateWindowTitle, triggerSessionHistoryRefresh]);
+
+  // Create a new worktree session (may show onboarding modal first)
+  const createNewWorktreeSession = useCallback(async () => {
+    // Check if onboarding has been shown before
+    const onboardingShown = await window.electronAPI.invoke('worktree-onboarding:is-shown');
+
+    if (!onboardingShown) {
+      // Show onboarding modal first - actual creation happens in the continue handler
+      setWorktreeOnboardingOpen(true);
+      return;
+    }
+
+    // Proceed directly with creation
+    return doCreateWorktreeSession();
+  }, [doCreateWorktreeSession]);
+
+  // Handler for worktree onboarding modal continue
+  const handleWorktreeOnboardingContinue = useCallback(async () => {
+    // Mark as shown
+    await window.electronAPI.invoke('worktree-onboarding:set-shown', true);
+    setWorktreeOnboardingOpen(false);
+    // Proceed with creation
+    await doCreateWorktreeSession();
+  }, [doCreateWorktreeSession]);
+
+  // Handler for worktree onboarding modal cancel
+  const handleWorktreeOnboardingCancel = useCallback(() => {
+    // Mark as shown even on cancel (they saw it)
+    window.electronAPI.invoke('worktree-onboarding:set-shown', true);
+    setWorktreeOnboardingOpen(false);
+  }, []);
 
   // Add a new session to an existing worktree
   const handleAddSessionToWorktree = useCallback(async (worktreeId: string) => {
@@ -1881,6 +1914,19 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     };
 
     const cleanup = window.electronAPI.on('worktree:display-name-updated', handleWorktreeDisplayNameUpdated);
+
+    return () => {
+      cleanup?.();
+    };
+  }, []);
+
+  // Listen for developer menu trigger to show worktree onboarding modal
+  useEffect(() => {
+    const handleShowWorktreeOnboarding = () => {
+      setWorktreeOnboardingOpen(true);
+    };
+
+    const cleanup = window.electronAPI.on('show-worktree-onboarding', handleShowWorktreeOnboarding);
 
     return () => {
       cleanup?.();
@@ -3537,6 +3583,13 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         onImport={handleImportSessions}
         currentWorkspacePath={workspacePath}
         filterByWorkspace={true}  // Only show sessions for current workspace
+      />
+
+      {/* Worktree Onboarding Modal */}
+      <WorktreeOnboardingModal
+        isOpen={worktreeOnboardingOpen}
+        onContinue={handleWorktreeOnboardingContinue}
+        onCancel={handleWorktreeOnboardingCancel}
       />
     </div>
   );

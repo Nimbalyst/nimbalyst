@@ -60,6 +60,8 @@ interface AppStoreSchema {
   claudeCodeInstallationChecked?: boolean;
   // Feature walkthrough shown on first launch
   featureWalkthroughCompleted?: boolean;
+  // Worktree onboarding modal shown
+  worktreeOnboardingShown?: boolean;
   // Extension settings (enabled/disabled state and configuration)
   extensionSettings?: Record<string, ExtensionSettings>;
   // Claude Code settings
@@ -1011,6 +1013,15 @@ export function isFeatureWalkthroughCompleted(): boolean {
 
 export function setFeatureWalkthroughCompleted(completed: boolean): void {
   getAppStore().set('featureWalkthroughCompleted', completed);
+}
+
+// Worktree Onboarding Settings
+export function isWorktreeOnboardingShown(): boolean {
+  return appStore.get('worktreeOnboardingShown', false);
+}
+
+export function setWorktreeOnboardingShown(shown: boolean): void {
+  appStore.set('worktreeOnboardingShown', shown);
 }
 
 // Extension Settings Management

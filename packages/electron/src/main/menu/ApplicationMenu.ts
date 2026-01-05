@@ -1243,6 +1243,15 @@ export async function createApplicationMenu() {
                             }
                         },
                         {
+                            label: 'Show Worktree Onboarding',
+                            click: async () => {
+                                const focused = getFocusedWindow();
+                                if (focused) {
+                                    focused.webContents.send('show-worktree-onboarding');
+                                }
+                            }
+                        },
+                        {
                             label: 'Show Windows Warning',
                             click: async () => {
                                 const focused = getFocusedWindow();
@@ -1267,6 +1276,13 @@ export async function createApplicationMenu() {
                                 if (focused) {
                                     focused.webContents.send('show-trust-toast');
                                 }
+                            }
+                        },
+                        {
+                            label: 'Reset Worktree Onboarding',
+                            click: async () => {
+                                const { setWorktreeOnboardingShown } = await import('../utils/store');
+                                setWorktreeOnboardingShown(false);
                             }
                         }
                     ]
