@@ -1642,7 +1642,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       unregisterIncremental();
       unregisterClear();
     };
-  }, [filePath]);
+  }, [filePath, isEditorReady]);
 
   // Image interaction callbacks
   const handleImageDoubleClick = useCallback(async (src: string, nodeKey: string) => {
