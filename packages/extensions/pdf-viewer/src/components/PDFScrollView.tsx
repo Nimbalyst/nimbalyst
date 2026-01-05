@@ -25,7 +25,7 @@ export function PDFScrollView({
   totalPages,
   scale,
   fitToWidth,
-  theme,
+  theme: _theme,
   onFitWidthScaleChange,
 }: PDFScrollViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);

@@ -108,3 +108,5 @@ export type { ScreenshotCapability } from './services/ScreenshotService';
 export { DocumentPathProvider, useDocumentPath } from './DocumentPathContext';
 // Editor wrappers
 export * from './editors';
+// Sync types (for capacitor)
+export type { SessionIndexEntry } from './sync/types';

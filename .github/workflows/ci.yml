@@ -36,9 +36,11 @@ jobs:
         working-directory: packages/extension-sdk
         run: npm run build
 
+      - name: Build runtime
+        working-directory: packages/runtime
+        run: npm run build
+
       # Typecheck core packages
-      # Note: capacitor, collabv3, and extensions have pre-existing type issues
-      # They can be added here once those are fixed
       - name: TypeScript check - electron
         working-directory: packages/electron
         run: npx tsc --noEmit
@@ -54,3 +56,21 @@ jobs:
       - name: TypeScript check - extension-sdk
         working-directory: packages/extension-sdk
         run: npx tsc --noEmit
+
+      - name: TypeScript check - capacitor
+        working-directory: packages/capacitor
+        run: npx tsc --noEmit
+
+      # Typecheck extensions
+      - name: TypeScript check - extensions/pdf-viewer
+        working-directory: packages/extensions/pdf-viewer
+        run: npx tsc --noEmit
+
+      - name: TypeScript check - extensions/extension-dev-kit
+        working-directory: packages/extensions/extension-dev-kit
+        run: npx tsc --noEmit
+
+      # Note: These packages have pre-existing type issues
+      # - collabv3: needs @cloudflare/workers-types
+      # - datamodellm: ReactFlow type issues
+      # - csv-spreadsheet: RevoGrid type issues

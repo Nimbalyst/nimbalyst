@@ -15,9 +15,6 @@ import { usePDFDocument } from './hooks/usePDFDocument';
 import { PDFScrollView } from './components/PDFScrollView';
 import { Toolbar } from './components/Toolbar';
 
-// Get React from host (needed for TypeScript)
-const React = (window as any).__nimbalyst_extensions.react;
-
 // Import EditorHostProps type from runtime
 // Note: Extensions access runtime types via the host's exposed modules
 interface EditorHost {

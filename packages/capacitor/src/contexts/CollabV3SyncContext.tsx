@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import type { SessionIndexEntry as RuntimeSessionIndexEntry } from '@nimbalyst/runtime/sync';
+import type { SessionIndexEntry as RuntimeSessionIndexEntry } from '@nimbalyst/runtime';
 import {
   getSessionJwt,
   isAuthenticated,
@@ -844,7 +844,7 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
             });
 
             // Sort sessions by updated_at to match desktop sort order
-            convertedSessions.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+            convertedSessions.sort((a: SessionIndexEntry, b: SessionIndexEntry) => (b.updatedAt || 0) - (a.updatedAt || 0));
             // Sort projects by session count
             convertedProjects.sort((a, b) => b.sessionCount - a.sessionCount);
 

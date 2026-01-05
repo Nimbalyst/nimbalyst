@@ -77,7 +77,7 @@ export async function newExtensionCommand(args: string): Promise<string> {
   const files = templateFn({
     name,
     extensionId,
-    filePatterns: filePatterns || ['*.example'],
+    filePatterns: filePatterns ? [filePatterns] : ['*.example'],
   });
 
   // Return instructions for Claude to create the files
