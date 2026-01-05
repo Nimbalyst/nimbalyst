@@ -63,6 +63,13 @@
   --error-color: #ef4444;
   --info-color: #3b82f6;
 
+  /* Diff Colors */
+  --diff-add-bg: #e6ffed;
+  --diff-add-border: #e6ffed;
+  --diff-remove-bg: #ffebe9;
+  --diff-remove-border: #ffebe9;
+  --diff-remove-strikethrough: #ffebe9;
+
   /* Special Purpose */
   --highlight-background: rgba(255, 212, 0, 0.14);
   --highlight-border: rgba(255, 212, 0, 0.3);
@@ -99,6 +106,16 @@
   --terminal-ansi-bright-magenta: #a855f7;
   --terminal-ansi-bright-cyan: #06b6d4;
   --terminal-ansi-bright-white: #ffffff;
+}
+
+/* Dark Theme Variable Overrides */
+[data-theme="dark"],
+[data-theme="crystal-dark"] {
+  --diff-add-bg: rgba(40, 167, 69, 0.15);
+  --diff-add-border: rgba(40, 167, 69, 0.4);
+  --diff-remove-bg: rgba(220, 53, 69, 0.15);
+  --diff-remove-border: rgba(220, 53, 69, 0.4);
+  --diff-remove-strikethrough: rgba(220, 53, 69, 0.6);
 }
 
 .PlaygroundEditorTheme__ltr {
@@ -741,7 +758,7 @@
 }
 
 .PlaygroundEditorTheme__diffAdd {
-  background-color: #e6ffed; /* Light green background */
+  background-color: var(--diff-add-bg);
   border-radius: 2px;
   width: fit-content;
 }
@@ -751,21 +768,36 @@ table.PlaygroundEditorTheme__diffAdd {
 }
 
 .PlaygroundEditorTheme__diffRemove {
-  background-color: #ffebe9; /* Light red background */
+  background-color: var(--diff-remove-bg);
   text-decoration: none;
   border-radius: 2px;
   width: fit-content;
 }
 
+.mermaid-container.PlaygroundEditorTheme__diffRemove {
+  outline: 3px solid var(--diff-remove-border);
+}
+.mermaid-container.PlaygroundEditorTheme__diffRemove .mermaid-header {
+  background: var(--diff-remove-bg);
+}
+
+.mermaid-container.PlaygroundEditorTheme__diffAdd {
+  outline: 3px solid var(--diff-add-border);
+}
+.mermaid-container.PlaygroundEditorTheme__diffAdd .mermaid-header {
+  background: var(--diff-add-bg);
+}
+
+
 
 .PlaygroundEditorTheme__code.PlaygroundEditorTheme__diffAdd, .editor-image.PlaygroundEditorTheme__diffAdd {
-  background-color: #e6ffed; /* Light green background */
-  outline: 4px solid #e6ffed;
+  background-color: var(--diff-add-bg);
+  outline: 4px solid var(--diff-add-border);
 }
 
 .PlaygroundEditorTheme__code.PlaygroundEditorTheme__diffRemove, .editor-image.PlaygroundEditorTheme__diffRemove {
-  background-color: #ffebe9; /* Light red background */
-  outline: 4px solid #ffebe9;
+  background-color: var(--diff-remove-bg);
+  outline: 4px solid var(--diff-remove-border);
 }
 
 /* If the change node only contains a <br> element, remove the background */
@@ -776,10 +808,10 @@ table.PlaygroundEditorTheme__diffAdd {
 
 /* Show a left border for empty paragraphs that are added or removed */
 .PlaygroundEditorTheme__diffAdd:has(br:only-child) {
-  border-left: 10px solid #e6ffed; /* Light green border */
+  border-left: 10px solid var(--diff-add-border);
 }
 .PlaygroundEditorTheme__diffRemove:has(br:only-child) {
-  border-left: 10px solid #ffebe9; /* Light red border */
+  border-left: 10px solid var(--diff-remove-border);
 }
 
 /* Modified content (when both added and removed) */
@@ -790,25 +822,17 @@ table.PlaygroundEditorTheme__diffAdd {
      /*border-radius: 6px;*/
  }
 
-/* Dark mode styles for diffs */
+/* Dark mode styles for diffs - outline and strikethrough (backgrounds handled by CSS variables) */
 [data-theme="dark"] .PlaygroundEditorTheme__diffAdd,
 [data-theme="crystal-dark"] .PlaygroundEditorTheme__diffAdd {
-  background-color: rgba(40, 167, 69, 0.15); /* Dark green background */
-  outline: 1px solid rgba(40, 167, 69, 0.4);
+  outline: 1px solid var(--diff-add-border);
 }
 
 [data-theme="dark"] .PlaygroundEditorTheme__diffRemove,
 [data-theme="crystal-dark"] .PlaygroundEditorTheme__diffRemove {
-  background-color: rgba(220, 53, 69, 0.15); /* Dark red background */
-  outline: 1px solid rgba(220, 53, 69, 0.4);
+  outline: 1px solid var(--diff-remove-border);
   text-decoration: line-through;
-  text-decoration-color: rgba(220, 53, 69, 0.6);
-}
-
-[data-theme="dark"] .PlaygroundEditorTheme__diffModify,
-[data-theme="crystal-dark"] .PlaygroundEditorTheme__diffModify {
-  /*background-color: rgba(249, 199, 79, 0.15); !* Dark yellow background *!*/
-  /*outline: 1px solid rgba(249, 199, 79, 0.4);*/
+  text-decoration-color: var(--diff-remove-strikethrough);
 }
 
 /* Dark mode styles for code block gutters only */
