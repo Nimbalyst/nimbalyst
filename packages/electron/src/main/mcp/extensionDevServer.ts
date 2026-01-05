@@ -171,6 +171,18 @@ function validateBuiltExtension(extensionPath: string, manifestPath: string): Ma
     const manifestContent = fs.readFileSync(manifestPath, 'utf8');
     const manifest = JSON.parse(manifestContent);
 
+    // Validate that the main entry point file actually exists
+    if (manifest.main) {
+      const mainPath = path.join(extensionPath, manifest.main);
+      if (!fs.existsSync(mainPath)) {
+        warnings.push({
+          field: 'main',
+          message: `Main entry point file not found at "${manifest.main}". The file "${mainPath}" does not exist. Make sure your vite.config.ts output filename matches the manifest.json "main" field. Common issue: manifest says "dist/index.mjs" but Vite outputs "dist/index.js".`,
+          severity: 'error'
+        });
+      }
+    }
+
     // Check if extension has customEditors - if so, verify components export exists
     if (manifest.contributions?.customEditors?.length > 0 && manifest.main) {
       const mainPath = path.join(extensionPath, manifest.main);
