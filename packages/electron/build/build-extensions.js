@@ -5,6 +5,10 @@
  * then finds all extensions in packages/extensions/ that have a build script
  * and runs npm run build for each one. This ensures extension dist/ folders exist
  * before electron-builder packages them.
+ *
+ * After building each extension, it validates that the manifest.main and
+ * manifest.styles files actually exist. This catches mismatches between
+ * vite.config.ts output filenames and manifest.json early.
  */
 
 const { execSync } = require('child_process');
@@ -13,6 +17,51 @@ const path = require('path');
 
 const EXTENSIONS_DIR = path.resolve(__dirname, '..', '..', 'extensions');
 const EXTENSION_SDK_DIR = path.resolve(__dirname, '..', '..', 'extension-sdk');
+
+/**
+ * Validate that an extension's manifest.main and manifest.styles point to real files.
+ * Returns an array of error messages (empty if valid).
+ */
+function validateExtensionManifest(extPath, extName) {
+  const manifestPath = path.join(extPath, 'manifest.json');
+  const errors = [];
+
+  if (!fs.existsSync(manifestPath)) {
+    // No manifest is okay - some extensions might not have one yet
+    return errors;
+  }
+
+  try {
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+
+    // Validate main entry point exists
+    if (manifest.main) {
+      const mainPath = path.join(extPath, manifest.main);
+      if (!fs.existsSync(mainPath)) {
+        errors.push(
+          `manifest.main "${manifest.main}" not found. ` +
+          `Expected file at: ${mainPath}\n` +
+          `    Make sure vite.config.ts fileName matches manifest.json "main" field.`
+        );
+      }
+    }
+
+    // Validate styles file exists (if specified)
+    if (manifest.styles) {
+      const stylesPath = path.join(extPath, manifest.styles);
+      if (!fs.existsSync(stylesPath)) {
+        errors.push(
+          `manifest.styles "${manifest.styles}" not found. ` +
+          `Expected file at: ${stylesPath}`
+        );
+      }
+    }
+  } catch (error) {
+    errors.push(`Failed to parse manifest.json: ${error.message}`);
+  }
+
+  return errors;
+}
 
 async function buildExtensions() {
   // First, build the extension-sdk since extensions depend on it
@@ -75,6 +124,15 @@ async function buildExtensions() {
         cwd: extPath,
         stdio: 'inherit',
       });
+
+      // Validate manifest after build
+      const validationErrors = validateExtensionManifest(extPath, extDir);
+      if (validationErrors.length > 0) {
+        console.error(`\n  Validation failed for ${extDir}:`);
+        validationErrors.forEach((err) => console.error(`    - ${err}`));
+        process.exit(1);
+      }
+
       console.log(`  Built ${extDir} successfully`);
     } catch (error) {
       console.error(`  Failed to build ${extDir}:`, error.message);

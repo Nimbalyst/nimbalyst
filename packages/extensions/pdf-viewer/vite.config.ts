@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
 import { copyFileSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
+import { createManifestValidationPlugin } from '@nimbalyst/extension-sdk/vite';
 
 export default defineConfig({
   plugins: [
@@ -11,6 +12,8 @@ export default defineConfig({
       jsxRuntime: 'automatic',
       jsxImportSource: 'react',
     }),
+    // Validate manifest.main and manifest.styles point to real files after build
+    createManifestValidationPlugin(),
     // Custom plugin to copy PDF.js worker after build
     {
       name: 'copy-pdfjs-worker',

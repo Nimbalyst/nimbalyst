@@ -8,9 +8,25 @@ import { ROLLUP_EXTERNALS } from './externals.js';
 
 /**
  * Creates a Vite plugin that validates the build output matches the manifest.
- * This catches issues like CSS files not being named correctly.
+ * This catches issues like manifest.main pointing to a file that doesn't exist
+ * (e.g., manifest says "dist/index.mjs" but Vite outputs "dist/index.js").
+ *
+ * The plugin runs after the build completes and fails the build if validation fails.
+ *
+ * @example
+ * ```ts
+ * import { createManifestValidationPlugin } from '@nimbalyst/extension-sdk/vite';
+ *
+ * export default defineConfig({
+ *   plugins: [
+ *     react(),
+ *     createManifestValidationPlugin(),
+ *   ],
+ *   // ... rest of config
+ * });
+ * ```
  */
-function createManifestValidationPlugin(): Plugin {
+export function createManifestValidationPlugin(): Plugin {
   let outDir = 'dist';
   let rootDir = process.cwd();
 
