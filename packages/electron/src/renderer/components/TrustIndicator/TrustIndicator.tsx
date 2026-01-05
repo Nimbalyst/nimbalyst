@@ -144,10 +144,10 @@ export const TrustIndicator: React.FC<TrustIndicatorProps> = ({
     }
     if (isTrusted) {
       if (status.permissionMode === 'bypass-all') {
-        return 'Bypass All Checks mode (dangerous)';
+        return 'Allow All mode';
       }
       if (status.permissionMode === 'allow-all') {
-        return 'Allow All Edits mode';
+        return 'Allow Edits mode';
       }
       return 'Ask mode enabled';
     }
@@ -160,7 +160,7 @@ export const TrustIndicator: React.FC<TrustIndicatorProps> = ({
     }
     if (isTrusted) {
       if (status.permissionMode === 'bypass-all') {
-        return 'All operations auto-approved without any prompts. Use at your own risk.';
+        return 'All operations auto-approved without any prompts.';
       }
       if (status.permissionMode === 'allow-all') {
         return 'File operations auto-approved. Bash and web requests follow Claude Code settings.';
@@ -201,7 +201,7 @@ export const TrustIndicator: React.FC<TrustIndicatorProps> = ({
               />
               <span>
                 {isTrusted
-                  ? (status?.permissionMode === 'bypass-all' ? 'Bypass All Checks' : status?.permissionMode === 'allow-all' ? 'Allow All Edits' : 'Ask')
+                  ? (status?.permissionMode === 'bypass-all' ? 'Allow All' : status?.permissionMode === 'allow-all' ? 'Allow Edits' : 'Ask')
                   : 'Not Trusted'}
               </span>
             </div>

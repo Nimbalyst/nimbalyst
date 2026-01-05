@@ -376,14 +376,14 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
               <div className="permissions-mode-option-content">
                 <span className="material-symbols-outlined">check_circle</span>
                 <div className="permissions-mode-option-text">
-                  <span className="permissions-mode-option-title">Allow All Edits</span>
+                  <span className="permissions-mode-option-title">Allow Edits</span>
                   <span className="permissions-mode-option-description">
                     File operations auto-approved. Bash and web requests follow Claude Code settings.
                   </span>
                 </div>
               </div>
             </label>
-            <label className={`permissions-mode-option dangerous ${permissions.permissionMode === 'bypass-all' ? 'selected' : ''}`}>
+            <label className={`permissions-mode-option ${permissions.permissionMode === 'bypass-all' ? 'selected' : ''}`}>
               <input
                 type="radio"
                 name="permissionMode"
@@ -392,11 +392,11 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
                 onChange={() => handlePermissionModeChange('bypass-all')}
               />
               <div className="permissions-mode-option-content">
-                <span className="material-symbols-outlined">warning</span>
+                <span className="material-symbols-outlined">check_circle</span>
                 <div className="permissions-mode-option-text">
-                  <span className="permissions-mode-option-title">Bypass All Checks</span>
+                  <span className="permissions-mode-option-title">Allow All</span>
                   <span className="permissions-mode-option-description">
-                    All operations auto-approved without any prompts. Use at your own risk.
+                    All operations auto-approved without any prompts.
                   </span>
                 </div>
               </div>

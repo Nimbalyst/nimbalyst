@@ -25,7 +25,7 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
   const [isVisible, setIsVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isChangingMode, setIsChangingMode] = useState(false);
-  const [selectedMode, setSelectedMode] = useState<TrustChoice>('ask');
+  const [selectedMode, setSelectedMode] = useState<TrustChoice>('allow-all');
   const toastRef = useRef<HTMLDivElement>(null);
   const justSavedRef = useRef(false);
 
@@ -230,24 +230,21 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
             disabled={isSubmitting}
           >
             <span className="project-trust-toast-mode-label">Ask</span>
-            <span className="project-trust-toast-mode-badge">Recommended</span>
           </button>
           <button
             className={`project-trust-toast-mode-btn ${selectedMode === 'allow-all' ? 'project-trust-toast-mode-btn--selected' : ''}`}
             onClick={() => setSelectedMode('allow-all')}
             disabled={isSubmitting}
           >
-            <span className="project-trust-toast-mode-label">Allow All Edits</span>
+            <span className="project-trust-toast-mode-label">Allow Edits</span>
+            <span className="project-trust-toast-mode-badge">Recommended</span>
           </button>
           <button
-            className={`project-trust-toast-mode-btn ${selectedMode === 'bypass-all' ? 'project-trust-toast-mode-btn--selected project-trust-toast-mode-btn--dangerous' : ''}`}
+            className={`project-trust-toast-mode-btn ${selectedMode === 'bypass-all' ? 'project-trust-toast-mode-btn--selected' : ''}`}
             onClick={() => setSelectedMode('bypass-all')}
             disabled={isSubmitting}
           >
-            <span className="project-trust-toast-mode-label">Bypass All</span>
-            {selectedMode === 'bypass-all' && (
-              <span className="project-trust-toast-mode-badge project-trust-toast-mode-badge--dangerous">Dangerous</span>
-            )}
+            <span className="project-trust-toast-mode-label">Allow All</span>
           </button>
         </div>
 
@@ -310,30 +307,30 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
             </>
           ) : (
             <>
-              <p className="project-trust-toast-mode-summary project-trust-toast-mode-summary--dangerous">
-                The agent will run ALL operations without ANY permission prompts. This includes shell commands, file operations, and web requests.
+              <p className="project-trust-toast-mode-summary project-trust-toast-mode-summary--warning">
+                The agent will run all operations without permission prompts, including shell commands, file operations, and web requests.
               </p>
-              <ul className="project-trust-toast-features-list project-trust-toast-features-list--dangerous">
+              <ul className="project-trust-toast-features-list project-trust-toast-features-list--warning">
                 <li>
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                     <path d="M8 5.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                     <path d="M8 11h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                   </svg>
-                  <span><strong>No permission prompts</strong> - everything runs immediately</span>
+                  <span>All tool calls are automatically approved</span>
                 </li>
                 <li>
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                     <path d="M8 5.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                     <path d="M8 11h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                   </svg>
-                  <span><strong>Ignores Claude Code settings</strong> - bypasses all safety checks</span>
+                  <span>Uses Nimbalyst permissions instead of Claude Code settings</span>
                 </li>
                 <li>
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                     <path d="M8 5.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                     <path d="M8 11h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                   </svg>
-                  <span><strong>Use at your own risk</strong> - only for testing/development</span>
+                  <span>Best for development and testing workflows</span>
                 </li>
               </ul>
             </>

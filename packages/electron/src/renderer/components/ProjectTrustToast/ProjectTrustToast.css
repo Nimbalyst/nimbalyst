@@ -121,11 +121,12 @@
 
 .project-trust-toast-mode-btn {
   flex: 1;
-  display: flex;
+  display: grid;
+  grid-template-rows: 1fr auto;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 12px 16px;
+  justify-items: center;
+  padding: 12px 16px 8px 16px;
+  min-height: 64px;
   border-radius: 8px;
   border: 1px solid var(--border-primary);
   background: var(--surface-secondary);
@@ -170,6 +171,8 @@
   border-radius: 4px;
   background: color-mix(in srgb, var(--primary-color) 15%, transparent);
   color: var(--primary-color);
+  white-space: nowrap;
+  grid-row: 2;
 }
 
 .project-trust-toast-mode-badge--danger {
