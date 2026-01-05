@@ -341,8 +341,8 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       cleanupFns.push(window.electronAPI.onOpenWorkspaceFromCLI(async (workspacePath) => {
         console.log('Opening workspace from CLI:', workspacePath);
         // Open the workspace using the existing openWorkspace API
-        if (window.electronAPI.openWorkspace) {
-          await window.electronAPI.openWorkspace(workspacePath);
+        if (window.electronAPI.workspaceManager?.openWorkspace) {
+          await window.electronAPI.workspaceManager.openWorkspace(workspacePath);
         }
       }));
     }
@@ -598,7 +598,8 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
             console.log('[MCP] File not open, opening in background:', filePath);
 
             // Read the file content
-            const fileContent = await window.electronAPI.readFileContent(filePath);
+            const result = await window.electronAPI.readFileContent(filePath);
+            const fileContent = result?.success ? result.content : '';
 
             // Open the file using editorRegistry's file opener
             await editorRegistry.openFileInBackground(filePath, fileContent);
@@ -1045,7 +1046,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     // Handle permission request sound playback from main process
     const handlePlayPermissionSound = () => {
       const soundPlayer = getSoundPlayer();
-      soundPlayer.playSound('alert').catch(err => {
+      soundPlayer.playSound('bell').catch(err => {
         console.error('Failed to play permission sound:', err);
       });
     };

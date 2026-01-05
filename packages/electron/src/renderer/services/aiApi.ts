@@ -13,7 +13,7 @@ const previewForLog = (value?: string, max: number = LOG_PREVIEW_LENGTH): string
 // DocumentContext is now imported from runtime package
 
 interface EditRequest {
-  type: 'edit' | 'insert' | 'delete' | 'replace' | 'stream';
+  type: 'edit' | 'insert' | 'delete' | 'replace' | 'stream' | 'diff';
   file: string;
   range: {
     start: { line: number; column: number };
@@ -21,6 +21,7 @@ interface EditRequest {
   };
   content: string;
   preview: boolean;
+  replacements?: any[];  // For diff type edits
 }
 
 // Message type is now imported from runtime package
@@ -279,7 +280,8 @@ class AIApi {
           logger.api.info('File not open, opening in background:', targetFilePath);
 
           // Read the file content
-          const fileContent = await window.electronAPI.readFileContent(targetFilePath);
+          const result = await window.electronAPI.readFileContent(targetFilePath);
+          const fileContent = result?.success ? result.content : '';
 
           // Open the file using editorRegistry's file opener
           await editorRegistry.openFileInBackground(targetFilePath, fileContent);
@@ -299,13 +301,15 @@ class AIApi {
     });
   }
 
-  // Provider management
-  setDefaultProvider(provider: 'claude' | 'claude-code' | 'openai') {
-    this.defaultProvider = provider as any;
+  // Provider management (deprecated - provider should be specified explicitly)
+  setDefaultProvider(_provider: 'claude' | 'claude-code' | 'openai') {
+    // No-op - defaultProvider has been removed
+    console.warn('setDefaultProvider is deprecated - provider should be specified explicitly');
   }
 
   getDefaultProvider(): 'claude' | 'claude-code' | 'openai' {
-    return this.defaultProvider as any;
+    // Return claude-code as default for backward compatibility
+    return 'claude-code';
   }
 
   // Initialize with optional provider selection
@@ -319,7 +323,7 @@ class AIApi {
     workspacePath?: string,
     provider?: 'claude' | 'claude-code' | 'openai' | 'lmstudio',
     modelId?: string,
-    sessionType?: 'chat' | 'planning' | 'coding'
+    sessionType?: 'chat' | 'planning' | 'coding' | 'terminal'
   ): Promise<SessionData> {
     // Provider must be explicitly specified, no default
     if (!provider) {
@@ -334,7 +338,7 @@ class AIApi {
     documentContext?: DocumentContext,
     workspacePath?: string,
     modelId?: string,
-    sessionType?: 'chat' | 'planning' | 'coding'
+    sessionType?: 'chat' | 'planning' | 'coding' | 'terminal'
   ): Promise<SessionData> {
     return window.electronAPI.aiCreateSession(provider, documentContext, workspacePath, modelId, sessionType);
   }
@@ -372,8 +376,12 @@ class AIApi {
     return window.electronAPI.aiDeleteSession(sessionId, workspacePath);
   }
 
-  async cancelRequest(): Promise<{ success: boolean; error?: string }> {
-    return window.electronAPI.aiCancelRequest();
+  async cancelRequest(sessionId: string): Promise<{ success: boolean; error?: string }> {
+    if (!sessionId) {
+      console.error('[AIApi] cancelRequest called without sessionId');
+      return { success: false, error: 'Session ID is required to cancel request' };
+    }
+    return window.electronAPI.aiCancelRequest(sessionId);
   }
 
   async applyEdit(edit: EditRequest, targetFilePath?: string): Promise<{ success: boolean; error?: string }> {
@@ -490,7 +498,8 @@ class AIApi {
     apiKeys?: Record<string, string>;
     providerSettings?: any;
   }): Promise<{ success: boolean }> {
-    return window.electronAPI.saveAISettings(settings);
+    await window.electronAPI.saveAISettings(settings);
+    return { success: true };
   }
 
   // Test connection for a specific provider
@@ -506,4 +515,4 @@ class AIApi {
 
 export const aiApi = new AIApi();
 export default aiApi;
-export type { DocumentContext, EditRequest, Message, Session };
+export type { DocumentContext, EditRequest, Message, SessionData };

@@ -250,7 +250,8 @@ if (typeof window !== 'undefined') {
 
     if (message === 'Canceled' || message === 'Canceled: Canceled') {
       // This is a Monaco internal cancellation, not a real error
-      console.debug('[ErrorNotificationService] Ignoring Monaco cancellation:', message);
+      // Prevent it from appearing in the console as an uncaught error
+      event.preventDefault();
       return;
     }
 

@@ -172,7 +172,7 @@ interface ElectronAPI {
   // AI operations (flat methods)
   aiHasApiKey: () => Promise<boolean>;
   aiInitialize: (provider?: string, apiKey?: string) => Promise<any>;
-  aiCreateSession: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio', documentContext?: any, workspacePath?: string, modelId?: string, sessionType?: 'chat' | 'planning' | 'coding') => Promise<any>;
+  aiCreateSession: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio', documentContext?: any, workspacePath?: string, modelId?: string, sessionType?: 'chat' | 'planning' | 'coding' | 'terminal') => Promise<any>;
   aiSendMessage: (message: string, documentContext?: any, sessionId?: string, workspacePath?: string) => Promise<any>;
   aiGetSessions: (workspacePath?: string) => Promise<any>;
   aiLoadSession: (sessionId: string, workspacePath?: string, trackAsResume?: boolean) => Promise<any>;
@@ -202,8 +202,8 @@ interface ElectronAPI {
   onAIStreamEditContent: (callback: (data: any) => void) => () => void;
   onAIStreamEditEnd: (callback: (data: any) => void) => () => void;
   onAIPerformanceMetrics: (callback: (data: any) => void) => () => void;
-  onAIGetDocumentContent: (callback: (data: { resultChannel: string }) => void) => () => void;
-  onAIUpdateFrontmatter: (callback: (data: { updates: Record<string, any>, resultChannel: string }) => void) => () => void;
+  onAIGetDocumentContent: (callback: (data: { filePath?: string, resultChannel: string }) => void) => () => void;
+  onAIUpdateFrontmatter: (callback: (data: { filePath?: string, updates: Record<string, any>, resultChannel: string }) => void) => () => void;
   onAICreateDocument: (callback: (data: { filePath: string; initialContent?: string; switchToFile?: boolean; resultChannel: string }) => void) => () => void;
   onAIEditRequest: (callback: (edit: any) => void) => () => void;
 
@@ -223,7 +223,7 @@ interface ElectronAPI {
   cliCheckClaudeCodeWindowsInstallation: () => Promise<ClaudeForWindowsInstallation>;
 
   // MCP Server operations
-  onMcpApplyDiff: (callback: (data: { replacements: any[], resultChannel: string }) => void) => () => void;
+  onMcpApplyDiff: (callback: (data: { replacements: any[], resultChannel: string, targetFilePath?: string }) => void) => () => void;
   onMcpStreamContent: (callback: (data: { streamId: string, content: string, position: string, insertAfter?: string, mode?: string, targetFilePath?: string, resultChannel: string }) => void) => () => void;
   onMcpNavigateTo: (callback: (data: { line: number, column: number }) => void) => () => void;
   sendMcpApplyDiffResult: (resultChannel: string, result: any) => void;
@@ -240,7 +240,7 @@ interface ElectronAPI {
   ai: {
     hasApiKey: () => Promise<boolean>;
     initialize: (provider?: string, apiKey?: string) => Promise<any>;
-    createSession: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio', documentContext?: any, workspacePath?: string, modelId?: string, sessionType?: 'chat' | 'planning' | 'coding') => Promise<any>;
+    createSession: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio', documentContext?: any, workspacePath?: string, modelId?: string, sessionType?: 'chat' | 'planning' | 'coding' | 'terminal') => Promise<any>;
     sendMessage: (message: string, documentContext?: any, sessionId?: string, workspacePath?: string) => Promise<any>;
     getSessions: (workspacePath?: string) => Promise<any>;
     getSessionList: (workspacePath?: string) => Promise<any>;

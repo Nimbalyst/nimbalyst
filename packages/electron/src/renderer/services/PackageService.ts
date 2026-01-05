@@ -152,11 +152,11 @@ export class PackageService {
     try {
       if (location === 'global') {
         const result = await window.electronAPI.invoke('read-global-claude-file', `commands/${commandName}.md`);
-        return !!result?.content;
+        return !!(result?.success && result.content);
       } else {
         const fullPath = `${this.workspacePath}/.claude/commands/${commandName}.md`;
         const result = await window.electronAPI.readFileContent(fullPath);
-        return !!result?.content;
+        return !!(result?.success && result.content);
       }
     } catch (error) {
       return false;
@@ -170,7 +170,7 @@ export class PackageService {
     try {
       const fullPath = `${this.workspacePath}/.nimbalyst/trackers/${type}.yaml`;
       const result = await window.electronAPI.readFileContent(fullPath);
-      return !!result?.content;
+      return !!(result?.success && result.content);
     } catch (error) {
       return false;
     }
@@ -209,7 +209,7 @@ export class PackageService {
     try {
       const gitignorePath = `${this.workspacePath}/.gitignore`;
       const result = await window.electronAPI.readFileContent(gitignorePath);
-      if (result && result.content) {
+      if (result && result.success) {
         // Check if nimbalyst-local/ is already ignored
         return result.content.includes(`${NIMBALYST_LOCAL_DIR}/`);
       }
@@ -231,7 +231,7 @@ export class PackageService {
       let content = '';
       try {
         const result = await window.electronAPI.readFileContent(gitignorePath);
-        if (result && result.content) {
+        if (result && result.success) {
           content = result.content;
         }
       } catch (err) {
@@ -544,7 +544,7 @@ export class PackageService {
       } else {
         const fullPath = `${this.workspacePath}/.claude/commands/${commandName}.md`;
         const result = await window.electronAPI.readFileContent(fullPath);
-        content = result?.content;
+        content = result?.success ? result.content : undefined;
       }
 
       if (!content) {
@@ -567,7 +567,7 @@ export class PackageService {
       const fullPath = `${this.workspacePath}/.nimbalyst/trackers/${type}.yaml`;
       const result = await window.electronAPI.readFileContent(fullPath);
 
-      if (!result?.content) {
+      if (!result?.success) {
         return null;
       }
 

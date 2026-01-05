@@ -22,7 +22,7 @@ export interface CreateSessionPayload {
   id: string;
   provider: string;
   model?: string;
-  sessionType?: 'chat' | 'planning' | 'coding';
+  sessionType?: 'chat' | 'planning' | 'coding' | 'terminal';
   mode?: SessionMode;
   title?: string;
   workspaceId: string;

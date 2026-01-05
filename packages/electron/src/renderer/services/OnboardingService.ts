@@ -127,13 +127,13 @@ export class OnboardingService {
       try {
         if (isGlobal) {
           const result = await window.electronAPI.invoke('read-global-claude-file', relativePath);
-          if (result && result.content) {
+          if (result && result.success) {
             console.log('plan.md already exists in ~/.claude/, skipping installation');
             return;
           }
         } else {
           const existing = await window.electronAPI.readFileContent(`${workspacePath}/.claude/commands/plan.md`);
-          if (existing && existing.content) {
+          if (existing && existing.success) {
             console.log('plan.md already exists in project .claude/, skipping installation');
             return;
           }
@@ -174,13 +174,13 @@ export class OnboardingService {
       try {
         if (isGlobal) {
           const result = await window.electronAPI.invoke('read-global-claude-file', relativePath);
-          if (result && result.content) {
+          if (result && result.success) {
             console.log('track.md already exists in ~/.claude/, skipping installation');
             return;
           }
         } else {
           const existing = await window.electronAPI.readFileContent(`${workspacePath}/.claude/commands/track.md`);
-          if (existing && existing.content) {
+          if (existing && existing.success) {
             console.log('track.md already exists in project .claude/, skipping installation');
             return;
           }
@@ -221,13 +221,13 @@ export class OnboardingService {
       try {
         if (isGlobal) {
           const result = await window.electronAPI.invoke('read-global-claude-file', relativePath);
-          if (result && result.content) {
+          if (result && result.success) {
             console.log('track-bug.md already exists in ~/.claude/, skipping installation');
             return;
           }
         } else {
           const existing = await window.electronAPI.readFileContent(`${workspacePath}/.claude/commands/track-bug.md`);
-          if (existing && existing.content) {
+          if (existing && existing.success) {
             console.log('track-bug.md already exists in project .claude/, skipping installation');
             return;
           }
@@ -262,13 +262,13 @@ export class OnboardingService {
       try {
         if (isGlobal) {
           const result = await window.electronAPI.invoke('read-global-claude-file', relativePath);
-          if (result && result.content) {
+          if (result && result.success) {
             console.log('track-idea.md already exists in ~/.claude/, skipping installation');
             return;
           }
         } else {
           const existing = await window.electronAPI.readFileContent(`${workspacePath}/.claude/commands/track-idea.md`);
-          if (existing && existing.content) {
+          if (existing && existing.success) {
             console.log('track-idea.md already exists in project .claude/, skipping installation');
             return;
           }
@@ -304,7 +304,7 @@ export class OnboardingService {
       // Try to read existing file
       try {
         const result = await window.electronAPI.readFileContent(claudeMdPath);
-        if (result && result.content) {
+        if (result && result.success) {
           // File exists, append to it
           const content = result.content;
 
@@ -399,7 +399,7 @@ ${preditorSection}`;
       let content = '';
       try {
         const result = await window.electronAPI.readFileContent(gitignorePath);
-        if (result && result.content) {
+        if (result && result.success) {
           content = result.content;
         }
       } catch (err) {
@@ -1172,7 +1172,7 @@ When creating your own plans:
       // Check if tracker already exists
       try {
         const existing = await window.electronAPI.readFileContent(trackerPath);
-        if (existing && existing.content) {
+        if (existing && existing.success) {
           console.log(`${type}.md already exists, skipping creation`);
           return;
         }
@@ -1280,12 +1280,12 @@ ${config.description}
         try {
           if (isGlobal) {
             const result = await window.electronAPI.invoke('read-global-claude-file', relativePath);
-            if (!result || !result.content) {
+            if (!result || !result.success) {
               return true; // Command is missing
             }
           } else {
             const existing = await window.electronAPI.readFileContent(`${workspacePath}/.claude/commands/${command}`);
-            if (!existing || !existing.content) {
+            if (!existing || !existing.success) {
               return true; // Command is missing
             }
           }
@@ -1322,7 +1322,7 @@ ${config.description}
     try {
       const gitignorePath = `${workspacePath}/.gitignore`;
       const result = await window.electronAPI.readFileContent(gitignorePath);
-      if (result && result.content) {
+      if (result && result.success) {
         return result.content.includes('nimbalyst-local/');
       }
       return false;
@@ -1388,13 +1388,13 @@ ${config.description}
       try {
         if (isGlobal) {
           const result = await window.electronAPI.invoke('read-global-claude-file', relativePath);
-          if (result && result.content) {
+          if (result && result.success) {
             console.log('mockup.md already exists in ~/.claude/, skipping installation');
             return;
           }
         } else {
           const existing = await window.electronAPI.readFileContent(`${workspacePath}/.claude/commands/mockup.md`);
-          if (existing && existing.content) {
+          if (existing && existing.success) {
             console.log('mockup.md already exists in project .claude/, skipping installation');
             return;
           }

@@ -990,7 +990,7 @@ export class AIService {
       documentContext?: DocumentContext,
       workspacePath?: string,
       modelId?: string,
-      sessionType?: 'chat' | 'planning' | 'coding'
+      sessionType?: 'chat' | 'planning' | 'coding' | 'terminal'
     ) => {
       // TODO: Debug logging - uncomment if needed
       // console.log('[AIService] ai:createSession called:', {

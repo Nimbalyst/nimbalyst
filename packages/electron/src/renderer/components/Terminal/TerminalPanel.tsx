@@ -10,25 +10,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 
-declare global {
-  interface Window {
-    electronAPI: {
-      terminal: {
-        initialize: (sessionId: string, options?: { cwd?: string; cols?: number; rows?: number }) => Promise<{ success: boolean; alreadyActive?: boolean; error?: string }>;
-        isActive: (sessionId: string) => Promise<boolean>;
-        write: (sessionId: string, data: string) => Promise<{ success: boolean }>;
-        resize: (sessionId: string, cols: number, rows: number) => Promise<{ success: boolean }>;
-        getScrollback: (sessionId: string) => Promise<string | null>;
-        getInfo: (
-          sessionId: string
-        ) => Promise<{ shell: { name: string; path: string }; cwd: string; cols: number; rows: number; historyFile?: string } | null>;
-        destroy: (sessionId: string) => Promise<{ success: boolean }>;
-        onOutput: (callback: (data: { sessionId: string; data: string }) => void) => () => void;
-        onExited: (callback: (data: { sessionId: string; exitCode: number }) => void) => () => void;
-      };
-    };
-  }
-}
+// Type for terminal API is defined in electron.d.ts
 
 export interface TerminalPanelProps {
   sessionId: string;

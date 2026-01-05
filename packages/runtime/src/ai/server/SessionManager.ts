@@ -520,7 +520,7 @@ export class SessionManager {
     workspacePath?: string,
     providerConfig?: any,
     model?: string,
-    sessionType?: 'chat' | 'planning' | 'coding',
+    sessionType?: 'chat' | 'planning' | 'coding' | 'terminal',
     mode?: 'planning' | 'agent'
   ): Promise<SessionData> {
     const sessionId = uuidv4();

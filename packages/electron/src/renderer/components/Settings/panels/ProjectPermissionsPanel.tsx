@@ -341,7 +341,7 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
       </div>
 
       {/* Permission Mode Section - Only show when trusted */}
-      {permissions?.permissionMode !== null && (
+      {permissions && permissions.permissionMode !== null && (
         <div className="permissions-section">
           <div className="permissions-section-header">
             <span>Permission Mode</span>

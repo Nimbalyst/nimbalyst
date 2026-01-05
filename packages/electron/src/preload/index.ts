@@ -355,7 +355,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // AI operations (new unified interface)
   aiHasApiKey: () => ipcRenderer.invoke('ai:hasApiKey'),
   aiInitialize: (provider?: string, apiKey?: string) => ipcRenderer.invoke('ai:initialize', provider, apiKey),
-  aiCreateSession: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio', documentContext?: any, workspacePath?: string, modelId?: string, sessionType?: 'chat' | 'planning' | 'coding') => {
+  aiCreateSession: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio', documentContext?: any, workspacePath?: string, modelId?: string, sessionType?: 'chat' | 'planning' | 'coding' | 'terminal') => {
     console.log('[Preload] aiCreateSession called:', { provider, workspacePath, sessionType });
     return ipcRenderer.invoke('ai:createSession', provider, documentContext, workspacePath, modelId, sessionType);
   },
@@ -517,7 +517,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ai: {
     hasApiKey: () => ipcRenderer.invoke('ai:hasApiKey'),
     initialize: (provider?: string, apiKey?: string) => ipcRenderer.invoke('ai:initialize', provider, apiKey),
-    createSession: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio', documentContext?: any, workspacePath?: string, modelId?: string, sessionType?: 'chat' | 'planning' | 'coding') =>
+    createSession: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio', documentContext?: any, workspacePath?: string, modelId?: string, sessionType?: 'chat' | 'planning' | 'coding' | 'terminal') =>
       ipcRenderer.invoke('ai:createSession', provider, documentContext, workspacePath, modelId, sessionType),
     sendMessage: (message: string, documentContext?: any, sessionId?: string, workspacePath?: string) =>
       ipcRenderer.invoke('ai:sendMessage', message, documentContext, sessionId, workspacePath),
