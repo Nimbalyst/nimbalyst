@@ -20,6 +20,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.50.14] - 2026-01-05
+
+
+### Added
+- Context menu to convert text attachments back to prompt text
+
+### Changed
+- Diff colors now use CSS variables for dark mode support
+
+### Fixed
+- Mermaid diagram changes now show in diff mode
+- Extension manifest/output mismatches caught at build time
+- iOS-dev extension builds without tsconfig warning
+- Table action menu now positions correctly when document is scrolled
+- PDF viewer now loads in packaged builds
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.50.13] - 2026-01-05
 
 
