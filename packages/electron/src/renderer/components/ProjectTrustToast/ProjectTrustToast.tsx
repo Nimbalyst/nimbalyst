@@ -127,13 +127,6 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
     };
   }, [isVisible, handleDismiss]);
 
-  // Handle click outside to dismiss without changing settings
-  const handleOverlayClick = useCallback((e: React.MouseEvent) => {
-    // Only dismiss if clicking directly on the overlay, not the toast content
-    if (e.target === e.currentTarget) {
-      handleDismiss();
-    }
-  }, [handleDismiss]);
 
   const handleSave = useCallback(async () => {
     if (!workspacePath || isSubmitting) return;
@@ -181,7 +174,7 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
   const projectName = workspacePath.split('/').pop() || 'this project';
 
   return (
-    <div className="project-trust-toast-overlay" onClick={handleOverlayClick}>
+    <div className="project-trust-toast-overlay">
       <div className="project-trust-toast" ref={toastRef}>
         {/* Header with Don't Trust button */}
         <div className="project-trust-toast-header">
