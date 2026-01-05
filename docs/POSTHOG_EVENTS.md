@@ -205,6 +205,15 @@ All events include `$session_id` property automatically. Dev users are marked wi
 | `claude_commands_toast_settings` | `App.tsx:1663` | User clicks "Settings" on commands toast | None | v0.47.2 (2025-12-10) | |
 | `claude_commands_toast_skip` | `App.tsx:1673` | User clicks "Skip" on commands toast | None | v0.47.2 (2025-12-10) | |
 
+### Permissions
+
+| Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |
+| --- | --- | --- | --- | --- | --- |
+| `agent_permissions_opened` | `ProjectPermissionsPanel.tsx:75` | User opens the agent permissions settings panel | `isTrusted`<br/>`permissionMode`<br/>`allowedPatternsCount`<br/>`additionalDirectoriesCount` | (pending release as of d00c15df) | |
+| `permission_setting_changed` | `ProjectPermissionsPanel.tsx` | User changes any permission setting | `action` (trust_workspace/revoke_trust/change_mode/remove_pattern/reset_to_defaults/add_directory/remove_directory/add_url_pattern/remove_url_pattern/allow_all_domains/revoke_all_domains)<br/>`mode` (only for change_mode action) | (pending release as of d00c15df) | |
+| `tool_permission_responded` | `AISessionView.tsx:536` | User responds to tool permission dialog | `decision` (allow/deny)<br/>`scope` (once/session/always/always-all)<br/>`toolCategory` (bash/webfetch/mcp/file/other) | (pending release as of d00c15df) | |
+| `trust_dialog_saved` | `ProjectTrustToast.tsx:151` | User saves trust choice in dialog | `permissionMode` (ask/allow-all/bypass-all)<br/>`isChangingMode` | (pending release as of d00c15df) | |
+
 ### Special System Events
 
 | Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |
@@ -217,9 +226,9 @@ All events include `$session_id` property automatically. Dev users are marked wi
 
 ## Event Summary Statistics
 
-- **Total Events**: 68 unique event names
+- **Total Events**: 72 unique event names
 - **Main Process Events**: 40 (via AnalyticsService)
-- **Renderer Process Events**: 28 (via usePostHog hook)
+- **Renderer Process Events**: 32 (via usePostHog hook)
 - **File Operations**: 7 events
 - **Workspace Operations**: 4 events
 - **Navigation & Editor Mode**: 3 events
@@ -229,6 +238,7 @@ All events include `$session_id` property automatically. Dev users are marked wi
 - **Terminal**: 1 event
 - **Extensions**: 1 event
 - **Onboarding**: 8 events
+- **Permissions**: 4 events
 - **System/Infrastructure**: 10 events
 
 ## Privacy Requirements

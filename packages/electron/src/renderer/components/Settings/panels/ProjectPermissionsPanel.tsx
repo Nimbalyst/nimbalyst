@@ -86,7 +86,7 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
       await window.electronAPI.invoke('permissions:trustWorkspace', workspacePath);
       await loadPermissions();
       setSuccess('Workspace trusted for agent operations');
-      posthog?.capture('workspace_trusted', { workspacePath: 'redacted' });
+      posthog?.capture('permission_setting_changed', { action: 'trust_workspace' });
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       console.error('Failed to trust workspace:', err);
@@ -99,7 +99,7 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
       await window.electronAPI.invoke('permissions:revokeWorkspaceTrust', workspacePath);
       await loadPermissions();
       setSuccess('Workspace trust revoked');
-      posthog?.capture('workspace_trust_revoked', { workspacePath: 'redacted' });
+      posthog?.capture('permission_setting_changed', { action: 'revoke_trust' });
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       console.error('Failed to revoke workspace trust:', err);
@@ -111,7 +111,7 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
     try {
       await window.electronAPI.invoke('permissions:setPermissionMode', workspacePath, mode);
       await loadPermissions();
-      posthog?.capture('permission_mode_changed', { mode });
+      posthog?.capture('permission_setting_changed', { action: 'change_mode', mode });
     } catch (err) {
       console.error('Failed to set permission mode:', err);
       setError(err instanceof Error ? err.message : 'Failed to set permission mode');
@@ -123,7 +123,7 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
       await window.electronAPI.invoke('permissions:removePattern', workspacePath, pattern);
       await loadPermissions();
       setSuccess(`Pattern removed`);
-      posthog?.capture('permission_pattern_removed', { type });
+      posthog?.capture('permission_setting_changed', { action: 'remove_pattern' });
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       console.error('Failed to remove pattern:', err);
@@ -136,7 +136,7 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
       await window.electronAPI.invoke('permissions:resetToDefaults', workspacePath);
       await loadPermissions();
       setSuccess('Permissions reset to defaults');
-      posthog?.capture('permission_patterns_reset');
+      posthog?.capture('permission_setting_changed', { action: 'reset_to_defaults' });
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       console.error('Failed to reset permissions:', err);
@@ -158,7 +158,7 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
         await window.electronAPI.invoke('permissions:addAdditionalDirectory', workspacePath, dirPath, false);
         await loadPermissions();
         setSuccess('Directory added');
-        posthog?.capture('additional_directory_added');
+        posthog?.capture('permission_setting_changed', { action: 'add_directory' });
         setTimeout(() => setSuccess(null), 3000);
       }
     } catch (err) {
@@ -174,7 +174,7 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
       await window.electronAPI.invoke('permissions:removeAdditionalDirectory', workspacePath, dirPath);
       await loadPermissions();
       setSuccess('Directory removed');
-      posthog?.capture('additional_directory_removed');
+      posthog?.capture('permission_setting_changed', { action: 'remove_directory' });
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       console.error('Failed to remove directory:', err);
@@ -197,7 +197,7 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
       setNewUrlDescription('');
       setIsAddingUrl(false);
       setSuccess('URL pattern added');
-      posthog?.capture('url_pattern_added');
+      posthog?.capture('permission_setting_changed', { action: 'add_url_pattern' });
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       console.error('Failed to add URL pattern:', err);
@@ -210,7 +210,7 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
       await window.electronAPI.invoke('permissions:removeAllowedUrlPattern', workspacePath, pattern);
       await loadPermissions();
       setSuccess('URL pattern removed');
-      posthog?.capture('url_pattern_removed');
+      posthog?.capture('permission_setting_changed', { action: 'remove_url_pattern' });
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       console.error('Failed to remove URL pattern:', err);
@@ -223,7 +223,7 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
       await window.electronAPI.invoke('permissions:allowAllUrls', workspacePath);
       await loadPermissions();
       setSuccess('All domains are now allowed');
-      posthog?.capture('all_domains_allowed');
+      posthog?.capture('permission_setting_changed', { action: 'allow_all_domains' });
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       console.error('Failed to allow all domains:', err);
@@ -236,7 +236,7 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
       await window.electronAPI.invoke('permissions:revokeAllUrlsPermission', workspacePath);
       await loadPermissions();
       setSuccess('All domains permission revoked');
-      posthog?.capture('all_domains_revoked');
+      posthog?.capture('permission_setting_changed', { action: 'revoke_all_domains' });
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       console.error('Failed to revoke all domains permission:', err);

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { usePostHog } from 'posthog-js/react';
 import './ProjectTrustToast.css';
 
 interface ProjectTrustToastProps {
@@ -22,6 +23,7 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
   forceShow = false,
   onDismiss,
 }) => {
+  const posthog = usePostHog();
   const [isVisible, setIsVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isChangingMode, setIsChangingMode] = useState(false);
@@ -139,6 +141,13 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
       // Set the permission mode directly - this also trusts the workspace
       // (any non-null mode means trusted)
       await window.electronAPI.invoke('permissions:setPermissionMode', workspacePath, selectedMode);
+
+      // Track trust dialog completion
+      posthog?.capture('trust_dialog_saved', {
+        permissionMode: selectedMode,
+        isChangingMode,
+      });
+
       setIsVisible(false);
       setIsChangingMode(false);
       // Reset parent's forceShow state
@@ -150,7 +159,7 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
     } finally {
       setIsSubmitting(false);
     }
-  }, [workspacePath, isSubmitting, selectedMode, onDismiss]);
+  }, [workspacePath, isSubmitting, selectedMode, onDismiss, posthog, isChangingMode]);
 
   const handleDontTrust = useCallback(() => {
     // Just dismiss without trusting - the project remains untrusted

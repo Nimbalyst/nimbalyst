@@ -1,4 +1,5 @@
 import React, { useCallback, useRef, useImperativeHandle, forwardRef, useEffect, useState } from 'react';
+import { usePostHog } from 'posthog-js/react';
 import { AgentTranscriptPanel, TodoItem, FileEditSummary, storeAskUserQuestionAnswers } from '@nimbalyst/runtime';
 import type { SessionData, ChatAttachment } from '@nimbalyst/runtime/ai/server/types';
 import { AIInput, AIInputRef } from './AIInput';
@@ -329,6 +330,7 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
   onCloseAndArchive,
   onUnarchive
 }, ref) => {
+  const posthog = usePostHog();
   const inputRef = useRef<AIInputRef>(null);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [queuedPrompts, setQueuedPrompts] = useState<any[]>([]);
@@ -467,6 +469,15 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
     }
   }, []);
 
+  // Helper to extract tool category from pattern
+  const getToolCategory = useCallback((pattern: string): string => {
+    if (pattern.startsWith('Bash')) return 'bash';
+    if (pattern.startsWith('WebFetch')) return 'webfetch';
+    if (pattern.startsWith('mcp__')) return 'mcp';
+    if (['Edit', 'Write', 'Read', 'Glob', 'Grep'].includes(pattern)) return 'file';
+    return 'other';
+  }, []);
+
   // Listen for tool permission requests for this session
   useEffect(() => {
     const handleToolPermission = (data: ToolPermissionData) => {
@@ -510,18 +521,30 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
     confirmSessionId: string,
     response: { decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' | 'always-all' }
   ) => {
+    // Find the request data for analytics before removing it
+    const requestData = pendingToolPermissions.find(p => p.requestId === requestId);
+    const firstPattern = requestData?.request.actionsNeedingApproval[0]?.action.pattern;
+
     try {
       await window.electronAPI.invoke('claude-code:answer-tool-permission', {
         requestId,
         sessionId: confirmSessionId,
         response
       });
+
+      // Track the permission decision
+      posthog?.capture('tool_permission_responded', {
+        decision: response.decision,
+        scope: response.scope,
+        toolCategory: firstPattern ? getToolCategory(firstPattern) : 'unknown',
+      });
+
       // Remove this request from the queue
       setPendingToolPermissions(prev => prev.filter(p => p.requestId !== requestId));
     } catch (error) {
       console.error('[AISessionView] Failed to submit tool permission response:', error);
     }
-  }, []);
+  }, [pendingToolPermissions, posthog, getToolCategory]);
 
   const handleToolPermissionCancel = useCallback(async (requestId: string, confirmSessionId: string) => {
     try {
