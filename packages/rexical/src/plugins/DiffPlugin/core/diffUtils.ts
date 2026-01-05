@@ -183,9 +183,17 @@ function escapeRegExp(string: string): string {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-// Type for text replacement edits
+// Type for text replacement edits (internal use after resolution)
 export type TextReplacement = {
   oldText: string;
+  newText: string;
+} & Record<string, unknown>;
+
+// Type for text replacement input (oldText is optional - when not provided,
+// the command handler extracts it from the editor)
+// This is used for whole-document replacements (e.g., history diffs)
+export type TextReplacementInput = {
+  oldText?: string;
   newText: string;
 } & Record<string, unknown>;
 

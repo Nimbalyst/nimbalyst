@@ -4,7 +4,7 @@
  * Shared utilities for Monaco editor integration.
  */
 
-import type { Theme as ConfigTheme } from 'rexical';
+import type { ConfigTheme } from 'rexical';
 
 /**
  * Map Nimbalyst theme to Monaco editor theme

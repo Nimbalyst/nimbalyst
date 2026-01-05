@@ -205,7 +205,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   createFile: (filePath: string, content: string) => ipcRenderer.invoke('create-file', filePath, content),
   createFolder: (folderPath: string) => ipcRenderer.invoke('create-folder', folderPath),
   switchWorkspaceFile: (filePath: string) => ipcRenderer.invoke('switch-workspace-file', filePath),
-  readFileContent: (filePath: string) => ipcRenderer.invoke('read-file-content', filePath),
+  readFileContent: (filePath: string, options?: { binary?: boolean }) => ipcRenderer.invoke('read-file-content', filePath, options),
 
   // File context menu operations
   renameFile: (oldPath: string, newName: string) => ipcRenderer.invoke('rename-file', oldPath, newName),

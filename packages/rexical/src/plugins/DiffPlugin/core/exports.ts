@@ -31,7 +31,7 @@ export type { DiffStateType } from './DiffState';
 
 // Main API - the primary entry point
 export { applyMarkdownDiff, applyMarkdownReplace } from './diffUtils';
-export type { TextReplacement } from './diffUtils';
+export type { TextReplacement, TextReplacementInput } from './diffUtils';
 
 // Testing utilities
 export { NodeStructureValidator } from './NodeStructureValidator';

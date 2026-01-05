@@ -5,6 +5,7 @@
     "lib": ["ES2020", "DOM"],
     "jsx": "react-jsx",
     "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": true,
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -12,5 +13,6 @@
     "noEmit": true,
     "types": []
   },
-  "include": ["src", "src/types/optional-deps.d.ts", "src/types/vite.d.ts"]
+  "include": ["src", "src/types/optional-deps.d.ts", "src/types/vite.d.ts"],
+  "exclude": ["src/ai/server/providers/mcp-stdio-server.ts"]
 }

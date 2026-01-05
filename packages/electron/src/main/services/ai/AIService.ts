@@ -750,11 +750,11 @@ export class AIService {
                 provider: session.provider,
                 model: session.model,
                 mode: session.mode,
-                workspaceId: session.workspaceId,
+                workspaceId: session.workspacePath,
                 workspacePath: session.workspacePath,
-                messageCount: session.messageCount,
-                updatedAt: typeof session.updatedAt === 'number' ? session.updatedAt : session.updatedAt?.getTime() || Date.now(),
-                createdAt: typeof session.createdAt === 'number' ? session.createdAt : session.createdAt?.getTime() || Date.now()
+                messageCount: session.messages.length,
+                updatedAt: session.updatedAt,
+                createdAt: session.createdAt
               }]);
             }
 

@@ -13,7 +13,7 @@
 
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { usePostHog } from 'posthog-js/react';
-import type { ConfigTheme, TextReplacement } from 'rexical';
+import type { ConfigTheme } from 'rexical';
 import { DocumentPathProvider, MarkdownEditor, MonacoEditor, MonacoCodeEditor } from '@nimbalyst/runtime';
 import { useTheme } from '../../hooks/useTheme';
 import {
@@ -52,7 +52,7 @@ interface TabEditorProps {
   isActive: boolean;
 
   // Optional features
-  textReplacements?: TextReplacement[];
+  textReplacements?: Array<{ oldText?: string; newText: string }>;
   autosaveInterval?: number; // milliseconds, default 2000
   autosaveDebounce?: number; // milliseconds, default 200
   periodicSnapshotInterval?: number; // milliseconds, default 300000 (5 minutes)
@@ -554,7 +554,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               editorRef.current.showDiff(oldContent, newContent);
               setShowMonacoDiffBar(true);
               // Fetch session info for the diff approval bar
-              fetchDiffSessionInfo(pendingTag.sessionId, pendingTag.createdAt?.getTime?.() || Date.now());
+              fetchDiffSessionInfo(pendingTag.sessionId, pendingTag.createdAt ? new Date(pendingTag.createdAt).getTime() : Date.now());
             } else {
               logger.ui.warn(`[TabEditor] Monaco editor doesn't have showDiff method`);
             }
@@ -582,13 +582,13 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           // This handles normalization differences (tables, spacing, etc.)
           isApplyingDiffRef.current = true;
           try {
-            const replacements: TextReplacement[] = [{
+            const replacements = [{
               newText: newContent
             }];
             editorRef.current.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
             console.log(`[TabEditor] Applied pending AI edit diff on mount`);
             // Fetch session info for the diff approval bar (for Lexical)
-            fetchDiffSessionInfo(pendingTag.sessionId, pendingTag.createdAt?.getTime?.() || Date.now());
+            fetchDiffSessionInfo(pendingTag.sessionId, pendingTag.createdAt ? new Date(pendingTag.createdAt).getTime() : Date.now());
           } finally {
             setTimeout(() => {
               isApplyingDiffRef.current = false;
@@ -640,8 +640,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       // Save to disk with conflict detection
       const result = await window.electronAPI.saveFile(
           contentToSave,
-          filePath,
-          initialContentRef.current
+          filePath
       );
 
       // console.log(`[TabEditor] saveFile returned for ${fileName}, success=${result?.success}, conflict=${result?.conflict}`);
@@ -676,9 +675,10 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               lastSaveTimeRef.current = Date.now();
               lastSavedContentRef.current = contentToSave;
             }
-          } else {
+          } else if (result.diskContent) {
             // User chose to reload - update editor with disk content
             // Update editor content programmatically to avoid remount
+            const diskContent = result.diskContent;
             if (editorRef.current) {
               try {
                 // Import Lexical functions from 'lexical' and rexical functions from 'rexical'
@@ -687,16 +687,16 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                 editorRef.current.update(() => {
                   const root = $getRoot();
                   root.clear();
-                  $convertFromEnhancedMarkdownString(result.diskContent, transformers);
+                  $convertFromEnhancedMarkdownString(diskContent, transformers);
                 }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
               } catch (error) {
                 logger.ui.error(`[TabEditor] Failed to update editor content:`, error);
               }
             }
 
-            setContent(result.diskContent);
-            initialContentRef.current = result.diskContent;
-            lastSavedContentRef.current = result.diskContent;
+            setContent(diskContent);
+            initialContentRef.current = diskContent;
+            lastSavedContentRef.current = diskContent;
             isDirtyRef.current = false;
             return;
           }
@@ -1035,7 +1035,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                   // THEN: Apply the new diff replacement
                   // Don't pass oldText - let the command handler extract it from the editor
                   // This handles normalization differences (tables, spacing, etc.)
-                  const replacements: TextReplacement[] = [{
+                  const replacements = [{
                     newText: newContent
                   }];
 
@@ -1104,7 +1104,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                     // THEN: Apply the diff replacement to show changes from old to new
                     // Don't pass oldText - let the command handler extract it from the editor
                     // This handles normalization differences (tables, spacing, etc.)
-                    const replacements: TextReplacement[] = [{
+                    const replacements = [{
                       newText: newContent
                     }];
 
@@ -1532,7 +1532,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
           // Reload editor to exit diff mode and show clean final state
           const result = await window.electronAPI.readFileContent(filePath);
-          if (result && result.content) {
+          if (result && result.success) {
             const finalContent = result.content;
 
             // Update editor to show final content (no diff)
@@ -1823,14 +1823,16 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       // Read file content from disk (text)
       readFile: async (path: string): Promise<string> => {
         const result = await window.electronAPI.readFileContent(path);
-        return result?.content || '';
+        if (!result || !result.success) return '';
+        return result.content;
       },
 
       // Read file content from disk (binary)
       readBinaryFile: async (path: string): Promise<ArrayBuffer> => {
         const result = await window.electronAPI.readFileContent(path, { binary: true });
-        if (!result?.success || !result.content) {
-          throw new Error(result?.error || 'Failed to read binary file');
+        if (!result || !result.success) {
+          const errorMsg = result && !result.success ? result.error : 'Failed to read binary file';
+          throw new Error(errorMsg);
         }
         // Convert base64 to ArrayBuffer
         const binaryString = atob(result.content);
@@ -1984,7 +1986,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           // Reload content from disk so Monaco has fresh data
           try {
             const result = await window.electronAPI.readFileContent(filePath);
-            if (result?.content) {
+            if (result && result.success) {
               setContent(result.content);
               contentRef.current = result.content;
               lastSavedContentRef.current = result.content;
@@ -2164,9 +2166,10 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             }
 
             // Fallback if custom editor is not found (shouldn't happen)
+            const fileExt = filePath.substring(filePath.lastIndexOf('.'));
             return (
               <div style={{ padding: '20px', color: 'var(--text-primary)' }}>
-                <p>No custom editor found for file type: {ext}</p>
+                <p>No custom editor found for file type: {fileExt}</p>
               </div>
             );
           })() : isImage ? (

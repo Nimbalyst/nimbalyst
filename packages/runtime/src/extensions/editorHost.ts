@@ -57,8 +57,8 @@ export interface EditorHost {
   /** File name (for display) */
   readonly fileName: string;
 
-  /** Current theme */
-  readonly theme: 'light' | 'dark' | 'crystal-dark';
+  /** Current theme - may include 'auto' which should be resolved by the host */
+  readonly theme: 'light' | 'dark' | 'crystal-dark' | 'auto';
 
   /** Whether this editor's tab is active */
   readonly isActive: boolean;

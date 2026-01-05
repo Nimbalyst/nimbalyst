@@ -171,7 +171,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
               };
             }
             return null; // Session was deleted
-          }).filter((s): s is SessionItem => s !== null);
+          }).filter((s): s is NonNullable<typeof s> => s !== null);
 
           // Add any new sessions that weren't in the previous list
           const newSessions = Array.from(incomingMap.values());
@@ -197,7 +197,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
               };
             }
             return null;
-          }).filter((s): s is SessionItem => s !== null);
+          }).filter((s): s is NonNullable<typeof s> => s !== null);
 
           const newSessions = Array.from(incomingMap.values());
           return [...merged, ...newSessions];

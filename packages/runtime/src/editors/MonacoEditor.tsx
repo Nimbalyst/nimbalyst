@@ -17,7 +17,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { MonacoCodeEditor } from './MonacoCodeEditor';
 import type { EditorHost, DiffConfig } from '../extensions/editorHost';
-import type { Theme as ConfigTheme } from 'rexical';
+import type { ConfigTheme } from 'rexical';
 
 export interface MonacoEditorConfig {
   /** Theme for the editor */
@@ -143,7 +143,7 @@ export function MonacoEditor({
     const handleDiffRequest = (config: DiffConfig) => {
       // Use editor's showDiff method
       if (editorWrapperRef.current?.showDiff) {
-        editorWrapperRef.current.showDiff(config.oldContent, config.newContent);
+        editorWrapperRef.current.showDiff(config.originalContent, config.modifiedContent);
       }
     };
 

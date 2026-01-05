@@ -24,6 +24,7 @@ import {
   applyMarkdownReplace,
   LiveNodeKeyState,
   type TextReplacement,
+  type TextReplacementInput,
 } from './core/exports';
 import { $getState, $setState } from 'lexical';
 
@@ -47,11 +48,12 @@ import { createCommand } from 'lexical';
 /**
  * Payload for APPLY_MARKDOWN_REPLACE_COMMAND
  * Supports both legacy array format and new object format with requestId
+ * Uses TextReplacementInput which allows optional oldText (filled from editor if missing)
  */
 type ApplyMarkdownReplacePayload =
-  | TextReplacement[]
+  | TextReplacementInput[]
   | {
-      replacements: TextReplacement[];
+      replacements: TextReplacementInput[];
       requestId?: string;
     };
 
@@ -211,13 +213,14 @@ export function DiffPlugin(): JSX.Element | null {
           // Normalize replacements: if oldText is not provided, use the extracted originalMarkdown
           // This handles history comparison where we load oldMarkdown into editor,
           // but after normalization it might differ from the raw input
-          const normalizedReplacements = replacements.map(r => {
+          const normalizedReplacements: TextReplacement[] = replacements.map(r => {
             if (!r.oldText) {
               // No oldText provided - use the extracted editor content
               // This is the "replace entire document" case for history diffs
               return { ...r, oldText: originalMarkdown };
             }
-            return r;
+            // r.oldText is defined here, so cast is safe
+            return r as TextReplacement;
           });
 
           // Apply the replacements - applyMarkdownReplace does its own editor.update() internally

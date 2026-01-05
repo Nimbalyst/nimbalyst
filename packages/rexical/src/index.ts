@@ -134,7 +134,8 @@ export {
   CLEAR_DIFF_TAG_COMMAND,
   INCREMENTAL_APPROVAL_COMMAND,
   generateUnifiedDiff,
-  type TextReplacement
+  type TextReplacement,
+  type TextReplacementInput
 } from './plugins/DiffPlugin/core/exports';
 export type { DiffChangeGroup } from './plugins/DiffPlugin/core/exports';
 

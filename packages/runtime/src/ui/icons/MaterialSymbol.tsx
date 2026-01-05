@@ -8,6 +8,7 @@ interface MaterialSymbolProps {
   grade?: number;
   opticalSize?: number;
   className?: string;
+  title?: string;
 }
 
 // Custom SVG icons for icons not available in Material Symbols
@@ -52,7 +53,8 @@ export function MaterialSymbol({
   weight = 400,
   grade = 0,
   opticalSize = 24,
-  className = ''
+  className = '',
+  title
 }: MaterialSymbolProps) {
   // Check if this is a custom icon
   const customIcon = CUSTOM_ICONS[icon];
@@ -67,7 +69,7 @@ export function MaterialSymbol({
   };
 
   return (
-    <span className={`material-symbols-outlined ${className}`} style={style}>
+    <span className={`material-symbols-outlined ${className}`} style={style} title={title}>
       {icon}
     </span>
   );

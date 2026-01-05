@@ -64,9 +64,9 @@ export function DiffPreviewEditor({
 
     editor.getEditorState().read(() => {
       const selection = editor._editorState._selection;
-      if (!selection) return;
+      if (!selection || !('anchor' in selection)) return;
 
-      const anchor = selection.anchor;
+      const anchor = (selection as any).anchor;
       const node = anchor.getNode();
       if (!node) return;
 
@@ -313,7 +313,8 @@ export function DiffPreviewEditor({
 
           // Don't pass oldText - let the command handler extract it from the editor
           // This handles normalization differences (tables, spacing, etc.)
-          const replacements = [{ newText: newMarkdown }];
+          // oldText is optional - the command handler will extract it from the editor
+          const replacements = [{ newText: newMarkdown }] as any;
 
           try {
             // LiveNodeKeyState is set automatically by applyMarkdownReplace via parallel traversal

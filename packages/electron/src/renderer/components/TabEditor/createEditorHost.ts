@@ -14,8 +14,8 @@ export interface EditorHostOptions {
   /** File name (for display) */
   fileName: string;
 
-  /** Current theme */
-  theme: 'light' | 'dark' | 'crystal-dark';
+  /** Current theme - may include 'auto' which should be resolved by the host */
+  theme: 'light' | 'dark' | 'crystal-dark' | 'auto';
 
   /** Whether this editor's tab is active */
   isActive: boolean;
