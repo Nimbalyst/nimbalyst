@@ -156,6 +156,7 @@ export interface SessionHistoryLayout {
   width: number;
   collapsed: boolean;
   collapsedGroups: string[];
+  sortOrder?: 'updated' | 'created';
 }
 
 /**
@@ -430,7 +431,8 @@ function cloneWorkspaceState(state: WorkspaceState): WorkspaceState {
       sessionHistoryLayout: state.agenticCodingWindowState.sessionHistoryLayout ? {
         width: state.agenticCodingWindowState.sessionHistoryLayout.width,
         collapsed: state.agenticCodingWindowState.sessionHistoryLayout.collapsed,
-        collapsedGroups: [...state.agenticCodingWindowState.sessionHistoryLayout.collapsedGroups]
+        collapsedGroups: [...state.agenticCodingWindowState.sessionHistoryLayout.collapsedGroups],
+        sortOrder: state.agenticCodingWindowState.sessionHistoryLayout.sortOrder
       } : undefined
     } : undefined,
     activeMode: state.activeMode,

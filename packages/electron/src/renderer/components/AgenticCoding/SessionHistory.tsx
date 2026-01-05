@@ -40,6 +40,8 @@ interface SessionHistoryProps {
   onOpenQuickSearch?: () => void; // Callback for opening session quick search (Cmd+L)
   collapsedGroups: string[];
   onCollapsedGroupsChange: (groups: string[]) => void;
+  sortOrder?: 'updated' | 'created'; // Sort order for sessions
+  onSortOrderChange?: (sortOrder: 'updated' | 'created') => void; // Callback when sort order changes
   refreshTrigger?: number; // Optional trigger to force refresh
 }
 
@@ -76,6 +78,8 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   onOpenQuickSearch,
   collapsedGroups,
   onCollapsedGroupsChange,
+  sortOrder: controlledSortOrder,
+  onSortOrderChange,
   refreshTrigger
 }) => {
   const [allSessions, setAllSessions] = useState<SessionItem[]>([]); // All sessions from DB
@@ -83,7 +87,10 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState<'updated' | 'created'>('updated');
+  // Use controlled sort order from props if provided, otherwise use internal state
+  const [internalSortOrder, setInternalSortOrder] = useState<'updated' | 'created'>('updated');
+  const sortBy = controlledSortOrder ?? internalSortOrder;
+  const setSortBy = onSortOrderChange ?? setInternalSortOrder;
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const [contentSearchTriggered, setContentSearchTriggered] = useState(false);
   const [isSearching, setIsSearching] = useState(false);

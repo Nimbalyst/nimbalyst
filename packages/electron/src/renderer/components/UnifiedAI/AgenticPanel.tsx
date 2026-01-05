@@ -149,6 +149,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   const [sessionHistoryWidth, setSessionHistoryWidth] = useState(240);
   const [sessionHistoryCollapsed, setSessionHistoryCollapsed] = useState(mode === 'chat'); // Collapsed in chat mode
   const [collapsedGroups, setCollapsedGroups] = useState<string[]>([]);
+  const [sortOrder, setSortOrder] = useState<'updated' | 'created'>('updated');
   const [sessionHistoryRefreshTrigger, setSessionHistoryRefreshTrigger] = useState(0);
   const [renamedSession, setRenamedSession] = useState<{ id: string; title: string } | null>(null);
   const [updatedSession, setUpdatedSession] = useState<{ id: string; timestamp: number } | null>(null);
@@ -334,6 +335,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           setSessionHistoryWidth(layout.width ?? 240);
           setSessionHistoryCollapsed(layout.collapsed ?? false);
           setCollapsedGroups(layout.collapsedGroups ?? []);
+          setSortOrder(layout.sortOrder ?? 'updated');
         }
       } catch (err) {
         console.error('[AgenticPanel] Failed to load session history layout:', err);
@@ -353,7 +355,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             sessionHistoryLayout: {
               width: sessionHistoryWidth,
               collapsed: sessionHistoryCollapsed,
-              collapsedGroups
+              collapsedGroups,
+              sortOrder
             }
           }
         });
@@ -364,7 +367,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
     const timer = setTimeout(saveLayout, 500);
     return () => clearTimeout(timer);
-  }, [workspacePath, sessionHistoryWidth, sessionHistoryCollapsed, collapsedGroups, mode]);
+  }, [workspacePath, sessionHistoryWidth, sessionHistoryCollapsed, collapsedGroups, sortOrder, mode]);
 
   // Subscribe to session state changes to track running sessions
   useEffect(() => {
@@ -2866,6 +2869,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             onOpenQuickSearch={onOpenQuickSearch}
             collapsedGroups={collapsedGroups}
             onCollapsedGroupsChange={setCollapsedGroups}
+            sortOrder={sortOrder}
+            onSortOrderChange={setSortOrder}
             refreshTrigger={sessionHistoryRefreshTrigger}
           />
         }
