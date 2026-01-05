@@ -1209,9 +1209,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       // Trigger SessionHistory refresh
       triggerSessionHistoryRefresh('new-session');
 
-      if (onSessionChange) {
-        onSessionChange(sessionData.id, tabName);
-      }
+      updateWindowTitle(tabName);
 
       // Focus the input after UI updates
       setTimeout(() => {
@@ -1228,7 +1226,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       // Always clear loading state
       setLoading(false);
     }
-  }, [workspacePath, mode, loadSessions, onSessionChange, triggerSessionHistoryRefresh, sessionTabs]);
+  }, [workspacePath, mode, loadSessions, updateWindowTitle, triggerSessionHistoryRefresh, sessionTabs]);
 
   // Add a new session to an existing worktree
   const handleAddSessionToWorktree = useCallback(async (worktreeId: string) => {
@@ -1294,9 +1292,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       await loadSessions();
       triggerSessionHistoryRefresh('new-session');
 
-      if (onSessionChange) {
-        onSessionChange(sessionData.id, tabName);
-      }
+      updateWindowTitle(tabName);
 
       setTimeout(() => {
         const ref = sessionViewRefsRef.current.get(sessionData.id);
@@ -1311,7 +1307,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     } finally {
       setLoading(false);
     }
-  }, [workspacePath, mode, loadSessions, onSessionChange, triggerSessionHistoryRefresh]);
+  }, [workspacePath, mode, loadSessions, updateWindowTitle, triggerSessionHistoryRefresh]);
 
   // Create a new terminal session
   const createNewTerminal = useCallback(async () => {
@@ -1431,9 +1427,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       // Trigger SessionHistory refresh
       triggerSessionHistoryRefresh('new-worktree-terminal');
 
-      if (onSessionChange) {
-        onSessionChange(sessionData.id, tabName);
-      }
+      updateWindowTitle(tabName);
 
       return sessionData;
     } catch (error) {
@@ -1441,7 +1435,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       errorNotificationService.showError('Failed to Add Terminal', String(error));
       throw error;
     }
-  }, [sessionTabs, workspacePath, mode, loadSessions, onSessionChange, triggerSessionHistoryRefresh]);
+  }, [sessionTabs, workspacePath, mode, loadSessions, updateWindowTitle, triggerSessionHistoryRefresh]);
 
   // Load or create initial session
   useEffect(() => {
