@@ -186,6 +186,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   const sortBy = controlledSortOrder ?? internalSortOrder;
   const setSortBy = onSortOrderChange ?? setInternalSortOrder;
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
+  const [newDropdownOpen, setNewDropdownOpen] = useState(false);
   const [contentSearchTriggered, setContentSearchTriggered] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
@@ -629,19 +630,24 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     setSortDropdownOpen(false);
   };
 
-  // Close dropdown when clicking outside
+  const toggleNewDropdown = () => {
+    setNewDropdownOpen(!newDropdownOpen);
+  };
+
+  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (sortDropdownOpen) {
-        const target = e.target as HTMLElement;
-        if (!target.closest('.session-history-sort-dropdown')) {
-          setSortDropdownOpen(false);
-        }
+      const target = e.target as HTMLElement;
+      if (sortDropdownOpen && !target.closest('.session-history-sort-dropdown')) {
+        setSortDropdownOpen(false);
+      }
+      if (newDropdownOpen && !target.closest('.session-history-new-dropdown')) {
+        setNewDropdownOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [sortDropdownOpen]);
+  }, [sortDropdownOpen, newDropdownOpen]);
 
   // Group worktree sessions by worktree_id and compute worktree timestamps
   const worktreeGroupsData = useMemo(() => {
@@ -798,50 +804,67 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                 </svg>
               </button>
             )}
-            {onNewWorktreeSession && (
-              <button
-                className="session-history-worktree-button"
-                data-testid="new-worktree-session-button"
-                onClick={onNewWorktreeSession}
-                title="New Worktree: Create an isolated git branch for AI coding"
-                aria-label="Create new worktree session"
-              >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M5 13v-2.5a1.5 1.5 0 0 1 1.5-1.5h3"/>
-                  <path d="M9.5 9V4.5"/>
-                  <circle cx="5" cy="4.5" r="1.5"/>
-                  <circle cx="9.5" cy="4.5" r="1.5"/>
-                  <path d="M5 6v2.5a1.5 1.5 0 0 0 1.5 1.5"/>
-                  <path d="M12 7v4M10 9h4"/>
-                </svg>
-              </button>
-            )}
-            {onNewSession && (
-              <button
-                className="session-history-new-button"
-                data-testid="new-session-button"
-                onClick={() => onNewSession()}
-                title={`New session (${getShortcutDisplay(KeyboardShortcuts.file.newSession)})`}
-                aria-label="Create new session"
-              >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                </svg>
-              </button>
-            )}
-            {onNewTerminal && (
-              <button
-                className="session-history-new-terminal-button"
-                data-testid="new-terminal-button"
-                onClick={() => onNewTerminal()}
-                title="New terminal"
-                aria-label="Create new terminal"
-              >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M3 5L7 9L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M9 13H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                </svg>
-              </button>
+            {(onNewSession || onNewWorktreeSession || onNewTerminal) && (
+              <div className="session-history-new-dropdown">
+                <button
+                  className="session-history-new-button"
+                  data-testid="new-dropdown-button"
+                  onClick={toggleNewDropdown}
+                  title="Create new..."
+                  aria-label="Create new session, worktree, or terminal"
+                >
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  </svg>
+                </button>
+                {newDropdownOpen && (
+                  <div className="session-history-new-menu">
+                    {onNewSession && (
+                      <button
+                        className="session-history-new-option"
+                        data-testid="new-session-button"
+                        onClick={() => { onNewSession(); setNewDropdownOpen(false); }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                        </svg>
+                        <span>New Session</span>
+                        <span className="session-history-new-option-shortcut">{getShortcutDisplay(KeyboardShortcuts.file.newSession)}</span>
+                      </button>
+                    )}
+                    {onNewWorktreeSession && (
+                      <button
+                        className="session-history-new-option"
+                        data-testid="new-worktree-session-button"
+                        onClick={() => { onNewWorktreeSession(); setNewDropdownOpen(false); }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                          <path d="M5 13v-2.5a1.5 1.5 0 0 1 1.5-1.5h3"/>
+                          <path d="M9.5 9V4.5"/>
+                          <circle cx="5" cy="4.5" r="1.5"/>
+                          <circle cx="9.5" cy="4.5" r="1.5"/>
+                          <path d="M5 6v2.5a1.5 1.5 0 0 0 1.5 1.5"/>
+                          <path d="M12 7v4M10 9h4"/>
+                        </svg>
+                        <span>New Worktree</span>
+                      </button>
+                    )}
+                    {onNewTerminal && (
+                      <button
+                        className="session-history-new-option"
+                        data-testid="new-terminal-button"
+                        onClick={() => { onNewTerminal(); setNewDropdownOpen(false); }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M3 5L7 9L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M9 13H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                        </svg>
+                        <span>New Terminal</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -912,22 +935,70 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
             <h3 className="session-history-header-name">{workspaceName}</h3>
             <div className="session-history-header-path">{workspacePath}</div>
           </div>
-          {onNewSession && (
-            <button
-              className="session-history-new-button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onNewSession();
-              }}
-              title={`New session (${getShortcutDisplay(KeyboardShortcuts.file.newSession)})`}
-              aria-label="Create new session"
-              type="button"
-            >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-              </svg>
-            </button>
-          )}
+          <div className="session-history-header-buttons">
+            {(onNewSession || onNewWorktreeSession || onNewTerminal) && (
+              <div className="session-history-new-dropdown">
+                <button
+                  className="session-history-new-button"
+                  data-testid="new-dropdown-button"
+                  onClick={toggleNewDropdown}
+                  title="Create new..."
+                  aria-label="Create new session, worktree, or terminal"
+                >
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  </svg>
+                </button>
+                {newDropdownOpen && (
+                  <div className="session-history-new-menu">
+                    {onNewSession && (
+                      <button
+                        className="session-history-new-option"
+                        data-testid="new-session-button"
+                        onClick={() => { onNewSession(); setNewDropdownOpen(false); }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                        </svg>
+                        <span>New Session</span>
+                        <span className="session-history-new-option-shortcut">{getShortcutDisplay(KeyboardShortcuts.file.newSession)}</span>
+                      </button>
+                    )}
+                    {onNewWorktreeSession && (
+                      <button
+                        className="session-history-new-option"
+                        data-testid="new-worktree-session-button"
+                        onClick={() => { onNewWorktreeSession(); setNewDropdownOpen(false); }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                          <path d="M5 13v-2.5a1.5 1.5 0 0 1 1.5-1.5h3"/>
+                          <path d="M9.5 9V4.5"/>
+                          <circle cx="5" cy="4.5" r="1.5"/>
+                          <circle cx="9.5" cy="4.5" r="1.5"/>
+                          <path d="M5 6v2.5a1.5 1.5 0 0 0 1.5 1.5"/>
+                          <path d="M12 7v4M10 9h4"/>
+                        </svg>
+                        <span>New Worktree</span>
+                      </button>
+                    )}
+                    {onNewTerminal && (
+                      <button
+                        className="session-history-new-option"
+                        data-testid="new-terminal-button"
+                        onClick={() => { onNewTerminal(); setNewDropdownOpen(false); }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M3 5L7 9L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M9 13H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                        </svg>
+                        <span>New Terminal</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
         <div className="session-history-section-label">Agent Sessions</div>
         <div className="session-history-error">
@@ -964,36 +1035,54 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                 </svg>
               </button>
             )}
-            {onNewWorktreeSession && (
-              <button
-                className="session-history-worktree-button"
-                data-testid="new-worktree-session-button"
-                onClick={onNewWorktreeSession}
-                title="New Worktree: Create an isolated git branch for AI coding"
-                aria-label="Create new worktree session"
-              >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M5 13v-2.5a1.5 1.5 0 0 1 1.5-1.5h3"/>
-                  <path d="M9.5 9V4.5"/>
-                  <circle cx="5" cy="4.5" r="1.5"/>
-                  <circle cx="9.5" cy="4.5" r="1.5"/>
-                  <path d="M5 6v2.5a1.5 1.5 0 0 0 1.5 1.5"/>
-                  <path d="M12 7v4M10 9h4"/>
-                </svg>
-              </button>
-            )}
-            {onNewSession && (
-              <button
-                className="session-history-new-button"
-                data-testid="new-session-button"
-                onClick={onNewSession}
-                title={`New session (${getShortcutDisplay(KeyboardShortcuts.file.newSession)})`}
-                aria-label="Create new session"
-              >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                </svg>
-              </button>
+            {(onNewSession || onNewWorktreeSession) && (
+              <div className="session-history-new-dropdown">
+                <button
+                  className="session-history-new-button"
+                  data-testid="new-dropdown-button"
+                  onClick={toggleNewDropdown}
+                  title="Create new..."
+                  aria-label="Create new session or worktree"
+                >
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  </svg>
+                </button>
+                {newDropdownOpen && (
+                  <div className="session-history-new-menu">
+                    {onNewSession && (
+                      <button
+                        className="session-history-new-option"
+                        data-testid="new-session-button"
+                        onClick={() => { onNewSession(); setNewDropdownOpen(false); }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                        </svg>
+                        <span>New Session</span>
+                        <span className="session-history-new-option-shortcut">{getShortcutDisplay(KeyboardShortcuts.file.newSession)}</span>
+                      </button>
+                    )}
+                    {onNewWorktreeSession && (
+                      <button
+                        className="session-history-new-option"
+                        data-testid="new-worktree-session-button"
+                        onClick={() => { onNewWorktreeSession(); setNewDropdownOpen(false); }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                          <path d="M5 13v-2.5a1.5 1.5 0 0 1 1.5-1.5h3"/>
+                          <path d="M9.5 9V4.5"/>
+                          <circle cx="5" cy="4.5" r="1.5"/>
+                          <circle cx="9.5" cy="4.5" r="1.5"/>
+                          <path d="M5 6v2.5a1.5 1.5 0 0 0 1.5 1.5"/>
+                          <path d="M12 7v4M10 9h4"/>
+                        </svg>
+                        <span>New Worktree</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
             {onNewTerminal && (
               <button
@@ -1058,50 +1147,67 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
               </svg>
             </button>
           )}
-          {onNewWorktreeSession && (
-            <button
-              className="session-history-worktree-button"
-              data-testid="new-worktree-session-button"
-              onClick={onNewWorktreeSession}
-              title="New Worktree: Create an isolated git branch for AI coding"
-              aria-label="Create new worktree session"
-            >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M5 13v-2.5a1.5 1.5 0 0 1 1.5-1.5h3"/>
-                <path d="M9.5 9V4.5"/>
-                <circle cx="5" cy="4.5" r="1.5"/>
-                <circle cx="9.5" cy="4.5" r="1.5"/>
-                <path d="M5 6v2.5a1.5 1.5 0 0 0 1.5 1.5"/>
-                <path d="M12 7v4M10 9h4"/>
-              </svg>
-            </button>
-          )}
-          {onNewSession && (
-            <button
-              className="session-history-new-button"
-              data-testid="new-session-button"
-              onClick={onNewSession}
-              title={`New session (${getShortcutDisplay(KeyboardShortcuts.file.newSession)})`}
-              aria-label="Create new session"
-            >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-              </svg>
-            </button>
-          )}
-          {onNewTerminal && (
-            <button
-              className="session-history-new-terminal-button"
-              data-testid="new-terminal-button"
-              onClick={() => onNewTerminal()}
-              title="New terminal"
-              aria-label="Create new terminal"
-            >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M3 5L7 9L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M9 13H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-            </button>
+          {(onNewSession || onNewWorktreeSession || onNewTerminal) && (
+            <div className="session-history-new-dropdown">
+              <button
+                className="session-history-new-button"
+                data-testid="new-dropdown-button"
+                onClick={toggleNewDropdown}
+                title="Create new..."
+                aria-label="Create new session, worktree, or terminal"
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+              </button>
+              {newDropdownOpen && (
+                <div className="session-history-new-menu">
+                  {onNewSession && (
+                    <button
+                      className="session-history-new-option"
+                      data-testid="new-session-button"
+                      onClick={() => { onNewSession(); setNewDropdownOpen(false); }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                      </svg>
+                      <span>New Session</span>
+                      <span className="session-history-new-option-shortcut">{getShortcutDisplay(KeyboardShortcuts.file.newSession)}</span>
+                    </button>
+                  )}
+                  {onNewWorktreeSession && (
+                    <button
+                      className="session-history-new-option"
+                      data-testid="new-worktree-session-button"
+                      onClick={() => { onNewWorktreeSession(); setNewDropdownOpen(false); }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                        <path d="M5 13v-2.5a1.5 1.5 0 0 1 1.5-1.5h3"/>
+                        <path d="M9.5 9V4.5"/>
+                        <circle cx="5" cy="4.5" r="1.5"/>
+                        <circle cx="9.5" cy="4.5" r="1.5"/>
+                        <path d="M5 6v2.5a1.5 1.5 0 0 0 1.5 1.5"/>
+                        <path d="M12 7v4M10 9h4"/>
+                      </svg>
+                      <span>New Worktree</span>
+                    </button>
+                  )}
+                  {onNewTerminal && (
+                    <button
+                      className="session-history-new-option"
+                      data-testid="new-terminal-button"
+                      onClick={() => { onNewTerminal(); setNewDropdownOpen(false); }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M3 5L7 9L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        <path d="M9 13H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                      </svg>
+                      <span>New Terminal</span>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
