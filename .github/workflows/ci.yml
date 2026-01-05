@@ -70,7 +70,10 @@ jobs:
         working-directory: packages/extensions/extension-dev-kit
         run: npx tsc --noEmit
 
+      - name: TypeScript check - collabv3
+        working-directory: packages/collabv3
+        run: npx tsc --noEmit
+
       # Note: These packages have pre-existing type issues
-      # - collabv3: needs @cloudflare/workers-types
-      # - datamodellm: ReactFlow type issues
-      # - csv-spreadsheet: RevoGrid type issues
+      # - datamodellm: ReactFlow type constraint changes
+      # - csv-spreadsheet: RevoGrid type changes
