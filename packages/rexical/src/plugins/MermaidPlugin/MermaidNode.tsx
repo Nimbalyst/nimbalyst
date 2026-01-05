@@ -103,6 +103,15 @@ export class MermaidNode extends DecoratorNode<JSX.Element> {
     return this.__content;
   }
 
+  /**
+   * Override getTextContent to return the mermaid diagram content.
+   * This is critical for the diff system to properly compare mermaid nodes
+   * and detect content changes.
+   */
+  getTextContent(): string {
+    return this.__content;
+  }
+
   setContent(content: string): void {
     const writable = this.getWritable();
     writable.__content = content;

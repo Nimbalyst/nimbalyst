@@ -351,7 +351,8 @@ export class WindowedTreeMatcher {
       // This makes TOPT prefer exact text matches over position-based matches
       // heading: "MD Editor" won't match "Feature Requests" (0% text similarity)
       // listitem: "Three" won't match "undefined" (for nested list cases)
-      isTextual: (n) => n.type === 'text' || n.type === 'paragraph' || n.type === 'heading' || n.type === 'list' || n.type === 'listitem',
+      // mermaid: content changes like "40" -> "60" should be detected as different
+      isTextual: (n) => n.type === 'text' || n.type === 'paragraph' || n.type === 'heading' || n.type === 'list' || n.type === 'listitem' || n.type === 'mermaid',
     });
 
     // console.log(`\n[TreeMatcher] TOPT produced ${diffOps.length} operations for ${sourceNodes.length} source → ${targetNodes.length} target nodes:`);

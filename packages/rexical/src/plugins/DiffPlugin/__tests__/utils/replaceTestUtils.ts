@@ -238,8 +238,10 @@ export function setupMarkdownReplaceTest(
   };
 
   const getApprovedMarkdown = () => {
-    // $approveDiffs already includes its own editor.update() call
-    $approveDiffs(approveEditor);
+    // $approveDiffs is a $ function that needs to be called inside editor.update()
+    approveEditor.update(() => {
+      $approveDiffs();
+    }, { discrete: true });
 
     return approveEditor.getEditorState().read(() => {
       return $convertToEnhancedMarkdownString(transformers, { shouldPreserveNewLines: true, includeFrontmatter: false });
@@ -265,8 +267,10 @@ export function setupMarkdownReplaceTest(
       }
     });
 
-    // $rejectDiffs already includes its own editor.update() call
-    $rejectDiffs(rejectEditor);
+    // $rejectDiffs is a $ function that needs to be called inside editor.update()
+    rejectEditor.update(() => {
+      $rejectDiffs();
+    }, { discrete: true });
 
     return rejectEditor.getEditorState().read(() => {
       return $convertToEnhancedMarkdownString(transformers, { shouldPreserveNewLines: true, includeFrontmatter: false });
