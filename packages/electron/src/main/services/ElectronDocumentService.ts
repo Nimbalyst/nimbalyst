@@ -624,6 +624,11 @@ export class ElectronDocumentService implements DocumentService {
       ? filePath.substring(this.workspacePath.length + 1)
       : filePath;
 
+    // Only process markdown files
+    if (!relativePath.endsWith('.md')) {
+      return;
+    }
+
     const fullPath = path.join(this.workspacePath, relativePath);
 
     try {

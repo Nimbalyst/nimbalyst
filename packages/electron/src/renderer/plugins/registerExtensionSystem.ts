@@ -37,6 +37,9 @@ let editorScreenshotListenerSetup = false;
 // Track if extension status listener is set up
 let extensionStatusListenerSetup = false;
 
+// Track if extension tool execution listener is set up
+let extensionToolListenerSetup = false;
+
 /**
  * Set up IPC listener for screenshot capture requests from main process.
  * Uses the generic screenshotService to route requests to the appropriate capability.
@@ -421,7 +424,8 @@ export async function registerExtensionSystem(): Promise<void> {
     });
 
     // Set up IPC listener for extension tool execution
-    if (window.electronAPI?.onExecuteExtensionTool && window.electronAPI?.sendExtensionToolResult) {
+    if (!extensionToolListenerSetup && window.electronAPI?.onExecuteExtensionTool && window.electronAPI?.sendExtensionToolResult) {
+      extensionToolListenerSetup = true;
       const sendResult = window.electronAPI.sendExtensionToolResult;
       window.electronAPI.onExecuteExtensionTool(async (data) => {
         const { toolName, args, resultChannel, context } = data;

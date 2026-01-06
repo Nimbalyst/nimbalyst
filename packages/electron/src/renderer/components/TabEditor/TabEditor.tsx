@@ -943,9 +943,10 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         // Don't reload even if the user has typed more since then
         // BUT: Skip this check for custom editors with pending AI edits
         const contentMatchesLastSave = newContent === lastSavedContentRef.current;
+        console.log(`[TabEditor] File change for ${fileName}: contentMatchesLastSave=${contentMatchesLastSave}, isCustom=${isCustom}`);
 
         if (contentMatchesLastSave && !hasPendingAIEditForCustomEditor) {
-          // console.log('[TabEditor] Skipping - disk content matches last saved content');
+          console.log(`[TabEditor] Skipping file change - content matches last save`);
           processingFileChangeRef.current = false;
           return;
         }
@@ -1162,8 +1163,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         // Apply time-based heuristic to avoid reloading after own save
         // BUT: Skip this for custom editors with pending AI edits (they need to reload)
         const timeSinceLastSave = lastSaveTimeRef.current ? Date.now() - lastSaveTimeRef.current : Infinity;
+        console.log(`[TabEditor] File change for ${fileName}: timeSinceLastSave=${timeSinceLastSave}ms, isCustom=${isCustom}, hasPendingAI=${hasPendingAIEditForCustomEditor}`);
         if (timeSinceLastSave < 2000 && !hasPendingAIEditForCustomEditor) {
-          // console.log(`[TabEditor] Skipping - recent save (${timeSinceLastSave}ms ago)`);
+          console.log(`[TabEditor] Skipping file change - recent save (${timeSinceLastSave}ms ago)`);
           processingFileChangeRef.current = false;
           return;
         }
@@ -1870,6 +1872,14 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
       // Save content to disk
       saveContent: async (content: string | ArrayBuffer): Promise<void> => {
+        // CRITICAL: Update tracking refs BEFORE the await to prevent race conditions
+        // with the file watcher. The file watcher can fire before saveFile returns,
+        // so we need lastSaveTimeRef and lastSavedContentRef set beforehand.
+        if (typeof content === 'string') {
+          lastSavedContentRef.current = content;
+        }
+        lastSaveTimeRef.current = Date.now();
+
         // Write to disk
         if (typeof content === 'string') {
           await window.electronAPI.saveFile(content, filePath);
@@ -1882,13 +1892,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         if (window.electronAPI.history && typeof content === 'string') {
           await window.electronAPI.history.createSnapshot(filePath, content, 'auto-save', 'Auto-save');
         }
-
-        // Update our tracking of what's on disk
-        if (typeof content === 'string') {
-          lastSavedContentRef.current = content;
-          lastSavedContentRef.current = content;
-        }
-        lastSaveTimeRef.current = Date.now();
 
         // Mark clean
         isDirtyRef.current = false;
@@ -2016,7 +2019,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       },
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filePath, fileName, workspaceId]); // Only recreate when file or workspace changes
+  }, [filePath, fileName, workspaceId, theme]); // Recreate when file, workspace, or theme changes
 
   // Register manual save function for custom editors
   // This ensures saveTabById works when closing dirty custom editor tabs
