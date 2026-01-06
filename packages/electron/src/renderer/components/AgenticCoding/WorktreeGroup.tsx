@@ -47,6 +47,7 @@ interface WorktreeGroupProps {
   onSessionArchive?: (sessionId: string) => void;
   onWorktreePinToggle?: (worktreeId: string, isPinned: boolean) => void;
   onSessionPinToggle?: (sessionId: string, isPinned: boolean) => void;
+  onSessionRename?: (sessionId: string, newName: string) => void;
 }
 
 export const WorktreeGroup: React.FC<WorktreeGroupProps> = ({
@@ -62,7 +63,8 @@ export const WorktreeGroup: React.FC<WorktreeGroupProps> = ({
   onSessionDelete,
   onSessionArchive,
   onWorktreePinToggle,
-  onSessionPinToggle
+  onSessionPinToggle,
+  onSessionRename
 }) => {
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
@@ -203,6 +205,7 @@ export const WorktreeGroup: React.FC<WorktreeGroupProps> = ({
               onDelete={onSessionDelete ? () => onSessionDelete(session.id) : undefined}
               onArchive={onSessionArchive ? () => onSessionArchive(session.id) : undefined}
               onPinToggle={onSessionPinToggle ? (isPinned) => onSessionPinToggle(session.id, isPinned) : undefined}
+              onRename={onSessionRename ? (newName) => onSessionRename(session.id, newName) : undefined}
             />
           ))}
         </div>
@@ -258,6 +261,7 @@ interface WorktreeSessionItemProps {
   onDelete?: () => void;
   onArchive?: () => void;
   onPinToggle?: (isPinned: boolean) => void;
+  onRename?: (newName: string) => void;
 }
 
 const WorktreeSessionItem: React.FC<WorktreeSessionItemProps> = ({
@@ -266,11 +270,15 @@ const WorktreeSessionItem: React.FC<WorktreeSessionItemProps> = ({
   onClick,
   onDelete,
   onArchive,
-  onPinToggle
+  onPinToggle,
+  onRename
 }) => {
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
   const contextMenuRef = useRef<HTMLDivElement>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   const displayTitle = session.title || 'Untitled Session';
 
@@ -299,6 +307,40 @@ const WorktreeSessionItem: React.FC<WorktreeSessionItemProps> = ({
     onPinToggle?.(!session.isPinned);
   };
 
+  const handleRenameClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    setRenameValue(displayTitle);
+    setIsRenaming(true);
+  };
+
+  const handleRenameSubmit = () => {
+    const trimmedValue = renameValue.trim();
+    if (trimmedValue && trimmedValue !== displayTitle && onRename) {
+      onRename(trimmedValue);
+    }
+    setIsRenaming(false);
+  };
+
+  const handleRenameKeyDown = (e: React.KeyboardEvent) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleRenameSubmit();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setIsRenaming(false);
+    }
+  };
+
+  // Auto-focus and select text when rename input appears
+  useEffect(() => {
+    if (isRenaming && renameInputRef.current) {
+      renameInputRef.current.focus();
+      renameInputRef.current.select();
+    }
+  }, [isRenaming]);
+
   return (
     <div
       className={`worktree-session-item ${isActive ? 'active' : ''}`}
@@ -322,7 +364,20 @@ const WorktreeSessionItem: React.FC<WorktreeSessionItemProps> = ({
       {session.isPinned && (
         <MaterialSymbol icon="push_pin" size={10} className="worktree-session-item-pin-icon" />
       )}
-      <span className="worktree-session-item-title">{displayTitle}</span>
+      {isRenaming ? (
+        <input
+          ref={renameInputRef}
+          type="text"
+          className="worktree-session-item-rename-input"
+          value={renameValue}
+          onChange={(e) => setRenameValue(e.target.value)}
+          onKeyDown={handleRenameKeyDown}
+          onBlur={handleRenameSubmit}
+          onClick={(e) => e.stopPropagation()}
+        />
+      ) : (
+        <span className="worktree-session-item-title">{displayTitle}</span>
+      )}
       <div className="worktree-session-item-right">
         {session.isProcessing ? (
           <div className="worktree-session-item-status processing" title="Processing...">
@@ -359,6 +414,15 @@ const WorktreeSessionItem: React.FC<WorktreeSessionItemProps> = ({
             >
               <MaterialSymbol icon="push_pin" size={14} />
               {session.isPinned ? 'Unpin' : 'Pin'}
+            </button>
+          )}
+          {onRename && (
+            <button
+              className="worktree-group-context-menu-item"
+              onClick={handleRenameClick}
+            >
+              <MaterialSymbol icon="edit" size={14} />
+              Rename
             </button>
           )}
           {onArchive && (

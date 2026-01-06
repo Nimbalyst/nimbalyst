@@ -1380,6 +1380,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                           onSessionArchive={handleArchiveSession}
                           onWorktreePinToggle={handleWorktreePinToggle}
                           onSessionPinToggle={handleSessionPinToggle}
+                          onSessionRename={onSessionRename}
                         />
                       );
                     } else {
