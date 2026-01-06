@@ -1633,18 +1633,14 @@ export class AIService {
                 // console.log(`[AIService] Tool arguments:`, JSON.stringify(chunk.toolCall.arguments, null, 2));
 
                 // Track file interactions for all tool calls
-                // Also attach file watchers for edited files to detect subsequent changes
                 if (workspacePath && chunk.toolCall.arguments) {
                   try {
-                    // Get window from event sender to enable file watcher attachment
-                    const window = BrowserWindow.fromWebContents(event.sender);
                     await sessionFileTracker.trackToolExecution(
                       session.id,
                       workspacePath,
                       chunk.toolCall.name,
                       chunk.toolCall.arguments,
-                      chunk.toolCall.result,
-                      window  // Pass window to enable file watcher attachment for edited files
+                      chunk.toolCall.result
                     );
                     // Notify renderer that files were tracked
                     event.sender.send('session-files:updated', session.id);
@@ -1809,19 +1805,15 @@ export class AIService {
               });
 
               // Track the streamContent file interaction
-              // Also attach file watcher for the edited file
               if (documentContext?.filePath && workspacePath) {
                 try {
                   // console.log('[AIService] Tracking streamContent file interaction for:', documentContext.filePath);
-                  // Get window from event sender to enable file watcher attachment
-                  const window = BrowserWindow.fromWebContents(event.sender);
                   await sessionFileTracker.trackToolExecution(
                     session.id,
                     workspacePath,
                     'streamContent',
                     { file_path: documentContext.filePath },
-                    { success: !chunk.error },
-                    window  // Pass window to enable file watcher attachment for edited files
+                    { success: !chunk.error }
                   );
                   // console.log('[AIService] streamContent tracking completed');
                   // Notify renderer that files were tracked

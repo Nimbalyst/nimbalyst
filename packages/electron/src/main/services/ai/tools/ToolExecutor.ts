@@ -2,7 +2,7 @@
  * ToolExecutor - Handles execution of tools with proper IPC communication
  */
 
-import { WebContents, ipcMain, BrowserWindow } from 'electron';
+import { WebContents, ipcMain } from 'electron';
 import { EventEmitter } from 'events';
 import type { DiffArgs, DiffResult, ToolDefinition } from '@nimbalyst/runtime/ai/server/types';
 import { toolRegistry } from './ToolRegistry';
@@ -147,20 +147,15 @@ export class ToolExecutor extends EventEmitter {
     this.webContents.send('ai:streamEditEnd', { id: streamId });
 
     // Track file interaction after streaming completes
-    // Also attach file watcher for the edited file
     if (this.sessionId && this.workspaceId && args.targetFilePath) {
       try {
-        // Get the BrowserWindow from webContents to attach file watchers
-        const window = BrowserWindow.fromWebContents(this.webContents);
-
         console.log('[ToolExecutor] Tracking streamContent file interaction');
         await sessionFileTracker.trackToolExecution(
           this.sessionId,
           this.workspaceId,
           'streamContent',
           { file_path: args.targetFilePath, content: args.content },
-          { success: true, linesAdded: args.content.split('\n').length },
-          window  // Pass window to enable file watcher attachment
+          { success: true, linesAdded: args.content.split('\n').length }
         );
         console.log('[ToolExecutor] streamContent tracking completed');
       } catch (error) {
@@ -330,7 +325,6 @@ export class ToolExecutor extends EventEmitter {
     }
 
     // Track file interactions after successful tool execution
-    // Also attach file watchers for edited files to detect subsequent changes
     console.log('[ToolExecutor] Checking if should track file:', {
       hasSessionId: !!this.sessionId,
       hasWorkspaceId: !!this.workspaceId,
@@ -341,17 +335,13 @@ export class ToolExecutor extends EventEmitter {
 
     if (this.sessionId && this.workspaceId) {
       try {
-        // Get the BrowserWindow from webContents to attach file watchers
-        const window = BrowserWindow.fromWebContents(this.webContents);
-
         console.log('[ToolExecutor] Calling sessionFileTracker.trackToolExecution');
         await sessionFileTracker.trackToolExecution(
           this.sessionId,
           this.workspaceId,
           name,
           args,
-          result,
-          window  // Pass window to enable file watcher attachment for edited files
+          result
         );
         console.log('[ToolExecutor] File tracking completed successfully');
       } catch (error) {

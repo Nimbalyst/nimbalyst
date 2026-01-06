@@ -1,17 +1,11 @@
 /**
  * Session File Tracker
  * Automatically tracks file interactions during AI sessions
- *
- * This service ensures that files modified by agents are:
- * 1. Tracked in the session_files database
- * 2. Have file watchers attached for change detection
  */
 
-import { BrowserWindow } from 'electron';
 import { SessionFilesRepository } from '@nimbalyst/runtime';
 import type { FileLinkType, EditedFileMetadata, ReadFileMetadata, ReferencedFileMetadata } from '@nimbalyst/runtime/ai/server/types';
 import { logger } from '../utils/logger';
-import { startFileWatcher } from '../file/FileWatcher';
 
 /**
  * Extract file mentions from user messages
@@ -127,25 +121,14 @@ export class SessionFileTracker {
   private enabled = true;
 
   /**
-   * Track a tool execution and create appropriate file links.
-   * For edited files, also ensures a file watcher is attached to detect
-   * subsequent changes (including changes from concurrent AI sessions or
-   * external editors).
-   *
-   * @param sessionId - The AI session ID
-   * @param workspaceId - The workspace path
-   * @param toolName - Name of the tool that was executed
-   * @param args - Tool arguments (used to extract file path)
-   * @param result - Tool execution result
-   * @param window - Optional BrowserWindow to attach file watchers for edited files
+   * Track a tool execution and create appropriate file links
    */
   async trackToolExecution(
     sessionId: string,
     workspaceId: string,
     toolName: string,
     args: any,
-    result: any,
-    window?: BrowserWindow | null
+    result: any
   ): Promise<void> {
     // console.log('[SessionFileTracker] trackToolExecution called:', { sessionId, workspaceId, toolName, enabled: this.enabled });
 
@@ -177,22 +160,6 @@ export class SessionFileTracker {
       let metadata: any = {};
       if (linkType === 'edited') {
         metadata = extractEditMetadata(toolName, args, result);
-
-        // Ensure file watcher is attached for edited files
-        // This is critical for detecting subsequent changes, even for files
-        // beyond the 5000 file limit in the file tree
-        console.log(`[SessionFileTracker] Edited file detected: ${filePath}, window provided: ${!!window}, window destroyed: ${window?.isDestroyed?.()}`);
-        if (window && !window.isDestroyed()) {
-          try {
-            await startFileWatcher(window, filePath);
-            console.log(`[SessionFileTracker] Started file watcher for edited file: ${filePath}`);
-          } catch (watchError) {
-            // Log but don't fail - file watcher is not critical for tracking
-            console.error(`[SessionFileTracker] Failed to start file watcher for ${filePath}:`, watchError);
-          }
-        } else {
-          console.warn(`[SessionFileTracker] Cannot start file watcher - no valid window for: ${filePath}`);
-        }
       } else if (linkType === 'read') {
         metadata = extractReadMetadata(toolName, args, result);
       }
