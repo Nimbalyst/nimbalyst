@@ -659,29 +659,76 @@ ${newLines.map(line => '+' + line).join('\n')}`;
       const commits: CommitInfo[] = [];
 
       if (logOutput.trim()) {
-        // Split by double newline to separate commits
-        const commitBlocks = logOutput.trim().split('\n\n');
+        // Each commit's format line ends with NUL (%x00), so we can split by the NUL-newline pattern
+        // The format is: hash\0shorthash\0message\0author\0date\0\nfile1\nfile2\n\nhash2\0...
+        // But commits without files won't have the double newline separator
+        // Instead, parse by looking for lines that contain NUL characters (metadata lines)
+        const allLines = logOutput.trim().split('\n');
 
-        for (const block of commitBlocks) {
-          const lines = block.split('\n');
-          if (lines.length === 0) continue;
+        let currentCommit: { parts: string[]; files: string[] } | null = null;
 
-          // First line contains commit metadata
-          const [hash, shortHash, message, author, dateStr] = lines[0].split('\x00');
+        for (const line of allLines) {
+          if (line.includes('\x00')) {
+            // This is a metadata line - save previous commit and start new one
+            if (currentCommit) {
+              const [hash, shortHash, message, author, dateStr] = currentCommit.parts;
+              if (hash) {
+                let date: Date;
+                if (dateStr && dateStr.trim()) {
+                  date = new Date(dateStr);
+                  if (isNaN(date.getTime())) {
+                    logger.warn('Invalid date string from git log, using current date', { dateStr, hash });
+                    date = new Date();
+                  }
+                } else {
+                  logger.warn('Missing date string from git log, using current date', { hash, partsCount: currentCommit.parts.length });
+                  date = new Date();
+                }
+                commits.push({
+                  hash,
+                  shortHash,
+                  message,
+                  author,
+                  date,
+                  files: currentCommit.files,
+                });
+              }
+            }
+            // Start new commit
+            currentCommit = {
+              parts: line.split('\x00'),
+              files: [],
+            };
+          } else if (line.trim() && currentCommit) {
+            // This is a file line
+            currentCommit.files.push(line);
+          }
+        }
 
-          if (!hash) continue;
-
-          // Remaining lines are files (skip empty lines)
-          const files = lines.slice(1).filter(Boolean);
-
-          commits.push({
-            hash,
-            shortHash,
-            message,
-            author,
-            date: new Date(dateStr),
-            files,
-          });
+        // Don't forget the last commit
+        if (currentCommit) {
+          const [hash, shortHash, message, author, dateStr] = currentCommit.parts;
+          if (hash) {
+            let date: Date;
+            if (dateStr && dateStr.trim()) {
+              date = new Date(dateStr);
+              if (isNaN(date.getTime())) {
+                logger.warn('Invalid date string from git log, using current date', { dateStr, hash });
+                date = new Date();
+              }
+            } else {
+              logger.warn('Missing date string from git log, using current date', { hash, partsCount: currentCommit.parts.length });
+              date = new Date();
+            }
+            commits.push({
+              hash,
+              shortHash,
+              message,
+              author,
+              date,
+              files: currentCommit.files,
+            });
+          }
         }
       }
 

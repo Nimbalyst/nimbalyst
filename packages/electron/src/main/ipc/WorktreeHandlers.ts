@@ -436,9 +436,21 @@ export function registerWorktreeHandlers(): void {
 
       const commits = await gitWorktreeService.getWorktreeCommits(worktreePath);
 
+      // Convert Date objects to ISO strings for IPC serialization
+      // Date objects don't survive Electron IPC correctly in arrays
+      const serializedCommits = commits.map(commit => {
+        const dateValue = commit.date instanceof Date && !isNaN(commit.date.getTime())
+          ? commit.date.toISOString()
+          : new Date().toISOString();
+        return {
+          ...commit,
+          date: dateValue,
+        };
+      });
+
       return {
         success: true,
-        commits,
+        commits: serializedCommits,
       };
     } catch (error) {
       logger.error('Failed to get worktree commits:', error);
@@ -471,9 +483,18 @@ export function registerWorktreeHandlers(): void {
 
       const commit = await gitWorktreeService.commitChanges(worktreePath, message, files);
 
+      // Convert Date object to ISO string for IPC serialization
+      const dateValue = commit.date instanceof Date && !isNaN(commit.date.getTime())
+        ? commit.date.toISOString()
+        : new Date().toISOString();
+      const serializedCommit = {
+        ...commit,
+        date: dateValue,
+      };
+
       return {
         success: true,
-        commit,
+        commit: serializedCommit,
       };
     } catch (error) {
       logger.error('Failed to commit changes:', error);
