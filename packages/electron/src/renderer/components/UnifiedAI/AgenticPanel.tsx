@@ -3450,7 +3450,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                   >
                     <TerminalPanel
                       sessionId={tab.id}
-                      workspacePath={workspacePath}
+                      workspacePath={tab.sessionData.worktreePath || workspacePath}
                       isActive={tab.id === activeTabId}
                     />
                   </div>
