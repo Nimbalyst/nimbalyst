@@ -22,6 +22,7 @@ interface FileTreeProps {
   onNewFile?: (folderPath: string, fileType: NewFileType) => void;
   onNewFolder?: (folderPath: string) => void;
   onRefreshFileTree?: () => void;
+  onFolderContentsLoaded?: (folderPath: string, contents: FileTreeItem[]) => void;
   onViewHistory?: (filePath: string) => void;
   onViewWorkspaceHistory?: (folderPath: string) => void;
   selectedFolder?: string | null;
@@ -91,7 +92,7 @@ function getDirectoryGitStatus(
   return null;
 }
 
-export function FileTree({ items, currentFilePath, onFileSelect, level, showIcons = true, enableAutoScroll = true, onNewFile, onNewFolder, onRefreshFileTree, onViewHistory, onViewWorkspaceHistory, selectedFolder, onFolderSelect, gitStatusMap, extensionFileTypes = [], sharedDragState, sharedExpandedDirs, selectedPaths: selectedPathsProp, onSelectionChange, sharedSelectionState, rootItems: rootItemsProp }: FileTreeProps) {
+export function FileTree({ items, currentFilePath, onFileSelect, level, showIcons = true, enableAutoScroll = true, onNewFile, onNewFolder, onRefreshFileTree, onFolderContentsLoaded, onViewHistory, onViewWorkspaceHistory, selectedFolder, onFolderSelect, gitStatusMap, extensionFileTypes = [], sharedDragState, sharedExpandedDirs, selectedPaths: selectedPathsProp, onSelectionChange, sharedSelectionState, rootItems: rootItemsProp }: FileTreeProps) {
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -284,9 +285,9 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
         // Refresh folder contents when opening (in case file watcher missed changes)
         if (window.electronAPI?.refreshFolderContents) {
           window.electronAPI.refreshFolderContents(path).then((refreshedContents) => {
-            if (refreshedContents && onRefreshFileTree) {
-              // Trigger a full tree refresh to incorporate the new data
-              // This ensures the file watcher and UI are in sync
+            if (onFolderContentsLoaded) {
+              onFolderContentsLoaded(path, Array.isArray(refreshedContents) ? refreshedContents : []);
+            } else if (onRefreshFileTree) {
               onRefreshFileTree();
             }
           }).catch((error) => {
@@ -296,7 +297,7 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
       }
       return newSet;
     });
-  }, [onRefreshFileTree]);
+  }, [onFolderContentsLoaded, onRefreshFileTree]);
 
   const handleFolderClick = useCallback((e: React.MouseEvent, path: string) => {
     // Toggle the folder when clicking anywhere on the row
@@ -658,6 +659,7 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
                     onNewFile={onNewFile}
                     onNewFolder={onNewFolder}
                     onRefreshFileTree={onRefreshFileTree}
+                    onFolderContentsLoaded={onFolderContentsLoaded}
                     onViewHistory={onViewHistory}
                     onViewWorkspaceHistory={onViewWorkspaceHistory}
                     selectedFolder={selectedFolder}

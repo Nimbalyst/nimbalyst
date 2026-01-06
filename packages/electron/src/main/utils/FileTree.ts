@@ -25,6 +25,7 @@ function isSpecialDirectory(name: string): boolean {
 
 export function getFolderContents(dirPath: string, depth: number = 0): FileTreeItem[] {
     const result: FileTreeItem[] = [];
+    const directoriesToPopulate: FileTreeItem[] = [];
 
     // Reset counter on top-level call
     if (depth === 0) {
@@ -51,9 +52,12 @@ export function getFolderContents(dirPath: string, depth: number = 0): FileTreeI
             console.warn(`[FileTree] Directory has ${items.length} items, only showing first ${MAX_FILES_PER_DIR}: ${dirPath}`);
         }
 
+        let truncatedCurrentDir = false;
+
         for (const item of limitedItems) {
             // Check global limit
-            if (totalItemCount > MAX_TOTAL_ITEMS) {
+            if (totalItemCount >= MAX_TOTAL_ITEMS) {
+                truncatedCurrentDir = true;
                 break;
             }
 
@@ -68,13 +72,15 @@ export function getFolderContents(dirPath: string, depth: number = 0): FileTreeI
                 const stats = statSync(fullPath);
 
                 if (stats.isDirectory()) {
-                    totalItemCount++;
-                    result.push({
+                    const dirItem: FileTreeItem = {
                         name: item,
                         type: 'directory',
                         path: fullPath,
-                        children: getFolderContents(fullPath, depth + 1)
-                    });
+                        children: []
+                    };
+                    directoriesToPopulate.push(dirItem);
+                    result.push(dirItem);
+                    totalItemCount++;
                 } else if (stats.isFile()) {
                     totalItemCount++;
                     // Include all files - filtering happens in the UI
@@ -87,6 +93,10 @@ export function getFolderContents(dirPath: string, depth: number = 0): FileTreeI
             } catch (error) {
                 // Skip files/dirs we can't stat (permissions, broken symlinks)
             }
+        }
+
+        if (truncatedCurrentDir) {
+            console.warn(`[FileTree] Hit MAX_TOTAL_ITEMS (${MAX_TOTAL_ITEMS}) while listing: ${dirPath}`);
         }
 
         // Sort: special directories first, then regular directories, then files
@@ -111,6 +121,14 @@ export function getFolderContents(dirPath: string, depth: number = 0): FileTreeI
             // Natural sort within same type
             return naturalCollator.compare(a.name, b.name);
         });
+
+        // Populate directory children after all siblings are registered so folders never disappear
+        for (const directory of directoriesToPopulate) {
+            if (totalItemCount >= MAX_TOTAL_ITEMS) {
+                break;
+            }
+            directory.children = getFolderContents(directory.path, depth + 1);
+        }
     } catch (error: any) {
         // Silently handle ENOENT errors (directory doesn't exist)
         // This is expected when scanning directories that may not be created yet

@@ -82,6 +82,38 @@ function resolveSessionFilePath(filePath: string, workspacePath?: string): strin
   return normalizeFilePath(`${base}/${relative}`);
 }
 
+function replaceFolderChildren(
+  items: FileTreeItem[],
+  normalizedFolderPath: string,
+  newChildren: FileTreeItem[]
+): [FileTreeItem[], boolean] {
+  let mutated = false;
+
+  const updatedItems = items.map(item => {
+    if (item.type !== 'directory') {
+      return item;
+    }
+
+    const normalizedItemPath = normalizeFilePath(item.path);
+    if (normalizedItemPath === normalizedFolderPath) {
+      mutated = true;
+      return { ...item, children: newChildren };
+    }
+
+    if (item.children && item.children.length > 0) {
+      const [nextChildren, childMutated] = replaceFolderChildren(item.children, normalizedFolderPath, newChildren);
+      if (childMutated) {
+        mutated = true;
+        return { ...item, children: nextChildren };
+      }
+    }
+
+    return item;
+  });
+
+  return [mutated ? updatedItems : items, mutated];
+}
+
 // Generate a consistent color based on workspace path
 function generateWorkspaceColor(path: string): string {
   let hash = 0;
@@ -195,6 +227,22 @@ export function WorkspaceSidebar({
         console.error('Error refreshing file tree:', error);
       }
     }
+  }, [workspacePath]);
+
+  const handleFolderContentsLoaded = useCallback((folderPath: string, contents: FileTreeItem[]) => {
+    if (!folderPath) return;
+
+    const normalizedFolderPath = normalizeFilePath(folderPath);
+    const normalizedWorkspacePath = workspacePath ? normalizeFilePath(workspacePath) : '';
+
+    setFileTree(prevTree => {
+      if (normalizedWorkspacePath && normalizedFolderPath === normalizedWorkspacePath) {
+        return contents;
+      }
+
+      const [updatedTree, changed] = replaceFolderChildren(prevTree, normalizedFolderPath, contents);
+      return changed ? updatedTree : prevTree;
+    });
   }, [workspacePath]);
 
   // Load file tree settings from workspace state
@@ -1144,6 +1192,7 @@ export function WorkspaceSidebar({
                 onNewFile={handleNewFileInFolder}
                 onNewFolder={handleNewFolderInFolder}
                 onRefreshFileTree={handleRefreshFileTree}
+                onFolderContentsLoaded={handleFolderContentsLoaded}
                 onViewHistory={onViewHistory}
                 onViewWorkspaceHistory={onViewWorkspaceHistory}
                 selectedFolder={selectedFolder}
