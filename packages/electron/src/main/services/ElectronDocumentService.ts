@@ -35,11 +35,36 @@ export class ElectronDocumentService implements DocumentService {
   private trackerItemWatchers: Map<string, (change: TrackerItemChangeEvent) => void> = new Map();
 
   // Performance limits - balance between completeness and performance
-  private static readonly MAX_FILES_TO_SCAN = 2000;   // Stop scanning after 1000 files
-  private static readonly MAX_SCAN_TIME_MS = 2000;    // Stop scanning after 2 seconds
+  private static readonly MAX_FILES_TO_SCAN = 2000;   // Stop adding regular files after 2000
+  private static readonly MAX_SCAN_TIME_MS = 10000;   // Stop scanning after 10 seconds (increased to allow full scan)
   private static readonly MAX_DEPTH = 8;              // Maximum directory depth
 
   private isScanning = false; // Prevent concurrent scans
+
+  /**
+   * Quick check if a markdown file contains tracker-relevant frontmatter
+   * This reads only the first ~4KB of the file for performance
+   */
+  private hasTrackerFrontmatter(fullPath: string): boolean {
+    try {
+      // Read only the first 4KB - frontmatter should be at the top
+      const fd = fsSync.openSync(fullPath, 'r');
+      const buffer = Buffer.alloc(4096);
+      const bytesRead = fsSync.readSync(fd, buffer, 0, 4096, 0);
+      fsSync.closeSync(fd);
+
+      const content = buffer.toString('utf-8', 0, bytesRead);
+
+      // Check for YAML frontmatter with plan/bug/tracker content
+      // Look for patterns like planStatus:, or inline tracker items like #bug[, #task[, etc.
+      const hasPlanStatus = /^---[\s\S]*?planStatus:/m.test(content);
+      const hasInlineTracker = /#(bug|task|plan|idea|decision)\[/.test(content);
+
+      return hasPlanStatus || hasInlineTracker;
+    } catch {
+      return false;
+    }
+  }
 
   constructor(workspacePath: string) {
     this.workspacePath = workspacePath;
@@ -249,18 +274,12 @@ export class ElectronDocumentService implements DocumentService {
     dirPath: string,
     basePath: string = '',
     depth: number = 0,
-    scanState: { count: number; startTime: number; stopped: boolean } = { count: 0, startTime: Date.now(), stopped: false }
+    scanState: { count: number; trackerCount: number; startTime: number; stopped: boolean } = { count: 0, trackerCount: 0, startTime: Date.now(), stopped: false }
   ): Document[] {
     const documents: Document[] = [];
 
-    // Check limits BEFORE scanning this directory
+    // Check time limit BEFORE scanning this directory
     if (scanState.stopped) {
-      return documents;
-    }
-
-    if (scanState.count >= ElectronDocumentService.MAX_FILES_TO_SCAN) {
-      // console.warn(`[DocumentService] Stopped scanning at ${scanState.count} files (limit: ${ElectronDocumentService.MAX_FILES_TO_SCAN})`);
-      scanState.stopped = true;
       return documents;
     }
 
@@ -298,6 +317,9 @@ export class ElectronDocumentService implements DocumentService {
       '.vue', '.svelte', '.astro'
     ];
 
+    // Markdown extensions for tracker content check
+    const markdownExtensions = ['.md', '.markdown'];
+
     try {
       const items = fsSync.readdirSync(dirPath);
 
@@ -309,12 +331,6 @@ export class ElectronDocumentService implements DocumentService {
         }
 
         if (scanState.stopped) {
-          break;
-        }
-
-        // Check file count limit on every iteration
-        if (scanState.count >= ElectronDocumentService.MAX_FILES_TO_SCAN) {
-          scanState.stopped = true;
           break;
         }
 
@@ -340,18 +356,34 @@ export class ElectronDocumentService implements DocumentService {
           } else if (stats.isFile()) {
             const ext = path.extname(item).toLowerCase();
             if (supportedExtensions.includes(ext)) {
-              scanState.count++;
+              const isMarkdown = markdownExtensions.includes(ext);
+              const underLimit = scanState.count < ElectronDocumentService.MAX_FILES_TO_SCAN;
 
-              const id = crypto.createHash('md5').update(relativePath).digest('hex');
+              // Determine if we should add this file:
+              // - Always add if under the limit
+              // - For markdown files above the limit, check if they have tracker frontmatter
+              let shouldAdd = underLimit;
+              if (!underLimit && isMarkdown) {
+                shouldAdd = this.hasTrackerFrontmatter(fullPath);
+                if (shouldAdd) {
+                  scanState.trackerCount++;
+                }
+              }
 
-              documents.push({
-                id,
-                name: item,
-                path: relativePath,
-                workspace: basePath || undefined,
-                lastModified: stats.mtime,
-                type: ext.slice(1)
-              });
+              if (shouldAdd) {
+                scanState.count++;
+
+                const id = crypto.createHash('md5').update(relativePath).digest('hex');
+
+                documents.push({
+                  id,
+                  name: item,
+                  path: relativePath,
+                  workspace: basePath || undefined,
+                  lastModified: stats.mtime,
+                  type: ext.slice(1)
+                });
+              }
             }
           }
         } catch (error) {
@@ -368,16 +400,21 @@ export class ElectronDocumentService implements DocumentService {
   private async scanDocuments(): Promise<Document[]> {
     try {
       // Use synchronous file system operations like the file tree
-      const scanState = { count: 0, startTime: Date.now(), stopped: false };
+      const scanState = { count: 0, trackerCount: 0, startTime: Date.now(), stopped: false };
       const docs = this.scanDirectory(this.workspacePath, '', 0, scanState);
 
-      // Log warning if scan was incomplete due to limits
+      // Log info about scan results
+      const elapsed = Date.now() - scanState.startTime;
       if (scanState.stopped) {
-        const elapsed = Date.now() - scanState.startTime;
         console.warn(
-          `[DocumentService] Scan incomplete: scanned ${scanState.count} files in ${elapsed}ms. ` +
-          `Limits: ${ElectronDocumentService.MAX_FILES_TO_SCAN} files, ${ElectronDocumentService.MAX_SCAN_TIME_MS}ms, depth ${ElectronDocumentService.MAX_DEPTH}. ` +
+          `[DocumentService] Scan stopped early: scanned ${scanState.count} files in ${elapsed}ms. ` +
+          `Time limit: ${ElectronDocumentService.MAX_SCAN_TIME_MS}ms, depth limit: ${ElectronDocumentService.MAX_DEPTH}. ` +
           `Some files may not appear in @ mentions.`
+        );
+      } else if (scanState.trackerCount > 0) {
+        console.log(
+          `[DocumentService] Scan complete: ${scanState.count} files in ${elapsed}ms ` +
+          `(${scanState.trackerCount} tracker files found beyond ${ElectronDocumentService.MAX_FILES_TO_SCAN} file limit)`
         );
       }
 
