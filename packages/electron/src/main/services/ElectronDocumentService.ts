@@ -603,11 +603,28 @@ export class ElectronDocumentService implements DocumentService {
       if (!cachedState || cachedState.hash !== hash) {
         const commonFields = data ? extractCommonFields(data) : {};
 
-        // Find the document entry
-        const doc = this.documents.find(d => d.path === relativePath);
+        // Find the document entry, or create one if it doesn't exist
+        // (this can happen for files beyond the scan limit or newly created files)
+        let doc = this.documents.find(d => d.path === relativePath);
         if (!doc) {
-          console.warn(`[DocumentService] Document not found for path: ${relativePath}`);
-          return;
+          // Create a document entry for this file
+          const fileName = path.basename(relativePath);
+          const ext = path.extname(fileName).toLowerCase();
+          const id = crypto.createHash('md5').update(relativePath).digest('hex');
+
+          const dirname = path.dirname(relativePath);
+          doc = {
+            id,
+            name: fileName,
+            path: relativePath,
+            workspace: dirname && dirname !== '.' ? dirname : undefined,
+            lastModified: stats.mtime,
+            type: ext.slice(1)
+          };
+
+          // Add to documents list so future lookups work
+          this.documents.push(doc);
+          console.log(`[DocumentService] Added document entry for agent-edited file: ${relativePath}`);
         }
 
         const metadata: DocumentMetadataEntry = {
@@ -642,6 +659,10 @@ export class ElectronDocumentService implements DocumentService {
 
         this.metadataWatchers.forEach(callback => callback(changeEvent));
       }
+
+      // Also update tracker items for markdown files
+      // This ensures inline tracker items (#bug, #task, etc.) are kept in sync
+      await this.updateTrackerItemsCache(relativePath);
     } catch (error) {
       console.error(`[DocumentService] Failed to refresh metadata for ${relativePath}:`, error);
     }

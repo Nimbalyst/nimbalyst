@@ -5,6 +5,7 @@
  * This service ensures that files modified by agents are:
  * 1. Tracked in the session_files database
  * 2. Have file watchers attached for change detection
+ * 3. Have their tracker items/metadata refreshed in the document service
  */
 
 import { BrowserWindow } from 'electron';
@@ -12,6 +13,7 @@ import { SessionFilesRepository } from '@nimbalyst/runtime';
 import type { FileLinkType, EditedFileMetadata, ReadFileMetadata, ReferencedFileMetadata } from '@nimbalyst/runtime/ai/server/types';
 import { logger } from '../utils/logger';
 import { startFileWatcher } from '../file/FileWatcher';
+import { documentServices } from '../window/WindowManager';
 
 /**
  * Extract file mentions from user messages
@@ -192,6 +194,22 @@ export class SessionFileTracker {
           }
         } else {
           console.warn(`[SessionFileTracker] Cannot start file watcher - no valid window for: ${filePath}`);
+        }
+
+        // Refresh tracker items/metadata for the edited file
+        // This ensures plan frontmatter and inline trackers (#bug, #task, etc.)
+        // are immediately visible in the tracker UI
+        const documentService = documentServices.get(workspaceId);
+        if (documentService) {
+          try {
+            await documentService.refreshFileMetadata(filePath);
+            console.log(`[SessionFileTracker] Refreshed tracker/metadata for: ${filePath}`);
+          } catch (refreshError) {
+            // Log but don't fail - metadata refresh is not critical for tracking
+            console.error(`[SessionFileTracker] Failed to refresh metadata for ${filePath}:`, refreshError);
+          }
+        } else {
+          console.warn(`[SessionFileTracker] No document service found for workspace: ${workspaceId}`);
         }
       } else if (linkType === 'read') {
         metadata = extractReadMetadata(toolName, args, result);
