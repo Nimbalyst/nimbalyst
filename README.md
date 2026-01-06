@@ -1,6 +1,6 @@
 # Nimbalyst - UI for Claude Code
 
-[Nimbalyst](https://nimbalyst.com) is a WYSIWIG markdown editor with visual diffs powered by Claude Code and a parallel session manager
+[Nimbalyst](https://nimbalyst.com) Nimbalyst is the free, local, WYSIWYG editor & parallel session manager where you iterate with Claude Code on your full context: sessions, markdown docs, mockups, diagrams, data models, MCP, and code
 
 ![Version](https://img.shields.io/github/v/release/nimbalyst/nimbalyst)
 ![Downloads](https://img.shields.io/github/downloads/nimbalyst/nimbalyst/total)
@@ -10,6 +10,8 @@
 ## Features
 - Edit markdown in a local, WYSIWIG, agentic editor powered by Claude Code. Review AI changes as red/green diffs.
 - Manage agents' work across parallel Claude Code sessions in a UI
+- Iterate with AI on html mockups. Annotate, edit, embed, & use to code.
+- Build your data model with AI based on your code and docs. Use it to write better code.
 - Open storage of content and status in markdown, workflow in Claude Code / commands, and plain files on disk or in git
 
 ## ScreenShots
@@ -50,7 +52,7 @@ Found a bug or have a feature request? Please [create an issue](https://github.c
 
 ## License
 
-Nimbalyst is proprietary software. All rights reserved. © 2025 Nimbalyst. 
+Nimbalyst is proprietary software. All rights reserved. © 2026 Nimbalyst. 
 
 ## Acknowledgments
 
