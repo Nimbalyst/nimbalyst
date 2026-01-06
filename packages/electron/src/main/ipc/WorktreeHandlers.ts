@@ -357,5 +357,166 @@ export function registerWorktreeHandlers(): void {
     }
   });
 
+  /**
+   * Get all changed files in a worktree compared to base branch
+   *
+   * @param worktreePath - Path to the worktree
+   * @returns Array of changed files with their status
+   */
+  ipcMain.handle('worktree:get-changed-files', async (_event, worktreePath: string) => {
+    try {
+      if (!worktreePath) {
+        throw new Error('worktreePath is required');
+      }
+
+      logger.info('Getting changed files', { worktreePath });
+
+      const changedFiles = await gitWorktreeService.getChangedFiles(worktreePath);
+
+      return {
+        success: true,
+        files: changedFiles,
+      };
+    } catch (error) {
+      logger.error('Failed to get changed files:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get changed files',
+        files: [],
+      };
+    }
+  });
+
+  /**
+   * Get diff for a specific file in a worktree
+   *
+   * @param worktreePath - Path to the worktree
+   * @param filePath - Relative path to the file
+   * @returns File diff result
+   */
+  ipcMain.handle('worktree:get-file-diff', async (_event, worktreePath: string, filePath: string) => {
+    try {
+      if (!worktreePath) {
+        throw new Error('worktreePath is required');
+      }
+      if (!filePath) {
+        throw new Error('filePath is required');
+      }
+
+      logger.info('Getting file diff', { worktreePath, filePath });
+
+      const diff = await gitWorktreeService.getFileDiff(worktreePath, filePath);
+
+      return {
+        success: true,
+        diff,
+      };
+    } catch (error) {
+      logger.error('Failed to get file diff:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get file diff',
+      };
+    }
+  });
+
+  /**
+   * Get commits in a worktree branch
+   *
+   * @param worktreePath - Path to the worktree
+   * @returns Array of commits
+   */
+  ipcMain.handle('worktree:get-commits', async (_event, worktreePath: string) => {
+    try {
+      if (!worktreePath) {
+        throw new Error('worktreePath is required');
+      }
+
+      logger.info('Getting worktree commits', { worktreePath });
+
+      const commits = await gitWorktreeService.getWorktreeCommits(worktreePath);
+
+      return {
+        success: true,
+        commits,
+      };
+    } catch (error) {
+      logger.error('Failed to get worktree commits:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get worktree commits',
+        commits: [],
+      };
+    }
+  });
+
+  /**
+   * Commit changes in a worktree
+   *
+   * @param worktreePath - Path to the worktree
+   * @param message - Commit message
+   * @param files - Optional array of specific files to commit
+   * @returns Commit information
+   */
+  ipcMain.handle('worktree:commit', async (_event, worktreePath: string, message: string, files?: string[]) => {
+    try {
+      if (!worktreePath) {
+        throw new Error('worktreePath is required');
+      }
+      if (!message) {
+        throw new Error('message is required');
+      }
+
+      logger.info('Committing changes', { worktreePath, message, fileCount: files?.length });
+
+      const commit = await gitWorktreeService.commitChanges(worktreePath, message, files);
+
+      return {
+        success: true,
+        commit,
+      };
+    } catch (error) {
+      logger.error('Failed to commit changes:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to commit changes',
+      };
+    }
+  });
+
+  /**
+   * Merge worktree branch to main
+   *
+   * @param worktreePath - Path to the worktree
+   * @param mainRepoPath - Path to the main repository
+   * @returns Merge result
+   */
+  ipcMain.handle('worktree:merge', async (_event, worktreePath: string, mainRepoPath: string) => {
+    try {
+      if (!worktreePath) {
+        throw new Error('worktreePath is required');
+      }
+      if (!mainRepoPath) {
+        throw new Error('mainRepoPath is required');
+      }
+
+      logger.info('Merging worktree to main', { worktreePath, mainRepoPath });
+
+      const result = await gitWorktreeService.mergeToMain(worktreePath, mainRepoPath);
+
+      return {
+        success: result.success,
+        message: result.message,
+        conflictedFiles: result.conflictedFiles,
+      };
+    } catch (error) {
+      logger.error('Failed to merge to main:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to merge to main',
+      };
+    }
+  });
+
   logger.info('Worktree handlers registered');
 }

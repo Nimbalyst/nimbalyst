@@ -19,6 +19,7 @@ import { InputModal } from '../InputModal';
 import { createInitialFileContent } from '../../utils/fileUtils';
 import { getFileName } from '../../utils/pathUtils';
 import { WorktreeContentMode } from './WorktreeModeToggle';
+import { DiffModeView } from '../DiffMode';
 import './WorktreeFilesMode.css';
 
 interface FileTreeItem {
@@ -575,6 +576,23 @@ const WorktreeFilesMode = forwardRef<WorktreeFilesModeRef, WorktreeFilesModeProp
         style={{ display: isActive ? 'flex' : 'none', width: '100%', height: '100%' }}
       >
         {chatPanel}
+      </div>
+    );
+  }
+
+  // When in changes mode, show the diff view
+  if (mode === 'changes') {
+    return (
+      <div
+        key={`changes-mode-${sessionId}`}
+        className="worktree-changes-mode"
+        style={{ display: isActive ? 'flex' : 'none', width: '100%', height: '100%' }}
+      >
+        <DiffModeView
+          worktreePath={worktreePath}
+          workspacePath={workspacePath}
+          isActive={isActive}
+        />
       </div>
     );
   }

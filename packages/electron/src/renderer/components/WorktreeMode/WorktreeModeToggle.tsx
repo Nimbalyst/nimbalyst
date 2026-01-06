@@ -2,7 +2,7 @@ import React from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import './WorktreeModeToggle.css';
 
-export type WorktreeContentMode = 'agent' | 'files';
+export type WorktreeContentMode = 'agent' | 'files' | 'changes';
 
 interface WorktreeModeToggleProps {
   mode: WorktreeContentMode;
@@ -11,7 +11,8 @@ interface WorktreeModeToggleProps {
 
 const MODE_OPTIONS: Array<{ value: WorktreeContentMode; label: string; icon: string }> = [
   { value: 'agent', label: 'Agent', icon: 'schedule' },
-  { value: 'files', label: 'Files', icon: 'description' }
+  { value: 'files', label: 'Files', icon: 'description' },
+  { value: 'changes', label: 'Changes', icon: 'difference' }
 ];
 
 export function WorktreeModeToggle({ mode, onChange }: WorktreeModeToggleProps) {

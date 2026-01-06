@@ -3,6 +3,13 @@
  *
  * Provides methods to create, delete, and query git worktrees using simple-git.
  * Worktrees are parallel working directories that share the same git repository.
+ *
+ * CROSS-PLATFORM NOTES:
+ * - Git internally uses forward slashes (/) for paths in all output, even on Windows
+ * - All git command output (diff, status, log) returns paths with forward slashes
+ * - Manual diff generation also uses forward slashes to match git's format
+ * - Local file operations use path.join() for platform-specific path separators
+ * - This design ensures consistent diff output across all platforms
  */
 
 import simpleGit, { SimpleGit } from 'simple-git';
@@ -35,6 +42,38 @@ export interface WorktreeStatus {
   commitsAhead: number;
   commitsBehind: number;
   isMerged: boolean;
+}
+
+/**
+ * Diff result for a file
+ */
+export interface FileDiffResult {
+  filePath: string;
+  diff: string;
+  oldContent: string;
+  newContent: string;
+  status: 'added' | 'modified' | 'deleted';
+}
+
+/**
+ * Commit information
+ */
+export interface CommitInfo {
+  hash: string;
+  shortHash: string;
+  message: string;
+  author: string;
+  date: Date;
+  files: string[];
+}
+
+/**
+ * Result of a merge operation
+ */
+export interface MergeResult {
+  success: boolean;
+  message: string;
+  conflictedFiles?: string[];
 }
 
 /**
@@ -376,6 +415,487 @@ export class GitWorktreeService {
 
     // Fallback to 'main'
     return 'main';
+  }
+
+  /**
+   * Validate file path to prevent path traversal and command injection
+   * @private
+   */
+  private validateFilePath(filePath: string): void {
+    // Check for null bytes (command injection)
+    if (filePath.includes('\0')) {
+      throw new Error('Invalid file path: contains null bytes');
+    }
+
+    // Check for path traversal attempts
+    const normalized = path.normalize(filePath);
+    if (normalized.startsWith('..') || normalized.includes('/../')) {
+      throw new Error('Invalid file path: path traversal detected');
+    }
+
+    // Check for absolute paths (should be relative)
+    if (path.isAbsolute(filePath)) {
+      throw new Error('Invalid file path: must be relative');
+    }
+  }
+
+  /**
+   * Get diff for a specific file in a worktree
+   *
+   * @param worktreePath - Path to the worktree
+   * @param filePath - Relative path to the file
+   * @returns File diff result with old and new content
+   */
+  async getFileDiff(worktreePath: string, filePath: string): Promise<FileDiffResult> {
+    if (!worktreePath) {
+      throw new Error('worktreePath is required');
+    }
+    if (!filePath) {
+      throw new Error('filePath is required');
+    }
+
+    // Validate file path for security
+    this.validateFilePath(filePath);
+
+    logger.info('Getting file diff', { worktreePath, filePath });
+
+    const git: SimpleGit = simpleGit(worktreePath);
+
+    try {
+      // Get base branch
+      const baseBranch = await this.inferBaseBranch(git);
+
+      // Get old content from base branch
+      let oldContent = '';
+      let status: 'added' | 'modified' | 'deleted' = 'modified';
+
+      try {
+        oldContent = await git.show([`${baseBranch}:${filePath}`]);
+      } catch {
+        // File doesn't exist in base branch - it's a new file
+        status = 'added';
+      }
+
+      // Get new content from current working tree
+      let newContent = '';
+      const absolutePath = path.join(worktreePath, filePath);
+      try {
+        if (fs.existsSync(absolutePath)) {
+          newContent = fs.readFileSync(absolutePath, 'utf-8');
+        } else {
+          // File was deleted
+          status = 'deleted';
+        }
+      } catch {
+        status = 'deleted';
+      }
+
+      // Get the diff - use most efficient approach based on status
+      let diff = '';
+
+      // Try diff between base branch and HEAD (committed changes)
+      try {
+        diff = await git.diff([`${baseBranch}...HEAD`, '--', filePath]);
+        if (diff.trim()) {
+          // Found committed diff, return early
+          return {
+            filePath,
+            diff,
+            oldContent,
+            newContent,
+            status,
+          };
+        }
+      } catch {
+        // Ignore error, try next approach
+      }
+
+      // Check for uncommitted changes (working directory)
+      try {
+        diff = await git.diff(['--', filePath]);
+        if (diff.trim()) {
+          // Found working directory diff, return early
+          return {
+            filePath,
+            diff,
+            oldContent,
+            newContent,
+            status,
+          };
+        }
+      } catch {
+        // Ignore error
+      }
+
+      // Check staged changes
+      try {
+        diff = await git.diff(['--cached', '--', filePath]);
+        if (diff.trim()) {
+          // Found staged diff, return early
+          return {
+            filePath,
+            diff,
+            oldContent,
+            newContent,
+            status,
+          };
+        }
+      } catch {
+        // Ignore error
+      }
+
+      // If still no diff but file is new (untracked), generate a simple diff
+      if (status === 'added' && newContent) {
+        const lines = newContent.split('\n');
+        diff = `diff --git a/${filePath} b/${filePath}
+new file mode 100644
+--- /dev/null
++++ b/${filePath}
+@@ -0,0 +1,${lines.length} @@
+${lines.map(line => '+' + line).join('\n')}`;
+
+        return {
+          filePath,
+          diff,
+          oldContent,
+          newContent,
+          status,
+        };
+      }
+
+      // If file is deleted, generate deletion diff
+      if (status === 'deleted' && oldContent) {
+        const lines = oldContent.split('\n');
+        diff = `diff --git a/${filePath} b/${filePath}
+deleted file mode 100644
+--- a/${filePath}
++++ /dev/null
+@@ -1,${lines.length} +0,0 @@
+${lines.map(line => '-' + line).join('\n')}`;
+
+        return {
+          filePath,
+          diff,
+          oldContent,
+          newContent,
+          status,
+        };
+      }
+
+      // If we have both old and new content but still no diff, generate one
+      if (oldContent !== newContent) {
+        // Use git diff to generate the diff between old and new content
+        try {
+          diff = await git.diff([`${baseBranch}`, '--', filePath]);
+          if (diff.trim()) {
+            return {
+              filePath,
+              diff,
+              oldContent,
+              newContent,
+              status,
+            };
+          }
+        } catch {
+          // Log warning and fall back to manual diff generation
+          logger.warn('Git diff failed, generating manual diff', { filePath });
+
+          // Generate a simple unified diff manually
+          // Note: This is a crude fallback and may not be accurate for all cases
+          const oldLines = oldContent.split('\n');
+          const newLines = newContent.split('\n');
+          diff = `diff --git a/${filePath} b/${filePath}
+--- a/${filePath}
++++ b/${filePath}
+@@ -1,${oldLines.length} +1,${newLines.length} @@
+${oldLines.map(line => '-' + line).join('\n')}
+${newLines.map(line => '+' + line).join('\n')}`;
+        }
+      }
+
+      return {
+        filePath,
+        diff,
+        oldContent,
+        newContent,
+        status,
+      };
+    } catch (error) {
+      logger.error('Failed to get file diff', { error, worktreePath, filePath });
+      throw new Error(`Failed to get file diff: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * Get commits in the worktree branch that are not in the base branch
+   *
+   * @param worktreePath - Path to the worktree
+   * @returns Array of commit information
+   */
+  async getWorktreeCommits(worktreePath: string): Promise<CommitInfo[]> {
+    if (!worktreePath) {
+      throw new Error('worktreePath is required');
+    }
+
+    logger.info('Getting worktree commits', { worktreePath });
+
+    const git: SimpleGit = simpleGit(worktreePath);
+
+    try {
+      // Get current branch and base branch
+      const currentBranch = (await git.revparse(['--abbrev-ref', 'HEAD'])).trim();
+      const baseBranch = await this.inferBaseBranch(git);
+
+      // Get commits with file information in a single command
+      // Format: hash, short hash, subject, author, date, then files separated by NUL
+      // Use %x00 (NUL) as delimiter to handle special characters in messages
+      const logOutput = await git.raw([
+        'log',
+        `${baseBranch}..${currentBranch}`,
+        '--name-only',
+        '--format=%H%x00%h%x00%s%x00%an%x00%aI%x00',
+      ]);
+
+      const commits: CommitInfo[] = [];
+
+      if (logOutput.trim()) {
+        // Split by double newline to separate commits
+        const commitBlocks = logOutput.trim().split('\n\n');
+
+        for (const block of commitBlocks) {
+          const lines = block.split('\n');
+          if (lines.length === 0) continue;
+
+          // First line contains commit metadata
+          const [hash, shortHash, message, author, dateStr] = lines[0].split('\x00');
+
+          if (!hash) continue;
+
+          // Remaining lines are files (skip empty lines)
+          const files = lines.slice(1).filter(Boolean);
+
+          commits.push({
+            hash,
+            shortHash,
+            message,
+            author,
+            date: new Date(dateStr),
+            files,
+          });
+        }
+      }
+
+      logger.info('Found worktree commits', { count: commits.length });
+      return commits;
+    } catch (error) {
+      logger.error('Failed to get worktree commits', { error, worktreePath });
+      throw new Error(`Failed to get worktree commits: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * Commit changes in the worktree
+   *
+   * @param worktreePath - Path to the worktree
+   * @param message - Commit message
+   * @param files - Optional array of specific files to commit (commits all changes if not specified)
+   * @returns Commit information
+   */
+  async commitChanges(worktreePath: string, message: string, files?: string[]): Promise<CommitInfo> {
+    if (!worktreePath) {
+      throw new Error('worktreePath is required');
+    }
+    if (!message) {
+      throw new Error('message is required');
+    }
+
+    logger.info('Committing changes', { worktreePath, message, fileCount: files?.length });
+
+    const git: SimpleGit = simpleGit(worktreePath);
+
+    try {
+      // Stage files
+      if (files && files.length > 0) {
+        await git.add(files);
+      } else {
+        // Stage all changes
+        await git.add('-A');
+      }
+
+      // Check if there are staged changes
+      const status = await git.status();
+      if (status.staged.length === 0) {
+        throw new Error('No changes to commit');
+      }
+
+      // Commit
+      const commitResult = await git.commit(message);
+
+      if (!commitResult.commit) {
+        throw new Error('Commit failed - no commit hash returned');
+      }
+
+      // Get commit details
+      const logResult = await git.log(['-1', commitResult.commit]);
+      const commit = logResult.latest;
+
+      if (!commit) {
+        throw new Error('Failed to get commit details');
+      }
+
+      // Get files in commit
+      const filesOutput = await git.raw(['show', '--name-only', '--format=', commit.hash]);
+      const committedFiles = filesOutput.trim().split('\n').filter(Boolean);
+
+      logger.info('Changes committed successfully', { hash: commit.hash });
+
+      return {
+        hash: commit.hash,
+        shortHash: commit.hash.substring(0, 7),
+        message: commit.message,
+        author: commit.author_name,
+        date: new Date(commit.date),
+        files: committedFiles,
+      };
+    } catch (error) {
+      logger.error('Failed to commit changes', { error, worktreePath });
+      throw new Error(`Failed to commit changes: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * Merge worktree branch into the base branch
+   *
+   * @param worktreePath - Path to the worktree
+   * @param mainRepoPath - Path to the main repository
+   * @returns Merge result
+   */
+  async mergeToMain(worktreePath: string, mainRepoPath: string): Promise<MergeResult> {
+    if (!worktreePath) {
+      throw new Error('worktreePath is required');
+    }
+    if (!mainRepoPath) {
+      throw new Error('mainRepoPath is required');
+    }
+
+    logger.info('Merging worktree to main', { worktreePath, mainRepoPath });
+
+    const worktreeGit: SimpleGit = simpleGit(worktreePath);
+    const mainGit: SimpleGit = simpleGit(mainRepoPath);
+
+    try {
+      // Check for uncommitted changes in worktree
+      const worktreeStatus = await worktreeGit.status();
+      if (!worktreeStatus.isClean()) {
+        return {
+          success: false,
+          message: 'Cannot merge: uncommitted changes in worktree. Please commit or discard changes first.',
+        };
+      }
+
+      // Check for uncommitted changes in main repo
+      const mainStatus = await mainGit.status();
+      if (!mainStatus.isClean()) {
+        return {
+          success: false,
+          message: 'Cannot merge: uncommitted changes in main repository. Please commit or stash changes first.',
+        };
+      }
+
+      // Get worktree branch name
+      const worktreeBranch = await worktreeGit.revparse(['--abbrev-ref', 'HEAD']);
+      const baseBranch = await this.inferBaseBranch(mainGit);
+
+      logger.info('Merge details', { worktreeBranch, baseBranch });
+
+      // Switch to base branch in main repo
+      await mainGit.checkout(baseBranch);
+
+      // Pull latest changes - fail if this fails to avoid merging stale code
+      try {
+        await mainGit.pull('origin', baseBranch);
+        logger.info('Successfully pulled latest changes from remote');
+      } catch (pullError) {
+        logger.error('Failed to pull latest changes', { pullError });
+        return {
+          success: false,
+          message: 'Failed to pull latest changes from remote. Please update the main branch manually before merging.',
+        };
+      }
+
+      // Attempt merge
+      try {
+        await mainGit.merge([worktreeBranch, '--no-ff', '-m', `Merge branch '${worktreeBranch}'`]);
+
+        logger.info('Merge completed successfully');
+        return {
+          success: true,
+          message: `Successfully merged ${worktreeBranch} into ${baseBranch}`,
+        };
+      } catch (mergeError) {
+        // Check for merge conflicts
+        const status = await mainGit.status();
+        if (status.conflicted.length > 0) {
+          // Abort the merge
+          await mainGit.merge(['--abort']);
+
+          return {
+            success: false,
+            message: 'Merge conflicts detected. Please resolve conflicts manually.',
+            conflictedFiles: status.conflicted,
+          };
+        }
+
+        throw mergeError;
+      }
+    } catch (error) {
+      logger.error('Failed to merge to main', { error, worktreePath });
+      throw new Error(`Failed to merge to main: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * Get all changed files in the worktree compared to base branch
+   *
+   * @param worktreePath - Path to the worktree
+   * @returns Array of changed file paths with their status
+   */
+  async getChangedFiles(worktreePath: string): Promise<Array<{ path: string; status: 'added' | 'modified' | 'deleted' }>> {
+    if (!worktreePath) {
+      throw new Error('worktreePath is required');
+    }
+
+    logger.info('Getting changed files', { worktreePath });
+
+    const git: SimpleGit = simpleGit(worktreePath);
+
+    try {
+      // Get only uncommitted changes from git status
+      // This shows files that need to be staged/committed, not the full branch diff
+      const gitStatus = await git.status();
+
+      const changedFiles: Array<{ path: string; status: 'added' | 'modified' | 'deleted' }> = [];
+
+      for (const file of gitStatus.files) {
+        let status: 'added' | 'modified' | 'deleted';
+
+        if (file.index === 'D' || file.working_dir === 'D') {
+          status = 'deleted';
+        } else if (file.index === '?' || file.index === 'A') {
+          status = 'added';
+        } else {
+          status = 'modified';
+        }
+
+        changedFiles.push({ path: file.path, status });
+      }
+
+      logger.info('Found changed files', { count: changedFiles.length });
+      return changedFiles;
+    } catch (error) {
+      logger.error('Failed to get changed files', { error, worktreePath });
+      throw new Error(`Failed to get changed files: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 }
 

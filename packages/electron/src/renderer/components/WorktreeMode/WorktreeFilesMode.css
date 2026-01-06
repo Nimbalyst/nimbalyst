@@ -14,6 +14,14 @@
   background: var(--surface-primary, #121417);
 }
 
+.worktree-changes-mode {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface-primary, #121417);
+}
+
 .worktree-files-editor {
   flex: 1;
   min-width: 0;
