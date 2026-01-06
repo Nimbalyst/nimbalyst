@@ -1,7 +1,7 @@
 ---
-description: Publish tested internal release to public repo
+description: Publish tested internal release to public repo (as draft)
 ---
-Publish the tested internal release to the public repository following this automated workflow:
+Publish the tested internal release to the public repository as a **draft release** following this automated workflow:
 
 ## PHASE 1: COLLECT INFORMATION
 
@@ -61,8 +61,9 @@ Publish the tested internal release to the public repository following this auto
   - The workflow will:
     - Fetch PUBLIC_RELEASE_NOTES.md from the repo
     - Download artifacts from private release
-    - Create public release with the notes
+    - Create a **draft** public release with the notes
     - Upload all build artifacts
+  - **Note**: The release is created as a draft - you must manually publish it from the GitHub releases page when ready
 
 3. **Provide confirmation**:
   - Show workflow trigger URL
