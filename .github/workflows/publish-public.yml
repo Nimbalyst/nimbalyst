@@ -123,16 +123,19 @@ jobs:
 
           The app will automatically check for updates."
 
-          # Create release in public repository
+          # Create draft release in public repository
           if gh release create "$VERSION" \
             --repo nimbalyst/nimbalyst \
             --title "Nimbalyst $VERSION" \
             --notes "${RELEASE_BODY}" \
+            --draft \
             public-release-files/*; then
-            echo "✅ Successfully created release in public repository!"
+            echo "✅ Successfully created DRAFT release in public repository!"
             echo ""
-            echo "📦 Public release available at:"
+            echo "📦 Draft release available at:"
             echo "   https://github.com/nimbalyst/nimbalyst/releases/tag/$VERSION"
+            echo ""
+            echo "⚠️  Remember to manually publish the release when ready!"
           else
             echo "❌ Failed to create release in public repository"
             echo "Possible causes:"
@@ -179,12 +182,12 @@ jobs:
         run: |
           VERSION="${{ inputs.version }}"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "✅ Public Release Complete!"
+          echo "✅ Draft Release Created!"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo ""
           echo "📦 Version: $VERSION"
-          echo "🔗 Public Release: https://github.com/nimbalyst/nimbalyst/releases/tag/$VERSION"
+          echo "🔗 Draft Release: https://github.com/nimbalyst/nimbalyst/releases/tag/$VERSION"
           echo "🔗 Private Release: https://github.com/nimbalyst/nimbalyst-code/releases/tag/$VERSION"
           echo ""
-          echo "🎉 Users can now download the latest version!"
+          echo "⚠️  NEXT STEP: Manually publish the draft release when ready!"
           echo ""
