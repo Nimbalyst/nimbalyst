@@ -148,7 +148,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const isMarkdown = fileType === 'markdown';
   const isImage = fileType === 'image';
   const isCustom = fileType === 'custom';
-  const isMockupFile = isCustom && filePath.toLowerCase().endsWith('.mockup.html');
 
   // Check if the custom editor supports source mode (from registry)
   const customEditorSupportsSourceMode = useMemo(() => {
@@ -191,6 +190,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const [showConflictDialog, setShowConflictDialog] = useState(false);
   const [conflictDialogContent, setConflictDialogContent] = useState<string>('');
   const [showMonacoDiffBar, setShowMonacoDiffBar] = useState(false); // For Monaco diff approval bar
+  const [showCustomEditorDiffBar, setShowCustomEditorDiffBar] = useState(false); // For custom editor diff approval bar
   const [isEditorReady, setIsEditorReady] = useState(false); // Track when editor is mounted and ready
   const [customEditorSourceMode, setCustomEditorSourceMode] = useState(false); // Source mode for custom editors
   const [diffSessionInfo, setDiffSessionInfo] = useState<{sessionId: string; sessionTitle?: string; editedAt?: number; provider?: string} | null>(null); // Session info for diff approval bar
@@ -267,6 +267,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const isApplyingDiffRef = useRef<boolean>(false); // Track programmatic diff application
   const editorHostFileChangeCallbackRef = useRef<((newContent: string) => void) | null>(null); // For EditorHost file change subscription
   const diffRequestCallbackRef = useRef<((config: DiffConfig) => void) | null>(null); // For EditorHost diff request subscription
+  const diffClearedCallbackRef = useRef<(() => void) | null>(null); // For EditorHost diff cleared subscription
   const editorHostSaveRequestCallbackRef = useRef<(() => void | Promise<void>) | null>(null); // For EditorHost save request subscription
   const sourceModeChangedCallbackRef = useRef<((isSourceMode: boolean) => void) | null>(null); // For EditorHost source mode subscription
   const themeChangeCallbackRef = useRef<((theme: 'light' | 'dark' | 'crystal-dark') => void) | null>(null); // For EditorHost theme change subscription
@@ -502,7 +503,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     if (!window.electronAPI?.history) return;
     // Wait for editor to be ready before checking pending diffs
     if (!isEditorReady) return;
-    if (!editorRef.current && !isMockupFile) return;
+    if (!editorRef.current && !isCustom) return;
     // Skip pending diff check when in source mode - source mode is for raw editing
     if (customEditorSourceMode) return;
 
@@ -548,16 +549,17 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
         // If content differs, apply the diff
         if (oldContent !== newContent) {
-          if (isMockupFile) {
-            // Route through EditorHost callback - MockupViewer handles diff mode
-            if (diffRequestCallbackRef.current) {
-              diffRequestCallbackRef.current({
-                originalContent: oldContent,
-                modifiedContent: newContent,
-                tagId: pendingTag.id,
-                sessionId: pendingTag.sessionId,
-              });
-            }
+          // Route through EditorHost callback if custom editor has subscribed to diff requests
+          if (diffRequestCallbackRef.current) {
+            setShowCustomEditorDiffBar(true);
+            // Fetch session info for the diff approval bar
+            fetchDiffSessionInfo(pendingTag.sessionId, pendingTag.createdAt ? new Date(pendingTag.createdAt).getTime() : Date.now());
+            diffRequestCallbackRef.current({
+              originalContent: oldContent,
+              modifiedContent: newContent,
+              tagId: pendingTag.id,
+              sessionId: pendingTag.sessionId,
+            });
             setContent(oldContent);
             contentRef.current = oldContent;
             initialContentRef.current = oldContent;
@@ -625,7 +627,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     };
 
     checkAndApplyPendingDiffs();
-  }, [filePath, isMarkdown, isEditorReady, isMockupFile, customEditorSourceMode]); // Wait for editor to be ready before checking pending diffs
+  }, [filePath, isMarkdown, isEditorReady, isCustom, customEditorSourceMode]); // Wait for editor to be ready before checking pending diffs
 
 
   // Helper: Save file with history snapshot
@@ -971,8 +973,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         }
 
         // If there are unreviewed pending AI edit tags, apply diff mode (skip conflict dialog)
-        const supportsMockupDiff = isCustom && isMockupFile;
-        if (pendingTags && pendingTags.length > 0 && (!isCustom || supportsMockupDiff)) {
+        // Custom editors that subscribe to onDiffRequested can also handle diff mode
+        const customEditorSupportsDiff = isCustom && diffRequestCallbackRef.current !== null;
+        if (pendingTags && pendingTags.length > 0 && (!isCustom || customEditorSupportsDiff)) {
           // Get the baseline for diff comparison
           // This will be the latest incremental-approval tag if it exists, otherwise the pre-edit tag
           const baseline = await window.electronAPI.invoke('history:get-diff-baseline', data.path);
@@ -1001,18 +1004,19 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             filePath: data.path
           };
 
-          if (isMockupFile) {
+          // Route through EditorHost callback if custom editor has subscribed to diff requests
+          if (diffRequestCallbackRef.current) {
             diffUpdatePromise = (async () => {
               setPendingAIEditTag(tagInfo);
-              // Route through EditorHost callback - MockupViewer handles diff mode
-              if (diffRequestCallbackRef.current) {
-                diffRequestCallbackRef.current({
-                  originalContent: oldContent,
-                  modifiedContent: newContent,
-                  tagId: pendingTags[0].id,
-                  sessionId: pendingTags[0].sessionId,
-                });
-              }
+              setShowCustomEditorDiffBar(true);
+              // Fetch session info for the diff approval bar
+              fetchDiffSessionInfo(pendingTags[0].sessionId, pendingTags[0].createdAt ? new Date(pendingTags[0].createdAt).getTime() : Date.now());
+              diffRequestCallbackRef.current!({
+                originalContent: oldContent,
+                modifiedContent: newContent,
+                tagId: pendingTags[0].id,
+                sessionId: pendingTags[0].sessionId,
+              });
               setContent(oldContent);
               contentRef.current = oldContent;
               initialContentRef.current = oldContent;
@@ -1829,6 +1833,96 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     }
   }, [filePath]);
 
+  // Custom editor diff mode accept/reject handlers
+  const handleCustomEditorDiffAccept = useCallback(async () => {
+    if (!pendingAIEditTagRef.current) {
+      logger.ui.warn('[TabEditor] Cannot accept custom editor diff - no pending tag');
+      return;
+    }
+
+    try {
+      logger.ui.info('[TabEditor] Accepting custom editor diff', {
+        tagId: pendingAIEditTagRef.current.tagId,
+        filePath
+      });
+
+      // The custom editor already has the modified content displayed
+      // We just need to save it (it's already on disk from the AI edit)
+      // and mark the tag as reviewed
+
+      // Mark tag as reviewed
+      if (window.electronAPI.history) {
+        await window.electronAPI.history.updateTagStatus(
+          filePath,
+          pendingAIEditTagRef.current.tagId,
+          'reviewed',
+          workspaceId
+        );
+      }
+
+      // Clear pending tag ref
+      setPendingAIEditTag(null);
+
+      // Hide the diff approval bar and clear session info
+      setShowCustomEditorDiffBar(false);
+      setDiffSessionInfo(null);
+
+      // Notify the custom editor that diff mode has ended
+      diffClearedCallbackRef.current?.();
+
+      logger.ui.info('[TabEditor] Custom editor diff accepted successfully');
+    } catch (error) {
+      logger.ui.error('[TabEditor] Error accepting custom editor diff:', error);
+    }
+  }, [filePath, workspaceId]);
+
+  const handleCustomEditorDiffReject = useCallback(async () => {
+    if (!pendingAIEditTagRef.current) {
+      logger.ui.warn('[TabEditor] Cannot reject custom editor diff - no pending tag');
+      return;
+    }
+
+    try {
+      logger.ui.info('[TabEditor] Rejecting custom editor diff');
+
+      // Get the original content from the pending tag
+      const baseline = await window.electronAPI.invoke('history:get-diff-baseline', filePath);
+      if (!baseline) {
+        logger.ui.error('[TabEditor] Cannot reject - no baseline found');
+        return;
+      }
+
+      // Write original content back to disk
+      await window.electronAPI.saveFile(baseline.content, filePath);
+
+      // Mark tag as reviewed
+      if (window.electronAPI.history) {
+        await window.electronAPI.history.updateTagStatus(
+          filePath,
+          pendingAIEditTagRef.current.tagId,
+          'reviewed',
+          workspaceId
+        );
+      }
+
+      // Clear pending tag ref
+      setPendingAIEditTag(null);
+
+      // Hide the diff approval bar and clear session info
+      setShowCustomEditorDiffBar(false);
+      setDiffSessionInfo(null);
+
+      // Notify the custom editor that diff mode has ended
+      diffClearedCallbackRef.current?.();
+
+      // The file change notification will also trigger the editor to reload with original content
+
+      logger.ui.info('[TabEditor] Custom editor diff rejected successfully');
+    } catch (error) {
+      logger.ui.error('[TabEditor] Error rejecting custom editor diff:', error);
+    }
+  }, [filePath, workspaceId]);
+
   // Create EditorHost for custom editors
   // This is memoized and uses refs for changing values to stay stable across renders
   // Only recreate when filePath or workspaceId changes (genuinely new file/workspace)
@@ -1978,6 +2072,14 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       // Check if diff mode is active
       isDiffModeActive: () => {
         return pendingAIEditTagRef.current !== null;
+      },
+
+      // Subscribe to diff being cleared externally (accept/reject from unified header)
+      subscribeToDiffCleared: (callback: () => void): (() => void) => {
+        diffClearedCallbackRef.current = callback;
+        return () => {
+          diffClearedCallbackRef.current = null;
+        };
       },
 
       // ============ SOURCE MODE ============
@@ -2175,23 +2277,53 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               // Built-in editors (no extensionId) are rendered directly
               if (registration.extensionId) {
                 return (
-                  <CustomEditorWrapper
-                    key={filePath}
-                    component={registration.component}
-                    host={editorHost}
-                    extensionId={registration.extensionId}
-                    componentName={registration.componentName}
-                  />
+                  <>
+                    {showCustomEditorDiffBar && (
+                      <UnifiedDiffHeader
+                        filePath={filePath}
+                        fileName={fileName}
+                        capabilities={{
+                          onAcceptAll: handleCustomEditorDiffAccept,
+                          onRejectAll: handleCustomEditorDiffReject,
+                        }}
+                        sessionInfo={diffSessionInfo || undefined}
+                        onGoToSession={onOpenSessionInChat ? handleGoToSession : undefined}
+                        editorType="custom"
+                      />
+                    )}
+                    <CustomEditorWrapper
+                      key={filePath}
+                      component={registration.component}
+                      host={editorHost}
+                      extensionId={registration.extensionId}
+                      componentName={registration.componentName}
+                    />
+                  </>
                 );
               }
 
               // Built-in custom editors (e.g., mockup editor) rendered directly
               const CustomEditor = registration.component;
               return (
-                <CustomEditor
-                  key={filePath}
-                  host={editorHost}
-                />
+                <>
+                  {showCustomEditorDiffBar && (
+                    <UnifiedDiffHeader
+                      filePath={filePath}
+                      fileName={fileName}
+                      capabilities={{
+                        onAcceptAll: handleCustomEditorDiffAccept,
+                        onRejectAll: handleCustomEditorDiffReject,
+                      }}
+                      sessionInfo={diffSessionInfo || undefined}
+                      onGoToSession={onOpenSessionInChat ? handleGoToSession : undefined}
+                      editorType="custom"
+                    />
+                  )}
+                  <CustomEditor
+                    key={filePath}
+                    host={editorHost}
+                  />
+                </>
               );
             }
 

@@ -60,6 +60,9 @@ export interface EditorHostOptions {
   /** Optional: Check if diff mode is active */
   isDiffModeActive?: () => boolean;
 
+  /** Optional: Subscribe to diff being cleared externally */
+  subscribeToDiffCleared?: (callback: () => void) => () => void;
+
   // ============ SOURCE MODE (OPTIONAL) ============
 
   /** Whether this editor supports source mode */
@@ -149,6 +152,10 @@ export function createEditorHost(options: EditorHostOptions): EditorHost {
       : undefined,
 
     isDiffModeActive: options.isDiffModeActive,
+
+    onDiffCleared: options.subscribeToDiffCleared
+      ? (callback: () => void) => options.subscribeToDiffCleared!(callback)
+      : undefined,
 
     // ============ SOURCE MODE (OPTIONAL) ============
     supportsSourceMode: options.supportsSourceMode,

@@ -166,6 +166,16 @@ export interface EditorHost {
    */
   isDiffModeActive?(): boolean;
 
+  /**
+   * Subscribe to diff mode being cleared externally.
+   * Called when the user accepts/rejects diff via the unified diff header.
+   * Editor should clear its diff state when this fires.
+   *
+   * @param callback Called when diff mode should be cleared
+   * @returns Unsubscribe function
+   */
+  onDiffCleared?(callback: () => void): () => void;
+
   // ============ SOURCE MODE (OPTIONAL) ============
 
   /**

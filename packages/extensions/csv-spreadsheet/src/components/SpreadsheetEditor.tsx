@@ -14,11 +14,12 @@
 import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { RevoGrid, type RevoGridCustomEvent, type ColumnRegular } from '@revolist/react-datagrid';
 import type { RevoGridElement } from '../revogrid-types';
-import type { EditorHostProps, NormalizedSelectionRange, ColumnFormat } from '../types';
+import type { EditorHostProps, NormalizedSelectionRange, ColumnFormat, DiffState, CellDiff } from '../types';
 import { useSpreadsheetMetadata } from '../hooks/useSpreadsheetMetadata';
 import { createGridOperations, type GridOperations } from '../utils/gridOperations';
 import { UndoRedoPlugin } from '../plugins/UndoRedoPlugin';
 import { columnIndexToLetter, columnLetterToIndex, generateColumnHeaders, parseCSV } from '../utils/csvParser';
+import { computeDiff, getCellDiffClass, getCellPreviousValue, getRowDiffClass } from '../utils/diffCompute';
 import { isFormula } from '../utils/formulaEngine';
 import { getColumnTypeName } from '../utils/formatters';
 import { FormulaBar, type FormulaBarHandle } from './FormulaBar';
@@ -71,7 +72,8 @@ function getColumnAlignmentClass(format: ColumnFormat | undefined): string {
 function generateColumns(
   columnCount: number,
   frozenColumnCount: number = 0,
-  columnFormats: Record<number, ColumnFormat> = {}
+  columnFormats: Record<number, ColumnFormat> = {},
+  diffState: DiffState | null = null
 ): ColumnRegular[] {
   const columnHeaders = generateColumnHeaders(columnCount);
 
@@ -85,7 +87,41 @@ function generateColumns(
       size: 120,
       editor: 'sheets',
       ...(index < frozenColumnCount ? { pin: 'colPinStart' as const } : {}),
-      ...(alignClass ? { cellProperties: () => ({ class: { [alignClass]: true } }) } : {}),
+      cellProperties: (cellData: { model: Record<string, unknown>; rowIndex: number }) => {
+        const classes: Record<string, boolean> = {};
+
+        // Apply alignment class
+        if (alignClass) {
+          classes[alignClass] = true;
+        }
+
+        // Detect if this is a pinned (header) row by checking for header-row class
+        const isPinned = cellData.model._rowClass === 'header-row';
+
+        // Apply diff class if in diff mode
+        if (diffState?.isActive) {
+          const diffClass = getCellDiffClass(diffState, cellData.rowIndex, letter, isPinned);
+          if (diffClass) {
+            classes[diffClass] = true;
+          }
+        }
+
+        // Build props object
+        const props: { class?: Record<string, boolean>; title?: string } = {};
+        if (Object.keys(classes).length > 0) {
+          props.class = classes;
+        }
+
+        // Add tooltip for previous value on modified/deleted cells
+        if (diffState?.isActive) {
+          const previousValue = getCellPreviousValue(diffState, cellData.rowIndex, letter, isPinned);
+          if (previousValue !== undefined) {
+            props.title = `Previous: ${previousValue}`;
+          }
+        }
+
+        return props;
+      },
     };
   });
 }
@@ -159,6 +195,9 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
   // Column format dialog state
   const [formatDialogColumn, setFormatDialogColumn] = useState<number | null>(null);
 
+  // Diff mode state for AI edit review
+  const [diffState, setDiffState] = useState<DiffState | null>(null);
+
   // Stable editors object
   const editors = useMemo(() => ({ sheets: SheetsTextEditor }), []);
 
@@ -170,8 +209,8 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
 
   // Memoized column definitions
   const columns = useMemo(
-    () => generateColumns(displayColumnCount, frozenColumnCount, columnFormats),
-    [displayColumnCount, frozenColumnCount, columnFormats]
+    () => generateColumns(displayColumnCount, frozenColumnCount, columnFormats, diffState),
+    [displayColumnCount, frozenColumnCount, columnFormats, diffState]
   );
 
   // Theme for RevoGrid
@@ -280,8 +319,14 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
         grid.pinnedTopSource = gridData.pinnedTop;
       }
       spreadsheetMeta.markClean();
+
+      // Clear diff state when file changes (e.g., after accept/reject)
+      if (diffState?.isActive) {
+        console.log('[CSV] Clearing diff state after file change');
+        setDiffState(null);
+      }
     });
-  }, [host, spreadsheetMeta]);
+  }, [host, spreadsheetMeta, diffState]);
 
   // Subscribe to save requests
   useEffect(() => {
@@ -313,6 +358,160 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
       }
     });
   }, [host, spreadsheetMeta]);
+
+  // Subscribe to diff mode requests (AI edit review)
+  useEffect(() => {
+    if (!host.onDiffRequested) return;
+
+    return host.onDiffRequested((config) => {
+      console.log('[CSV] Diff requested:', config.tagId);
+
+      // Compute cell-level diff between original and modified content
+      const diff = computeDiff(
+        config.originalContent,
+        config.modifiedContent,
+        config.tagId,
+        config.sessionId
+      );
+
+      // Parse the modified content to get the actual data to display
+      const { data: modifiedData } = parseCSV(config.modifiedContent);
+      const gridData = convertToGridSource(modifiedData.rows, modifiedData.headerRowCount);
+
+      // Update grid with modified content so the new data is visible
+      const grid = revoGridRef.current;
+      if (grid) {
+        // Calculate how many actual data rows we have (excluding buffer rows)
+        const actualDataRowCount = modifiedData.rows.length - modifiedData.headerRowCount;
+        console.log('[CSV] modifiedData.rows.length:', modifiedData.rows.length,
+          'headerRowCount:', modifiedData.headerRowCount,
+          'actualDataRowCount:', actualDataRowCount,
+          'gridData.source.length:', gridData.source.length);
+
+        // If there are phantom rows (deleted rows), insert them at their correct positions
+        if (diff.phantomRows.length > 0) {
+          console.log('[CSV] Phantom rows:', diff.phantomRows.length,
+            'positions:', diff.phantomRowPositions,
+            'data:', diff.phantomRows);
+
+          // Build the final source by inserting phantom rows at their correct positions
+          // phantomRowPositions[i] tells us where phantomRows[i] should go (data row index)
+          // We need to account for previously inserted phantoms when calculating indices
+
+          // Start with actual data rows (no buffer)
+          const dataRows = gridData.source.slice(0, actualDataRowCount);
+          const bufferRows = gridData.source.slice(actualDataRowCount);
+
+          // Create array of { row, isPhantom, originalPosition } for sorting
+          type RowEntry = { row: Record<string, string | number>; isPhantom: boolean; position: number };
+          const entries: RowEntry[] = [];
+
+          // Add data rows
+          for (let i = 0; i < dataRows.length; i++) {
+            entries.push({ row: dataRows[i], isPhantom: false, position: i });
+          }
+
+          // Add phantom rows at their positions
+          for (let i = 0; i < diff.phantomRows.length; i++) {
+            const phantomRow = diff.phantomRows[i];
+            const position = diff.phantomRowPositions[i] - modifiedData.headerRowCount; // Convert to data index
+
+            const rowData: Record<string, string | number> = {};
+            phantomRow.forEach((cell, colIdx) => {
+              const colKey = columnIndexToLetter(colIdx);
+              rowData[colKey] = cell.raw || '';
+            });
+            rowData._rowClass = 'row-diff-deleted';
+
+            // Position is where this phantom row was in the original sequence
+            // Use position + 0.5 to sort it after data rows at that position
+            entries.push({ row: rowData, isPhantom: true, position: position + 0.5 });
+          }
+
+          // Sort by position to get correct order
+          entries.sort((a, b) => a.position - b.position);
+
+          // Build a mapping from original data index to new grid index
+          // This accounts for phantom rows being inserted
+          const indexMapping = new Map<number, number>();
+          let gridIdx = 0;
+          for (const entry of entries) {
+            if (!entry.isPhantom) {
+              // This is a real data row - map its original position to its new grid position
+              const originalDataIdx = Math.floor(entry.position);
+              indexMapping.set(originalDataIdx, gridIdx);
+            }
+            gridIdx++;
+          }
+
+          // Remap all cell diff entries to use the new grid indices
+          const newCells = new Map<string, CellDiff>();
+          for (const [key, value] of diff.cells.entries()) {
+            if (key.startsWith('data:')) {
+              const parts = key.split(':');
+              const oldIdx = parseInt(parts[1], 10);
+              const colProp = parts[2];
+              const newIdx = indexMapping.get(oldIdx);
+              if (newIdx !== undefined) {
+                newCells.set(`data:${newIdx}:${colProp}`, value);
+              }
+            } else {
+              // Preserve pinned row entries
+              newCells.set(key, value);
+            }
+          }
+
+          // Add phantom row cell entries
+          gridIdx = 0;
+          for (const entry of entries) {
+            if (entry.isPhantom) {
+              // Add cell diff entries for this phantom row
+              const rowData = entry.row;
+              for (const [key, value] of Object.entries(rowData)) {
+                if (key !== '_rowClass' && value !== '') {
+                  newCells.set(`data:${gridIdx}:${key}`, {
+                    type: 'deleted',
+                    previousValue: String(value),
+                  });
+                }
+              }
+              console.log('[CSV] Phantom row at grid index:', gridIdx, rowData);
+            }
+            gridIdx++;
+          }
+
+          // Replace diff.cells with remapped entries
+          diff.cells.clear();
+          for (const [key, value] of newCells.entries()) {
+            diff.cells.set(key, value);
+          }
+
+          // Build final source
+          const finalDataRows = entries.map(e => e.row);
+          grid.source = [...finalDataRows, ...bufferRows];
+          console.log('[CSV] Grid source: data+phantoms=', finalDataRows.length, 'buffer=', bufferRows.length, 'total=', grid.source.length);
+        } else {
+          grid.source = gridData.source;
+        }
+        grid.pinnedTopSource = gridData.pinnedTop;
+      }
+
+      // Update metadata to reflect modified content structure (column count, etc.)
+      spreadsheetMeta.loadFromCSV(config.modifiedContent);
+
+      setDiffState(diff);
+    });
+  }, [host, spreadsheetMeta]);
+
+  // Subscribe to diff being cleared externally (user accepts/rejects via unified header)
+  useEffect(() => {
+    if (!host.onDiffCleared) return;
+
+    return host.onDiffCleared(() => {
+      console.log('[CSV] Diff cleared externally');
+      setDiffState(null);
+    });
+  }, [host]);
 
   // Register for AI tool access
   useEffect(() => {
@@ -1178,6 +1377,7 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
           applyOnClose={true}
           editors={editors}
           rowClass="_rowClass"
+          readonly={diffState?.isActive}
           onAfteredit={handleAfterEdit}
           onAfterfocus={handleFocusCell}
           onSetrange={handleSetRange as any}

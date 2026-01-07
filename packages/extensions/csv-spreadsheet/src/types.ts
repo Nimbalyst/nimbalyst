@@ -163,3 +163,44 @@ export interface RangeReference {
   start: CellReference;
   end: CellReference;
 }
+
+/**
+ * Diff mode types for AI edit review
+ */
+
+/** Type of change for a cell */
+export type CellDiffType = 'added' | 'modified' | 'deleted' | 'unchanged';
+
+/** Diff information for a single cell */
+export interface CellDiff {
+  type: CellDiffType;
+  /** Previous value for modified/deleted cells */
+  previousValue?: string;
+}
+
+/** Diff information for a row */
+export interface RowDiff {
+  type: 'added' | 'modified' | 'deleted' | 'unchanged';
+  /** True for deleted rows that are shown as phantom rows */
+  isPhantom?: boolean;
+}
+
+/** Complete diff state for the spreadsheet */
+export interface DiffState {
+  /** Cell-level diff info, keyed by "rowIndex:colProp" (e.g., "3:B") */
+  cells: Map<string, CellDiff>;
+  /** Row-level diff info, keyed by row index in merged view */
+  rows: Map<number, RowDiff>;
+  /** Deleted rows from original to display as phantom rows */
+  phantomRows: Row[];
+  /** Position in modified data where each phantom row should be inserted (data row index, not including header) */
+  phantomRowPositions: number[];
+  /** Original content for revert */
+  originalContent: string;
+  /** Whether diff mode is currently active */
+  isActive: boolean;
+  /** History tag ID */
+  tagId: string;
+  /** AI session ID that made the edit */
+  sessionId: string;
+}

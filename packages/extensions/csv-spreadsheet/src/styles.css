@@ -512,3 +512,68 @@
 .dialog-button.primary:hover {
   opacity: 0.9;
 }
+
+/* ========================================
+   Diff Mode Styles (AI Edit Review)
+   ======================================== */
+
+/* Diff color variables */
+.spreadsheet-editor {
+  --diff-added-bg: #d4edda;
+  --diff-added-text: #155724;
+  --diff-modified-bg: #fff3cd;
+  --diff-modified-text: #856404;
+  --diff-deleted-bg: #f8d7da;
+  --diff-deleted-text: #721c24;
+}
+
+/* Dark theme diff colors */
+[data-theme="dark"] .spreadsheet-editor,
+[data-theme="crystal-dark"] .spreadsheet-editor {
+  --diff-added-bg: #1e4620;
+  --diff-added-text: #8fd694;
+  --diff-modified-bg: #4a3f00;
+  --diff-modified-text: #ffd966;
+  --diff-deleted-bg: #4a1c1c;
+  --diff-deleted-text: #f5a5a5;
+}
+
+/* Cell-level diff styling */
+.spreadsheet-editor revo-grid .cell-diff-added {
+  background-color: var(--diff-added-bg) !important;
+  color: var(--diff-added-text);
+}
+
+.spreadsheet-editor revo-grid .cell-diff-modified {
+  background-color: var(--diff-modified-bg) !important;
+  color: var(--diff-modified-text);
+}
+
+.spreadsheet-editor revo-grid .cell-diff-deleted {
+  background-color: var(--diff-deleted-bg) !important;
+  color: var(--diff-deleted-text);
+  text-decoration: line-through;
+}
+
+/* Row-level diff styling for phantom (deleted) rows */
+.spreadsheet-editor revo-grid .row-diff-deleted {
+  background-color: var(--diff-deleted-bg) !important;
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.spreadsheet-editor revo-grid .row-diff-deleted revogr-cell {
+  text-decoration: line-through;
+  color: var(--diff-deleted-text);
+}
+
+/* Row-level diff styling for added rows */
+.spreadsheet-editor revo-grid .row-diff-added {
+  background-color: var(--diff-added-bg) !important;
+}
+
+/* Tooltip for previous value - using native title attribute */
+.spreadsheet-editor revo-grid .cell-diff-modified[title],
+.spreadsheet-editor revo-grid .cell-diff-deleted[title] {
+  cursor: help;
+}
