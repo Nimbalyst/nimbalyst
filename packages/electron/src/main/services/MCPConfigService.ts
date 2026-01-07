@@ -147,6 +147,26 @@ export class MCPConfigService {
   }
 
   /**
+   * Process a server config for runtime use.
+   * On Windows, converts npm/npx/etc commands to their .cmd equivalents.
+   */
+  processServerConfigForRuntime(serverConfig: MCPServerConfig): MCPServerConfig {
+    // Only process stdio servers with a command
+    if (serverConfig.type === 'sse' || !serverConfig.command) {
+      return serverConfig;
+    }
+
+    // Resolve command for current platform
+    const resolvedCommand = this.resolveCommandForPlatform(serverConfig.command);
+
+    // Return a new config with the resolved command
+    return {
+      ...serverConfig,
+      command: resolvedCommand
+    };
+  }
+
+  /**
    * Validate MCP configuration against Claude Code schema.
    * Throws error if invalid.
    */

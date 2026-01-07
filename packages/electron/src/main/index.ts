@@ -449,11 +449,12 @@ app.whenReady().then(async () => {
         const mergedConfig = await mcpConfigService.getMergedConfig(workspacePath);
         const allServers = mergedConfig.mcpServers || {};
 
-        // Filter out disabled servers
+        // Filter out disabled servers and process for runtime
+        // (On Windows, converts npm/npx/etc commands to .cmd equivalents)
         const enabledServers: Record<string, any> = {};
         for (const [name, config] of Object.entries(allServers)) {
             if (!(config as any).disabled) {
-                enabledServers[name] = config;
+                enabledServers[name] = mcpConfigService.processServerConfigForRuntime(config as any);
             }
         }
         return enabledServers;
