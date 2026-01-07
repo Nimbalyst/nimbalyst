@@ -33,26 +33,6 @@ function getElementByLabel(elements: readonly ExcalidrawElement[], label: string
  */
 export const aiTools = [
   {
-    name: 'view_diagram',
-    description: 'Capture screenshot of current Excalidraw diagram',
-    parameters: {
-      type: 'object' as const,
-      properties: {},
-    },
-    handler: async (_params: Record<string, never>, context: { activeFilePath?: string }) => {
-      // Screenshot will be handled by the screenshot service
-      return {
-        success: true,
-        message: 'Screenshot capture requested.',
-        captureScreenshot: true,
-        data: {
-          filePath: context.activeFilePath,
-        },
-      };
-    },
-  },
-
-  {
     name: 'get_elements',
     description: 'Get list of diagram elements with labels and group membership',
     parameters: {

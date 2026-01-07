@@ -503,22 +503,8 @@ async function tryCreateServer(port: number): Promise<any> {
         // The agent should use native Edit/Write tools with file-watcher diff approval.
         const builtInTools: Array<{ name: string; description: string; inputSchema: any }> = [
           {
-            name: 'capture_mockup_screenshot',
-            description: 'Capture a screenshot of a .mockup.html file. Returns the screenshot as a base64-encoded PNG image. If the file is open in the editor, the screenshot will include any user annotations (drawings, highlights). If the file is not open, it will be rendered in a headless window (without annotations).',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                file_path: {
-                  type: 'string',
-                  description: 'The absolute path to the .mockup.html file to capture.'
-                }
-              },
-              required: ['file_path']
-            }
-          },
-          {
             name: 'capture_editor_screenshot',
-            description: 'Capture a screenshot of the current editor view. Works with any file type including custom editors from extensions, markdown, code, etc. Useful for visually verifying extension UI during development.',
+            description: 'Capture a screenshot of any editor view. Works with all file types including custom editors (Excalidraw, CSV, mockups), markdown, code, etc. Use this to visually verify UI, diagrams, or any editor content.',
             inputSchema: {
               type: 'object',
               properties: {
@@ -531,6 +517,20 @@ async function tryCreateServer(port: number): Promise<any> {
                   description: 'CSS selector to capture a specific element (optional, captures full editor area if not specified)'
                 }
               }
+            }
+          },
+          {
+            name: 'capture_mockup_screenshot',
+            description: 'DEPRECATED: Use capture_editor_screenshot instead. This tool is maintained for backward compatibility only. Captures a screenshot of a .mockup.html file, including user annotations if the file is open.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                file_path: {
+                  type: 'string',
+                  description: 'The absolute path to the .mockup.html file to capture.'
+                }
+              },
+              required: ['file_path']
             }
           }
         ];

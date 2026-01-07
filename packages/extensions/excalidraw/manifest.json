@@ -34,13 +34,13 @@
       "excalidraw.relayout"
     ],
     "fileIcons": {
-      "*.excalidraw": "pen-tool"
+      "*.excalidraw": "draw"
     },
     "newFileMenu": [
       {
         "extension": ".excalidraw",
         "displayName": "Excalidraw Diagram",
-        "icon": "pen-tool",
+        "icon": "draw",
         "defaultContent": "{\"type\":\"excalidraw\",\"version\":2,\"source\":\"https://excalidraw.com\",\"elements\":[],\"appState\":{\"gridSize\":null,\"viewBackgroundColor\":\"#ffffff\"},\"files\":{}}"
       }
     ],
