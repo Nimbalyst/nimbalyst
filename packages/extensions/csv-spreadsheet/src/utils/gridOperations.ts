@@ -37,6 +37,10 @@ export interface GridOperations {
   addColumn: (index?: number) => Promise<void>;
   deleteColumn: (index: number) => Promise<void>;
 
+  // Header row operations
+  /** Move rows between pinned (header) and regular sections based on new header count */
+  updateHeaderRowCount: (newCount: number) => Promise<void>;
+
   // Clipboard operations
   copySelection: (range: NormalizedSelectionRange) => Promise<void>;
   cutSelection: (range: NormalizedSelectionRange) => Promise<void>;
@@ -299,6 +303,51 @@ export function createGridOperations(
       grid.source = newSource;
     }
 
+    onDirty();
+  };
+
+  /**
+   * Update header row count - moves rows between pinned and regular sections
+   */
+  const updateHeaderRowCount = async (newCount: number): Promise<void> => {
+    const grid = gridRef.current;
+    if (!grid) throw new Error('Grid not available');
+
+    const [source, pinnedTop] = await Promise.all([
+      grid.getSource('rgRow'),
+      grid.getSource('rowPinStart'),
+    ]);
+
+    const currentCount = pinnedTop?.length ?? 0;
+    const safeNewCount = Math.max(0, newCount);
+
+    if (safeNewCount === currentCount) return;
+
+    let newPinned = [...(pinnedTop || [])];
+    let newSource = [...(source || [])];
+
+    if (safeNewCount > currentCount) {
+      // Moving rows from source to pinned (making them headers)
+      const rowsToMove = safeNewCount - currentCount;
+      const movedRows = newSource.splice(0, rowsToMove);
+      // Add header-row class to moved rows
+      movedRows.forEach(row => {
+        row._rowClass = 'header-row';
+      });
+      newPinned = [...newPinned, ...movedRows];
+    } else {
+      // Moving rows from pinned to source (removing headers)
+      const rowsToMove = currentCount - safeNewCount;
+      const movedRows = newPinned.splice(safeNewCount, rowsToMove);
+      // Remove header-row class from moved rows
+      movedRows.forEach(row => {
+        delete row._rowClass;
+      });
+      newSource = [...movedRows, ...newSource];
+    }
+
+    grid.pinnedTopSource = newPinned;
+    grid.source = newSource;
     onDirty();
   };
 
@@ -646,6 +695,7 @@ export function createGridOperations(
     deleteRow,
     addColumn,
     deleteColumn,
+    updateHeaderRowCount,
     copySelection,
     cutSelection,
     pasteFromText,

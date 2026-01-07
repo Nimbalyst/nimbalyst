@@ -196,6 +196,15 @@ export interface EditorHost {
    * If true, a "View Source" button will be available.
    */
   readonly supportsSourceMode?: boolean;
+
+  // ============ CONFIGURATION (OPTIONAL) ============
+
+  /**
+   * Get a configuration value for the extension.
+   * Only available if the extension has configuration contributions defined.
+   * Returns the workspace value if set, otherwise the user value, otherwise the default.
+   */
+  getConfig?<T>(key: string, defaultValue?: T): T;
 }
 
 /**

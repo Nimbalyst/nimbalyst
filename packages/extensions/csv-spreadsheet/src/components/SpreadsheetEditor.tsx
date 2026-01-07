@@ -132,9 +132,10 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
   const selectedCellRef = useRef<{ row: number; col: number } | null>(null);
   const selectionRangeRef = useRef<NormalizedSelectionRange | null>(null);
 
-  // Grid source state (set once on load, updated on external changes)
-  const [gridSource, setGridSource] = useState<Record<string, string | number>[]>([]);
-  const [gridPinnedTop, setGridPinnedTop] = useState<Record<string, string | number>[]>([]);
+  // Grid initialization - render grid immediately, load data imperatively after mount
+  // This avoids React props overwriting RevoGrid's internal state on re-renders
+  const pendingDataRef = useRef<{ source: Record<string, string | number>[]; pinnedTop: Record<string, string | number>[] } | null>(null);
+  const dataLoadedRef = useRef(false);
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
@@ -232,8 +233,16 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
         const { data } = parseCSV(content);
         const gridData = convertToGridSource(data.rows, data.headerRowCount);
 
-        setGridSource(gridData.source);
-        setGridPinnedTop(gridData.pinnedTop);
+        // Store data to be loaded imperatively once grid is mounted
+        pendingDataRef.current = gridData;
+
+        // If grid already mounted, load immediately
+        const grid = revoGridRef.current;
+        if (grid) {
+          grid.source = gridData.source;
+          grid.pinnedTopSource = gridData.pinnedTop;
+          dataLoadedRef.current = true;
+        }
 
         // Update metadata
         spreadsheetMeta.loadFromCSV(content);
@@ -260,11 +269,16 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
         return;
       }
 
-      // External change detected - reload
+      // External change detected - reload by setting RevoGrid's source directly
       console.log('[CSV] External file change detected, reloading');
       const gridData = spreadsheetMeta.loadFromCSV(newContent);
-      setGridSource(gridData.source);
-      setGridPinnedTop(gridData.pinnedTop);
+
+      // Update RevoGrid directly - it owns the data
+      const grid = revoGridRef.current;
+      if (grid) {
+        grid.source = gridData.source;
+        grid.pinnedTopSource = gridData.pinnedTop;
+      }
       spreadsheetMeta.markClean();
     });
   }, [host, spreadsheetMeta]);
@@ -816,29 +830,35 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
     const isCurrentlyHeader = rowIndex < headerRowCount;
     const isTopRowOrAdjacentToHeader = rowIndex === 0 || rowIndex === headerRowCount;
 
+    // Helper to update both grid data and metadata
+    const setHeaderCount = async (count: number) => {
+      await gridOps?.updateHeaderRowCount(count);
+      spreadsheetMeta.setHeaderRowCount(count);
+    };
+
     if (isCurrentlyHeader) {
       if (rowIndex === headerRowCount - 1) {
         items.push({
           label: 'Remove Header Row',
-          action: () => spreadsheetMeta.setHeaderRowCount(headerRowCount - 1),
+          action: () => setHeaderCount(headerRowCount - 1),
         });
       }
       if (headerRowCount > 1) {
         items.push({
           label: 'Remove All Header Rows',
-          action: () => spreadsheetMeta.setHeaderRowCount(0),
+          action: () => setHeaderCount(0),
         });
       }
     } else {
       if (isTopRowOrAdjacentToHeader) {
         items.push({
           label: 'Set as Header Row',
-          action: () => spreadsheetMeta.setHeaderRowCount(rowIndex + 1),
+          action: () => setHeaderCount(rowIndex + 1),
         });
       } else {
         items.push({
           label: `Set Rows 1-${rowIndex + 1} as Headers`,
-          action: () => spreadsheetMeta.setHeaderRowCount(rowIndex + 1),
+          action: () => setHeaderCount(rowIndex + 1),
         });
       }
     }
@@ -1140,10 +1160,16 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
         onMouseDown={handleHeaderMouseDown}
       >
         <RevoGrid
-          ref={revoGridRef}
+          ref={(el) => {
+            (revoGridRef as React.MutableRefObject<RevoGridElement | null>).current = el;
+            // Load pending data imperatively when grid mounts
+            if (el && !dataLoadedRef.current && pendingDataRef.current) {
+              el.source = pendingDataRef.current.source;
+              el.pinnedTopSource = pendingDataRef.current.pinnedTop;
+              dataLoadedRef.current = true;
+            }
+          }}
           columns={columns}
-          source={gridSource}
-          pinnedTopSource={gridPinnedTop}
           theme={gridTheme}
           rowHeaders={true}
           resize={true}

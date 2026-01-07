@@ -75,6 +75,11 @@ export interface EditorHostOptions {
 
   /** Check if source mode is currently active */
   isSourceModeActive?: () => boolean;
+
+  // ============ CONFIGURATION (OPTIONAL) ============
+
+  /** Get a configuration value for the extension */
+  getConfig?: <T>(key: string, defaultValue?: T) => T;
 }
 
 /**
@@ -156,5 +161,8 @@ export function createEditorHost(options: EditorHostOptions): EditorHost {
       : undefined,
 
     isSourceModeActive: options.isSourceModeActive,
+
+    // ============ CONFIGURATION (OPTIONAL) ============
+    getConfig: options.getConfig,
   };
 }
