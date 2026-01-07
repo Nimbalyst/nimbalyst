@@ -20,6 +20,7 @@ interface NavigationGutterProps {
   onOpenHistory?: () => void;
   onOpenSettings?: () => void;
   onOpenPermissions?: () => void;
+  onOpenFeedback?: () => void;
   onChangeTrustMode?: () => void;
   onTogglePlansPanel?: () => void;
   onToggleBugsPanel?: () => void;
@@ -44,6 +45,7 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
   onOpenHistory,
   onOpenSettings,
   onOpenPermissions,
+  onOpenFeedback,
   onChangeTrustMode,
   onTogglePlansPanel,
   onToggleBugsPanel,
@@ -244,8 +246,11 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
         </div>
 
         <button
-          className="nimbalyst-open-feedback-button nav-button"
-          onClick={() => console.log('[NavigationGutter] Feedback button clicked')}
+          className="nimbalyst-feedback-button nav-button"
+          onClick={() => {
+            console.log('[NavigationGutter] Feedback button clicked');
+            onOpenFeedback?.();
+          }}
           title={feedbackButton.label}
           aria-label={feedbackButton.label}
         >

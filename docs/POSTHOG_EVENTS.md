@@ -205,6 +205,14 @@ All events include `$session_id` property automatically. Dev users are marked wi
 | `claude_commands_toast_settings` | `App.tsx:1663` | User clicks "Settings" on commands toast | None | v0.47.2 (2025-12-10) | |
 | `claude_commands_toast_skip` | `App.tsx:1673` | User clicks "Skip" on commands toast | None | v0.47.2 (2025-12-10) | |
 
+### Surveys & Feedback
+
+| Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |
+| --- | --- | --- | --- | --- | --- |
+| `survey shown` | `PostHogSurvey.tsx:85` | PostHog API survey is displayed to user | `$survey_id`<br/>`$survey_name` | (pending release) | |
+| `survey dismissed` | `PostHogSurvey.tsx:95` | User dismisses survey without submitting | `$survey_id`<br/>`$survey_name` | (pending release) | |
+| `survey sent` | `PostHogSurvey.tsx:122` | User submits survey response | `$survey_id`<br/>`$survey_name`<br/>`$survey_response` (single question)<br/>`$survey_response_N` (multi-question) | (pending release) | |
+
 ### Permissions
 
 | Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |
@@ -226,9 +234,9 @@ All events include `$session_id` property automatically. Dev users are marked wi
 
 ## Event Summary Statistics
 
-- **Total Events**: 72 unique event names
+- **Total Events**: 75 unique event names
 - **Main Process Events**: 40 (via AnalyticsService)
-- **Renderer Process Events**: 32 (via usePostHog hook)
+- **Renderer Process Events**: 35 (via usePostHog hook)
 - **File Operations**: 7 events
 - **Workspace Operations**: 4 events
 - **Navigation & Editor Mode**: 3 events
@@ -238,6 +246,7 @@ All events include `$session_id` property automatically. Dev users are marked wi
 - **Terminal**: 1 event
 - **Extensions**: 1 event
 - **Onboarding**: 8 events
+- **Surveys & Feedback**: 3 events
 - **Permissions**: 4 events
 - **System/Infrastructure**: 10 events
 

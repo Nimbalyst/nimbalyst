@@ -70,3 +70,204 @@ body {
   text-rendering: optimizeLegibility;
   font-feature-settings: 'liga';
 }
+
+/**
+ * PostHog Survey Dark Mode Overrides
+ *
+ * PostHog's built-in popover surveys don't support dark mode automatically.
+ * These overrides style the survey to match Nimbalyst's current theme.
+ */
+.PostHogSurvey,
+.PostHogSurvey__popup {
+  --survey-bg: var(--surface-primary) !important;
+  --survey-border: var(--border-primary) !important;
+  --survey-text: var(--text-primary) !important;
+  --survey-text-secondary: var(--text-secondary) !important;
+}
+
+/* Survey popup container */
+.PostHogSurvey__popup {
+  background-color: var(--surface-primary) !important;
+  border-color: var(--border-primary) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Survey box/card */
+.survey-box,
+.PostHogSurvey__box {
+  background-color: var(--surface-primary) !important;
+  border-color: var(--border-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Survey question text */
+.survey-question,
+.PostHogSurvey__question {
+  color: var(--text-primary) !important;
+}
+
+/* Survey description text */
+.survey-question-description,
+.PostHogSurvey__description {
+  color: var(--text-secondary) !important;
+}
+
+/* Text input/textarea */
+.PostHogSurvey textarea,
+.PostHogSurvey input[type="text"],
+.survey-box textarea,
+.survey-box input[type="text"] {
+  background-color: var(--surface-secondary) !important;
+  border-color: var(--border-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+.PostHogSurvey textarea::placeholder,
+.PostHogSurvey input[type="text"]::placeholder,
+.survey-box textarea::placeholder,
+.survey-box input[type="text"]::placeholder {
+  color: var(--text-tertiary) !important;
+}
+
+.PostHogSurvey textarea:focus,
+.PostHogSurvey input[type="text"]:focus,
+.survey-box textarea:focus,
+.survey-box input[type="text"]:focus {
+  border-color: var(--border-focus) !important;
+  outline: none !important;
+}
+
+/* Rating buttons */
+.PostHogSurvey__ratingButton,
+.ratings-number button,
+.rating-options button {
+  background-color: var(--surface-secondary) !important;
+  border-color: var(--border-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+.PostHogSurvey__ratingButton:hover,
+.ratings-number button:hover,
+.rating-options button:hover {
+  background-color: var(--surface-hover) !important;
+  border-color: var(--accent-primary) !important;
+}
+
+.PostHogSurvey__ratingButton--selected,
+.PostHogSurvey__ratingButton.selected,
+.ratings-number button.selected,
+.rating-options button.selected {
+  background-color: var(--accent-primary) !important;
+  border-color: var(--accent-primary) !important;
+  color: white !important;
+}
+
+/* Rating labels (e.g., "Not likely" / "Very likely") */
+.PostHogSurvey__ratingLabels,
+.rating-text,
+.ratings-number span {
+  color: var(--text-tertiary) !important;
+}
+
+/* Multiple choice options */
+.PostHogSurvey__choiceOption,
+.multiple-choice button,
+.survey-box .choice-option {
+  background-color: var(--surface-secondary) !important;
+  border-color: var(--border-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+.PostHogSurvey__choiceOption:hover,
+.multiple-choice button:hover,
+.survey-box .choice-option:hover {
+  background-color: var(--surface-hover) !important;
+  border-color: var(--accent-primary) !important;
+}
+
+.PostHogSurvey__choiceOption--selected,
+.PostHogSurvey__choiceOption.selected,
+.multiple-choice button.selected,
+.survey-box .choice-option.selected {
+  background-color: var(--surface-selected) !important;
+  border-color: var(--accent-primary) !important;
+}
+
+/* Submit/action buttons */
+.PostHogSurvey__button,
+.survey-box .survey-submit,
+.survey-box button[type="submit"],
+.survey-box .buttons button {
+  background-color: var(--accent-primary) !important;
+  color: white !important;
+  border: none !important;
+}
+
+.PostHogSurvey__button:hover,
+.survey-box .survey-submit:hover,
+.survey-box button[type="submit"]:hover,
+.survey-box .buttons button:hover {
+  background-color: var(--accent-primary-hover) !important;
+}
+
+.PostHogSurvey__button:disabled,
+.survey-box .survey-submit:disabled,
+.survey-box button[type="submit"]:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+
+/* Close button */
+.PostHogSurvey__close,
+.survey-box .cancel,
+.survey-box .close-survey-btn {
+  color: var(--text-secondary) !important;
+}
+
+.PostHogSurvey__close:hover,
+.survey-box .cancel:hover,
+.survey-box .close-survey-btn:hover {
+  color: var(--text-primary) !important;
+  background-color: var(--surface-hover) !important;
+}
+
+/* Thank you message */
+.PostHogSurvey__thankYou,
+.thank-you-message {
+  background-color: var(--surface-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+.PostHogSurvey__thankYouHeader,
+.thank-you-message h3,
+.thank-you-message-header {
+  color: var(--text-primary) !important;
+}
+
+.PostHogSurvey__thankYouBody,
+.thank-you-message p,
+.thank-you-message-body {
+  color: var(--text-secondary) !important;
+}
+
+/* Footer/branding */
+.PostHogSurvey__footer,
+.footer-branding {
+  color: var(--text-tertiary) !important;
+}
+
+.PostHogSurvey__footer a,
+.footer-branding a {
+  color: var(--accent-link) !important;
+}
+
+/* Progress indicator for multi-question surveys */
+.PostHogSurvey__progress,
+.survey-progress {
+  background-color: var(--surface-tertiary) !important;
+}
+
+.PostHogSurvey__progressFill,
+.survey-progress-fill {
+  background-color: var(--accent-primary) !important;
+}

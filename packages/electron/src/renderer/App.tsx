@@ -57,6 +57,7 @@ import { ExtensionHostComponents } from './components/ExtensionHostComponents';
 import { ClaudeCommandsToast } from './components/ClaudeCommandsToast';
 import { UpdateToast } from './components/UpdateToast';
 import { ProjectTrustToast } from './components/ProjectTrustToast';
+import { PostHogSurvey } from './components/PostHogSurvey';
 import OnboardingService from './services/OnboardingService';
 import './WorkspaceWelcome.css';
 
@@ -208,6 +209,7 @@ export default function App() {
   const [aiChatWidth, setAIChatWidth] = useState<number>(350);
   const [isKeyboardShortcutsDialogOpen, setIsKeyboardShortcutsDialogOpen] = useState(false);
   const [isDiscordInvitationOpen, setIsDiscordInvitationOpen] = useState(false);
+  const [isPostHogSurveyOpen, setIsPostHogSurveyOpen] = useState(false);
   const [isWindowsClaudeCodeWarningOpen, setIsWindowsClaudeCodeWarningOpen] = useState(false);
   const [isAIChatStateLoaded, setIsAIChatStateLoaded] = useState(false);
   // Planning mode for AI sidebar (Claude Code safety). Default ON
@@ -1498,6 +1500,9 @@ export default function App() {
           setSettingsKey(k => k + 1); // Force SettingsView remount
           setTimeout(() => setActiveMode('settings'), 0);
         }}
+        onOpenFeedback={() => {
+          setIsPostHogSurveyOpen(true);
+        }}
         onChangeTrustMode={() => {
           // Show the trust toast so user can pick a new mode
           setForceShowTrustToast(true);
@@ -1778,6 +1783,9 @@ export default function App() {
         forceShow={forceShowTrustToast}
         onDismiss={() => setForceShowTrustToast(false)}
       />
+      {isPostHogSurveyOpen && (
+        <PostHogSurvey onClose={() => setIsPostHogSurveyOpen(false)} />
+      )}
     </div>
   );
 }
