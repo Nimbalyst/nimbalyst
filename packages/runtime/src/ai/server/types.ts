@@ -133,13 +133,21 @@ export interface SessionData {
 
   // Token usage tracking (for providers that support it)
   tokenUsage?: {
-    inputTokens: number;      // Total input tokens used
-    outputTokens: number;     // Total output tokens used
+    inputTokens: number;      // Cumulative input tokens across session lifetime
+    outputTokens: number;     // Cumulative output tokens across session lifetime
     totalTokens: number;      // Total tokens (input + output)
-    contextWindow?: number;   // Max context window size for the model
-    categories?: TokenUsageCategory[]; // Breakdown parsed from /context output
+    contextWindow?: number;   // Max context window size for the model (legacy, use currentContext)
+    categories?: TokenUsageCategory[]; // Breakdown parsed from /context output (legacy, use currentContext)
     costUSD?: number;         // Total cost in USD (from SDK modelUsage)
     webSearchRequests?: number; // Number of web searches performed (from SDK modelUsage)
+    // Current context window snapshot (from /context command for Claude Code)
+    // This is separate from cumulative tokens - resets on compaction
+    currentContext?: {
+      tokens: number;         // Current tokens in context window
+      contextWindow: number;  // Max context window size
+      categories?: TokenUsageCategory[]; // Category breakdown from /context
+      rawResponse?: string;   // Raw markdown from /context for display on session reload
+    };
   };
 
   // Additional metadata

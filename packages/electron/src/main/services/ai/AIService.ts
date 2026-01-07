@@ -899,14 +899,31 @@ export class AIService {
           const parsedUsage = parseContextUsageMessage(contextResponse);
 
           if (parsedUsage) {
-            // For claude-code, token usage comes ONLY from /context command
-            // This provides accurate context window usage with category breakdown
-            const tokenUsage = {
+            // Get current session to preserve cumulative tokens
+            const currentSession = await this.sessionManager.loadSession(session.id, workspacePath);
+            const currentUsage = currentSession?.tokenUsage ?? {
               inputTokens: 0,
               outputTokens: 0,
-              totalTokens: parsedUsage.totalTokens,
+              totalTokens: 0
+            };
+
+            // Store /context data in currentContext (snapshot of context window)
+            // Preserve cumulative input/output tokens from modelUsage
+            const tokenUsage = {
+              inputTokens: currentUsage.inputTokens,
+              outputTokens: currentUsage.outputTokens,
+              totalTokens: currentUsage.totalTokens,
+              costUSD: currentUsage.costUSD,
+              // Legacy fields for backward compatibility
               contextWindow: parsedUsage.contextWindow,
-              categories: parsedUsage.categories
+              categories: parsedUsage.categories,
+              // New field for context window snapshot
+              currentContext: {
+                tokens: parsedUsage.totalTokens,
+                contextWindow: parsedUsage.contextWindow,
+                categories: parsedUsage.categories,
+                rawResponse: contextResponse  // Store raw markdown for display on session reload
+              }
             };
 
             // Persist token usage to session metadata
@@ -1938,9 +1955,41 @@ export class AIService {
               });
 
               // Update session token usage if available
-              // For claude-code: token usage comes ONLY from /context command (auto-fetched after response)
+              // For claude-code: use modelUsage for cumulative tokens, /context for currentContext
               // For other providers: use tokenUsage from chunk.usage
-              if (tokenUsage && session.provider !== 'claude-code') {
+              if (session.provider === 'claude-code' && modelUsage) {
+                // For claude-code, accumulate tokens from modelUsage (SDK provides per-model breakdown)
+                const currentUsage = session.tokenUsage ?? {
+                  inputTokens: 0,
+                  outputTokens: 0,
+                  totalTokens: 0
+                };
+
+                // Sum up tokens from all models in modelUsage
+                let newInputTokens = 0;
+                let newOutputTokens = 0;
+                let newCostUSD = 0;
+                for (const modelName of Object.keys(modelUsage)) {
+                  const modelStats = modelUsage[modelName];
+                  newInputTokens += modelStats.inputTokens || 0;
+                  newOutputTokens += modelStats.outputTokens || 0;
+                  newCostUSD += modelStats.costUSD || 0;
+                }
+
+                const updatedUsage = {
+                  inputTokens: currentUsage.inputTokens + newInputTokens,
+                  outputTokens: currentUsage.outputTokens + newOutputTokens,
+                  totalTokens: currentUsage.totalTokens + newInputTokens + newOutputTokens,
+                  contextWindow: currentUsage.contextWindow,
+                  costUSD: (currentUsage.costUSD || 0) + newCostUSD,
+                  currentContext: currentUsage.currentContext  // Preserve existing currentContext
+                };
+
+                await this.sessionManager.updateSessionTokenUsage(session.id, updatedUsage);
+
+                // Update local session reference for next iteration
+                session.tokenUsage = updatedUsage;
+              } else if (tokenUsage && session.provider !== 'claude-code') {
                 // For non-claude-code providers, use tokenUsage from chunk
                 const currentUsage = session.tokenUsage ?? {
                   inputTokens: 0,
