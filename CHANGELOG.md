@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.50.20] - 2026-01-07
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+- Improved MCP OAuth error messages for missing commands
+
+### Fixed
+<!-- Bug fixes go here -->
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.50.19] - 2026-01-07
 
 
