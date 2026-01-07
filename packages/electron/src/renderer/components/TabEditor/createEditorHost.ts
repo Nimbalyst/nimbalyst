@@ -14,8 +14,11 @@ export interface EditorHostOptions {
   /** File name (for display) */
   fileName: string;
 
-  /** Current theme - may include 'auto' which should be resolved by the host */
-  theme: 'light' | 'dark' | 'crystal-dark' | 'auto';
+  /** Get current theme value */
+  getTheme: () => 'light' | 'dark' | 'crystal-dark';
+
+  /** Subscribe to theme changes */
+  subscribeToThemeChanges: (callback: (theme: 'light' | 'dark' | 'crystal-dark') => void) => () => void;
 
   /** Whether this editor's tab is active */
   isActive: boolean;
@@ -86,9 +89,14 @@ export function createEditorHost(options: EditorHostOptions): EditorHost {
     filePath: options.filePath,
     fileName: options.fileName,
     // Use getters for reactive properties that can change after creation
-    get theme() { return options.theme; },
+    get theme() { return options.getTheme(); },
     get isActive() { return options.isActive; },
     workspaceId: options.workspaceId,
+
+    // ============ THEME CHANGES ============
+    onThemeChanged(callback: (theme: 'light' | 'dark' | 'crystal-dark') => void): () => void {
+      return options.subscribeToThemeChanges(callback);
+    },
 
     // ============ CONTENT LOADING ============
     async loadContent(): Promise<string> {

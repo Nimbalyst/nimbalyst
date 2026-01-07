@@ -13,7 +13,8 @@ import { registerEditor, unregisterEditor } from '../editorRegistry';
 
 export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function ExcalidrawEditor({ host }, ref) {
   const { filePath, theme: hostTheme } = host;
-  const theme = hostTheme === 'auto' ? 'light' : hostTheme;
+  // Excalidraw only supports 'light' or 'dark' - map our themes accordingly
+  const theme = (hostTheme === 'dark' || hostTheme === 'crystal-dark') ? 'dark' : 'light';
 
   // Loading state
   const [isLoading, setIsLoading] = useState(true);

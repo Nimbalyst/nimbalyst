@@ -39,6 +39,7 @@ import { customEditorRegistry, CustomEditorWrapper } from '../CustomEditors';
 import { logger } from '../../utils/logger';
 import { createEditorHost } from './createEditorHost';
 import type { EditorHost, DiffConfig } from '@nimbalyst/runtime';
+import { store, editorHasUnacceptedChangesAtom, makeEditorKey } from '@nimbalyst/runtime/store';
 
 interface TabEditorProps {
   // Identification
@@ -268,6 +269,15 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const diffRequestCallbackRef = useRef<((config: DiffConfig) => void) | null>(null); // For EditorHost diff request subscription
   const editorHostSaveRequestCallbackRef = useRef<(() => void | Promise<void>) | null>(null); // For EditorHost save request subscription
   const sourceModeChangedCallbackRef = useRef<((isSourceMode: boolean) => void) | null>(null); // For EditorHost source mode subscription
+  const themeChangeCallbackRef = useRef<((theme: 'light' | 'dark' | 'crystal-dark') => void) | null>(null); // For EditorHost theme change subscription
+
+  // Helper to update pending AI edit state - updates both ref and Jotai atom
+  const editorKey = useMemo(() => makeEditorKey(filePath), [filePath]);
+  const setPendingAIEditTag = useCallback((tag: {tagId: string, sessionId: string, filePath: string} | null) => {
+    pendingAIEditTagRef.current = tag;
+    // Update Jotai atom so tab indicator subscribes to it
+    store.set(editorHasUnacceptedChangesAtom(editorKey), tag !== null);
+  }, [editorKey]);
 
   // Refs for EditorHost stability - these allow editorHost to access current values without recreating
   const themeRef = useRef(theme);
@@ -275,6 +285,11 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const customEditorSourceModeRef = useRef(customEditorSourceMode);
   const customEditorSupportSourceModeRef = useRef(customEditorSupportsSourceMode);
   const onViewHistoryRef = useRef(onViewHistory);
+
+  // CRITICAL: Update themeRef SYNCHRONOUSLY during render, not in an effect.
+  // Effects run AFTER render, so custom editors would get the stale value if we used an effect.
+  // This ensures host.theme returns the current value immediately.
+  themeRef.current = theme;
 
   // NOTE: The old "check disk content on tab activation" polling logic has been removed.
   // File watchers are now active for all open tabs, so changes are detected in real-time
@@ -314,8 +329,12 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     }
   }, [onOpenSessionInChat]);
 
-  // Keep EditorHost stability refs in sync
-  useEffect(() => { themeRef.current = theme; }, [theme]);
+  // Notify custom editors of theme changes (themeRef is updated synchronously above)
+  useEffect(() => {
+    if (themeChangeCallbackRef.current) {
+      themeChangeCallbackRef.current(theme as 'light' | 'dark' | 'crystal-dark');
+    }
+  }, [theme]);
   useEffect(() => { isActiveRef.current = isActive; }, [isActive]);
   useEffect(() => { customEditorSourceModeRef.current = customEditorSourceMode; }, [customEditorSourceMode]);
   useEffect(() => { customEditorSupportSourceModeRef.current = customEditorSupportsSourceMode; }, [customEditorSupportsSourceMode]);
@@ -521,11 +540,11 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         logger.ui.info(`[TabEditor] Restoring pending AI edit on mount: tagId=${pendingTag.id}, status=${pendingTag.status}`);
 
         // Set the ref so other parts of the component know we're in diff mode
-        pendingAIEditTagRef.current = {
+        setPendingAIEditTag({
           tagId: pendingTag.id,
           sessionId: pendingTag.sessionId,
           filePath: filePath
-        };
+        });
 
         // If content differs, apply the diff
         if (oldContent !== newContent) {
@@ -731,7 +750,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             logger.ui.info('[TabEditor] No diffs remaining after user save, clearing pending tag');
             const { tagId, filePath: tagFilePath } = pendingAIEditTagRef.current!;
             await window.electronAPI.invoke('history:update-tag-status', tagFilePath, tagId, 'reviewed');
-            pendingAIEditTagRef.current = null;
+            setPendingAIEditTag(null);
           } else {
             logger.ui.info('[TabEditor] Diffs still present after save, keeping pending tag');
           }
@@ -984,7 +1003,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
           if (isMockupFile) {
             diffUpdatePromise = (async () => {
-              pendingAIEditTagRef.current = tagInfo;
+              setPendingAIEditTag(tagInfo);
               // Route through EditorHost callback - MockupViewer handles diff mode
               if (diffRequestCallbackRef.current) {
                 diffRequestCallbackRef.current({
@@ -1143,7 +1162,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
                   // CRITICAL FIX RC7: Store tag info ONLY after successful diff application
                   // This ensures pendingAIEditTagRef is synchronized with actual editor state
-                  pendingAIEditTagRef.current = tagInfo;
+                  setPendingAIEditTag(tagInfo);
                 }
               } catch (error) {
                 logger.ui.error(`[TabEditor] Failed to apply AI diff:`, error);
@@ -1297,7 +1316,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         logger.ui.info('[TabEditor] Pending tag cleared for this file, exiting diff mode:', filePath);
 
         // Clear pending tag ref
-        pendingAIEditTagRef.current = null;
+        setPendingAIEditTag(null);
 
         // Hide the diff approval bar and clear session info
         setShowMonacoDiffBar(false);
@@ -1473,11 +1492,11 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
           // CRITICAL: Update pendingAIEditTagRef to point to the NEW incremental-approval tag
           // This ensures that when CLEAR_DIFF_TAG_COMMAND is dispatched later, it marks the correct tag as reviewed
-          pendingAIEditTagRef.current = {
+          setPendingAIEditTag({
             tagId: newTagId,
             sessionId,
             filePath
-          };
+          });
 
           // Update our state
           setContent(approvedContent);
@@ -1507,7 +1526,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         logger.ui.info(`[TabEditor] Successfully marked AI edit tag as reviewed: ${tagId}`);
 
         // Clear the pending tag reference immediately so file watcher won't re-enter diff mode
-        pendingAIEditTagRef.current = null;
+        setPendingAIEditTag(null);
 
         // Now save current editor state to disk
         // This preserves all the incremental accept/reject decisions the user made
@@ -1574,7 +1593,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             logger.ui.info('[TabEditor] APPROVE_DIFF_COMMAND - clearing tag before DiffPlugin handles it');
 
             // Clear ref immediately so file watcher won't re-enter diff mode
-            pendingAIEditTagRef.current = null;
+            setPendingAIEditTag(null);
 
             // Update tag status in database (async, but tag ref is already cleared)
             window.electronAPI.history.updateTagStatus(tagFilePath, tagId, 'reviewed', workspaceId)
@@ -1600,7 +1619,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             logger.ui.info('[TabEditor] REJECT_DIFF_COMMAND - clearing tag before DiffPlugin handles it');
 
             // Clear ref immediately so file watcher won't re-enter diff mode
-            pendingAIEditTagRef.current = null;
+            setPendingAIEditTag(null);
 
             // Update tag status in database (async, but tag ref is already cleared)
             window.electronAPI.history.updateTagStatus(tagFilePath, tagId, 'reviewed', workspaceId)
@@ -1734,7 +1753,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       console.log('[TabEditor] EXIT DIFF MODE CALLED');
 
       // Clear pending tag ref
-      pendingAIEditTagRef.current = null;
+      setPendingAIEditTag(null);
 
       // Hide the diff approval bar and clear session info
       setShowMonacoDiffBar(false);
@@ -1790,7 +1809,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       editorRef.current.exitDiffMode();
 
       // Clear pending tag ref
-      pendingAIEditTagRef.current = null;
+      setPendingAIEditTag(null);
 
       // Hide the diff approval bar and clear session info
       setShowMonacoDiffBar(false);
@@ -1817,8 +1836,16 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     return createEditorHost({
       filePath,
       fileName,
-      // Use getters that access refs for values that change but shouldn't recreate host
-      get theme() { return themeRef.current; },
+      // Theme access via function - reads from ref so always current
+      getTheme: () => themeRef.current as 'light' | 'dark' | 'crystal-dark',
+      // Subscribe to theme changes
+      subscribeToThemeChanges: (callback: (t: 'light' | 'dark' | 'crystal-dark') => void): (() => void) => {
+        themeChangeCallbackRef.current = callback;
+        return () => {
+          themeChangeCallbackRef.current = null;
+        };
+      },
+      // Use getter that accesses ref for value that can change but shouldn't recreate host
       get isActive() { return isActiveRef.current; },
       workspaceId,
 
@@ -1937,7 +1964,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         }
 
         // Clear pending tag
-        pendingAIEditTagRef.current = null;
+        setPendingAIEditTag(null);
 
         // Update state
         setContent(result.content);

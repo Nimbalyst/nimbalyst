@@ -9,6 +9,7 @@ import { createInitialFileContent, createMockupContent } from '../utils/fileUtil
 import { getFileName } from '../utils/pathUtils';
 import { getExtensionLoader } from '@nimbalyst/runtime';
 import { KeyboardShortcuts, getShortcutDisplay } from '../../shared/KeyboardShortcuts';
+import { store, gitStatusMapAtom, type FileGitStatus as AtomFileGitStatus } from '../store';
 import '../WorkspaceSidebar.css';
 
 interface FileTreeItem {
@@ -738,9 +739,11 @@ export function WorkspaceSidebar({
   }, [fileTree, fileTreeFilter, isGitWorktree, loadGitWorktreeModifiedFiles]);
 
   // Load git file statuses for file tree icons
+  // Writes to Jotai atom - FileGitStatusIndicator components subscribe per-node
   const loadGitFileStatuses = useCallback(async () => {
     if (!workspacePath || !window.electronAPI?.invoke) {
       setGitFileStatuses(new Map());
+      store.set(gitStatusMapAtom, new Map());
       return;
     }
 
@@ -748,22 +751,33 @@ export function WorkspaceSidebar({
       const result = await window.electronAPI.invoke('git:get-all-file-statuses', workspacePath);
 
       if (result?.success && result.statuses) {
-        // Convert object to Map, filtering out unchanged and deleted statuses
-        const statusMap = new Map<string, FileGitStatus>();
+        // Convert object to Map for legacy prop-based system
+        const legacyStatusMap = new Map<string, FileGitStatus>();
+        // Convert to atom format {index, workingTree}
+        const atomStatusMap = new Map<string, AtomFileGitStatus>();
+
         for (const [filePath, fileStatus] of Object.entries(result.statuses)) {
           const status = (fileStatus as { status: string }).status;
           // Only include modified, staged, and untracked (not unchanged or deleted)
           if (status === 'modified' || status === 'staged' || status === 'untracked') {
-            statusMap.set(filePath, status as FileGitStatus);
+            legacyStatusMap.set(filePath, status as FileGitStatus);
+            // Map to atom format
+            atomStatusMap.set(filePath, {
+              index: status === 'staged' ? 'A' : ' ',
+              workingTree: status === 'modified' ? 'M' : status === 'untracked' ? '?' : ' ',
+            });
           }
         }
-        setGitFileStatuses(statusMap);
+        setGitFileStatuses(legacyStatusMap);
+        store.set(gitStatusMapAtom, atomStatusMap);
       } else {
         setGitFileStatuses(new Map());
+        store.set(gitStatusMapAtom, new Map());
       }
     } catch (error) {
       console.error('Failed to load git file statuses:', error);
       setGitFileStatuses(new Map());
+      store.set(gitStatusMapAtom, new Map());
     }
   }, [workspacePath]);
 
@@ -773,6 +787,7 @@ export function WorkspaceSidebar({
       loadGitFileStatuses();
     } else {
       setGitFileStatuses(new Map());
+      store.set(gitStatusMapAtom, new Map());
     }
   }, [isGitRepo, loadGitFileStatuses]);
 

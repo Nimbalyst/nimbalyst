@@ -57,11 +57,23 @@ export interface EditorHost {
   /** File name (for display) */
   readonly fileName: string;
 
-  /** Current theme - may include 'auto' which should be resolved by the host */
-  readonly theme: 'light' | 'dark' | 'crystal-dark' | 'auto';
+  /** Current theme */
+  readonly theme: 'light' | 'dark' | 'crystal-dark';
 
   /** Whether this editor's tab is active */
   readonly isActive: boolean;
+
+  // ============ THEME CHANGES ============
+
+  /**
+   * Subscribe to theme changes.
+   * Called when the application theme changes.
+   * Editor should update its visual appearance in response.
+   *
+   * @param callback Called with new theme when it changes
+   * @returns Unsubscribe function
+   */
+  onThemeChanged(callback: (theme: 'light' | 'dark' | 'crystal-dark') => void): () => void;
 
   /** Workspace identifier (if in a workspace) */
   readonly workspaceId?: string;

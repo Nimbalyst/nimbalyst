@@ -14,6 +14,7 @@ import { DiffTestDropdown } from "../AIChat/DiffTestDropdown.tsx";
 import { getFileName } from '../../utils/pathUtils';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
 import { TerminalPanel } from '../Terminal/TerminalPanel';
+import { store, sessionProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom } from '../../store';
 
 export interface AgenticPanelRef {
   createNewSession: (planPath?: string) => Promise<void>;
@@ -31,7 +32,10 @@ export interface AgenticPanelProps {
   workspaceName?: string; // For window title updates
 
   // Optional context
+  /** @deprecated Use getDocumentContext instead */
   documentContext?: any; // DocumentContext type
+  /** Getter function for document context - called on-demand to avoid re-renders */
+  getDocumentContext?: () => any;
 
   // Initial session (optional)
   initialSessionId?: string;
@@ -112,6 +116,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   workspacePath,
   workspaceName,
   documentContext,
+  getDocumentContext,
   initialSessionId,
   planDocumentPath,
   isActive = true,
@@ -370,31 +375,26 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   }, [workspacePath, sessionHistoryWidth, sessionHistoryCollapsed, collapsedGroups, sortOrder, mode]);
 
   // Subscribe to session state changes to track running sessions
+  // Writes to Jotai atoms so SessionListItem indicators subscribe directly
   useEffect(() => {
     const initSessionState = async () => {
       try {
-        // TODO: Debug logging - uncomment if needed
-        // console.log('[AgenticPanel] Initializing session state subscription');
-
         // Get initial active sessions
         const result = await window.electronAPI.sessionState.getActiveSessionIds();
-        // TODO: Debug logging - uncomment if needed
-        // console.log('[AgenticPanel] Initial active sessions:', result);
         if (result.success && result.sessionIds) {
-          // TODO: Debug logging - uncomment if needed
-          // console.log('[AgenticPanel] Setting running sessions:', result.sessionIds);
           setRunningSessions(new Set(result.sessionIds));
+          // Write initial state to Jotai atoms
+          for (const sessionId of result.sessionIds) {
+            store.set(sessionProcessingAtom(sessionId), true);
+          }
         }
 
         // Subscribe to state changes
-        // TODO: Debug logging - uncomment if needed
-        // console.log('[AgenticPanel] Subscribing to session state changes');
         await window.electronAPI.sessionState.subscribe();
 
         // Listen for state change events
         const handleStateChange = (event: any) => {
-          // TODO: Debug logging - uncomment if needed
-          // console.log('[AgenticPanel] Session state changed:', event);
+          // Update local state (for backwards compat)
           setRunningSessions(prev => {
             const next = new Set(prev);
 
@@ -403,27 +403,35 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
               case 'session:streaming':
               case 'session:waiting':
                 next.add(event.sessionId);
-                // TODO: Debug logging - uncomment if needed
-                // console.log('[AgenticPanel] Added running session:', event.sessionId, 'Total:', next.size);
                 break;
               case 'session:completed':
               case 'session:error':
               case 'session:interrupted':
                 next.delete(event.sessionId);
-                // TODO: Debug logging - uncomment if needed
-                // console.log('[AgenticPanel] Removed running session:', event.sessionId, 'Total:', next.size);
                 break;
             }
 
             return next;
           });
+
+          // Write to Jotai atoms - SessionStatusIndicator subscribes to these
+          switch (event.type) {
+            case 'session:started':
+            case 'session:streaming':
+            case 'session:waiting':
+              store.set(sessionProcessingAtom(event.sessionId), true);
+              break;
+            case 'session:completed':
+            case 'session:error':
+            case 'session:interrupted':
+              store.set(sessionProcessingAtom(event.sessionId), false);
+              break;
+          }
         };
 
         window.electronAPI.sessionState.onStateChange(handleStateChange);
 
         return () => {
-          // TODO: Debug logging - uncomment if needed
-          // console.log('[AgenticPanel] Cleaning up session state subscription');
           window.electronAPI.sessionState.removeStateChangeListener(handleStateChange);
           window.electronAPI.sessionState.unsubscribe();
         };
@@ -1290,6 +1298,12 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       // Update session timestamp in SessionHistory without database reload
       setUpdatedSession({ id: data.sessionId, timestamp: Date.now() });
 
+      // If this is NOT the active tab, mark as unread (new assistant message arrived)
+      // Write to Jotai atom so SessionStatusIndicator updates
+      if (data.sessionId !== activeTabId) {
+        store.set(sessionUnreadAtom(data.sessionId), true);
+      }
+
       // If this is the active tab, auto-mark as read after message completion
       // Use a delay to ensure the reload completes first
       if (data.sessionId === activeTabId) {
@@ -1368,6 +1382,14 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   const activeTabIdRef = useRef(activeTabId);
   useEffect(() => {
     activeTabIdRef.current = activeTabId;
+  }, [activeTabId]);
+
+  // Clear unread state when user switches to a session
+  // Write to Jotai atom so SessionStatusIndicator updates
+  useEffect(() => {
+    if (activeTabId) {
+      store.set(sessionUnreadAtom(activeTabId), false);
+    }
   }, [activeTabId]);
 
   useEffect(() => {
@@ -1767,6 +1789,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
   // Listen for pending prompt events (tool permissions and AskUserQuestion)
   // This tracks which sessions have prompts waiting for user response
+  // Writes to Jotai atoms so SessionStatusIndicator can subscribe
   useEffect(() => {
     const handleToolPermission = (data: { sessionId: string; requestId: string }) => {
       if (!data?.sessionId) return;
@@ -1775,6 +1798,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         next.add(data.sessionId);
         return next;
       });
+      // Write to Jotai atom
+      store.set(sessionPendingPromptAtom(data.sessionId), true);
     };
 
     const handleToolPermissionResolved = (data: { sessionId: string; requestId: string }) => {
@@ -1786,6 +1811,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         next.delete(data.sessionId);
         return next;
       });
+      // Write to Jotai atom
+      store.set(sessionPendingPromptAtom(data.sessionId), false);
     };
 
     const handleAskUserQuestion = (data: { sessionId: string; questionId: string }) => {
@@ -1795,6 +1822,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         next.add(data.sessionId);
         return next;
       });
+      // Write to Jotai atom
+      store.set(sessionPendingPromptAtom(data.sessionId), true);
     };
 
     const handleAskUserQuestionAnswered = (data: { sessionId: string; questionId: string }) => {
@@ -1804,6 +1833,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         next.delete(data.sessionId);
         return next;
       });
+      // Write to Jotai atom
+      store.set(sessionPendingPromptAtom(data.sessionId), false);
     };
 
     const cleanupToolPermission = window.electronAPI.on('ai:toolPermission', handleToolPermission);
@@ -2104,9 +2135,11 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
     try {
       // Prepare document context - strip out non-serializable functions
+      // Prefer getter function (avoids re-renders) over prop (legacy)
       let contextToSend = undefined;
-      if (documentContext) {
-        const { getLatestContent, ...serializableContext } = documentContext as any;
+      const docContext = getDocumentContext ? getDocumentContext() : documentContext;
+      if (docContext) {
+        const { getLatestContent, ...serializableContext } = docContext as any;
 
         // If getLatestContent exists, call it to get the current content
         if (typeof getLatestContent === 'function') {
@@ -2193,7 +2226,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         throw err;
       }
     }
-  }, [workspacePath, mode, documentContext, sessionTabs]);
+  }, [workspacePath, mode, getDocumentContext, documentContext, sessionTabs]);
 
   // Handle cancel request
   const handleCancelRequest = useCallback(async (sessionId: string) => {

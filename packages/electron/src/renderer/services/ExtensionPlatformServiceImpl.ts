@@ -81,6 +81,10 @@ export class ExtensionPlatformServiceImpl implements ExtensionPlatformService {
 
     // Helper to create a blob URL for a module that re-exports from window
     const createModuleUrl = (key: string, moduleExports: any): string => {
+      if (!moduleExports) {
+        console.error(`[ExtensionPlatformService] Missing dependency for import map: ${key}`);
+        throw new Error(`Missing host dependency: ${key}. App may need restart after code changes.`);
+      }
       // Generate export statements for all properties
       const exportNames = Object.keys(moduleExports).filter(
         (name) => name !== 'default' && name !== '__esModule'
@@ -141,6 +145,12 @@ ${exportNames.map((name) => `export const ${name} = __mod?.${name};`).join('\n')
     imports['@nimbalyst/datamodel-platform-service'] = createModuleUrl(
       '@nimbalyst/datamodel-platform-service',
       deps['@nimbalyst/datamodel-platform-service']
+    );
+
+    // @nimbalyst/runtime - umbrella module that re-exports common extension dependencies
+    imports['@nimbalyst/runtime'] = createModuleUrl(
+      '@nimbalyst/runtime',
+      deps['@nimbalyst/runtime']
     );
 
     // Register the import map with es-module-shims
@@ -414,6 +424,12 @@ CHECK:
       '@nimbalyst/datamodel-platform-service': {
         DataModelPlatformServiceImpl,
         getInstance: () => DataModelPlatformServiceImpl.getInstance(),
+      },
+      // @nimbalyst/runtime - umbrella re-export of common extension dependencies
+      // Extensions can import { MaterialSymbol, useDocumentPath } from '@nimbalyst/runtime'
+      '@nimbalyst/runtime': {
+        MaterialSymbol,
+        useDocumentPath,
       },
     };
 

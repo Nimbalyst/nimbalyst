@@ -1,7 +1,6 @@
 import React from 'react';
 import { TabBar } from './TabBar';
 import { useTabs } from '../../contexts/TabsContext';
-import { editorRegistry } from '@nimbalyst/runtime/ai/EditorRegistry';
 import './TabManager.css';
 
 export interface Tab {
@@ -15,7 +14,7 @@ export interface Tab {
   isVirtual?: boolean;
   isProcessing?: boolean; // Session is actively processing AI response
   hasUnread?: boolean; // Session has unread AI response
-  hasUnacceptedChanges?: boolean; // Tab has pending AI diffs that haven't been accepted
+  // NOTE: hasUnacceptedChanges removed - now subscribed via Jotai atom in TabDirtyIndicator
 }
 
 interface TabManagerProps {
@@ -42,19 +41,14 @@ export const TabManager: React.FC<TabManagerProps> = ({
 }) => {
   if (import.meta.env.DEV) console.log('[TabManager] render');
   // Get tabs from context - this component subscribes to tab changes
+  // NOTE: hasPendingDiffs polling removed - dirty/pending state now via Jotai atoms per-tab
   const { tabs, activeTabId, switchTab, togglePin, reorderTabs } = useTabs();
-
-  // Add hasUnacceptedChanges to tabs
-  const tabsWithPendingDiffs = tabs.map(tab => ({
-    ...tab,
-    hasUnacceptedChanges: editorRegistry.getEditor(tab.filePath)?.hasPendingDiffs() || false
-  }));
 
   return (
     <div className="tab-manager">
       {!hideTabBar && tabs.length > 0 && (
         <TabBar
-          tabs={tabsWithPendingDiffs}
+          tabs={tabs}
           activeTabId={activeTabId}
           onTabSelect={switchTab}
           onTabClose={onTabClose}

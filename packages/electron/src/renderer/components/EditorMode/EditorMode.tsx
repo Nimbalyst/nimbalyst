@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useRef, useState, useImperativeHandle, f
 import type { ConfigTheme } from 'rexical';
 import { useTabsActions, type TabData } from '../../contexts/TabsContext';
 import { useTabNavigation } from '../../hooks/useTabNavigation';
-import { useDocumentContext } from '../../hooks/useDocumentContext';
 import { handleWorkspaceFileSelect as handleWorkspaceFileSelectUtil } from '../../utils/workspaceFileOperations';
 import { createInitialFileContent, createMockupContent } from '../../utils/fileUtils';
 import { getFileName } from '../../utils/pathUtils';
@@ -95,8 +94,8 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   const [currentAISessionId, setCurrentAISessionId] = useState<string | null>(null);
 
   // Track active tab for document context (AI needs to know current file)
-  // This is state because we need to re-render when it changes
-  const [activeTabForContext, setActiveTabForContext] = useState<TabData | null>(null);
+  // Uses ref to avoid re-rendering EditorMode on every tab switch
+  const activeTabForContextRef = useRef<TabData | null>(null);
 
   // Refs
   const getContentRef = useRef<(() => string) | null>(null);
@@ -184,13 +183,12 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     return unsubscribe;
   }, [tabsActions, workspaceName]);
 
-  // Subscribe to active tab changes for document context (AI needs to know current file)
-  // This triggers a re-render when active tab changes, which is necessary for AIChat
+  // Keep activeTabForContextRef in sync with active tab (no re-render)
   useEffect(() => {
     const updateActiveTabForContext = () => {
       const snapshot = tabsActions.getSnapshot();
       const activeTab = snapshot.activeTabId ? snapshot.tabs.get(snapshot.activeTabId) : null;
-      setActiveTabForContext(activeTab || null);
+      activeTabForContextRef.current = activeTab || null;
     };
 
     // Initial update
@@ -285,11 +283,81 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   }, [currentFilePath, workspacePath]);
 
   // Build document context for AI features
-  // Uses activeTabForContext which is updated via subscription to trigger re-renders
-  const documentContext = useDocumentContext({
-    activeTab: activeTabForContext,
-    getContentRef
-  });
+  // Uses ref - context is computed on-demand, not on every tab switch
+  // AIChat will read this when it needs it (e.g., when sending a message)
+  const getDocumentContext = useCallback(() => {
+    const activeTab = activeTabForContextRef.current;
+    if (!activeTab) {
+      return {
+        filePath: '',
+        fileType: 'unknown',
+        content: '',
+        cursorPosition: undefined,
+        selection: undefined,
+        getLatestContent: undefined,
+        textSelection: undefined,
+        textSelectionTimestamp: undefined
+      };
+    }
+
+    const filePath = activeTab.filePath || '';
+    const lowerPath = filePath.toLowerCase();
+    let fileType = 'unknown';
+
+    if (lowerPath.endsWith('.mockup.html')) {
+      fileType = 'mockup';
+    } else {
+      const lastDot = lowerPath.lastIndexOf('.');
+      if (lastDot !== -1) {
+        const ext = lowerPath.substring(lastDot);
+        switch (ext) {
+          case '.md':
+          case '.markdown':
+            fileType = 'markdown';
+            break;
+          case '.json':
+            fileType = 'json';
+            break;
+          case '.yaml':
+          case '.yml':
+            fileType = 'yaml';
+            break;
+          case '.js':
+          case '.jsx':
+          case '.ts':
+          case '.tsx':
+            fileType = 'javascript';
+            break;
+          case '.html':
+            fileType = 'html';
+            break;
+          case '.css':
+          case '.scss':
+            fileType = 'css';
+            break;
+          case '.py':
+            fileType = 'python';
+            break;
+          default:
+            fileType = 'code';
+        }
+      }
+    }
+
+    return {
+      filePath,
+      fileType,
+      content: getContentRef.current ? getContentRef.current() : '',
+      cursorPosition: undefined,
+      selection: undefined,
+      getLatestContent: getContentRef.current || undefined,
+      mockupSelection: fileType === 'mockup' ? (window as any).__mockupSelectedElement : undefined,
+      mockupDrawing: fileType === 'mockup' ? (window as any).__mockupDrawing : undefined,
+      mockupAnnotationTimestamp: fileType === 'mockup' ? (window as any).__mockupAnnotationTimestamp : undefined,
+      textSelection: undefined,
+      textSelectionTimestamp: undefined
+    };
+  }, []);
 
   // Initialize tab navigation
   // NOTE: useTabNavigation will be updated to use context internally
@@ -889,7 +957,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
             onSessionLoaded={() => {}}
             onSessionIdChange={setCurrentAISessionId}
             onShowApiKeyError={() => {}}
-            documentContext={documentContext}
+            getDocumentContext={getDocumentContext}
             onContentModeChange={onModeChange}
             onFileOpen={handleWorkspaceFileSelect}
             onApplyEdit={(edit, prompt, aiResponse) => {

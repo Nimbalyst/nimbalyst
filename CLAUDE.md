@@ -58,7 +58,7 @@ See `/docs/PLAYWRIGHT.md` for comprehensive E2E testing documentation.
 
 ## Releases
 
-For detailed release instructions, see [RELEASING.md](RELEASING.md).
+For detailed release instructions, see [RELEASING.md](./RELEASING.md).
 
 **Quick reference:**
 - Use the `/release [patch|minor|major]` command
@@ -108,6 +108,61 @@ if (!window) {
   - Throw on missing required fields, don't provide defaults
 
 **Rule of thumb:** If you're adding code to "handle" missing required data, you're probably hiding a bug. Throw instead.
+
+### React State Architecture
+
+**CRITICAL: Do NOT "lift state up" for complex applications.**
+
+The "lift state up" pattern is appropriate for simple React apps but becomes an anti-pattern in IDE-like applications. This codebase explicitly rejects that pattern for editor state.
+
+#### State Ownership Principles
+
+1. **Editors own their content state**
+   - Custom editors (Monaco, RevoGrid, Lexical) own their document content
+   - Parent only knows "tab X uses editor Y for file Z" - NOT the file contents
+   - Editor content is NEVER stored in a Map/object in a parent component
+
+2. **Use Jotai atoms for cross-cutting state**
+   - Theme, preferences (global atoms)
+   - Tab metadata - dirty, processing (atom families by tab ID)
+   - Session state - unread, processing (atom families by session ID)
+   - File tree git status (atom per file/directory)
+
+3. **Communication via EditorHost, not props**
+   ```typescript
+   // BAD: Controlled editor
+   <Editor content={content} onChange={setContent} />
+
+   // GOOD: Editor owns state, uses host for I/O
+   <Editor host={editorHost} />
+   // Editor calls host.loadContent() on mount
+   // Editor calls host.saveContent() when saving
+   // Editor calls host.setDirty() on changes
+   ```
+
+4. **Stateful editors cannot be re-rendered**
+   - RevoGrid, Monaco, Lexical manage internal state
+   - Parent re-renders will break them
+   - Changes flow through callbacks, not props
+
+#### Anti-Pattern Recognition
+
+| Anti-Pattern | Problem | Solution |
+| --- | --- | --- |
+| `Map<string, Content>` in parent | All children re-render on any change | Each editor owns its content |
+| `Map<string, Status>` as prop | Reference changes trigger re-render | Use Jotai atom family |
+| Polling in render (`hasPendingDiffs()`) | O(n) on every render | Subscribe to atom updates |
+| 15 refs to avoid re-renders | Fighting the architecture | Fix state ownership |
+| `useState` for cross-component state | Prop drilling or context re-renders | Use Jotai atoms |
+
+#### Extension Contract
+
+Extensions receive `EditorHost` and must:
+- Call `loadContent()` on mount (not expect content prop)
+- Own all internal state
+- Call `saveContent()` when save requested
+- Handle `onFileChanged()` for external edits
+- NEVER depend on parent re-rendering them
 
 ### Shared UI Patterns
 
@@ -202,7 +257,7 @@ planStatus:
 - **Never commit changes unless explicitly asked**
 - **Never provide time or effort estimates**
 - **Don't disable tests without asking first**
-- **Don't run `npm run dev` yourself** - User always does that
+- **Don't run \****`npm run dev`**\*\* yourself** - User always does that
 - **Never release without being explicitly instructed**
 - **Don't git reset or git add -A without asking**
 - **Don't add Co-Authored-By lines to commit messages**
@@ -214,7 +269,7 @@ When working on extensions in `packages/extensions/`:
 - Use `mcp__nimbalyst-extension-dev__extension_reload` to rebuild and reload extensions
 - Use `mcp__nimbalyst-extension-dev__extension_get_logs` to check for errors
 - Use `mcp__nimbalyst-extension-dev__extension_get_status` to verify extension state
-- **Never use manual `npm run build`** - always use the MCP tools for extension builds
+- **Never use manual \****`npm run build`** - always use the MCP tools for extension builds
 
 ## Testing Guidelines
 
@@ -225,11 +280,11 @@ When working on extensions in `packages/extensions/`:
 
 ## Documentation
 
-- **ANALYTICS_GUIDE.md**: How to add PostHog analytics events
-- **POSTHOG_EVENTS.md**: Canonical reference for all analytics events
+- **ANALYTICS\_GUIDE.md**: How to add PostHog analytics events
+- **POSTHOG\_EVENTS.md**: Canonical reference for all analytics events
 - **PLAYWRIGHT.md**: E2E testing patterns and best practices
-- **AI_PROVIDER_TYPES.md**: AI provider architecture
-- **CUSTOM_TOOL_WIDGETS.md**: Custom MCP tool widget implementation
-- **INTERNAL_MCP_SERVERS.md**: How to implement internal MCP servers
+- **AI\_PROVIDER\_TYPES.md**: AI provider architecture
+- **CUSTOM\_TOOL\_WIDGETS.md**: Custom MCP tool widget implementation
+- **INTERNAL\_MCP\_SERVERS.md**: How to implement internal MCP servers
 - **THEMING.md**: Theming system documentation (in electron package)
 - **RELEASING.md**: Release process

@@ -120,6 +120,68 @@ const createdAt = toMillis(row.created_at);  // Converts UTC to proper epoch ms
 - `src/main/services/PGLiteSessionStore.ts` - toMillis() implementation
 - `src/main/services/PGLiteAgentMessagesStore.ts` - Uses CURRENT_TIMESTAMP
 
+## Renderer State Architecture
+
+### Jotai Atoms by Domain
+
+The renderer uses Jotai for state that needs to cross component boundaries:
+
+| Domain | Atoms | Owner |
+| --- | --- | --- |
+| Theme | `themeAtom` | Global, IPC-synced |
+| Editors | `editorDirtyAtom(key)`, `editorProcessingAtom(key)` | EditorHost writes, Tab reads |
+| Sessions | `sessionUnreadAtom(id)`, `sessionProcessingAtom(id)` | AgenticPanel writes, UI reads |
+| File Tree | `gitStatusAtom`, `expandedDirsAtom` | WorkspaceSidebar writes, FileTree reads |
+| Trackers | `trackerCountsAtom` | TrackerService writes, UI reads |
+
+### EditorHost Architecture
+
+All editors use EditorHost - a stable service object that handles all host communication:
+
+```typescript
+// TabEditor creates host once, passes to editor
+function TabEditor({ editorKey }: { editorKey: EditorKey }) {
+  const host = useMemo(() => createEditorHost({ editorKey }), [editorKey]);
+  const Editor = useEditorForFile(host.filePath);
+  return <Editor host={host} />;
+}
+
+// Editor uses host for everything
+function CustomEditor({ host }: { host: EditorHost }) {
+  useEffect(() => host.loadContent().then(setContent), [host]);
+  useEffect(() => host.onThemeChanged(setTheme), [host]);
+  useEffect(() => host.onFileChanged(handleFileChange), [host]);
+  useEffect(() => host.onSaveRequested(handleSave), [host]);
+
+  const handleChange = (content) => {
+    setContent(content);
+    host.setDirty(true);  // Writes to atom, Tab re-renders, TabEditor does NOT
+  };
+}
+```
+
+**Key principle:** EditorHost methods write to atoms. Components that need that state subscribe to the atoms directly. The parent (TabEditor) never subscribes, so it never re-renders.
+
+### Re-render Isolation
+
+Parents subscribe ONLY to lists of IDs. Children subscribe to their own atoms:
+
+```typescript
+// TabBar subscribes to list of tab IDs only
+function TabBar() {
+  const tabIds = useAtomValue(tabIdsAtom);  // Re-renders when tabs added/removed
+  return tabIds.map(id => <Tab key={id} editorKey={id} />);
+}
+
+// Each Tab subscribes to its own dirty atom
+function Tab({ editorKey }) {
+  const isDirty = useAtomValue(editorDirtyAtom(editorKey));  // Only THIS tab re-renders
+  return <div>{isDirty && '*'}</div>;
+}
+```
+
+**If you need React.memo to prevent re-renders, you have the wrong architecture.**
+
 ## Logging
 
 The Electron app has multiple log outputs:

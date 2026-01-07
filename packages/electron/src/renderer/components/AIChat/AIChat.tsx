@@ -14,7 +14,10 @@ interface AIChatProps {
   onWidthChange: (width: number) => void;
   planningModeEnabled?: boolean;
   onTogglePlanningMode?: (enabled: boolean) => void;
+  /** @deprecated Use getDocumentContext instead */
   documentContext?: DocumentContext & { getLatestContent?: () => string };
+  /** Getter function for document context - called on-demand to avoid re-renders */
+  getDocumentContext?: () => DocumentContext & { getLatestContent?: () => string };
   onApplyEdit?: (edit: any, prompt?: string, aiResponse?: string) => void;
   workspacePath?: string;
   sessionToLoad?: { sessionId: string; workspacePath?: string } | null;
@@ -40,6 +43,7 @@ export const AIChat = forwardRef<AIChatRef, AIChatProps>(function AIChat({
   planningModeEnabled = true,
   onTogglePlanningMode,
   documentContext,
+  getDocumentContext,
   onApplyEdit,
   workspacePath,
   sessionToLoad,
@@ -136,6 +140,7 @@ export const AIChat = forwardRef<AIChatRef, AIChatProps>(function AIChat({
             mode="chat"
             workspacePath={workspacePath}
             documentContext={documentContext}
+            getDocumentContext={getDocumentContext}
             onContentModeChange={onContentModeChange}
             onFileOpen={onFileOpen}
           />

@@ -1,0 +1,156 @@
+/**
+ * Jotai Store Exports
+ *
+ * Central export point for all Jotai atoms and utilities.
+ * Re-exports shared atoms from @nimbalyst/runtime/store,
+ * plus Electron-specific atoms (sessions, file tree, project state, trackers).
+ *
+ * @example
+ * import { store, themeAtom, makeEditorKey } from '@/store';
+ */
+
+// ============================================================
+// Re-export shared atoms from runtime
+// These are used by extensions and are platform-agnostic
+// ============================================================
+
+// Store instance
+export { store, getStore } from '@nimbalyst/runtime/store';
+
+// EditorKey utilities
+export {
+  type EditorKey,
+  type EditorContext,
+  makeEditorKey,
+  makeEditorContext,
+  parseEditorKey,
+  getFilePathFromKey,
+  isWorktreeKey,
+  isMainKey,
+  getKeysForFilePath,
+} from '@nimbalyst/runtime/store';
+
+// Theme atoms
+export {
+  themeIdAtom,
+  themeAtom,
+  isDarkThemeAtom,
+  themeColorsAtom,
+  setThemeAtom,
+  getThemeById,
+  registerCustomTheme,
+  type ThemeId,
+  type Theme,
+  type ThemeColors,
+} from '@nimbalyst/runtime/store';
+
+// Editor atoms
+export {
+  editorDirtyAtom,
+  editorProcessingAtom,
+  editorHasUnacceptedChangesAtom,
+  tabIdsAtom,
+  activeTabIdAtom,
+  tabMetadataAtom,
+  dirtyEditorCountAtom,
+  hasAnyPendingReviewAtom,
+  addTabAtom,
+  closeTabAtom,
+  reorderTabsAtom,
+  type TabMetadata,
+} from '@nimbalyst/runtime/store';
+
+// ============================================================
+// Electron-specific atoms
+// These depend on IPC, file watchers, or other Electron features
+// ============================================================
+
+// Session atoms (Electron IPC)
+export {
+  sessionListAtom,
+  activeSessionIdAtom,
+  sessionProcessingAtom,
+  sessionUnreadAtom,
+  sessionPendingPromptAtom,
+  sessionPendingPermissionAtom,
+  sessionLastReadAtom,
+  totalUnreadCountAtom,
+  anySessionProcessingAtom,
+  anyPendingPermissionAtom,
+  markSessionReadAtom,
+  setActiveSessionAtom,
+  removeSessionAtom,
+  addSessionAtom,
+  updateSessionAtom,
+  type SessionInfo,
+} from './atoms/sessions';
+
+// File tree atoms (Electron file watcher)
+export {
+  fileTreeAtom,
+  gitStatusMapAtom,
+  fileGitStatusAtom,
+  expandedDirsAtom,
+  isDirExpandedAtom,
+  selectedFilePathAtom,
+  fileTreeFilterAtom,
+  directoryGitStatusAtom,
+  modifiedFileCountAtom,
+  updateGitStatusAtom,
+  toggleDirExpandedAtom,
+  revealFileAtom,
+  type GitStatusCode,
+  type FileGitStatus,
+  type FileTreeItem,
+} from './atoms/fileTree';
+
+// Tracker atoms (Electron-specific)
+export {
+  trackerCountsAtom,
+  trackerCountAtom,
+  trackerItemsAtom,
+  activeTrackerTypeAtom,
+  selectedTrackerItemAtom,
+  trackerFilterAtom,
+  filteredTrackerItemsAtom,
+  totalOpenItemsAtom,
+  criticalItemsCountAtom,
+  updateTrackerCountsAtom,
+  updateTrackerItemsAtom,
+  setTrackerFilterAtom,
+  clearTrackerFilterAtom,
+  type TrackerType,
+  type TrackerStatus,
+  type TrackerItem,
+  type TrackerFilter,
+} from './atoms/trackers';
+
+// Project state atoms (Electron persistence)
+export {
+  projectStateAtom,
+  persistNow,
+  sidebarWidthAtom,
+  sidebarCollapsedAtom,
+  aiPanelWidthAtom,
+  aiPanelCollapsedAtom,
+  bottomPanelHeightAtom,
+  bottomPanelTypeAtom,
+  persistedExpandedDirsAtom,
+  recentFilesAtom,
+  setSidebarWidthAtom,
+  setSidebarCollapsedAtom,
+  setAiPanelWidthAtom,
+  setAiPanelCollapsedAtom,
+  setBottomPanelHeightAtom,
+  setBottomPanelTypeAtom,
+  setExpandedDirsAtom,
+  addRecentFileAtom,
+  updateContextTabsAtom,
+  loadProjectStateAtom,
+  resetProjectStateAtom,
+  type ProjectState,
+  type PanelLayout,
+  type FileTreeState,
+  type ContextTabState,
+  type PersistedTabInfo,
+} from './atoms/projectState';

@@ -2,17 +2,24 @@
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { Provider as JotaiProvider } from 'jotai';
 import App from './App';
 import './index.css';
 import posthog from "posthog-js";
 import {PostHogProvider} from "posthog-js/react";
 import {beforePostHogSendWeb} from "../main/services/analytics/analytics-utils.ts";
 import { initMonacoEditor } from './utils/monacoConfig';
+import { store } from '@nimbalyst/runtime/store';
+import { initializeTheme } from './hooks/useTheme';
 
 // console.log('[RENDERER] Imports complete at', new Date().toISOString());
 
 // Initialize Monaco Editor before rendering any components
 initMonacoEditor();
+
+// Initialize theme from main process and set up IPC listener
+// This must happen before React renders to avoid flash
+initializeTheme();
 
 const rootElement = document.getElementById('root') as HTMLElement;
 // console.log('[RENDERER] Root element:', rootElement, 'at', new Date().toISOString());
@@ -63,9 +70,11 @@ posthog.onSessionId(async (sessionId: string, windowId, changeReason) => {
 
 root.render(
   <React.StrictMode>
-    <PostHogProvider client={posthogClient}>
-      <App />
-    </PostHogProvider>
+    <JotaiProvider store={store}>
+      <PostHogProvider client={posthogClient}>
+        <App />
+      </PostHogProvider>
+    </JotaiProvider>
   </React.StrictMode>
 );
 

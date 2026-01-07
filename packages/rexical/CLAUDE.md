@@ -123,6 +123,52 @@ For ephemeral UI state that needs to be shared across React component boundaries
 - State within a single component tree (use React state/context)
 - Complex state management (consider Redux or Zustand)
 
+### Editor State Ownership
+
+Lexical editor OWNS its state. This is non-negotiable:
+
+1. **EditorState lives in Lexical** - Content, selection, history
+2. **React does NOT control content** - No content props
+3. **Updates via Lexical APIs** - `editor.update()`, commands
+
+**Never:**
+- Store Lexical content in React state
+- Store Lexical content in Jotai atoms
+- Pass content as controlled prop
+- Expect parent to re-render with new content
+
+**Correct pattern:**
+```typescript
+function RexicalEditor({ host }: EditorHostProps) {
+  const [editor] = useLexicalComposerContext();
+
+  // Load content ONCE on mount
+  useEffect(() => {
+    host.loadContent().then(content => {
+      editor.update(() => {
+        // Initialize from content
+      });
+    });
+  }, []);
+
+  // Subscribe to external changes
+  useEffect(() => {
+    return host.onFileChanged((newContent) => {
+      editor.update(() => {
+        // Apply external changes
+      });
+    });
+  }, [host]);
+
+  // Notify dirty state
+  useEffect(() => {
+    return editor.registerUpdateListener(({ dirtyElements }) => {
+      host.setDirty(dirtyElements.size > 0);
+    });
+  }, [host]);
+}
+```
+
 ## Dependencies
 
 Built with modern React, TypeScript, and Vite. Uses extensive Lexical packages (@lexical/*) for editor functionality, plus supporting libraries like KaTeX for equations, Prettier for code formatting, and Excalidraw for drawings.

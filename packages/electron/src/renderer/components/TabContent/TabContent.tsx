@@ -13,12 +13,14 @@
 
 import React, { useCallback, useEffect, useRef } from 'react';
 import { createRoot, Root } from 'react-dom/client';
+import { Provider as JotaiProvider } from 'jotai';
 import type { TextReplacement } from 'rexical';
 import type { Tab } from '../TabManager/TabManager';
 import { TabEditor } from '../TabEditor/TabEditor';
 import { TabEditorErrorBoundary } from '../TabEditorErrorBoundary';
 import { logger } from '../../utils/logger';
 import { useTabsActions, type TabData, notifyDirtyStateChange } from '../../contexts/TabsContext';
+import { store, editorDirtyAtom, editorHasUnacceptedChangesAtom, makeEditorKey } from '@nimbalyst/runtime/store';
 
 interface TabContentProps {
   textReplacements?: TextReplacement[];
@@ -163,10 +165,14 @@ export const TabContent: React.FC<TabContentProps> = ({
       }
     };
 
-    // Handle dirty state changes - update tab store and notify subscribers
+    // Handle dirty state changes - write to Jotai atom only
+    // NOTE: We do NOT call tabsActions.updateTab() here because that would
+    // trigger useTabs() subscribers to re-render (the old architecture).
+    // With Jotai, only TabDirtyIndicator subscribes to dirty state.
     const handleDirtyChange = (isDirty: boolean) => {
-      tabsActions.updateTab(tab.id, { isDirty });
-      // Notify the dirty state subscription system so TabItem can re-render
+      const editorKey = makeEditorKey(tab.filePath);
+      store.set(editorDirtyAtom(editorKey), isDirty);
+      // Also notify the legacy subscription system (for backwards compat with save-on-close)
       notifyDirtyStateChange(tab.id, isDirty);
     };
 
@@ -174,36 +180,40 @@ export const TabContent: React.FC<TabContentProps> = ({
     // The wrapper is set to display:none for inactive tabs, display:block for active
     const isActiveTab = tab.id === activeTabIdRef.current;
 
+    // Wrap in JotaiProvider so TabEditor can subscribe to theme atom
+    // (separate React roots need their own provider to access the shared store)
     root.render(
-      <TabEditorErrorBoundary
-        filePath={tab.filePath}
-        fileName={tab.fileName}
-        onRetry={() => {
-          // Remove and recreate on retry
-          removeTabEditor(tab.id);
-          createTabEditor(tab, content);
-        }}
-        onClose={() => {
-          propsRef.current.onTabClose?.(tab.id);
-        }}
-      >
-        <TabEditor
+      <JotaiProvider store={store}>
+        <TabEditorErrorBoundary
           filePath={tab.filePath}
           fileName={tab.fileName}
-          initialContent={content}
-          isActive={true}  // Always true - wrapper controls visibility
-          textReplacements={isActiveTab ? propsRef.current.textReplacements : undefined}
-          onDirtyChange={handleDirtyChange}
-          onSaveComplete={propsRef.current.onSaveComplete}
-          onManualSaveReady={handleManualSaveReady}
-          onGetContentReady={handleGetContentReady}
-          onViewHistory={propsRef.current.onViewHistory}
-          onRenameDocument={propsRef.current.onRenameDocument}
-          onSwitchToAgentMode={propsRef.current.onSwitchToAgentMode}
-          onOpenSessionInChat={propsRef.current.onOpenSessionInChat}
-          workspaceId={propsRef.current.workspaceId}
-        />
-      </TabEditorErrorBoundary>
+          onRetry={() => {
+            // Remove and recreate on retry
+            removeTabEditor(tab.id);
+            createTabEditor(tab, content);
+          }}
+          onClose={() => {
+            propsRef.current.onTabClose?.(tab.id);
+          }}
+        >
+          <TabEditor
+            filePath={tab.filePath}
+            fileName={tab.fileName}
+            initialContent={content}
+            isActive={true}  // Always true - wrapper controls visibility
+            textReplacements={isActiveTab ? propsRef.current.textReplacements : undefined}
+            onDirtyChange={handleDirtyChange}
+            onSaveComplete={propsRef.current.onSaveComplete}
+            onManualSaveReady={handleManualSaveReady}
+            onGetContentReady={handleGetContentReady}
+            onViewHistory={propsRef.current.onViewHistory}
+            onRenameDocument={propsRef.current.onRenameDocument}
+            onSwitchToAgentMode={propsRef.current.onSwitchToAgentMode}
+            onOpenSessionInChat={propsRef.current.onOpenSessionInChat}
+            workspaceId={propsRef.current.workspaceId}
+          />
+        </TabEditorErrorBoundary>
+      </JotaiProvider>
     );
 
     tabInstancesRef.current.set(tab.id, { root, element, tabData: tab, content });
@@ -213,6 +223,11 @@ export const TabContent: React.FC<TabContentProps> = ({
   const removeTabEditor = useCallback((tabId: string) => {
     const instance = tabInstancesRef.current.get(tabId);
     if (!instance) return;
+
+    // Clean up Jotai atoms for this tab
+    const editorKey = makeEditorKey(instance.tabData.filePath);
+    editorDirtyAtom.remove(editorKey);
+    editorHasUnacceptedChangesAtom.remove(editorKey);
 
     instance.root.unmount();
     instance.element.remove();

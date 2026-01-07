@@ -1,11 +1,14 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState, memo } from 'react';
 import { Tab } from './TabManager';
-import { useTabDirtyState } from '../../contexts/TabsContext';
+import { useTabDirty, useTabHasUnacceptedChanges } from '../../hooks/useTabState';
 
 // Separate component for dirty indicator - subscribes to its own tab's dirty state
 // This allows only this component to re-render when dirty state changes
-const TabDirtyIndicator: React.FC<{ tabId: string; hasUnacceptedChanges: boolean }> = ({ tabId, hasUnacceptedChanges }) => {
-  const isDirty = useTabDirtyState(tabId, false);
+// Uses Jotai atoms for efficient per-tab subscriptions
+// Memoized to prevent re-renders when parent re-renders but filePath hasn't changed
+const TabDirtyIndicator = memo<{ filePath: string }>(({ filePath }) => {
+  const isDirty = useTabDirty(filePath);
+  const hasUnacceptedChanges = useTabHasUnacceptedChanges(filePath);
 
   if (hasUnacceptedChanges) {
     return <span className="tab-unaccepted-indicator" title="Has unaccepted AI changes">•</span>;
@@ -16,7 +19,20 @@ const TabDirtyIndicator: React.FC<{ tabId: string; hasUnacceptedChanges: boolean
   }
 
   return null;
-};
+});
+
+// Menu item dirty indicator - for the dropdown tab list
+// Memoized to prevent re-renders when parent re-renders
+const MenuItemDirtyIndicator = memo<{ filePath: string }>(({ filePath }) => {
+  const isDirty = useTabDirty(filePath);
+  const hasUnacceptedChanges = useTabHasUnacceptedChanges(filePath);
+
+  if (hasUnacceptedChanges || isDirty) {
+    return <> •</>;
+  }
+
+  return null;
+});
 
 interface TabItemProps {
   tab: Tab;
@@ -42,6 +58,7 @@ interface TabItemProps {
 }
 
 // Each tab is a separate component that subscribes to its own dirty state
+// Uses Jotai atoms for efficient per-tab subscriptions
 const TabItem: React.FC<TabItemProps> = ({
   tab,
   index,
@@ -64,7 +81,7 @@ const TabItem: React.FC<TabItemProps> = ({
   onRenameBlur,
   onTabRef,
 }) => {
-  const isDirty = useTabDirtyState(tab.id, false);
+  const isDirty = useTabDirty(tab.filePath);
 
   return (
     <div
@@ -134,10 +151,12 @@ const TabItem: React.FC<TabItemProps> = ({
           }}
         />
       ) : (
-        <span className="tab-title">
-          {tab.fileName}
-          <TabDirtyIndicator tabId={tab.id} hasUnacceptedChanges={tab.hasUnacceptedChanges || false} />
-        </span>
+        <>
+          <span className="tab-title">
+            {tab.fileName}
+          </span>
+          <TabDirtyIndicator filePath={tab.filePath} />
+        </>
       )}
       {!tab.isPinned && (
         <button
@@ -671,8 +690,7 @@ export const TabBar: React.FC<TabBarProps> = ({
                           <span className="tab-menu-title">
                             {tab.isPinned && '📌 '}
                             {tab.fileName}
-                            {tab.hasUnacceptedChanges && ' •'}
-                            {tab.isDirty && !tab.hasUnacceptedChanges && ' •'}
+                            <MenuItemDirtyIndicator filePath={tab.filePath} />
                           </span>
                         </div>
                       ))}

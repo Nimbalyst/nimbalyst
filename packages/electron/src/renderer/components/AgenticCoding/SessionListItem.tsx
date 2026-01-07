@@ -1,7 +1,51 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, memo } from 'react';
+import { useAtomValue } from 'jotai';
 import { MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
+import { sessionProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom } from '../../store';
 import './SessionListItem.css';
+
+/**
+ * Combined status indicator that subscribes to this session's state atoms.
+ * Shows processing, pending prompt, or unread status (in priority order).
+ * Only this component re-renders when the session's state changes.
+ */
+const SessionStatusIndicator = memo<{ sessionId: string; messageCount?: number }>(({ sessionId, messageCount }) => {
+  const isProcessing = useAtomValue(sessionProcessingAtom(sessionId));
+  const hasPendingPrompt = useAtomValue(sessionPendingPromptAtom(sessionId));
+  const hasUnread = useAtomValue(sessionUnreadAtom(sessionId));
+
+  // Priority: processing > pending prompt > unread > message count
+  if (isProcessing) {
+    return (
+      <div className="session-list-item-status processing" title="Processing...">
+        <MaterialSymbol icon="progress_activity" size={14} />
+      </div>
+    );
+  }
+
+  if (hasPendingPrompt) {
+    return (
+      <div className="session-list-item-status pending-prompt" title="Waiting for your response">
+        <MaterialSymbol icon="help" size={14} />
+      </div>
+    );
+  }
+
+  if (hasUnread) {
+    return (
+      <div className="session-list-item-status unread" title="Unread response">
+        <MaterialSymbol icon="circle" size={8} fill />
+      </div>
+    );
+  }
+
+  if (messageCount !== undefined) {
+    return <span className="session-list-item-message-count">{messageCount}</span>;
+  }
+
+  return null;
+});
 
 interface SessionListItemProps {
   id: string;
@@ -10,9 +54,12 @@ interface SessionListItemProps {
   updatedAt?: number;
   isActive: boolean;
   isLoaded?: boolean; // Whether session is loaded in a tab
-  isProcessing?: boolean; // Whether session is actively processing
-  hasUnread?: boolean; // Whether session has unread messages
-  hasPendingPrompt?: boolean; // Whether session has a pending permission/question prompt waiting for response
+  /** @deprecated Uses Jotai atom subscription - do not pass */
+  isProcessing?: boolean;
+  /** @deprecated Uses Jotai atom subscription - do not pass */
+  hasUnread?: boolean;
+  /** @deprecated Uses Jotai atom subscription - do not pass */
+  hasPendingPrompt?: boolean;
   isArchived?: boolean; // Whether session is archived
   isSelected?: boolean; // Whether session is selected for bulk actions
   sortBy?: 'updated' | 'created'; // Which timestamp to display based on sort order
@@ -230,21 +277,7 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
         )}
       </div>
       <div className="session-list-item-right">
-        {isProcessing ? (
-          <div className="session-list-item-status processing" title="Processing...">
-            <MaterialSymbol icon="progress_activity" size={14} />
-          </div>
-        ) : hasPendingPrompt ? (
-          <div className="session-list-item-status pending-prompt" title="Waiting for your response">
-            <MaterialSymbol icon="help" size={14} />
-          </div>
-        ) : hasUnread ? (
-          <div className="session-list-item-status unread" title="Unread response">
-            <MaterialSymbol icon="circle" size={8} fill />
-          </div>
-        ) : messageCount !== undefined ? (
-          <span className="session-list-item-message-count">{messageCount}</span>
-        ) : null}
+        <SessionStatusIndicator sessionId={id} messageCount={messageCount} />
         {(onArchive || onUnarchive) && (
           <button
             className={`session-list-item-archive ${isHovering ? 'visible' : ''}`}

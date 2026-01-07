@@ -1,7 +1,9 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, memo } from 'react';
+import { useAtomValue } from 'jotai';
 import { MaterialSymbol, getFileIcon } from '@nimbalyst/runtime';
 import { FileContextMenu } from './FileContextMenu';
 import type { NewFileType, ExtensionFileType } from './NewFileMenu';
+import { fileGitStatusAtom, directoryGitStatusAtom, type FileGitStatus as AtomFileGitStatus } from '../store';
 
 interface FileTreeItem {
   name: string;
@@ -62,7 +64,80 @@ function isSpecialDirectory(name: string): boolean {
   return SPECIAL_DIRECTORIES.includes(name);
 }
 
+/**
+ * Helper to convert atom git status to display string.
+ * The atom uses {index, workingTree} format from simple-git.
+ */
+function getStatusDisplay(status: AtomFileGitStatus | undefined): { code: string; className: string; title: string } | null {
+  if (!status) return null;
+
+  // Check working tree first (unstaged changes), then index (staged)
+  const code = status.workingTree !== ' ' ? status.workingTree : status.index;
+  if (code === ' ') return null;
+
+  switch (code) {
+    case 'M':
+      return { code: 'M', className: 'modified', title: 'Modified - Changes not staged for commit' };
+    case 'A':
+      return { code: 'S', className: 'staged', title: 'Staged - Changes ready to commit' };
+    case '?':
+      return { code: '?', className: 'untracked', title: 'Untracked - New file not yet added to git' };
+    case 'D':
+      return { code: 'D', className: 'deleted', title: 'Deleted - File removed' };
+    default:
+      return null;
+  }
+}
+
+/**
+ * Git status indicator for a file.
+ * Each instance subscribes only to its own file's git status atom.
+ * Memoized to prevent re-renders when parent re-renders.
+ */
+const FileGitStatusIndicator = memo<{ filePath: string }>(({ filePath }) => {
+  const status = useAtomValue(fileGitStatusAtom(filePath));
+  const display = getStatusDisplay(status);
+
+  if (!display) return null;
+
+  return (
+    <span
+      className={`file-tree-git-status file-tree-git-status--${display.className}`}
+      title={display.title}
+    >
+      {display.code}
+    </span>
+  );
+});
+
+/**
+ * Git status indicator for a directory.
+ * Shows aggregate status of all files within the directory.
+ * Each instance subscribes only to its own directory's git status atom.
+ */
+const DirectoryGitStatusIndicator = memo<{ dirPath: string }>(({ dirPath }) => {
+  const status = useAtomValue(directoryGitStatusAtom(dirPath));
+  const display = getStatusDisplay(status);
+
+  if (!display) return null;
+
+  return (
+    <span
+      className={`file-tree-git-status file-tree-git-status--${display.className} file-tree-git-status--inherited`}
+      title={
+        display.className === 'modified' ? 'Contains modified files' :
+        display.className === 'staged' ? 'Contains staged files' :
+        display.className === 'untracked' ? 'Contains untracked files' :
+        display.className === 'deleted' ? 'Contains deleted files' : ''
+      }
+    >
+      {display.code}
+    </span>
+  );
+});
+
 // Check if a directory contains any files with git status changes
+// NOTE: This is the legacy prop-based approach. Use DirectoryGitStatusIndicator for atom-based.
 function getDirectoryGitStatus(
   dirPath: string,
   gitStatusMap: Map<string, FileGitStatus> | undefined
@@ -630,24 +705,7 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
                     {item.name}
                     {isDragOver && isDragCopy && <span style={{ marginLeft: '4px', fontSize: '10px', opacity: 0.7 }}>(copy)</span>}
                   </span>
-                  {(() => {
-                    const dirStatus = getDirectoryGitStatus(item.path, gitStatusMap);
-                    if (!dirStatus) return null;
-                    return (
-                      <span
-                        className={`file-tree-git-status file-tree-git-status--${dirStatus} file-tree-git-status--inherited`}
-                        title={
-                          dirStatus === 'modified' ? 'Contains modified files' :
-                          dirStatus === 'staged' ? 'Contains staged files' :
-                          dirStatus === 'untracked' ? 'Contains untracked files' : ''
-                        }
-                      >
-                        {dirStatus === 'modified' ? 'M' :
-                         dirStatus === 'staged' ? 'S' :
-                         dirStatus === 'untracked' ? '?' : ''}
-                      </span>
-                    );
-                  })()}
+                  <DirectoryGitStatusIndicator dirPath={item.path} />
                 </div>
                 {isExpanded && item.children && (
                   <FileTree
@@ -711,22 +769,7 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
                 <span className="file-tree-name">
                   {item.name}
                 </span>
-                {gitStatusMap?.has(item.path) && (
-                  <span
-                    className={`file-tree-git-status file-tree-git-status--${gitStatusMap.get(item.path)}`}
-                    title={
-                      gitStatusMap.get(item.path) === 'modified' ? 'Modified - Changes not staged for commit' :
-                      gitStatusMap.get(item.path) === 'staged' ? 'Staged - Changes ready to commit' :
-                      gitStatusMap.get(item.path) === 'untracked' ? 'Untracked - New file not yet added to git' :
-                      gitStatusMap.get(item.path) === 'deleted' ? 'Deleted - File removed' : ''
-                    }
-                  >
-                    {gitStatusMap.get(item.path) === 'modified' ? 'M' :
-                     gitStatusMap.get(item.path) === 'staged' ? 'S' :
-                     gitStatusMap.get(item.path) === 'untracked' ? '?' :
-                     gitStatusMap.get(item.path) === 'deleted' ? 'D' : ''}
-                  </span>
-                )}
+                <FileGitStatusIndicator filePath={item.path} />
               </div>
             )}
           </li>

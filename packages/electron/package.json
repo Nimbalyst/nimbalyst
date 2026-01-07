@@ -70,6 +70,7 @@
     "formdata-node": "^6.0.3",
     "glob": "^11.0.3",
     "html2canvas": "^1.4.1",
+    "jotai": "^2.16.1",
     "js-yaml": "^4.1.0",
     "json-schema-to-ts": "^3.1.1",
     "marked": "^16.4.0",
