@@ -31,23 +31,23 @@ export class SheetsTextEditor implements EditorBase {
 
   /**
    * Handle key events
+   *
+   * For navigation keys (Tab, Enter, Arrows), we save the value and let
+   * the event bubble up to RevoGrid which handles the navigation.
    */
   private handleKeyDown = (e: KeyboardEvent) => {
     const key = e.key;
 
-    // Enter - save and move down
+    // Enter - save and let RevoGrid move down
     if (key === 'Enter') {
-      e.preventDefault();
-      e.stopPropagation();
       this.save(this.getValue(), false);
+      // Don't stop propagation - let RevoGrid handle navigation
       return;
     }
 
-    // Tab - save and move right
+    // Tab - save but prevent default focus change, let RevoGrid handle navigation
     if (key === 'Tab') {
-      e.preventDefault();
-      e.stopPropagation();
-      this.save(this.getValue(), false);
+      this.save(this.getValue(), true);
       return;
     }
 
@@ -59,11 +59,10 @@ export class SheetsTextEditor implements EditorBase {
       return;
     }
 
-    // Arrow keys - save and let grid handle navigation
+    // Arrow keys - save and let RevoGrid handle navigation
     if (key === 'ArrowUp' || key === 'ArrowDown' || key === 'ArrowLeft' || key === 'ArrowRight') {
-      e.preventDefault();
-      e.stopPropagation();
       this.save(this.getValue(), false);
+      // Don't stop propagation - let RevoGrid handle navigation
       return;
     }
   };
