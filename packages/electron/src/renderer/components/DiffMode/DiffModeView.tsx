@@ -36,6 +36,7 @@ export function DiffModeView({ worktreePath, workspacePath, isActive }: DiffMode
   const [error, setError] = useState<string | null>(null);
   const [rightPanelWidth, setRightPanelWidth] = useState(320);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
+  const [repoRootBranch, setRepoRootBranch] = useState<string | undefined>(undefined);
   const isResizingRef = useRef(false);
 
   // Load changed files from the worktree
@@ -80,16 +81,30 @@ export function DiffModeView({ worktreePath, workspacePath, isActive }: DiffMode
     }
   }, [worktreePath]);
 
+  // Load repo root's current branch
+  const loadRepoRootBranch = useCallback(async () => {
+    if (!workspacePath) return;
+
+    try {
+      const result = await window.electronAPI.invoke('worktree:get-repo-current-branch', workspacePath);
+      if (result?.success && result.branch) {
+        setRepoRootBranch(result.branch);
+      }
+    } catch (err) {
+      console.error('[DiffModeView] Failed to load repo root branch:', err);
+    }
+  }, [workspacePath]);
+
   // Initial load
   useEffect(() => {
     const load = async () => {
       setIsLoading(true);
       setError(null);
-      await Promise.all([loadChangedFiles(), loadCommits()]);
+      await Promise.all([loadChangedFiles(), loadCommits(), loadRepoRootBranch()]);
       setIsLoading(false);
     };
     load();
-  }, [loadChangedFiles, loadCommits]);
+  }, [loadChangedFiles, loadCommits, loadRepoRootBranch]);
 
   // Toggle file staged state
   const handleToggleStaged = useCallback((filePath: string) => {
@@ -245,13 +260,14 @@ export function DiffModeView({ worktreePath, workspacePath, isActive }: DiffMode
           onCommit={handleCommit}
           onMerge={handleMerge}
           onSelectFile={setSelectedFile}
-          onRefresh={() => Promise.all([loadChangedFiles(), loadCommits()])}
+          onRefresh={() => Promise.all([loadChangedFiles(), loadCommits(), loadRepoRootBranch()])}
           onCollapse={() => setPanelCollapsed(prev => !prev)}
           collapsed={panelCollapsed}
           error={error}
           onDismissError={() => setError(null)}
           workspacePath={workspacePath}
           worktreePath={worktreePath}
+          repoRootBranch={repoRootBranch}
         />
       </div>
     </div>

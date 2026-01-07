@@ -81,7 +81,7 @@ export interface MergeResult {
  */
 export interface CreateWorktreeOptions {
   name?: string; // Optional custom name (defaults to random adjective-noun)
-  baseBranch?: string; // Branch to compare against (defaults to 'main')
+  baseBranch?: string; // Branch to base the worktree on (defaults to repo root's current branch)
 }
 
 /**
@@ -116,17 +116,15 @@ export class GitWorktreeService {
     const worktreeName = options.name || this.generateWorktreeName();
     logger.info('Generated worktree name', { worktreeName });
 
-    // Determine base branch (default to 'main', fallback to 'master')
-    let baseBranch = options.baseBranch || 'main';
-    try {
-      const branches = await git.branch();
-      if (!branches.all.includes(baseBranch) && branches.all.includes('master')) {
-        baseBranch = 'master';
-        logger.info('Base branch not found, using master', { requestedBranch: options.baseBranch });
-      }
-    } catch (error) {
-      logger.warn('Failed to check branches, using default base branch', { baseBranch, error });
+    // Determine base branch - use the repo root's current branch (not hardcoded)
+    let baseBranch: string;
+    if (options.baseBranch) {
+      baseBranch = options.baseBranch;
+    } else {
+      // Get the current branch of the repo root
+      baseBranch = await this.getCurrentBranch(git);
     }
+    logger.info('Using base branch', { baseBranch });
 
     // Create worktrees directory if it doesn't exist
     const projectName = path.basename(workspacePath);
@@ -389,32 +387,43 @@ export class GitWorktreeService {
   }
 
   /**
-   * Infer the base branch from git configuration or default to 'main'
+   * Get the current branch of a git repository (private helper)
+   * @private
+   */
+  private async getCurrentBranch(git: SimpleGit): Promise<string> {
+    try {
+      const branch = await git.revparse(['--abbrev-ref', 'HEAD']);
+      return branch.trim();
+    } catch (error) {
+      logger.error('Failed to get current branch', { error });
+      throw new Error(`Failed to get current branch: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * Get the current branch of a repository by path.
+   * Public method for use by IPC handlers.
+   *
+   * @param repoPath - Path to the git repository
+   * @returns Current branch name
+   */
+  async getRepoCurrentBranch(repoPath: string): Promise<string> {
+    if (!repoPath) {
+      throw new Error('repoPath is required');
+    }
+
+    const git: SimpleGit = simpleGit(repoPath);
+    return this.getCurrentBranch(git);
+  }
+
+  /**
+   * Get the base branch for a worktree by reading it from the main repo's current branch.
+   * This ensures worktree operations are always relative to the repo root's current branch.
    * @private
    */
   private async inferBaseBranch(git: SimpleGit): Promise<string> {
-    try {
-      // Try to get default branch from remote
-      const remotes = await git.getRemotes(true);
-      if (remotes.length > 0) {
-        const defaultRemote = remotes.find(r => r.name === 'origin') || remotes[0];
-        const remoteBranches = await git.branch(['-r']);
-
-        // Check for common default branches
-        const defaultBranches = ['main', 'master', 'develop'];
-        for (const branch of defaultBranches) {
-          const remoteBranch = `${defaultRemote.name}/${branch}`;
-          if (remoteBranches.all.includes(remoteBranch)) {
-            return branch;
-          }
-        }
-      }
-    } catch (error) {
-      logger.warn('Failed to infer base branch from remote', { error });
-    }
-
-    // Fallback to 'main'
-    return 'main';
+    // Get the current branch - this is the source of truth
+    return this.getCurrentBranch(git);
   }
 
   /**

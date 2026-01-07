@@ -39,6 +39,12 @@
   border-bottom: 1px solid var(--border-primary);
 }
 
+.changes-panel-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .changes-panel-title {
   display: flex;
   align-items: center;
@@ -46,6 +52,19 @@
   font-size: 0.8125rem;
   font-weight: 500;
   color: var(--text-primary);
+}
+
+.changes-panel-base-branch {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.6875rem;
+  color: var(--text-tertiary);
+}
+
+.changes-panel-base-branch span {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
 }
 
 .changes-panel-count {

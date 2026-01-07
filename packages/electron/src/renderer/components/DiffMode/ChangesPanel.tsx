@@ -23,6 +23,7 @@ interface ChangesPanelProps {
   onDismissError: () => void;
   workspacePath: string;
   worktreePath: string;
+  repoRootBranch?: string; // Current branch of the repo root (what worktree is compared against)
 }
 
 export function ChangesPanel({
@@ -41,6 +42,7 @@ export function ChangesPanel({
   onDismissError,
   workspacePath,
   worktreePath,
+  repoRootBranch,
 }: ChangesPanelProps) {
   const [showMergeDialog, setShowMergeDialog] = useState(false);
   const [isCommitting, setIsCommitting] = useState(false);
@@ -87,10 +89,18 @@ export function ChangesPanel({
     <div className="changes-panel">
       {/* Header */}
       <div className="changes-panel-header">
-        <div className="changes-panel-title">
-          <span>Changes</span>
-          {files.length > 0 && (
-            <span className="changes-panel-count">{files.length}</span>
+        <div className="changes-panel-title-group">
+          <div className="changes-panel-title">
+            <span>Changes</span>
+            {files.length > 0 && (
+              <span className="changes-panel-count">{files.length}</span>
+            )}
+          </div>
+          {repoRootBranch && (
+            <div className="changes-panel-base-branch" title="Comparing against repo root branch">
+              <MaterialSymbol icon="compare_arrows" size={14} />
+              <span>{repoRootBranch}</span>
+            </div>
           )}
         </div>
         <div className="changes-panel-actions">

@@ -506,6 +506,36 @@ export function registerWorktreeHandlers(): void {
   });
 
   /**
+   * Get the current branch of a repository
+   * This is used to show what branch the repo root is on, which worktrees are compared against.
+   *
+   * @param repoPath - Path to the git repository
+   * @returns Current branch name
+   */
+  ipcMain.handle('worktree:get-repo-current-branch', async (_event, repoPath: string) => {
+    try {
+      if (!repoPath) {
+        throw new Error('repoPath is required');
+      }
+
+      logger.info('Getting current branch for repo', { repoPath });
+
+      const currentBranch = await gitWorktreeService.getRepoCurrentBranch(repoPath);
+
+      return {
+        success: true,
+        branch: currentBranch,
+      };
+    } catch (error) {
+      logger.error('Failed to get current branch:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get current branch',
+      };
+    }
+  });
+
+  /**
    * Merge worktree branch to main
    *
    * @param worktreePath - Path to the worktree
