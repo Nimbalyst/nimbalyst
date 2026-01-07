@@ -103,6 +103,7 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
     };
   }, [host]);
 
+
   // Subscribe to file change notifications
   useEffect(() => {
     return host.onFileChanged((newContent) => {
@@ -161,6 +162,9 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
           elements,
           appState: {
             viewBackgroundColor: appState.viewBackgroundColor,
+            scrollX: appState.scrollX,
+            scrollY: appState.scrollY,
+            zoom: appState.zoom,
           },
           files,
         };
@@ -176,10 +180,7 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
     });
   }, [host, excalidrawAPI]);
 
-  // Track previous elements for dirty detection
-  const prevElementsRef = useRef<string>('');
-
-  // Mark as dirty when diagram changes (but not from external updates)
+  // Mark as dirty on any change - host handles autosave debouncing
   const onChange = useCallback((
     elements: readonly ExcalidrawElement[],
     appState: AppState,
@@ -190,17 +191,10 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
       return;
     }
 
-    // Excalidraw's onChange fires for many reasons (cursor, selection, etc.)
-    // Only mark dirty if the actual elements or files changed
-    const elementsJson = JSON.stringify(elements);
-    if (elementsJson === prevElementsRef.current) {
-      return; // No actual change to elements
-    }
-    prevElementsRef.current = elementsJson;
-
-    console.log('[Excalidraw] Elements changed, marking dirty');
+    // Always mark dirty - host has autosave debouncing (200ms) built in
     host.setDirty(true);
   }, [host]);
+
 
   // Register editor API for AI tool access
   useEffect(() => {

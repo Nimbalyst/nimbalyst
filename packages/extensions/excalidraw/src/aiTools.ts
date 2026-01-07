@@ -96,7 +96,7 @@ export const aiTools = [
 
   {
     name: 'add_rectangle',
-    description: 'Add a labeled rectangle to the diagram',
+    description: 'Add a labeled rectangle to the diagram. Rectangles are rounded by default.',
     parameters: {
       type: 'object' as const,
       properties: {
@@ -108,10 +108,17 @@ export const aiTools = [
           type: 'string' as const,
           description: 'Optional element label to place near',
         },
-        style: {
+        color: {
           type: 'string' as const,
-          enum: ['default', 'highlight', 'muted'],
-          description: 'Visual style for the element',
+          description: 'Fill color. PREFER Excalidraw default palette for best visual consistency: #ffc9c9 (red), #b2f2bb (green), #a5d8ff (blue), #ffec99 (yellow), #ffd8a8 (orange), #e599f7 (purple), #ffc0cb (pink). When user says "red", use #ffc9c9 not #ff0000.',
+        },
+        strokeColor: {
+          type: 'string' as const,
+          description: 'Border color (hex code or color name)',
+        },
+        rounded: {
+          type: 'boolean' as const,
+          description: 'Whether to use rounded corners (default: true)',
         },
       },
       required: ['label'],
@@ -120,7 +127,9 @@ export const aiTools = [
       params: {
         label: string;
         nearElement?: string;
-        style?: string;
+        color?: string;
+        strokeColor?: string;
+        rounded?: boolean;
       },
       context: { activeFilePath?: string }
     ) => {
@@ -132,7 +141,7 @@ export const aiTools = [
         };
       }
 
-      const { label, nearElement, style = 'default' } = params;
+      const { label, nearElement, color, strokeColor, rounded = true } = params;
       const currentElements = api.getSceneElements() || [];
 
       const engine = new LayoutEngine();
@@ -159,7 +168,9 @@ export const aiTools = [
         width,
         height,
         text: label,
-        style: style as any,
+        backgroundColor: color,
+        strokeColor,
+        roundness: rounded ? { type: 3 } : null,
         groupIds: [],
       });
 
@@ -246,30 +257,39 @@ export const aiTools = [
 
   {
     name: 'update_element',
-    description: 'Update text or style of existing element',
+    description: 'Update text, color, or style of existing element. Can look up by ID or label.',
     parameters: {
       type: 'object' as const,
       properties: {
+        id: {
+          type: 'string' as const,
+          description: 'Element ID to update (use this if you have the ID from get_elements)',
+        },
         label: {
           type: 'string' as const,
-          description: 'Current label of the element to update',
+          description: 'Current label of the element to update (alternative to id)',
         },
         newLabel: {
           type: 'string' as const,
           description: 'New label text',
         },
-        style: {
+        color: {
           type: 'string' as const,
-          description: 'New style',
+          description: 'New fill color (hex code or color name)',
+        },
+        strokeColor: {
+          type: 'string' as const,
+          description: 'New border color (hex code or color name)',
         },
       },
-      required: ['label'],
     },
     handler: async (
       params: {
-        label: string;
+        id?: string;
+        label?: string;
         newLabel?: string;
-        style?: string;
+        color?: string;
+        strokeColor?: string;
       },
       context: { activeFilePath?: string }
     ) => {
@@ -281,24 +301,71 @@ export const aiTools = [
         };
       }
 
-      const currentElements = api.getSceneElements();
-      const element = getElementByLabel(currentElements, params.label);
+      if (!params.id && !params.label) {
+        return {
+          success: false,
+          error: 'Must provide either id or label',
+        };
+      }
 
-      if (!element) {
+      const currentElements = api.getSceneElements();
+
+      // Find element by ID or label
+      let textElement: ExcalidrawElement | undefined;
+      if (params.id) {
+        textElement = currentElements.find(el => el.id === params.id);
+      } else if (params.label) {
+        textElement = getElementByLabel(currentElements, params.label);
+      }
+
+      if (!textElement) {
         return {
           success: false,
           error: `Element not found: ${params.label}`,
         };
       }
 
-      const updates: Partial<ExcalidrawElement> = {};
-      if (params.newLabel && 'text' in element) {
-        updates.text = params.newLabel;
+      // Helper to normalize colors to Excalidraw palette
+      const normalizeColor = (color?: string): string | undefined => {
+        if (!color) return undefined;
+        const colorMap: Record<string, string> = {
+          red: '#ffc9c9', green: '#b2f2bb', blue: '#a5d8ff', yellow: '#ffec99',
+          orange: '#ffd8a8', purple: '#e599f7', pink: '#ffc0cb', gray: '#e9ecef', grey: '#e9ecef',
+        };
+        return colorMap[color.toLowerCase()] || color;
+      };
+
+      // Find the container (rectangle) if this is a text element bound to one
+      let containerElement: ExcalidrawElement | undefined;
+      if ('containerId' in textElement && textElement.containerId) {
+        containerElement = currentElements.find(el => el.id === textElement.containerId);
       }
 
-      const updatedElements = currentElements.map((el) =>
-        el.id === element.id ? { ...el, ...updates } : el
-      );
+      // Prepare updates for text element
+      const textUpdates: any = {};
+      if (params.newLabel && 'text' in textElement) {
+        textUpdates.text = params.newLabel;
+      }
+
+      // Prepare updates for container (for color changes)
+      const containerUpdates: any = {};
+      if (params.color !== undefined) {
+        containerUpdates.backgroundColor = normalizeColor(params.color);
+      }
+      if (params.strokeColor !== undefined) {
+        containerUpdates.strokeColor = normalizeColor(params.strokeColor);
+      }
+
+      // Apply updates
+      const updatedElements = currentElements.map((el) => {
+        if (el.id === textElement.id && Object.keys(textUpdates).length > 0) {
+          return { ...el, ...textUpdates };
+        }
+        if (containerElement && el.id === containerElement.id && Object.keys(containerUpdates).length > 0) {
+          return { ...el, ...containerUpdates };
+        }
+        return el;
+      });
 
       api.updateScene({ elements: updatedElements });
 
@@ -308,19 +375,22 @@ export const aiTools = [
 
   {
     name: 'remove_element',
-    description: 'Remove an element by label',
+    description: 'Remove an element by ID or label',
     parameters: {
       type: 'object' as const,
       properties: {
+        id: {
+          type: 'string' as const,
+          description: 'Element ID to remove (use this if you have the ID from get_elements)',
+        },
         label: {
           type: 'string' as const,
-          description: 'Label of the element to remove',
+          description: 'Label of the element to remove (alternative to id)',
         },
       },
-      required: ['label'],
     },
     handler: async (
-      params: { label: string },
+      params: { id?: string; label?: string },
       context: { activeFilePath?: string }
     ) => {
       const api = getEditorAPI(context.activeFilePath);
@@ -331,17 +401,37 @@ export const aiTools = [
         };
       }
 
+      if (!params.id && !params.label) {
+        return {
+          success: false,
+          error: 'Must provide either id or label',
+        };
+      }
+
       const currentElements = api.getSceneElements();
-      const element = getElementByLabel(currentElements, params.label);
+
+      // Find element by ID or label
+      let element: ExcalidrawElement | undefined;
+      if (params.id) {
+        element = currentElements.find(el => el.id === params.id);
+      } else if (params.label) {
+        element = getElementByLabel(currentElements, params.label);
+      }
 
       if (!element) {
         return {
           success: false,
-          error: `Element not found: ${params.label}`,
+          error: `Element not found`,
         };
       }
 
-      const updatedElements = currentElements.filter((el) => el.id !== element.id);
+      // Remove both the element and its container (if it's a text element)
+      let idsToRemove = [element.id];
+      if ('containerId' in element && element.containerId) {
+        idsToRemove.push(element.containerId as string);
+      }
+
+      const updatedElements = currentElements.filter((el) => !idsToRemove.includes(el.id));
 
       api.updateScene({ elements: updatedElements });
 
@@ -464,6 +554,34 @@ export const aiTools = [
           error: `Failed to parse Mermaid: ${error instanceof Error ? error.message : String(error)}`,
         };
       }
+    },
+  },
+
+  {
+    name: 'clear_all',
+    description: 'Remove all elements from the diagram',
+    parameters: {
+      type: 'object' as const,
+      properties: {},
+    },
+    handler: async (
+      params: Record<string, never>,
+      context: { activeFilePath?: string }
+    ) => {
+      const api = getEditorAPI(context.activeFilePath);
+      if (!api) {
+        return {
+          success: false,
+          error: 'No active Excalidraw editor found.',
+        };
+      }
+
+      api.updateScene({ elements: [] });
+
+      return {
+        success: true,
+        message: 'Cleared all elements from the diagram'
+      };
     },
   },
 ];

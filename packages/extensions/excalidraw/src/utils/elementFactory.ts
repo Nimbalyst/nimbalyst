@@ -15,7 +15,30 @@ interface RectangleOptions {
   height?: number;
   text: string;
   style?: 'default' | 'highlight' | 'muted';
+  backgroundColor?: string;
+  strokeColor?: string;
+  roundness?: { type: number } | null;
   groupIds?: string[];
+}
+
+// Helper to convert color names to Excalidraw default palette
+function normalizeColor(color?: string): string | undefined {
+  if (!color) return undefined;
+
+  // Map color names to Excalidraw's default pastel palette
+  const colorMap: Record<string, string> = {
+    red: '#ffc9c9',
+    green: '#b2f2bb',
+    blue: '#a5d8ff',
+    yellow: '#ffec99',
+    orange: '#ffd8a8',
+    purple: '#e599f7',
+    pink: '#ffc0cb',
+    gray: '#e9ecef',
+    grey: '#e9ecef',
+  };
+
+  return colorMap[color.toLowerCase()] || color;
 }
 
 export function createRectangle(options: RectangleOptions): ExcalidrawElement {
@@ -26,10 +49,13 @@ export function createRectangle(options: RectangleOptions): ExcalidrawElement {
     height = 80,
     text,
     style = 'default',
+    backgroundColor,
+    strokeColor,
+    roundness,
     groupIds = [],
   } = options;
 
-  // Map styles to colors
+  // Map styles to colors (only used if explicit colors not provided)
   const styleColors: Record<string, string> = {
     default: '#1971c2',
     highlight: '#f08c00',
@@ -44,8 +70,8 @@ export function createRectangle(options: RectangleOptions): ExcalidrawElement {
     width,
     height,
     angle: 0,
-    strokeColor: styleColors[style] || styleColors.default,
-    backgroundColor: 'transparent',
+    strokeColor: normalizeColor(strokeColor) || styleColors[style] || styleColors.default,
+    backgroundColor: normalizeColor(backgroundColor) || 'transparent',
     fillStyle: 'solid',
     strokeWidth: 2,
     strokeStyle: 'solid',
@@ -53,7 +79,7 @@ export function createRectangle(options: RectangleOptions): ExcalidrawElement {
     opacity: 100,
     groupIds,
     frameId: null,
-    roundness: { type: 3 },
+    roundness: roundness !== undefined ? roundness : { type: 3 },
     seed: Math.floor(Math.random() * 1000000),
     version: 1,
     versionNonce: Math.floor(Math.random() * 1000000),
