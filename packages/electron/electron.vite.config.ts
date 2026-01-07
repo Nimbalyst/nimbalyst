@@ -151,7 +151,7 @@ export default defineConfig({
           '@excalidraw/excalidraw',
           '@excalidraw/excalidraw/index.css',
           // Native modules
-          '@homebridge/node-pty-prebuilt-multiarch' // PTY for terminal - native module needs external
+          'node-pty' // PTY for terminal - native module needs external
         ]
       }
     }

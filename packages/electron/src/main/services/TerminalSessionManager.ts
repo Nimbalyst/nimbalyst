@@ -9,8 +9,8 @@
  * - State persistence on close
  */
 
-import * as pty from '@homebridge/node-pty-prebuilt-multiarch';
-import type { IPty } from '@homebridge/node-pty-prebuilt-multiarch';
+import * as pty from 'node-pty';
+import type { IPty } from 'node-pty';
 import { app, BrowserWindow } from 'electron';
 import path from 'path';
 import { promises as fs } from 'fs';
