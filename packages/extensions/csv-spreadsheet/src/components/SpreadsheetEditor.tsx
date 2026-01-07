@@ -196,7 +196,7 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
       undoPluginRef.current = plugin;
     });
 
-    // Create grid operations - use undoPluginRef instead of local plugin
+    // Create grid operations - use getter to access undoPlugin dynamically
     const gridOps = createGridOperations(revoGridRef, {
       getHeaderRowCount: () => spreadsheetMeta.metadata.headerRowCount,
       getColumnCount: () => spreadsheetMeta.metadata.columnCount,
@@ -204,7 +204,7 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
       getColumnFormats: () => spreadsheetMeta.metadata.columnFormats,
       getFrozenColumnCount: () => spreadsheetMeta.metadata.frozenColumnCount,
       onDirty: () => host.setDirty(true),
-      undoPlugin: undoPluginRef.current,
+      getUndoPlugin: () => undoPluginRef.current,
     });
     gridOpsRef.current = gridOps;
 

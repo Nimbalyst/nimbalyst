@@ -19,7 +19,7 @@ export interface GridOperationsOptions {
   getColumnFormats: () => Record<number, ColumnFormat>;
   getFrozenColumnCount: () => number;
   onDirty: () => void;
-  undoPlugin?: UndoRedoPlugin | null;
+  getUndoPlugin: () => UndoRedoPlugin | null;
 }
 
 export interface GridOperations {
@@ -64,7 +64,7 @@ export function createGridOperations(
     getColumnFormats,
     getFrozenColumnCount,
     onDirty,
-    undoPlugin,
+    getUndoPlugin,
   } = options;
 
   /**
@@ -112,6 +112,7 @@ export function createGridOperations(
     });
 
     // Record for undo
+    const undoPlugin = getUndoPlugin();
     if (undoPlugin && oldValue !== displayValue) {
       undoPlugin.recordManualChange([{
         rowIndex: gridRow,
@@ -183,6 +184,7 @@ export function createGridOperations(
     await Promise.all(promises);
 
     // Record for undo
+    const undoPlugin = getUndoPlugin();
     if (undoPlugin && changes.length > 0) {
       undoPlugin.recordManualChange(changes);
     }
@@ -431,6 +433,7 @@ export function createGridOperations(
     await Promise.all(promises);
 
     // Record for undo
+    const undoPlugin = getUndoPlugin();
     if (undoPlugin && changes.length > 0) {
       undoPlugin.recordManualChange(changes);
     }
@@ -563,16 +566,21 @@ export function createGridOperations(
       csvRows.push('');
     }
 
-    // Build metadata
+    // Build metadata - only include if using non-default features
     const hasColumnFormats = Object.keys(columnFormats).length > 0;
-    const metadata: CSVMetadata = {
-      hasHeaders: headerRowCount > 0,
-      headerRowCount,
-      frozenColumnCount,
-      ...(hasColumnFormats ? { columnFormats } : {}),
-    };
+    const hasNonDefaultMetadata = headerRowCount > 0 || frozenColumnCount > 0 || hasColumnFormats;
 
-    return `${serializeMetadata(metadata)}\n${csvRows.join('\n')}`;
+    if (hasNonDefaultMetadata) {
+      const metadata: CSVMetadata = {
+        hasHeaders: headerRowCount > 0,
+        headerRowCount,
+        frozenColumnCount,
+        ...(hasColumnFormats ? { columnFormats } : {}),
+      };
+      return `${serializeMetadata(metadata)}\n${csvRows.join('\n')}`;
+    }
+
+    return csvRows.join('\n');
   };
 
   /**

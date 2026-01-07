@@ -180,17 +180,22 @@ export function serializeToCSV(data: SpreadsheetData, delimiter: ',' | '\t' = ',
 
   const csvContent = rows.map(row => row.join(delimiter)).join('\n');
 
-  // Prepend metadata comment if requested
+  // Prepend metadata comment if requested AND if using non-default features
   if (includeMetadata) {
-    // Only include columnFormats if there are any defined
     const hasColumnFormats = Object.keys(data.columnFormats || {}).length > 0;
-    const metadata: CSVMetadata = {
-      hasHeaders: data.hasHeaders,
-      headerRowCount: data.headerRowCount || (data.hasHeaders ? 1 : 0),
-      frozenColumnCount: data.frozenColumnCount || 0,
-      ...(hasColumnFormats ? { columnFormats: data.columnFormats } : {}),
-    };
-    return `${serializeMetadata(metadata)}\n${csvContent}`;
+    const headerRowCount = data.headerRowCount || (data.hasHeaders ? 1 : 0);
+    const frozenColumnCount = data.frozenColumnCount || 0;
+    const hasNonDefaultMetadata = headerRowCount > 0 || frozenColumnCount > 0 || hasColumnFormats;
+
+    if (hasNonDefaultMetadata) {
+      const metadata: CSVMetadata = {
+        hasHeaders: data.hasHeaders,
+        headerRowCount,
+        frozenColumnCount,
+        ...(hasColumnFormats ? { columnFormats: data.columnFormats } : {}),
+      };
+      return `${serializeMetadata(metadata)}\n${csvContent}`;
+    }
   }
 
   return csvContent;
