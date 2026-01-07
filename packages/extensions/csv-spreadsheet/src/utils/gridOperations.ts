@@ -533,26 +533,17 @@ export function createGridOperations(
       }
     }
 
-    // Add regular rows
+    // Add regular rows (include empty rows - they'll be trimmed from the end only)
     if (source) {
       for (let rowIdx = 0; rowIdx < source.length; rowIdx++) {
         const rowData = source[rowIdx];
-
-        // Skip trailing empty rows
-        let hasData = false;
         const cells: string[] = [];
         for (let colIdx = 0; colIdx < columnCount; colIdx++) {
           const prop = columnIndexToLetter(colIdx);
           const value = rowData[prop];
-          const cellValue = String(value ?? '');
-          if (cellValue) hasData = true;
           cells.push(formatCell(value));
         }
-
-        // Only include if row has data or is within original data bounds
-        if (hasData) {
-          csvRows.push(cells.join(delimiter));
-        }
+        csvRows.push(cells.join(delimiter));
       }
     }
 
