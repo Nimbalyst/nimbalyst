@@ -1,5 +1,6 @@
 import { ipcMain, BrowserWindow, shell } from 'electron';
 import { MCPConfigService, TestProgressCallback } from '../services/MCPConfigService';
+import { getEnhancedPath } from '../services/CLIManager';
 import { MCPConfig } from '@nimbalyst/runtime/types/MCPServerConfig';
 import { logger } from '../utils/logger';
 import { spawn } from 'child_process';
@@ -252,11 +253,15 @@ async function triggerMcpRemoteOAuth(serverUrl: string): Promise<{ success: bool
   return new Promise((resolve) => {
     logger.main.info('[MCP] Triggering OAuth for:', serverUrl);
 
-    // Spawn npx without shell for cross-platform compatibility
-    // npx is available on all platforms and doesn't need shell interpretation
-    const child = spawn('npx', ['-y', 'mcp-remote', serverUrl], {
+    // On Windows, use npx.cmd with shell:true to avoid PowerShell execution policy issues
+    const npxCommand = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+
+    // Spawn npx - use shell on Windows for .cmd files to execute properly
+    // Use enhanced PATH for GUI apps (they don't inherit shell PATH on macOS/Windows)
+    const child = spawn(npxCommand, ['-y', 'mcp-remote', serverUrl], {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env },
+      env: { ...process.env, PATH: getEnhancedPath() },
+      shell: process.platform === 'win32'
     });
 
     let stdout = '';

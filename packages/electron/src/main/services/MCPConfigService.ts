@@ -228,7 +228,7 @@ export class MCPConfigService {
   async testServerConnection(
     config: MCPServerConfig,
     onProgress?: TestProgressCallback
-  ): Promise<{ success: boolean; error?: string }> {
+  ): Promise<{ success: boolean; error?: string; helpUrl?: string }> {
     try {
       // Validate config first
       const tempConfig: MCPConfig = {
@@ -314,7 +314,7 @@ export class MCPConfigService {
   private async testStdioConnection(
     config: MCPServerConfig,
     onProgress?: TestProgressCallback
-  ): Promise<{ success: boolean; error?: string }> {
+  ): Promise<{ success: boolean; error?: string; helpUrl?: string }> {
     const { spawn } = await import('child_process');
 
     if (!config.command) {
@@ -332,17 +332,25 @@ export class MCPConfigService {
           }
         }
 
+        // On Windows, use .cmd versions of npm/npx to avoid PowerShell execution policy issues
+        const command = this.resolveCommandForPlatform(config.command!);
+
+        // Expand environment variables in args as well (e.g., ${FILESYSTEM_ALLOWED_DIR})
+        const expandedArgs = (config.args || []).map(arg => this.expandEnvVar(arg, env));
+
         logger.mcp.info('[MCP Test] Starting stdio connection test');
-        logger.mcp.info(`[MCP Test] Command: ${config.command}`);
-        logger.mcp.info(`[MCP Test] Args: ${JSON.stringify(config.args)}`);
+        logger.mcp.info(`[MCP Test] Command: ${command} (original: ${config.command})`);
+        logger.mcp.info(`[MCP Test] Args: ${JSON.stringify(expandedArgs)} (original: ${JSON.stringify(config.args)})`);
         logger.mcp.info(`[MCP Test] Env keys: ${Object.keys(config.env || {}).join(', ')}`);
 
         onProgress?.('connecting', 'Starting server...');
 
         // Spawn the process (command is validated above)
-        const child = spawn(config.command!, config.args || [], {
+        // On Windows, .cmd files need shell:true to execute properly
+        const child = spawn(command, expandedArgs, {
           env,
-          stdio: ['pipe', 'pipe', 'pipe']
+          stdio: ['pipe', 'pipe', 'pipe'],
+          shell: process.platform === 'win32'
         });
 
         logger.mcp.info(`[MCP Test] Process spawned with PID: ${child.pid}`);
@@ -355,7 +363,7 @@ export class MCPConfigService {
         let timeoutId: NodeJS.Timeout;
         let currentTimeoutMs = this.CONNECTION_TIMEOUT_MS;
 
-        const resolveOnce = (result: { success: boolean; error?: string }) => {
+        const resolveOnce = (result: { success: boolean; error?: string; helpUrl?: string }) => {
           if (!resolved) {
             resolved = true;
             clearTimeout(timeoutId);
@@ -496,10 +504,8 @@ export class MCPConfigService {
 
           // Provide helpful error message for command not found
           if (error.code === 'ENOENT') {
-            const helpfulMessage = config.command === 'uvx'
-              ? `Command '${config.command}' not found. Please install uv (https://docs.astral.sh/uv/) to use this MCP server.`
-              : `Command '${config.command}' not found. Please ensure it is installed and available in your PATH.`;
-            resolveOnce({ success: false, error: helpfulMessage });
+            const commandHelp = this.getCommandNotFoundHelp(config.command || '');
+            resolveOnce({ success: false, error: commandHelp.message, helpUrl: commandHelp.helpUrl });
           } else {
             resolveOnce({ success: false, error: error.message });
           }
@@ -517,11 +523,22 @@ export class MCPConfigService {
               logger.mcp.info('[MCP Test] Process exited cleanly but no JSON-RPC response');
               resolveOnce({ success: false, error: 'Server exited without responding to initialize request' });
             } else {
-              logger.mcp.warn(`[MCP Test] Test failed: ${errorOutput || `exit code ${code}`}`);
-              resolveOnce({
-                success: false,
-                error: errorOutput || `Process exited with code ${code}`
-              });
+              // Check if this is a "command not found" error from the shell
+              // Windows: "'xyz' is not recognized as an internal or external command"
+              // Unix: "command not found" or "not found"
+              const notFoundMatch = errorOutput.match(/'([^']+)' is not recognized|(\S+): (?:command )?not found/i);
+              if (notFoundMatch) {
+                const cmdName = notFoundMatch[1] || notFoundMatch[2];
+                const commandHelp = this.getCommandNotFoundHelp(cmdName);
+                logger.mcp.warn(`[MCP Test] Command not found: ${cmdName}`);
+                resolveOnce({ success: false, error: commandHelp.message, helpUrl: commandHelp.helpUrl });
+              } else {
+                logger.mcp.warn(`[MCP Test] Test failed: ${errorOutput || `exit code ${code}`}`);
+                resolveOnce({
+                  success: false,
+                  error: errorOutput || `Process exited with code ${code}`
+                });
+              }
             }
           }
         });
@@ -585,5 +602,95 @@ export class MCPConfigService {
       // Variable not set and no default - return original
       return `\${${varName}}`;
     });
+  }
+
+  /**
+   * Resolve command for the current platform.
+   * On Windows, npm/npx need to use .cmd extension to avoid PowerShell execution policy issues.
+   */
+  private resolveCommandForPlatform(command: string): string {
+    if (process.platform !== 'win32') {
+      return command;
+    }
+
+    // On Windows, use .cmd versions to bypass PowerShell execution policy
+    // PowerShell tries to run .ps1 scripts which may be blocked by security policy
+    const windowsCommands: Record<string, string> = {
+      'npx': 'npx.cmd',
+      'npm': 'npm.cmd',
+      'node': 'node.exe',
+      'pnpm': 'pnpm.cmd',
+      'yarn': 'yarn.cmd',
+      'bun': 'bun.exe'
+    };
+
+    return windowsCommands[command] || command;
+  }
+
+  /**
+   * Get helpful error message and install URL for command not found errors.
+   */
+  private getCommandNotFoundHelp(command: string): { message: string; helpUrl?: string } {
+    // Map commands to their install instructions
+    const commandHelp: Record<string, { message: string; helpUrl: string }> = {
+      npx: {
+        message: `Command 'npx' not found. Node.js needs to be installed to use this MCP server.`,
+        helpUrl: 'https://nodejs.org/en/download'
+      },
+      node: {
+        message: `Command 'node' not found. Node.js needs to be installed to use this MCP server.`,
+        helpUrl: 'https://nodejs.org/en/download'
+      },
+      npm: {
+        message: `Command 'npm' not found. Node.js needs to be installed to use this MCP server.`,
+        helpUrl: 'https://nodejs.org/en/download'
+      },
+      uvx: {
+        message: `Command 'uvx' not found. Please install uv to use this MCP server.`,
+        helpUrl: 'https://docs.astral.sh/uv/getting-started/installation/'
+      },
+      uv: {
+        message: `Command 'uv' not found. Please install uv to use this MCP server.`,
+        helpUrl: 'https://docs.astral.sh/uv/getting-started/installation/'
+      },
+      python: {
+        message: `Command 'python' not found. Python needs to be installed to use this MCP server.`,
+        helpUrl: 'https://www.python.org/downloads/'
+      },
+      python3: {
+        message: `Command 'python3' not found. Python needs to be installed to use this MCP server.`,
+        helpUrl: 'https://www.python.org/downloads/'
+      },
+      docker: {
+        message: `Command 'docker' not found. Docker Desktop needs to be installed to use this MCP server.`,
+        helpUrl: 'https://www.docker.com/products/docker-desktop/'
+      },
+      bunx: {
+        message: `Command 'bunx' not found. Bun needs to be installed to use this MCP server.`,
+        helpUrl: 'https://bun.sh/docs/installation'
+      },
+      bun: {
+        message: `Command 'bun' not found. Bun needs to be installed to use this MCP server.`,
+        helpUrl: 'https://bun.sh/docs/installation'
+      },
+      deno: {
+        message: `Command 'deno' not found. Deno needs to be installed to use this MCP server.`,
+        helpUrl: 'https://docs.deno.com/runtime/getting_started/installation/'
+      },
+      pipx: {
+        message: `Command 'pipx' not found. pipx needs to be installed to use this MCP server.`,
+        helpUrl: 'https://pipx.pypa.io/stable/installation/'
+      }
+    };
+
+    const help = commandHelp[command];
+    if (help) {
+      return help;
+    }
+
+    // Default message for unknown commands
+    return {
+      message: `Command '${command}' not found. Please ensure it is installed and available in your PATH.`
+    };
   }
 }

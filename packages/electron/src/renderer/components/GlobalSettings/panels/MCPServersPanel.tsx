@@ -710,6 +710,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
   const [formEnv, setFormEnv] = useState<Array<{ key: string; value: string }>>([]);
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [testMessage, setTestMessage] = useState<string>('');
+  const [testHelpUrl, setTestHelpUrl] = useState<string | null>(null);
 
   // OAuth state
   const [oauthStatus, setOauthStatus] = useState<'unknown' | 'checking' | 'authorized' | 'not-authorized'>('unknown');
@@ -1188,6 +1189,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
       if (result.success) {
         setTestStatus('success');
         setTestMessage('Connection successful');
+        setTestHelpUrl(null);
         // Track successful test
         posthog?.capture('mcp_server_test_result', {
           templateId: selectedTemplate?.id || null,
@@ -1197,6 +1199,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
       } else {
         setTestStatus('error');
         setTestMessage(result.error || 'Connection failed');
+        setTestHelpUrl(result.helpUrl || null);
         // Track failed test
         posthog?.capture('mcp_server_test_result', {
           templateId: selectedTemplate?.id || null,
@@ -1209,6 +1212,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
       const errorMsg = error instanceof Error ? error.message : 'Test failed';
       setTestStatus('error');
       setTestMessage(errorMsg);
+      setTestHelpUrl(null);
       // Track test exception
       posthog?.capture('mcp_server_test_result', {
         templateId: selectedTemplate?.id || null,
@@ -1516,6 +1520,15 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
             {testStatus === 'error' && testMessage && (
               <div className="mcp-oauth-error" role="alert" aria-live="assertive">
                 {testMessage}
+                {testHelpUrl && (
+                  <button
+                    type="button"
+                    className="mcp-help-link-button"
+                    onClick={() => window.electronAPI.openExternal(testHelpUrl)}
+                  >
+                    Install Instructions
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -1590,6 +1603,15 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
                 >
                   {testStatus === 'testing' && <span className="mcp-test-spinner" aria-hidden="true" />}
                   {testMessage}
+                  {testHelpUrl && testStatus === 'error' && (
+                    <button
+                      type="button"
+                      className="mcp-help-link-button"
+                      onClick={() => window.electronAPI.openExternal(testHelpUrl)}
+                    >
+                      Install Instructions
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -1710,6 +1732,15 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
                 >
                   {testStatus === 'testing' && <span className="mcp-test-spinner" aria-hidden="true" />}
                   {testMessage}
+                  {testHelpUrl && testStatus === 'error' && (
+                    <button
+                      type="button"
+                      className="mcp-help-link-button"
+                      onClick={() => window.electronAPI.openExternal(testHelpUrl)}
+                    >
+                      Install Instructions
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -1769,6 +1800,15 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
               >
                 {testStatus === 'testing' && <span className="mcp-test-spinner" aria-hidden="true" />}
                 {testMessage}
+                {testHelpUrl && testStatus === 'error' && (
+                  <button
+                    type="button"
+                    className="mcp-help-link-button"
+                    onClick={() => window.electronAPI.openExternal(testHelpUrl)}
+                  >
+                    Install Instructions
+                  </button>
+                )}
               </div>
             )}
           </div>

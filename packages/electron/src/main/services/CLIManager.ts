@@ -958,7 +958,24 @@ export function getEnhancedPath(): string {
       // Ignore if npm is not available
     }
   } else if (process.platform === 'win32') {
-    // Windows paths - use forward slashes or escaped backslashes
+    // On Windows, GUI apps don't inherit the full user PATH from shell sessions.
+    // Query the actual user PATH from the registry to get the complete PATH.
+    try {
+      const { execSync } = require('child_process');
+      // Get User PATH from registry
+      const userPathResult = execSync(
+        'reg query "HKCU\\Environment" /v Path',
+        { encoding: 'utf8', timeout: 5000, windowsHide: true }
+      );
+      const userPathMatch = userPathResult.match(/Path\s+REG_(?:EXPAND_)?SZ\s+(.+)/i);
+      if (userPathMatch && userPathMatch[1]) {
+        paths.push(userPathMatch[1].trim());
+      }
+    } catch (e) {
+      // Registry query failed, fall back to common paths
+    }
+
+    // Also add common paths as fallback (in case registry query misses something)
     const programFiles = process.env['ProgramFiles'] || 'C:\\Program Files';
     const programFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
 
@@ -973,6 +990,12 @@ export function getEnhancedPath(): string {
     if (userProfile) {
       paths.push(path.join(userProfile, 'AppData', 'Roaming', 'npm'));
       paths.push(path.join(userProfile, 'scoop', 'shims'));
+      // uv/uvx default installation path
+      paths.push(path.join(userProfile, '.local', 'bin'));
+      // Bun default installation path
+      paths.push(path.join(userProfile, '.bun', 'bin'));
+      // Deno default installation path
+      paths.push(path.join(userProfile, '.deno', 'bin'));
     }
 
     // NVM for Windows

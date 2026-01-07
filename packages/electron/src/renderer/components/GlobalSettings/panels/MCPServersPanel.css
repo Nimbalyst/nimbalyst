@@ -476,6 +476,32 @@
   border: 1px solid rgba(231, 76, 60, 0.3);
 }
 
+.mcp-help-link-button {
+  display: inline-block;
+  margin-left: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--primary-color, #3498db);
+  background: transparent;
+  border: 1px solid var(--primary-color, #3498db);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.mcp-help-link-button:hover {
+  background: var(--primary-color, #3498db);
+  color: white;
+}
+
+.mcp-oauth-error .mcp-help-link-button {
+  margin-top: 0.5rem;
+  margin-left: 0;
+  display: block;
+  width: fit-content;
+}
+
 .mcp-test-spinner {
   display: inline-block;
   width: 14px;
