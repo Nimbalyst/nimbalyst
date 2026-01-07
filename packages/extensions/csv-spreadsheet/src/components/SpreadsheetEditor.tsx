@@ -1154,7 +1154,7 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
           rowClass="_rowClass"
           onAfteredit={handleAfterEdit}
           onAfterfocus={handleFocusCell}
-          onBeforerange={handleSetRange as any}
+          onSetrange={handleSetRange as any}
           onBeforecellfocus={handleCellClick}
         />
         {contextMenu && (
