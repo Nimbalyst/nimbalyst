@@ -254,9 +254,13 @@ ${exportNames.map((name) => `export const ${name} = __mod?.${name};`).join('\n')
       // Read the module source
       const source = await this.readFile(modulePath);
 
+      // Add cache-busting comment to force reload on restart
+      // We can't use query params on blob URLs, so we inject a comment with timestamp
+      const cacheBustedSource = `/* t=${Date.now()} */\n${source}`;
+
       // Create blob URL - NO transformation needed!
       // The import map handles bare specifier resolution
-      const blob = new Blob([source], { type: 'application/javascript' });
+      const blob = new Blob([cacheBustedSource], { type: 'application/javascript' });
       const blobUrl = URL.createObjectURL(blob);
 
       try {
