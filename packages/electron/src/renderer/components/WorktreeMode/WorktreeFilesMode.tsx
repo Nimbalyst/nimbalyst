@@ -9,7 +9,7 @@ import React, {
 } from 'react';
 import type { SessionData } from '@nimbalyst/runtime/ai/server/types';
 import { MaterialSymbol } from '@nimbalyst/runtime';
-import { useTabs } from '../../hooks/useTabs';
+import { TabsProvider, useTabsActions, useTabs } from '../../contexts/TabsContext';
 import { useTheme } from '../../hooks/useTheme';
 import { TabManager } from '../TabManager/TabManager';
 import { TabContent } from '../TabContent/TabContent';
@@ -78,7 +78,8 @@ function resolveSessionFilePath(filePath: string, basePath?: string): string | n
   return normalizeFilePath(`${base}/${relative}`);
 }
 
-const WorktreeFilesMode = forwardRef<WorktreeFilesModeRef, WorktreeFilesModeProps>(function WorktreeFilesMode({
+// Inner component that uses TabsContext
+const WorktreeFilesModeInner = forwardRef<WorktreeFilesModeRef, WorktreeFilesModeProps>(function WorktreeFilesModeInner({
   sessionId,
   sessionData,
   worktreePath,
@@ -89,6 +90,8 @@ const WorktreeFilesMode = forwardRef<WorktreeFilesModeRef, WorktreeFilesModeProp
   onMounted
 }, ref) {
   const { theme } = useTheme();
+  const tabsActions = useTabsActions();
+  const tabs = useTabs();
   const [fileTree, setFileTree] = useState<FileTreeItem[]>([]);
   const [fileTreeFilter, setFileTreeFilter] = useState<FileTreeFilter>('all');
   const [showFileIcons, setShowFileIcons] = useState(true);
@@ -112,17 +115,9 @@ const WorktreeFilesMode = forwardRef<WorktreeFilesModeRef, WorktreeFilesModeProp
   const mountedRef = useRef(false);
   const pendingFileQueue = useRef<string[]>([]);
 
-  const tabs = useTabs({
-    workspacePath: worktreePath,
-    enabled: true,
-    onTabChange: (tab) => {
-      // Keep highlight in sync with active tab
-      setActiveFilePath(tab.filePath || null);
-    }
-  });
-
   const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
 
+  // Keep highlight in sync with active tab
   useEffect(() => {
     setActiveFilePath(tabs.activeTab?.filePath || null);
   }, [tabs.activeTab?.filePath]);
@@ -163,22 +158,22 @@ const WorktreeFilesMode = forwardRef<WorktreeFilesModeRef, WorktreeFilesModeProp
     }
 
     // Check if tab already exists
-    const existing = tabs.findTabByPath(normalized);
+    const existing = tabsActions.findTabByPath(normalized);
     console.log('[WorktreeFilesMode] Existing tab:', existing);
 
     if (existing) {
-      tabs.switchTab(existing.id);
+      tabsActions.switchTab(existing.id);
       return;
     }
 
     // Add new tab
     try {
       console.log('[WorktreeFilesMode] Adding new tab for:', normalized);
-      tabs.addTab(normalized, '', true);
+      tabsActions.addTab(normalized, '', true);
     } catch (err) {
       console.error('[WorktreeFilesMode] Failed to open file in tab:', err);
     }
-  }, [tabs, worktreePath, workspacePath]);
+  }, [tabsActions, worktreePath, workspacePath]);
 
   useImperativeHandle(ref, () => ({
     openFile: openFileInEditor
@@ -607,13 +602,10 @@ const WorktreeFilesMode = forwardRef<WorktreeFilesModeRef, WorktreeFilesModeProp
       <div className="worktree-files-editor">
         {tabs.tabs.length > 0 ? (
           <TabManager
-            tabs={tabs.tabs}
-            activeTabId={tabs.activeTabId}
-            onTabSelect={tabs.switchTab}
-            onTabClose={tabs.removeTab}
+            onTabClose={(tabId) => {
+              tabsActions.removeTab(tabId);
+            }}
             onNewTab={() => setIsNewFileModalOpen(true)}
-            onTogglePin={tabs.togglePin}
-            onTabReorder={tabs.reorderTabs}
             hideTabBar={false}
             isActive={isActive}
           >
@@ -622,12 +614,12 @@ const WorktreeFilesMode = forwardRef<WorktreeFilesModeRef, WorktreeFilesModeProp
               activeTabId={tabs.activeTabId}
               theme={theme}
               onTabDirtyChange={(tabId, isDirty) => {
-                const tab = tabs.getTabState(tabId);
+                const tab = tabsActions.getTabState(tabId);
                 if (tab && tab.isDirty !== isDirty) {
-                  tabs.updateTab(tabId, { isDirty });
+                  tabsActions.updateTab(tabId, { isDirty });
                 }
               }}
-              onTabClose={tabs.removeTab}
+              onTabClose={(tabId) => tabsActions.removeTab(tabId)}
               workspaceId={worktreePath}
             />
           </TabManager>
@@ -765,6 +757,15 @@ const WorktreeFilesMode = forwardRef<WorktreeFilesModeRef, WorktreeFilesModeProp
         />
       )}
     </div>
+  );
+});
+
+// Wrapper component that provides TabsContext
+const WorktreeFilesMode = forwardRef<WorktreeFilesModeRef, WorktreeFilesModeProps>(function WorktreeFilesMode(props, ref) {
+  return (
+    <TabsProvider workspacePath={props.worktreePath}>
+      <WorktreeFilesModeInner {...props} ref={ref} />
+    </TabsProvider>
   );
 });
 

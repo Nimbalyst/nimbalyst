@@ -61,6 +61,8 @@ interface SessionHistoryProps {
   onNewWorktreeSession?: () => void; // Callback for creating new worktree session
   onAddSessionToWorktree?: (worktreeId: string) => void; // Callback for adding session to existing worktree
   onAddTerminalToWorktree?: (worktreeId: string) => void; // Callback for adding terminal to existing worktree
+  onWorktreeFilesMode?: (worktreeId: string) => void; // Callback to open Files mode for a worktree
+  onWorktreeChangesMode?: (worktreeId: string) => void; // Callback to open Changes mode for a worktree
   onImportSessions?: () => void; // Callback for opening import dialog
   onOpenQuickSearch?: () => void; // Callback for opening session quick search (Cmd+L)
   collapsedGroups: string[];
@@ -167,6 +169,8 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   onNewWorktreeSession,
   onAddSessionToWorktree,
   onAddTerminalToWorktree,
+  onWorktreeFilesMode,
+  onWorktreeChangesMode,
   onImportSessions,
   onOpenQuickSearch,
   collapsedGroups,
@@ -1381,6 +1385,8 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                           onWorktreePinToggle={handleWorktreePinToggle}
                           onSessionPinToggle={handleSessionPinToggle}
                           onSessionRename={onSessionRename}
+                          onFilesMode={onWorktreeFilesMode}
+                          onChangesMode={onWorktreeChangesMode}
                         />
                       );
                     } else {

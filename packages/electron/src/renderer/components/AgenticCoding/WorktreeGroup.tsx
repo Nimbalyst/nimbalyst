@@ -48,6 +48,8 @@ interface WorktreeGroupProps {
   onWorktreePinToggle?: (worktreeId: string, isPinned: boolean) => void;
   onSessionPinToggle?: (sessionId: string, isPinned: boolean) => void;
   onSessionRename?: (sessionId: string, newName: string) => void;
+  onFilesMode?: (worktreeId: string) => void;
+  onChangesMode?: (worktreeId: string) => void;
 }
 
 export const WorktreeGroup: React.FC<WorktreeGroupProps> = ({
@@ -64,7 +66,9 @@ export const WorktreeGroup: React.FC<WorktreeGroupProps> = ({
   onSessionArchive,
   onWorktreePinToggle,
   onSessionPinToggle,
-  onSessionRename
+  onSessionRename,
+  onFilesMode,
+  onChangesMode
 }) => {
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
@@ -112,6 +116,16 @@ export const WorktreeGroup: React.FC<WorktreeGroupProps> = ({
     onAddTerminal?.(worktree.id);
   }, [onAddTerminal, worktree.id]);
 
+  const handleFilesMode = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    onFilesMode?.(worktree.id);
+  }, [onFilesMode, worktree.id]);
+
+  const handleChangesMode = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    onChangesMode?.(worktree.id);
+  }, [onChangesMode, worktree.id]);
+
   // Adjust context menu position to keep it within viewport
   useEffect(() => {
     if (showContextMenu && contextMenuRef.current) {
@@ -144,54 +158,82 @@ export const WorktreeGroup: React.FC<WorktreeGroupProps> = ({
       onMouseLeave={handleCloseContextMenu}
     >
       {/* Worktree Header */}
-      <button
+      <div
         className="worktree-group-header"
-        onClick={onToggle}
         onContextMenu={handleContextMenu}
-        aria-expanded={isExpanded}
-        aria-label={`Worktree ${worktree.name}, ${sessions.length} session${sessions.length !== 1 ? 's' : ''}, ${isExpanded ? 'expanded' : 'collapsed'}`}
       >
-        <MaterialSymbol
-          icon="chevron_right"
-          size={12}
-          className={`worktree-group-chevron ${isExpanded ? 'expanded' : ''}`}
-        />
-        <div className="worktree-group-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M8 21v-4a2 2 0 0 1 2-2h4"/>
-            <path d="M14 15V7"/>
-            <circle cx="8" cy="7" r="2"/>
-            <circle cx="14" cy="7" r="2"/>
-            <path d="M8 9v4a2 2 0 0 0 2 2"/>
-          </svg>
-        </div>
-        <div className="worktree-group-content-wrapper">
-          <div className="worktree-group-row-primary">
-            <span className="worktree-group-name">{worktree.displayName || worktree.name}</span>
-            {worktree.isPinned && (
-              <MaterialSymbol icon="push_pin" size={12} className="worktree-group-pin-icon" />
-            )}
+        <button
+          className="worktree-group-header-toggle"
+          onClick={onToggle}
+          aria-expanded={isExpanded}
+          aria-label={`Worktree ${worktree.name}, ${sessions.length} session${sessions.length !== 1 ? 's' : ''}, ${isExpanded ? 'expanded' : 'collapsed'}`}
+        >
+          <MaterialSymbol
+            icon="chevron_right"
+            size={12}
+            className={`worktree-group-chevron ${isExpanded ? 'expanded' : ''}`}
+          />
+          <div className="worktree-group-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M8 21v-4a2 2 0 0 1 2-2h4"/>
+              <path d="M14 15V7"/>
+              <circle cx="8" cy="7" r="2"/>
+              <circle cx="14" cy="7" r="2"/>
+              <path d="M8 9v4a2 2 0 0 0 2 2"/>
+            </svg>
           </div>
-          <div className="worktree-group-row-secondary">
-            {gitStatus?.ahead && gitStatus.ahead > 0 && (
-              <span className="worktree-group-badge ahead">
-                {gitStatus.ahead} ahead
-              </span>
-            )}
-            {gitStatus?.behind && gitStatus.behind > 0 && (
-              <span className="worktree-group-badge behind">
-                {gitStatus.behind} behind
-              </span>
-            )}
-            {gitStatus?.uncommitted && (
-              <span className="worktree-group-badge uncommitted">
-                uncommitted
-              </span>
-            )}
-            <span className="worktree-group-count">{sessions.length} session{sessions.length !== 1 ? 's' : ''}</span>
+          <div className="worktree-group-content-wrapper">
+            <div className="worktree-group-row-primary">
+              <span className="worktree-group-name">{worktree.displayName || worktree.name}</span>
+              {worktree.isPinned && (
+                <MaterialSymbol icon="push_pin" size={12} className="worktree-group-pin-icon" />
+              )}
+            </div>
+            <div className="worktree-group-row-secondary">
+              {gitStatus?.ahead && gitStatus.ahead > 0 && (
+                <span className="worktree-group-badge ahead">
+                  {gitStatus.ahead} ahead
+                </span>
+              )}
+              {gitStatus?.behind && gitStatus.behind > 0 && (
+                <span className="worktree-group-badge behind">
+                  {gitStatus.behind} behind
+                </span>
+              )}
+              {gitStatus?.uncommitted && (
+                <span className="worktree-group-badge uncommitted">
+                  uncommitted
+                </span>
+              )}
+              <span className="worktree-group-count">{sessions.length} session{sessions.length !== 1 ? 's' : ''}</span>
+            </div>
           </div>
+        </button>
+
+        {/* Files and Changes mode buttons */}
+        <div className="worktree-group-mode-buttons">
+          {onFilesMode && (
+            <button
+              className="worktree-group-mode-button"
+              onClick={handleFilesMode}
+              title="Browse Files"
+              aria-label="Browse files in worktree"
+            >
+              <MaterialSymbol icon="description" size={14} />
+            </button>
+          )}
+          {onChangesMode && (
+            <button
+              className="worktree-group-mode-button"
+              onClick={handleChangesMode}
+              title="View Changes"
+              aria-label="View changes in worktree"
+            >
+              <MaterialSymbol icon="difference" size={14} />
+            </button>
+          )}
         </div>
-      </button>
+      </div>
 
       {/* Sessions List */}
       {isExpanded && (

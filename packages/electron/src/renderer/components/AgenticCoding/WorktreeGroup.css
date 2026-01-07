@@ -4,16 +4,11 @@
 
 .worktree-group-header {
   display: flex;
-  align-items: flex-start;
-  gap: 0.5rem;
-  width: 100%;
-  padding: 0.5rem 0.75rem;
+  align-items: center;
+  gap: 0.25rem;
   background: var(--surface-tertiary);
-  border: none;
-  cursor: pointer;
   font-size: 0.8125rem;
   color: var(--text-primary);
-  text-align: left;
   transition: background-color 0.15s ease;
   border-radius: 0.375rem;
   margin: 0 0.5rem;
@@ -22,6 +17,69 @@
 
 .worktree-group-header:hover {
   background: var(--surface-hover);
+}
+
+.worktree-group-header-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 0;
+  padding: 0.5rem 0.5rem 0.5rem 0.75rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: inherit;
+  color: inherit;
+  text-align: left;
+}
+
+.worktree-group-header-toggle:focus {
+  outline: none;
+}
+
+.worktree-group-header-toggle:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -2px;
+  border-radius: 0.25rem;
+}
+
+/* Mode buttons container */
+.worktree-group-mode-buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+  padding-right: 0.5rem;
+  flex-shrink: 0;
+}
+
+.worktree-group-mode-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.worktree-group-mode-button:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.worktree-group-mode-button:focus {
+  outline: none;
+}
+
+.worktree-group-mode-button:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -2px;
 }
 
 .worktree-group-chevron {
