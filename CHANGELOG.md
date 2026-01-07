@@ -20,6 +20,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.50.19] - 2026-01-07
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+- Replaced node-pty fork with official package for Windows compatibility
+
+### Fixed
+- MCP server command resolution on Windows
+- MCP server installation on Windows and improved cross-platform PATH resolution
+- Document scanner now continues scanning tracker files beyond limit
+- Tracker metadata refresh for agent-edited files
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.50.18] - 2026-01-06
 
 
