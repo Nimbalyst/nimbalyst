@@ -18,6 +18,77 @@ export interface TestProgressCallback {
   (status: 'downloading' | 'connecting' | 'testing' | 'done', message: string): void;
 }
 
+/**
+ * Get helpful error message and install URL for command not found errors.
+ * Exported for use by other modules (e.g., OAuth handlers).
+ */
+export function getCommandNotFoundHelp(command: string): { message: string; helpUrl?: string } {
+  // Map commands to their install instructions
+  const commandHelp: Record<string, { message: string; helpUrl: string }> = {
+    npx: {
+      message: `Command 'npx' not found. Node.js needs to be installed to use this MCP server.`,
+      helpUrl: 'https://nodejs.org/en/download'
+    },
+    node: {
+      message: `Command 'node' not found. Node.js needs to be installed to use this MCP server.`,
+      helpUrl: 'https://nodejs.org/en/download'
+    },
+    npm: {
+      message: `Command 'npm' not found. Node.js needs to be installed to use this MCP server.`,
+      helpUrl: 'https://nodejs.org/en/download'
+    },
+    uvx: {
+      message: `Command 'uvx' not found. Please install uv to use this MCP server.`,
+      helpUrl: 'https://docs.astral.sh/uv/getting-started/installation/'
+    },
+    uv: {
+      message: `Command 'uv' not found. Please install uv to use this MCP server.`,
+      helpUrl: 'https://docs.astral.sh/uv/getting-started/installation/'
+    },
+    python: {
+      message: `Command 'python' not found. Python needs to be installed to use this MCP server.`,
+      helpUrl: 'https://www.python.org/downloads/'
+    },
+    python3: {
+      message: `Command 'python3' not found. Python needs to be installed to use this MCP server.`,
+      helpUrl: 'https://www.python.org/downloads/'
+    },
+    docker: {
+      message: `Command 'docker' not found. Docker Desktop needs to be installed to use this MCP server.`,
+      helpUrl: 'https://www.docker.com/products/docker-desktop/'
+    },
+    bunx: {
+      message: `Command 'bunx' not found. Bun needs to be installed to use this MCP server.`,
+      helpUrl: 'https://bun.sh/docs/installation'
+    },
+    bun: {
+      message: `Command 'bun' not found. Bun needs to be installed to use this MCP server.`,
+      helpUrl: 'https://bun.sh/docs/installation'
+    },
+    deno: {
+      message: `Command 'deno' not found. Deno needs to be installed to use this MCP server.`,
+      helpUrl: 'https://docs.deno.com/runtime/getting_started/installation/'
+    },
+    pipx: {
+      message: `Command 'pipx' not found. pipx needs to be installed to use this MCP server.`,
+      helpUrl: 'https://pipx.pypa.io/stable/installation/'
+    }
+  };
+
+  // Strip Windows .cmd/.exe suffixes for lookup (e.g., npx.cmd -> npx, node.exe -> node)
+  const normalizedCommand = command.replace(/\.(cmd|exe)$/i, '');
+
+  const help = commandHelp[normalizedCommand];
+  if (help) {
+    return help;
+  }
+
+  // Default message for unknown commands
+  return {
+    message: `Command '${command}' not found. Please ensure it is installed and available in your PATH.`
+  };
+}
+
 export class MCPConfigService {
   private userConfigPath: string;
 
@@ -649,68 +720,9 @@ export class MCPConfigService {
 
   /**
    * Get helpful error message and install URL for command not found errors.
+   * Delegates to the exported standalone function.
    */
   private getCommandNotFoundHelp(command: string): { message: string; helpUrl?: string } {
-    // Map commands to their install instructions
-    const commandHelp: Record<string, { message: string; helpUrl: string }> = {
-      npx: {
-        message: `Command 'npx' not found. Node.js needs to be installed to use this MCP server.`,
-        helpUrl: 'https://nodejs.org/en/download'
-      },
-      node: {
-        message: `Command 'node' not found. Node.js needs to be installed to use this MCP server.`,
-        helpUrl: 'https://nodejs.org/en/download'
-      },
-      npm: {
-        message: `Command 'npm' not found. Node.js needs to be installed to use this MCP server.`,
-        helpUrl: 'https://nodejs.org/en/download'
-      },
-      uvx: {
-        message: `Command 'uvx' not found. Please install uv to use this MCP server.`,
-        helpUrl: 'https://docs.astral.sh/uv/getting-started/installation/'
-      },
-      uv: {
-        message: `Command 'uv' not found. Please install uv to use this MCP server.`,
-        helpUrl: 'https://docs.astral.sh/uv/getting-started/installation/'
-      },
-      python: {
-        message: `Command 'python' not found. Python needs to be installed to use this MCP server.`,
-        helpUrl: 'https://www.python.org/downloads/'
-      },
-      python3: {
-        message: `Command 'python3' not found. Python needs to be installed to use this MCP server.`,
-        helpUrl: 'https://www.python.org/downloads/'
-      },
-      docker: {
-        message: `Command 'docker' not found. Docker Desktop needs to be installed to use this MCP server.`,
-        helpUrl: 'https://www.docker.com/products/docker-desktop/'
-      },
-      bunx: {
-        message: `Command 'bunx' not found. Bun needs to be installed to use this MCP server.`,
-        helpUrl: 'https://bun.sh/docs/installation'
-      },
-      bun: {
-        message: `Command 'bun' not found. Bun needs to be installed to use this MCP server.`,
-        helpUrl: 'https://bun.sh/docs/installation'
-      },
-      deno: {
-        message: `Command 'deno' not found. Deno needs to be installed to use this MCP server.`,
-        helpUrl: 'https://docs.deno.com/runtime/getting_started/installation/'
-      },
-      pipx: {
-        message: `Command 'pipx' not found. pipx needs to be installed to use this MCP server.`,
-        helpUrl: 'https://pipx.pypa.io/stable/installation/'
-      }
-    };
-
-    const help = commandHelp[command];
-    if (help) {
-      return help;
-    }
-
-    // Default message for unknown commands
-    return {
-      message: `Command '${command}' not found. Please ensure it is installed and available in your PATH.`
-    };
+    return getCommandNotFoundHelp(command);
   }
 }

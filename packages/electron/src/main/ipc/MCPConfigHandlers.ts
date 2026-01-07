@@ -1,5 +1,5 @@
 import { ipcMain, BrowserWindow, shell } from 'electron';
-import { MCPConfigService, TestProgressCallback } from '../services/MCPConfigService';
+import { MCPConfigService, TestProgressCallback, getCommandNotFoundHelp } from '../services/MCPConfigService';
 import { getEnhancedPath } from '../services/CLIManager';
 import { MCPConfig } from '@nimbalyst/runtime/types/MCPServerConfig';
 import { logger } from '../utils/logger';
@@ -301,7 +301,13 @@ async function triggerMcpRemoteOAuth(serverUrl: string): Promise<{ success: bool
     child.on('error', (error) => {
       clearTimeout(timeout);
       cleanup();
-      resolve({ success: false, error: error.message });
+      // Check if this is a "command not found" error (ENOENT)
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        const help = getCommandNotFoundHelp(npxCommand);
+        resolve({ success: false, error: help.message });
+      } else {
+        resolve({ success: false, error: error.message });
+      }
     });
 
     child.on('close', (code) => {
@@ -315,7 +321,17 @@ async function triggerMcpRemoteOAuth(serverUrl: string): Promise<{ success: bool
           } else if (code === 0) {
             resolve({ success: true });
           } else {
-            resolve({ success: false, error: stderr || `Process exited with code ${code}` });
+            // Check if this is a "command not found" error from the shell
+            // Windows: "'xyz' is not recognized as an internal or external command"
+            // Unix: "command not found" or "not found"
+            const notFoundMatch = stderr.match(/'([^']+)' is not recognized|(\S+): (?:command )?not found/i);
+            if (notFoundMatch) {
+              const cmdName = notFoundMatch[1] || notFoundMatch[2];
+              const help = getCommandNotFoundHelp(cmdName);
+              resolve({ success: false, error: help.message });
+            } else {
+              resolve({ success: false, error: stderr || `Process exited with code ${code}` });
+            }
           }
         });
       }
