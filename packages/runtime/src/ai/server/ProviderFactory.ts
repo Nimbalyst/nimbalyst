@@ -23,12 +23,12 @@ export class ProviderFactory {
   ): AIProvider | null {
     const key = `${type}-${sessionId}`;
     const provider = this.providers.get(key) || null;
-    console.log(`[ProviderFactory] getProvider(${key}): ${provider ? 'found' : 'not found'}, map size: ${this.providers.size}`);
-    if (provider && type === 'claude-code') {
-      const instanceId = (provider as any)._instanceId;
-      const hasAbortController = !!(provider as any).abortController;
-      console.log(`[ProviderFactory] claude-code provider state: instanceId=${instanceId}, hasAbortController=${hasAbortController}`);
-    }
+    // console.log(`[ProviderFactory] getProvider(${key}): ${provider ? 'found' : 'not found'}, map size: ${this.providers.size}`);
+    // if (provider && type === 'claude-code') {
+    //   const instanceId = (provider as any)._instanceId;
+    //   const hasAbortController = !!(provider as any).abortController;
+    //   console.log(`[ProviderFactory] claude-code provider state: instanceId=${instanceId}, hasAbortController=${hasAbortController}`);
+    // }
     return provider;
   }
   
