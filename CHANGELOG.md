@@ -20,6 +20,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.50.23] - 2026-01-08
+
+
+### Added
+- Excalidraw extension for AI-driven diagram editing with colors and viewport persistence
+- CSV spreadsheet cell-level diff highlighting for AI edits
+- CSV spreadsheet Cmd+A select-all and auto-expand on paste
+- CSV spreadsheet Tab key navigation while editing
+- Excalidraw layout tools and improved arrow binding
+- Feedback survey dark mode support
+
+### Changed
+- Improved state management with Jotai to eliminate unnecessary re-renders
+
+### Fixed
+- Auto-updater no longer flickers when starting download
+- Diff approval bar now appears for markdown, Monaco, and mockup files
+- Cmd+Y no longer opens document history when in agent mode
+- Claude Code now sees file-scoped extension tools
+- Sync connections no longer fail silently when limit reached
+- AI Usage Report graph now shows Claude Code token usage
+- CSV spreadsheet row operations now persist across re-renders
+- Agent now uses correct screenshot tool for all editors
+- CSV spreadsheet now preserves empty rows in the middle of data
+- CSV spreadsheet no longer adds metadata comment to plain CSV files
+- CSV spreadsheet Delete key now clears selected range
+- Session cancel now requires sessionId, preventing silent failures
+- TypeScript compiles cleanly with zero errors
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.50.22] - 2026-01-08
 
 
