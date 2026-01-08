@@ -6,20 +6,19 @@ interface MockupDiffViewerProps {
   originalHtml: string;
   updatedHtml: string;
   fileName: string;
-  onAccept: () => Promise<void> | void;
-  onReject: () => Promise<void> | void;
-  isAccepting?: boolean;
-  isRejecting?: boolean;
 }
 
+/**
+ * MockupDiffViewer - Visual diff comparison for mockup files
+ *
+ * This component provides the slider-based visual diff UI for comparing
+ * original vs modified mockups. Accept/reject actions are handled by
+ * the unified diff header (UnifiedDiffHeader) in TabEditor.
+ */
 export const MockupDiffViewer: React.FC<MockupDiffViewerProps> = ({
   originalHtml,
   updatedHtml,
   fileName,
-  onAccept,
-  onReject,
-  isAccepting = false,
-  isRejecting = false
 }) => {
   const [sliderPosition, setSliderPosition] = useState(50);
   const beforeFrameRef = useRef<HTMLIFrameElement>(null);
@@ -85,43 +84,8 @@ export const MockupDiffViewer: React.FC<MockupDiffViewerProps> = ({
     updateSliderFromPointer(event.clientX);
   }, [updateSliderFromPointer]);
 
-  const toolbarLabel = useMemo(() => `${isNewFile ? 'New File' : 'AI Changes'} · ${fileName}`, [fileName, isNewFile]);
-
   return (
     <div className="mockup-diff-viewer">
-      <div className="mockup-diff-heading">
-        <div className="mockup-diff-heading-label">
-          {isNewFile ? 'Previewing New Mockup' : 'Previewing AI Changes'}
-        </div>
-        <p>
-          {isNewFile
-            ? 'Review the new mockup before accepting it.'
-            : 'Review the proposed mockup updates before accepting them.'}
-        </p>
-      </div>
-      <div className="mockup-diff-toolbar">
-        <div className="mockup-diff-title">
-          <span className="mockup-diff-indicator" aria-hidden="true" />
-          {toolbarLabel}
-        </div>
-        <div className="mockup-diff-actions">
-          <button
-            className="reject"
-            onClick={onReject}
-            disabled={isAccepting || isRejecting}
-          >
-            {isRejecting ? 'Rejecting…' : 'Reject'}
-          </button>
-          <button
-            className="accept"
-            onClick={onAccept}
-            disabled={isAccepting || isRejecting}
-          >
-            {isAccepting ? 'Accepting…' : 'Accept'}
-          </button>
-        </div>
-      </div>
-
       <div className="mockup-diff-content" role="region" aria-label={isNewFile ? 'New mockup preview' : 'Mockup diff preview'}>
         {isNewFile ? (
           // New file: simple preview without slider

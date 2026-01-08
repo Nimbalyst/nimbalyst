@@ -16,7 +16,7 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { MonacoCodeEditor } from './MonacoCodeEditor';
-import type { EditorHost, DiffConfig } from '../extensions/editorHost';
+import type { EditorHost } from '../extensions/editorHost';
 import type { ConfigTheme } from 'rexical';
 
 export interface MonacoEditorConfig {
@@ -136,20 +136,15 @@ export function MonacoEditor({
     return unsubscribe;
   }, [host]);
 
-  // Subscribe to diff requests (for AI edit review)
-  useEffect(() => {
-    if (!host.onDiffRequested) return;
-
-    const handleDiffRequest = (config: DiffConfig) => {
-      // Use editor's showDiff method
-      if (editorWrapperRef.current?.showDiff) {
-        editorWrapperRef.current.showDiff(config.originalContent, config.modifiedContent);
-      }
-    };
-
-    const unsubscribe = host.onDiffRequested(handleDiffRequest);
-    return unsubscribe;
-  }, [host]);
+  // NOTE: We intentionally do NOT subscribe to diff requests here.
+  // Monaco diff handling is fully implemented in TabEditor.tsx which calls
+  // editorRef.current.showDiff() and sets showMonacoDiffBar to display the
+  // unified diff header. If we subscribed here, TabEditor would take the
+  // "custom editor" code path (diffRequestCallbackRef) which sets the wrong
+  // diff bar state (showCustomEditorDiffBar instead of showMonacoDiffBar).
+  //
+  // Custom editors that implement their own diff display should subscribe
+  // to onDiffRequested. For Monaco, TabEditor handles it directly.
 
   // Handle dirty state changes from Monaco
   const handleDirtyChange = useCallback(

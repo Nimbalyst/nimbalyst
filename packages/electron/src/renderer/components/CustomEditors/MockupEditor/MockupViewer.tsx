@@ -74,19 +74,18 @@ export const MockupViewer: React.FC<EditorHostProps> = ({ host }) => {
 
   const {
     content,
-    setContent,
     isLoading,
     error,
   } = useEditorHost(host, editorHostOptions);
 
   // Diff mode state (not handled by useEditorHost - it's a mockup-specific feature)
+  // Accept/reject is handled by TabEditor's UnifiedDiffHeader; we just show the visual diff
   const [diffData, setDiffData] = useState<{
     originalContent: string;
     modifiedContent: string;
     tagId: string;
     sessionId: string;
   } | null>(null);
-  const [diffAction, setDiffAction] = useState<'idle' | 'accept' | 'reject'>('idle');
 
   // Additional UI state
   const [isCapturing, setIsCapturing] = useState(false);
@@ -107,54 +106,20 @@ export const MockupViewer: React.FC<EditorHostProps> = ({ host }) => {
     });
   }, [host]);
 
+  // Subscribe to diff cleared events (when user accepts/rejects via unified diff header)
+  useEffect(() => {
+    if (!host.onDiffCleared) return;
+
+    return host.onDiffCleared(() => {
+      logger.ui.info('[MockupViewer] Diff cleared');
+      setDiffData(null);
+    });
+  }, [host]);
+
   // Clear annotations when filePath changes
   useEffect(() => {
     clearAllAnnotations();
   }, [filePath, clearAllAnnotations]);
-
-  // Handle diff accept
-  const handleDiffAccept = useCallback(async () => {
-    if (!diffData || !host.reportDiffResult) return;
-
-    setDiffAction('accept');
-    try {
-      host.reportDiffResult({
-        content: diffData.modifiedContent,
-        action: 'accept',
-      });
-
-      // Update content through the hook's setContent
-      setContent(diffData.modifiedContent);
-      setDiffData(null);
-      logger.ui.info('[MockupViewer] Diff accepted');
-    } catch (err) {
-      logger.ui.error('[MockupViewer] Error accepting diff:', err);
-    } finally {
-      setDiffAction('idle');
-    }
-  }, [diffData, host, setContent]);
-
-  // Handle diff reject
-  const handleDiffReject = useCallback(async () => {
-    if (!diffData || !host.reportDiffResult) return;
-
-    setDiffAction('reject');
-    try {
-      host.reportDiffResult({
-        content: diffData.originalContent,
-        action: 'reject',
-      });
-
-      // Update content through the hook's setContent
-      setContent(diffData.originalContent);
-      setDiffData(null);
-      logger.ui.info('[MockupViewer] Diff rejected');
-    } catch (err) {
-      logger.ui.error('[MockupViewer] Error rejecting diff:', err);
-    } finally {
-      setDiffAction('idle');
-    }
-  }, [diffData, host, setContent]);
 
   // Generate CSS selector for element
   const generateSelector = useCallback((element: Element): string => {
@@ -691,17 +656,14 @@ export const MockupViewer: React.FC<EditorHostProps> = ({ host }) => {
     );
   }
 
-  // Render diff mode
+  // Render diff mode - MockupDiffViewer shows the visual comparison,
+  // UnifiedDiffHeader (from TabEditor) handles accept/reject actions
   if (diffData) {
     return (
       <MockupDiffViewer
         originalHtml={diffData.originalContent}
         updatedHtml={diffData.modifiedContent}
         fileName={fileName}
-        onAccept={handleDiffAccept}
-        onReject={handleDiffReject}
-        isAccepting={diffAction === 'accept'}
-        isRejecting={diffAction === 'reject'}
       />
     );
   }

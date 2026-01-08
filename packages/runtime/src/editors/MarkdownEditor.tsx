@@ -16,7 +16,7 @@
 
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { StravuEditor, type EditorConfig } from 'rexical';
-import type { EditorHost, DiffConfig } from '../extensions/editorHost';
+import type { EditorHost } from '../extensions/editorHost';
 
 export interface MarkdownEditorConfig {
   /** Theme for the editor */
@@ -91,9 +91,6 @@ export function MarkdownEditor({
   // Function to get current content from editor
   const getContentFnRef = useRef<(() => string) | null>(null);
 
-  // Track if we're in diff mode
-  const [diffConfig, setDiffConfig] = useState<DiffConfig | null>(null);
-
   // Load initial content on mount
   useEffect(() => {
     let mounted = true;
@@ -157,19 +154,14 @@ export function MarkdownEditor({
     return unsubscribe;
   }, [host]);
 
-  // Subscribe to diff requests (optional - for AI edit review)
-  useEffect(() => {
-    if (!host.onDiffRequested) return;
-
-    const handleDiffRequest = (config: DiffConfig) => {
-      setDiffConfig(config);
-      // Apply diff mode to editor
-      // TODO: Dispatch APPLY_MARKDOWN_REPLACE_COMMAND when we have full integration
-    };
-
-    const unsubscribe = host.onDiffRequested(handleDiffRequest);
-    return unsubscribe;
-  }, [host]);
+  // NOTE: We intentionally do NOT subscribe to diff requests here.
+  // Markdown diff handling is fully implemented in TabEditor.tsx using Lexical's
+  // APPLY_MARKDOWN_REPLACE_COMMAND. If we subscribed here, TabEditor would take
+  // the "custom editor" code path (diffRequestCallbackRef) which bypasses the
+  // working Lexical diff implementation.
+  //
+  // Custom editors that implement their own diff display should subscribe
+  // to onDiffRequested. For markdown, TabEditor handles it directly.
 
   // Handle content change from Rexical
   // This is called on dirty state changes, NOT content serialization
