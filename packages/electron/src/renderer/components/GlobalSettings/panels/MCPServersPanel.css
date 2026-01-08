@@ -442,10 +442,11 @@
   border-color: #27ae60;
 }
 
-.mcp-test-button.error {
-  background: #e74c3c;
-  color: white;
-  border-color: #e74c3c;
+.mcp-test-failed-label {
+  color: #e74c3c;
+  font-weight: 500;
+  font-size: 0.875rem;
+  margin-left: 0.5rem;
 }
 
 .mcp-test-message {

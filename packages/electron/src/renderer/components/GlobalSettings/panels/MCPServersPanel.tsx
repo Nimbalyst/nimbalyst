@@ -1592,9 +1592,9 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
                 aria-busy={testStatus === 'testing'}
               >
                 {testStatus === 'testing' ? 'Testing...' :
-                 testStatus === 'success' ? 'Connected' :
-                 testStatus === 'error' ? 'Failed' : 'Test Connection'}
+                 testStatus === 'success' ? 'Connected' : 'Test Connection'}
               </button>
+              {testStatus === 'error' && <span className="mcp-test-failed-label">Failed</span>}
               {testMessage && (
                 <div
                   className={`mcp-test-message ${testStatus}`}
@@ -1720,9 +1720,9 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
                   aria-busy={testStatus === 'testing'}
                 >
                   {testStatus === 'testing' ? 'Testing...' :
-                   testStatus === 'success' ? 'Connected' :
-                   testStatus === 'error' ? 'Failed' : 'Test'}
+                   testStatus === 'success' ? 'Connected' : 'Test'}
                 </button>
+                {testStatus === 'error' && <span className="mcp-test-failed-label">Failed</span>}
               </div>
               {testMessage && (
                 <div
@@ -1788,9 +1788,9 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
                 aria-busy={testStatus === 'testing'}
               >
                 {testStatus === 'testing' ? 'Testing...' :
-                 testStatus === 'success' ? 'Connected' :
-                 testStatus === 'error' ? 'Failed' : 'Test'}
+                 testStatus === 'success' ? 'Connected' : 'Test'}
               </button>
+              {testStatus === 'error' && <span className="mcp-test-failed-label">Failed</span>}
             </div>
             {testMessage && (
               <div
