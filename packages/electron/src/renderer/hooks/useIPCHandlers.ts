@@ -488,16 +488,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       }));
     }
 
-    // View history menu handler - delegate to EditorMode
-    if (window.electronAPI.onViewHistory) {
-      cleanupFns.push(window.electronAPI.onViewHistory(() => {
-        console.log('View history menu triggered');
-        // EditorMode handles snapshot creation if needed (it has access to dirty state)
-        if (editorModeRef.current?.openHistoryDialog) {
-          editorModeRef.current.openHistoryDialog();
-        }
-      }));
-    }
+    // NOTE: view-history IPC event (Cmd+Y) is handled in App.tsx which gates it by active mode
 
     // Tab navigation handlers - delegate to App.tsx for mode-aware routing
     if (window.electronAPI.onNextTab && handlersRef.current.handleNextTab) {

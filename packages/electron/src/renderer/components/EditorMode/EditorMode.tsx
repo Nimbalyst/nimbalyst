@@ -661,19 +661,8 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     return cleanup;
   }, [selectedFolderPath]);
 
-  // Listen for view-history IPC event from menu (Cmd+Y)
-  useEffect(() => {
-    if (!window.electronAPI?.onViewHistory) return undefined;
-
-    const cleanup = window.electronAPI.onViewHistory(() => {
-      // Open history dialog for the current file
-      if (currentFilePath) {
-        setIsHistoryDialogOpen(true);
-      }
-    });
-
-    return cleanup;
-  }, [currentFilePath]);
+  // NOTE: view-history IPC event (Cmd+Y) is handled in App.tsx which gates it by active mode
+  // and calls editorModeRef.openHistoryDialog()
 
   // Listen for view-workspace-history IPC event from menu (Cmd+Shift+H)
   useEffect(() => {

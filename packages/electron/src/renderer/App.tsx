@@ -1075,11 +1075,11 @@ export default function App() {
         setIsAIChatCollapsed(prev => !prev);
       }
       // NOTE: Cmd+Shift+T handled by menu system (reopen-last-closed-tab IPC event)
-      // Cmd+Y (Mac) or Ctrl+Y (Windows/Linux) for History
+      // Cmd+Y (Mac) or Ctrl+Y (Windows/Linux) for History - only in files mode
       if ((e.metaKey || e.ctrlKey) && e.key === 'y') {
         e.preventDefault();
-        // Delegate to EditorMode - it handles snapshot creation if needed
-        if (workspaceMode && editorModeRef.current) {
+        // Only open history dialog when in files mode
+        if (workspaceMode && activeModeStateRef.current === 'files' && editorModeRef.current) {
           editorModeRef.current.openHistoryDialog();
         }
       }
@@ -1424,6 +1424,8 @@ export default function App() {
       window.electronAPI?.off?.('reopen-last-closed-tab', handleReopenLastClosedTab);
     };
   }, []); // Empty deps - listener registered once, uses refs for current values
+
+  // NOTE: view-history (Cmd+Y) is handled by the keyboard handler above, not IPC
 
   // Intercept external link clicks and open in default browser
   useEffect(() => {
