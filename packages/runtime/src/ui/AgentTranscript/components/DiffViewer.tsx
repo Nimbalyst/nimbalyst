@@ -6,13 +6,45 @@ interface DiffViewerProps {
   edit: any;
   filePath?: string; // File path from session context
   maxHeight?: string;
+  /** Optional: Open a file in the editor (makes file path clickable) */
+  onOpenFile?: (filePath: string) => void;
+  /** Absolute file path for opening (may differ from display filePath) */
+  absoluteFilePath?: string;
 }
 
-export const DiffViewer: React.FC<DiffViewerProps> = ({ edit, filePath: contextFilePath, maxHeight = '20rem' }) => {
+export const DiffViewer: React.FC<DiffViewerProps> = ({ edit, filePath: contextFilePath, maxHeight = '20rem', onOpenFile, absoluteFilePath }) => {
   // Extract the relevant diff information from the edit object
   const replacements = edit.replacements || [];
   // Use file path from props (session context) or fallback to edit fields
   const filePath = contextFilePath || edit.filePath || edit.file_path || edit.targetFilePath || 'Unknown file';
+
+  // Helper to render clickable file header
+  const renderFileHeader = (displayPath: string) => {
+    const pathToOpen = absoluteFilePath || edit.filePath || edit.file_path || edit.targetFilePath;
+    const isClickable = onOpenFile && pathToOpen;
+
+    const handleClick = (e: React.MouseEvent) => {
+      if (isClickable) {
+        e.preventDefault();
+        onOpenFile(pathToOpen);
+      }
+    };
+
+    if (isClickable) {
+      return (
+        <div className="diff-file-header">
+          <button
+            className="diff-file-header-link"
+            onClick={handleClick}
+            title={`Open ${pathToOpen}`}
+          >
+            {displayPath}
+          </button>
+        </div>
+      );
+    }
+    return <div className="diff-file-header">{displayPath}</div>;
+  };
 
   // Handle single edit with old_string/new_string (Claude Code Edit tool format)
   if (!replacements.length && (edit.old_string || edit.new_string)) {
@@ -27,7 +59,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ edit, filePath: contextF
 
     return (
       <div className="diff-viewer" style={{ maxHeight }}>
-        <div className="diff-file-header">{filePath}</div>
+        {renderFileHeader(filePath)}
         <div className="diff-content">
           {/* Show removed lines */}
           {oldLines.length > 0 && oldLines.some((line: string) => line.trim()) && (
@@ -73,9 +105,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ edit, filePath: contextF
 
           return (
             <div key={idx} className="diff-viewer" style={{ maxHeight, marginBottom: idx < replacements.length - 1 ? '0.5rem' : '0' }}>
-              <div className="diff-file-header">
-                {filePath} {replacements.length > 1 && `(${idx + 1}/${replacements.length})`}
-              </div>
+              {renderFileHeader(`${filePath}${replacements.length > 1 ? ` (${idx + 1}/${replacements.length})` : ''}`)}
               <div className="diff-content">
                 {/* Show removed lines */}
                 {oldLines.length > 0 && oldLines.some((line: string) => line.trim()) && (
@@ -113,7 +143,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ edit, filePath: contextF
     const lines = edit.content.split('\n');
     return (
       <div className="diff-viewer" style={{ maxHeight }}>
-        <div className="diff-file-header">{filePath}</div>
+        {renderFileHeader(filePath)}
         <div className="diff-content">
           {lines.map((line: string, i: number) => (
             <div key={`add-${i}`} className="diff-line added">
@@ -129,7 +159,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ edit, filePath: contextF
   // Fallback: show edit details in a simple format
   return (
     <div className="diff-viewer" style={{ maxHeight }}>
-      <div className="diff-file-header">{filePath}</div>
+      {renderFileHeader(filePath)}
       <div className="diff-content">
         {edit.operation && (
           <div className="diff-line info">

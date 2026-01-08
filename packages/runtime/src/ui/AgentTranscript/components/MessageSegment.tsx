@@ -21,6 +21,8 @@ interface MessageSegmentProps {
   shouldShowLoginWidget?: boolean; // Control whether to show login widget
   sessionId?: string; // For context limit widget to trigger compact command
   isLastMessage?: boolean; // For context limit widget to show compact button only on last message
+  /** Optional: Open a file in the editor (makes file paths clickable) */
+  onOpenFile?: (filePath: string) => void;
 }
 
 export const MessageSegment: React.FC<MessageSegmentProps> = ({
@@ -33,7 +35,8 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
   documentContext,
   shouldShowLoginWidget = true,
   sessionId,
-  isLastMessage = false
+  isLastMessage = false,
+  onOpenFile
 }) => {
   const [isDiffExpanded, setDiffExpanded] = useState(false);
   const [enlargedImage, setEnlargedImage] = useState<ChatAttachment | null>(null);
@@ -595,14 +598,19 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
             flexDirection: 'column',
             gap: '0.5rem'
           }}>
-            {message.edits.map((edit: any, idx: number) => (
-              <DiffViewer
-                key={idx}
-                edit={edit}
-                filePath={documentContext?.filePath}
-                maxHeight="20rem"
-              />
-            ))}
+            {message.edits.map((edit: any, idx: number) => {
+              const absolutePath = edit.filePath || edit.file_path || edit.targetFilePath;
+              return (
+                <DiffViewer
+                  key={idx}
+                  edit={edit}
+                  filePath={documentContext?.filePath}
+                  maxHeight="20rem"
+                  onOpenFile={onOpenFile}
+                  absoluteFilePath={absolutePath}
+                />
+              );
+            })}
           </div>
         )}
       </div>

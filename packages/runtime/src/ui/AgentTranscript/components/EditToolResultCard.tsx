@@ -72,7 +72,20 @@ export const EditToolResultCard: React.FC<EditToolResultCardProps> = ({ toolMess
           <div className="rich-transcript-edit-card__title">
             {toolDisplayName}
             {prettyPath && (
-              <span className="rich-transcript-edit-card__file">· {prettyPath}</span>
+              <>
+                <span className="rich-transcript-edit-card__file-separator">·</span>
+                {firstEditPath && onOpenFile ? (
+                  <button
+                    className="rich-transcript-edit-card__file-link"
+                    onClick={handleOpenFile}
+                    title={`Open ${firstEditPath}`}
+                  >
+                    {prettyPath}
+                  </button>
+                ) : (
+                  <span className="rich-transcript-edit-card__file">{prettyPath}</span>
+                )}
+              </>
             )}
           </div>
           <div className="rich-transcript-edit-card__meta">
@@ -112,6 +125,8 @@ export const EditToolResultCard: React.FC<EditToolResultCardProps> = ({ toolMess
               edit={edit}
               filePath={relativePath || absolutePath}
               maxHeight="18rem"
+              onOpenFile={onOpenFile}
+              absoluteFilePath={absolutePath}
             />
           );
         })}

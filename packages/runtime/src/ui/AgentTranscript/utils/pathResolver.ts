@@ -3,6 +3,24 @@
  */
 
 /**
+ * Extract file path from tool arguments
+ * @param args - Tool arguments object
+ * @returns File path if found, undefined otherwise
+ */
+export function extractFilePathFromArgs(args: any): string | undefined {
+  if (!args || typeof args !== 'object') {
+    return undefined;
+  }
+
+  // Check common property names for file paths
+  const filePath = args.file_path || args.filePath || args.path || args.file;
+  if (typeof filePath === 'string') {
+    return filePath;
+  }
+  return undefined;
+}
+
+/**
  * Convert an absolute path to a project-relative path
  * @param absolutePath - Full system path
  * @param workspacePath - Workspace root path (optional)

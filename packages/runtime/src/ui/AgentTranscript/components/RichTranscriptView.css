@@ -394,6 +394,26 @@
   font-weight: 400;
 }
 
+.rich-transcript-edit-card__file-separator {
+  color: var(--text-tertiary);
+  margin: 0 0.25rem;
+}
+
+.rich-transcript-edit-card__file-link {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: var(--text-link, var(--accent-color));
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.rich-transcript-edit-card__file-link:hover {
+  text-decoration: underline;
+}
+
 .rich-transcript-edit-card__meta {
   display: flex;
   align-items: center;
@@ -496,6 +516,22 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.rich-transcript-tool-args-link {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: var(--text-link, var(--accent-color));
+  cursor: pointer;
+  text-decoration: none;
+  text-align: left;
+}
+
+.rich-transcript-tool-args-link:hover {
+  text-decoration: underline;
 }
 
 .rich-transcript-tool-success {

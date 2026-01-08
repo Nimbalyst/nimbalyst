@@ -8,7 +8,7 @@ import { ProviderIcon } from '../../icons/ProviderIcons';
 import { MaterialSymbol } from '../../icons/MaterialSymbol';
 import { formatMessageTime } from '../../../utils/dateUtils';
 import { JSONViewer } from './JSONViewer';
-import { formatToolArguments } from '../utils/pathResolver';
+import { formatToolArguments, extractFilePathFromArgs } from '../utils/pathResolver';
 import { EditToolResultCard } from './EditToolResultCard';
 import { TranscriptSearchBar } from './TranscriptSearchBar';
 import { formatToolDisplayName } from '../utils/toolNameFormatter';
@@ -596,7 +596,27 @@ export const RichTranscriptView = React.forwardRef<
             </span>
             {!isSubAgent && tool.arguments && (() => {
               const argStr = formatToolArguments(tool.name, tool.arguments, workspacePath);
-              return argStr ? <span className="rich-transcript-tool-args">{argStr}</span> : null;
+              if (!argStr) return null;
+
+              // Check if there's a clickable file path
+              const filePath = extractFilePathFromArgs(tool.arguments);
+              const isClickable = onOpenFile && filePath;
+
+              if (isClickable) {
+                return (
+                  <button
+                    className="rich-transcript-tool-args rich-transcript-tool-args-link"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenFile(filePath);
+                    }}
+                    title={`Open ${filePath}`}
+                  >
+                    {argStr}
+                  </button>
+                );
+              }
+              return <span className="rich-transcript-tool-args">{argStr}</span>;
             })()}
             {tool.result && !(toolMsg as any).isError && (
               <MaterialSymbol icon="check_circle" size={16} className="rich-transcript-tool-success" />
@@ -876,6 +896,7 @@ export const RichTranscriptView = React.forwardRef<
                             shouldShowLoginWidget={shouldShowLoginWidgetForIndex(index)}
                             sessionId={sessionId}
                             isLastMessage={index === messages.length - 1}
+                            onOpenFile={onOpenFile}
                           />
                         </div>
                       </div>

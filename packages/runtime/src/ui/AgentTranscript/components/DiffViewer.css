@@ -20,6 +20,22 @@
   flex-shrink: 0;
 }
 
+.diff-file-header-link {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: var(--text-link, var(--accent-color));
+  cursor: pointer;
+  text-decoration: none;
+  text-align: left;
+}
+
+.diff-file-header-link:hover {
+  text-decoration: underline;
+}
+
 .diff-content {
   overflow-x: auto;
   overflow-y: auto;
