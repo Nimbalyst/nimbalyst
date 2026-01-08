@@ -22,16 +22,22 @@
       }
     ],
     "aiTools": [
-      "excalidraw.view_diagram",
       "excalidraw.get_elements",
       "excalidraw.add_rectangle",
       "excalidraw.add_arrow",
       "excalidraw.update_element",
       "excalidraw.remove_element",
-      "excalidraw.create_group",
-      "excalidraw.add_to_group",
-      "excalidraw.remove_from_group",
-      "excalidraw.relayout"
+      "excalidraw.relayout",
+      "excalidraw.import_mermaid",
+      "excalidraw.clear_all",
+      "excalidraw.add_frame",
+      "excalidraw.add_row",
+      "excalidraw.add_column",
+      "excalidraw.align_elements",
+      "excalidraw.distribute_elements",
+      "excalidraw.move_element",
+      "excalidraw.group_elements",
+      "excalidraw.set_elements_in_frame"
     ],
     "fileIcons": {
       "*.excalidraw": "draw"
@@ -45,18 +51,6 @@
       }
     ],
     "nodes": ["ExcalidrawNode"],
-    "transformers": ["EXCALIDRAW_TRANSFORMER"],
-    "claudePlugin": {
-      "path": "claude-plugin",
-      "displayName": "Excalidraw Diagram Commands",
-      "description": "Provides AI tools for creating and editing Excalidraw diagrams",
-      "enabledByDefault": true,
-      "commands": [
-        {
-          "name": "diagram",
-          "description": "Create or modify Excalidraw diagrams"
-        }
-      ]
-    }
+    "transformers": ["EXCALIDRAW_TRANSFORMER"]
   }
 }

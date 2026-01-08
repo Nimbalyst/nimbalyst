@@ -283,3 +283,47 @@ export function createLabeledRectangle(options: RectangleOptions): LabeledRectan
     text: textElement,
   };
 }
+
+interface FrameOptions {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  name?: string;
+}
+
+/**
+ * Create a frame element (container with dashed border and title)
+ */
+export function createFrame(options: FrameOptions): ExcalidrawElement {
+  const { x, y, width, height, name } = options;
+
+  return {
+    id: generateId(),
+    type: 'frame',
+    x,
+    y,
+    width,
+    height,
+    angle: 0,
+    strokeColor: '#000000',
+    backgroundColor: 'transparent',
+    fillStyle: 'solid',
+    strokeWidth: 2,
+    strokeStyle: 'solid',
+    roughness: 0,
+    opacity: 100,
+    groupIds: [],
+    frameId: null,
+    roundness: null,
+    seed: Math.floor(Math.random() * 1000000),
+    version: 1,
+    versionNonce: Math.floor(Math.random() * 1000000),
+    isDeleted: false,
+    boundElements: [],
+    updated: Date.now(),
+    link: null,
+    locked: false,
+    name: name || null,
+  } as any;
+}
