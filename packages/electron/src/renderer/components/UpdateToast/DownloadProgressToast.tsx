@@ -9,7 +9,7 @@ interface DownloadProgress {
 
 interface DownloadProgressToastProps {
   version: string;
-  progress: DownloadProgress;
+  progress: DownloadProgress | null;
   onCancel: () => void;
 }
 
@@ -45,9 +45,10 @@ export function DownloadProgressToast({
   progress,
   onCancel,
 }: DownloadProgressToastProps): React.ReactElement {
-  const remaining = progress.total - progress.transferred;
-  const timeRemaining = estimateTimeRemaining(progress.bytesPerSecond, remaining);
-  const percent = Math.round(progress.percent);
+  // Handle initial state before first progress event
+  const remaining = progress ? progress.total - progress.transferred : 0;
+  const timeRemaining = progress ? estimateTimeRemaining(progress.bytesPerSecond, remaining) : 'Starting download...';
+  const percent = progress ? Math.round(progress.percent) : 0;
 
   return (
     <div className="update-toast update-toast-download" data-testid="download-progress-toast">
@@ -68,7 +69,7 @@ export function DownloadProgressToast({
         {/* Progress details */}
         <div className="update-toast-progress-details">
           <div className="update-toast-progress-text" data-testid="download-progress-text">
-            {formatBytes(progress.transferred)} of {formatBytes(progress.total)}
+            {progress ? `${formatBytes(progress.transferred)} of ${formatBytes(progress.total)}` : 'Preparing...'}
           </div>
           <div className="update-toast-progress-bar">
             <div

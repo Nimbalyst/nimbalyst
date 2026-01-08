@@ -230,7 +230,7 @@ export function UpdateToast(): React.ReactElement | null {
             />
           )}
 
-          {state === 'downloading' && updateInfo && downloadProgress && (
+          {state === 'downloading' && updateInfo && (
             <DownloadProgressToast
               version={updateInfo.version}
               progress={downloadProgress}
