@@ -391,18 +391,6 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     }
   },
   {
-    id: 'google-drive',
-    name: 'Google Drive',
-    description: 'Access files and documents in Google Drive',
-    docsUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/gdrive',
-    authType: 'oauth',
-    config: {
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-gdrive'],
-      env: {}
-    }
-  },
-  {
     id: 'posthog',
     name: 'PostHog',
     description: 'Product analytics, feature flags, and error tracking',
