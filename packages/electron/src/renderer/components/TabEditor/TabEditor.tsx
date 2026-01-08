@@ -971,10 +971,10 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         // Don't reload even if the user has typed more since then
         // BUT: Skip this check for custom editors with pending AI edits
         const contentMatchesLastSave = newContent === lastSavedContentRef.current;
-        console.log(`[TabEditor] File change for ${fileName}: contentMatchesLastSave=${contentMatchesLastSave}, isCustom=${isCustom}`);
+        // console.log(`[TabEditor] File change for ${fileName}: contentMatchesLastSave=${contentMatchesLastSave}, isCustom=${isCustom}`);
 
         if (contentMatchesLastSave && !hasPendingAIEditForCustomEditor) {
-          console.log(`[TabEditor] Skipping file change - content matches last save`);
+          // console.log(`[TabEditor] Skipping file change - content matches last save`);
           processingFileChangeRef.current = false;
           return;
         }
@@ -1193,7 +1193,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         // Apply time-based heuristic to avoid reloading after own save
         // BUT: Skip this for custom editors with pending AI edits (they need to reload)
         const timeSinceLastSave = lastSaveTimeRef.current ? Date.now() - lastSaveTimeRef.current : Infinity;
-        console.log(`[TabEditor] File change for ${fileName}: timeSinceLastSave=${timeSinceLastSave}ms, isCustom=${isCustom}, hasPendingAI=${hasPendingAIEditForCustomEditor}`);
+        // console.log(`[TabEditor] File change for ${fileName}: timeSinceLastSave=${timeSinceLastSave}ms, isCustom=${isCustom}, hasPendingAI=${hasPendingAIEditForCustomEditor}`);
         if (timeSinceLastSave < 2000 && !hasPendingAIEditForCustomEditor) {
           console.log(`[TabEditor] Skipping file change - recent save (${timeSinceLastSave}ms ago)`);
           processingFileChangeRef.current = false;
