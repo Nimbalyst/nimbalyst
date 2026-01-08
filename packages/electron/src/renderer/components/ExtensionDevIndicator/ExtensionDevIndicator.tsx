@@ -196,15 +196,7 @@ export const ExtensionDevIndicator: React.FC<ExtensionDevIndicatorProps> = ({
                 )}
               </span>
             </button>
-            <button
-              className="extension-dev-menu-action"
-              onClick={handleRestart}
-              disabled={isRestarting}
-              role="menuitem"
-            >
-              <MaterialSymbol icon="refresh" size={18} />
-              <span>{isRestarting ? 'Restarting...' : 'Restart Nimbalyst'}</span>
-            </button>
+
             {onOpenSettings && (
               <button
                 className="extension-dev-menu-action"
@@ -215,6 +207,15 @@ export const ExtensionDevIndicator: React.FC<ExtensionDevIndicatorProps> = ({
                 <span>Extension Settings</span>
               </button>
             )}
+            <button
+                className="extension-dev-menu-action"
+                onClick={handleRestart}
+                disabled={isRestarting}
+                role="menuitem"
+            >
+              <MaterialSymbol icon="refresh" size={18} />
+              <span>{isRestarting ? 'Restarting...' : 'Restart Nimbalyst'}</span>
+            </button>
           </div>
         </div>
       )}
