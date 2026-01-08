@@ -679,6 +679,15 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
                   },
                   required: ['sql']
                 }
+              },
+              {
+                name: 'get_environment_info',
+                description: 'Get information about the Nimbalyst environment including whether the app is running in development mode or as a packaged build. Use this to verify code changes will take effect.',
+                inputSchema: {
+                  type: 'object',
+                  properties: {},
+                  required: []
+                }
               }
             ]
           };
@@ -1210,6 +1219,32 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
                   isError: true
                 };
               }
+            }
+
+            case 'get_environment_info': {
+              const { app } = await import('electron');
+              const isDev = process.env.NODE_ENV === 'development' || !!process.env.ELECTRON_RENDERER_URL;
+              const isPackaged = app.isPackaged;
+              const appVersion = app.getVersion();
+
+              let responseText = `Nimbalyst Environment Info:\n\n`;
+              responseText += `- App Version: ${appVersion}\n`;
+              responseText += `- Development Mode: ${isDev ? 'YES' : 'NO'}\n`;
+              responseText += `- Packaged Build: ${isPackaged ? 'YES' : 'NO'}\n`;
+              responseText += `- NODE_ENV: ${process.env.NODE_ENV || 'not set'}\n`;
+
+              if (!isDev || isPackaged) {
+                responseText += `\nWARNING: Nimbalyst is running as a PACKAGED BUILD, not in development mode.\n`;
+                responseText += `Code changes you make will NOT be reflected in this running instance.\n`;
+                responseText += `Ask the user to run the dev server (npm run dev) if they want to test code changes.`;
+              } else {
+                responseText += `\nNimbalyst is running in development mode. Code changes will be reflected after hot reload or restart.`;
+              }
+
+              return {
+                content: [{ type: 'text', text: responseText }],
+                isError: false
+              };
             }
 
             default:

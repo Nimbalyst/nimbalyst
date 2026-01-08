@@ -274,6 +274,10 @@ planStatus:
 - **Don't add Co-Authored-By lines to commit messages**
 - **Never restart Nimbalyst without explicit permission** - Always ask before using `restart_nimbalyst`
 
+## Verifying Development Mode
+
+**IMPORTANT**: Before making code changes to the Nimbalyst codebase, use `mcp__nimbalyst-extension-dev__get_environment_info` to verify that Nimbalyst is running in development mode. If the user is running a packaged build, your code changes will NOT take effect and you should inform them to start the dev server (`npm run dev`).
+
 ## Extension Development
 
 When working on extensions in `packages/extensions/`:
