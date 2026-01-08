@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { VList } from 'virtua';
 import './DatabaseBrowser.css';
 
 interface Table {
@@ -42,6 +43,12 @@ export function DatabaseBrowser() {
   const [queryResult, setQueryResult] = useState<QueryResult | null>(null);
   const [queryError, setQueryError] = useState<string | null>(null);
   const [sqlExpanded, setSqlExpanded] = useState(false);
+  const [queryTimeMs, setQueryTimeMs] = useState<number | null>(null);
+  const [tableLoadTimeMs, setTableLoadTimeMs] = useState<number | null>(null);
+
+  // Cell detail modal
+  const [expandedCell, setExpandedCell] = useState<{ column: string; value: any } | null>(null);
+  const [copiedCell, setCopiedCell] = useState(false);
 
   // Sorting
   const [sortColumn, setSortColumn] = useState<string | null>(null);
@@ -125,6 +132,9 @@ export function DatabaseBrowser() {
     try {
       setLoading(true);
       setError(null);
+      setTableLoadTimeMs(null);
+
+      const startTime = performance.now();
       const result = await window.electronAPI.invoke(
         'database:getTableData',
         tableName,
@@ -133,6 +143,9 @@ export function DatabaseBrowser() {
         sort?.column,
         sort?.direction
       );
+      const endTime = performance.now();
+
+      setTableLoadTimeMs(Math.round(endTime - startTime));
 
       if (result.success) {
         setTableData(result);
@@ -177,8 +190,13 @@ export function DatabaseBrowser() {
       setLoading(true);
       setQueryError(null);
       setQueryResult(null);
+      setQueryTimeMs(null);
 
+      const startTime = performance.now();
       const result = await window.electronAPI.invoke('database:executeQuery', sqlQuery);
+      const endTime = performance.now();
+
+      setQueryTimeMs(Math.round(endTime - startTime));
 
       if (result.success) {
         setQueryResult(result);
@@ -260,6 +278,31 @@ export function DatabaseBrowser() {
     });
   };
 
+  // Format cell value for display/copy
+  const formatCellValue = (value: any): string => {
+    if (value === null) return 'NULL';
+    if (typeof value === 'object') return JSON.stringify(value, null, 2);
+    return String(value);
+  };
+
+  // Copy cell value to clipboard
+  const handleCopyCellValue = async () => {
+    if (!expandedCell) return;
+    try {
+      await navigator.clipboard.writeText(formatCellValue(expandedCell.value));
+      setCopiedCell(true);
+      setTimeout(() => setCopiedCell(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
+  // Handle cell click to expand
+  const handleCellClick = (column: string, value: any) => {
+    setExpandedCell({ column, value });
+    setCopiedCell(false);
+  };
+
   const totalPages = tableData ? Math.ceil(tableData.totalCount / pageSize) : 0;
 
   return (
@@ -324,7 +367,7 @@ export function DatabaseBrowser() {
           )}
         </div>
 
-        {selectedTable && (
+        {selectedTable && !queryResult && (
           <div className="table-view">
             <div className="table-header">
               <h3>Table: {selectedTable}</h3>
@@ -375,7 +418,7 @@ export function DatabaseBrowser() {
               <div className="data-tab">
                 <div className="data-header">
                   <div className="data-header-left">
-                    <h4>{tableData.totalCount} total rows</h4>
+                    <h4>{tableData.totalCount} total rows{tableLoadTimeMs !== null && <span className="query-time"> - {tableLoadTimeMs}ms</span>}</h4>
                     <button
                       className="column-picker-button"
                       onClick={() => setShowColumnPicker(!showColumnPicker)}
@@ -433,40 +476,50 @@ export function DatabaseBrowser() {
                   const visibleColumns = getVisibleColumns(selectedTable, allColumns);
 
                   return (
-                    <div className="table-container">
-                      <table className="data-table">
-                        <thead>
-                          <tr>
-                            {visibleColumns.map(key => (
-                              <th key={key} onClick={() => handleSort(key)} className="sortable">
-                                {key}
-                                {sortColumn === key && (
-                                  <span className="sort-indicator">
-                                    {sortDirection === 'asc' ? ' ↑' : ' ↓'}
-                                  </span>
-                                )}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {tableData.rows.map((row, idx) => (
-                            <tr key={idx}>
-                              {visibleColumns.map(col => (
-                                <td key={col}>
-                                  {row[col] === null ? (
-                                    <span className="null-value">NULL</span>
-                                  ) : typeof row[col] === 'object' ? (
-                                    <pre className="json-value">{JSON.stringify(row[col], null, 2)}</pre>
-                                  ) : (
-                                    String(row[col])
+                    <div className="virtual-table-container">
+                      <div className="virtual-table-header">
+                        <table className="data-table">
+                          <thead>
+                            <tr>
+                              {visibleColumns.map(key => (
+                                <th key={key} onClick={() => handleSort(key)} className="sortable">
+                                  {key}
+                                  {sortColumn === key && (
+                                    <span className="sort-indicator">
+                                      {sortDirection === 'asc' ? ' ↑' : ' ↓'}
+                                    </span>
                                   )}
-                                </td>
+                                </th>
                               ))}
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                        </table>
+                      </div>
+                      <VList className="virtual-table-body">
+                        {tableData.rows.map((row, idx) => (
+                          <div key={idx} className="virtual-table-row">
+                            {visibleColumns.map(col => {
+                              const value = row[col];
+                              return (
+                                <div
+                                  key={col}
+                                  className="virtual-table-cell clickable"
+                                  onClick={() => handleCellClick(col, value)}
+                                  title="Click to expand"
+                                >
+                                  {value === null ? (
+                                    <span className="null-value">NULL</span>
+                                  ) : typeof value === 'object' ? (
+                                    <span className="json-preview">{JSON.stringify(value)}</span>
+                                  ) : (
+                                    String(value)
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ))}
+                      </VList>
                     </div>
                   );
                 })()}
@@ -479,51 +532,66 @@ export function DatabaseBrowser() {
           </div>
         )}
 
-        {queryResult && !selectedTable && (
+        {queryResult && (
           <div className="query-results">
             <div className="data-header">
-              <h4>Query Results ({queryResult.rowCount} rows)</h4>
+              <h4>Query Results ({queryResult.rowCount} rows){queryTimeMs !== null && <span className="query-time"> - {queryTimeMs}ms</span>}</h4>
             </div>
 
             {loading && <div className="loading">Loading...</div>}
 
-            {!loading && queryResult.rows.length > 0 && (
-              <div className="table-container">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      {Object.keys(queryResult.rows[0]).map(key => (
-                        <th key={key} onClick={() => handleSort(key)} className="sortable">
-                          {key}
-                          {sortColumn === key && (
-                            <span className="sort-indicator">
-                              {sortDirection === 'asc' ? ' ↑' : ' ↓'}
-                            </span>
-                          )}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {getSortedQueryResults().map((row, idx) => (
-                      <tr key={idx}>
-                        {Object.values(row).map((value: any, colIdx) => (
-                          <td key={colIdx}>
-                            {value === null ? (
-                              <span className="null-value">NULL</span>
-                            ) : typeof value === 'object' ? (
-                              <pre className="json-value">{JSON.stringify(value, null, 2)}</pre>
-                            ) : (
-                              String(value)
-                            )}
-                          </td>
-                        ))}
-                      </tr>
+            {!loading && queryResult.rows.length > 0 && (() => {
+              const columns = Object.keys(queryResult.rows[0]);
+              const sortedRows = getSortedQueryResults();
+
+              return (
+                <div className="virtual-table-container">
+                  <div className="virtual-table-header">
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          {columns.map(key => (
+                            <th key={key} onClick={() => handleSort(key)} className="sortable">
+                              {key}
+                              {sortColumn === key && (
+                                <span className="sort-indicator">
+                                  {sortDirection === 'asc' ? ' ↑' : ' ↓'}
+                                </span>
+                              )}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                    </table>
+                  </div>
+                  <VList className="virtual-table-body">
+                    {sortedRows.map((row, idx) => (
+                      <div key={idx} className="virtual-table-row">
+                        {columns.map((col, colIdx) => {
+                          const value = row[col];
+                          return (
+                            <div
+                              key={colIdx}
+                              className="virtual-table-cell clickable"
+                              onClick={() => handleCellClick(col, value)}
+                              title="Click to expand"
+                            >
+                              {value === null ? (
+                                <span className="null-value">NULL</span>
+                              ) : typeof value === 'object' ? (
+                                <span className="json-preview">{JSON.stringify(value)}</span>
+                              ) : (
+                                String(value)
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                  </VList>
+                </div>
+              );
+            })()}
 
             {!loading && queryResult.rows.length === 0 && (
               <div className="no-data">No results</div>
@@ -537,6 +605,34 @@ export function DatabaseBrowser() {
           </div>
         )}
       </div>
+
+      {/* Cell Detail Modal */}
+      {expandedCell && (
+        <div className="cell-modal-overlay" onClick={() => setExpandedCell(null)}>
+          <div className="cell-modal" onClick={e => e.stopPropagation()}>
+            <div className="cell-modal-header">
+              <h3>{expandedCell.column}</h3>
+              <div className="cell-modal-actions">
+                <button
+                  className="cell-modal-copy"
+                  onClick={handleCopyCellValue}
+                >
+                  {copiedCell ? 'Copied!' : 'Copy'}
+                </button>
+                <button
+                  className="cell-modal-close"
+                  onClick={() => setExpandedCell(null)}
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+            <div className="cell-modal-content">
+              <pre>{formatCellValue(expandedCell.value)}</pre>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
