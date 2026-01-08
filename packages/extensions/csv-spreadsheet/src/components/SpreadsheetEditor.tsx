@@ -167,6 +167,7 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
   // Selection state (refs to avoid re-renders)
   const selectedCellRef = useRef<{ row: number; col: number } | null>(null);
   const selectionRangeRef = useRef<NormalizedSelectionRange | null>(null);
+  const skipFocusHandlerRef = useRef(false); // Flag to skip focus handler during programmatic selection
 
   // Grid initialization - render grid immediately, load data imperatively after mount
   // This avoids React props overwriting RevoGrid's internal state on re-renders
@@ -240,6 +241,7 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
     const gridOps = createGridOperations(revoGridRef, {
       getHeaderRowCount: () => spreadsheetMeta.metadata.headerRowCount,
       getColumnCount: () => spreadsheetMeta.metadata.columnCount,
+      setColumnCount: spreadsheetMeta.setColumnCount,
       getDelimiter: () => spreadsheetMeta.delimiter,
       getColumnFormats: () => spreadsheetMeta.metadata.columnFormats,
       getFrozenColumnCount: () => spreadsheetMeta.metadata.frozenColumnCount,
@@ -633,6 +635,8 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleFocusCell = useCallback(
     (event: RevoGridCustomEvent<any>) => {
+      // Skip if we're doing programmatic selection (e.g., select-all)
+      if (skipFocusHandlerRef.current) return;
       if (!event.detail) return;
       const { rowIndex, colIndex, type } = event.detail;
 
@@ -700,6 +704,96 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
     []
   );
 
+  // Select all cells (from 0,0 to last cell with data)
+  const selectAll = useCallback(() => {
+    const grid = revoGridRef.current;
+    if (!grid) return;
+
+    const columnCount = spreadsheetMeta.metadata.columnCount;
+    const lastCol = Math.max(0, columnCount - 1);
+
+    // Set selection synchronously using a large row count initially
+    // This ensures Cmd+C works immediately after Cmd+A
+    // We use headerRowCount + a large buffer to cover all possible data
+    const maxRows = headerRowCount + 10000; // Large enough for any reasonable data
+
+    // Update selection refs synchronously
+    selectedCellRef.current = { row: 0, col: 0 };
+    selectionRangeRef.current = normalizeRange(0, 0, maxRows, lastCol);
+
+    // Skip focus handler to prevent it from resetting our selection
+    skipFocusHandlerRef.current = true;
+
+    // Then asynchronously find actual data bounds and update visual selection
+    (async () => {
+      try {
+        const [source, pinnedTop] = await Promise.all([
+          grid.getSource('rgRow'),
+          grid.getSource('rowPinStart'),
+        ]);
+
+        const pinnedRows = (pinnedTop as Record<string, unknown>[]) ?? [];
+        const dataRows = (source as Record<string, unknown>[]) ?? [];
+
+        // Find last row with actual data (not empty buffer rows)
+        const isRowEmpty = (row: Record<string, unknown>): boolean => {
+          for (let c = 0; c < columnCount; c++) {
+            const colKey = columnIndexToLetter(c);
+            const value = row[colKey];
+            if (value !== undefined && value !== null && value !== '') {
+              return false;
+            }
+          }
+          return true;
+        };
+
+        // Find last non-empty data row
+        let lastDataRowIndex = -1;
+        for (let r = dataRows.length - 1; r >= 0; r--) {
+          if (!isRowEmpty(dataRows[r])) {
+            lastDataRowIndex = r;
+            break;
+          }
+        }
+
+        // Calculate total rows (pinned + data rows with content)
+        const pinnedRowCount = pinnedRows.length;
+        const lastRow = Math.max(0, pinnedRowCount + lastDataRowIndex);
+
+        // Update selection with actual bounds
+        selectionRangeRef.current = normalizeRange(0, 0, lastRow, lastCol);
+
+        // Update formula bar
+        if (formulaBarRef.current) {
+          const cellRef = formatSelectionRef(selectionRangeRef.current);
+          formulaBarRef.current.update(cellRef, '', false);
+        }
+
+        // Set RevoGrid visual focus
+        // Note: RevoGrid can't visually select across pinned/data boundary,
+        // so we focus on data rows if present, otherwise pinned rows.
+        if (lastDataRowIndex >= 0) {
+          grid.setCellsFocus(
+            { x: 0, y: 0 },
+            { x: lastCol, y: lastDataRowIndex }
+          );
+        } else if (pinnedRowCount > 0) {
+          grid.setCellsFocus(
+            { x: 0, y: 0 },
+            { x: lastCol, y: pinnedRowCount - 1 },
+            undefined,
+            'rowPinStart'
+          );
+        }
+      } finally {
+        // Re-enable focus handler after a short delay to allow RevoGrid events to settle
+        setTimeout(() => {
+          skipFocusHandlerRef.current = false;
+        }, 100);
+      }
+    })();
+  }, [spreadsheetMeta.metadata.columnCount, headerRowCount]);
+
   // Handle keyboard shortcuts
   const handleKeyDown = useCallback(
     async (event: React.KeyboardEvent) => {
@@ -731,39 +825,91 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
             }
             break;
           case 'c':
-            if (!event.shiftKey && selectionRangeRef.current && gridOps) {
+            if (!event.shiftKey && gridOps) {
               event.preventDefault();
-              await gridOps.copySelection(selectionRangeRef.current);
+              // Get selection from RevoGrid or fall back to our ref
+              const grid = revoGridRef.current;
+              let range = selectionRangeRef.current;
+              if (grid) {
+                const gridRange = await grid.getSelectedRange();
+                if (gridRange) {
+                  const isPinned = gridRange.type === 'rowPinStart';
+                  range = normalizeRange(
+                    translateRowIndex(gridRange.y, isPinned),
+                    gridRange.x,
+                    translateRowIndex(gridRange.y1, isPinned),
+                    gridRange.x1
+                  );
+                }
+              }
+              if (range) {
+                await gridOps.copySelection(range);
+              }
             }
             return;
           case 'x':
-            if (!event.shiftKey && selectionRangeRef.current && gridOps) {
+            if (!event.shiftKey && gridOps) {
               event.preventDefault();
-              await gridOps.cutSelection(selectionRangeRef.current);
+              const grid = revoGridRef.current;
+              let range = selectionRangeRef.current;
+              if (grid) {
+                const gridRange = await grid.getSelectedRange();
+                if (gridRange) {
+                  const isPinned = gridRange.type === 'rowPinStart';
+                  range = normalizeRange(
+                    translateRowIndex(gridRange.y, isPinned),
+                    gridRange.x,
+                    translateRowIndex(gridRange.y1, isPinned),
+                    gridRange.x1
+                  );
+                }
+              }
+              if (range) {
+                await gridOps.cutSelection(range);
+              }
             }
             return;
           case 'v':
-            if (!event.shiftKey && selectedCellRef.current && gridOps) {
+            if (!event.shiftKey && gridOps) {
               event.preventDefault();
-              const cell = selectedCellRef.current;
-              try {
-                const text = await navigator.clipboard.readText();
-                if (text) {
-                  await gridOps.pasteFromText(cell.row, cell.col, text);
+              // Get focused cell from RevoGrid or fall back to our ref
+              const grid = revoGridRef.current;
+              let cell = selectedCellRef.current;
+              if (grid) {
+                const focused = await grid.getFocused();
+                // getFocused returns { focus: { x, y }, rowType } or similar structure
+                // Be defensive about the shape
+                if (focused?.focus?.y !== undefined && focused?.focus?.x !== undefined) {
+                  const isPinned = focused.rowType === 'rowPinStart';
+                  cell = {
+                    row: translateRowIndex(focused.focus.y, isPinned),
+                    col: focused.focus.x
+                  };
+                } else if (focused?.y !== undefined && focused?.x !== undefined) {
+                  // Alternative structure: { x, y, rowType }
+                  const isPinned = focused.rowType === 'rowPinStart';
+                  cell = {
+                    row: translateRowIndex(focused.y, isPinned),
+                    col: focused.x
+                  };
                 }
-              } catch {
-                // Clipboard access denied
+              }
+              if (cell) {
+                try {
+                  const text = await navigator.clipboard.readText();
+                  if (text) {
+                    await gridOps.pasteFromText(cell.row, cell.col, text);
+                  }
+                } catch {
+                  // Clipboard access denied
+                }
               }
             }
             return;
           case 'a':
             if (!event.shiftKey) {
               event.preventDefault();
-              // Select all would need to get total row count from grid
-              updateSelection(
-                { row: 0, col: 0 },
-                normalizeRange(0, 0, 100, spreadsheetMeta.metadata.columnCount - 1)
-              );
+              selectAll();
             }
             return;
         }
@@ -786,7 +932,7 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
         updateSelection(null, null);
       }
     },
-    [isActive, updateSelection, spreadsheetMeta.metadata.columnCount]
+    [isActive, updateSelection, selectAll, translateRowIndex]
   );
 
   // Context menu handler
@@ -822,18 +968,29 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
     // Check for row header click
     const rowHeader = target.closest('[data-rgrow]:not([data-rgcol])') as HTMLElement | null;
     if (rowHeader) {
-      const rowIndex = parseInt(rowHeader.dataset.rgrow || '', 10);
-      if (!isNaN(rowIndex)) {
-        updateSelection({ row: rowIndex, col: 0 }, normalizeRange(rowIndex, 0, rowIndex, spreadsheetMeta.metadata.columnCount - 1));
-        setContextMenu({
-          x: event.clientX - rect.left,
-          y: event.clientY - rect.top,
-          isRowHeader: true,
-          rowIndex,
-          isColumnHeader: false,
-          colIndex: null,
-        });
-        return;
+      const gridRowIndex = parseInt(rowHeader.dataset.rgrow || '', 10);
+      if (!isNaN(gridRowIndex)) {
+        // Translate grid row index to logical row index
+        const isInRowHeaders = !!rowHeader.closest('.rowHeaders');
+        if (isInRowHeaders) {
+          const viewport = rowHeader.closest('revogr-viewport-scroll');
+          const slot = viewport?.getAttribute('slot');
+          const dataContainer = rowHeader.closest('revogr-data');
+          const dataType = dataContainer?.getAttribute('type');
+          const isPinned = slot?.includes('rowPinStart') || dataType === 'rowPinStart';
+          const logicalRowIndex = isPinned ? gridRowIndex : gridRowIndex + headerRowCount;
+
+          updateSelection({ row: logicalRowIndex, col: 0 }, normalizeRange(logicalRowIndex, 0, logicalRowIndex, spreadsheetMeta.metadata.columnCount - 1));
+          setContextMenu({
+            x: event.clientX - rect.left,
+            y: event.clientY - rect.top,
+            isRowHeader: true,
+            rowIndex: logicalRowIndex,
+            isColumnHeader: false,
+            colIndex: null,
+          });
+          return;
+        }
       }
     }
 
@@ -967,6 +1124,16 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
   const handleHeaderMouseDown = useCallback((event: React.MouseEvent) => {
     const target = event.target as HTMLElement;
 
+    // Check for corner cell click (the cell in the row header area within the column header)
+    // This is the intersection of the row headers and column headers
+    const isInRowHeadersArea = !!target.closest('.rowHeaders');
+    const isInColumnHeader = !!target.closest('revogr-header');
+    if (isInRowHeadersArea && isInColumnHeader) {
+      event.preventDefault();
+      selectAll();
+      return;
+    }
+
     const colIndex = getColumnIndexFromHeader(target);
     if (colIndex !== null) {
       event.preventDefault();
@@ -982,7 +1149,7 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
       setHeaderDrag({ type: 'row', startIndex: rowIndex, currentIndex: rowIndex });
       return;
     }
-  }, [getColumnIndexFromHeader, getRowIndexFromHeader, selectColumn, selectRow]);
+  }, [getColumnIndexFromHeader, getRowIndexFromHeader, selectColumn, selectRow, selectAll]);
 
   // Header drag effect
   useEffect(() => {

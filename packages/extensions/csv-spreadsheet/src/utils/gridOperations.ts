@@ -15,6 +15,7 @@ import type { UndoRedoPlugin } from '../plugins/UndoRedoPlugin';
 export interface GridOperationsOptions {
   getHeaderRowCount: () => number;
   getColumnCount: () => number;
+  setColumnCount: (count: number) => void;
   getDelimiter: () => ',' | '\t';
   getColumnFormats: () => Record<number, ColumnFormat>;
   getFrozenColumnCount: () => number;
@@ -64,6 +65,7 @@ export function createGridOperations(
   const {
     getHeaderRowCount,
     getColumnCount,
+    setColumnCount,
     getDelimiter,
     getColumnFormats,
     getFrozenColumnCount,
@@ -354,25 +356,109 @@ export function createGridOperations(
   /**
    * Add a new column at the specified index
    */
-  const addColumn = async (_index?: number): Promise<void> => {
+  const addColumn = async (index?: number): Promise<void> => {
     const grid = gridRef.current;
     if (!grid) throw new Error('Grid not available');
 
-    // Column operations require rebuilding the column definition
-    // and shifting cell data. This is complex and may need to be
-    // handled at a higher level.
-    // For now, mark dirty and rely on React state for column changes
+    const [source, pinnedTop] = await Promise.all([
+      grid.getSource('rgRow'),
+      grid.getSource('rowPinStart'),
+    ]);
+
+    const currentColumnCount = getColumnCount();
+    const insertIndex = index ?? currentColumnCount;
+
+    // Shift column data: for each row, shift columns from insertIndex onward
+    const shiftColumnsInRow = (row: Record<string, unknown>): Record<string, unknown> => {
+      const newRow: Record<string, unknown> = {};
+      for (let c = 0; c < currentColumnCount + 1; c++) {
+        const newKey = columnIndexToLetter(c);
+        if (c < insertIndex) {
+          // Columns before insert point stay the same
+          const oldKey = columnIndexToLetter(c);
+          newRow[newKey] = row[oldKey] ?? '';
+        } else if (c === insertIndex) {
+          // New column is empty
+          newRow[newKey] = '';
+        } else {
+          // Columns after insert point shift right (read from c-1)
+          const oldKey = columnIndexToLetter(c - 1);
+          newRow[newKey] = row[oldKey] ?? '';
+        }
+      }
+      // Preserve special properties like _rowClass
+      if (row._rowClass) {
+        newRow._rowClass = row._rowClass;
+      }
+      return newRow;
+    };
+
+    // Apply to all rows
+    if (pinnedTop) {
+      const newPinned = pinnedTop.map(shiftColumnsInRow);
+      grid.pinnedTopSource = newPinned;
+    }
+    if (source) {
+      const newSource = source.map(shiftColumnsInRow);
+      grid.source = newSource;
+    }
+
+    // Update column count
+    setColumnCount(currentColumnCount + 1);
     onDirty();
   };
 
   /**
    * Delete a column at the specified index
    */
-  const deleteColumn = async (_index: number): Promise<void> => {
+  const deleteColumn = async (index: number): Promise<void> => {
     const grid = gridRef.current;
     if (!grid) throw new Error('Grid not available');
 
-    // Similar to addColumn, this is complex
+    const [source, pinnedTop] = await Promise.all([
+      grid.getSource('rgRow'),
+      grid.getSource('rowPinStart'),
+    ]);
+
+    const currentColumnCount = getColumnCount();
+
+    // Don't allow deleting the last column
+    if (currentColumnCount <= 1) return;
+
+    // Shift column data: for each row, shift columns after deleteIndex left
+    const shiftColumnsInRow = (row: Record<string, unknown>): Record<string, unknown> => {
+      const newRow: Record<string, unknown> = {};
+      for (let c = 0; c < currentColumnCount - 1; c++) {
+        const newKey = columnIndexToLetter(c);
+        if (c < index) {
+          // Columns before delete point stay the same
+          const oldKey = columnIndexToLetter(c);
+          newRow[newKey] = row[oldKey] ?? '';
+        } else {
+          // Columns after delete point shift left (read from c+1)
+          const oldKey = columnIndexToLetter(c + 1);
+          newRow[newKey] = row[oldKey] ?? '';
+        }
+      }
+      // Preserve special properties like _rowClass
+      if (row._rowClass) {
+        newRow._rowClass = row._rowClass;
+      }
+      return newRow;
+    };
+
+    // Apply to all rows
+    if (pinnedTop) {
+      const newPinned = pinnedTop.map(shiftColumnsInRow);
+      grid.pinnedTopSource = newPinned;
+    }
+    if (source) {
+      const newSource = source.map(shiftColumnsInRow);
+      grid.source = newSource;
+    }
+
+    // Update column count
+    setColumnCount(currentColumnCount - 1);
     onDirty();
   };
 
@@ -429,6 +515,49 @@ export function createGridOperations(
 
     if (values.length === 0) return;
 
+    // Calculate required dimensions after paste
+    const pasteRowCount = values.length;
+    const pasteColCount = Math.max(...values.map(row => row.length));
+    const requiredColCount = targetCol + pasteColCount;
+
+    // Expand column count if paste extends beyond current columns
+    const currentColumnCount = getColumnCount();
+    if (requiredColCount > currentColumnCount) {
+      setColumnCount(requiredColCount);
+    }
+
+    const headerRowCount = getHeaderRowCount();
+    const finalColumnCount = Math.max(currentColumnCount, requiredColCount);
+
+    // Get current data
+    const [source, pinnedTop] = await Promise.all([
+      grid.getSource('rgRow'),
+      grid.getSource('rowPinStart'),
+    ]);
+
+    // Calculate required row count after paste
+    const requiredLastRow = targetRow + pasteRowCount - 1;
+    const requiredDataRows = requiredLastRow >= headerRowCount
+      ? requiredLastRow - headerRowCount + 1
+      : 0;
+    const currentDataRows = source?.length ?? 0;
+
+    // Expand grid source if needed
+    let newSource = [...(source || [])];
+    if (requiredDataRows > currentDataRows) {
+      // Add empty rows to accommodate pasted data
+      const rowsToAdd = requiredDataRows - currentDataRows;
+      for (let i = 0; i < rowsToAdd; i++) {
+        const emptyRow: Record<string, string> = {};
+        for (let c = 0; c < finalColumnCount; c++) {
+          emptyRow[columnIndexToLetter(c)] = '';
+        }
+        newSource.push(emptyRow);
+      }
+      // Update grid source with expanded rows
+      grid.source = newSource;
+    }
+
     const changes: Array<{
       rowIndex: number;
       colIndex: number;
@@ -437,12 +566,6 @@ export function createGridOperations(
       newValue: unknown;
       rowType: DimensionRows;
     }> = [];
-
-    // Get current data for undo tracking
-    const [source, pinnedTop] = await Promise.all([
-      grid.getSource('rgRow'),
-      grid.getSource('rowPinStart'),
-    ]);
 
     const promises: Promise<void | undefined>[] = [];
 
@@ -455,7 +578,7 @@ export function createGridOperations(
         const value = values[r][c];
 
         // Get old value
-        const dataSource = rowType === 'rowPinStart' ? pinnedTop : source;
+        const dataSource = rowType === 'rowPinStart' ? pinnedTop : newSource;
         const oldValue = dataSource?.[gridRow]?.[prop] ?? '';
 
         if (oldValue !== value) {

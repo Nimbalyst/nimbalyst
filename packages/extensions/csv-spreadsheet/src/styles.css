@@ -227,6 +227,11 @@
   cursor: pointer;
 }
 
+/* Corner cell (select all) should be clickable */
+.spreadsheet-editor revo-grid .rowHeaders revogr-header {
+  cursor: pointer;
+}
+
 /* Cell editing styles for dark mode */
 [data-theme="dark"] .spreadsheet-editor revo-grid revogr-edit,
 [data-theme="crystal-dark"] .spreadsheet-editor revo-grid revogr-edit {
