@@ -203,13 +203,26 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     if (isActive && isEditorReady && hasTrackedOpenRef.current !== filePath) {
       hasTrackedOpenRef.current = filePath;
 
-      // Determine the editor type for tracking
-      let editorType = 'monaco'; // default for code files
+      // Determine file extension for tracking (handles compound extensions like .mockup.html)
+      const lowerPath = filePath.toLowerCase();
+      let fileExtension: string;
+
+      // Check for compound extensions first
+      if (lowerPath.endsWith('.mockup.html')) {
+        fileExtension = '.mockup.html';
+      } else {
+        // Standard single extension
+        const lastDot = filePath.lastIndexOf('.');
+        fileExtension = lastDot >= 0 ? filePath.substring(lastDot).toLowerCase() : '';
+      }
+
+      // Determine editor category
+      let editorCategory = 'monaco'; // default for code files
       let hasMermaid = false;
       let hasDataModel = false;
 
       if (isMarkdown) {
-        editorType = 'markdown';
+        editorCategory = 'markdown';
         // Check if markdown contains Mermaid diagrams
         if (initialContent.includes('```mermaid') || initialContent.includes('~~~mermaid')) {
           hasMermaid = true;
@@ -219,22 +232,16 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           hasDataModel = true;
         }
       } else if (isImage) {
-        editorType = 'image';
+        editorCategory = 'image';
       } else if (isCustom) {
-        // Check for specific custom editor types
-        const ext = filePath.toLowerCase();
-        if (ext.endsWith('.mockup.html')) {
-          editorType = 'mockup';
-        } else if (ext.endsWith('.datamodel.json') || ext.endsWith('.datamodel')) {
-          editorType = 'datamodel';
-        } else {
-          editorType = 'custom';
-        }
+        // Use the registered editor name (e.g., "Spreadsheet Editor", "PDF Viewer")
+        const registration = customEditorRegistry.getRegistration(fileExtension);
+        editorCategory = registration?.name || 'custom';
       }
 
       posthog?.capture('editor_type_opened', {
-        editorType,
-        fileExtension: filePath.substring(filePath.lastIndexOf('.')).toLowerCase(),
+        editorCategory,
+        fileExtension,
         hasMermaid,
         hasDataModel,
       });
