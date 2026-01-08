@@ -2146,9 +2146,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           serializableContext.content = getLatestContent();
         }
 
-        // In agent mode, strip out filePath - we work across entire codebase
+        // In agent mode, strip out content - we work across entire codebase
+        // BUT keep filePath so MCP server knows which file-scoped tools to show
         if (mode === 'agent') {
-          delete serializableContext.filePath;
           delete serializableContext.content;
         }
 

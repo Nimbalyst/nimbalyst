@@ -1596,6 +1596,23 @@ export class AIService {
           attachments
         } as any : { sessionType: session.sessionType, mode: session.mode, attachments } as any;
 
+        // Update MCP document state for Claude Code provider so it knows which file-scoped tools to show
+        if (isClaudeCode && contextWithSession?.filePath && contextWithSession?.workspacePath) {
+          const { updateDocumentState, registerWorkspaceWindow } = await import('../../mcp/httpServer');
+          updateDocumentState({
+            filePath: contextWithSession.filePath,
+            workspacePath: contextWithSession.workspacePath,
+            fileType: contextWithSession.fileType
+          }, session.id);
+
+          // Also register the workspace->window mapping so MCP tools can route to the correct window
+          const { BrowserWindow } = await import('electron');
+          const window = BrowserWindow.fromWebContents(event.sender);
+          if (window) {
+            registerWorkspaceWindow(contextWithSession.workspacePath, window.id);
+          }
+        }
+
         for await (const chunk of provider.sendMessage(messageToSend, contextWithSession, session.id, sessionMessages, workspacePath, attachments)) {
           if (!chunk) continue;
           chunkCount++;

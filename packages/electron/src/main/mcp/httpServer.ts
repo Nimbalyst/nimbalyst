@@ -204,10 +204,10 @@ export function updateDocumentState(state: any, sessionId?: string) {
     throw error;
   }
 
+  // filePath is optional - if missing, only global-scoped extension tools will be available
+  // This is normal for agent mode sessions without a specific file open
   if (!state?.filePath) {
-    const error = new Error(`[MCP Server] CRITICAL: No filePath in document state for session ${sessionId}! State keys: ${Object.keys(state || {}).join(', ')}`);
-    console.error(error.message);
-    throw error;
+    console.log(`[MCP Server] No filePath in document state for session ${sessionId} - only global tools will be available`);
   }
 
   // DEFENSIVE LOGGING: Log exactly what we received
