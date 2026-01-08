@@ -427,7 +427,22 @@ export class MCPConfigService {
         const command = this.resolveCommandForPlatform(config.command!);
 
         // Expand environment variables in args as well (e.g., ${FILESYSTEM_ALLOWED_DIR})
-        const expandedArgs = (config.args || []).map(arg => this.expandEnvVar(arg, env));
+        let expandedArgs = (config.args || []).map(arg => this.expandEnvVar(arg, env));
+
+        // On Windows with shell:true, we need to manually quote args containing spaces
+        // because windowsVerbatimArguments is automatically set to true with cmd.exe,
+        // meaning no automatic escaping is done. Without quoting, cmd.exe treats
+        // spaces as argument separators, breaking args like "Authorization:Bearer token"
+        if (process.platform === 'win32') {
+          expandedArgs = expandedArgs.map(arg => {
+            // If arg contains spaces or special cmd characters, wrap in double quotes
+            // Also escape any internal double quotes by doubling them
+            if (arg.includes(' ') || arg.includes('&') || arg.includes('|') || arg.includes('^')) {
+              return `"${arg.replace(/"/g, '""')}"`;
+            }
+            return arg;
+          });
+        }
 
         logger.mcp.info('[MCP Test] Starting stdio connection test');
         logger.mcp.info(`[MCP Test] Command: ${command} (original: ${config.command})`);

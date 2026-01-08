@@ -2196,10 +2196,28 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   }
 
   /**
-   * Process a single MCP server config, converting env vars to headers for SSE transport
+   * Process a single MCP server config, expanding env vars and converting to headers where needed
    */
   private processServerConfig(serverName: string, serverConfig: any): any {
     const processedConfig = { ...serverConfig };
+
+    // Build combined env: process.env + config.env (config.env takes precedence)
+    const combinedEnv: Record<string, string | undefined> = {
+      ...process.env as Record<string, string | undefined>
+    };
+    if (processedConfig.env) {
+      for (const [key, value] of Object.entries(processedConfig.env)) {
+        combinedEnv[key] = this.expandEnvVar(value as string, combinedEnv);
+      }
+    }
+
+    // For stdio transport, expand env vars in args
+    // This is critical for Windows where shell doesn't expand ${VAR} syntax
+    if (processedConfig.type !== 'sse' && processedConfig.args && Array.isArray(processedConfig.args)) {
+      processedConfig.args = processedConfig.args.map((arg: string) =>
+        typeof arg === 'string' ? this.expandEnvVar(arg, combinedEnv) : arg
+      );
+    }
 
     // For SSE transport, convert env vars to headers (SDK requirement)
     if (processedConfig.type === 'sse' && processedConfig.env) {
