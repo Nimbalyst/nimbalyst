@@ -20,6 +20,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.50.22] - 2026-01-08
+
+
+### Added
+- Added clickable file paths to agent transcript UI
+- Added display_chart MCP tool for inline chart visualization
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Fixed OAuth EADDRINUSE error with stale lock file cleanup
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.50.21] - 2026-01-07
 
 
