@@ -1,146 +1,103 @@
 # MCP Server Template Verification Report
 
-Generated: 2026-01-02
+Generated: 2026-01-07
 
 This document verifies each MCP server template in `packages/electron/src/renderer/components/GlobalSettings/panels/MCPServersPanel.tsx` against official documentation and npm/PyPI registries.
 
-## Summary (After Fixes)
+## Summary
 
-All 28 MCP server templates have been verified and corrected where necessary.
+All 22 MCP server templates are now verified as official first-party implementations.
 
 | Status | Count |
 |--------|-------|
-| Correct | 28 |
-| Fixed | 15 |
+| Official (Active) | 22 |
+| Removed (Unofficial) | 5 |
+| Removed (Deprecated/Security) | 1 |
 
-## Verification Table
+## Current Templates (All Official)
 
-| Template | Package | Status | Confidence | Notes |
-|----------|---------|--------|------------|-------|
-| Linear | `mcp-remote` + `https://mcp.linear.app/mcp` | Correct | High | OAuth flow |
-| GitHub | `@modelcontextprotocol/server-github` | Correct | High | Deprecated but functional |
-| GitLab | `@modelcontextprotocol/server-gitlab` | Correct | High | |
-| Slack | `@modelcontextprotocol/server-slack` | Correct | High | Deprecated but functional |
-| PostgreSQL | `@modelcontextprotocol/server-postgres` | Fixed | High | Connection string now passed as CLI arg |
-| Filesystem | `@modelcontextprotocol/server-filesystem` | Fixed | High | Directory path now required |
-| Brave Search | `@brave/brave-search-mcp-server` | Fixed | High | Updated to official Brave package |
-| Google Drive | `@modelcontextprotocol/server-gdrive` | Correct | Medium | Deprecated but functional |
-| PostHog | `mcp-remote@latest` + SSE | Correct | High | |
-| Atlassian | `mcp-remote` + `https://mcp.atlassian.com/v1/sse` | Correct | High | |
-| Notion | `mcp-remote` + `https://mcp.notion.com/mcp` | Correct | High | |
-| Asana | `mcp-remote` + `https://mcp.asana.com/sse` | Correct | High | |
-| Playwright | `@playwright/mcp@latest` | Correct | High | |
-| Context7 | `@upstash/context7-mcp@latest` | Correct | High | |
-| n8n | `n8n-mcp` | Fixed | High | Changed from non-existent `@anthropic/mcp-server-n8n` |
-| Zapier | `mcp-remote` + user URL | Fixed | Medium | Now requires user-specific MCP URL |
-| AWS | `uvx awslabs.aws-api-mcp-server@latest` | Fixed | High | Changed to Python-based official package |
-| Stripe | `@stripe/mcp` | Fixed | High | Corrected package name and env var |
-| Snowflake | `uvx snowflake-labs-mcp` | Fixed | High | Changed to Python-based official package |
-| Sequential Thinking | `@modelcontextprotocol/server-sequential-thinking` | Fixed | High | Added missing hyphen |
-| Shopify Dev | `@shopify/dev-mcp@latest` | Fixed | High | Changed to official dev docs package |
-| Fetch | `uvx mcp-server-fetch` | Fixed | High | Changed to Python-based package |
-| Chrome DevTools | `chrome-devtools-mcp@latest` | Fixed | High | Changed to official Chrome DevTools package |
-| Claude Flow | `claude-flow@alpha mcp start` | Fixed | High | Changed to correct community package |
-| Blender | `uvx blender-mcp` | Fixed | High | Changed to Python-based package |
-| Knowledge Graph Memory | `@modelcontextprotocol/server-memory` | Correct | High | |
-| Task Master | `task-master-ai` | Fixed | High | Changed package name, added API key requirement |
-| Serena | `uvx` + git install | Correct | High | |
-| Desktop Commander | `@wonderwhy-er/desktop-commander` | Correct | High | |
+| Template | Package/URL | Auth | Source |
+|----------|-------------|------|--------|
+| Linear | `mcp-remote` + `mcp.linear.app` | OAuth | Linear (vendor) |
+| GitHub | `mcp-remote` + `api.githubcopilot.com/mcp/` | OAuth | GitHub (vendor) |
+| GitLab | `mcp-remote` + `gitlab.com/api/v4/mcp` | OAuth | GitLab (vendor) |
+| Slack | `mcp-remote` + `api.slack.com/mcp/sse` | OAuth | Slack (vendor) |
+| Filesystem | `@modelcontextprotocol/server-filesystem` | None | MCP (Anthropic) |
+| Brave Search | `@brave/brave-search-mcp-server` | API Key | Brave (vendor) |
+| PostHog | `mcp-remote` + `mcp.posthog.com/sse` | API Key | PostHog (vendor) |
+| Atlassian | `mcp-remote` + `mcp.atlassian.com/v1/sse` | OAuth | Atlassian (vendor) |
+| Notion | `mcp-remote` + `mcp.notion.com/mcp` | OAuth | Notion (vendor) |
+| Asana | `mcp-remote` + `mcp.asana.com/sse` | OAuth | Asana (vendor) |
+| Playwright | `@playwright/mcp@latest` | None | Microsoft (vendor) |
+| Context7 | `@upstash/context7-mcp@latest` | None | Upstash (vendor) |
+| Zapier | `mcp-remote` + user URL | API Key | Zapier (vendor) |
+| AWS | `uvx awslabs.aws-api-mcp-server@latest` | API Key | AWS Labs (vendor) |
+| Stripe | `@stripe/mcp` | API Key | Stripe (vendor) |
+| Snowflake | `uvx snowflake-labs-mcp` | API Key | Snowflake Labs (vendor) |
+| Sequential Thinking | `@modelcontextprotocol/server-sequential-thinking` | None | MCP (Anthropic) |
+| Shopify Dev | `@shopify/dev-mcp@latest` | None | Shopify (vendor) |
+| Fetch | `uvx mcp-server-fetch` | None | MCP (Anthropic) |
+| Chrome DevTools | `chrome-devtools-mcp@latest` | None | Google Chrome DevTools (vendor) |
+| Knowledge Graph Memory | `@modelcontextprotocol/server-memory` | None | MCP (Anthropic) |
+| Serena | `uvx` + git install from oraios/serena | None | Oraios AI (vendor) |
 
-## Fixes Applied
+## Removed Templates
 
-### 1. n8n
-- **Before**: `@anthropic/mcp-server-n8n` (non-existent)
-- **After**: `n8n-mcp`
-- **Changes**: Updated package name, changed env var from `N8N_BASE_URL` to `N8N_API_URL`, added `MCP_MODE: 'stdio'`
+### Removed - Unofficial/Community (5 servers)
 
-### 2. Stripe
-- **Before**: `@stripe/mcp-server`, `STRIPE_API_KEY`
-- **After**: `@stripe/mcp`, `STRIPE_SECRET_KEY`
-- **Changes**: Corrected package name, added `--tools=all` flag, fixed env var name
+These were community contributions, not official first-party implementations:
 
-### 3. Sequential Thinking
-- **Before**: `@modelcontextprotocol/server-sequentialthinking`
-- **After**: `@modelcontextprotocol/server-sequential-thinking`
-- **Changes**: Added missing hyphen in package name
+| Template | Previous Package | Reason |
+|----------|------------------|--------|
+| n8n | `n8n-mcp` | Community (czlonkowski), not from n8n GmbH |
+| Claude Flow | `claude-flow` | Community (ruvnet), not from Anthropic |
+| Blender | `blender-mcp` | Community (ahujasid), not from Blender Foundation |
+| Task Master | `task-master-ai` | Community (eyaltoledano), not from Anthropic |
+| Desktop Commander | `@wonderwhy-er/desktop-commander` | Community, explicitly states not an Anthropic product |
 
-### 4. Brave Search
-- **Before**: `@modelcontextprotocol/server-brave-search` (deprecated)
-- **After**: `@brave/brave-search-mcp-server`
-- **Changes**: Updated to official Brave package, updated docsUrl
+### Removed - Deprecated/Security Issues (1 server)
 
-### 5. AWS
-- **Before**: `npx @aws/aws-mcp-server` (non-existent)
-- **After**: `uvx awslabs.aws-api-mcp-server@latest`
-- **Changes**: Changed to Python-based official package, updated docsUrl
+| Template | Previous Package | Reason |
+|----------|------------------|--------|
+| PostgreSQL | `@modelcontextprotocol/server-postgres` | Archived July 2025, SQL injection vulnerability |
 
-### 6. Snowflake
-- **Before**: `npx @snowflake-labs/mcp-server-snowflake` (non-existent)
-- **After**: `uvx snowflake-labs-mcp`
-- **Changes**: Changed to Python-based official package, updated docsUrl
+## Updated Templates
 
-### 7. Shopify
-- **Before**: `@shopify/mcp-server` (non-existent), required API key
-- **After**: `@shopify/dev-mcp@latest`, no auth required
-- **Changes**: Changed to official dev documentation package, updated name/description, removed auth requirement
+### GitHub
+- **Before**: `@modelcontextprotocol/server-github` (deprecated)
+- **After**: Remote server via `mcp-remote` + `https://api.githubcopilot.com/mcp/`
+- **Auth**: Changed from API key to OAuth
+- **Source**: [GitHub MCP Server](https://github.com/github/github-mcp-server)
 
-### 8. Fetch
-- **Before**: `npx @modelcontextprotocol/server-fetch` (non-existent)
-- **After**: `uvx mcp-server-fetch`
-- **Changes**: Changed to Python-based package
+### GitLab
+- **Before**: `@modelcontextprotocol/server-gitlab` (archived May 2025)
+- **After**: Remote server via `mcp-remote` + `https://gitlab.com/api/v4/mcp`
+- **Auth**: Changed from API key to OAuth
+- **Source**: [GitLab MCP Documentation](https://docs.gitlab.com/user/gitlab_duo/model_context_protocol/mcp_server/)
 
-### 9. Chrome DevTools
-- **Before**: `@anthropic/mcp-server-chrome-devtools` (non-existent)
-- **After**: `chrome-devtools-mcp@latest`
-- **Changes**: Changed to official Chrome DevTools team package, updated docsUrl
-
-### 10. Claude Flow
-- **Before**: `@anthropic/claude-flow-mcp` (non-existent)
-- **After**: `claude-flow@alpha mcp start`
-- **Changes**: Changed to community package by ruvnet, updated docsUrl
-
-### 11. Blender
-- **Before**: `npx blender-mcp` (npm package doesn't exist)
-- **After**: `uvx blender-mcp`
-- **Changes**: Changed to Python-based package, corrected docsUrl to ahujasid repo
-
-### 12. Task Master
-- **Before**: `task-master-mcp` (non-existent), no auth
-- **After**: `task-master-ai`, requires Anthropic API key
-- **Changes**: Corrected package name, updated docsUrl, added API key requirement
-
-### 13. Zapier
-- **Before**: `https://mcp.zapier.com/sse` (generic URL doesn't work)
-- **After**: User-provided MCP URL via `ZAPIER_MCP_URL` env var
-- **Changes**: Changed to require user-specific URL, changed authType to api-key
-
-### 14. PostgreSQL
-- **Before**: Connection string in env var (not supported by package)
-- **After**: Connection string passed as CLI argument
-- **Changes**: Moved connection string to args array, updated docsUrl to archived repo
-
-### 15. Filesystem
-- **Before**: No directory paths (required by package)
-- **After**: Directory path required via env var
-- **Changes**: Added required directory path argument, updated description
+### Slack
+- **Before**: `@modelcontextprotocol/server-slack` (deprecated/archived)
+- **After**: Remote server via `mcp-remote` + `https://api.slack.com/mcp/sse`
+- **Auth**: Changed from API key (bot token) to OAuth
+- **Source**: [Slack MCP Documentation](https://docs.slack.dev/ai/mcp-server/)
 
 ## Python-based Servers (require `uvx`)
 
-The following servers are Python-based and require `uvx` (from the `uv` package manager) instead of `npx`:
+The following servers are Python-based and require `uvx` (from the `uv` package manager):
 
 1. **AWS** - `uvx awslabs.aws-api-mcp-server@latest`
 2. **Snowflake** - `uvx snowflake-labs-mcp`
 3. **Fetch** - `uvx mcp-server-fetch`
-4. **Blender** - `uvx blender-mcp`
-5. **Serena** - `uvx --from git+https://github.com/oraios/serena serena start-mcp-server`
+4. **Serena** - `uvx --from git+https://github.com/oraios/serena serena start-mcp-server`
 
-Users will need Python 3.10+ and the `uv` package manager installed to use these servers.
+Users need Python 3.10+ and the `uv` package manager installed for these servers.
 
-## Deprecated but Functional
+## Verification Sources
 
-These packages still work but are no longer actively maintained:
-
-1. **GitHub** (`@modelcontextprotocol/server-github`) - Official replacement is `github/github-mcp-server`
-2. **Slack** (`@modelcontextprotocol/server-slack`) - Moved to archived repo
-3. **Google Drive** (`@modelcontextprotocol/server-gdrive`) - Moved to archived repo
-4. **PostgreSQL** (`@modelcontextprotocol/server-postgres`) - Moved to archived repo
+- [Model Context Protocol Servers](https://github.com/modelcontextprotocol/servers)
+- [GitHub MCP Server](https://github.com/github/github-mcp-server)
+- [GitLab MCP Documentation](https://docs.gitlab.com/user/gitlab_duo/model_context_protocol/mcp_server/)
+- [Slack MCP Documentation](https://docs.slack.dev/ai/mcp-server/)
+- [AWS MCP Servers](https://github.com/awslabs/mcp)
+- [Snowflake MCP](https://github.com/Snowflake-Labs/mcp)
+- [Chrome DevTools MCP](https://github.com/ChromeDevTools/chrome-devtools-mcp)

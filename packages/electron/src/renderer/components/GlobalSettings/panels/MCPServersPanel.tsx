@@ -40,7 +40,7 @@ type IconConfig =
 
 // Icons that are dark/black and need a light color override in dark mode
 // Most brand icons have colorful logos that work on both light and dark backgrounds
-const DARK_ICONS_NEEDING_LIGHT_OVERRIDE = new Set(['github', 'notion', 'n8n']);
+const DARK_ICONS_NEEDING_LIGHT_OVERRIDE = new Set(['github', 'notion', 'gitlab']);
 
 const TEMPLATE_ICON_CONFIG: Record<string, IconConfig> = {
   // Brand icons from Simple Icons CDN
@@ -48,20 +48,16 @@ const TEMPLATE_ICON_CONFIG: Record<string, IconConfig> = {
   github: { type: 'simple-icons', slug: 'github' },
   gitlab: { type: 'simple-icons', slug: 'gitlab' },
   slack: { type: 'simple-icons', slug: 'slack' },
-  postgres: { type: 'simple-icons', slug: 'postgresql' },
   'brave-search': { type: 'simple-icons', slug: 'brave' },
-  'google-drive': { type: 'simple-icons', slug: 'googledrive' },
   posthog: { type: 'simple-icons', slug: 'posthog' },
   atlassian: { type: 'simple-icons', slug: 'atlassian' },
   notion: { type: 'simple-icons', slug: 'notion' },
   asana: { type: 'simple-icons', slug: 'asana' },
-  n8n: { type: 'simple-icons', slug: 'n8n' },
   zapier: { type: 'simple-icons', slug: 'zapier' },
   aws: { type: 'url', url: 'https://cdn.jsdelivr.net/npm/simple-icons/icons/amazonwebservices.svg' },
   stripe: { type: 'simple-icons', slug: 'stripe' },
   snowflake: { type: 'simple-icons', slug: 'snowflake' },
   shopify: { type: 'simple-icons', slug: 'shopify' },
-  blender: { type: 'simple-icons', slug: 'blender' },
   'chrome-devtools': { type: 'simple-icons', slug: 'googlechrome' },
   playwright: { type: 'simple-icons', slug: 'playwright' },
   context7: { type: 'simple-icons', slug: 'upstash' },
@@ -70,11 +66,8 @@ const TEMPLATE_ICON_CONFIG: Record<string, IconConfig> = {
   filesystem: { type: 'material-symbol', icon: 'folder' },
   fetch: { type: 'material-symbol', icon: 'cloud_download' },
   'sequential-thinking': { type: 'material-symbol', icon: 'psychology' },
-  'claude-flow': { type: 'material-symbol', icon: 'account_tree' },
   'knowledge-graph-memory': { type: 'material-symbol', icon: 'hub' },
-  'task-master': { type: 'material-symbol', icon: 'task_alt' },
-  serena: { type: 'material-symbol', icon: 'code' },
-  'desktop-commander': { type: 'material-symbol', icon: 'terminal' }
+  serena: { type: 'material-symbol', icon: 'code' }
 };
 
 // Component to render MCP server icon
@@ -145,29 +138,22 @@ const TEMPLATE_CATEGORIES: Record<string, TemplateCategory> = {
   playwright: 'development',
   context7: 'development',
   'chrome-devtools': 'development',
+  serena: 'development',
   linear: 'productivity',
   asana: 'productivity',
   atlassian: 'productivity',
   notion: 'productivity',
   slack: 'productivity',
-  'task-master': 'productivity',
-  serena: 'development',
-  'desktop-commander': 'automation',
-  n8n: 'automation',
   zapier: 'automation',
   'sequential-thinking': 'ai',
-  'claude-flow': 'ai',
   'knowledge-graph-memory': 'ai',
-  blender: 'ai',
   stripe: 'commerce',
   shopify: 'commerce',
-  postgres: 'data',
   posthog: 'data',
   snowflake: 'data',
   aws: 'data',
   'brave-search': 'search',
   fetch: 'search',
-  'google-drive': 'files',
   filesystem: 'files'
 };
 
@@ -186,33 +172,6 @@ const CATEGORY_ORDER: TemplateCategory[] = ['development', 'productivity', 'auto
 
 // Help text for common env vars
 const ENV_VAR_HELP: Record<string, { label: string; help: string; link?: string }> = {
-  GITHUB_PERSONAL_ACCESS_TOKEN: {
-    label: 'GitHub Personal Access Token',
-    help: 'Create at Settings > Developer settings > Personal access tokens',
-    link: 'https://github.com/settings/tokens'
-  },
-  GITLAB_PERSONAL_ACCESS_TOKEN: {
-    label: 'GitLab Personal Access Token',
-    help: 'Create at User Settings > Access Tokens',
-    link: 'https://gitlab.com/-/user_settings/personal_access_tokens'
-  },
-  GITLAB_API_URL: {
-    label: 'GitLab API URL',
-    help: 'Your GitLab instance URL (default: https://gitlab.com)'
-  },
-  SLACK_BOT_TOKEN: {
-    label: 'Slack Bot Token',
-    help: 'Get from your Slack app settings',
-    link: 'https://api.slack.com/apps'
-  },
-  SLACK_TEAM_ID: {
-    label: 'Slack Team ID',
-    help: 'Find in Slack workspace settings'
-  },
-  POSTGRES_CONNECTION_STRING: {
-    label: 'PostgreSQL Connection String',
-    help: 'Format: postgresql://user:password@host:5432/database'
-  },
   BRAVE_API_KEY: {
     label: 'Brave Search API Key',
     help: 'Get from Brave Search API dashboard',
@@ -222,16 +181,6 @@ const ENV_VAR_HELP: Record<string, { label: string; help: string; link?: string 
     label: 'PostHog Personal API Key',
     help: 'Get from PostHog > Settings > Personal API Keys',
     link: 'https://app.posthog.com/settings/user-api-keys'
-  },
-  N8N_API_KEY: {
-    label: 'n8n API Key',
-    help: 'Get from n8n Settings > API',
-    link: 'https://docs.n8n.io/api/'
-  },
-  N8N_API_URL: {
-    label: 'n8n API URL',
-    help: 'Your n8n API URL (e.g., http://localhost:5678/api/v1)',
-    link: 'https://docs.n8n.io/api/'
   },
   AWS_ACCESS_KEY_ID: {
     label: 'AWS Access Key ID',
@@ -267,15 +216,6 @@ const ENV_VAR_HELP: Record<string, { label: string; help: string; link?: string 
     label: 'Snowflake Warehouse',
     help: 'The warehouse to use for queries'
   },
-  SHOPIFY_ACCESS_TOKEN: {
-    label: 'Shopify Access Token',
-    help: 'Get from Shopify Admin > Apps > Develop apps',
-    link: 'https://shopify.dev/docs/apps/auth/admin-app-access-tokens'
-  },
-  SHOPIFY_STORE_URL: {
-    label: 'Shopify Store URL',
-    help: 'Your store URL (e.g., your-store.myshopify.com)'
-  },
   ZAPIER_MCP_URL: {
     label: 'Zapier MCP URL',
     help: 'Get your personal MCP URL from Zapier MCP dashboard',
@@ -284,11 +224,6 @@ const ENV_VAR_HELP: Record<string, { label: string; help: string; link?: string 
   FILESYSTEM_ALLOWED_DIR: {
     label: 'Allowed Directory',
     help: 'Directory path the server is allowed to access (e.g., /Users/you/projects)'
-  },
-  ANTHROPIC_API_KEY: {
-    label: 'Anthropic API Key',
-    help: 'Get from Anthropic Console',
-    link: 'https://console.anthropic.com/settings/keys'
   }
 };
 
@@ -308,58 +243,33 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     id: 'github',
     name: 'GitHub',
     description: 'Repository management and code collaboration',
-    docsUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/github',
-    authType: 'api-key',
+    docsUrl: 'https://github.com/github/github-mcp-server',
+    authType: 'oauth',
     config: {
       command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-github'],
-      env: {
-        GITHUB_PERSONAL_ACCESS_TOKEN: '${GITHUB_PERSONAL_ACCESS_TOKEN}'
-      }
+      args: ['-y', 'mcp-remote', 'https://api.githubcopilot.com/mcp/']
     }
   },
   {
     id: 'gitlab',
     name: 'GitLab',
     description: 'DevOps platform and repository management',
-    docsUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/gitlab',
-    authType: 'api-key',
+    docsUrl: 'https://docs.gitlab.com/user/gitlab_duo/model_context_protocol/mcp_server/',
+    authType: 'oauth',
     config: {
       command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-gitlab'],
-      env: {
-        GITLAB_PERSONAL_ACCESS_TOKEN: '${GITLAB_PERSONAL_ACCESS_TOKEN}',
-        GITLAB_API_URL: '${GITLAB_API_URL:-https://gitlab.com}'
-      }
+      args: ['-y', 'mcp-remote', 'https://gitlab.com/api/v4/mcp']
     }
   },
   {
     id: 'slack',
     name: 'Slack',
     description: 'Team communication and messaging',
-    docsUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/slack',
-    authType: 'api-key',
+    docsUrl: 'https://docs.slack.dev/ai/mcp-server/',
+    authType: 'oauth',
     config: {
       command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-slack'],
-      env: {
-        SLACK_BOT_TOKEN: '${SLACK_BOT_TOKEN}',
-        SLACK_TEAM_ID: '${SLACK_TEAM_ID}'
-      }
-    }
-  },
-  {
-    id: 'postgres',
-    name: 'PostgreSQL',
-    description: 'Database queries and management',
-    docsUrl: 'https://github.com/modelcontextprotocol/servers-archived/tree/main/src/postgres',
-    authType: 'api-key',
-    config: {
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-postgres', '${POSTGRES_CONNECTION_STRING}'],
-      env: {
-        POSTGRES_CONNECTION_STRING: ''
-      }
+      args: ['-y', 'mcp-remote', 'https://api.slack.com/mcp/sse']
     }
   },
   {
@@ -465,22 +375,6 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
       command: 'npx',
       args: ['-y', '@upstash/context7-mcp@latest'],
       env: {}
-    }
-  },
-  {
-    id: 'n8n',
-    name: 'n8n',
-    description: 'Workflow automation platform',
-    docsUrl: 'https://github.com/czlonkowski/n8n-mcp',
-    authType: 'api-key',
-    config: {
-      command: 'npx',
-      args: ['-y', 'n8n-mcp'],
-      env: {
-        N8N_API_KEY: '${N8N_API_KEY}',
-        N8N_API_URL: '${N8N_API_URL}',
-        MCP_MODE: 'stdio'
-      }
     }
   },
   {
@@ -593,30 +487,6 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     }
   },
   {
-    id: 'claude-flow',
-    name: 'Claude Flow',
-    description: 'Multi-agent orchestration and workflows',
-    docsUrl: 'https://github.com/ruvnet/claude-flow',
-    authType: 'none',
-    config: {
-      command: 'npx',
-      args: ['claude-flow@alpha', 'mcp', 'start'],
-      env: {}
-    }
-  },
-  {
-    id: 'blender',
-    name: 'Blender',
-    description: '3D modeling and rendering control',
-    docsUrl: 'https://github.com/ahujasid/blender-mcp',
-    authType: 'none',
-    config: {
-      command: 'uvx',
-      args: ['blender-mcp'],
-      env: {}
-    }
-  },
-  {
     id: 'knowledge-graph-memory',
     name: 'Knowledge Graph Memory',
     description: 'Persistent memory with knowledge graphs',
@@ -629,20 +499,6 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     }
   },
   {
-    id: 'task-master',
-    name: 'Task Master',
-    description: 'AI-powered task management and planning',
-    docsUrl: 'https://github.com/eyaltoledano/claude-task-master',
-    authType: 'api-key',
-    config: {
-      command: 'npx',
-      args: ['-y', 'task-master-ai'],
-      env: {
-        ANTHROPIC_API_KEY: '${ANTHROPIC_API_KEY}'
-      }
-    }
-  },
-  {
     id: 'serena',
     name: 'Serena',
     description: 'Semantic code retrieval and editing for codebases',
@@ -651,18 +507,6 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     config: {
       command: 'uvx',
       args: ['--from', 'git+https://github.com/oraios/serena', 'serena', 'start-mcp-server'],
-      env: {}
-    }
-  },
-  {
-    id: 'desktop-commander',
-    name: 'Desktop Commander',
-    description: 'Terminal control, file search, and diff editing',
-    docsUrl: 'https://github.com/wonderwhy-er/DesktopCommanderMCP',
-    authType: 'none',
-    config: {
-      command: 'npx',
-      args: ['-y', '@wonderwhy-er/desktop-commander'],
       env: {}
     }
   }
