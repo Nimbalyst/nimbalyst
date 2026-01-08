@@ -43,6 +43,7 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite build --watch",
+    "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "clean": "rm -rf node_modules/.vite dist",
     "clean:build": "rm -rf node_modules/.vite dist && pnpm run build",

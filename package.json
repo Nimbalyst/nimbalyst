@@ -15,6 +15,7 @@
     "build": "npm run build --prefix packages/rexical",
     "build:playground": "npm run build --prefix packages/playground",
     "preview": "npm run preview --prefix packages/playground",
+    "typecheck": "npm run typecheck -ws --if-present",
     "test": "npm run test:unit",
     "test:unit": "vitest",
     "test:unit:ui": "vitest --ui",

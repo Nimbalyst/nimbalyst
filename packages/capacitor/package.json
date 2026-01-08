@@ -7,6 +7,7 @@
     "dev": "vite --host",
     "build": "vite build",
     "build:check": "tsc -b && vite build",
+    "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "clean": "rm -rf dist node_modules/.vite",
     "cap:sync": "npm run build && npx cap sync",
