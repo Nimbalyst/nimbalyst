@@ -349,8 +349,10 @@ On desktop startup, only sync what's missing:
 
 ### Limits
 
-- `MAX_SESSION_CONNECTIONS = 5` - Prevents connection explosion
-- New connections rejected when limit reached
+- `MAX_SESSION_CONNECTIONS = 10` - Prevents connection explosion
+- `IDLE_EVICTION_TIMEOUT_MS = 5 minutes` - Sessions idle longer than this can be evicted
+- When at max: evicts oldest idle session to make room for new connections
+- If no idle sessions: new connections rejected
 
 ### Auto-Connect Strategy
 

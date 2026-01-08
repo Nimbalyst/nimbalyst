@@ -489,6 +489,8 @@ interface SessionConnection {
   encryptionKey?: CryptoKey;
   /** Cached metadata from sync_response and metadata_broadcast */
   cachedMetadata?: Partial<SessionMetadata>;
+  /** Timestamp of last activity (send/receive) for LRU eviction */
+  lastActivity: number;
 }
 
 // Cache of session index entries for partial update merging
@@ -1621,7 +1623,10 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
   }
 
   // Hard limit on concurrent session WebSocket connections to prevent performance issues
-  const MAX_SESSION_CONNECTIONS = 5;
+  const MAX_SESSION_CONNECTIONS = 10;
+
+  // Idle timeout before a connection can be evicted (5 minutes)
+  const IDLE_EVICTION_TIMEOUT_MS = 5 * 60 * 1000;
 
   // Create provider object
   const provider: SyncProvider = {
@@ -1631,10 +1636,33 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         return; // Already connected
       }
 
-      // Enforce hard limit on concurrent connections
+      // Enforce hard limit on concurrent connections - try to evict idle connection first
       if (sessions.size >= MAX_SESSION_CONNECTIONS) {
-        console.warn(`[CollabV3] connect() - REJECTING connection for ${sessionId}, already at max (${MAX_SESSION_CONNECTIONS} connections)`);
-        return; // Silently reject - caller should handle missing connection gracefully
+        // Find the oldest idle connection that exceeds the idle timeout
+        const now = Date.now();
+        let oldestIdleSessionId: string | null = null;
+        let oldestIdleTime = Infinity;
+
+        for (const [sid, sess] of sessions) {
+          const idleTime = now - sess.lastActivity;
+          if (idleTime >= IDLE_EVICTION_TIMEOUT_MS && idleTime > (now - oldestIdleTime)) {
+            // This session has been idle longer than the threshold
+            if (sess.lastActivity < oldestIdleTime) {
+              oldestIdleTime = sess.lastActivity;
+              oldestIdleSessionId = sid;
+            }
+          }
+        }
+
+        if (oldestIdleSessionId) {
+          // Evict the oldest idle connection to make room
+          console.log(`[CollabV3] connect() - evicting idle session ${oldestIdleSessionId} (idle for ${Math.round((now - oldestIdleTime) / 1000)}s) to make room for ${sessionId}`);
+          this.disconnect(oldestIdleSessionId);
+        } else {
+          // No idle connections to evict - reject the new connection
+          console.warn(`[CollabV3] connect() - REJECTING connection for ${sessionId}, already at max (${MAX_SESSION_CONNECTIONS} connections) and no idle sessions to evict`);
+          return;
+        }
       }
 
       // Log stack trace to identify what's creating connections
@@ -1659,6 +1687,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
           changeListeners: new Set(),
           lastSequence: 0,
           encryptionKey: config.encryptionKey,
+          lastActivity: Date.now(),
         };
 
         sessions.set(sessionId, session);
@@ -1696,6 +1725,9 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         };
 
         ws.onmessage = (event) => {
+          // Update activity timestamp on message receive
+          const sess = sessions.get(sessionId);
+          if (sess) sess.lastActivity = Date.now();
           handleServerMessage(sessionId, event.data);
         };
       });
@@ -1830,6 +1862,8 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         const json = JSON.stringify(clientMessage);
         // console.log('[CollabV3] Sending message, length:', json.length);
         session.ws.send(json);
+        // Update activity timestamp on message send
+        session.lastActivity = Date.now();
       } catch (err) {
         console.error('[CollabV3] Failed to send message:', err);
       }
