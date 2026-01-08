@@ -10,6 +10,7 @@ import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { BrowserWindow, ipcMain, nativeImage } from 'electron';
 import { parse as parseUrl } from 'url';
 import { MockupScreenshotService } from '../services/MockupScreenshotService';
+import { getReleaseChannel } from '../utils/store';
 
 /**
  * Compress a base64 image to JPEG if it exceeds 0.28 MB.
@@ -500,7 +501,7 @@ async function tryCreateServer(port: number): Promise<any> {
         // They are only available through chat providers via direct IPC, not through
         // Claude Code MCP. This was the original design - see commit af94ef47.
         // The agent should use native Edit/Write tools with file-watcher diff approval.
-        const builtInTools = [
+        const builtInTools: Array<{ name: string; description: string; inputSchema: any }> = [
           {
             name: 'capture_mockup_screenshot',
             description: 'Capture a screenshot of a .mockup.html file. Returns the screenshot as a base64-encoded PNG image. If the file is open in the editor, the screenshot will include any user annotations (drawings, highlights). If the file is not open, it will be rendered in a headless window (without annotations).',
@@ -533,6 +534,60 @@ async function tryCreateServer(port: number): Promise<any> {
             }
           }
         ];
+
+        // Alpha-only: Add display_chart tool for inline chart rendering
+        if (getReleaseChannel() === 'alpha') {
+          builtInTools.push({
+            name: 'display_chart',
+            description: 'Display a chart inline in the conversation. Supports bar, line, pie, area, and scatter charts. The chart will be rendered visually in the AI transcript for the user to see. Please use this any time you want to convey data to the user.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                chartType: {
+                  type: 'string',
+                  enum: ['bar', 'line', 'pie', 'area', 'scatter'],
+                  description: 'The type of chart to display'
+                },
+                data: {
+                  type: 'array',
+                  items: {
+                    type: 'object'
+                  },
+                  description: 'Array of data objects. Each object should have keys matching xAxisKey and yAxisKey(s)'
+                },
+                xAxisKey: {
+                  type: 'string',
+                  description: 'The key in each data object to use for x-axis labels (or pie chart labels)'
+                },
+                yAxisKey: {
+                  oneOf: [
+                    { type: 'string' },
+                    { type: 'array', items: { type: 'string' } }
+                  ],
+                  description: 'The key(s) in each data object to use for y-axis values. Can be a single string or array for multi-series charts'
+                },
+                title: {
+                  type: 'string',
+                  description: 'Optional chart title'
+                },
+                width: {
+                  type: 'number',
+                  description: 'Chart width in pixels (default: 500)'
+                },
+                height: {
+                  type: 'number',
+                  description: 'Chart height in pixels (default: 300)'
+                },
+                colors: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Optional array of colors for the chart series (hex codes or CSS color names)'
+                }
+              },
+              required: ['chartType', 'data', 'xAxisKey', 'yAxisKey']
+            }
+          });
+        }
 
         // Get extension tools for the current workspace/file
         const extensionTools = getAvailableExtensionTools(workspacePath, currentFilePath);
@@ -1021,6 +1076,67 @@ async function tryCreateServer(port: number): Promise<any> {
                 isError: true
               };
             }
+          }
+
+          case 'display_chart': {
+            const typedArgs = args as {
+              chartType?: string;
+              data?: any[];
+              xAxisKey?: string;
+              yAxisKey?: string | string[];
+              title?: string;
+              width?: number;
+              height?: number;
+              colors?: string[];
+            } | undefined;
+
+            // Validate required fields
+            if (!typedArgs?.chartType) {
+              return {
+                content: [{ type: 'text', text: 'Error: chartType is required' }],
+                isError: true
+              };
+            }
+
+            const validChartTypes = ['bar', 'line', 'pie', 'area', 'scatter'];
+            if (!validChartTypes.includes(typedArgs.chartType)) {
+              return {
+                content: [{ type: 'text', text: `Error: chartType must be one of: ${validChartTypes.join(', ')}` }],
+                isError: true
+              };
+            }
+
+            if (!typedArgs.data || !Array.isArray(typedArgs.data) || typedArgs.data.length === 0) {
+              return {
+                content: [{ type: 'text', text: 'Error: data must be a non-empty array' }],
+                isError: true
+              };
+            }
+
+            if (!typedArgs.xAxisKey) {
+              return {
+                content: [{ type: 'text', text: 'Error: xAxisKey is required' }],
+                isError: true
+              };
+            }
+
+            if (!typedArgs.yAxisKey) {
+              return {
+                content: [{ type: 'text', text: 'Error: yAxisKey is required' }],
+                isError: true
+              };
+            }
+
+            // Return success - the widget will render the chart from the tool arguments
+            console.log(`[MCP Server] display_chart called: ${typedArgs.chartType} chart with ${typedArgs.data.length} data points`);
+
+            return {
+              content: [{
+                type: 'text',
+                text: `Chart displayed: ${typedArgs.title || typedArgs.chartType + ' chart'}`
+              }],
+              isError: false
+            };
           }
 
           default: {

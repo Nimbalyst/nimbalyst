@@ -1,0 +1,130 @@
+/**
+ * Chart Display Widget Styles
+ *
+ * Custom widget for displaying charts in the AI transcript.
+ * Uses CSS variables from PlaygroundEditorTheme.css for theming support.
+ * Uses container queries for responsive sizing per CLAUDE.md guidelines.
+ */
+
+.chart-display-widget {
+  container-type: inline-size;
+  container-name: chart-widget;
+  border-radius: 0.25rem;
+  background-color: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  overflow: hidden;
+}
+
+.chart-display-widget--error {
+  border-color: color-mix(in srgb, var(--error-color) 30%, transparent);
+}
+
+.chart-display-widget__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.chart-display-widget__label {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+
+.chart-display-widget__title {
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.chart-display-widget__status {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+
+.chart-display-widget__status--error {
+  color: var(--error-color);
+  background-color: color-mix(in srgb, var(--error-color) 15%, transparent);
+}
+
+.chart-display-widget__error {
+  margin: 0.5rem;
+  margin-top: 0;
+  padding: 0.5rem;
+  background-color: color-mix(in srgb, var(--error-color) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--error-color) 30%, transparent);
+  border-radius: 0.25rem;
+  color: var(--error-color);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.chart-display-widget__chart {
+  padding: 0.75rem;
+  min-height: 200px;
+}
+
+/* Recharts tooltip styling - ensure it inherits theme colors */
+.chart-display-widget .recharts-tooltip-wrapper {
+  z-index: 10;
+}
+
+/* Ensure tooltip content is visible in all themes */
+.chart-display-widget .recharts-default-tooltip {
+  background-color: var(--surface-secondary) !important;
+  border: 1px solid var(--border-primary) !important;
+  border-radius: 6px !important;
+  padding: 8px !important;
+}
+
+.chart-display-widget .recharts-tooltip-label {
+  color: var(--text-primary) !important;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.chart-display-widget .recharts-tooltip-item {
+  color: var(--text-primary) !important;
+}
+
+.chart-display-widget .recharts-tooltip-item-name,
+.chart-display-widget .recharts-tooltip-item-separator,
+.chart-display-widget .recharts-tooltip-item-value {
+  color: var(--text-primary) !important;
+}
+
+/* Ensure legend text uses theme colors */
+.chart-display-widget .recharts-legend-item-text {
+  color: var(--text-secondary) !important;
+}
+
+/* Responsive adjustments using container queries */
+@container chart-widget (max-width: 400px) {
+  .chart-display-widget__chart {
+    padding: 0.5rem;
+    min-height: 180px;
+  }
+
+  .chart-display-widget__header {
+    padding: 0.375rem 0.5rem;
+  }
+
+  .chart-display-widget__title {
+    font-size: 0.8125rem;
+  }
+}
+
+@container chart-widget (max-width: 300px) {
+  .chart-display-widget__chart {
+    padding: 0.25rem;
+    min-height: 150px;
+  }
+}

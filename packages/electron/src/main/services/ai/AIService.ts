@@ -1920,11 +1920,13 @@ export class AIService {
               const hasError = false; // If we got here, no error occurred
               const responseType = toolCallCount > 0 ? 'tool_use' : 'text';
               const toolsUsed = toolCalls.map(tc => tc.name).filter((name, index, self) => self.indexOf(name) === index);
+              const usedChartTool = toolsUsed.some(name => name === 'display_chart' || name === 'mcp__nimbalyst__display_chart');
 
               this.analytics.sendEvent('ai_response_received', {
                 provider: session.provider,
                 responseType,
                 toolsUsed,
+                usedChartTool,
                 responseTime: bucketResponseTime(perfLog.totalTime)
               });
 
@@ -2148,6 +2150,7 @@ export class AIService {
             provider: session.provider,
             responseType: 'error',
             toolsUsed: [],
+            usedChartTool: false,
             responseTime: bucketResponseTime(errorTime)
           });
         }

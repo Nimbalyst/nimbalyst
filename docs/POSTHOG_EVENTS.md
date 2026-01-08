@@ -102,7 +102,7 @@ All events include `$session_id` property automatically. Dev users are marked wi
 | --- | --- | --- | --- | --- | --- |
 | `create_ai_session` | `AIService.ts:455` | User creates new AI chat session | `provider` | v0.45.25 (2025-11-14) | |
 | `ai_message_sent` | `AIService.ts:1286` | User sends message in AI chat | `provider`<br/>`hasDocumentContext`<br/>`hasAttachments`<br/>`contentMode` (files/agent/unknown)<br/>`usedSlashCommand` (optional)<br/>`slashCommandName` (optional)<br/>`slashCommandPackageId` (optional) | v0.45.25 (2025-11-14) | v0.47.2 (2025-12-10): Added usedSlashCommand, slashCommandName, slashCommandPackageId properties |
-| `ai_response_received` | `AIService.ts:1092, 1326` | AI provider returns response | `provider`<br/>`responseType` (text/tool_use/error)<br/>`toolsUsed` | v0.45.25 (2025-11-14) | |
+| `ai_response_received` | `AIService.ts:1092, 1326` | AI provider returns response | `provider`<br/>`responseType` (text/tool_use/error)<br/>`toolsUsed`<br/>`usedChartTool` | v0.45.25 (2025-11-14) | (pending release as of f74f38fb): Added usedChartTool property |
 | `ai_response_streamed` | `AIService.ts:1100` | AI response finishes streaming | `provider`<br/>`chunkCount` (0-9, 10-49, 50-99, 100+)<br/>`totalLength` (0-99, 100-499, 500-999, 1000+) | v0.45.25 (2025-11-14) | |
 | `ai_stream_interrupted` | `AIService.ts:1024, 1483` | AI streaming stops prematurely | `provider`<br/>`chunksReceived`<br/>`reason` (error/user_cancel) | v0.45.25 (2025-11-14) | |
 | `ai_request_failed` | `AIService.ts:1319` | AI API request fails | `provider`<br/>`errorType` (network/auth/timeout/rate_limit/overloaded/unknown)<br/>`retryAttempt` | v0.45.25 (2025-11-14) | |
