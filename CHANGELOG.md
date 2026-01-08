@@ -20,6 +20,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.50.21] - 2026-01-07
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- MCP server environment variable expansion now works correctly
+- MCP server argument quoting fixed on Windows
+
+### Removed
+- Removed unofficial MCP servers from templates
+- Updated deprecated MCP server configurations
+
 ## [0.50.20] - 2026-01-07
 
 
