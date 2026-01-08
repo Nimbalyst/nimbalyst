@@ -40,13 +40,12 @@ type IconConfig =
 
 // Icons that are dark/black and need a light color override in dark mode
 // Most brand icons have colorful logos that work on both light and dark backgrounds
-const DARK_ICONS_NEEDING_LIGHT_OVERRIDE = new Set(['github', 'notion', 'gitlab']);
+const DARK_ICONS_NEEDING_LIGHT_OVERRIDE = new Set(['github', 'notion']);
 
 const TEMPLATE_ICON_CONFIG: Record<string, IconConfig> = {
   // Brand icons from Simple Icons CDN
   linear: { type: 'simple-icons', slug: 'linear' },
   github: { type: 'simple-icons', slug: 'github' },
-  gitlab: { type: 'simple-icons', slug: 'gitlab' },
   slack: { type: 'simple-icons', slug: 'slack' },
   'brave-search': { type: 'simple-icons', slug: 'brave' },
   posthog: { type: 'simple-icons', slug: 'posthog' },
@@ -134,7 +133,6 @@ type TemplateCategory = 'development' | 'productivity' | 'automation' | 'ai' | '
 
 const TEMPLATE_CATEGORIES: Record<string, TemplateCategory> = {
   github: 'development',
-  gitlab: 'development',
   playwright: 'development',
   context7: 'development',
   'chrome-devtools': 'development',
@@ -248,17 +246,6 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     config: {
       command: 'npx',
       args: ['-y', 'mcp-remote', 'https://api.githubcopilot.com/mcp/']
-    }
-  },
-  {
-    id: 'gitlab',
-    name: 'GitLab',
-    description: 'DevOps platform and repository management',
-    docsUrl: 'https://docs.gitlab.com/user/gitlab_duo/model_context_protocol/mcp_server/',
-    authType: 'oauth',
-    config: {
-      command: 'npx',
-      args: ['-y', 'mcp-remote', 'https://gitlab.com/api/v4/mcp']
     }
   },
   {
@@ -543,10 +530,11 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [testMessage, setTestMessage] = useState<string>('');
   const [testHelpUrl, setTestHelpUrl] = useState<string | null>(null);
+  const [isStalePortError, setIsStalePortError] = useState(false);
 
   // OAuth state
   const [oauthStatus, setOauthStatus] = useState<'unknown' | 'checking' | 'authorized' | 'not-authorized'>('unknown');
-  const [oauthAction, setOauthAction] = useState<'idle' | 'authorizing' | 'revoking'>('idle');
+  const [oauthAction, setOauthAction] = useState<'idle' | 'authorizing' | 'revoking' | 'clearing-cache'>('idle');
 
   // Template search
   const [templateSearch, setTemplateSearch] = useState('');
@@ -714,6 +702,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
     if (!serverUrl) return;
 
     setOauthAction('authorizing');
+    setIsStalePortError(false);
     try {
       const result = await window.electronAPI.invoke('mcp-config:trigger-oauth', serverUrl);
       if (result.success) {
@@ -730,12 +719,13 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
         console.error('OAuth authorization failed:', errorMsg);
         setTestStatus('error');
         setTestMessage(`Authorization failed: ${errorMsg}`);
+        setIsStalePortError(result.isStalePortError === true);
         await checkOAuthStatus(formArgs);
         // Track failed OAuth
         posthog?.capture('mcp_oauth_result', {
           templateId: selectedTemplate?.id || null,
           success: false,
-          errorType: 'auth_rejected'
+          errorType: result.isStalePortError ? 'stale_port' : 'auth_rejected'
         });
       }
     } catch (error: unknown) {
@@ -783,6 +773,54 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
       console.error('Failed to revoke OAuth:', errorMsg);
       setTestStatus('error');
       setTestMessage(`Revocation error: ${errorMsg}`);
+    } finally {
+      setOauthAction('idle');
+    }
+  };
+
+  /**
+   * Clear stale OAuth cache and retry authorization
+   * Used when EADDRINUSE error occurs due to stale lock files
+   */
+  const handleClearAuthCacheAndRetry = async () => {
+    const serverUrl = getOAuthServerUrl(formArgs);
+    if (!serverUrl) return;
+
+    setOauthAction('clearing-cache');
+    setIsStalePortError(false);
+    try {
+      // First, revoke/clear any existing auth files (including lock files)
+      await window.electronAPI.invoke('mcp-config:revoke-oauth', serverUrl);
+      setTestMessage('Auth cache cleared. Retrying authorization...');
+      setTestStatus('idle');
+
+      // Wait a moment for any port to be released
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Then trigger OAuth again
+      const result = await window.electronAPI.invoke('mcp-config:trigger-oauth', serverUrl);
+      if (result.success) {
+        setOauthStatus('authorized');
+        setTestStatus('idle');
+        setTestMessage('');
+        posthog?.capture('mcp_oauth_result', {
+          templateId: selectedTemplate?.id || null,
+          success: true,
+          retryAfterCacheClear: true
+        });
+      } else {
+        const errorMsg = result.error || 'Authorization failed';
+        console.error('OAuth authorization failed after cache clear:', errorMsg);
+        setTestStatus('error');
+        setTestMessage(`Authorization failed: ${errorMsg}`);
+        setIsStalePortError(result.isStalePortError === true);
+        await checkOAuthStatus(formArgs);
+      }
+    } catch (error: unknown) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error occurred';
+      console.error('Failed to clear cache and retry OAuth:', errorMsg);
+      setTestStatus('error');
+      setTestMessage(`Error: ${errorMsg}`);
     } finally {
       setOauthAction('idle');
     }
@@ -1352,6 +1390,17 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
             {testStatus === 'error' && testMessage && (
               <div className="mcp-oauth-error" role="alert" aria-live="assertive">
                 {testMessage}
+                {isStalePortError && (
+                  <button
+                    type="button"
+                    className="mcp-clear-cache-button"
+                    onClick={handleClearAuthCacheAndRetry}
+                    disabled={oauthAction !== 'idle'}
+                    aria-label="Clear auth cache and retry authorization"
+                  >
+                    {oauthAction === 'clearing-cache' ? 'Clearing...' : 'Clear Auth Cache & Retry'}
+                  </button>
+                )}
                 {testHelpUrl && (
                   <button
                     type="button"

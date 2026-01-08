@@ -249,7 +249,7 @@ async function checkMcpRemoteAuthStatus(serverUrl: string): Promise<{ authorized
  * Trigger OAuth flow for mcp-remote
  * This spawns mcp-remote which will open a browser for OAuth
  */
-async function triggerMcpRemoteOAuth(serverUrl: string): Promise<{ success: boolean; error?: string }> {
+async function triggerMcpRemoteOAuth(serverUrl: string): Promise<{ success: boolean; error?: string; isStalePortError?: boolean }> {
   return new Promise((resolve) => {
     logger.main.info('[MCP] Triggering OAuth for:', serverUrl);
 
@@ -321,16 +321,27 @@ async function triggerMcpRemoteOAuth(serverUrl: string): Promise<{ success: bool
           } else if (code === 0) {
             resolve({ success: true });
           } else {
+            // Check if this is an EADDRINUSE error (stale lock file from previous session)
+            // This happens when mcp-remote's lock file contains a port that's now in use
+            if (stderr.includes('EADDRINUSE') || stderr.includes('address already in use')) {
+              logger.main.warn('[MCP OAuth] EADDRINUSE detected - likely stale lock file');
+              resolve({
+                success: false,
+                error: 'Port conflict: Another process is using the OAuth callback port. This usually happens when a previous session did not clean up properly.',
+                isStalePortError: true
+              });
             // Check if this is a "command not found" error from the shell
             // Windows: "'xyz' is not recognized as an internal or external command"
             // Unix: "command not found" or "not found"
-            const notFoundMatch = stderr.match(/'([^']+)' is not recognized|(\S+): (?:command )?not found/i);
-            if (notFoundMatch) {
-              const cmdName = notFoundMatch[1] || notFoundMatch[2];
-              const help = getCommandNotFoundHelp(cmdName);
-              resolve({ success: false, error: help.message });
             } else {
-              resolve({ success: false, error: stderr || `Process exited with code ${code}` });
+              const notFoundMatch = stderr.match(/'([^']+)' is not recognized|(\S+): (?:command )?not found/i);
+              if (notFoundMatch) {
+                const cmdName = notFoundMatch[1] || notFoundMatch[2];
+                const help = getCommandNotFoundHelp(cmdName);
+                resolve({ success: false, error: help.message });
+              } else {
+                resolve({ success: false, error: stderr || `Process exited with code ${code}` });
+              }
             }
           }
         });
@@ -367,7 +378,64 @@ async function triggerMcpRemoteOAuth(serverUrl: string): Promise<{ success: bool
 }
 
 /**
+ * Try to kill a stale mcp-remote process that might be holding a port
+ * Reads the lock file to get the PID and attempts to kill it
+ * Works cross-platform (macOS, Linux, Windows)
+ */
+async function tryKillStaleProcess(lockFilePath: string): Promise<boolean> {
+  try {
+    const content = await fs.promises.readFile(lockFilePath, 'utf-8');
+    const lock = JSON.parse(content);
+    if (lock.pid && typeof lock.pid === 'number') {
+      logger.main.info('[MCP] Found stale lock with PID:', lock.pid);
+
+      if (process.platform === 'win32') {
+        // Windows: use taskkill command
+        // process.kill() on Windows doesn't support signal 0 for checking
+        const { execSync } = require('child_process');
+        try {
+          // /F = force, /PID = process ID
+          execSync(`taskkill /F /PID ${lock.pid}`, { stdio: 'ignore' });
+          logger.main.info('[MCP] Killed stale mcp-remote process on Windows:', lock.pid);
+          await new Promise(resolve => setTimeout(resolve, 500));
+          return true;
+        } catch {
+          // Process doesn't exist or can't be killed - that's fine, continue with cleanup
+          logger.main.info('[MCP] Process not found or already dead on Windows');
+          return true;
+        }
+      } else {
+        // macOS/Linux: use process.kill with signals
+        try {
+          // Check if process is still running
+          process.kill(lock.pid, 0); // Signal 0 just checks if process exists
+          // Process exists, try to kill it
+          logger.main.info('[MCP] Killing stale mcp-remote process:', lock.pid);
+          process.kill(lock.pid, 'SIGTERM');
+          // Give it a moment to die
+          await new Promise(resolve => setTimeout(resolve, 500));
+          return true;
+        } catch (killError: unknown) {
+          // ESRCH means process doesn't exist (already dead) - that's fine
+          if (killError && typeof killError === 'object' && 'code' in killError && killError.code === 'ESRCH') {
+            logger.main.info('[MCP] Process already dead, just cleaning up lock file');
+            return true;
+          }
+          // EPERM means we don't have permission - can't kill it
+          logger.main.warn('[MCP] Cannot kill process:', killError);
+          return false;
+        }
+      }
+    }
+  } catch {
+    // Lock file doesn't exist or can't be read
+  }
+  return false;
+}
+
+/**
  * Revoke OAuth authorization by deleting token files
+ * Also attempts to kill any stale processes holding ports
  */
 async function revokeMcpRemoteOAuth(serverUrl: string): Promise<{ success: boolean; error?: string }> {
   const authDir = getMcpAuthDir();
@@ -380,7 +448,26 @@ async function revokeMcpRemoteOAuth(serverUrl: string): Promise<{ success: boole
       .filter(e => e.isDirectory() && e.name.startsWith('mcp-remote-'))
       .map(e => e.name);
 
-    // Delete token files from each version directory
+    // First pass: try to kill any stale processes from lock files
+    for (const versionDir of versionDirs) {
+      const versionPath = path.join(authDir, versionDir);
+      try {
+        for (const hash of serverHashes) {
+          const lockFilePath = path.join(versionPath, `${hash}_lock.json`);
+          await tryKillStaleProcess(lockFilePath);
+        }
+      } catch {
+        // Can't read version directory, continue
+      }
+    }
+
+    // Also check root auth dir for lock files
+    for (const hash of serverHashes) {
+      const lockFilePath = path.join(authDir, `${hash}_lock.json`);
+      await tryKillStaleProcess(lockFilePath);
+    }
+
+    // Second pass: delete all auth files
     for (const versionDir of versionDirs) {
       const versionPath = path.join(authDir, versionDir);
       try {
@@ -392,7 +479,7 @@ async function revokeMcpRemoteOAuth(serverUrl: string): Promise<{ success: boole
               const filePath = path.join(versionPath, file);
               try {
                 await fs.promises.unlink(filePath);
-                logger.main.info('[MCP] Deleted token file:', filePath);
+                logger.main.info('[MCP] Deleted auth file:', filePath);
               } catch (err) {
                 logger.main.warn('[MCP] Failed to delete:', filePath, err);
               }
@@ -416,7 +503,7 @@ async function revokeMcpRemoteOAuth(serverUrl: string): Promise<{ success: boole
       for (const filePath of possibleFiles) {
         try {
           await fs.promises.unlink(filePath);
-          logger.main.info('[MCP] Deleted token file:', filePath);
+          logger.main.info('[MCP] Deleted auth file:', filePath);
         } catch {
           // File doesn't exist, that's fine
         }
