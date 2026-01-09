@@ -46,6 +46,22 @@ async function buildWorker() {
     });
 
     console.log('Worker bundle created successfully at out/worker.bundle.js');
+
+    // Copy PGLite runtime files that are loaded dynamically at runtime
+    // The binary loader embeds some files, but PGLite loads these via fs.readFile
+    const pgliteDistDir = path.join(__dirname, '../../../node_modules/@electric-sql/pglite/dist');
+    const filesToCopy = ['pglite.data', 'pglite.wasm'];
+
+    for (const file of filesToCopy) {
+      const src = path.join(pgliteDistDir, file);
+      const dest = path.join(outDir, file);
+      if (fs.existsSync(src)) {
+        fs.copyFileSync(src, dest);
+        console.log(`Copied ${file} to out/`);
+      } else {
+        console.warn(`Warning: ${file} not found at ${src}`);
+      }
+    }
   } catch (error) {
     console.error('Failed to build worker bundle:', error);
     process.exit(1);

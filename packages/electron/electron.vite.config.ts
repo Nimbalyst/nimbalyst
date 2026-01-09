@@ -3,7 +3,6 @@ import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import viteStravuPlugin from '../shared/viteStravuPlugin.ts'
 import { viteStaticCopy } from 'vite-plugin-static-copy'
-import monacoEditorPlugin from 'vite-plugin-monaco-editor'
 import fs from 'fs'
 
 // Custom plugin to exclude Excalidraw locales and optimize imports (copied from rexical)
@@ -189,14 +188,7 @@ export default defineConfig({
       react(),
       optimizeExcalidrawPlugin(),
       optimizeShikiPlugin(),
-      // Monaco Editor plugin handles worker and CSS bundling
-      // customDistPath fixes Windows path bug where path.join incorrectly concatenates absolute paths
-      (monacoEditorPlugin as any).default({
-        languageWorkers: ['editorWorkerService', 'css', 'html', 'json', 'typescript'],
-        customDistPath: (root: string, outDir: string, _base: string) => {
-          return resolve(root, outDir, 'monacoeditorwork')
-        }
-      }),
+      // Monaco workers are configured in monacoConfig.ts using Vite's native ?worker imports
       // NOTE: On Windows, vite-plugin-static-copy uses fast-glob which expects
       // POSIX-style paths. Absolute Windows paths with backslashes won't match
       // and cause "No file was found to copy" errors in CI. Normalize to POSIX.
@@ -300,13 +292,8 @@ export default defineConfig({
         'react',
         'react-dom',
         'es6-promise-pool',
-        // Monaco Editor - include both the main module and workers for proper bundling
-        'monaco-editor',
-        'monaco-editor/esm/vs/editor/editor.worker',
-        'monaco-editor/esm/vs/language/json/json.worker',
-        'monaco-editor/esm/vs/language/css/css.worker',
-        'monaco-editor/esm/vs/language/html/html.worker',
-        'monaco-editor/esm/vs/language/typescript/ts.worker'
+        // Monaco Editor - the vite-plugin-monaco-editor-esm handles worker bundling
+        'monaco-editor'
       ],
       exclude: [
         '@shikijs/langs',

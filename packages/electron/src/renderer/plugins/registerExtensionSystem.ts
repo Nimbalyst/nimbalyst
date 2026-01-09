@@ -163,30 +163,60 @@ function setupEditorScreenshotListener(): void {
         if (!targetElement) {
           throw new Error(`Element not found for selector: ${data.selector}`);
         }
-      } else {
-        // Try selectors in order of specificity
-        const selectors = [
-          // For Lexical/markdown editors
-          '.multi-editor-instance.active .editor-content',
-          // For custom extension editors (CSV, etc.) - look for their content
-          '.multi-editor-instance.active .spreadsheet-editor',
-          '.multi-editor-instance.active .custom-editor',
-          // Main editor area (works for most cases)
-          '.multi-editor-instance.active',
-          // Fallbacks
+      } else if (data.filePath) {
+        // Find the editor by file path - TabEditor has data-file-path attribute
+        const editorWrapper = document.querySelector(`[data-file-path="${data.filePath}"]`) as HTMLElement | null;
+        if (editorWrapper) {
+          // Try to find the best element to capture within this editor
+          const contentSelectors = [
+            '.editor-content',
+            '.spreadsheet-editor',
+            '.excalidraw-editor',
+            '.custom-editor',
+          ];
+          for (const selector of contentSelectors) {
+            const content = editorWrapper.querySelector(selector) as HTMLElement | null;
+            if (content) {
+              const rect = content.getBoundingClientRect();
+              if (rect.width > 0 && rect.height > 0) {
+                targetElement = content;
+                selectorUsed = `[data-file-path] ${selector}`;
+                break;
+              }
+            }
+          }
+          // Fall back to the wrapper itself if no content found
+          if (!targetElement) {
+            const rect = editorWrapper.getBoundingClientRect();
+            if (rect.width > 0 && rect.height > 0) {
+              targetElement = editorWrapper;
+              selectorUsed = `[data-file-path="${data.filePath}"]`;
+            }
+          }
+        }
+      }
+
+      // Fallback: try generic selectors if file path didn't work
+      if (!targetElement) {
+        const fallbackSelectors = [
+          '.multi-editor-instance .editor-content',
+          '.multi-editor-instance .spreadsheet-editor',
+          '.multi-editor-instance .excalidraw-editor',
+          '.multi-editor-instance .custom-editor',
+          '.multi-editor-instance',
           '.tab-editor-content',
           '.editor',
         ];
 
-        for (const selector of selectors) {
-          const el = document.querySelector(selector) as HTMLElement | null;
-          if (el) {
-            // Check if element has actual dimensions
+        outerLoop:
+        for (const selector of fallbackSelectors) {
+          const elements = document.querySelectorAll(selector) as NodeListOf<HTMLElement>;
+          for (const el of elements) {
             const rect = el.getBoundingClientRect();
             if (rect.width > 0 && rect.height > 0) {
               targetElement = el;
               selectorUsed = selector;
-              break;
+              break outerLoop;
             }
           }
         }
@@ -195,19 +225,36 @@ function setupEditorScreenshotListener(): void {
       if (!targetElement) {
         // Collect diagnostic info about what we found
         const diagnostics: string[] = [];
-        const selectors = [
-          '.multi-editor-instance.active .editor-content',
-          '.multi-editor-instance.active .spreadsheet-editor',
-          '.multi-editor-instance.active .custom-editor',
-          '.multi-editor-instance.active',
+
+        // Check file path selector first
+        if (data.filePath) {
+          const filePathSelector = `[data-file-path="${data.filePath}"]`;
+          const editorByPath = document.querySelector(filePathSelector) as HTMLElement | null;
+          if (editorByPath) {
+            const rect = editorByPath.getBoundingClientRect();
+            diagnostics.push(`${filePathSelector}: found (${rect.width}x${rect.height})`);
+          } else {
+            diagnostics.push(`${filePathSelector}: not found - file may not be open in a tab`);
+          }
+        }
+
+        const diagnosticSelectors = [
+          '.multi-editor-instance .editor-content',
+          '.multi-editor-instance .spreadsheet-editor',
+          '.multi-editor-instance .excalidraw-editor',
+          '.multi-editor-instance .custom-editor',
+          '.multi-editor-instance',
           '.tab-editor-content',
           '.editor',
         ];
-        for (const selector of selectors) {
-          const el = document.querySelector(selector) as HTMLElement | null;
-          if (el) {
-            const rect = el.getBoundingClientRect();
-            diagnostics.push(`${selector}: found (${rect.width}x${rect.height})`);
+        for (const selector of diagnosticSelectors) {
+          const elements = document.querySelectorAll(selector) as NodeListOf<HTMLElement>;
+          if (elements.length > 0) {
+            const visibleCount = Array.from(elements).filter(el => {
+              const rect = el.getBoundingClientRect();
+              return rect.width > 0 && rect.height > 0;
+            }).length;
+            diagnostics.push(`${selector}: ${elements.length} found, ${visibleCount} visible`);
           } else {
             diagnostics.push(`${selector}: not found`);
           }

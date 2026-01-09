@@ -184,10 +184,22 @@ export function createWindow(
             webPreferences: {
                 nodeIntegration: false,
                 contextIsolation: true,
-                // Use app.getAppPath() for dev mode (not __dirname) because bundled chunks may be in nested directories
-                preload: app.isPackaged
-                    ? join(__dirname, '../preload/index.js')
-                    : join(app.getAppPath(), 'out/preload/index.js'),
+                // Preload path depends on context:
+                // - Packaged: use __dirname (relative to main bundle)
+                // - Built but not packaged (Playwright): app.getAppPath() returns out/main
+                // - Dev mode: app.getAppPath() returns package root
+                preload: (() => {
+                    if (app.isPackaged) {
+                        return join(__dirname, '../preload/index.js');
+                    }
+                    const appPath = app.getAppPath();
+                    if (appPath.includes('/out/main') || appPath.includes('\\out\\main')) {
+                        // Running from built output - preload is sibling to main
+                        return join(appPath, '../preload/index.js');
+                    }
+                    // Dev mode - preload is in out/ under package root
+                    return join(appPath, 'out/preload/index.js');
+                })(),
                 webSecurity: false,
                 webviewTag: false
             },

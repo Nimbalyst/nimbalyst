@@ -50,8 +50,7 @@
     "cross-env": "^10.1.0",
     "electron-builder": "^26.0.12",
     "terser": "^5.31.0",
-    "typescript": "^5.0.0",
-    "vite-plugin-monaco-editor": "^1.1.0"
+    "typescript": "^5.0.0"
   },
   "workspaces": [
     "packages/playground",

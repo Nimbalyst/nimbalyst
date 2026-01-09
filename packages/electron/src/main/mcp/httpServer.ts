@@ -959,20 +959,33 @@ async function tryCreateServer(port: number): Promise<any> {
               // Find the window that has this file open
               let targetWindow: BrowserWindow | null = null;
 
-              // Try to find by workspace path first
-              if (workspacePath) {
-                const windowId = workspaceToWindowMap.get(workspacePath);
-                if (windowId) {
-                  targetWindow = BrowserWindow.fromId(windowId);
+              // Find which workspace contains this file path
+              // The file's workspace is the longest workspace path that is a prefix of the file path
+              let fileWorkspacePath: string | undefined;
+              for (const wsPath of workspaceToWindowMap.keys()) {
+                if (filePath.startsWith(wsPath + '/') || filePath === wsPath) {
+                  if (!fileWorkspacePath || wsPath.length > fileWorkspacePath.length) {
+                    fileWorkspacePath = wsPath;
+                  }
                 }
               }
 
-              // Fallback to any window that has the file open
-              if (!targetWindow) {
-                const allWindows = BrowserWindow.getAllWindows().filter(w => !w.isDestroyed());
-                if (allWindows.length > 0) {
-                  targetWindow = allWindows[0];
-                }
+              if (!fileWorkspacePath) {
+                const availableWorkspaces = Array.from(workspaceToWindowMap.keys()).join(', ') || 'none';
+                return {
+                  content: [
+                    {
+                      type: 'text',
+                      text: `Error: File "${filePath}" does not belong to any open workspace. Available workspaces: ${availableWorkspaces}`
+                    }
+                  ],
+                  isError: true
+                };
+              }
+
+              const windowId = workspaceToWindowMap.get(fileWorkspacePath);
+              if (windowId) {
+                targetWindow = BrowserWindow.fromId(windowId);
               }
 
               if (!targetWindow || targetWindow.isDestroyed()) {
@@ -980,12 +993,14 @@ async function tryCreateServer(port: number): Promise<any> {
                   content: [
                     {
                       type: 'text',
-                      text: 'Error: No window available to capture screenshot from'
+                      text: `Error: Window for workspace "${fileWorkspacePath}" is no longer available`
                     }
                   ],
                   isError: true
                 };
               }
+
+              console.log(`[MCP Server] Routing screenshot request to window ${targetWindow.id} for workspace: ${fileWorkspacePath}`);
 
               // Generate unique request ID
               const requestId = `editor-screenshot-${Date.now()}-${Math.random().toString(36).substring(7)}`;
