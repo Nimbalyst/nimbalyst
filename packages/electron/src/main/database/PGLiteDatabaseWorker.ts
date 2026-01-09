@@ -62,9 +62,11 @@ export class PGLiteDatabaseWorker {
   private createWorker(): void {
     // Create worker thread - use the bundled worker in production
     // In production, the worker.bundle.js is in the resources directory
+    // In dev, use app.getAppPath() to get the package root reliably
+    // (can't use __dirname because bundled chunks may be in nested directories)
     const workerPath = app.isPackaged
       ? path.join(process.resourcesPath, 'worker.bundle.js')
-      : path.join(__dirname, '../../src/main/database/worker.js');
+      : path.join(app.getAppPath(), 'src/main/database/worker.js');
 
     // Use test-specific userData path for Playwright tests to avoid touching production database
     const userDataPath = process.env.PLAYWRIGHT === '1'

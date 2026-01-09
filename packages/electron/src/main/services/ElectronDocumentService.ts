@@ -731,10 +731,9 @@ export class ElectronDocumentService implements DocumentService {
       if (app.isPackaged) {
         assetPath = path.join(process.resourcesPath, virtualDoc.assetPath);
       } else {
-        // In development, __dirname is out/main or out/main/services
-        // Go up to packages/electron then add the asset path
-        // out/main -> out -> packages/electron
-        assetPath = path.join(__dirname, '../../', virtualDoc.assetPath);
+        // In development, use app.getAppPath() to get the package root reliably
+        // (can't use __dirname because bundled chunks may be in nested directories)
+        assetPath = path.join(app.getAppPath(), virtualDoc.assetPath);
       }
 
       console.log('[DocumentService] Loading virtual document:', {

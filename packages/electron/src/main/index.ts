@@ -81,6 +81,10 @@ if (process.env.ELECTRON_RUN_AS_NODE === '1' && process.platform === 'darwin') {
   }
 }
 
+// NOTE: User data directory configuration is handled in bootstrap.ts
+// which runs BEFORE this file is imported, ensuring electron-store
+// uses the correct path.
+
 // Track pending file to open
 let pendingFilePath: string | null = null;
 // Track pending workspace to open
@@ -403,10 +407,11 @@ app.whenReady().then(async () => {
 
     // Set dock icon for macOS
     if (process.platform === 'darwin' && app.dock) {
-        // In dev mode, use icon from root; in production, use from resources
+        // In dev mode, use icon from package root; in production, use from resources
+        // Use app.getAppPath() for dev mode (not __dirname) because bundled chunks may be in nested directories
         const iconPath = app.isPackaged
             ? join(__dirname, '../../resources/icon.png')
-            : join(__dirname, '../../icon.png');
+            : join(app.getAppPath(), 'icon.png');
 
         if (existsSync(iconPath)) {
             const dockIcon = nativeImage.createFromPath(iconPath);

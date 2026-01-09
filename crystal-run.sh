@@ -319,8 +319,8 @@ fi
 # Navigate to the electron package directory
 cd packages/electron
 
-# Run the dev app
+# Run the dev app with a separate user data directory
 echo "Starting Preditor..."
-npm run dev
+npm run dev -- --user-data-dir=/tmp/nimbalyst-dev
 
 echo "Preditor has been launched!"

@@ -97,21 +97,22 @@ export function createWindow(
         // console.log('[MAIN] Creating window at', new Date().toISOString());
 
         // Set up icon path based on platform
-        // In dev mode, use icon from root; in production, use from resources
+        // In dev mode, use icon from package root; in production, use from resources
+        // Use app.getAppPath() for dev mode (not __dirname) because bundled chunks may be in nested directories
         let iconPath: string | undefined;
 
         if (process.platform === 'darwin') {
             iconPath = app.isPackaged
                 ? join(__dirname, '../../resources/icon.png')
-                : join(__dirname, '../../icon.png');
+                : join(app.getAppPath(), 'icon.png');
         } else if (process.platform === 'win32') {
             iconPath = app.isPackaged
                 ? join(__dirname, '../../resources/icon.png')
-                : join(__dirname, '../../icon.png');
+                : join(app.getAppPath(), 'icon.png');
         } else {
             iconPath = app.isPackaged
                 ? join(__dirname, '../../resources/icon.png')
-                : join(__dirname, '../../icon.png');
+                : join(app.getAppPath(), 'icon.png');
         }
 
         // Check if icon exists
@@ -183,7 +184,10 @@ export function createWindow(
             webPreferences: {
                 nodeIntegration: false,
                 contextIsolation: true,
-                preload: join(__dirname, '../preload/index.js'),
+                // Use app.getAppPath() for dev mode (not __dirname) because bundled chunks may be in nested directories
+                preload: app.isPackaged
+                    ? join(__dirname, '../preload/index.js')
+                    : join(app.getAppPath(), 'out/preload/index.js'),
                 webSecurity: false,
                 webviewTag: false
             },

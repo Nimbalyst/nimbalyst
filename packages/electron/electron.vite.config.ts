@@ -132,7 +132,8 @@ export default defineConfig({
       sourcemap: isDev,
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'src/main/index.ts')
+          // Use bootstrap.ts as entry point to handle user-data-dir before any imports
+          index: resolve(__dirname, 'src/main/bootstrap.ts')
         },
         external: [
           '@anthropic-ai/claude-agent-sdk', // Exclude from bundle - loaded dynamically at runtime

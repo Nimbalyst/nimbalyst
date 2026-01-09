@@ -1,4 +1,4 @@
-import { BrowserWindow, nativeTheme } from 'electron';
+import { app, BrowserWindow, nativeTheme } from 'electron';
 import { join } from 'path';
 import { getTheme } from '../utils/store';
 
@@ -25,7 +25,10 @@ export function createAboutWindow() {
         backgroundColor: isDarkTheme ? '#2d2d2d' : '#ffffff',
         titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
         webPreferences: {
-            preload: join(__dirname, '../preload/index.js'),
+            // Use app.getAppPath() for dev mode (not __dirname) because bundled chunks may be in nested directories
+            preload: app.isPackaged
+                ? join(__dirname, '../preload/index.js')
+                : join(app.getAppPath(), 'out/preload/index.js'),
             nodeIntegration: false,
             contextIsolation: true,
             webviewTag: false

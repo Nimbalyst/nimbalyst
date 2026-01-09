@@ -1,4 +1,4 @@
-import { BrowserWindow } from 'electron';
+import { app, BrowserWindow } from 'electron';
 import { join } from 'path';
 import { getTheme } from '../utils/store';
 import { getBackgroundColor } from '../theme/ThemeManager';
@@ -20,7 +20,10 @@ export function createDatabaseBrowserWindow() {
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
-            preload: join(__dirname, '../preload/index.js'),
+            // Use app.getAppPath() for dev mode (not __dirname) because bundled chunks may be in nested directories
+            preload: app.isPackaged
+                ? join(__dirname, '../preload/index.js')
+                : join(app.getAppPath(), 'out/preload/index.js'),
             webviewTag: false
         },
         show: false,
