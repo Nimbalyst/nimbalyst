@@ -20,6 +20,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.50.24] - 2026-01-09
+
+
+### Added
+- Unified header bar for all editor types with breadcrumb navigation
+- Document type management for markdown files with submenu options
+- Mobile app now has dedicated project selection screen
+- Database Browser now handles large datasets smoothly
+- Claude can now detect when running against packaged build
+- Docker dev container support for E2E testing
+
+### Changed
+- Upgraded claude-agent-sdk to 0.2.2
+
+### Fixed
+- Excalidraw no longer saves on tab switch
+- Typing in AI input no longer causes lag from SessionHistory re-renders
+- DatamodelLM extension passes CI typecheck
+- Toggle Debug Tree menu item now works in header bar
+- Context usage display now shows correct /context data
+- Set Document Type submenu now visible in header bar menu
+- File tree auto-scroll now works when switching tabs
+- Consecutive AI edits now correctly update diff mode
+- Incorrect clickable links in agent transcript tool arguments
+- npm run dev -- user-data-dir=<dir> now works correctly
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.50.23] - 2026-01-08
 
 
