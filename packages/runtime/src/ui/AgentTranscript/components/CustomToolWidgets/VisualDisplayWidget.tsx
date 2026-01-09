@@ -174,23 +174,63 @@ function isToolError(result: unknown, message: { isError?: boolean }): boolean {
 }
 
 /**
+ * Extract error message from tool result
+ * Server returns errors in format: { content: [{ type: 'text', text: 'Error: ...' }], isError: true }
+ */
+function extractErrorMessage(result: unknown): string | null {
+  if (!result || typeof result !== 'object') return null;
+
+  const resultObj = result as Record<string, unknown>;
+
+  // Handle MCP-style content array response
+  if (Array.isArray(resultObj.content)) {
+    for (const item of resultObj.content) {
+      if (item && typeof item === 'object' && 'text' in item && typeof item.text === 'string') {
+        return item.text;
+      }
+    }
+  }
+
+  // Handle simple text response
+  if (typeof resultObj.text === 'string') {
+    return resultObj.text;
+  }
+
+  // Handle error message field
+  if (typeof resultObj.error === 'string') {
+    return resultObj.error;
+  }
+
+  if (typeof resultObj.message === 'string') {
+    return resultObj.message;
+  }
+
+  return null;
+}
+
+/**
  * Error boundary for visual rendering
  */
 class VisualErrorBoundary extends React.Component<
-  { children: React.ReactNode; fallback: React.ReactNode },
-  { hasError: boolean }
+  { children: React.ReactNode; fallback: React.ReactNode; context?: string },
+  { hasError: boolean; errorMessage: string | null }
 > {
   constructor(props: any) {
     super(props);
-    this.state = { hasError: false };
+    this.state = { hasError: false, errorMessage: null };
   }
 
-  static getDerivedStateFromError() {
-    return { hasError: true };
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, errorMessage: error.message };
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('[VisualDisplayWidget] Rendering error:', error, errorInfo);
+    const context = this.props.context || 'unknown';
+    console.error(`[VisualDisplayWidget] Rendering error in ${context}:`, {
+      error: error.message,
+      stack: error.stack,
+      componentStack: errorInfo.componentStack
+    });
   }
 
   render() {
@@ -403,6 +443,14 @@ const ImageDisplay: React.FC<{
             }
             setLoading(false);
             return;
+          } else if (result.error) {
+            console.error('[VisualDisplayWidget] Failed to read image file:', {
+              path: image.path,
+              error: result.error
+            });
+            setError(`Failed to load image: ${result.error}`);
+            setLoading(false);
+            return;
           }
         }
 
@@ -411,7 +459,12 @@ const ImageDisplay: React.FC<{
         setImageData(`file://${image.path}`);
         setLoading(false);
       } catch (err) {
-        setError('Failed to load image');
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        console.error('[VisualDisplayWidget] Image load exception:', {
+          path: image.path,
+          error: errorMessage
+        });
+        setError(`Failed to load image: ${errorMessage}`);
         setLoading(false);
       }
     };
@@ -443,7 +496,13 @@ const ImageDisplay: React.FC<{
           src={imageData || ''}
           alt={description || 'Image'}
           className="visual-display-widget__image"
-          onError={() => setError('Failed to load image')}
+          onError={(e) => {
+            console.error('[VisualDisplayWidget] Image element failed to load:', {
+              path: image.path,
+              src: imageData?.substring(0, 100) + (imageData && imageData.length > 100 ? '...' : '')
+            });
+            setError(`Failed to render image from: ${image.path}`);
+          }}
         />
       </div>
     </div>
@@ -491,13 +550,13 @@ const ChartItemRenderer: React.FC<{
     <div className="visual-display-widget__item visual-display-widget__item--error">
       <div className="visual-display-widget__item-description">{item.description}</div>
       <div className="visual-display-widget__error">
-        Chart rendering failed. Please check the data format.
+        Failed to render {chartConfig.chartType} chart. Check that data contains valid "{chartConfig.xAxisKey}" and "{Array.isArray(chartConfig.yAxisKey) ? chartConfig.yAxisKey.join(', ') : chartConfig.yAxisKey}" fields.
       </div>
     </div>
   );
 
   return (
-    <VisualErrorBoundary fallback={errorFallback}>
+    <VisualErrorBoundary fallback={errorFallback} context={`${chartConfig.chartType} chart`}>
       <div className="visual-display-widget__item" role="img" aria-label={`${chartConfig.chartType} chart: ${item.description}`}>
         <div className="visual-display-widget__item-description">{item.description}</div>
         <div className="visual-display-widget__chart" style={{ height }}>
@@ -585,16 +644,22 @@ const ImageGallery: React.FC<{
 }> = ({ images, readFile }) => {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
+  const imagePaths = images.map(img => img.image?.path).filter(Boolean);
   const errorFallback = (
     <div className="visual-display-widget__item visual-display-widget__item--error">
       <div className="visual-display-widget__error">
-        Failed to render image gallery.
+        Failed to render image gallery ({images.length} image{images.length !== 1 ? 's' : ''}).
+        {imagePaths.length > 0 && (
+          <div className="visual-display-widget__error-details">
+            Paths: {imagePaths.slice(0, 3).join(', ')}{imagePaths.length > 3 ? `, ...and ${imagePaths.length - 3} more` : ''}
+          </div>
+        )}
       </div>
     </div>
   );
 
   return (
-    <VisualErrorBoundary fallback={errorFallback}>
+    <VisualErrorBoundary fallback={errorFallback} context="image gallery">
       <div className="visual-display-widget__gallery">
         <div className="visual-display-widget__gallery-grid">
           {images.map((item, index) => (
@@ -660,12 +725,49 @@ export const VisualDisplayWidget: React.FC<CustomToolWidgetProps> = ({ message, 
   const tool = message.toolCall;
   const isDark = useAtomValue(isDarkThemeAtom);
 
-  if (!tool) return null;
+  if (!tool) {
+    console.warn('[VisualDisplayWidget] No tool call in message');
+    return null;
+  }
 
   const items = extractDisplayItems(tool);
   const hasError = isToolError(tool.result, message);
 
   if (hasError || !items) {
+    // Extract detailed error message from server response
+    const serverErrorMessage = extractErrorMessage(tool.result);
+
+    // Determine the appropriate error message to display
+    let displayErrorMessage: string;
+    if (serverErrorMessage) {
+      displayErrorMessage = serverErrorMessage;
+    } else if (!items && !hasError) {
+      displayErrorMessage = 'Invalid visual configuration: items array is missing or malformed';
+    } else if (!items) {
+      displayErrorMessage = 'Failed to parse visual display arguments';
+    } else {
+      displayErrorMessage = 'Failed to display visual content';
+    }
+
+    // Log for debugging - use console.log for expected server-side validation rejections,
+    // console.error only for unexpected failures (no items and no server error)
+    const isExpectedValidationError = hasError && serverErrorMessage;
+    if (isExpectedValidationError) {
+      console.log('[VisualDisplayWidget] Server rejected request:', {
+        serverErrorMessage,
+        toolName: tool.name
+      });
+    } else {
+      console.error('[VisualDisplayWidget] Unexpected display failure:', {
+        hasError,
+        hasItems: !!items,
+        serverErrorMessage,
+        toolName: tool.name,
+        toolResult: tool.result,
+        toolArguments: tool.arguments
+      });
+    }
+
     return (
       <div className="visual-display-widget visual-display-widget--error" role="img" aria-label="Visual content error">
         <div className="visual-display-widget__header">
@@ -675,13 +777,21 @@ export const VisualDisplayWidget: React.FC<CustomToolWidgetProps> = ({ message, 
           </span>
         </div>
         <div className="visual-display-widget__error">
-          {!items ? 'Invalid visual configuration' : 'Failed to display visual content'}
+          {displayErrorMessage}
         </div>
       </div>
     );
   }
 
   const segments = groupItemsIntoSegments(items);
+
+  // Summarize content for error message
+  const chartCount = items.filter(i => i.chart).length;
+  const imageCount = items.filter(i => i.image).length;
+  const contentSummary = [
+    chartCount > 0 ? `${chartCount} chart${chartCount !== 1 ? 's' : ''}` : null,
+    imageCount > 0 ? `${imageCount} image${imageCount !== 1 ? 's' : ''}` : null
+  ].filter(Boolean).join(' and ');
 
   const errorFallback = (
     <div className="visual-display-widget visual-display-widget--error" role="img" aria-label="Visual content error">
@@ -692,13 +802,13 @@ export const VisualDisplayWidget: React.FC<CustomToolWidgetProps> = ({ message, 
         </span>
       </div>
       <div className="visual-display-widget__error">
-        Failed to render visual content.
+        Failed to render visual content ({contentSummary || 'unknown content'}).
       </div>
     </div>
   );
 
   return (
-    <VisualErrorBoundary fallback={errorFallback}>
+    <VisualErrorBoundary fallback={errorFallback} context="main widget">
       <div className="visual-display-widget" role="img" aria-label={`${items.length} visual item(s)`}>
         {segments.map((segment, index) => {
           if (segment.type === 'chart') {
