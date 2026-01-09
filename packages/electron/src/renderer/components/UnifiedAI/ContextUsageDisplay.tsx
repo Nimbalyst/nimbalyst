@@ -13,11 +13,17 @@ const CATEGORY_COLORS = [
 ];
 
 interface ContextUsageDisplayProps {
-  inputTokens: number;
-  outputTokens: number;
-  totalTokens: number;
-  contextWindow: number;
-  categories?: TokenUsageCategory[];
+  inputTokens: number;       // Cumulative input tokens (for tooltip breakdown)
+  outputTokens: number;      // Cumulative output tokens (for tooltip breakdown)
+  totalTokens: number;       // Cumulative total tokens (fallback if no currentContext)
+  contextWindow: number;     // Context window size (legacy, use currentContext)
+  categories?: TokenUsageCategory[];  // Categories (legacy, use currentContext)
+  // Current context snapshot for Claude Code (from /context command)
+  currentContext?: {
+    tokens: number;          // Current tokens in context window
+    contextWindow: number;   // Max context window size
+    categories?: TokenUsageCategory[];
+  };
 }
 
 interface FormattedCategory extends TokenUsageCategory {
@@ -39,16 +45,23 @@ export function ContextUsageDisplay({
   outputTokens,
   totalTokens,
   contextWindow,
-  categories
+  categories,
+  currentContext
 }: ContextUsageDisplayProps) {
+  // For context window display, prefer currentContext (from /context command)
+  // Fall back to legacy fields for backward compatibility
+  const displayTokens = currentContext?.tokens ?? totalTokens;
+  const displayContextWindow = currentContext?.contextWindow ?? contextWindow;
+  const displayCategories = currentContext?.categories ?? categories;
+
   // Check what data we have
-  const hasTokenData = totalTokens > 0;
-  const hasContextWindow = contextWindow > 0;
+  const hasTokenData = displayTokens > 0 || totalTokens > 0;
+  const hasContextWindow = displayContextWindow > 0;
   const [tooltipVisible, setTooltipVisible] = useState(false);
   const tooltipId = useId();
 
   // Calculate percentage used (only meaningful with context window)
-  const percentage = hasContextWindow ? Math.round((totalTokens / contextWindow) * 100) : 0;
+  const percentage = hasContextWindow ? Math.round((displayTokens / displayContextWindow) * 100) : 0;
 
   // Format numbers with k suffix for thousands
   const formatTokensShort = (tokens: number): string => {
@@ -66,11 +79,11 @@ export function ContextUsageDisplay({
   };
 
   const formattedCategories = useMemo<FormattedCategory[]>(() => {
-    if (!categories || categories.length === 0) {
+    if (!displayCategories || displayCategories.length === 0) {
       return [];
     }
 
-    return categories
+    return displayCategories
       .filter(cat => cat && (cat.tokens > 0 || cat.percentage > 0))
       .map((cat, index) => ({
         ...cat,
@@ -78,7 +91,7 @@ export function ContextUsageDisplay({
         width: Math.max(0, Math.min(cat.percentage, 100)),
         percentText: formatPercent(cat.percentage)
       }));
-  }, [categories]);
+  }, [displayCategories]);
 
   // Categories that represent actual usage (exclude "Free space" from bar fill)
   const usedCategories = useMemo(() => {
@@ -106,15 +119,15 @@ export function ContextUsageDisplay({
   const getDisplayText = (): string => {
     if (!hasTokenData) return '--';
     if (hasContextWindow) {
-      return `${formatTokensShort(totalTokens)}/${formatTokensShort(contextWindow)} (${percentage}%)`;
+      return `${formatTokensShort(displayTokens)}/${formatTokensShort(displayContextWindow)} (${percentage}%)`;
     }
-    return `${formatTokensShort(totalTokens)} tokens`;
+    return `${formatTokensShort(displayTokens)} tokens`;
   };
 
   const label = hasTokenData
     ? hasContextWindow
-      ? `Context usage ${formatTokensShort(totalTokens)} of ${formatTokensShort(contextWindow)} tokens (${percentage}%)`
-      : `Token usage: ${formatTokensShort(totalTokens)} total tokens`
+      ? `Context usage ${formatTokensShort(displayTokens)} of ${formatTokensShort(displayContextWindow)} tokens (${percentage}%)`
+      : `Token usage: ${formatTokensShort(displayTokens)} total tokens`
     : 'Token usage data not available yet';
 
   const handleVisibilityChange = (visible: boolean) => {
@@ -142,7 +155,7 @@ export function ContextUsageDisplay({
             <span>{hasContextWindow ? 'Context Breakdown' : 'Token Usage'}</span>
             {hasContextWindow && (
               <span className="tooltip-total">
-                {formatTokensShort(totalTokens)} / {formatTokensShort(contextWindow)}
+                {formatTokensShort(displayTokens)} / {formatTokensShort(displayContextWindow)}
               </span>
             )}
           </div>

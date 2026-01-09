@@ -67,6 +67,11 @@ interface AIInputProps {
     totalTokens: number;
     contextWindow?: number;
     categories?: TokenUsageCategory[];
+    currentContext?: {
+      tokens: number;
+      contextWindow: number;
+      categories?: TokenUsageCategory[];
+    };
   };
   provider?: string; // Provider ID to determine if we should show token usage
 
@@ -886,6 +891,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
               totalTokens={tokenUsage?.totalTokens || 0}
               contextWindow={tokenUsage?.contextWindow || 0}
               categories={tokenUsage?.categories}
+              currentContext={tokenUsage?.currentContext}
             />
           </div>
         )}
