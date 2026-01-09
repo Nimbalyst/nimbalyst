@@ -174,9 +174,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     return registration?.supportsSourceMode || false;
   }, [isCustom, filePath, registryVersion]);
 
-  // View mode state for markdown files (lexical = rich text editor, monaco = raw markdown)
-  const [markdownViewMode, setMarkdownViewMode] = useState<'lexical' | 'monaco'>('lexical');
-  const [viewModeVersion, setViewModeVersion] = useState(0);
+  // Source mode state - unified for both markdown and custom editors
+  // When true, shows Monaco with raw content; when false, shows rich editor (Lexical or custom)
+  const [sourceMode, setSourceMode] = useState(false);
 
   // Internal state - fully owned by this component
   // NOTE: content state is only updated for major content changes (file reload, diff apply/reject, etc.),
@@ -193,7 +193,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const [showMonacoDiffBar, setShowMonacoDiffBar] = useState(false); // For Monaco diff approval bar
   const [showCustomEditorDiffBar, setShowCustomEditorDiffBar] = useState(false); // For custom editor diff approval bar
   const [isEditorReady, setIsEditorReady] = useState(false); // Track when editor is mounted and ready
-  const [customEditorSourceMode, setCustomEditorSourceMode] = useState(false); // Source mode for custom editors
   const [diffSessionInfo, setDiffSessionInfo] = useState<{sessionId: string; sessionTitle?: string; editedAt?: number; provider?: string} | null>(null); // Session info for diff approval bar
   const [monacoDiffChangeCount, setMonacoDiffChangeCount] = useState(0); // Number of changes in Monaco diff mode
 
@@ -254,7 +253,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
   useEffect(() => {
     currentFilePathRef.current = filePath;
-    setCustomEditorSourceMode(false); // Reset source mode when switching files
+    setSourceMode(false); // Reset source mode when switching files
   }, [filePath]);
 
   // Refs for stable access in timers/callbacks
@@ -291,8 +290,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   // Refs for EditorHost stability - these allow editorHost to access current values without recreating
   const themeRef = useRef(theme);
   const isActiveRef = useRef(isActive);
-  const customEditorSourceModeRef = useRef(customEditorSourceMode);
-  const customEditorSupportSourceModeRef = useRef(customEditorSupportsSourceMode);
+  const sourceModeRef = useRef(sourceMode);
+  // Whether current editor supports source mode toggle (markdown or custom editors that declare it)
+  const supportsSourceModeRef = useRef(isMarkdown || customEditorSupportsSourceMode);
   const onViewHistoryRef = useRef(onViewHistory);
 
   // CRITICAL: Update themeRef SYNCHRONOUSLY during render, not in an effect.
@@ -345,8 +345,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     }
   }, [theme]);
   useEffect(() => { isActiveRef.current = isActive; }, [isActive]);
-  useEffect(() => { customEditorSourceModeRef.current = customEditorSourceMode; }, [customEditorSourceMode]);
-  useEffect(() => { customEditorSupportSourceModeRef.current = customEditorSupportsSourceMode; }, [customEditorSupportsSourceMode]);
+  useEffect(() => { sourceModeRef.current = sourceMode; }, [sourceMode]);
+  useEffect(() => { supportsSourceModeRef.current = isMarkdown || customEditorSupportsSourceMode; }, [isMarkdown, customEditorSupportsSourceMode]);
   useEffect(() => { onViewHistoryRef.current = onViewHistory; }, [onViewHistory]);
 
   // Clear Lexical editor selection when tab becomes inactive
@@ -355,7 +355,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   useEffect(() => {
     if (!isActive && isEditorReady && editorRef.current) {
       // Clear Lexical editor selection
-      if (isMarkdown && markdownViewMode === 'lexical') {
+      if (isMarkdown && !sourceMode) {
         const editor = editorRef.current;
         if (editor?.update) {
           editor.update(() => {
@@ -369,7 +369,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         }
       }
     }
-  }, [isActive, isEditorReady, isMarkdown, markdownViewMode]);
+  }, [isActive, isEditorReady, isMarkdown, sourceMode]);
 
   // Track text selection for AI context
   // This updates window globals when user selects text in the editor
@@ -390,8 +390,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     // Debounce timer for selection updates
     let debounceTimer: NodeJS.Timeout | null = null;
 
-    // For Lexical editor (markdown in lexical mode)
-    if (isMarkdown && markdownViewMode === 'lexical') {
+    // For Lexical editor (markdown in rich text mode)
+    if (isMarkdown && !sourceMode) {
       const editor = editorRef.current;
       if (editor?.registerUpdateListener) {
         // When tab becomes active, clear any stale selection state
@@ -445,8 +445,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       return undefined;
     }
 
-    // For Monaco editor (code files or markdown in monaco mode)
-    if (!isMarkdown || markdownViewMode === 'monaco') {
+    // For Monaco editor (code files or markdown/custom editor in source mode)
+    if (!isMarkdown || sourceMode) {
       const monacoEditor = editorRef.current?.editor;
       if (monacoEditor?.onDidChangeCursorSelection) {
         // When tab becomes active, clear any stale selection state
@@ -495,7 +495,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       }
     }
     return undefined;
-  }, [isActive, isEditorReady, isMarkdown, markdownViewMode, filePath]);
+  }, [isActive, isEditorReady, isMarkdown, sourceMode, filePath]);
 
   // CRITICAL FIX RC7: On component mount or file path change, check if there are pending AI edits
   // that should show diffs. This handles the case where a tab is closed and reopened.
@@ -513,13 +513,18 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     if (!isEditorReady) return;
     if (!editorRef.current && !isCustom) return;
     // Skip pending diff check when in source mode - source mode is for raw editing
-    if (customEditorSourceMode) return;
+    if (sourceMode) return;
 
     hasCheckedForPendingTagsRef.current = true;
     // Reset the flag for this file
     mountEffectHandledPendingDiffRef.current = false;
 
     const checkAndApplyPendingDiffs = async () => {
+      // For custom editors, wait a tick for their useEffect to register diff callbacks
+      // This ensures diffRequestCallbackRef is set before we try to use it
+      if (isCustom) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
       try {
         const pendingTags = await window.electronAPI.history.getPendingTags(filePath);
         if (!pendingTags || pendingTags.length === 0) {
@@ -635,7 +640,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     };
 
     checkAndApplyPendingDiffs();
-  }, [filePath, isMarkdown, isEditorReady, isCustom, customEditorSourceMode]); // Wait for editor to be ready before checking pending diffs
+  }, [filePath, isMarkdown, isEditorReady, isCustom, sourceMode]); // Wait for editor to be ready before checking pending diffs
 
 
   // Helper: Save file with history snapshot
@@ -817,6 +822,12 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         return;
       }
 
+      // Skip if we're in the process of applying a diff
+      // This catches the window between starting diff application and setting pendingAIEditTagRef
+      if (isApplyingDiffRef.current) {
+        return;
+      }
+
       // Skip if not dirty
       if (!isDirtyRef.current) {
         // console.log(`[TabEditor] Skipping autosave - not dirty`);
@@ -898,6 +909,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const fileWatcherRegisteredRef = useRef(false);
   // Track if we're currently processing a file change (prevent duplicate processing)
   const processingFileChangeRef = useRef(false);
+  // Track if a file change arrived while we were processing (needs re-check after done)
+  const pendingFileChangeRef = useRef(false);
 
   useEffect(() => {
     if (!window.electronAPI) {
@@ -918,12 +931,15 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         return;
       }
 
-      // Skip if already processing a change or applying a diff
+      // If already processing a change or applying a diff, mark as pending and return
+      // We'll re-check for changes after the current processing completes
       if (processingFileChangeRef.current || isApplyingDiffRef.current) {
-        // console.log('[TabEditor] Skipping file-changed event - processing or applying diff');
+        console.log('[TabEditor] File change during processing - marking as pending');
+        pendingFileChangeRef.current = true;
         return;
       }
       processingFileChangeRef.current = true;
+      pendingFileChangeRef.current = false; // Clear any pending flag since we're processing now
       // console.log('[TabEditor] Processing file-changed event for:', data.path);
       // console.log('[TabEditor] Processing flag set to true');
 
@@ -1014,22 +1030,28 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
           // Route through EditorHost callback if custom editor has subscribed to diff requests
           if (diffRequestCallbackRef.current) {
+            // Set isApplyingDiffRef before async work to protect against autosave race
+            isApplyingDiffRef.current = true;
             diffUpdatePromise = (async () => {
-              setPendingAIEditTag(tagInfo);
-              setShowCustomEditorDiffBar(true);
-              // Fetch session info for the diff approval bar
-              fetchDiffSessionInfo(pendingTags[0].sessionId, pendingTags[0].createdAt ? new Date(pendingTags[0].createdAt).getTime() : Date.now());
-              diffRequestCallbackRef.current!({
-                originalContent: oldContent,
-                modifiedContent: newContent,
-                tagId: pendingTags[0].id,
-                sessionId: pendingTags[0].sessionId,
-              });
-              setContent(oldContent);
-              contentRef.current = oldContent;
-              initialContentRef.current = oldContent;
-              isDirtyRef.current = false;
-              onDirtyChange?.(false);
+              try {
+                setPendingAIEditTag(tagInfo);
+                setShowCustomEditorDiffBar(true);
+                // Fetch session info for the diff approval bar
+                fetchDiffSessionInfo(pendingTags[0].sessionId, pendingTags[0].createdAt ? new Date(pendingTags[0].createdAt).getTime() : Date.now());
+                diffRequestCallbackRef.current!({
+                  originalContent: oldContent,
+                  modifiedContent: newContent,
+                  tagId: pendingTags[0].id,
+                  sessionId: pendingTags[0].sessionId,
+                });
+                setContent(oldContent);
+                contentRef.current = oldContent;
+                initialContentRef.current = oldContent;
+                isDirtyRef.current = false;
+                onDirtyChange?.(false);
+              } finally {
+                isApplyingDiffRef.current = false;
+              }
             })();
           } else if (alreadyInDiffMode) {
             // CRITICAL: Check if the disk content actually changed
@@ -1046,6 +1068,10 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
             setContent(oldContent);
             contentRef.current = oldContent;
+
+            // Set isApplyingDiffRef before async work for consistency
+            // (pendingAIEditTagRef should already be set, but this is belt-and-suspenders)
+            isApplyingDiffRef.current = true;
 
             // CRITICAL FIX RC2: Create a promise for the diff update and don't release lock until it completes
             diffUpdatePromise = (async () => {
@@ -1074,25 +1100,21 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                   // Wait a tick for the editor to update
                   await new Promise(resolve => setTimeout(resolve, 100));
 
-                  // Mark that we're applying a diff programmatically (not a user edit)
-                  isApplyingDiffRef.current = true;
-                  try {
-                    if (editorRef.current) {
-                      editorRef.current.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
-                      console.log(`[TabEditor] Updated diff with new edits`);
-                      // Fetch session info for the diff approval bar (for Lexical)
-                      fetchDiffSessionInfo(tagInfo.sessionId, pendingTags[0].createdAt?.getTime?.() || Date.now());
-                    }
-                  } finally {
-                    // Wait for DOM to fully render with CSS classes
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                    isApplyingDiffRef.current = false;
-
-                    // Reset dirty state after diff application - user hasn't made any changes
-                    // This prevents false-positive autosaves from WYSIWYG rendering differences
-                    isDirtyRef.current = false;
-                    onDirtyChange?.(false);
+                  // Apply diff (isApplyingDiffRef was set before async work started)
+                  if (editorRef.current) {
+                    editorRef.current.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
+                    console.log(`[TabEditor] Updated diff with new edits`);
+                    // Fetch session info for the diff approval bar (for Lexical)
+                    fetchDiffSessionInfo(tagInfo.sessionId, pendingTags[0].createdAt?.getTime?.() || Date.now());
                   }
+
+                  // Wait for DOM to fully render with CSS classes
+                  await new Promise(resolve => setTimeout(resolve, 500));
+
+                  // Reset dirty state after diff application - user hasn't made any changes
+                  // This prevents false-positive autosaves from WYSIWYG rendering differences
+                  isDirtyRef.current = false;
+                  onDirtyChange?.(false);
                 } else {
                   // Code files: Use Monaco's built-in diff editor
                   if (editorRef.current && editorRef.current.showDiff) {
@@ -1105,6 +1127,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                 }
               } catch (error) {
                 logger.ui.error(`[TabEditor] Failed to update diff:`, error);
+              } finally {
+                // Clear isApplyingDiffRef whether success or failure
+                isApplyingDiffRef.current = false;
               }
             })();
           } else {
@@ -1114,6 +1139,11 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
             setContent(oldContent);
             contentRef.current = oldContent;
+
+            // CRITICAL: Set isApplyingDiffRef BEFORE starting async work
+            // This prevents autosave from firing during diff application
+            // (pendingAIEditTagRef is set after diff completes, but we need protection during)
+            isApplyingDiffRef.current = true;
 
             // CRITICAL FIX RC6/RC7: Create a promise for the diff application and ensure proper state sync
             // Load the old content first, then apply diff
@@ -1144,23 +1174,14 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                     console.log(`[TabEditor] Waiting for content load to complete...`);
                     await new Promise(resolve => setTimeout(resolve, 250));
 
-                    // Mark that we're applying a diff programmatically (not a user edit)
-                    isApplyingDiffRef.current = true;
-                    try {
-                      editorRef.current.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
-                      console.log(`[TabEditor] Dispatched APPLY_MARKDOWN_REPLACE_COMMAND`);
-                      // Fetch session info for the diff approval bar (for Lexical)
-                      fetchDiffSessionInfo(tagInfo.sessionId, pendingTags[0].createdAt?.getTime?.() || Date.now());
-                    } finally {
-                      // Reset flag after a small delay to ensure content change handler has run
-                      await new Promise(resolve => setTimeout(resolve, 100));
-                      isApplyingDiffRef.current = false;
+                    // Apply diff (isApplyingDiffRef was set before async work started)
+                    editorRef.current.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
+                    console.log(`[TabEditor] Dispatched APPLY_MARKDOWN_REPLACE_COMMAND`);
+                    // Fetch session info for the diff approval bar (for Lexical)
+                    fetchDiffSessionInfo(tagInfo.sessionId, pendingTags[0].createdAt?.getTime?.() || Date.now());
 
-                      // Reset dirty state after diff application - user hasn't made any changes
-                      // This prevents false-positive autosaves from WYSIWYG rendering differences
-                      isDirtyRef.current = false;
-                      onDirtyChange?.(false);
-                    }
+                    // Wait for content change handler to process
+                    await new Promise(resolve => setTimeout(resolve, 100));
                   } else {
                     // Code files: Use Monaco's built-in diff editor
                     if (editorRef.current.showDiff) {
@@ -1175,9 +1196,18 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                   // CRITICAL FIX RC7: Store tag info ONLY after successful diff application
                   // This ensures pendingAIEditTagRef is synchronized with actual editor state
                   setPendingAIEditTag(tagInfo);
+
+                  // Reset dirty state after diff application - user hasn't made any changes
+                  // This prevents false-positive autosaves from WYSIWYG rendering differences
+                  isDirtyRef.current = false;
+                  onDirtyChange?.(false);
                 }
               } catch (error) {
                 logger.ui.error(`[TabEditor] Failed to apply AI diff:`, error);
+              } finally {
+                // CRITICAL: Clear isApplyingDiffRef whether success or failure
+                // This was set before the async work started to protect against autosave race
+                isApplyingDiffRef.current = false;
               }
             })();
           }
@@ -1301,6 +1331,17 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         }
         processingFileChangeRef.current = false;
         // console.log('[TabEditor] Finished processing file-changed event - processing flag set to false');
+
+        // If another file change arrived while we were processing, re-process
+        // This ensures we don't miss updates (e.g., second AI edit while processing first)
+        if (pendingFileChangeRef.current) {
+          console.log('[TabEditor] Re-processing pending file change');
+          pendingFileChangeRef.current = false;
+          // Use setTimeout to avoid deep recursion and allow React to process
+          setTimeout(() => {
+            handleFileChanged(data);
+          }, 0);
+        }
       }
     };
 
@@ -2091,35 +2132,58 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       },
 
       // ============ SOURCE MODE ============
+      // Unified source mode handling for both markdown and custom editors
+      // Source mode = Monaco with raw content; Rich mode = Lexical or custom editor
 
-      // Source mode is declared in extension manifest (supportsSourceMode)
-      // Use getter to access ref for dynamic value
-      get supportsSourceMode() { return customEditorSupportSourceModeRef.current; },
+      // Whether this editor supports source mode toggle (markdown or custom editors that declare it)
+      get supportsSourceMode() { return supportsSourceModeRef.current; },
 
-      // Toggle source mode
+      // Toggle source mode - works for both markdown and custom editors
       toggleSourceMode: async () => {
-        const currentlyInSourceMode = customEditorSourceModeRef.current;
+        const currentlyInSourceMode = sourceModeRef.current;
 
         if (currentlyInSourceMode) {
-          // Switching FROM source mode TO custom editor
-          // Save Monaco's content to disk first so custom editor loads fresh data
+          // Switching FROM source mode (Monaco) TO rich editor (Lexical or custom)
+          // Save Monaco's content to disk first so rich editor loads fresh data
           if (getContentFnRef.current && isDirtyRef.current) {
             const monacoContent = getContentFnRef.current();
-            logger.ui.info(`[TabEditor] Saving source mode content before switching to editor: ${fileName}`);
+            logger.ui.info(`[TabEditor] Saving source mode content before switching to rich editor: ${fileName}`);
             await window.electronAPI.saveFile(monacoContent, filePath);
             // Update our tracking
             lastSavedContentRef.current = monacoContent;
-            lastSavedContentRef.current = monacoContent;
-            setContent(monacoContent);
             contentRef.current = monacoContent;
             isDirtyRef.current = false;
+            onDirtyChange?.(false);
+          }
+          // Reload content from disk so rich editor has fresh data
+          try {
+            const result = await window.electronAPI.readFileContent(filePath);
+            if (result && result.success) {
+              setContent(result.content);
+              contentRef.current = result.content;
+              lastSavedContentRef.current = result.content;
+            }
+          } catch (error) {
+            logger.ui.error(`[TabEditor] Failed to load content for rich editor: ${filePath}`, error);
           }
         } else {
-          // Switching TO source mode FROM custom editor
-          // First, save custom editor's content if dirty
-          if (isDirtyRef.current && editorHostSaveRequestCallbackRef.current) {
-            logger.ui.info(`[TabEditor] Saving custom editor content before switching to source mode: ${fileName}`);
-            editorHostSaveRequestCallbackRef.current();
+          // Switching TO source mode (Monaco) FROM rich editor (Lexical or custom)
+          // First, save rich editor's content if dirty
+          if (isDirtyRef.current) {
+            if (editorHostSaveRequestCallbackRef.current) {
+              // Custom editor - use EditorHost callback
+              logger.ui.info(`[TabEditor] Saving custom editor content before switching to source mode: ${fileName}`);
+              editorHostSaveRequestCallbackRef.current();
+            } else if (getContentFnRef.current) {
+              // Lexical - use getContent function
+              logger.ui.info(`[TabEditor] Saving Lexical content before switching to source mode: ${fileName}`);
+              const lexicalContent = getContentFnRef.current();
+              await window.electronAPI.saveFile(lexicalContent, filePath);
+              lastSavedContentRef.current = lexicalContent;
+              contentRef.current = lexicalContent;
+              isDirtyRef.current = false;
+              onDirtyChange?.(false);
+            }
             // Give the save a moment to complete
             await new Promise(resolve => setTimeout(resolve, 100));
           }
@@ -2130,14 +2194,17 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               setContent(result.content);
               contentRef.current = result.content;
               lastSavedContentRef.current = result.content;
-              lastSavedContentRef.current = result.content;
             }
           } catch (error) {
             logger.ui.error(`[TabEditor] Failed to load content for source mode: ${filePath}`, error);
           }
         }
 
-        setCustomEditorSourceMode(!currentlyInSourceMode);
+        // Reset editor ready state so the pending diff check can run after new editor mounts
+        setIsEditorReady(false);
+        // Reset the pending tags check flag so it runs again after the new editor mounts
+        hasCheckedForPendingTagsRef.current = false;
+        setSourceMode(!currentlyInSourceMode);
         // Notify subscribers
         sourceModeChangedCallbackRef.current?.(!currentlyInSourceMode);
       },
@@ -2152,7 +2219,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
       // Check if source mode is active
       isSourceModeActive: () => {
-        return customEditorSourceModeRef.current;
+        return sourceModeRef.current;
       },
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2162,7 +2229,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   // This ensures saveTabById works when closing dirty custom editor tabs
   // Skip when in source mode - Monaco handles its own save registration
   useEffect(() => {
-    if (!isCustom || !onManualSaveReady || customEditorSourceMode) return;
+    if (!isCustom || !onManualSaveReady || sourceMode) return;
 
     // Register a save function that triggers the EditorHost callback
     const customEditorSave = async () => {
@@ -2172,7 +2239,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       }
     };
     onManualSaveReady(customEditorSave);
-  }, [isCustom, onManualSaveReady, fileName, customEditorSourceMode]);
+  }, [isCustom, onManualSaveReady, fileName, sourceMode]);
 
   // Note: isActive prop is always true (visibility controlled by parent wrapper)
   // The parent sets display:none on the wrapper for inactive tabs
@@ -2195,11 +2262,15 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           workspaceId={workspaceId}
           isMarkdown={isMarkdown}
           isCustomEditor={isCustom}
-          lexicalEditor={isMarkdown ? editorRef.current : undefined}
+          lexicalEditor={isMarkdown && !sourceMode ? editorRef.current : undefined}
           onViewHistory={onViewHistory}
-          onToggleSourceMode={isCustom ? () => editorHost.toggleSourceMode?.() : undefined}
-          supportsSourceMode={isCustom}
-          isSourceModeActive={customEditorSourceMode}
+          onToggleSourceMode={() => editorHost.toggleSourceMode?.()}
+          supportsSourceMode={isMarkdown || customEditorSupportsSourceMode}
+          isSourceModeActive={sourceMode}
+          onDirtyChange={(isDirty) => {
+            isDirtyRef.current = isDirty;
+            onDirtyChange?.(isDirty);
+          }}
           onSwitchToAgentMode={onSwitchToAgentMode}
           onOpenSessionInChat={onOpenSessionInChat}
         />
@@ -2210,7 +2281,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         />
           {isCustom ? (() => {
             // Source mode: render Monaco instead of custom editor
-            if (customEditorSourceMode) {
+            if (sourceMode) {
               return (
                 <>
                   <div className="custom-editor-source-toolbar" style={{
@@ -2364,7 +2435,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               filePath={filePath}
               fileName={fileName}
             />
-          ) : isMarkdown && markdownViewMode === 'lexical' ? (
+          ) : isMarkdown && !sourceMode ? (
               <>
               <LexicalDiffHeaderAdapter
                 editor={editorRef.current as any}
@@ -2376,27 +2447,14 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               <div className="tab-editor-wrapper" style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
               <DocumentPathProvider documentPath={filePath}>
                 <MarkdownEditor
-                  key={`${filePath}-lexical-v${viewModeVersion}`}
+                  key={`${filePath}-lexical`}
                   host={editorHost}
                   config={{
                     theme,
                     onRenameDocument,
                     onSwitchToAgentMode,
                     onOpenSessionInChat,
-                    onToggleMarkdownMode: () => {
-                      // Get current content from Lexical editor before switching
-                      if (getContentFnRef.current) {
-                        const currentContent = getContentFnRef.current();
-                        setContent(currentContent);
-                      }
-                      // Track markdown view mode switch
-                      posthog?.capture('markdown_view_mode_switched', {
-                        fromMode: 'lexical',
-                        toMode: 'monaco',
-                      });
-                      setMarkdownViewMode('monaco');
-                      setViewModeVersion(v => v + 1);
-                    },
+                    onToggleMarkdownMode: () => editorHost.toggleSourceMode?.(),
                     onImageDoubleClick: handleImageDoubleClick,
                     onImageDragStart: handleImageDragStart,
                     documentHeader: (
@@ -2431,7 +2489,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               </DocumentPathProvider>
               </div>
               </>
-          ) : isMarkdown && markdownViewMode === 'monaco' ? (
+          ) : isMarkdown && sourceMode ? (
             <>
               <div className="monaco-markdown-toolbar" style={{
                 padding: '8px 16px',
@@ -2447,23 +2505,10 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                   fontSize: '13px',
                   color: 'var(--text-secondary)'
                 }}>
-                  Raw Markdown Mode
+                  Source Mode
                 </span>
                 <button
-                  onClick={() => {
-                    // Get current content from Monaco editor before switching
-                    if (getContentFnRef.current) {
-                      const currentContent = getContentFnRef.current();
-                      setContent(currentContent);
-                    }
-                    // Track markdown view mode switch
-                    posthog?.capture('markdown_view_mode_switched', {
-                      fromMode: 'monaco',
-                      toMode: 'lexical',
-                    });
-                    setMarkdownViewMode('lexical');
-                    setViewModeVersion(v => v + 1);
-                  }}
+                  onClick={() => editorHost.toggleSourceMode?.()}
                   style={{
                     padding: '4px 12px',
                     fontSize: '13px',
@@ -2474,7 +2519,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                     color: 'var(--text-primary)',
                   }}
                 >
-                  Switch to Rich Text Editor
+                  Rich Text
                 </button>
               </div>
               <MonacoEditor
