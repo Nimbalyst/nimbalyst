@@ -59,7 +59,7 @@ function generateWorkspaceColor(path: string): string {
   return `hsl(${hue}, 65%, 55%)`;
 }
 
-export const SessionHistory: React.FC<SessionHistoryProps> = ({
+const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   workspacePath,
   activeSessionId,
   loadedSessionIds = [],
@@ -930,3 +930,54 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
     </div>
   );
 };
+
+// Helper to compare arrays by value (for loadedSessionIds, collapsedGroups)
+function arraysEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+// Helper to compare Sets by value
+function setsEqual(a: Set<string>, b: Set<string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const item of a) {
+    if (!b.has(item)) return false;
+  }
+  return true;
+}
+
+// Memoize SessionHistory to prevent re-renders when props haven't meaningfully changed
+// This is critical for performance during typing in AIInput
+export const SessionHistory = React.memo(SessionHistoryComponent, (prevProps, nextProps) => {
+  // Only re-render if meaningful props changed
+  if (prevProps.workspacePath !== nextProps.workspacePath) return false;
+  if (prevProps.activeSessionId !== nextProps.activeSessionId) return false;
+  if (prevProps.refreshTrigger !== nextProps.refreshTrigger) return false;
+  if (prevProps.sortOrder !== nextProps.sortOrder) return false;
+
+  // Compare arrays by value
+  if (!arraysEqual(prevProps.loadedSessionIds ?? [], nextProps.loadedSessionIds ?? [])) return false;
+  if (!arraysEqual(prevProps.collapsedGroups, nextProps.collapsedGroups)) return false;
+
+  // Compare Sets by value
+  if (!setsEqual(prevProps.processingSessions ?? new Set(), nextProps.processingSessions ?? new Set())) return false;
+  if (!setsEqual(prevProps.unreadSessions ?? new Set(), nextProps.unreadSessions ?? new Set())) return false;
+  if (!setsEqual(prevProps.pendingPromptSessions ?? new Set(), nextProps.pendingPromptSessions ?? new Set())) return false;
+
+  // Compare renamed/updated session objects
+  const prevRenamed = prevProps.renamedSession;
+  const nextRenamed = nextProps.renamedSession;
+  if (prevRenamed?.id !== nextRenamed?.id || prevRenamed?.title !== nextRenamed?.title) return false;
+
+  const prevUpdated = prevProps.updatedSession;
+  const nextUpdated = nextProps.updatedSession;
+  if (prevUpdated?.id !== nextUpdated?.id || prevUpdated?.timestamp !== nextUpdated?.timestamp) return false;
+
+  // Callback functions are assumed stable (wrapped in useCallback at parent)
+  // If they're equal by reference, that's a bonus, but we don't require it
+
+  return true; // Props are equal, skip re-render
+});

@@ -2715,9 +2715,15 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   }, [unreadSessionsKey]);
 
   // Memoize loadedSessionIds to prevent creating new array on every render
+  // Create a stable key based only on session IDs (not draftInput or other transient state)
+  const loadedSessionIdsKey = React.useMemo(() => {
+    return sessionTabs.filter(tab => tab != null).map(tab => tab.id).join(',');
+  }, [sessionTabs]);
+
   const loadedSessionIds = React.useMemo(() => {
     return sessionTabs.filter(tab => tab != null).map(tab => tab.id);
-  }, [sessionTabs]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadedSessionIdsKey]);
 
   // Convert SessionTab to Tab format for TabBar
   const convertToTabs = (sessionTabs: SessionTab[]): Tab[] => {
