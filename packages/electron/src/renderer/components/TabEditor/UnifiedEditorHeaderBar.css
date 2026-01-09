@@ -337,3 +337,37 @@
 .dropdown-item.settings-link {
   color: var(--primary-color);
 }
+
+/* Submenu styles for Set Document Type */
+.dropdown-item-with-submenu {
+  position: relative;
+}
+
+.dropdown-item-label {
+  flex: 1;
+}
+
+.dropdown-item-chevron {
+  margin-left: auto;
+  font-size: 14px;
+  color: var(--text-tertiary);
+}
+
+.dropdown-submenu {
+  position: absolute;
+  left: 100%;
+  top: 0;
+  min-width: 180px;
+  background: var(--surface-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 1001;
+  padding: 4px 0;
+}
+
+.dropdown-checkmark {
+  margin-left: auto;
+  color: var(--primary-color);
+  font-size: 14px;
+}

@@ -6,13 +6,32 @@
  * - Breadcrumb path navigation
  * - AI Sessions button (for files edited by AI)
  * - TOC button (for Markdown files only)
- * - Actions menu (View History, Toggle Source Mode, extension items)
+ * - Actions menu (View History, Toggle Source Mode, Set Document Type, etc.)
  */
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { $isHeadingNode } from '@lexical/rich-text';
 import { $getRoot } from 'lexical';
+import {
+  $convertToEnhancedMarkdownString,
+  $convertFromEnhancedMarkdownString,
+  getEditorTransformers,
+} from 'rexical';
 import './UnifiedEditorHeaderBar.css';
+
+// Tracker type info
+interface TrackerTypeInfo {
+  type: string;
+  displayName: string;
+  icon: string;
+  color: string;
+}
+
+// Built-in tracker types that support full-document mode
+const TRACKER_TYPES: TrackerTypeInfo[] = [
+  { type: 'plan', displayName: 'Plan', icon: 'flag', color: '#3b82f6' },
+  { type: 'decision', displayName: 'Decision', icon: 'gavel', color: '#8b5cf6' },
+];
 
 // Editor reference type - can be LexicalEditor or any editor with similar interface
 interface EditorLike {
@@ -20,6 +39,87 @@ interface EditorLike {
   registerUpdateListener: (callback: () => void) => () => void;
   getElementByKey: (key: string) => HTMLElement | null;
   update: (fn: () => void) => void;
+}
+
+// Helper functions for document type detection and manipulation
+function getCurrentTrackerTypeFromMarkdown(markdown: string): string | null {
+  const frontmatterRegex = /^---\n([\s\S]*?)\n---/;
+  const match = markdown.match(frontmatterRegex);
+  if (!match) return null;
+
+  const yamlContent = match[1];
+  if (yamlContent.includes('planStatus:')) return 'plan';
+  if (yamlContent.includes('decisionStatus:')) return 'decision';
+  return null;
+}
+
+function getDefaultFrontmatterForType(trackerType: string): Record<string, unknown> {
+  const now = new Date().toISOString();
+  const today = now.split('T')[0];
+  const generateId = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
+  if (trackerType === 'plan') {
+    return {
+      planId: generateId('plan'),
+      title: '',
+      status: 'draft',
+      planType: 'feature',
+      priority: 'medium',
+      progress: 0,
+      owner: '',
+      stakeholders: [],
+      tags: [],
+      created: today,
+      updated: now,
+    };
+  } else if (trackerType === 'decision') {
+    return {
+      decisionId: generateId('dec'),
+      title: '',
+      status: 'to-do',
+      chosen: '',
+      priority: 'medium',
+      owner: '',
+      stakeholders: [],
+      tags: [],
+      created: today,
+      updated: now,
+    };
+  }
+  return {};
+}
+
+function applyTrackerTypeToMarkdown(markdown: string, trackerType: string): string {
+  const defaultData = getDefaultFrontmatterForType(trackerType);
+  let frontmatterKey = 'trackerStatus';
+  if (trackerType === 'plan') frontmatterKey = 'planStatus';
+  else if (trackerType === 'decision') frontmatterKey = 'decisionStatus';
+
+  const yamlLines = [`${frontmatterKey}:`];
+  for (const [key, value] of Object.entries(defaultData)) {
+    if (Array.isArray(value)) {
+      yamlLines.push(`  ${key}: []`);
+    } else if (typeof value === 'string') {
+      yamlLines.push(`  ${key}: "${value}"`);
+    } else {
+      yamlLines.push(`  ${key}: ${value}`);
+    }
+  }
+
+  const yamlContent = yamlLines.join('\n');
+  const frontmatterRegex = /^---\n[\s\S]*?\n---\n?/;
+  const hasFrontmatter = frontmatterRegex.test(markdown);
+
+  if (hasFrontmatter) {
+    return markdown.replace(frontmatterRegex, `---\n${yamlContent}\n---\n`);
+  } else {
+    return `---\n${yamlContent}\n---\n${markdown}`;
+  }
+}
+
+function removeTrackerTypeFromMarkdown(markdown: string): string {
+  const frontmatterRegex = /^---\n[\s\S]*?\n---\n?/;
+  return markdown.replace(frontmatterRegex, '');
 }
 
 interface AISession {
@@ -54,7 +154,7 @@ interface UnifiedEditorHeaderBarProps {
   isCustomEditor?: boolean;
   extensionId?: string;
 
-  // Lexical editor reference (for TOC extraction)
+  // Lexical editor reference (for TOC extraction and markdown operations)
   lexicalEditor?: EditorLike;
 
   // Action callbacks
@@ -62,6 +162,10 @@ interface UnifiedEditorHeaderBarProps {
   onToggleSourceMode?: () => void;
   supportsSourceMode?: boolean;
   isSourceModeActive?: boolean;
+
+  // Markdown-specific callbacks
+  onToggleMarkdownMode?: () => void;  // Switch to Monaco for raw editing
+  onDirtyChange?: (isDirty: boolean) => void;  // Mark document as dirty after changes
 
   // AI session callbacks
   onSwitchToAgentMode?: (planDocumentPath?: string, sessionId?: string) => void;
@@ -84,6 +188,8 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
   onToggleSourceMode,
   supportsSourceMode = false,
   isSourceModeActive = false,
+  onToggleMarkdownMode,
+  onDirtyChange,
   onSwitchToAgentMode,
   onOpenSessionInChat,
   extensionMenuItems = [],
@@ -93,6 +199,10 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
   const [showAISessions, setShowAISessions] = useState(false);
   const [showTOC, setShowTOC] = useState(false);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
+  const [showDocTypeSubmenu, setShowDocTypeSubmenu] = useState(false);
+
+  // Dev mode check
+  const isDevMode = import.meta.env.DEV;
 
   // AI Sessions state
   const [aiSessions, setAISessions] = useState<AISession[]>([]);
@@ -100,6 +210,9 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
 
   // TOC state
   const [tocItems, setTocItems] = useState<TOCItem[]>([]);
+
+  // Document type state (for markdown files)
+  const [currentDocumentType, setCurrentDocumentType] = useState<string | null>(null);
 
   // Refs for click-outside handling
   const aiSessionsButtonRef = useRef<HTMLButtonElement>(null);
@@ -157,29 +270,35 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
   // Extract TOC from Lexical editor
   const extractTOC = useCallback(() => {
     if (!lexicalEditor) return;
+    if (typeof lexicalEditor.getEditorState !== 'function') return;
 
-    lexicalEditor.getEditorState().read(() => {
-      const root = $getRoot();
-      const items: TOCItem[] = [];
+    try {
+      lexicalEditor.getEditorState().read(() => {
+        const root = $getRoot();
+        const items: TOCItem[] = [];
 
-      root.getChildren().forEach((node) => {
-        if ($isHeadingNode(node)) {
-          const level = parseInt(node.getTag().substring(1)); // h1 -> 1, h2 -> 2, etc.
-          items.push({
-            text: node.getTextContent(),
-            level,
-            key: node.getKey(),
-          });
-        }
+        root.getChildren().forEach((node) => {
+          if ($isHeadingNode(node)) {
+            const level = parseInt(node.getTag().substring(1)); // h1 -> 1, h2 -> 2, etc.
+            items.push({
+              text: node.getTextContent(),
+              level,
+              key: node.getKey(),
+            });
+          }
+        });
+
+        setTocItems(items);
       });
-
-      setTocItems(items);
-    });
+    } catch (error) {
+      console.error('[UnifiedHeaderBar] Failed to extract TOC:', error);
+    }
   }, [lexicalEditor]);
 
   // Update TOC when editor content changes
   useEffect(() => {
     if (!lexicalEditor) return;
+    if (typeof lexicalEditor.registerUpdateListener !== 'function') return;
 
     extractTOC();
 
@@ -191,6 +310,111 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
       unregister();
     };
   }, [lexicalEditor, extractTOC]);
+
+  // Detect current document type from editor content (markdown only)
+  useEffect(() => {
+    // Validate that lexicalEditor is actually a Lexical editor with the expected methods
+    if (!lexicalEditor || !isMarkdown) return;
+    if (typeof lexicalEditor.getEditorState !== 'function' ||
+        typeof lexicalEditor.registerUpdateListener !== 'function') {
+      // Not a valid Lexical editor (might be switching modes)
+      return;
+    }
+
+    const detectDocumentType = () => {
+      try {
+        lexicalEditor.getEditorState().read(() => {
+          const transformers = getEditorTransformers();
+          const markdown = $convertToEnhancedMarkdownString(transformers);
+          const detectedType = getCurrentTrackerTypeFromMarkdown(markdown);
+          setCurrentDocumentType(detectedType);
+        });
+      } catch (error) {
+        console.error('[UnifiedHeaderBar] Failed to detect document type:', error);
+      }
+    };
+
+    detectDocumentType();
+
+    const unregister = lexicalEditor.registerUpdateListener(() => {
+      detectDocumentType();
+    });
+
+    return () => {
+      unregister();
+    };
+  }, [lexicalEditor, isMarkdown]);
+
+  // Handle copy as markdown
+  const handleCopyAsMarkdown = useCallback(() => {
+    if (!lexicalEditor || typeof lexicalEditor.getEditorState !== 'function') return;
+
+    try {
+      lexicalEditor.getEditorState().read(() => {
+        const transformers = getEditorTransformers();
+        const markdown = $convertToEnhancedMarkdownString(transformers);
+
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText(markdown).then(() => {
+            console.log('[UnifiedHeaderBar] Markdown copied to clipboard');
+          }).catch((err) => {
+            console.error('[UnifiedHeaderBar] Failed to copy markdown:', err);
+          });
+        }
+      });
+    } catch (error) {
+      console.error('[UnifiedHeaderBar] Failed to convert to markdown:', error);
+    }
+    setShowActionsMenu(false);
+  }, [lexicalEditor]);
+
+  // Handle set document type
+  const handleSetDocumentType = useCallback((trackerType: string) => {
+    if (!lexicalEditor || typeof lexicalEditor.update !== 'function') return;
+
+    try {
+      lexicalEditor.update(() => {
+        const transformers = getEditorTransformers();
+        const markdown = $convertToEnhancedMarkdownString(transformers);
+        const updatedMarkdown = applyTrackerTypeToMarkdown(markdown, trackerType);
+        $convertFromEnhancedMarkdownString(updatedMarkdown, transformers);
+
+        // Mark as dirty - autosave will handle saving
+        if (onDirtyChange) {
+          onDirtyChange(true);
+        }
+      });
+    } catch (error) {
+      console.error('[UnifiedHeaderBar] Failed to apply document type:', error);
+    }
+
+    setShowDocTypeSubmenu(false);
+    setShowActionsMenu(false);
+  }, [lexicalEditor, onDirtyChange]);
+
+  // Handle remove document type
+  const handleRemoveDocumentType = useCallback(() => {
+    if (!lexicalEditor || typeof lexicalEditor.update !== 'function') return;
+
+    try {
+      lexicalEditor.update(() => {
+        const transformers = getEditorTransformers();
+        const markdown = $convertToEnhancedMarkdownString(transformers);
+        const updatedMarkdown = removeTrackerTypeFromMarkdown(markdown);
+        $convertFromEnhancedMarkdownString(updatedMarkdown, transformers);
+
+        // Mark as dirty - autosave will handle saving
+        if (onDirtyChange) {
+          onDirtyChange(true);
+        }
+      });
+    } catch (error) {
+      console.error('[UnifiedHeaderBar] Failed to remove document type:', error);
+    }
+
+    setShowDocTypeSubmenu(false);
+    setShowActionsMenu(false);
+  }, [lexicalEditor, onDirtyChange]);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -478,6 +702,124 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
                     <polyline points="12 6 12 12 16 14"/>
                   </svg>
                   View History
+                </button>
+              )}
+
+              {/* Markdown-specific actions */}
+              {isMarkdown && (
+                <>
+                  {/* Toggle Markdown Mode - switch to Monaco */}
+                  {onToggleMarkdownMode && (
+                    <button
+                      className="dropdown-item"
+                      onClick={() => {
+                        onToggleMarkdownMode();
+                        setShowActionsMenu(false);
+                      }}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="16 18 22 12 16 6"/>
+                        <polyline points="8 6 2 12 8 18"/>
+                      </svg>
+                      Toggle Markdown Mode
+                    </button>
+                  )}
+
+                  {/* Copy as Markdown */}
+                  {lexicalEditor && (
+                    <button
+                      className="dropdown-item"
+                      onClick={handleCopyAsMarkdown}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                      </svg>
+                      Copy as Markdown
+                    </button>
+                  )}
+
+                  {/* Set Document Type with submenu */}
+                  {lexicalEditor && (
+                    <div
+                      className="dropdown-item dropdown-item-with-submenu"
+                      onMouseEnter={() => setShowDocTypeSubmenu(true)}
+                      onMouseLeave={() => setShowDocTypeSubmenu(false)}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                        <line x1="16" y1="13" x2="8" y2="13"/>
+                        <line x1="16" y1="17" x2="8" y2="17"/>
+                      </svg>
+                      <span className="dropdown-item-label">Set Document Type</span>
+                      <span className="dropdown-item-chevron">&#8250;</span>
+
+                      {showDocTypeSubmenu && (
+                        <div className="dropdown-submenu">
+                          {TRACKER_TYPES.map((type) => (
+                            <button
+                              key={type.type}
+                              className="dropdown-item"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSetDocumentType(type.type);
+                              }}
+                            >
+                              <span
+                                className="material-symbols-outlined"
+                                style={{ color: type.color, fontSize: '18px' }}
+                              >
+                                {type.icon}
+                              </span>
+                              <span>{type.displayName}</span>
+                              {currentDocumentType === type.type && (
+                                <span className="dropdown-checkmark">&#10003;</span>
+                              )}
+                            </button>
+                          ))}
+                          {currentDocumentType && (
+                            <>
+                              <div className="dropdown-divider" />
+                              <button
+                                className="dropdown-item"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRemoveDocumentType();
+                                }}
+                              >
+                                <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
+                                  close
+                                </span>
+                                <span>Remove Type</span>
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Debug Tree (dev mode only) */}
+              {isDevMode && isMarkdown && (
+                <button
+                  className="dropdown-item"
+                  onClick={() => {
+                    // Toggle debug tree via runtime settings
+                    // This requires the runtimeSettings context which we don't have here
+                    // For now, just close the menu - the actual toggle needs to be wired up
+                    console.log('[UnifiedHeaderBar] Toggle debug tree requested');
+                    setShowActionsMenu(false);
+                  }}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M12 16v-4"/>
+                    <path d="M12 8h.01"/>
+                  </svg>
+                  Toggle Debug Tree
                 </button>
               )}
 
