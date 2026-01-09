@@ -138,7 +138,7 @@
     "@types/shell-quote": "^1.7.5",
     "esbuild": "0.25.10",
     "jotai": "^2.16.1",
-    "monaco-editor": "^0.54.0",
+    "monaco-editor": "^0.55.1",
     "openai": "^4.104.0",
     "posthog-js": "^1.280.1",
     "react-markdown": "^10.1.0",
