@@ -16,7 +16,7 @@ body[data-dev-mode="true"] .nav-quick-access {
 }
 
 body[data-dev-mode="true"] .nav-quick-access::before {
-  content: 'TEST MODE';
+  content: 'DEV MODE';
   position: absolute;
   top: 50%;
   left: 50%;
