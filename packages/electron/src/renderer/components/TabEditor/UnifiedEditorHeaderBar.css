@@ -115,7 +115,17 @@
   border-radius: 6px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   z-index: 1000; /* Higher than diff header (100) and other overlays */
+}
+
+/* AI and TOC dropdowns can clip content for scrolling */
+.unified-header-ai-dropdown,
+.unified-header-toc-dropdown {
   overflow: hidden;
+}
+
+/* Actions dropdown needs overflow visible for submenus */
+.unified-header-actions-dropdown {
+  overflow: visible;
 }
 
 /* AI Sessions Dropdown */
@@ -355,7 +365,9 @@
 
 .dropdown-submenu {
   position: absolute;
-  left: 100%;
+  /* Position to the left since dropdown is at right edge of screen */
+  right: 100%;
+  left: auto;
   top: 0;
   min-width: 180px;
   background: var(--surface-primary);
