@@ -24,9 +24,7 @@ import type { EditorHostProps } from '@nimbalyst/runtime';
 
 export function DatamodelLMEditor({ host }: EditorHostProps) {
   // Extract frequently used values from host
-  const { filePath, theme: hostTheme } = host;
-  // Convert 'auto' to 'light' for components that don't support auto
-  const theme = hostTheme === 'auto' ? 'light' : hostTheme;
+  const { filePath, theme } = host;
 
   // Loading state
   const [isLoading, setIsLoading] = useState(true);
