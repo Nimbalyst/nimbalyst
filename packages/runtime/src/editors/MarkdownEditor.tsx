@@ -48,6 +48,9 @@ export interface MarkdownEditorConfig {
 
   /** Callback to toggle markdown mode (switch to raw Monaco view) */
   onToggleMarkdownMode?: () => void;
+
+  /** Show the debug tree view (dev mode only) */
+  showTreeView?: boolean;
 }
 
 export interface MarkdownEditorProps {
@@ -201,6 +204,7 @@ export function MarkdownEditor({
       theme: config.theme ?? host.theme,
       editable: config.editable,
       showToolbar: config.showToolbar,
+      showTreeView: config.showTreeView,
       documentHeader: config.documentHeader,
       onImageDoubleClick: config.onImageDoubleClick,
       onImageDragStart: config.onImageDragStart,
@@ -222,6 +226,7 @@ export function MarkdownEditor({
       config.theme,
       config.editable,
       config.showToolbar,
+      config.showTreeView,
       config.documentHeader,
       config.onImageDoubleClick,
       config.onImageDragStart,

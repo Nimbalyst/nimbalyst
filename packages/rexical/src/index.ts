@@ -30,6 +30,7 @@ export { FlashMessageContext } from './context/FlashMessageContext';
 export { SharedHistoryContext } from './context/SharedHistoryContext';
 export { TableContext } from './plugins/TablePlugin/TablePlugin';
 export { ToolbarContext } from './context/ToolbarContext';
+export { RuntimeSettingsProvider, useRuntimeSettings } from './context/RuntimeSettingsContext';
 
 // Themes
 export { default as PlaygroundEditorTheme } from './themes/PlaygroundEditorTheme';

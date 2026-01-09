@@ -174,6 +174,9 @@ interface UnifiedEditorHeaderBarProps {
   // Extension menu items (contributed by custom editors)
   extensionMenuItems?: ExtensionMenuItem[];
   onOpenExtensionSettings?: () => void;
+
+  // Debug tree toggle (dev mode only)
+  onToggleDebugTree?: () => void;
 }
 
 export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
@@ -194,6 +197,7 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
   onOpenSessionInChat,
   extensionMenuItems = [],
   onOpenExtensionSettings,
+  onToggleDebugTree,
 }) => {
   // Dropdown states
   const [showAISessions, setShowAISessions] = useState(false);
@@ -803,14 +807,11 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
               )}
 
               {/* Debug Tree (dev mode only) */}
-              {isDevMode && isMarkdown && (
+              {isDevMode && isMarkdown && onToggleDebugTree && (
                 <button
                   className="dropdown-item"
                   onClick={() => {
-                    // Toggle debug tree via runtime settings
-                    // This requires the runtimeSettings context which we don't have here
-                    // For now, just close the menu - the actual toggle needs to be wired up
-                    console.log('[UnifiedHeaderBar] Toggle debug tree requested');
+                    onToggleDebugTree();
                     setShowActionsMenu(false);
                   }}
                 >

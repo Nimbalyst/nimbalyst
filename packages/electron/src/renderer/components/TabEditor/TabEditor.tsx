@@ -195,6 +195,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const [isEditorReady, setIsEditorReady] = useState(false); // Track when editor is mounted and ready
   const [diffSessionInfo, setDiffSessionInfo] = useState<{sessionId: string; sessionTitle?: string; editedAt?: number; provider?: string} | null>(null); // Session info for diff approval bar
   const [monacoDiffChangeCount, setMonacoDiffChangeCount] = useState(0); // Number of changes in Monaco diff mode
+  const [showTreeView, setShowTreeView] = useState(false); // Debug tree view for Lexical (dev mode only)
 
   // Track editor type usage when file is opened
   const hasTrackedOpenRef = useRef<string | null>(null);
@@ -2273,6 +2274,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           }}
           onSwitchToAgentMode={onSwitchToAgentMode}
           onOpenSessionInChat={onOpenSessionInChat}
+          onToggleDebugTree={() => setShowTreeView(prev => !prev)}
         />
         <FixedTabHeaderContainer
           filePath={filePath}
@@ -2457,6 +2459,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                     onToggleMarkdownMode: () => editorHost.toggleSourceMode?.(),
                     onImageDoubleClick: handleImageDoubleClick,
                     onImageDragStart: handleImageDragStart,
+                    showTreeView, // Debug tree view (dev mode)
                     documentHeader: (
                       <DocumentHeaderContainer
                         filePath={filePath}
