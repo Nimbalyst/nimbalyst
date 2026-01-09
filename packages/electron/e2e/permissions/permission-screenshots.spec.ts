@@ -17,10 +17,10 @@ import * as path from 'path';
  * This test suite captures screenshots of various permission request dialogs
  * to provide a visual catalog for review.
  *
- * Screenshots are saved to: packages/electron/e2e/permissions/screenshots/
+ * Screenshots are saved to: e2e_test_output/permissions/
  */
 
-const SCREENSHOT_DIR = path.join(__dirname, 'screenshots');
+const SCREENSHOT_DIR = path.resolve(__dirname, '../../../../e2e_test_output/permissions');
 
 test.setTimeout(120000);
 

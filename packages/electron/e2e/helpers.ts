@@ -70,6 +70,13 @@ export async function launchElectronApp(options?: {
   }
 
   const args = [electronMain];
+
+  // Add --no-sandbox when running in a container (Linux as root)
+  // This is required for Electron to run in Docker containers
+  if (process.platform === 'linux' && process.getuid && process.getuid() === 0) {
+    args.push('--no-sandbox');
+  }
+
   if (options?.workspace) {
     args.push('--workspace', options.workspace);
   }

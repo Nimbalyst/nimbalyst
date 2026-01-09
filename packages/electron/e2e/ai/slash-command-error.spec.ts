@@ -39,11 +39,7 @@ test.describe('Slash Command Error Display', () => {
     // Wait for workspace to load (increased timeout for slower startup)
     await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.workspaceSidebar, { timeout: 30000 });
 
-    // Take diagnostic screenshot
-    await page.screenshot({
-      path: 'slash-command-test-startup.png',
-      fullPage: true
-    });
+    // Diagnostic screenshots go to test output directory automatically
 
     // Dismiss API key dialog if present
     try {
@@ -145,12 +141,6 @@ test.describe('Slash Command Error Display', () => {
     // Wait for the app to be fully ready
     await page.waitForTimeout(3000);
 
-    // Take a screenshot for verification
-    await page.screenshot({
-      path: 'slash-command-error-test-loaded.png',
-      fullPage: true
-    });
-
     // Check that the app loaded without critical errors
     const consoleErrors: string[] = [];
     page.on('console', msg => {
@@ -186,11 +176,6 @@ test.describe('Slash Command Error Display', () => {
     console.log('Agent mode button visible:', isVisible);
 
     if (!isVisible) {
-      // Take screenshot to see what's on the page
-      await page.screenshot({
-        path: 'slash-command-no-agent-button.png',
-        fullPage: true
-      });
       console.log('Agent mode button not found - this may be expected in some configurations');
       // Skip the rest of the test but don't fail
       return;
@@ -199,12 +184,6 @@ test.describe('Slash Command Error Display', () => {
     // Click the agent mode button
     await agentModeButton.click();
     await page.waitForTimeout(1000);
-
-    // Take screenshot after switching
-    await page.screenshot({
-      path: 'slash-command-agent-mode.png',
-      fullPage: true
-    });
 
     // The test passes if we didn't crash
     console.log('Successfully switched to agent mode');

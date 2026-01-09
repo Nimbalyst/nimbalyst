@@ -75,12 +75,6 @@ test.describe('Terminal Session', () => {
     // Wait for command output
     await page.waitForTimeout(1000);
 
-    // Take a screenshot to verify
-    await page.screenshot({
-      path: 'terminal-pwd-output.png',
-      fullPage: false
-    });
-
     // Verify that the terminal session appears in the session list
     const terminalSessionItem = page.locator('.session-list-item-icon.terminal-icon');
     await expect(terminalSessionItem).toBeVisible({ timeout: 5000 });

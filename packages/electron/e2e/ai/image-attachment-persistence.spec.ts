@@ -216,8 +216,6 @@ test.describe('Image Attachment Persistence', () => {
     console.log(`Thumbnails in transcript: ${thumbnailCount}`);
     expect(thumbnailCount).toBeGreaterThan(0);
 
-    // Take a screenshot to verify the image is visible
-    await page.screenshot({ path: 'test-results/image-in-transcript.png' });
 
     // NOW TEST PERSISTENCE: Switch away and back to verify the image persists
     // Switch to files mode
@@ -236,7 +234,5 @@ test.describe('Image Attachment Persistence', () => {
     console.log(`Thumbnails after mode switch: ${thumbnailCountAfter}`);
     expect(thumbnailCountAfter).toBeGreaterThan(0);
 
-    // Take another screenshot to verify persistence
-    await page.screenshot({ path: 'test-results/image-after-switch.png' });
   });
 });

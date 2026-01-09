@@ -81,13 +81,11 @@ test('should handle consecutive AI edits without errors', async () => {
   const hasConflictDialog = await conflictDialog.isVisible().catch(() => false);
 
   if (hasBgDialog) {
-    await page.screenshot({ path: 'test-results/ERROR-bg-dialog-showing.png' });
-    console.log('[TEST] ❌ ERROR: Background change dialog is showing!');
+    console.log('[TEST] ERROR: Background change dialog is showing!');
   }
 
   if (hasConflictDialog) {
-    await page.screenshot({ path: 'test-results/ERROR-conflict-dialog-showing.png' });
-    console.log('[TEST] ❌ ERROR: Conflict dialog is showing!');
+    console.log('[TEST] ERROR: Conflict dialog is showing!');
   }
 
   // Dialogs should NOT be visible
@@ -101,8 +99,6 @@ test('should handle consecutive AI edits without errors', async () => {
   console.log('[TEST] Accept All button visible after edit 1:', isVisible);
 
   if (!isVisible) {
-    // Take screenshot for debugging
-    await page.screenshot({ path: 'test-results/no-diff-after-edit1.png' });
     console.log('[TEST] ERROR: Diff mode did not activate!');
   }
 

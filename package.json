@@ -5,11 +5,11 @@
   "description": "Monorepo for Nimbalyst - A rich text editor built with Meta's Lexical framework",
   "author": "Stravu Team",
   "license": "MIT",
+  "type": "module",
   "repository": {
     "type": "git",
     "url": "https://github.com/stravu/nimbalyst.git"
   },
-  "type": "module",
   "scripts": {
     "dev": "npm run dev --prefix packages/playground",
     "build": "npm run build --prefix packages/rexical",

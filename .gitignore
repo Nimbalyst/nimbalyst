@@ -154,3 +154,6 @@ worktrees/
 
 .nimbalyst/
 nimalyst-local/
+
+# E2E test output (screenshots, videos, etc.)
+e2e_test_output/

@@ -52,6 +52,17 @@ For detailed information about specific packages, see their CLAUDE.md files:
 
 See `/docs/PLAYWRIGHT.md` for comprehensive E2E testing documentation.
 
+### Running E2E Tests in Dev Containers
+
+When running e2e tests, run in a dev container if any of the following are true:
+1. You are in a git worktree
+2. You are in a CI environment
+3. You are specifically asked to
+
+If none of the above are true, run e2e tests normally.
+
+ALWAYS use the /e2e-devcontainer command when running e2e tests in a dev container.
+
 ### Other Packages
 - **Capacitor (mobile)**: `npm run cap:dev`, `npm run cap:ios`, `npm run cap:android`
 - **Collaboration server**: `npm run collabv2:dev`, `npm run collabv2:deploy`

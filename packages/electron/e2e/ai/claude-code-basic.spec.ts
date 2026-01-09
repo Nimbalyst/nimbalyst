@@ -68,14 +68,14 @@ test.describe('Claude Code CLI Basic Tests', () => {
     }
   });
 
-  test('should load the app and verify basic UI', async () => {
+  test('should load the app and verify basic UI', async ({ }, testInfo) => {
     // Wait for the app to be ready with a basic selector
     await page.waitForSelector('body', { timeout: 10000 });
     await page.waitForTimeout(2000); // Give the app time to load
 
     // Take a screenshot
     await page.screenshot({
-      path: 'app-loaded.png',
+      path: testInfo.outputPath('app-loaded.png'),
       fullPage: true
     });
 
@@ -85,7 +85,7 @@ test.describe('Claude Code CLI Basic Tests', () => {
 
     // Take another screenshot
     await page.screenshot({
-      path: 'ai-chat-opened.png',
+      path: testInfo.outputPath('ai-chat-opened.png'),
       fullPage: true
     });
 
@@ -93,7 +93,7 @@ test.describe('Claude Code CLI Basic Tests', () => {
     const bodyExists = await page.locator('body').isVisible();
     expect(bodyExists).toBe(true);
 
-    console.log('✅ App loaded successfully');
+    console.log('App loaded successfully');
   });
 
   test('should test Claude Code provider creation directly', async () => {
