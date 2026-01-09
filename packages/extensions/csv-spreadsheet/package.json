@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@formulajs/formulajs": "^4.4.9",
-    "@revolist/react-datagrid": "^4.19.4",
+    "@revolist/react-datagrid": "^4.20.2",
     "diff": "^8.0.2",
     "papaparse": "^5.4.1",
     "use-undoable": "^5.0.0"

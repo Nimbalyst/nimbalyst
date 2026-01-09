@@ -9,7 +9,15 @@
  * remain the same, only the new column cells are marked as added.
  */
 
-import { diffArrays, type ArrayChange } from 'diff';
+import { diffArrays } from 'diff';
+
+// Define ArrayChange type locally since it's not exported from diff@8.x main entry
+interface ArrayChange<T> {
+  value: T[];
+  added?: boolean;
+  removed?: boolean;
+  count?: number;
+}
 import type { DiffState, CellDiff, RowDiff, Row } from '../types';
 import { parseCSV, columnIndexToLetter } from './csvParser';
 

@@ -12,14 +12,14 @@
  */
 
 import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
-import { RevoGrid, type RevoGridCustomEvent, type ColumnRegular } from '@revolist/react-datagrid';
+import { RevoGrid, type RevoGridCustomEvent, type ColumnRegular, type ChangedRange } from '@revolist/react-datagrid';
 import type { RevoGridElement } from '../revogrid-types';
 import type { EditorHostProps, NormalizedSelectionRange, ColumnFormat, DiffState, CellDiff } from '../types';
 import { useSpreadsheetMetadata } from '../hooks/useSpreadsheetMetadata';
 import { createGridOperations, type GridOperations } from '../utils/gridOperations';
 import { UndoRedoPlugin } from '../plugins/UndoRedoPlugin';
 import { columnIndexToLetter, columnLetterToIndex, generateColumnHeaders, parseCSV } from '../utils/csvParser';
-import { computeDiff, getCellDiffClass, getCellPreviousValue, getRowDiffClass } from '../utils/diffCompute';
+import { computeDiff, getCellDiffClass, getCellPreviousValue } from '../utils/diffCompute';
 import { isFormula } from '../utils/formulaEngine';
 import { getColumnTypeName } from '../utils/formatters';
 import { FormulaBar, type FormulaBarHandle } from './FormulaBar';
@@ -666,28 +666,20 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
     [translateRowIndex, updateSelection]
   );
 
-  // Handle range selection
-  const handleSetRange = useCallback(
-    (event: RevoGridCustomEvent<{
-      type: string;
-      area?: { x: number; y: number; x1: number; y1: number };
-      x?: number; y?: number; x1?: number; y1?: number;
-    } | null>) => {
+  // Handle range selection (onBeforerange event)
+  const handleBeforeRange = useCallback(
+    (event: RevoGridCustomEvent<ChangedRange>) => {
       if (!event.detail) return;
 
-      const x = event.detail.area?.x ?? event.detail.x;
-      const y = event.detail.area?.y ?? event.detail.y;
-      const x1 = event.detail.area?.x1 ?? event.detail.x1;
-      const y1 = event.detail.area?.y1 ?? event.detail.y1;
+      const { newRange, type } = event.detail;
+      const { x, y, x1, y1 } = newRange;
 
-      if (x === undefined || y === undefined || x1 === undefined || y1 === undefined) return;
-
-      const isPinned = event.detail.type === 'rowPinStart';
+      const isPinned = type === 'rowPinStart';
       const actualY = translateRowIndex(y, isPinned);
       const actualY1 = translateRowIndex(y1, isPinned);
 
-      const newRange = normalizeRange(actualY, x, actualY1, x1);
-      updateSelection({ row: actualY, col: x }, newRange);
+      const normalizedRange = normalizeRange(actualY, x, actualY1, x1);
+      updateSelection({ row: actualY, col: x }, normalizedRange);
     },
     [translateRowIndex, updateSelection]
   );
@@ -833,7 +825,7 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
               if (grid) {
                 const gridRange = await grid.getSelectedRange();
                 if (gridRange) {
-                  const isPinned = gridRange.type === 'rowPinStart';
+                  const isPinned = gridRange.rowType === 'rowPinStart';
                   range = normalizeRange(
                     translateRowIndex(gridRange.y, isPinned),
                     gridRange.x,
@@ -855,7 +847,7 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
               if (grid) {
                 const gridRange = await grid.getSelectedRange();
                 if (gridRange) {
-                  const isPinned = gridRange.type === 'rowPinStart';
+                  const isPinned = gridRange.rowType === 'rowPinStart';
                   range = normalizeRange(
                     translateRowIndex(gridRange.y, isPinned),
                     gridRange.x,
@@ -877,20 +869,12 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
               let cell = selectedCellRef.current;
               if (grid) {
                 const focused = await grid.getFocused();
-                // getFocused returns { focus: { x, y }, rowType } or similar structure
-                // Be defensive about the shape
-                if (focused?.focus?.y !== undefined && focused?.focus?.x !== undefined) {
+                // getFocused returns { model, cell: { x, y }, colType, rowType }
+                if (focused?.cell) {
                   const isPinned = focused.rowType === 'rowPinStart';
                   cell = {
-                    row: translateRowIndex(focused.focus.y, isPinned),
-                    col: focused.focus.x
-                  };
-                } else if (focused?.y !== undefined && focused?.x !== undefined) {
-                  // Alternative structure: { x, y, rowType }
-                  const isPinned = focused.rowType === 'rowPinStart';
-                  cell = {
-                    row: translateRowIndex(focused.y, isPinned),
-                    col: focused.x
+                    row: translateRowIndex(focused.cell.y, isPinned),
+                    col: focused.cell.x
                   };
                 }
               }
@@ -1547,7 +1531,7 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
           readonly={diffState?.isActive}
           onAfteredit={handleAfterEdit}
           onAfterfocus={handleFocusCell}
-          onSetrange={handleSetRange as any}
+          onBeforerange={handleBeforeRange}
           onBeforecellfocus={handleCellClick}
         />
         {contextMenu && (
