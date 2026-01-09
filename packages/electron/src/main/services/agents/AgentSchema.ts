@@ -19,14 +19,14 @@ const AgentMetadataSchema = z.object({
   author: z.string().optional(),
   tags: z.array(z.string()).optional(),
   tools: z.array(z.string()).optional(),
-  parameters: z.record(AgentParameterSchema).optional(),
+  parameters: z.record(z.string(), AgentParameterSchema).optional(),
   origin: z.enum(['user', 'extension', 'builtin']).optional(),
   extensionId: z.string().optional(),
 });
 
 export class AgentValidator {
   static validateMetadata(metadata: unknown): AgentMetadata {
-    return AgentMetadataSchema.parse(metadata);
+    return AgentMetadataSchema.parse(metadata) as AgentMetadata;
   }
 
   static parseAgentFile(content: string, filePath?: string): Agent {
