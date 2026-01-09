@@ -1,0 +1,323 @@
+/**
+ * Visual Display Widget Styles
+ *
+ * Custom widget for displaying visual content in the AI transcript.
+ * Supports charts (via Recharts) and image galleries.
+ * Uses CSS variables from PlaygroundEditorTheme.css for theming support.
+ * Uses container queries for responsive sizing per CLAUDE.md guidelines.
+ */
+
+.visual-display-widget {
+  container-type: inline-size;
+  container-name: visual-widget;
+  border-radius: 0.25rem;
+  background-color: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  overflow: hidden;
+}
+
+.visual-display-widget--error {
+  border-color: color-mix(in srgb, var(--error-color) 30%, transparent);
+}
+
+.visual-display-widget__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.visual-display-widget__label {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+
+.visual-display-widget__title {
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.visual-display-widget__status {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+
+.visual-display-widget__status--error {
+  color: var(--error-color);
+  background-color: color-mix(in srgb, var(--error-color) 15%, transparent);
+}
+
+.visual-display-widget__error {
+  margin: 0.5rem;
+  margin-top: 0;
+  padding: 0.5rem;
+  background-color: color-mix(in srgb, var(--error-color) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--error-color) 30%, transparent);
+  border-radius: 0.25rem;
+  color: var(--error-color);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+/* Chart styles */
+.visual-display-widget__chart {
+  padding: 0.75rem;
+  min-height: 200px;
+}
+
+/* Recharts tooltip styling - ensure it inherits theme colors */
+.visual-display-widget .recharts-tooltip-wrapper {
+  z-index: 10;
+}
+
+/* Ensure tooltip content is visible in all themes */
+.visual-display-widget .recharts-default-tooltip {
+  background-color: var(--surface-secondary) !important;
+  border: 1px solid var(--border-primary) !important;
+  border-radius: 6px !important;
+  padding: 8px !important;
+}
+
+.visual-display-widget .recharts-tooltip-label {
+  color: var(--text-primary) !important;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.visual-display-widget .recharts-tooltip-item {
+  color: var(--text-primary) !important;
+}
+
+.visual-display-widget .recharts-tooltip-item-name,
+.visual-display-widget .recharts-tooltip-item-separator,
+.visual-display-widget .recharts-tooltip-item-value {
+  color: var(--text-primary) !important;
+}
+
+/* Ensure legend text uses theme colors */
+.visual-display-widget .recharts-legend-item-text {
+  color: var(--text-secondary) !important;
+}
+
+/* Image gallery styles */
+.visual-display-widget__gallery {
+  padding: 0.75rem;
+}
+
+.visual-display-widget__gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0.75rem;
+}
+
+.visual-display-widget__gallery-item {
+  cursor: pointer;
+  border-radius: 0.25rem;
+  overflow: hidden;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.visual-display-widget__gallery-item:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--text-primary) 15%, transparent);
+}
+
+.visual-display-widget__image-item {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--surface-tertiary, var(--surface-secondary));
+  border-radius: 0.25rem;
+  overflow: hidden;
+}
+
+/* Checkerboard background for transparent images */
+.visual-display-widget__image-wrapper {
+  /* Classic checkerboard pattern using CSS gradients */
+  background-color: #ffffff;
+  background-image:
+    linear-gradient(45deg, #e0e0e0 25%, transparent 25%),
+    linear-gradient(-45deg, #e0e0e0 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #e0e0e0 75%),
+    linear-gradient(-45deg, transparent 75%, #e0e0e0 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+}
+
+.visual-display-widget__image-item--loading,
+.visual-display-widget__image-item--error {
+  min-height: 100px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.visual-display-widget__image {
+  width: 100%;
+  height: auto;
+  display: block;
+  object-fit: contain;
+  max-height: 300px;
+}
+
+.visual-display-widget__image-loading {
+  color: var(--text-tertiary);
+  font-size: 0.75rem;
+}
+
+.visual-display-widget__image-error {
+  color: var(--error-color);
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.visual-display-widget__image-path {
+  color: var(--text-tertiary);
+  font-size: 0.625rem;
+  word-break: break-all;
+  text-align: center;
+  margin-top: 0.25rem;
+}
+
+.visual-display-widget__image-caption {
+  padding: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-align: center;
+  border-top: 1px solid var(--border-primary);
+  background-color: var(--surface-secondary);
+}
+
+/* Lightbox styles */
+.visual-display-widget__lightbox {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: color-mix(in srgb, var(--surface-primary) 95%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 2rem;
+}
+
+.visual-display-widget__lightbox-content {
+  position: relative;
+  max-width: 90vw;
+  max-height: 90vh;
+  background-color: var(--surface-secondary);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  box-shadow: 0 8px 32px color-mix(in srgb, var(--text-primary) 25%, transparent);
+}
+
+.visual-display-widget__lightbox-content .visual-display-widget__image {
+  max-height: 80vh;
+  max-width: 85vw;
+}
+
+.visual-display-widget__lightbox-close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  width: 2rem;
+  height: 2rem;
+  border: none;
+  background-color: color-mix(in srgb, var(--surface-primary) 80%, transparent);
+  color: var(--text-primary);
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 0.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+  transition: background-color 0.15s ease;
+}
+
+.visual-display-widget__lightbox-close:hover {
+  background-color: var(--surface-primary);
+}
+
+.visual-display-widget__lightbox-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 0.75rem;
+  background-color: var(--surface-secondary);
+  border-top: 1px solid var(--border-primary);
+}
+
+.visual-display-widget__lightbox-prev,
+.visual-display-widget__lightbox-next {
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border-primary);
+  background-color: var(--surface-tertiary, var(--surface-secondary));
+  color: var(--text-primary);
+  cursor: pointer;
+  border-radius: 0.25rem;
+  font-size: 1rem;
+  transition: background-color 0.15s ease;
+}
+
+.visual-display-widget__lightbox-prev:hover,
+.visual-display-widget__lightbox-next:hover {
+  background-color: var(--surface-primary);
+}
+
+.visual-display-widget__lightbox-counter {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  min-width: 4rem;
+  text-align: center;
+}
+
+/* Responsive adjustments using container queries */
+@container visual-widget (max-width: 400px) {
+  .visual-display-widget__chart {
+    padding: 0.5rem;
+    min-height: 180px;
+  }
+
+  .visual-display-widget__header {
+    padding: 0.375rem 0.5rem;
+  }
+
+  .visual-display-widget__title {
+    font-size: 0.8125rem;
+  }
+
+  .visual-display-widget__gallery {
+    padding: 0.5rem;
+  }
+
+  .visual-display-widget__gallery-grid {
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 0.5rem;
+  }
+}
+
+@container visual-widget (max-width: 300px) {
+  .visual-display-widget__chart {
+    padding: 0.25rem;
+    min-height: 150px;
+  }
+
+  .visual-display-widget__gallery-grid {
+    grid-template-columns: 1fr;
+  }
+}

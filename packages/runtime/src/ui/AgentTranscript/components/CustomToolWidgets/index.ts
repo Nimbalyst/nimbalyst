@@ -43,7 +43,7 @@ import type { Message } from '../../../../ai/server/types';
 // Re-export widgets
 export { MockupScreenshotWidget } from './MockupScreenshotWidget';
 export { AskUserQuestionWidget, storeAskUserQuestionAnswers } from './AskUserQuestionWidget';
-export { ChartDisplayWidget } from './ChartDisplayWidget';
+export { VisualDisplayWidget } from './VisualDisplayWidget';
 
 /**
  * Props passed to custom tool widgets
@@ -74,7 +74,7 @@ export type CustomToolWidgetRegistry = Record<string, CustomToolWidgetComponent>
 // Import custom widgets
 import { MockupScreenshotWidget } from './MockupScreenshotWidget';
 import { AskUserQuestionWidget } from './AskUserQuestionWidget';
-import { ChartDisplayWidget } from './ChartDisplayWidget';
+import { VisualDisplayWidget } from './VisualDisplayWidget';
 
 /**
  * Registry of custom tool widgets
@@ -93,9 +93,9 @@ export const CUSTOM_TOOL_WIDGETS: CustomToolWidgetRegistry = {
   // AskUserQuestion tool - displays questions from Claude for user input
   'AskUserQuestion': AskUserQuestionWidget,
 
-  // Chart display tool - renders charts inline in the transcript
-  'display_chart': ChartDisplayWidget,
-  'mcp__nimbalyst__display_chart': ChartDisplayWidget,
+  // Display to user tool - renders charts and image galleries inline in the transcript
+  'display_to_user': VisualDisplayWidget,
+  'mcp__nimbalyst__display_to_user': VisualDisplayWidget,
 };
 
 /**

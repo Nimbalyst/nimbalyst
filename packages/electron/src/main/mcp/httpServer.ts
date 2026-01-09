@@ -535,25 +535,35 @@ async function tryCreateServer(port: number): Promise<any> {
           }
         ];
 
-        // Alpha-only: Add display_chart tool for inline chart rendering
+        // Alpha-only: Add display_to_user tool for inline visual content rendering
         if (getReleaseChannel() === 'alpha') {
           builtInTools.push({
-            name: 'display_chart',
-            description: 'Display a chart inline in the conversation. Supports bar, line, pie, area, and scatter charts. The chart will be rendered visually in the AI transcript for the user to see. Please use this any time you want to convey data to the user.',
+            name: 'display_to_user',
+            description: 'Display visual content inline in the conversation. Use this whenever you want to convey an image file or a chart to the user. Supports charts (bar, line, pie, area, scatter) and image galleries. Use type="chart" to show data visualizations, or type="images" to display a collection of image files. The content will be rendered visually in the AI transcript for the user to see.',
             inputSchema: {
               type: 'object',
               properties: {
+                type: {
+                  type: 'string',
+                  enum: ['chart', 'images'],
+                  description: 'The type of visual content to display'
+                },
+                title: {
+                  type: 'string',
+                  description: 'Optional title for the visual content'
+                },
+                // Chart-specific properties
                 chartType: {
                   type: 'string',
                   enum: ['bar', 'line', 'pie', 'area', 'scatter'],
-                  description: 'The type of chart to display'
+                  description: 'The type of chart to display (required when type="chart")'
                 },
                 data: {
                   type: 'array',
                   items: {
                     type: 'object'
                   },
-                  description: 'Array of data objects. Each object should have keys matching xAxisKey and yAxisKey(s)'
+                  description: 'Array of data objects for charts. Each object should have keys matching xAxisKey and yAxisKey(s)'
                 },
                 xAxisKey: {
                   type: 'string',
@@ -566,25 +576,40 @@ async function tryCreateServer(port: number): Promise<any> {
                   ],
                   description: 'The key(s) in each data object to use for y-axis values. Can be a single string or array for multi-series charts'
                 },
-                title: {
-                  type: 'string',
-                  description: 'Optional chart title'
-                },
                 width: {
                   type: 'number',
-                  description: 'Chart width in pixels (default: 500)'
+                  description: 'Width in pixels (default: 500 for charts)'
                 },
                 height: {
                   type: 'number',
-                  description: 'Chart height in pixels (default: 300)'
+                  description: 'Height in pixels (default: 300 for charts)'
                 },
                 colors: {
                   type: 'array',
                   items: { type: 'string' },
                   description: 'Optional array of colors for the chart series (hex codes or CSS color names)'
+                },
+                // Image-specific properties
+                images: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      path: {
+                        type: 'string',
+                        description: 'Absolute file path to the image'
+                      },
+                      caption: {
+                        type: 'string',
+                        description: 'Optional caption for the image'
+                      }
+                    },
+                    required: ['path']
+                  },
+                  description: 'Array of image objects (required when type="images"). Each object must have a "path" property with the absolute file path, and optionally a "caption".'
                 }
               },
-              required: ['chartType', 'data', 'xAxisKey', 'yAxisKey']
+              required: ['type']
             }
           });
         }
@@ -1093,64 +1118,127 @@ async function tryCreateServer(port: number): Promise<any> {
             }
           }
 
-          case 'display_chart': {
-            const typedArgs = args as {
-              chartType?: string;
-              data?: any[];
-              xAxisKey?: string;
-              yAxisKey?: string | string[];
+          case 'display_to_user': {
+            type ChartArgs = {
+              type: 'chart';
               title?: string;
+              chartType: 'bar' | 'line' | 'pie' | 'area' | 'scatter';
+              data: Record<string, unknown>[];
+              xAxisKey: string;
+              yAxisKey: string | string[];
               width?: number;
               height?: number;
               colors?: string[];
-            } | undefined;
+            };
 
-            // Validate required fields
-            if (!typedArgs?.chartType) {
+            type ImageArgs = {
+              type: 'images';
+              title?: string;
+              images: Array<{ path: string; caption?: string }>;
+            };
+
+            type DisplayArgs = ChartArgs | ImageArgs;
+
+            const typedArgs = args as DisplayArgs | undefined;
+
+            // Validate type field
+            if (!typedArgs?.type) {
               return {
-                content: [{ type: 'text', text: 'Error: chartType is required' }],
+                content: [{ type: 'text', text: 'Error: type is required (must be "chart" or "images")' }],
                 isError: true
               };
             }
 
-            const validChartTypes = ['bar', 'line', 'pie', 'area', 'scatter'];
-            if (!validChartTypes.includes(typedArgs.chartType)) {
+            if (!['chart', 'images'].includes(typedArgs.type)) {
               return {
-                content: [{ type: 'text', text: `Error: chartType must be one of: ${validChartTypes.join(', ')}` }],
+                content: [{ type: 'text', text: 'Error: type must be "chart" or "images"' }],
                 isError: true
               };
             }
 
-            if (!typedArgs.data || !Array.isArray(typedArgs.data) || typedArgs.data.length === 0) {
+            // Validate chart-specific fields
+            if (typedArgs.type === 'chart') {
+              if (!typedArgs.chartType) {
+                return {
+                  content: [{ type: 'text', text: 'Error: chartType is required for type="chart"' }],
+                  isError: true
+                };
+              }
+
+              const validChartTypes = ['bar', 'line', 'pie', 'area', 'scatter'];
+              if (!validChartTypes.includes(typedArgs.chartType)) {
+                return {
+                  content: [{ type: 'text', text: `Error: chartType must be one of: ${validChartTypes.join(', ')}` }],
+                  isError: true
+                };
+              }
+
+              if (!typedArgs.data || !Array.isArray(typedArgs.data) || typedArgs.data.length === 0) {
+                return {
+                  content: [{ type: 'text', text: 'Error: data must be a non-empty array for charts' }],
+                  isError: true
+                };
+              }
+
+              if (!typedArgs.xAxisKey) {
+                return {
+                  content: [{ type: 'text', text: 'Error: xAxisKey is required for charts' }],
+                  isError: true
+                };
+              }
+
+              if (!typedArgs.yAxisKey) {
+                return {
+                  content: [{ type: 'text', text: 'Error: yAxisKey is required for charts' }],
+                  isError: true
+                };
+              }
+
+              console.log(`[MCP Server] display_to_user (chart): ${typedArgs.chartType} chart with ${typedArgs.data.length} data points`);
+
               return {
-                content: [{ type: 'text', text: 'Error: data must be a non-empty array' }],
-                isError: true
+                content: [{
+                  type: 'text',
+                  text: `Chart displayed: ${typedArgs.title || typedArgs.chartType + ' chart'}`
+                }],
+                isError: false
               };
             }
 
-            if (!typedArgs.xAxisKey) {
+            // Validate image-specific fields
+            if (typedArgs.type === 'images') {
+              if (!typedArgs.images || !Array.isArray(typedArgs.images) || typedArgs.images.length === 0) {
+                return {
+                  content: [{ type: 'text', text: 'Error: images must be a non-empty array for type="images"' }],
+                  isError: true
+                };
+              }
+
+              // Validate each image has a path
+              for (let i = 0; i < typedArgs.images.length; i++) {
+                if (!typedArgs.images[i].path) {
+                  return {
+                    content: [{ type: 'text', text: `Error: images[${i}] is missing required "path" property` }],
+                    isError: true
+                  };
+                }
+              }
+
+              console.log(`[MCP Server] display_to_user (images): ${typedArgs.images.length} images`);
+
               return {
-                content: [{ type: 'text', text: 'Error: xAxisKey is required' }],
-                isError: true
+                content: [{
+                  type: 'text',
+                  text: `Images displayed: ${typedArgs.title || `${typedArgs.images.length} image(s)`}`
+                }],
+                isError: false
               };
             }
 
-            if (!typedArgs.yAxisKey) {
-              return {
-                content: [{ type: 'text', text: 'Error: yAxisKey is required' }],
-                isError: true
-              };
-            }
-
-            // Return success - the widget will render the chart from the tool arguments
-            console.log(`[MCP Server] display_chart called: ${typedArgs.chartType} chart with ${typedArgs.data.length} data points`);
-
+            // Should not reach here, but handle unexpected type
             return {
-              content: [{
-                type: 'text',
-                text: `Chart displayed: ${typedArgs.title || typedArgs.chartType + ' chart'}`
-              }],
-              isError: false
+              content: [{ type: 'text', text: 'Error: Unexpected visual type' }],
+              isError: true
             };
           }
 
