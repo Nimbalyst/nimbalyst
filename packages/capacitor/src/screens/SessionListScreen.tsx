@@ -1,17 +1,14 @@
-import React, { useState, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useSync, type Project } from '../contexts/CollabV3SyncContext';
-import { SyncStatusBadge } from '../components/SyncStatusBadge';
+import React, { useState, useRef, useCallback, useMemo } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { useSync } from '../contexts/CollabV3SyncContext';
 import { SessionCard } from '../components/SessionCard';
-import { ProjectPicker } from '../components/ProjectPicker';
 
 export function SessionListScreen() {
   const navigate = useNavigate();
+  const { projectId } = useParams<{ projectId: string }>();
   const {
-    sessions,
+    allSessions,
     projects,
-    selectedProject,
-    selectProject,
     isConfigured,
     refresh,
     status,
@@ -19,10 +16,22 @@ export function SessionListScreen() {
     createSession,
     isCreatingSession,
   } = useSync();
-  const [showProjectPicker, setShowProjectPicker] = useState(false);
-  const [showNewSessionProjectPicker, setShowNewSessionProjectPicker] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+
+  // Find the current project from the route param
+  const currentProject = useMemo(() => {
+    return projects.find(p => p.id === projectId) || null;
+  }, [projects, projectId]);
+
+  // Filter sessions for this project
+  const sessions = useMemo(() => {
+    if (!projectId) return allSessions;
+    return allSessions.filter(session => {
+      const sessionWorkspace = session.workspaceId || 'default';
+      return sessionWorkspace === projectId;
+    });
+  }, [allSessions, projectId]);
 
   // Pull-to-refresh state
   const [pullDistance, setPullDistance] = useState(0);
@@ -84,25 +93,18 @@ export function SessionListScreen() {
     touchStartY.current = 0;
   }, [isPulling, pullDistance, pullThreshold]);
 
-  const handleNewSessionClick = () => {
-    setShowNewSessionProjectPicker(true);
-  };
-
-  const handleCreateSession = async (project: Project | null) => {
+  const handleCreateSession = async () => {
     setCreateError(null);
-    setShowNewSessionProjectPicker(false);
 
-    // Use the selected project ID or default
-    const projectId = project?.id || 'default';
+    // Use the current project ID from the route
+    const targetProjectId = projectId || 'default';
 
-    const result = await createSession(projectId);
+    const result = await createSession(targetProjectId);
 
     if (result.success && result.sessionId) {
-      // Navigate to the new session
       navigate(`/session/${result.sessionId}`);
     } else {
       setCreateError(result.error || 'Failed to create session');
-      // Clear error after 3 seconds
       setTimeout(() => setCreateError(null), 3000);
     }
   };
@@ -110,35 +112,42 @@ export function SessionListScreen() {
   // Show loading state until we've received initial data from the server
   const isLoading = isConfigured && !hasReceivedInitialData;
 
-  // Determine if we can create a session (need to have received data and have projects)
-  const canCreateSession = hasReceivedInitialData && projects.length > 0;
+  // Determine if we can create a session (need to have received data and current project)
+  const canCreateSession = hasReceivedInitialData && currentProject !== null;
 
   return (
     <div className="flex flex-col w-full overflow-x-hidden bg-[var(--surface-primary)]" style={{ height: '100dvh' }}>
       {/* Header - Fixed with safe area */}
       <header className="flex-shrink-0 flex items-center justify-between px-3 py-2 border-b border-[var(--border-primary)] bg-[var(--surface-secondary)] safe-area-top">
-        <div className="flex items-center gap-1">
-          {/* Project Picker Button */}
+        <div className="flex items-center gap-1 min-w-0 flex-1">
+          {/* Back button */}
           <button
-            onClick={() => setShowProjectPicker(true)}
-            className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-[var(--surface-tertiary)] text-[var(--text-primary)]"
+            onClick={() => navigate('/')}
+            className="p-1.5 rounded-lg hover:bg-[var(--surface-tertiary)] text-[var(--primary-color)] flex-shrink-0"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>
-              <path d="M14 2v4a2 2 0 0 0 2 2h4"/>
-            </svg>
-            <span className="font-medium text-sm">{selectedProject?.name || 'All Projects'}</span>
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="m6 9 6 6 6-6"/>
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="m15 18-6-6 6-6"/>
             </svg>
           </button>
+          {/* Project name and session count */}
+          <div className="min-w-0 flex-1">
+            <div className="font-semibold text-[17px] text-[var(--text-primary)] truncate">
+              {currentProject?.name
+                ? (currentProject.name.includes('/') ? currentProject.name.split('/').pop() : currentProject.name)
+                : 'Sessions'}
+            </div>
+            {currentProject && (
+              <div className="text-[12px] text-[var(--text-secondary)]">
+                {sessions.length} {sessions.length === 1 ? 'session' : 'sessions'}
+              </div>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-1">
-          <SyncStatusBadge />
+        <div className="flex items-center gap-1 flex-shrink-0">
           {/* New Session Button */}
           {canCreateSession && (
             <button
-              onClick={handleNewSessionClick}
+              onClick={handleCreateSession}
               disabled={isCreatingSession}
               className="p-1.5 rounded-lg hover:bg-[var(--surface-tertiary)] text-[var(--primary-color)] disabled:opacity-50"
               title="New Session"
@@ -156,16 +165,6 @@ export function SessionListScreen() {
               )}
             </button>
           )}
-          <button
-            onClick={() => navigate('/settings')}
-            className="p-1.5 rounded-lg hover:bg-[var(--surface-tertiary)] text-[var(--text-secondary)]"
-            title="Settings"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
-              <circle cx="12" cy="12" r="3"/>
-            </svg>
-          </button>
         </div>
       </header>
 
@@ -244,19 +243,20 @@ export function SessionListScreen() {
           <EmptyState
             icon={
               <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--text-tertiary)]">
-                <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
-                <polyline points="16 6 12 2 8 6"/>
-                <line x1="12" x2="12" y1="2" y2="15"/>
+                <rect x="3" y="3" width="7" height="7"/>
+                <rect x="14" y="3" width="7" height="7"/>
+                <rect x="14" y="14" width="7" height="7"/>
+                <rect x="3" y="14" width="7" height="7"/>
               </svg>
             }
-            title="Not Connected"
-            description="Connect to a sync server to view your AI sessions from other devices."
+            title="Connect to Desktop"
+            description="Sign in and scan the QR code from Nimbalyst desktop to sync your sessions."
             action={
               <button
                 onClick={() => navigate('/settings')}
                 className="px-6 py-2 rounded-lg font-medium text-white bg-[var(--primary-color)] hover:opacity-90 transition-opacity"
               >
-                Configure Sync
+                Get Started
               </button>
             }
           />
@@ -271,8 +271,8 @@ export function SessionListScreen() {
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
               </svg>
             }
-            title="No Sessions"
-            description="AI sessions from your desktop will appear here when synced."
+            title="No Sessions Yet"
+            description="Start an AI session in this project on Nimbalyst desktop and it will appear here."
             action={
               <button
                 onClick={handleRefresh}
@@ -294,27 +294,6 @@ export function SessionListScreen() {
         )}
         </div>
       </main>
-
-      {/* Project Filter Picker Dialog */}
-      {showProjectPicker && (
-        <ProjectPicker
-          projects={projects}
-          selectedProject={selectedProject}
-          onSelectProject={selectProject}
-          onClose={() => setShowProjectPicker(false)}
-        />
-      )}
-
-      {/* New Session Project Picker Dialog */}
-      {showNewSessionProjectPicker && (
-        <ProjectPicker
-          projects={projects}
-          selectedProject={null}
-          onSelectProject={handleCreateSession}
-          onClose={() => setShowNewSessionProjectPicker(false)}
-          showAllProjects={false}
-        />
-      )}
 
       {/* Error Toast */}
       {createError && (

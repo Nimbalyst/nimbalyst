@@ -33,7 +33,7 @@ export function SwipeNavigation({
   const [swipeProgress, setSwipeProgress] = useState(0);
   const [isSwipeActive, setIsSwipeActive] = useState(false);
 
-  // Only enable on detail pages (not on root)
+  // Enable swipe-back on all pages except root (Projects) and settings
   const canSwipeBack = enabled && location.pathname !== '/' && location.pathname !== '/settings';
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {

@@ -1,6 +1,7 @@
 import React, { useEffect, useCallback } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { CollabV3SyncProvider, useSync } from './contexts/CollabV3SyncContext';
+import { ProjectListScreen } from './screens/ProjectListScreen';
 import { SessionListScreen } from './screens/SessionListScreen';
 import { SessionDetailScreen } from './screens/SessionDetailScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
@@ -47,10 +48,12 @@ function AppContent() {
   }
 
   // On iPhone, use standard stack navigation with swipe-to-go-back
+  // Navigation flow: Projects -> Sessions (by project) -> Session Detail
   return (
     <SwipeNavigation>
       <Routes>
-        <Route path="/" element={<SessionListScreen />} />
+        <Route path="/" element={<ProjectListScreen />} />
+        <Route path="/project/:projectId/sessions" element={<SessionListScreen />} />
         <Route path="/session/:sessionId" element={<SessionDetailScreen />} />
         <Route path="/settings" element={<SettingsScreen />} />
         <Route path="*" element={<Navigate to="/" replace />} />
