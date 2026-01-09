@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
-import { RevoGrid, type RevoGridCustomEvent, type ColumnRegular, type ChangedRange } from '@revolist/react-datagrid';
+import { RevoGrid, type RevoGridCustomEvent, type ColumnRegular } from '@revolist/react-datagrid';
 import type { RevoGridElement } from '../revogrid-types';
 import type { EditorHostProps, NormalizedSelectionRange, ColumnFormat, DiffState, CellDiff } from '../types';
 import { useSpreadsheetMetadata } from '../hooks/useSpreadsheetMetadata';
@@ -666,20 +666,28 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
     [translateRowIndex, updateSelection]
   );
 
-  // Handle range selection (onBeforerange event)
-  const handleBeforeRange = useCallback(
-    (event: RevoGridCustomEvent<ChangedRange>) => {
+  // Handle range selection
+  const handleSetRange = useCallback(
+    (event: RevoGridCustomEvent<{
+      type: string;
+      area?: { x: number; y: number; x1: number; y1: number };
+      x?: number; y?: number; x1?: number; y1?: number;
+    } | null>) => {
       if (!event.detail) return;
 
-      const { newRange, type } = event.detail;
-      const { x, y, x1, y1 } = newRange;
+      const x = event.detail.area?.x ?? event.detail.x;
+      const y = event.detail.area?.y ?? event.detail.y;
+      const x1 = event.detail.area?.x1 ?? event.detail.x1;
+      const y1 = event.detail.area?.y1 ?? event.detail.y1;
 
-      const isPinned = type === 'rowPinStart';
+      if (x === undefined || y === undefined || x1 === undefined || y1 === undefined) return;
+
+      const isPinned = event.detail.type === 'rowPinStart';
       const actualY = translateRowIndex(y, isPinned);
       const actualY1 = translateRowIndex(y1, isPinned);
 
-      const normalizedRange = normalizeRange(actualY, x, actualY1, x1);
-      updateSelection({ row: actualY, col: x }, normalizedRange);
+      const newRange = normalizeRange(actualY, x, actualY1, x1);
+      updateSelection({ row: actualY, col: x }, newRange);
     },
     [translateRowIndex, updateSelection]
   );
@@ -701,22 +709,10 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
     const grid = revoGridRef.current;
     if (!grid) return;
 
-    const columnCount = spreadsheetMeta.metadata.columnCount;
-    const lastCol = Math.max(0, columnCount - 1);
-
-    // Set selection synchronously using a large row count initially
-    // This ensures Cmd+C works immediately after Cmd+A
-    // We use headerRowCount + a large buffer to cover all possible data
-    const maxRows = headerRowCount + 10000; // Large enough for any reasonable data
-
-    // Update selection refs synchronously
-    selectedCellRef.current = { row: 0, col: 0 };
-    selectionRangeRef.current = normalizeRange(0, 0, maxRows, lastCol);
-
     // Skip focus handler to prevent it from resetting our selection
     skipFocusHandlerRef.current = true;
 
-    // Then asynchronously find actual data bounds and update visual selection
+    // Find actual data bounds asynchronously
     (async () => {
       try {
         const [source, pinnedTop] = await Promise.all([
@@ -726,10 +722,25 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
 
         const pinnedRows = (pinnedTop as Record<string, unknown>[]) ?? [];
         const dataRows = (source as Record<string, unknown>[]) ?? [];
+        const allRows = [...pinnedRows, ...dataRows];
+
+        // Find last column with actual data
+        let lastColWithData = 0;
+        for (const row of allRows) {
+          for (const [key, value] of Object.entries(row)) {
+            if (key === '_rowClass') continue;
+            if (value !== undefined && value !== null && value !== '') {
+              const colIndex = columnLetterToIndex(key);
+              if (colIndex > lastColWithData) {
+                lastColWithData = colIndex;
+              }
+            }
+          }
+        }
 
         // Find last row with actual data (not empty buffer rows)
         const isRowEmpty = (row: Record<string, unknown>): boolean => {
-          for (let c = 0; c < columnCount; c++) {
+          for (let c = 0; c <= lastColWithData; c++) {
             const colKey = columnIndexToLetter(c);
             const value = row[colKey];
             if (value !== undefined && value !== null && value !== '') {
@@ -752,8 +763,9 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
         const pinnedRowCount = pinnedRows.length;
         const lastRow = Math.max(0, pinnedRowCount + lastDataRowIndex);
 
-        // Update selection with actual bounds
-        selectionRangeRef.current = normalizeRange(0, 0, lastRow, lastCol);
+        // Update selection refs
+        selectedCellRef.current = { row: 0, col: 0 };
+        selectionRangeRef.current = normalizeRange(0, 0, lastRow, lastColWithData);
 
         // Update formula bar
         if (formulaBarRef.current) {
@@ -767,12 +779,12 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
         if (lastDataRowIndex >= 0) {
           grid.setCellsFocus(
             { x: 0, y: 0 },
-            { x: lastCol, y: lastDataRowIndex }
+            { x: lastColWithData, y: lastDataRowIndex }
           );
         } else if (pinnedRowCount > 0) {
           grid.setCellsFocus(
             { x: 0, y: 0 },
-            { x: lastCol, y: pinnedRowCount - 1 },
+            { x: lastColWithData, y: pinnedRowCount - 1 },
             undefined,
             'rowPinStart'
           );
@@ -784,7 +796,7 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
         }, 100);
       }
     })();
-  }, [spreadsheetMeta.metadata.columnCount, headerRowCount]);
+  }, []);
 
   // Handle keyboard shortcuts
   const handleKeyDown = useCallback(
@@ -1531,7 +1543,8 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
           readonly={diffState?.isActive}
           onAfteredit={handleAfterEdit}
           onAfterfocus={handleFocusCell}
-          onBeforerange={handleBeforeRange}
+          // @ts-expect-error onSetrange exists but not in React type defs
+          onSetrange={handleSetRange}
           onBeforecellfocus={handleCellClick}
         />
         {contextMenu && (
