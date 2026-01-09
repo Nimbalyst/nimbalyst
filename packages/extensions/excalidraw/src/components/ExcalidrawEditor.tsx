@@ -40,6 +40,10 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
   // Track when we're programmatically updating the scene (to suppress onChange -> dirty)
   const isUpdatingFromExternalRef = useRef(false);
 
+  // Track previous elements to detect actual content changes vs view-only changes
+  const previousElementsRef = useRef<readonly ExcalidrawElement[]>([]);
+  const previousFilesCountRef = useRef<number>(0);
+
   // Default empty Excalidraw file
   const createEmptyFile = (): ExcalidrawFile => ({
     type: 'excalidraw',
@@ -78,13 +82,19 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
         }
 
         // Set initial state for Excalidraw with proper defaults
-        setInitialElements(data.elements as ExcalidrawElement[]);
+        const elements = data.elements as ExcalidrawElement[];
+        const files = data.files || {};
+        setInitialElements(elements);
         setInitialAppState({
           viewBackgroundColor: '#ffffff',
           collaborators: [],
           ...data.appState,
         });
-        setInitialFiles(data.files || {});
+        setInitialFiles(files);
+
+        // Initialize previous refs for change detection
+        previousElementsRef.current = elements;
+        previousFilesCountRef.current = Object.keys(files).length;
 
         lastKnownDiskContentRef.current = content || '';
         setIsLoading(false);
@@ -117,6 +127,8 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
 
       try {
         const data: ExcalidrawFile = JSON.parse(newContent);
+        const elements = data.elements as ExcalidrawElement[];
+        const files = data.files || {};
 
         // Update Excalidraw via API
         if (excalidrawAPI) {
@@ -124,7 +136,7 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
           isUpdatingFromExternalRef.current = true;
           try {
             excalidrawAPI.updateScene({
-              elements: data.elements as ExcalidrawElement[],
+              elements,
               appState: data.appState,
             });
           } finally {
@@ -134,6 +146,10 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
             });
           }
         }
+
+        // Update previous refs to match new content
+        previousElementsRef.current = elements;
+        previousFilesCountRef.current = Object.keys(files).length;
 
         lastKnownDiskContentRef.current = newContent;
       } catch (error) {
@@ -180,7 +196,7 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
     });
   }, [host, excalidrawAPI]);
 
-  // Mark as dirty on any change - host handles autosave debouncing
+  // Mark as dirty only when elements actually change (not just view state)
   const onChange = useCallback((
     elements: readonly ExcalidrawElement[],
     appState: AppState,
@@ -191,8 +207,43 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
       return;
     }
 
-    // Always mark dirty - host has autosave debouncing (200ms) built in
-    host.setDirty(true);
+    // Check if elements actually changed (not just selection/view state)
+    // Excalidraw fires onChange for every state change including cursor, selection, zoom
+    const prevElements = previousElementsRef.current;
+
+    // Fast path: same reference means no change
+    if (elements === prevElements) {
+      return;
+    }
+
+    // Check if elements actually differ
+    let elementsChanged = elements.length !== prevElements.length;
+
+    if (!elementsChanged) {
+      // Check if any element version changed
+      for (let i = 0; i < elements.length; i++) {
+        const curr = elements[i];
+        const prev = prevElements[i];
+        // Elements have version numbers that increment on changes
+        if (curr.id !== prev.id || curr.version !== prev.version) {
+          elementsChanged = true;
+          break;
+        }
+      }
+    }
+
+    // Also check if files changed (embedded images)
+    const currFilesCount = Object.keys(files).length;
+    const filesChanged = currFilesCount !== previousFilesCountRef.current;
+
+    // Update previous refs for next comparison
+    previousElementsRef.current = elements;
+    previousFilesCountRef.current = currFilesCount;
+
+    // Only mark dirty if actual content changed
+    if (elementsChanged || filesChanged) {
+      host.setDirty(true);
+    }
   }, [host]);
 
 
