@@ -7,7 +7,8 @@
  * - Image galleries with file path loading
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useAtomValue } from 'jotai';
 import {
   BarChart,
@@ -62,41 +63,37 @@ function getThemeColors(isDark: boolean): string[] {
   return isDark ? DARK_COLORS : LIGHT_COLORS;
 }
 
+// Chart configuration for rendering
 interface ChartConfig {
   chartType: 'bar' | 'line' | 'pie' | 'area' | 'scatter';
   data: Record<string, unknown>[];
   xAxisKey: string;
   yAxisKey: string | string[];
-  title?: string;
-  width?: number;
-  height?: number;
   colors?: string[];
 }
 
-interface ImageItem {
+// New schema types
+interface ImageContent {
   path: string;
-  caption?: string;
 }
 
-type ChartVisualConfig = {
-  type: 'chart';
-  title?: string;
+interface ChartContent {
   chartType: 'bar' | 'line' | 'pie' | 'area' | 'scatter';
   data: Record<string, unknown>[];
   xAxisKey: string;
   yAxisKey: string | string[];
-  width?: number;
-  height?: number;
   colors?: string[];
-};
+}
 
-type ImageVisualConfig = {
-  type: 'images';
-  title?: string;
-  images: ImageItem[];
-};
+interface DisplayItem {
+  description: string;
+  image?: ImageContent;
+  chart?: ChartContent;
+}
 
-type VisualConfig = ChartVisualConfig | ImageVisualConfig;
+interface DisplayArgs {
+  items: DisplayItem[];
+}
 
 interface ToolCall {
   name: string;
@@ -105,45 +102,64 @@ interface ToolCall {
 }
 
 /**
- * Extract visual configuration from tool arguments
+ * Type guard to check if value is DisplayArgs
  */
-function extractVisualConfig(tool: ToolCall): VisualConfig | null {
+function isDisplayArgs(value: unknown): value is DisplayArgs {
+  if (!value || typeof value !== 'object') return false;
+  const obj = value as Record<string, unknown>;
+
+  if (!obj.items || !Array.isArray(obj.items) || obj.items.length === 0) {
+    return false;
+  }
+
+  // Validate each item
+  for (const item of obj.items) {
+    if (!item || typeof item !== 'object') return false;
+    const typedItem = item as Record<string, unknown>;
+
+    // Check description
+    if (!typedItem.description || typeof typedItem.description !== 'string') return false;
+
+    const hasImage = !!typedItem.image;
+    const hasChart = !!typedItem.chart;
+
+    // Must have exactly one content type
+    if (!hasImage && !hasChart) return false;
+    if (hasImage && hasChart) return false;
+
+    // Validate image content
+    if (hasImage) {
+      const image = typedItem.image as Record<string, unknown>;
+      if (!image || typeof image !== 'object' || !image.path || typeof image.path !== 'string') {
+        return false;
+      }
+    }
+
+    // Validate chart content
+    if (hasChart) {
+      const chart = typedItem.chart as Record<string, unknown>;
+      if (!chart || typeof chart !== 'object') return false;
+      if (!chart.chartType || !chart.data || !chart.xAxisKey || !chart.yAxisKey) {
+        return false;
+      }
+      if (!Array.isArray(chart.data)) return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Extract display items from tool arguments
+ */
+function extractDisplayItems(tool: ToolCall): DisplayItem[] | null {
   if (!tool?.arguments) return null;
 
-  const args = tool.arguments;
-  const type = args.type;
-
-  if (type !== 'chart' && type !== 'images') {
+  if (!isDisplayArgs(tool.arguments)) {
     return null;
   }
 
-  if (type === 'chart') {
-    // Validate required chart fields
-    if (!args.chartType || !args.data || !args.xAxisKey || !args.yAxisKey) {
-      return null;
-    }
-    return {
-      type: 'chart',
-      title: args.title as string | undefined,
-      chartType: args.chartType as 'bar' | 'line' | 'pie' | 'area' | 'scatter',
-      data: args.data as Record<string, unknown>[],
-      xAxisKey: args.xAxisKey as string,
-      yAxisKey: args.yAxisKey as string | string[],
-      width: args.width as number | undefined,
-      height: args.height as number | undefined,
-      colors: args.colors as string[] | undefined,
-    };
-  }
-
-  // type === 'images'
-  if (!args.images) {
-    return null;
-  }
-  return {
-    type: 'images',
-    title: args.title as string | undefined,
-    images: args.images as ImageItem[],
-  };
+  return tool.arguments.items;
 }
 
 /**
@@ -350,9 +366,10 @@ function renderScatterChart(config: ChartConfig, colors: string[]) {
  * Component for displaying a single image with loading state
  */
 const ImageDisplay: React.FC<{
-  image: ImageItem;
+  image: ImageContent;
+  description?: string;
   readFile?: (path: string) => Promise<{ success: boolean; content?: string; error?: string }>;
-}> = ({ image, readFile }) => {
+}> = ({ image, description, readFile }) => {
   const [imageData, setImageData] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -406,9 +423,6 @@ const ImageDisplay: React.FC<{
     return (
       <div className="visual-display-widget__image-item visual-display-widget__image-item--loading">
         <div className="visual-display-widget__image-loading">Loading...</div>
-        {image.caption && (
-          <div className="visual-display-widget__image-caption">{image.caption}</div>
-        )}
       </div>
     );
   }
@@ -418,9 +432,6 @@ const ImageDisplay: React.FC<{
       <div className="visual-display-widget__image-item visual-display-widget__image-item--error">
         <div className="visual-display-widget__image-error">{error}</div>
         <div className="visual-display-widget__image-path">{image.path}</div>
-        {image.caption && (
-          <div className="visual-display-widget__image-caption">{image.caption}</div>
-        )}
       </div>
     );
   }
@@ -430,87 +441,220 @@ const ImageDisplay: React.FC<{
       <div className="visual-display-widget__image-wrapper">
         <img
           src={imageData || ''}
-          alt={image.caption || 'Image'}
+          alt={description || 'Image'}
           className="visual-display-widget__image"
           onError={() => setError('Failed to load image')}
         />
       </div>
-      {image.caption && (
-        <div className="visual-display-widget__image-caption">{image.caption}</div>
-      )}
     </div>
   );
 };
 
 /**
- * Render an image gallery
+ * Render a chart item
+ */
+const ChartItemRenderer: React.FC<{
+  item: DisplayItem;
+  isDark: boolean;
+}> = ({ item, isDark }) => {
+  if (!item.chart) return null;
+
+  const chartConfig: ChartConfig = {
+    chartType: item.chart.chartType,
+    data: item.chart.data,
+    xAxisKey: item.chart.xAxisKey,
+    yAxisKey: item.chart.yAxisKey,
+    colors: item.chart.colors
+  };
+
+  const colors = chartConfig.colors || getThemeColors(isDark);
+  const height = 300;
+
+  const renderChart = () => {
+    switch (chartConfig.chartType) {
+      case 'bar':
+        return renderBarChart(chartConfig, colors);
+      case 'line':
+        return renderLineChart(chartConfig, colors);
+      case 'pie':
+        return renderPieChart(chartConfig, colors);
+      case 'area':
+        return renderAreaChart(chartConfig, colors);
+      case 'scatter':
+        return renderScatterChart(chartConfig, colors);
+      default:
+        return null;
+    }
+  };
+
+  const errorFallback = (
+    <div className="visual-display-widget__item visual-display-widget__item--error">
+      <div className="visual-display-widget__item-description">{item.description}</div>
+      <div className="visual-display-widget__error">
+        Chart rendering failed. Please check the data format.
+      </div>
+    </div>
+  );
+
+  return (
+    <VisualErrorBoundary fallback={errorFallback}>
+      <div className="visual-display-widget__item" role="img" aria-label={`${chartConfig.chartType} chart: ${item.description}`}>
+        <div className="visual-display-widget__item-description">{item.description}</div>
+        <div className="visual-display-widget__chart" style={{ height }}>
+          <ResponsiveContainer width="100%" height="100%">
+            {renderChart()}
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </VisualErrorBoundary>
+  );
+};
+
+/**
+ * Lightbox component that renders full-screen over the entire app
+ */
+const Lightbox: React.FC<{
+  images: DisplayItem[];
+  selectedIndex: number;
+  onClose: () => void;
+  onNavigate: (index: number) => void;
+  readFile?: (path: string) => Promise<{ success: boolean; content?: string; error?: string }>;
+}> = ({ images, selectedIndex, onClose, onNavigate, readFile }) => {
+  const lightboxContent = (
+    <div
+      className="visual-display-widget__lightbox"
+      onClick={onClose}
+    >
+      <div className="visual-display-widget__lightbox-content" onClick={e => e.stopPropagation()}>
+        <button
+          className="visual-display-widget__lightbox-close"
+          onClick={onClose}
+          aria-label="Close"
+        >
+          &times;
+        </button>
+        <ImageDisplay
+          image={images[selectedIndex].image!}
+          description={images[selectedIndex].description}
+          readFile={readFile}
+        />
+        <div className="visual-display-widget__lightbox-caption">
+          {images[selectedIndex].description}
+        </div>
+        {images.length > 1 && (
+          <div className="visual-display-widget__lightbox-nav">
+            <button
+              className="visual-display-widget__lightbox-prev"
+              onClick={(e) => {
+                e.stopPropagation();
+                onNavigate((selectedIndex - 1 + images.length) % images.length);
+              }}
+              aria-label="Previous"
+            >
+              &larr;
+            </button>
+            <span className="visual-display-widget__lightbox-counter">
+              {selectedIndex + 1} / {images.length}
+            </span>
+            <button
+              className="visual-display-widget__lightbox-next"
+              onClick={(e) => {
+                e.stopPropagation();
+                onNavigate((selectedIndex + 1) % images.length);
+              }}
+              aria-label="Next"
+            >
+              &rarr;
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  // Always render via portal to document.body for full-screen display
+  return createPortal(lightboxContent, document.body);
+};
+
+/**
+ * Render an image gallery with lightbox support
  */
 const ImageGallery: React.FC<{
-  images: ImageItem[];
+  images: DisplayItem[];
   readFile?: (path: string) => Promise<{ success: boolean; content?: string; error?: string }>;
 }> = ({ images, readFile }) => {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
-  return (
-    <div className="visual-display-widget__gallery">
-      <div className="visual-display-widget__gallery-grid">
-        {images.map((image, index) => (
-          <div
-            key={index}
-            className="visual-display-widget__gallery-item"
-            onClick={() => setSelectedIndex(index)}
-          >
-            <ImageDisplay image={image} readFile={readFile} />
-          </div>
-        ))}
+  const errorFallback = (
+    <div className="visual-display-widget__item visual-display-widget__item--error">
+      <div className="visual-display-widget__error">
+        Failed to render image gallery.
       </div>
-      {selectedIndex !== null && (
-        <div
-          className="visual-display-widget__lightbox"
-          onClick={() => setSelectedIndex(null)}
-        >
-          <div className="visual-display-widget__lightbox-content" onClick={e => e.stopPropagation()}>
-            <button
-              className="visual-display-widget__lightbox-close"
-              onClick={() => setSelectedIndex(null)}
-              aria-label="Close"
-            >
-              &times;
-            </button>
-            <ImageDisplay image={images[selectedIndex]} readFile={readFile} />
-            {images.length > 1 && (
-              <div className="visual-display-widget__lightbox-nav">
-                <button
-                  className="visual-display-widget__lightbox-prev"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedIndex((selectedIndex - 1 + images.length) % images.length);
-                  }}
-                  aria-label="Previous"
-                >
-                  &larr;
-                </button>
-                <span className="visual-display-widget__lightbox-counter">
-                  {selectedIndex + 1} / {images.length}
-                </span>
-                <button
-                  className="visual-display-widget__lightbox-next"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedIndex((selectedIndex + 1) % images.length);
-                  }}
-                  aria-label="Next"
-                >
-                  &rarr;
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
+
+  return (
+    <VisualErrorBoundary fallback={errorFallback}>
+      <div className="visual-display-widget__gallery">
+        <div className="visual-display-widget__gallery-grid">
+          {images.map((item, index) => (
+            <div
+              key={index}
+              className="visual-display-widget__gallery-item"
+              onClick={() => setSelectedIndex(index)}
+            >
+              <ImageDisplay image={item.image!} description={item.description} readFile={readFile} />
+              <div className="visual-display-widget__image-caption">{item.description}</div>
+            </div>
+          ))}
+        </div>
+        {selectedIndex !== null && (
+          <Lightbox
+            images={images}
+            selectedIndex={selectedIndex}
+            onClose={() => setSelectedIndex(null)}
+            onNavigate={setSelectedIndex}
+            readFile={readFile}
+          />
+        )}
+      </div>
+    </VisualErrorBoundary>
+  );
 };
+
+/**
+ * Group items into segments: consecutive images are grouped together, charts are individual
+ */
+type ItemSegment =
+  | { type: 'chart'; item: DisplayItem }
+  | { type: 'images'; items: DisplayItem[] };
+
+function groupItemsIntoSegments(items: DisplayItem[]): ItemSegment[] {
+  const segments: ItemSegment[] = [];
+  let currentImageGroup: DisplayItem[] = [];
+
+  for (const item of items) {
+    // Defensive check: ensure image items have valid path
+    if (item.image && item.image.path) {
+      currentImageGroup.push(item);
+    } else if (item.chart) {
+      // Flush any pending image group
+      if (currentImageGroup.length > 0) {
+        segments.push({ type: 'images', items: currentImageGroup });
+        currentImageGroup = [];
+      }
+      // Add chart as individual segment
+      segments.push({ type: 'chart', item });
+    }
+  }
+
+  // Flush remaining images
+  if (currentImageGroup.length > 0) {
+    segments.push({ type: 'images', items: currentImageGroup });
+  }
+
+  return segments;
+}
 
 export const VisualDisplayWidget: React.FC<CustomToolWidgetProps> = ({ message, readFile }) => {
   const tool = message.toolCall;
@@ -518,10 +662,10 @@ export const VisualDisplayWidget: React.FC<CustomToolWidgetProps> = ({ message, 
 
   if (!tool) return null;
 
-  const config = extractVisualConfig(tool);
+  const items = extractDisplayItems(tool);
   const hasError = isToolError(tool.result, message);
 
-  if (hasError || !config) {
+  if (hasError || !items) {
     return (
       <div className="visual-display-widget visual-display-widget--error" role="img" aria-label="Visual content error">
         <div className="visual-display-widget__header">
@@ -531,133 +675,15 @@ export const VisualDisplayWidget: React.FC<CustomToolWidgetProps> = ({ message, 
           </span>
         </div>
         <div className="visual-display-widget__error">
-          {!config ? 'Invalid visual configuration' : 'Failed to display visual content'}
+          {!items ? 'Invalid visual configuration' : 'Failed to display visual content'}
         </div>
       </div>
     );
   }
 
-  // Render chart
-  if (config.type === 'chart') {
-    const chartConfig: ChartConfig = {
-      chartType: config.chartType,
-      data: config.data,
-      xAxisKey: config.xAxisKey,
-      yAxisKey: config.yAxisKey,
-      title: config.title,
-      width: config.width,
-      height: config.height,
-      colors: config.colors
-    };
+  const segments = groupItemsIntoSegments(items);
 
-    const colors = chartConfig.colors || getThemeColors(isDark);
-    const height = chartConfig.height || 300;
-
-    const renderChart = () => {
-      switch (chartConfig.chartType) {
-        case 'bar':
-          return renderBarChart(chartConfig, colors);
-        case 'line':
-          return renderLineChart(chartConfig, colors);
-        case 'pie':
-          return renderPieChart(chartConfig, colors);
-        case 'area':
-          return renderAreaChart(chartConfig, colors);
-        case 'scatter':
-          return renderScatterChart(chartConfig, colors);
-        default:
-          return null;
-      }
-    };
-
-    const chartLabel = config.title
-      ? `${chartConfig.chartType} chart: ${config.title}`
-      : `${chartConfig.chartType} chart`;
-
-    const errorFallback = (
-      <div className="visual-display-widget visual-display-widget--error" role="img" aria-label="Chart rendering error">
-        <div className="visual-display-widget__header">
-          <span className="visual-display-widget__label">Chart</span>
-          <span className="visual-display-widget__status visual-display-widget__status--error">
-            Error
-          </span>
-        </div>
-        <div className="visual-display-widget__error">
-          Chart rendering failed. Please check the data format.
-        </div>
-      </div>
-    );
-
-    return (
-      <VisualErrorBoundary fallback={errorFallback}>
-        <div className="visual-display-widget" role="img" aria-label={chartLabel}>
-          {config.title && (
-            <div className="visual-display-widget__header">
-              <span className="visual-display-widget__title">{config.title}</span>
-            </div>
-          )}
-          <div className="visual-display-widget__chart" style={{ height }}>
-            <ResponsiveContainer width="100%" height="100%">
-              {renderChart()}
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </VisualErrorBoundary>
-    );
-  }
-
-  // Render images
-  if (config.type === 'images') {
-    if (!config.images || config.images.length === 0) {
-      return (
-        <div className="visual-display-widget visual-display-widget--error" role="img" aria-label="Images error">
-          <div className="visual-display-widget__header">
-            <span className="visual-display-widget__label">Images</span>
-            <span className="visual-display-widget__status visual-display-widget__status--error">
-              Error
-            </span>
-          </div>
-          <div className="visual-display-widget__error">
-            No images provided
-          </div>
-        </div>
-      );
-    }
-
-    const imageLabel = config.title
-      ? `Images: ${config.title}`
-      : `${config.images.length} image(s)`;
-
-    const errorFallback = (
-      <div className="visual-display-widget visual-display-widget--error" role="img" aria-label="Image gallery error">
-        <div className="visual-display-widget__header">
-          <span className="visual-display-widget__label">Images</span>
-          <span className="visual-display-widget__status visual-display-widget__status--error">
-            Error
-          </span>
-        </div>
-        <div className="visual-display-widget__error">
-          Failed to render image gallery.
-        </div>
-      </div>
-    );
-
-    return (
-      <VisualErrorBoundary fallback={errorFallback}>
-        <div className="visual-display-widget" role="img" aria-label={imageLabel}>
-          {config.title && (
-            <div className="visual-display-widget__header">
-              <span className="visual-display-widget__title">{config.title}</span>
-            </div>
-          )}
-          <ImageGallery images={config.images} readFile={readFile} />
-        </div>
-      </VisualErrorBoundary>
-    );
-  }
-
-  // Unknown type
-  return (
+  const errorFallback = (
     <div className="visual-display-widget visual-display-widget--error" role="img" aria-label="Visual content error">
       <div className="visual-display-widget__header">
         <span className="visual-display-widget__label">Visual</span>
@@ -666,8 +692,34 @@ export const VisualDisplayWidget: React.FC<CustomToolWidgetProps> = ({ message, 
         </span>
       </div>
       <div className="visual-display-widget__error">
-        Unknown visual type: {config.type}
+        Failed to render visual content.
       </div>
     </div>
+  );
+
+  return (
+    <VisualErrorBoundary fallback={errorFallback}>
+      <div className="visual-display-widget" role="img" aria-label={`${items.length} visual item(s)`}>
+        {segments.map((segment, index) => {
+          if (segment.type === 'chart') {
+            return (
+              <ChartItemRenderer
+                key={index}
+                item={segment.item}
+                isDark={isDark}
+              />
+            );
+          } else {
+            return (
+              <ImageGallery
+                key={index}
+                images={segment.items}
+                readFile={readFile}
+              />
+            );
+          }
+        })}
+      </div>
+    </VisualErrorBoundary>
   );
 };

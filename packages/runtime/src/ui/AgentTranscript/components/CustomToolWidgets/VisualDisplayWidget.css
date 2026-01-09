@@ -68,6 +68,27 @@
   line-height: 1.4;
 }
 
+/* Item container styles (for array-based display) */
+.visual-display-widget__item {
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.visual-display-widget__item:last-child {
+  border-bottom: none;
+}
+
+.visual-display-widget__item--error {
+  padding: 0.75rem;
+}
+
+.visual-display-widget__item-description {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  background-color: var(--surface-tertiary, var(--surface-secondary));
+  border-bottom: 1px solid var(--border-primary);
+}
+
 /* Chart styles */
 .visual-display-widget__chart {
   padding: 0.75rem;
@@ -198,34 +219,48 @@
   background-color: var(--surface-secondary);
 }
 
-/* Lightbox styles */
+/* Lightbox styles - uses fixed positioning to cover entire viewport */
 .visual-display-widget__lightbox {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: color-mix(in srgb, var(--surface-primary) 95%, transparent);
+  background-color: rgba(0, 0, 0, 0.95);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 10000;
   padding: 2rem;
 }
 
 .visual-display-widget__lightbox-content {
   position: relative;
-  max-width: 90vw;
-  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  max-width: calc(100vw - 4rem);
+  max-height: calc(100vh - 4rem);
   background-color: var(--surface-secondary);
   border-radius: 0.5rem;
   overflow: hidden;
-  box-shadow: 0 8px 32px color-mix(in srgb, var(--text-primary) 25%, transparent);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.visual-display-widget__lightbox-content .visual-display-widget__image-wrapper {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  min-height: 0;
 }
 
 .visual-display-widget__lightbox-content .visual-display-widget__image {
-  max-height: 80vh;
-  max-width: 85vw;
+  max-height: calc(100vh - 10rem);
+  max-width: calc(100vw - 4rem);
+  width: auto;
+  height: auto;
+  object-fit: contain;
 }
 
 .visual-display-widget__lightbox-close {
@@ -284,6 +319,15 @@
   font-size: 0.875rem;
   min-width: 4rem;
   text-align: center;
+}
+
+.visual-display-widget__lightbox-caption {
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  text-align: center;
+  background-color: var(--surface-secondary);
+  border-top: 1px solid var(--border-primary);
 }
 
 /* Responsive adjustments using container queries */
