@@ -18,7 +18,9 @@ export const TEST_TIMEOUTS = {
 
 // Selector for the active editor (accounts for multi-editor architecture)
 // Scoped to file-tabs-container to avoid matching plan or AI editors
-export const ACTIVE_EDITOR_SELECTOR = '.file-tabs-container .multi-editor-instance.active .editor [contenteditable="true"]';
+// Note: The wrapper div (.tab-editor-wrapper) controls visibility via display:block/none
+// We select the visible multi-editor-instance's contenteditable
+export const ACTIVE_EDITOR_SELECTOR = '.file-tabs-container .tab-editor-wrapper:not([style*="display: none"]) .multi-editor-instance .editor [contenteditable="true"]';
 
 // Selector for the active file tab title
 // Scoped to file-tabs-container to avoid matching AI Chat tabs

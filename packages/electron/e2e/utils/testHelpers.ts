@@ -101,6 +101,11 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   historyPreviewPre: '.history-preview-content pre',
   historyRestoreButton: '.history-restore-button',
 
+  // File context menu
+  fileContextMenu: '[data-testid="file-context-menu"]',
+  fileContextMenuItem: '.file-context-menu-item',
+  fileContextMenuDelete: '[data-testid="context-menu-delete"]',
+
   // Search/Replace bar
   searchReplaceBar: '[data-testid="search-replace-bar"]',
   searchInput: '[data-testid="search-input"]',

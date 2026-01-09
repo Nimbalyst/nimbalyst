@@ -40,6 +40,7 @@ import { logger } from '../../utils/logger';
 import { createEditorHost } from './createEditorHost';
 import type { EditorHost, DiffConfig } from '@nimbalyst/runtime';
 import { store, editorHasUnacceptedChangesAtom, makeEditorKey } from '@nimbalyst/runtime/store';
+import { UnifiedEditorHeaderBar } from './UnifiedEditorHeaderBar';
 
 interface TabEditorProps {
   // Identification
@@ -2173,19 +2174,35 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     onManualSaveReady(customEditorSave);
   }, [isCustom, onManualSaveReady, fileName, customEditorSourceMode]);
 
+  // Note: isActive prop is always true (visibility controlled by parent wrapper)
+  // The parent sets display:none on the wrapper for inactive tabs
+  // So we don't use isActive for styling - we're always "active" when visible
   return (
       <div
-          className={`tab-editor multi-editor-instance ${isActive ? 'active' : 'hidden'}`}
-          data-active={isActive ? 'true' : 'false'}
+          className="tab-editor multi-editor-instance"
           data-file-path={filePath}
           style={{
-            display: isActive ? 'flex' : 'none',
+            display: 'flex',
             flexDirection: 'column',
             height: '100%',
             overflow: 'hidden',
             position: 'relative'
           }}
       >
+        <UnifiedEditorHeaderBar
+          filePath={filePath}
+          fileName={fileName}
+          workspaceId={workspaceId}
+          isMarkdown={isMarkdown}
+          isCustomEditor={isCustom}
+          lexicalEditor={isMarkdown ? editorRef.current : undefined}
+          onViewHistory={onViewHistory}
+          onToggleSourceMode={isCustom ? () => editorHost.toggleSourceMode?.() : undefined}
+          supportsSourceMode={isCustom}
+          isSourceModeActive={customEditorSourceMode}
+          onSwitchToAgentMode={onSwitchToAgentMode}
+          onOpenSessionInChat={onOpenSessionInChat}
+        />
         <FixedTabHeaderContainer
           filePath={filePath}
           fileName={fileName}

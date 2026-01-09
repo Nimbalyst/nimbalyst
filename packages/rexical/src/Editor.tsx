@@ -75,7 +75,7 @@ import CodeHighlightPlugin from './plugins/CodeHighlightPlugin';
 const ExcalidrawPlugin = React.lazy(() => import('./plugins/ExcalidrawPlugin'));
 import { KanbanBoardPlugin } from './plugins/KanbanBoardPlugin';
 import CommentPlugin from "./plugins/CommentPlugin";
-import FloatingDocumentActionsPlugin from './plugins/FloatingDocumentActionsPlugin';
+// FloatingDocumentActionsPlugin removed - functionality moved to UnifiedEditorHeaderBar in TabEditor
 import AutoLinkPlugin from './plugins/AutoLinkPlugin';
 
 
@@ -264,15 +264,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
             ) : ( */}
               <HistoryPlugin externalHistoryState={historyState} />
             {/* )} */}
-            {editable && (
-              <FloatingDocumentActionsPlugin
-                config={config}
-                filePath={config.filePath}
-                workspaceId={config.workspaceId}
-                onSwitchToAgentMode={config.onSwitchToAgentMode}
-                onOpenSessionInChat={config.onOpenSessionInChat}
-              />
-            )}
+            {/* FloatingDocumentActionsPlugin removed - unified header bar now provides these features */}
             <RichTextPlugin
               contentEditable={
                 <div className="editor-scroller" ref={onRef}>

@@ -235,6 +235,7 @@ export function FileContextMenu({
     <div
       ref={menuRef}
       className="file-context-menu"
+      data-testid="file-context-menu"
       style={{ left: adjustedPosition.x, top: adjustedPosition.y }}
     >
       {fileType === 'directory' && (
@@ -315,7 +316,11 @@ export function FileContextMenu({
 
       <div className="context-menu-separator" />
 
-      <div className="file-context-menu-item file-context-menu-item-danger" onClick={handleDelete}>
+      <div
+        className="file-context-menu-item file-context-menu-item-danger"
+        data-testid="context-menu-delete"
+        onClick={handleDelete}
+      >
         <MaterialSymbol icon="delete" size={18} />
         <span>Delete</span>
       </div>
