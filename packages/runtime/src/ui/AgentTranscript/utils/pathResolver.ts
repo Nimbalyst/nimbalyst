@@ -3,20 +3,70 @@
  */
 
 /**
- * Extract file path from tool arguments
- * @param args - Tool arguments object
- * @returns File path if found, undefined otherwise
+ * Tools that have file paths that should be clickable (actual files, not directories)
  */
-export function extractFilePathFromArgs(args: any): string | undefined {
+const FILE_PATH_TOOLS = new Set([
+  'read',
+  'edit',
+  'write',
+  'notebookedit',
+  'lsp',
+]);
+
+/**
+ * Tools where 'path' argument is a directory, not a file
+ */
+const DIRECTORY_PATH_TOOLS = new Set([
+  'glob',
+  'grep',
+]);
+
+/**
+ * Normalize a tool name by stripping MCP prefixes and converting to lowercase
+ * Handles patterns like: mcp__nimbalyst__glob -> glob, Glob -> glob
+ */
+function normalizeToolName(toolName: string): string {
+  let name = toolName.toLowerCase();
+  // Strip mcp__*__ prefix (e.g., mcp__nimbalyst__glob -> glob)
+  const mcpMatch = name.match(/^mcp__[^_]+__(.+)$/);
+  if (mcpMatch) {
+    name = mcpMatch[1];
+  }
+  return name;
+}
+
+/**
+ * Extract file path from tool arguments (only for tools that reference actual files)
+ * @param toolName - Name of the tool
+ * @param args - Tool arguments object
+ * @returns File path if found and tool references files, undefined otherwise
+ */
+export function extractFilePathFromArgs(toolName: string, args: any): string | undefined {
   if (!args || typeof args !== 'object') {
     return undefined;
   }
 
-  // Check common property names for file paths
-  const filePath = args.file_path || args.filePath || args.path || args.file;
+  const normalizedToolName = normalizeToolName(toolName);
+
+  // For tools that use 'path' as a directory (Glob, Grep), don't return it as clickable
+  if (DIRECTORY_PATH_TOOLS.has(normalizedToolName)) {
+    return undefined;
+  }
+
+  // For known file tools, check their specific path properties
+  if (FILE_PATH_TOOLS.has(normalizedToolName)) {
+    const filePath = args.file_path || args.filePath || args.notebook_path || args.path;
+    if (typeof filePath === 'string') {
+      return filePath;
+    }
+  }
+
+  // For unknown tools, only use unambiguous file path properties (not 'path')
+  const filePath = args.file_path || args.filePath || args.notebook_path;
   if (typeof filePath === 'string') {
     return filePath;
   }
+
   return undefined;
 }
 

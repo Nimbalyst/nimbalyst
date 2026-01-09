@@ -598,8 +598,8 @@ export const RichTranscriptView = React.forwardRef<
               const argStr = formatToolArguments(tool.name, tool.arguments, workspacePath);
               if (!argStr) return null;
 
-              // Check if there's a clickable file path
-              const filePath = extractFilePathFromArgs(tool.arguments);
+              // Check if there's a clickable file path (only for tools that reference actual files)
+              const filePath = extractFilePathFromArgs(tool.name, tool.arguments);
               const isClickable = onOpenFile && filePath;
 
               if (isClickable) {

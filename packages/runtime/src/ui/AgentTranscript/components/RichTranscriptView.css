@@ -405,7 +405,7 @@
   padding: 0;
   margin: 0;
   font: inherit;
-  color: var(--text-link, var(--accent-color));
+  color: var(--accent-link);
   cursor: pointer;
   text-decoration: none;
 }
@@ -524,7 +524,7 @@
   padding: 0;
   margin: 0;
   font: inherit;
-  color: var(--text-link, var(--accent-color));
+  color: var(--accent-link);
   cursor: pointer;
   text-decoration: none;
   text-align: left;
