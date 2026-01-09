@@ -93,6 +93,7 @@ export {
   expandedDirsAtom,
   isDirExpandedAtom,
   selectedFilePathAtom,
+  activeFilePathAtom,
   fileTreeFilterAtom,
   directoryGitStatusAtom,
   modifiedFileCountAtom,

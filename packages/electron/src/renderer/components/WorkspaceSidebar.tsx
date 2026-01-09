@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback, useSyncExternalStore } from 'react';
 import { FileTree, FileGitStatus } from './FileTree';
 import { InputModal } from './InputModal';
 import { NewFileDialog } from './NewFileDialog';
@@ -10,6 +10,7 @@ import { getFileName } from '../utils/pathUtils';
 import { getExtensionLoader } from '@nimbalyst/runtime';
 import { KeyboardShortcuts, getShortcutDisplay } from '../../shared/KeyboardShortcuts';
 import { store, gitStatusMapAtom, type FileGitStatus as AtomFileGitStatus } from '../store';
+import { useTabsActions } from '../contexts/TabsContext';
 import '../WorkspaceSidebar.css';
 
 interface FileTreeItem {
@@ -132,7 +133,7 @@ function generateWorkspaceColor(path: string): string {
 export function WorkspaceSidebar({
   workspaceName,
   workspacePath,
-  currentFilePath,
+  currentFilePath: currentFilePathProp,
   currentView,
   onFileSelect,
   onCloseWorkspace,
@@ -144,6 +145,18 @@ export function WorkspaceSidebar({
   onSelectedFolderChange,
   currentAISessionId
 }: WorkspaceSidebarProps) {
+  // Subscribe to TabsContext to get reactive updates when active tab changes
+  // This enables auto-scroll functionality after the Jotai refactor that
+  // made EditorMode stop re-rendering on tab switches
+  const tabsActions = useTabsActions();
+  const tabsStore = useSyncExternalStore(
+    tabsActions.subscribe,
+    tabsActions.getSnapshot
+  );
+  // Get active file path from tabs store (reactive) or fall back to prop (legacy)
+  const activeTab = tabsStore.activeTabId ? tabsStore.tabs.get(tabsStore.activeTabId) : null;
+  const currentFilePath = activeTab?.filePath ?? currentFilePathProp;
+
   // File tree state - managed internally to avoid parent re-renders
   const [fileTree, setFileTree] = useState<FileTreeItem[]>([]);
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);

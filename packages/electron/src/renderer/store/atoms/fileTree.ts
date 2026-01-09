@@ -11,6 +11,7 @@
 
 import { atom } from 'jotai';
 import { atomFamily } from 'jotai/utils';
+import { activeTabIdAtom, getFilePathFromKey } from '@nimbalyst/runtime/store';
 
 /**
  * Git status codes matching what `simple-git` provides.
@@ -97,6 +98,18 @@ export const isDirExpandedAtom = atomFamily((dirPath: string) =>
  * Currently selected file path in the tree.
  */
 export const selectedFilePathAtom = atom<string | null>(null);
+
+/**
+ * Derived: Active file path from the main editor context.
+ * WorkspaceSidebar subscribes to this for auto-scroll functionality.
+ * This allows the file tree to react to tab switches without requiring
+ * the parent component to re-render.
+ */
+export const activeFilePathAtom = atom((get) => {
+  const activeTabKey = get(activeTabIdAtom('main'));
+  if (!activeTabKey) return null;
+  return getFilePathFromKey(activeTabKey);
+});
 
 /**
  * Active filter for file tree (e.g., "modified", "untracked").
