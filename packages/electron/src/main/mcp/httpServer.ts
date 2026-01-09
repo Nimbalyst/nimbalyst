@@ -10,7 +10,7 @@ import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { BrowserWindow, ipcMain, nativeImage } from 'electron';
 import { parse as parseUrl } from 'url';
 import { existsSync } from 'fs';
-import { resolve, isAbsolute } from 'path';
+import path, { isAbsolute } from 'path';
 import { MockupScreenshotService } from '../services/MockupScreenshotService';
 import { getReleaseChannel } from '../utils/store';
 
@@ -1214,7 +1214,8 @@ async function tryCreateServer(port: number): Promise<any> {
                 }
 
                 // Normalize and resolve path (prevents path traversal attacks)
-                const normalizedPath = resolve(item.image!.path);
+                // Note: Using path.resolve() explicitly to avoid shadowing from Promise resolve callbacks
+                const normalizedPath = path.resolve(item.image!.path);
 
                 // Check if file exists
                 if (!existsSync(normalizedPath)) {
