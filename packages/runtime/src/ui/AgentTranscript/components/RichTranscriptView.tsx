@@ -604,16 +604,25 @@ export const RichTranscriptView = React.forwardRef<
 
               if (isClickable) {
                 return (
-                  <button
+                  <span
+                    role="link"
+                    tabIndex={0}
                     className="rich-transcript-tool-args rich-transcript-tool-args-link"
                     onClick={(e) => {
                       e.stopPropagation();
                       onOpenFile(filePath);
                     }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        onOpenFile(filePath);
+                      }
+                    }}
                     title={`Open ${filePath}`}
                   >
                     {argStr}
-                  </button>
+                  </span>
                 );
               }
               return <span className="rich-transcript-tool-args">{argStr}</span>;
