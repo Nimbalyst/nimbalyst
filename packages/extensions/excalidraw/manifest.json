@@ -37,7 +37,10 @@
       "excalidraw.distribute_elements",
       "excalidraw.move_element",
       "excalidraw.group_elements",
-      "excalidraw.set_elements_in_frame"
+      "excalidraw.set_elements_in_frame",
+      "excalidraw.add_arrows",
+      "excalidraw.add_elements",
+      "excalidraw.remove_elements"
     ],
     "fileIcons": {
       "*.excalidraw": "draw"

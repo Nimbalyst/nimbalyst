@@ -1620,4 +1620,391 @@ export const aiTools = [
       return { success: true, data: { frameId: frame.id, elementCount: idsToAddToFrame.size } };
     },
   },
+
+  {
+    name: 'add_arrows',
+    description: 'Add multiple arrows in a single batch operation. Much more efficient than calling add_arrow repeatedly when creating diagrams with many connections.',
+    parameters: {
+      type: 'object' as const,
+      properties: {
+        arrows: {
+          type: 'array' as const,
+          items: {
+            type: 'object' as const,
+            properties: {
+              from: {
+                type: 'string' as const,
+                description: 'Label of the source element',
+              },
+              to: {
+                type: 'string' as const,
+                description: 'Label of the target element',
+              },
+              label: {
+                type: 'string' as const,
+                description: 'Optional label for the arrow',
+              },
+            },
+            required: ['from', 'to'],
+          },
+          description: 'Array of arrow definitions to create',
+        },
+      },
+      required: ['arrows'],
+    },
+    handler: async (
+      params: {
+        arrows: Array<{ from: string; to: string; label?: string }>;
+      },
+      context: { activeFilePath?: string }
+    ) => {
+      const api = getEditorAPI(context.activeFilePath);
+      if (!api) {
+        return {
+          success: false,
+          error: 'No active Excalidraw editor found.',
+        };
+      }
+
+      const currentElements = api.getSceneElements();
+      const newArrows: any[] = [];
+      const elementUpdates = new Map<string, any>();
+      const createdIds: string[] = [];
+      const errors: string[] = [];
+
+      // Process each arrow
+      for (const arrowDef of params.arrows) {
+        const fromEl = getElementByLabel(currentElements, arrowDef.from);
+        const toEl = getElementByLabel(currentElements, arrowDef.to);
+
+        if (!fromEl || !toEl) {
+          errors.push(`Could not find elements: ${!fromEl ? arrowDef.from : ''} ${!toEl ? arrowDef.to : ''}`);
+          continue;
+        }
+
+        // Get container elements if bound to text
+        let fromContainerId = fromEl.id;
+        let toContainerId = toEl.id;
+
+        if ('containerId' in fromEl && fromEl.containerId) {
+          fromContainerId = fromEl.containerId as string;
+        }
+        if ('containerId' in toEl && toEl.containerId) {
+          toContainerId = toEl.containerId as string;
+        }
+
+        const fromContainer = currentElements.find(el => el.id === fromContainerId) || fromEl;
+        const toContainer = currentElements.find(el => el.id === toContainerId) || toEl;
+
+        // Calculate edge intersection points
+        const fromCenterX = fromContainer.x + (fromContainer.width || 0) / 2;
+        const fromCenterY = fromContainer.y + (fromContainer.height || 0) / 2;
+        const toCenterX = toContainer.x + (toContainer.width || 0) / 2;
+        const toCenterY = toContainer.y + (toContainer.height || 0) / 2;
+
+        const gap = 8;
+        const fromEdge = calculateEdgePoint(fromContainer, toCenterX, toCenterY, gap);
+        const toEdge = calculateEdgePoint(toContainer, fromCenterX, fromCenterY, gap);
+
+        const arrowId = `arrow-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+        // Create arrow element
+        const arrow: any = {
+          id: arrowId,
+          type: 'arrow',
+          x: fromEdge.x,
+          y: fromEdge.y,
+          width: toEdge.x - fromEdge.x,
+          height: toEdge.y - fromEdge.y,
+          angle: 0,
+          strokeColor: '#1e1e1e',
+          backgroundColor: 'transparent',
+          fillStyle: 'solid',
+          strokeWidth: 2,
+          strokeStyle: 'solid',
+          roughness: 1,
+          opacity: 100,
+          groupIds: [],
+          frameId: null,
+          roundness: { type: 2 },
+          seed: Math.floor(Math.random() * 1000000),
+          version: 1,
+          versionNonce: Math.floor(Math.random() * 1000000),
+          isDeleted: false,
+          boundElements: null,
+          updated: Date.now(),
+          link: null,
+          locked: false,
+          points: [
+            [0, 0],
+            [toEdge.x - fromEdge.x, toEdge.y - fromEdge.y],
+          ],
+          lastCommittedPoint: null,
+          startBinding: {
+            elementId: fromContainerId,
+            focus: 0,
+            gap,
+          },
+          endBinding: {
+            elementId: toContainerId,
+            focus: 0,
+            gap,
+          },
+          startArrowhead: null,
+          endArrowhead: 'arrow',
+        };
+
+        newArrows.push(arrow);
+        createdIds.push(arrowId);
+
+        // Track bound element updates
+        for (const containerId of [fromContainerId, toContainerId]) {
+          if (!elementUpdates.has(containerId)) {
+            const el = currentElements.find(e => e.id === containerId);
+            if (el) {
+              elementUpdates.set(containerId, {
+                ...el,
+                boundElements: [...((el as any).boundElements || [])],
+              });
+            }
+          }
+          const updated = elementUpdates.get(containerId);
+          if (updated) {
+            updated.boundElements.push({ id: arrowId, type: 'arrow' });
+          }
+        }
+      }
+
+      // Apply all updates in a single scene update
+      const updatedElements = currentElements.map(el =>
+        elementUpdates.has(el.id) ? elementUpdates.get(el.id) : el
+      );
+
+      api.updateScene({
+        elements: [...updatedElements, ...newArrows],
+      });
+
+      return {
+        success: true,
+        data: {
+          created: createdIds.length,
+          ids: createdIds,
+          errors: errors.length > 0 ? errors : undefined,
+        },
+      };
+    },
+  },
+
+  {
+    name: 'add_elements',
+    description: 'Add multiple rectangles in a single batch operation. Much more efficient than calling add_rectangle repeatedly when creating diagrams with many elements.',
+    parameters: {
+      type: 'object' as const,
+      properties: {
+        elements: {
+          type: 'array' as const,
+          items: {
+            type: 'object' as const,
+            properties: {
+              label: {
+                type: 'string' as const,
+                description: 'Text label for the rectangle',
+              },
+              x: {
+                type: 'number' as const,
+                description: 'X position (left edge). If not provided, auto-positions.',
+              },
+              y: {
+                type: 'number' as const,
+                description: 'Y position (top edge). If not provided, auto-positions.',
+              },
+              width: {
+                type: 'number' as const,
+                description: 'Width of the rectangle (default: 150)',
+              },
+              height: {
+                type: 'number' as const,
+                description: 'Height of the rectangle (default: 80)',
+              },
+              color: {
+                type: 'string' as const,
+                description: 'Fill color (hex code or color name)',
+              },
+              strokeColor: {
+                type: 'string' as const,
+                description: 'Border color (hex code or color name)',
+              },
+              rounded: {
+                type: 'boolean' as const,
+                description: 'Whether to use rounded corners (default: true)',
+              },
+            },
+            required: ['label'],
+          },
+          description: 'Array of rectangle definitions to create',
+        },
+      },
+      required: ['elements'],
+    },
+    handler: async (
+      params: {
+        elements: Array<{
+          label: string;
+          x?: number;
+          y?: number;
+          width?: number;
+          height?: number;
+          color?: string;
+          strokeColor?: string;
+          rounded?: boolean;
+        }>;
+      },
+      context: { activeFilePath?: string }
+    ) => {
+      const api = getEditorAPI(context.activeFilePath);
+      if (!api) {
+        return {
+          success: false,
+          error: 'No active Excalidraw editor found.',
+        };
+      }
+
+      const currentElements = api.getSceneElements() || [];
+      const engine = new LayoutEngine();
+      engine.addElements(currentElements);
+
+      const skeletons: any[] = [];
+      const createdIds: string[] = [];
+
+      // Create all rectangles
+      for (const elemDef of params.elements) {
+        const width = elemDef.width || 150;
+        const height = elemDef.height || 80;
+        const rounded = elemDef.rounded !== undefined ? elemDef.rounded : true;
+
+        let position: { x: number; y: number };
+
+        if (elemDef.x !== undefined && elemDef.y !== undefined) {
+          position = { x: elemDef.x, y: elemDef.y };
+        } else {
+          position = engine.calculateDefaultPosition(width, height);
+        }
+
+        const rectSkeleton: any = {
+          type: 'rectangle',
+          x: position.x,
+          y: position.y,
+          width,
+          height,
+          backgroundColor: normalizeColor(elemDef.color) || 'transparent',
+          strokeColor: normalizeColor(elemDef.strokeColor) || '#1e1e1e',
+          roundness: rounded ? { type: 3 } : null,
+          label: {
+            text: elemDef.label,
+          },
+        };
+
+        skeletons.push(rectSkeleton);
+      }
+
+      const newElements = convertToExcalidrawElements(skeletons);
+      const rectangleIds = newElements.filter(el => el.type === 'rectangle').map(el => el.id);
+
+      api.updateScene({
+        elements: [...currentElements, ...newElements],
+      });
+
+      return {
+        success: true,
+        data: {
+          created: rectangleIds.length,
+          ids: rectangleIds,
+        },
+      };
+    },
+  },
+
+  {
+    name: 'remove_elements',
+    description: 'Remove multiple elements in a single batch operation. Much more efficient than calling remove_element repeatedly.',
+    parameters: {
+      type: 'object' as const,
+      properties: {
+        labels: {
+          type: 'array' as const,
+          items: { type: 'string' as const },
+          description: 'Labels of elements to remove',
+        },
+        ids: {
+          type: 'array' as const,
+          items: { type: 'string' as const },
+          description: 'Element IDs to remove (alternative to labels)',
+        },
+      },
+    },
+    handler: async (
+      params: {
+        labels?: string[];
+        ids?: string[];
+      },
+      context: { activeFilePath?: string }
+    ) => {
+      const api = getEditorAPI(context.activeFilePath);
+      if (!api) {
+        return {
+          success: false,
+          error: 'No active Excalidraw editor found.',
+        };
+      }
+
+      if ((!params.labels || params.labels.length === 0) && (!params.ids || params.ids.length === 0)) {
+        return {
+          success: false,
+          error: 'Must provide either labels or ids array',
+        };
+      }
+
+      const currentElements = api.getSceneElements();
+      const idsToRemove = new Set<string>();
+
+      // Find elements by labels
+      if (params.labels) {
+        for (const label of params.labels) {
+          const element = getElementByLabel(currentElements, label);
+          if (element) {
+            idsToRemove.add(element.id);
+            // If it's bound text, also remove container
+            if ('containerId' in element && element.containerId) {
+              idsToRemove.add(element.containerId as string);
+            }
+          }
+        }
+      }
+
+      // Find elements by IDs
+      if (params.ids) {
+        for (const id of params.ids) {
+          const element = currentElements.find(el => el.id === id);
+          if (element) {
+            idsToRemove.add(id);
+            // If it's bound text, also remove container
+            if ('containerId' in element && element.containerId) {
+              idsToRemove.add(element.containerId as string);
+            }
+          }
+        }
+      }
+
+      const updatedElements = currentElements.filter((el) => !idsToRemove.has(el.id));
+
+      api.updateScene({ elements: updatedElements });
+
+      return {
+        success: true,
+        data: {
+          removed: idsToRemove.size,
+        },
+      };
+    },
+  },
 ];
