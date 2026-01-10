@@ -174,38 +174,93 @@ function isToolError(result: unknown, message: { isError?: boolean }): boolean {
 }
 
 /**
+ * Make technical error messages more user-friendly
+ * Handles various error formats from MCP server and Claude Code SDK
+ */
+function formatErrorMessage(rawMessage: string): string {
+  // Handle "items[N].image.path file does not exist: /path" format (from Claude Code SDK)
+  const fileNotExistMatch = rawMessage.match(/items\[\d+\]\.image\.path file does not exist:\s*"?([^"]+)"?/);
+  if (fileNotExistMatch) {
+    const filePath = fileNotExistMatch[1];
+    return `File not found at "${filePath}". Please verify the file exists and the path is correct.`;
+  }
+
+  // Handle "items[N].image.path must be..." format
+  const pathValidationMatch = rawMessage.match(/items\[\d+\]\.image\.path\s+(.*)/);
+  if (pathValidationMatch) {
+    return pathValidationMatch[1]; // Return just the validation message without the prefix
+  }
+
+  // Handle "Error: items[N]..." prefix - strip the technical prefix
+  const errorPrefixMatch = rawMessage.match(/^Error:\s*items\[\d+\]\.?\s*(.*)/);
+  if (errorPrefixMatch) {
+    return errorPrefixMatch[1];
+  }
+
+  return rawMessage;
+}
+
+/**
  * Extract error message from tool result
  * Server returns errors in format: { content: [{ type: 'text', text: 'Error: ...' }], isError: true }
+ * Claude Code SDK may also return errors as plain strings
  */
 function extractErrorMessage(result: unknown): string | null {
-  if (!result || typeof result !== 'object') return null;
+  let rawMessage: string | null = null;
 
-  const resultObj = result as Record<string, unknown>;
+  if (!result || typeof result !== 'object') {
+    // If result is a string, use it directly
+    if (typeof result === 'string') {
+      rawMessage = result;
+    }
+  } else {
+    const resultObj = result as Record<string, unknown>;
 
-  // Handle MCP-style content array response
-  if (Array.isArray(resultObj.content)) {
-    for (const item of resultObj.content) {
-      if (item && typeof item === 'object' && 'text' in item && typeof item.text === 'string') {
-        return item.text;
+    // Handle MCP-style content array response
+    if (Array.isArray(resultObj.content)) {
+      for (const item of resultObj.content) {
+        if (item && typeof item === 'object' && 'text' in item && typeof item.text === 'string') {
+          rawMessage = item.text;
+          break;
+        }
+      }
+    }
+
+    // Handle simple text response
+    if (!rawMessage && typeof resultObj.text === 'string') {
+      rawMessage = resultObj.text;
+    }
+
+    // Handle error message field
+    if (!rawMessage && typeof resultObj.error === 'string') {
+      rawMessage = resultObj.error;
+    }
+
+    if (!rawMessage && typeof resultObj.message === 'string') {
+      rawMessage = resultObj.message;
+    }
+
+    // Last resort: if result is truthy and we couldn't extract a message,
+    // try to stringify it (but only if it looks like it might contain useful info)
+    if (!rawMessage) {
+      try {
+        const stringified = JSON.stringify(resultObj);
+        // Only return if it's not just "{}" or similar
+        if (stringified && stringified.length > 2 && stringified !== '{}') {
+          rawMessage = stringified;
+        }
+      } catch {
+        // Ignore stringify errors
       }
     }
   }
 
-  // Handle simple text response
-  if (typeof resultObj.text === 'string') {
-    return resultObj.text;
+  if (!rawMessage) {
+    return null;
   }
 
-  // Handle error message field
-  if (typeof resultObj.error === 'string') {
-    return resultObj.error;
-  }
-
-  if (typeof resultObj.message === 'string') {
-    return resultObj.message;
-  }
-
-  return null;
+  // Format the message to be more user-friendly
+  return formatErrorMessage(rawMessage);
 }
 
 /**
@@ -731,22 +786,52 @@ export const VisualDisplayWidget: React.FC<CustomToolWidgetProps> = ({ message, 
   }
 
   const items = extractDisplayItems(tool);
-  const hasError = isToolError(tool.result, message);
 
-  if (hasError || !items) {
+  // Only show full-widget error if we truly can't extract items
+  // (server validation error). Don't let hasError flag override successful item extraction.
+  if (!items) {
+    const hasError = isToolError(tool.result, message);
+
     // Extract detailed error message from server response
     const serverErrorMessage = extractErrorMessage(tool.result);
+
+    // Try to extract path information from tool arguments for better error context
+    const args = tool.arguments as DisplayArgs | undefined;
+    const pathInfo = args?.items
+      ?.map((item, i) => item.image?.path ? `items[${i}].image.path: "${item.image.path}"` : null)
+      .filter(Boolean)
+      .join(', ');
 
     // Determine the appropriate error message to display
     let displayErrorMessage: string;
     if (serverErrorMessage) {
+      // Server provided an error message - use it directly
       displayErrorMessage = serverErrorMessage;
-    } else if (!items && !hasError) {
-      displayErrorMessage = 'Invalid visual configuration: items array is missing or malformed';
-    } else if (!items) {
-      displayErrorMessage = 'Failed to parse visual display arguments';
+    } else if (hasError) {
+      // Server indicated error but no message extracted - show what we can
+      displayErrorMessage = 'Server rejected the request';
+      if (pathInfo) {
+        displayErrorMessage += `\n\nProvided paths: ${pathInfo}`;
+      }
+      // Also include raw result for debugging
+      if (tool.result) {
+        try {
+          const resultStr = typeof tool.result === 'string'
+            ? tool.result
+            : JSON.stringify(tool.result);
+          if (resultStr && resultStr !== '{}' && resultStr !== 'null') {
+            displayErrorMessage += `\n\nRaw result: ${resultStr.substring(0, 500)}`;
+          }
+        } catch {
+          // Ignore stringify errors
+        }
+      }
     } else {
-      displayErrorMessage = 'Failed to display visual content';
+      // No server error but couldn't parse items
+      displayErrorMessage = 'Invalid visual configuration: items array is missing or malformed';
+      if (pathInfo) {
+        displayErrorMessage += `\n\nProvided paths: ${pathInfo}`;
+      }
     }
 
     // Log for debugging - use console.log for expected server-side validation rejections,
@@ -782,6 +867,9 @@ export const VisualDisplayWidget: React.FC<CustomToolWidgetProps> = ({ message, 
       </div>
     );
   }
+
+  // If we have items, render them regardless of error flags
+  // Individual images will handle their own errors gracefully
 
   const segments = groupItemsIntoSegments(items);
 

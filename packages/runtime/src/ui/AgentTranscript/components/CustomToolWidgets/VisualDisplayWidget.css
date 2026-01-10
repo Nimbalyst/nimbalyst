@@ -67,6 +67,7 @@
   font-size: 0.75rem;
   line-height: 1.4;
   word-break: break-word;
+  white-space: pre-wrap;
 }
 
 .visual-display-widget__error-details {

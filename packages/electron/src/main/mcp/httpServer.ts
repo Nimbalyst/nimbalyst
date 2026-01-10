@@ -541,7 +541,7 @@ async function tryCreateServer(port: number): Promise<any> {
         if (getReleaseChannel() === 'alpha') {
           builtInTools.push({
             name: 'display_to_user',
-            description: 'Display visual content inline in the conversation. Use this to show images or charts to the user. Provide an array of items, where each item has a description and exactly one content type: either "image" (for displaying a file) or "chart" (for data visualizations).',
+            description: 'Display visual content inline in the conversation. Use this to show images or charts to the user. Provide an array of items, where each item has a description and exactly one content type: either "image" (for displaying a LOCAL file) or "chart" (for data visualizations). IMPORTANT: For images, you must provide an ABSOLUTE path to a LOCAL file on disk (e.g., "/Users/name/project/image.png"). URLs and relative paths are NOT supported. If a file does not exist, that specific image will show an error while other valid images still display.',
             inputSchema: {
               type: 'object',
               properties: {
@@ -558,11 +558,11 @@ async function tryCreateServer(port: number): Promise<any> {
                       },
                       image: {
                         type: 'object',
-                        description: 'Display an image file. Provide this OR chart, not both.',
+                        description: 'Display a LOCAL image file from disk. Provide this OR chart, not both. The file must exist locally.',
                         properties: {
                           path: {
                             type: 'string',
-                            description: 'Absolute file path to the image'
+                            description: 'ABSOLUTE path to a LOCAL image file on disk (e.g., "/Users/name/project/screenshot.png"). URLs and relative paths are NOT supported. The file must exist.'
                           }
                         },
                         required: ['path']
@@ -1205,25 +1205,32 @@ async function tryCreateServer(port: number): Promise<any> {
                   };
                 }
 
-                // Validate path is absolute (prevents relative path traversal)
-                if (!isAbsolute(item.image!.path)) {
+                const imagePath = item.image!.path;
+
+                // Check if path looks like a URL (common mistake)
+                if (imagePath.startsWith('http://') || imagePath.startsWith('https://') || imagePath.startsWith('data:')) {
                   return {
-                    content: [{ type: 'text', text: `Error: ${itemPrefix}.image.path must be an absolute path. Got: "${item.image!.path}"` }],
+                    content: [{ type: 'text', text: `Error: ${itemPrefix}.image.path must be a LOCAL file path, not a URL. Got: "${imagePath.substring(0, 100)}${imagePath.length > 100 ? '...' : ''}". Download the image to a local file first, then provide the absolute path to that file.` }],
+                    isError: true
+                  };
+                }
+
+                // Validate path is absolute (prevents relative path traversal)
+                if (!isAbsolute(imagePath)) {
+                  return {
+                    content: [{ type: 'text', text: `Error: ${itemPrefix}.image.path must be an ABSOLUTE local file path (e.g., "/Users/name/image.png"), not a relative path. Got: "${imagePath}"` }],
                     isError: true
                   };
                 }
 
                 // Normalize and resolve path (prevents path traversal attacks)
                 // Note: Using path.resolve() explicitly to avoid shadowing from Promise resolve callbacks
-                const normalizedPath = path.resolve(item.image!.path);
+                const normalizedPath = path.resolve(imagePath);
 
-                // Check if file exists
-                if (!existsSync(normalizedPath)) {
-                  return {
-                    content: [{ type: 'text', text: `Error: ${itemPrefix}.image.path file does not exist: "${normalizedPath}"` }],
-                    isError: true
-                  };
-                }
+                // Note: We intentionally do NOT check if the file exists here.
+                // The widget handles missing files gracefully per-image, showing an error
+                // for that specific image while still displaying other valid images.
+                // Failing the entire request for one missing file is poor UX.
 
                 displayedItems.push(`image: ${item.description}`);
               }
