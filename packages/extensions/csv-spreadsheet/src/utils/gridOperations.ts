@@ -8,7 +8,7 @@
 import type { DimensionRows } from '@revolist/revogrid';
 import type { RevoGridElement } from '../revogrid-types';
 import type { NormalizedSelectionRange, ColumnFormat, CSVMetadata, FormulaEvalData } from '../types';
-import { columnIndexToLetter, serializeMetadata } from './csvParser';
+import { columnIndexToLetter, columnLetterToIndex, serializeMetadata } from './csvParser';
 import { isFormula, evaluateFormula } from './formulaEngine';
 import type { UndoRedoPlugin } from '../plugins/UndoRedoPlugin';
 
@@ -680,8 +680,6 @@ export function createGridOperations(
     const columnFormats = getColumnFormats();
     const frozenColumnCount = getFrozenColumnCount();
 
-    const csvRows: string[] = [];
-
     // Helper to format a cell value for CSV
     function formatCell(value: unknown): string {
       const str = String(value ?? '');
@@ -691,12 +689,55 @@ export function createGridOperations(
       return str;
     }
 
+    // Helper to check if a cell value is empty
+    function isEmptyCell(value: unknown): boolean {
+      return value === undefined || value === null || value === '';
+    }
+
+    // Find the last non-empty column across all rows (pinned + regular)
+    // We need to check ALL column keys that exist in row data, not just up to columnCount,
+    // because new columns may have been added that aren't reflected in the metadata
+    let lastNonEmptyCol = -1;
+    const allRows = [...(pinnedTop?.slice(0, headerRowCount) || []), ...(source || [])];
+
+    // Find the maximum possible column by looking at row object keys
+    let maxColToCheck = columnCount - 1;
+    for (const rowData of allRows) {
+      for (const key of Object.keys(rowData)) {
+        // Column keys are single or double letters (A-Z, AA-ZZ, etc.)
+        if (/^[A-Z]+$/.test(key)) {
+          const colIdx = columnLetterToIndex(key);
+          if (colIdx > maxColToCheck) {
+            maxColToCheck = colIdx;
+          }
+        }
+      }
+    }
+
+    for (const rowData of allRows) {
+      // Check all columns in this row from right to left
+      for (let colIdx = maxColToCheck; colIdx >= 0; colIdx--) {
+        const prop = columnIndexToLetter(colIdx);
+        if (!isEmptyCell(rowData[prop])) {
+          if (colIdx > lastNonEmptyCol) {
+            lastNonEmptyCol = colIdx;
+          }
+          break; // Found rightmost non-empty cell in this row
+        }
+      }
+    }
+
+    // Use at least 1 column
+    const effectiveColumnCount = Math.max(1, lastNonEmptyCol + 1);
+
+    const csvRows: string[] = [];
+
     // Add pinned (header) rows first
     if (pinnedTop) {
       for (let rowIdx = 0; rowIdx < headerRowCount && rowIdx < pinnedTop.length; rowIdx++) {
         const rowData = pinnedTop[rowIdx];
         const cells: string[] = [];
-        for (let colIdx = 0; colIdx < columnCount; colIdx++) {
+        for (let colIdx = 0; colIdx < effectiveColumnCount; colIdx++) {
           const prop = columnIndexToLetter(colIdx);
           const value = rowData[prop];
           cells.push(formatCell(value));
@@ -710,7 +751,7 @@ export function createGridOperations(
       for (let rowIdx = 0; rowIdx < source.length; rowIdx++) {
         const rowData = source[rowIdx];
         const cells: string[] = [];
-        for (let colIdx = 0; colIdx < columnCount; colIdx++) {
+        for (let colIdx = 0; colIdx < effectiveColumnCount; colIdx++) {
           const prop = columnIndexToLetter(colIdx);
           const value = rowData[prop];
           cells.push(formatCell(value));
