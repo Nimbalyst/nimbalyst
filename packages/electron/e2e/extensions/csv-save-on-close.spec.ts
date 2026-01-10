@@ -26,7 +26,11 @@ test.beforeEach(async () => {
   const csvPath = path.join(workspaceDir, 'test.csv');
   await fs.writeFile(csvPath, 'A,B,C\n1,2,3\n4,5,6\n', 'utf8');
 
-  electronApp = await launchElectronApp({ workspace: workspaceDir });
+  // Launch with alpha release channel so CSV extension loads
+  electronApp = await launchElectronApp({
+    workspace: workspaceDir,
+    env: { NIMBALYST_RELEASE_CHANNEL: 'alpha' }
+  });
   page = await electronApp.firstWindow();
   await page.waitForLoadState('domcontentloaded');
   await waitForAppReady(page);

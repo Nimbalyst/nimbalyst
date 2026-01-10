@@ -841,6 +841,11 @@ export function setOSNotificationsEnabled(enabled: boolean): void {
 
 // Release Channel Settings
 export function getReleaseChannel(): ReleaseChannel {
+  // Allow env override for testing (set via NIMBALYST_RELEASE_CHANNEL=alpha)
+  const envChannel = process.env.NIMBALYST_RELEASE_CHANNEL;
+  if (envChannel === 'alpha' || envChannel === 'stable') {
+    return envChannel;
+  }
   return appStore.get('releaseChannel', 'stable');
 }
 

@@ -163,7 +163,10 @@ async function getBuiltinExtensionsDirectory(): Promise<string | null> {
         path.join(process.resourcesPath, 'app.asar.unpacked', 'extensions'),
       ]
     : [
-        // Development: relative to __dirname (out/main)
+        // Development: relative to __dirname (out/main/chunks in vite build)
+        // Go up 4 levels to packages/, then into extensions/
+        path.join(__dirname, '..', '..', '..', '..', 'extensions'),
+        // Fallback: if __dirname is out/main (no chunks)
         path.join(__dirname, '..', '..', '..', 'extensions'),
         path.join(__dirname, '..', '..', 'resources', 'extensions'),
       ];
