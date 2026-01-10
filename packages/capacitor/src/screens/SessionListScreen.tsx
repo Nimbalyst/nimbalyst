@@ -5,7 +5,7 @@ import { SessionCard } from '../components/SessionCard';
 
 export function SessionListScreen() {
   const navigate = useNavigate();
-  const { projectId } = useParams<{ projectId: string }>();
+  const { projectId: encodedProjectId } = useParams<{ projectId: string }>();
   const {
     allSessions,
     projects,
@@ -18,6 +18,9 @@ export function SessionListScreen() {
   } = useSync();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+
+  // Decode the project ID from the URL
+  const projectId = encodedProjectId ? decodeURIComponent(encodedProjectId) : undefined;
 
   // Find the current project from the route param
   const currentProject = useMemo(() => {
