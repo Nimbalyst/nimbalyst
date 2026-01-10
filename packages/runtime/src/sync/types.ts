@@ -212,6 +212,11 @@ export interface SessionIndexData {
   messageCount: number;
   updatedAt: number;
   createdAt: number;
+  /** Current context usage (from /context command for Claude Code) */
+  currentContext?: {
+    tokens: number;
+    contextWindow: number;
+  };
   /** Optional messages to sync to the session Y.Doc */
   messages?: AgentMessage[];
 }
@@ -254,6 +259,11 @@ export interface SyncedSessionMetadata {
   };
   /** Whether the session is currently executing (processing AI request) */
   isExecuting?: boolean;
+  /** Current context usage (from /context command for Claude Code) */
+  currentContext?: {
+    tokens: number;         // Current tokens in context window
+    contextWindow: number;  // Max context window size
+  };
 }
 
 /**
@@ -283,6 +293,11 @@ export interface SessionIndexEntry {
   isExecuting?: boolean;
   /** Whether there are pending interactive prompts (permissions or questions) waiting for response */
   hasPendingPrompt?: boolean;
+  /** Current context usage (from /context command for Claude Code) */
+  currentContext?: {
+    tokens: number;         // Current tokens in context window
+    contextWindow: number;  // Max context window size
+  };
 }
 
 /**

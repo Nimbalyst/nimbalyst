@@ -158,6 +158,11 @@ interface ServerSessionEntry {
   encryptedQueuedPrompts?: EncryptedQueuedPrompt[];
   /** Whether there are pending interactive prompts (permissions or questions) waiting for response */
   hasPendingPrompt?: boolean;
+  /** Current context usage (from /context command for Claude Code) */
+  currentContext?: {
+    tokens: number;
+    contextWindow: number;
+  };
 }
 
 interface ServerProjectEntry {
@@ -763,6 +768,7 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
       } : undefined,
       isExecuting: server.isExecuting,
       hasPendingPrompt: server.hasPendingPrompt,
+      currentContext: server.currentContext,
     };
   }, []);
 
@@ -870,15 +876,19 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
           }
 
           case 'index_broadcast': {
+            console.log('[CollabV3] Received index_broadcast for session:', message.session.session_id);
             const updatedSession = await convertSession(message.session);
+            console.log('[CollabV3] Converted session:', updatedSession.id, updatedSession.title);
             setAllSessions((prev) => {
               const existing = prev.findIndex((s) => s.id === updatedSession.id);
               if (existing >= 0) {
+                console.log('[CollabV3] Updating existing session:', updatedSession.id);
                 const updated = [...prev];
                 updated[existing] = updatedSession;
                 // Sort by updated_at to match desktop sort order
                 return updated.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
               } else {
+                console.log('[CollabV3] Adding new session:', updatedSession.id);
                 // Sort by updated_at to match desktop sort order
                 return [updatedSession, ...prev].sort(
                   (a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)
@@ -924,11 +934,11 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
           case 'create_session_response_broadcast': {
             // Desktop responded to our session creation request
             const response = message.response;
-            // Debug logging - uncomment if needed
-            // console.log('[CollabV3] Received create_session_response:', response.request_id, 'success:', response.success);
+            console.log('[CollabV3] Received create_session_response:', response.request_id, 'success:', response.success, 'sessionId:', response.session_id);
 
             const pending = pendingSessionCreationsRef.current.get(response.request_id);
             if (pending) {
+              console.log('[CollabV3] Found pending request, resolving...');
               clearTimeout(pending.timeout);
               pendingSessionCreationsRef.current.delete(response.request_id);
               setIsCreatingSession(false);
@@ -937,6 +947,8 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
                 sessionId: response.session_id,
                 error: response.error,
               });
+            } else {
+              console.log('[CollabV3] No pending request found for:', response.request_id);
             }
             break;
           }
