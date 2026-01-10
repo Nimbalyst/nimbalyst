@@ -623,8 +623,10 @@ export class AIService {
 
                 logger.main.info(`[AIService] Inserted ${newPromptsCount} new prompts into queued_prompts table`);
 
-                // Load session to get its workspacePath
-                const session = await this.sessionManager.loadSession(sessionId);
+                // Load session to get its workspacePath for window routing
+                // Use repository directly since we just need metadata, not full session load
+                const { AISessionsRepository } = await import('@nimbalyst/runtime/storage/repositories/AISessionsRepository');
+                const session = await AISessionsRepository.get(sessionId);
                 if (!session) {
                   logger.main.warn('[AIService] Session not found for queuedPrompts:', sessionId);
                   return;
@@ -2314,8 +2316,9 @@ export class AIService {
 
       // Abort any ongoing request for the specific session
       if (sessionId) {
-        // Get provider from ProviderFactory using sessionId
-        const session = await this.sessionManager.loadSession(sessionId);
+        // Use repository directly - we just need session metadata (provider type)
+        const { AISessionsRepository } = await import('@nimbalyst/runtime/storage/repositories/AISessionsRepository');
+        const session = await AISessionsRepository.get(sessionId);
         if (session) {
           const provider = ProviderFactory.getProvider(session.provider as AIProviderType, sessionId);
           if (provider) {
@@ -2509,8 +2512,10 @@ export class AIService {
     ipcMain.handle('ai:exitPlanModeConfirmResponse', async (event, requestId: string, sessionId: string, approved: boolean) => {
       logger.main.info(`[AIService] ExitPlanMode confirmation response: requestId=${requestId}, approved=${approved}`);
 
-      // Find the session and its provider
-      const session = await this.sessionManager.loadSession(sessionId);
+      // Use repository directly - we just need session metadata (provider type),
+      // not the full session load with messages
+      const { AISessionsRepository } = await import('@nimbalyst/runtime/storage/repositories/AISessionsRepository');
+      const session = await AISessionsRepository.get(sessionId);
       if (!session) {
         logger.main.warn(`[AIService] Session not found for ExitPlanMode response: ${sessionId}`);
         return { success: false, error: 'Session not found' };
@@ -2550,8 +2555,10 @@ export class AIService {
         return { success: false, error: 'Unknown session' };
       }
 
-      // Find the session and its provider
-      const session = await this.sessionManager.loadSession(sessionId);
+      // Use repository directly - we just need session metadata (provider type),
+      // not the full session load with messages
+      const { AISessionsRepository } = await import('@nimbalyst/runtime/storage/repositories/AISessionsRepository');
+      const session = await AISessionsRepository.get(sessionId);
       if (!session) {
         logger.main.warn(`[AIService] Session not found for AskUserQuestion: ${sessionId}`);
         return { success: false, error: 'Session not found' };
@@ -2592,8 +2599,10 @@ export class AIService {
         return { success: false, error: 'Unknown session' };
       }
 
-      // Find the session and its provider
-      const session = await this.sessionManager.loadSession(sessionId);
+      // Use repository directly - we just need session metadata (provider type),
+      // not the full session load with messages
+      const { AISessionsRepository } = await import('@nimbalyst/runtime/storage/repositories/AISessionsRepository');
+      const session = await AISessionsRepository.get(sessionId);
       if (!session) {
         logger.main.warn(`[AIService] Session not found for AskUserQuestion cancel: ${sessionId}`);
         return { success: false, error: 'Session not found' };
@@ -2635,8 +2644,10 @@ export class AIService {
         return { success: false, error: 'Unknown session' };
       }
 
-      // Find the session and its provider
-      const session = await this.sessionManager.loadSession(sessionId);
+      // Use repository directly - we just need session metadata (provider type),
+      // not the full session load with messages
+      const { AISessionsRepository } = await import('@nimbalyst/runtime/storage/repositories/AISessionsRepository');
+      const session = await AISessionsRepository.get(sessionId);
       if (!session) {
         logger.main.warn(`[AIService] Session not found for tool permission: ${sessionId}`);
         return { success: false, error: 'Session not found' };
@@ -2675,8 +2686,10 @@ export class AIService {
         return { success: false, error: 'Unknown session' };
       }
 
-      // Find the session and its provider
-      const session = await this.sessionManager.loadSession(sessionId);
+      // Use repository directly - we just need session metadata (provider type),
+      // not the full session load with messages
+      const { AISessionsRepository } = await import('@nimbalyst/runtime/storage/repositories/AISessionsRepository');
+      const session = await AISessionsRepository.get(sessionId);
       if (!session) {
         logger.main.warn(`[AIService] Session not found for tool permission cancel: ${sessionId}`);
         return { success: false, error: 'Session not found' };
@@ -2708,7 +2721,10 @@ export class AIService {
         throw new Error('Session ID is required to cancel request');
       }
 
-      const session = await this.sessionManager.loadSession(sessionId);
+      // Use repository directly - we just need session metadata (provider type),
+      // not the full session load with messages
+      const { AISessionsRepository } = await import('@nimbalyst/runtime/storage/repositories/AISessionsRepository');
+      const session = await AISessionsRepository.get(sessionId);
       if (!session) {
         console.warn(`[AIService] Cancel failed - session not found: ${sessionId}`);
         return { success: false, error: 'Session not found' };
