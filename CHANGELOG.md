@@ -20,6 +20,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.50.27] - 2026-01-10
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- CSV files no longer save trailing empty columns
+- AI session lookups work across multiple windows
+- Built-in extensions now load in E2E tests
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.50.26] - 2026-01-09
 
 
