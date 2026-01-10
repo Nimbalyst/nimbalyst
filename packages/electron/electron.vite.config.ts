@@ -136,22 +136,13 @@ export default defineConfig({
         },
         external: [
           '@anthropic-ai/claude-agent-sdk', // Exclude from bundle - loaded dynamically at runtime
-          '@anthropic-ai/sdk', // Anthropic SDK - keep external to avoid bundling issues
-          /^@modelcontextprotocol\/sdk/, // MCP SDK - keep external to avoid bundling zod
-          'openai', // OpenAI SDK - keep external
-          '@electron-toolkit/utils', // Electron toolkit utilities
-          // Node runtime dependencies required by AI SDKs
-          'node-fetch',
-          'formdata-node',
-          'form-data-encoder',
-          'abort-controller',
-          'agentkeepalive',
-          'web-streams-polyfill',
-          // Renderer-only packages
+          // All JS packages are now bundled to avoid npm workspaces hoisting issues.
+          // Only native modules and renderer-only packages are kept external.
+          // Renderer-only packages (loaded in browser context)
           '@excalidraw/excalidraw',
           '@excalidraw/excalidraw/index.css',
-          // Native modules
-          'node-pty' // PTY for terminal - native module needs external
+          // Native modules (require platform-specific binaries)
+          'node-pty' // PTY for terminal - native module copied via extraFiles
         ]
       }
     }

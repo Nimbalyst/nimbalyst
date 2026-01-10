@@ -25,10 +25,13 @@ export function createAboutWindow() {
         backgroundColor: isDarkTheme ? '#2d2d2d' : '#ffffff',
         titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
         webPreferences: {
-            // Use app.getAppPath() for dev mode (not __dirname) because bundled chunks may be in nested directories
-            preload: app.isPackaged
-                ? join(__dirname, '../preload/index.js')
-                : join(app.getAppPath(), 'out/preload/index.js'),
+            // Due to code splitting, __dirname is out/main/chunks/, not out/main/
+            preload: (() => {
+                const appPath = app.getAppPath();
+                if (app.isPackaged) return join(appPath, 'out/preload/index.js');
+                if (appPath.includes('/out/main') || appPath.includes('\\out\\main')) return join(appPath, '../preload/index.js');
+                return join(appPath, 'out/preload/index.js');
+            })(),
             nodeIntegration: false,
             contextIsolation: true,
             webviewTag: false
@@ -41,7 +44,18 @@ export function createAboutWindow() {
     if (process.env['ELECTRON_RENDERER_URL']) {
         aboutWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/about.html`);
     } else {
-        aboutWindow.loadFile(join(__dirname, '../renderer/about.html'));
+        // Note: Due to code splitting, __dirname is out/main/chunks/, not out/main/
+        // Use app.getAppPath() to reliably find the renderer
+        const appPath = app.getAppPath();
+        let htmlPath: string;
+        if (app.isPackaged) {
+            htmlPath = join(appPath, 'out/renderer/about.html');
+        } else if (appPath.includes('/out/main') || appPath.includes('\\out\\main')) {
+            htmlPath = join(appPath, '../renderer/about.html');
+        } else {
+            htmlPath = join(appPath, 'out/renderer/about.html');
+        }
+        aboutWindow.loadFile(htmlPath);
     }
 
     aboutWindow.once('ready-to-show', () => {

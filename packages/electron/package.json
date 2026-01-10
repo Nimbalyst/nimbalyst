@@ -154,6 +154,12 @@
       "nimbalyst-logo.png",
       "node_modules/**/*"
     ],
+    "extraFiles": [
+      {
+        "from": "../../node_modules/node-pty",
+        "to": "Resources/app.asar.unpacked/node_modules/node-pty"
+      }
+    ],
     "extraResources": [
       {
         "from": "out/worker.bundle.js",

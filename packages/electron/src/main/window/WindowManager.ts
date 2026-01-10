@@ -184,20 +184,16 @@ export function createWindow(
             webPreferences: {
                 nodeIntegration: false,
                 contextIsolation: true,
-                // Preload path depends on context:
-                // - Packaged: use __dirname (relative to main bundle)
-                // - Built but not packaged (Playwright): app.getAppPath() returns out/main
-                // - Dev mode: app.getAppPath() returns package root
+                // Preload path: Due to code splitting, __dirname is out/main/chunks/, not out/main/
+                // Use app.getAppPath() which returns asar root (packaged) or out/main (playwright)
                 preload: (() => {
-                    if (app.isPackaged) {
-                        return join(__dirname, '../preload/index.js');
-                    }
                     const appPath = app.getAppPath();
+                    if (app.isPackaged) {
+                        return join(appPath, 'out/preload/index.js');
+                    }
                     if (appPath.includes('/out/main') || appPath.includes('\\out\\main')) {
-                        // Running from built output - preload is sibling to main
                         return join(appPath, '../preload/index.js');
                     }
-                    // Dev mode - preload is in out/ under package root
                     return join(appPath, 'out/preload/index.js');
                 })(),
                 webSecurity: false,
@@ -454,7 +450,20 @@ export function createWindow(
             } else {
                 // console.log('[MAIN] Loading from built files with theme:', currentTheme);
                 // Use loadFile which handles App Translocation properly
-                const htmlPath = join(__dirname, '../renderer/index.html');
+                // Note: Due to code splitting, __dirname is out/main/chunks/, not out/main/
+                // Use app.getAppPath() to reliably find the renderer
+                const appPath = app.getAppPath();
+                let htmlPath: string;
+                if (app.isPackaged) {
+                    // Packaged: app.asar contains out/ at root
+                    htmlPath = join(appPath, 'out/renderer/index.html');
+                } else if (appPath.includes('/out/main') || appPath.includes('\\out\\main')) {
+                    // Playwright running built output: appPath is out/main
+                    htmlPath = join(appPath, '../renderer/index.html');
+                } else {
+                    // Fallback for other built scenarios
+                    htmlPath = join(appPath, 'out/renderer/index.html');
+                }
                 return window.loadFile(htmlPath, { query: { theme: currentTheme } });
             }
         };

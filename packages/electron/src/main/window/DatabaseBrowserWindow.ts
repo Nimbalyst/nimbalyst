@@ -20,10 +20,13 @@ export function createDatabaseBrowserWindow() {
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
-            // Use app.getAppPath() for dev mode (not __dirname) because bundled chunks may be in nested directories
-            preload: app.isPackaged
-                ? join(__dirname, '../preload/index.js')
-                : join(app.getAppPath(), 'out/preload/index.js'),
+            // Due to code splitting, __dirname is out/main/chunks/, not out/main/
+            preload: (() => {
+                const appPath = app.getAppPath();
+                if (app.isPackaged) return join(appPath, 'out/preload/index.js');
+                if (appPath.includes('/out/main') || appPath.includes('\\out\\main')) return join(appPath, '../preload/index.js');
+                return join(appPath, 'out/preload/index.js');
+            })(),
             webviewTag: false
         },
         show: false,
@@ -39,7 +42,18 @@ export function createDatabaseBrowserWindow() {
     if (process.env.NODE_ENV === 'development') {
         databaseBrowserWindow.loadURL(`http://localhost:5273/?${queryParams}`);
     } else {
-        databaseBrowserWindow.loadFile(join(__dirname, '../renderer/index.html'), {
+        // Note: Due to code splitting, __dirname is out/main/chunks/, not out/main/
+        // Use app.getAppPath() to reliably find the renderer
+        const appPath = app.getAppPath();
+        let htmlPath: string;
+        if (app.isPackaged) {
+            htmlPath = join(appPath, 'out/renderer/index.html');
+        } else if (appPath.includes('/out/main') || appPath.includes('\\out\\main')) {
+            htmlPath = join(appPath, '../renderer/index.html');
+        } else {
+            htmlPath = join(appPath, 'out/renderer/index.html');
+        }
+        databaseBrowserWindow.loadFile(htmlPath, {
             query: { mode: 'database-browser', theme: currentTheme }
         });
     }
