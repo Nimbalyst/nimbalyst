@@ -20,6 +20,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.50.25] - 2026-01-09
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+- Fixed all high and moderate npm audit vulnerabilities
+
+### Fixed
+- Packaged build works with Vite code splitting
+- Session naming tool uses correct MCP server prefix
+- Playwright tests work with dev server, screenshot tool finds correct editor
+- CSV select-all now selects only data columns, range delete works
+- CSV spreadsheet extension passes CI typecheck
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.50.24] - 2026-01-09
 
 
