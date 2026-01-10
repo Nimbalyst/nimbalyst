@@ -257,6 +257,9 @@
   flex-direction: column;
   gap: 16px;
   margin-bottom: 16px;
+  max-height: 60vh;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .interactive-prompt__question-card {
