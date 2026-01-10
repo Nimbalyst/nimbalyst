@@ -151,6 +151,21 @@
   gap: 0.75rem;
 }
 
+/* Single image display - centered and larger */
+.visual-display-widget__gallery-grid--single {
+  display: flex;
+  justify-content: center;
+}
+
+.visual-display-widget__gallery-item--single {
+  max-width: 100%;
+  width: auto;
+}
+
+.visual-display-widget__gallery-item--single .visual-display-widget__image {
+  max-height: 500px;
+}
+
 .visual-display-widget__gallery-item {
   cursor: pointer;
   border-radius: 0.25rem;

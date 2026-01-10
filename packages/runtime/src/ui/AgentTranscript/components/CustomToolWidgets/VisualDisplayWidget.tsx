@@ -713,14 +713,16 @@ const ImageGallery: React.FC<{
     </div>
   );
 
+  const isSingleImage = images.length === 1;
+
   return (
     <VisualErrorBoundary fallback={errorFallback} context="image gallery">
       <div className="visual-display-widget__gallery">
-        <div className="visual-display-widget__gallery-grid">
+        <div className={`visual-display-widget__gallery-grid${isSingleImage ? ' visual-display-widget__gallery-grid--single' : ''}`}>
           {images.map((item, index) => (
             <div
               key={index}
-              className="visual-display-widget__gallery-item"
+              className={`visual-display-widget__gallery-item${isSingleImage ? ' visual-display-widget__gallery-item--single' : ''}`}
               onClick={() => setSelectedIndex(index)}
             >
               <ImageDisplay image={item.image!} description={item.description} readFile={readFile} />
