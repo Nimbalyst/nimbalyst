@@ -689,7 +689,11 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
       <header className="flex-shrink-0 flex items-center px-3 py-2 border-b border-[var(--border-primary)] bg-[var(--surface-secondary)] safe-area-top">
         {!hiddenBackButton && (
           <button
-            onClick={() => navigate('/')}
+            onClick={() => {
+              // Navigate back to the session list for this project
+              const projectId = metadata.project_id || indexEntry?.workspaceId || 'default';
+              navigate(`/project/${projectId}/sessions`);
+            }}
             className="mr-2 p-1 text-[var(--text-primary)] active:opacity-70"
             aria-label="Go back"
           >
