@@ -20,6 +20,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.50.26] - 2026-01-09
+
+
+### Changed
+- Image and chart display MCP tool moved from alpha to general availability
+- Consolidated visual display functionality into unified display_to_user tool
+
+### Fixed
+- Improved error handling and validation messages for display_to_user tool
+- Resolved path shadowing in display_to_user MCP tool
+- Fixed validateDOMNesting warning by replacing nested button with span in VisualDisplayWidget
+- Improved single image display in VisualDisplayWidget
+
 ## [0.50.25] - 2026-01-09
 
 
