@@ -39,7 +39,7 @@ export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
 
         {!hasOpenAIKey && (
           <div className="provider-panel-hint" style={{ color: 'var(--color-warning)', marginBottom: '12px' }}>
-            <MaterialSymbol icon="warning" size={16} style={{ verticalAlign: 'text-bottom', marginRight: '4px' }} />
+            <MaterialSymbol icon="warning" size={16} style={{ verticalAlign: 'middle', marginRight: '4px' }} />
             Voice Mode requires an OpenAI API key. Please configure it in the OpenAI settings.
           </div>
         )}

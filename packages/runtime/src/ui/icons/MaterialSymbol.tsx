@@ -9,6 +9,7 @@ interface MaterialSymbolProps {
   opticalSize?: number;
   className?: string;
   title?: string;
+  style?: React.CSSProperties;
 }
 
 // Custom SVG icons for icons not available in Material Symbols
@@ -54,7 +55,8 @@ export function MaterialSymbol({
   grade = 0,
   opticalSize = 24,
   className = '',
-  title
+  title,
+  style: customStyle
 }: MaterialSymbolProps) {
   // Check if this is a custom icon
   const customIcon = CUSTOM_ICONS[icon];
@@ -63,9 +65,10 @@ export function MaterialSymbol({
   }
 
   // Otherwise render as Material Symbol
-  const style = {
+  const style: React.CSSProperties = {
     fontSize: size,
-    fontVariationSettings: `'FILL' ${fill ? 1 : 0}, 'wght' ${weight}, 'GRAD' ${grade}, 'opsz' ${opticalSize}`
+    fontVariationSettings: `'FILL' ${fill ? 1 : 0}, 'wght' ${weight}, 'GRAD' ${grade}, 'opsz' ${opticalSize}`,
+    ...customStyle
   };
 
   return (

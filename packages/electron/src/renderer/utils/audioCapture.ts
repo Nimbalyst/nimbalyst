@@ -61,7 +61,7 @@ export class AudioCapture {
         const pcm16 = this.floatToPCM16(inputData);
 
         // Convert to base64
-        const base64 = this.arrayBufferToBase64(pcm16.buffer);
+        const base64 = this.arrayBufferToBase64(pcm16.buffer as ArrayBuffer);
 
         // Send to callback
         if (this.onAudioData) {

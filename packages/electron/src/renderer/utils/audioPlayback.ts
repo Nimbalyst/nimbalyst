@@ -45,7 +45,7 @@ export class AudioPlayback {
       );
 
       // Copy data to audio buffer
-      audioBuffer.copyToChannel(float32Array, 0);
+      audioBuffer.copyToChannel(new Float32Array(float32Array), 0);
 
       // Add to queue and play
       this.audioQueue.push(audioBuffer);
