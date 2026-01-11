@@ -106,13 +106,29 @@ export const MockupViewer: React.FC<EditorHostProps> = ({ host }) => {
     });
   }, [host]);
 
+  // State to hold reloaded content after diff is cleared
+  // This is needed because useEditorHost's content state is stale after diff mode
+  const [reloadedContent, setReloadedContent] = useState<string | null>(null);
+
   // Subscribe to diff cleared events (when user accepts/rejects via unified diff header)
   useEffect(() => {
-    if (!host.onDiffCleared) return;
+    if (!host.onDiffCleared) {
+      return;
+    }
 
-    return host.onDiffCleared(() => {
+    return host.onDiffCleared(async () => {
       logger.ui.info('[MockupViewer] Diff cleared');
       setDiffData(null);
+
+      // Reload content from disk via EditorHost to show the accepted/current content
+      // The useEditorHost hook's content state is stale (shows pre-diff content)
+      try {
+        const newContent = await host.loadContent();
+        setReloadedContent(newContent);
+        logger.ui.info('[MockupViewer] Reloaded content from disk after diff cleared');
+      } catch (error) {
+        logger.ui.error('[MockupViewer] Failed to reload content after diff cleared:', error);
+      }
     });
   }, [host]);
 
@@ -200,14 +216,17 @@ export const MockupViewer: React.FC<EditorHostProps> = ({ host }) => {
   // Update iframe when content changes or when exiting diff mode
   // Must include diffData in dependencies so the effect runs when diff mode exits,
   // otherwise the iframe won't be populated after accepting changes
+  // Use reloadedContent if available (after diff mode exit), otherwise use content from hook
+  const effectiveContent = reloadedContent ?? content;
+
   useEffect(() => {
     // Skip if in diff mode - MockupDiffViewer handles its own rendering
     // Also skip if iframeRef not yet attached (will be null during diff mode)
-    if (diffData || !iframeRef.current || !content) {
+    if (diffData || !iframeRef.current || !effectiveContent) {
       return;
     }
 
-    renderMockupHtml(iframeRef.current, content, {
+    renderMockupHtml(iframeRef.current, effectiveContent, {
       onAfterRender: (iframeDoc) => {
         const style = iframeDoc.createElement('style');
         style.textContent = `
@@ -222,13 +241,17 @@ export const MockupViewer: React.FC<EditorHostProps> = ({ host }) => {
       },
     });
 
+    // NOTE: We do NOT clear reloadedContent here because the useEditorHost hook's
+    // content state is stale after diff mode. We keep reloadedContent as the source
+    // of truth until the component unmounts or a new file is loaded.
+
     return () => {
       const iframeDoc = iframeRef.current?.contentDocument;
       if (iframeDoc) {
         iframeDoc.removeEventListener('click', handleElementClick as any);
       }
     };
-  }, [content, handleElementClick, diffData]);
+  }, [effectiveContent, handleElementClick, diffData]);
 
   // Expose file path to window for AI context
   useEffect(() => {
