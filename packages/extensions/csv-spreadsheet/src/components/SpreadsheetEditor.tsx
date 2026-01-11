@@ -509,11 +509,35 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
   useEffect(() => {
     if (!host.onDiffCleared) return;
 
-    return host.onDiffCleared(() => {
+    return host.onDiffCleared(async () => {
       console.log('[CSV] Diff cleared externally');
+
+      // Clear diff state first
       setDiffState(null);
+
+      // Reload content from disk to remove phantom rows
+      // During diff mode, the grid may contain phantom rows (deleted rows shown for visualization)
+      // After accepting, we need to reload from disk which has the correct content
+      try {
+        const content = await host.loadContent();
+        const { data } = parseCSV(content);
+        const gridData = convertToGridSource(data.rows, data.headerRowCount);
+
+        const grid = revoGridRef.current;
+        if (grid) {
+          grid.source = gridData.source;
+          grid.pinnedTopSource = gridData.pinnedTop;
+        }
+
+        // Update metadata to match the reloaded content
+        spreadsheetMeta.loadFromCSV(content);
+        spreadsheetMeta.markClean();
+        console.log('[CSV] Reloaded content from disk after diff cleared');
+      } catch (error) {
+        console.error('[CSV] Failed to reload content after diff cleared:', error);
+      }
     });
-  }, [host]);
+  }, [host, spreadsheetMeta]);
 
   // Register for AI tool access
   useEffect(() => {
