@@ -1,9 +1,13 @@
 /**
- * Bootstrap file that runs BEFORE all other imports.
+ * Bootstrap file - Entry point for electron-vite.
  *
- * CRITICAL: This file must be the entry point for electron-vite.
- * It handles user-data-dir configuration before any electron-store
- * instances are created (which happens at module load time).
+ * This file handles:
+ * 1. Custom user-data-dir configuration (must be set before any electron-store usage)
+ * 2. Module resolution for packaged builds (native modules in unpacked asar)
+ *
+ * Note: electron-store is now lazy-initialized in store.ts, so we can use static
+ * imports without worrying about load order. The stores are created on first access,
+ * which happens well after app.setPath() is called here.
  *
  * Usage:
  *   NIMBALYST_USER_DATA_DIR=/path/to/dir npm run dev
@@ -11,11 +15,25 @@
  *   npm run dev -- --user-data-dir=/path/to/dir
  */
 
-import { app } from 'electron';
+import { app, ipcMain } from 'electron';
 import * as path from 'path';
 import Module from 'module';
 
-// Add unpacked node_modules to module resolution path for packaged builds
+// Patch ipcMain.handle to prevent "second handler" errors.
+// The dynamic import below creates a chunk boundary, and Vite's bundling can
+// cause modules (like electron-log) to be evaluated multiple times across chunks.
+// This patch makes ipcMain.handle idempotent by removing existing handlers first.
+const originalHandle = ipcMain.handle.bind(ipcMain);
+(ipcMain as any).handle = (channel: string, listener: any) => {
+  try {
+    ipcMain.removeHandler(channel);
+  } catch {
+    // No existing handler, that's fine
+  }
+  return originalHandle(channel, listener);
+};
+
+// Add unpacked node_modules to module resolution path for packaged builds.
 // This is needed because npm workspaces hoists dependencies to the root,
 // but electron-builder only packages from the local node_modules.
 // Native modules like node-pty are copied via extraFiles but need their
@@ -33,7 +51,7 @@ if (app.isPackaged) {
   (Module as typeof Module & { _initPaths: () => void })._initPaths();
 }
 
-// Parse --user-data-dir from command line args
+// Parse --user-data-dir from command line args or environment variable
 function getCustomUserDataDir(): string | undefined {
   // Check environment variable first (more reliable for npm scripts)
   if (process.env.NIMBALYST_USER_DATA_DIR) {
@@ -53,14 +71,21 @@ function getCustomUserDataDir(): string | undefined {
 const customUserDataDir = getCustomUserDataDir();
 
 if (customUserDataDir) {
-  // Must call setPath BEFORE any electron-store instances are created
+  // Set userData path before any electron-store instances are created.
+  // With lazy initialization in store.ts, this is guaranteed to run first.
   app.setPath('userData', customUserDataDir);
   // Also set appData to parent directory for consistency
   app.setPath('appData', path.dirname(customUserDataDir));
   console.log(`[Bootstrap] Using custom userData directory: ${customUserDataDir}`);
 }
 
-// Dynamic import to ensure the above code runs BEFORE index.ts is loaded
-// This causes Vite to code-split, placing the main app in a chunk.
-// All __dirname-relative paths in the main app need to use app.getAppPath() instead.
+// Dynamic import of main application code.
+// This is required for packaged builds because:
+// 1. The NODE_PATH setup above must complete before node-pty can be found
+// 2. Static imports are resolved before any code in this file runs
+// 3. Dynamic import defers loading until after NODE_PATH is configured
+//
+// Note: This creates a chunk boundary, but with lazy store initialization
+// in store.ts and the electron-log external config, this no longer causes
+// duplicate module issues.
 import('./index.js');

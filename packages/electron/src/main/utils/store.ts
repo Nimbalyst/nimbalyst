@@ -240,27 +240,42 @@ export interface WorkspaceState {
   lastUpdated: number;
 }
 
-const appStore = new Store<AppStoreSchema>({
-  name: 'app-settings',
-  clearInvalidConfig: true,
-  defaults: {
-    theme: 'system',
-    recent: {
-      workspaces: [],
-      documents: [],
-    },
-    openWorkspaces: [],
-  },
-});
+// Lazy-initialized stores to avoid reading userData path at module load time.
+// This allows bootstrap.ts to set a custom userData path before stores are created.
+// The stores are created on first access via getAppStore() and getWorkspaceStore().
+let _appStore: Store<AppStoreSchema> | null = null;
+let _workspaceStore: Store<Record<string, WorkspaceState>> | null = null;
 
-const workspaceStore = new Store<Record<string, WorkspaceState>>({
-  name: 'workspace-settings',
-  clearInvalidConfig: true,
-  defaults: {},
-});
+function getAppStore(): Store<AppStoreSchema> {
+  if (!_appStore) {
+    _appStore = new Store<AppStoreSchema>({
+      name: 'app-settings',
+      clearInvalidConfig: true,
+      defaults: {
+        theme: 'system',
+        recent: {
+          workspaces: [],
+          documents: [],
+        },
+        openWorkspaces: [],
+      },
+    });
+  }
+  return _appStore;
+}
 
-// Log the store path on initialization for debugging
-console.log('[Store] workspaceStore path:', workspaceStore.path);
+function getWorkspaceStore(): Store<Record<string, WorkspaceState>> {
+  if (!_workspaceStore) {
+    _workspaceStore = new Store<Record<string, WorkspaceState>>({
+      name: 'workspace-settings',
+      clearInvalidConfig: true,
+      defaults: {},
+    });
+    // Log the store path on initialization for debugging
+    console.log('[Store] workspaceStore path:', _workspaceStore.path);
+  }
+  return _workspaceStore;
+}
 
 const DEFAULT_TAB_MANAGER_STATE: TabManagerState = {
   tabs: [],
@@ -487,10 +502,10 @@ function cloneWorkspaceState(state: WorkspaceState): WorkspaceState {
 
 function ensureWorkspaceState(path: string): WorkspaceState {
   const key = workspaceKey(path);
-  const raw = workspaceStore.get(key);
+  const raw = getWorkspaceStore().get(key);
   const normalized = normalizeWorkspaceState(raw, path);
   if (!raw) {
-    workspaceStore.set(key, cloneWorkspaceState(normalized));
+    getWorkspaceStore().set(key, cloneWorkspaceState(normalized));
   }
   return normalized;
 }
@@ -498,7 +513,7 @@ function ensureWorkspaceState(path: string): WorkspaceState {
 function persistWorkspaceState(path: string, state: WorkspaceState): WorkspaceState {
   const key = workspaceKey(path);
   const next = cloneWorkspaceState({ ...state, lastUpdated: Date.now() });
-  workspaceStore.set(key, next);
+  getWorkspaceStore().set(key, next);
   return next;
 }
 
@@ -516,14 +531,23 @@ function getRecentLimit(type: 'workspaces' | 'documents'): number {
   return type === 'workspaces' ? Infinity : 50;
 }
 
-export const store = appStore;
+// Export store instance for backward compatibility.
+// This is a getter that returns the lazy-initialized store.
+// Callers use it as `store.get()` / `store.set()`.
+export const store = {
+  get get() { return getAppStore().get.bind(getAppStore()); },
+  get set() { return getAppStore().set.bind(getAppStore()); },
+  get delete() { return getAppStore().delete.bind(getAppStore()); },
+  get path() { return getAppStore().path; },
+  get store() { return getAppStore().store; },
+};
 
 export function getRecentItems(type: 'workspaces' | 'documents'): RecentItem[] {
   const key = getRecentKey(type);
-  const items = appStore.get(key, []) as RecentItem[];
+  const items = getAppStore().get(key, []) as RecentItem[];
   if (!Array.isArray(items)) {
     logger.store.warn(`[store] Recent ${type} payload not array, resetting`, items);
-    appStore.set(key, []);
+    getAppStore().set(key, []);
     return [];
   }
   return sortRecentItems(items);
@@ -534,39 +558,39 @@ export function addToRecentItems(type: 'workspaces' | 'documents', path: string,
   const items = getRecentItems(type);
   const filtered = items.filter(item => item.path !== path);
   filtered.unshift({ path, name, timestamp: Date.now() });
-  appStore.set(key, filtered.slice(0, maxItems));
+  getAppStore().set(key, filtered.slice(0, maxItems));
 }
 
 export function clearRecentItems(type: 'workspaces' | 'documents') {
   const key = getRecentKey(type);
-  appStore.set(key, []);
+  getAppStore().set(key, []);
 }
 
 export function getSessionState(): SessionState | undefined {
-  return appStore.get('sessionState');
+  return getAppStore().get('sessionState');
 }
 
 export function saveSessionState(state: SessionState): void {
-  appStore.set('sessionState', { ...state, lastUpdated: state.lastUpdated ?? Date.now() });
+  getAppStore().set('sessionState', { ...state, lastUpdated: state.lastUpdated ?? Date.now() });
 }
 
 export function clearSessionState(): void {
-  appStore.delete('sessionState');
+  getAppStore().delete('sessionState');
 }
 
 export function getTheme(): AppTheme {
-  return appStore.get('theme');
+  return getAppStore().get('theme');
 }
 
 export function setTheme(theme: AppTheme): void {
-  appStore.set('theme', theme);
+  getAppStore().set('theme', theme);
 }
 
 // getThemeSync resolves 'system'/'auto' to the actual theme for the renderer
 // This prevents flash by ensuring renderer gets 'dark' or 'light', not 'system'
 export function getThemeSync(): AppTheme {
   const { nativeTheme } = require('electron');
-  const storedTheme = appStore.get('theme');
+  const storedTheme = getAppStore().get('theme');
 
   // Resolve system/auto to actual theme based on OS preference
   if (storedTheme === 'system' || storedTheme === 'auto') {
@@ -775,22 +799,22 @@ export function clearAIProviderOverrides(workspacePath: string): void {
 
 // Discord Invitation Management
 export function incrementLaunchCount(): number {
-  const current = appStore.get('launchCount', 0);
+  const current = getAppStore().get('launchCount', 0);
   const next = current + 1;
-  appStore.set('launchCount', next);
+  getAppStore().set('launchCount', next);
   return next;
 }
 
 export function getLaunchCount(): number {
-  return appStore.get('launchCount', 0);
+  return getAppStore().get('launchCount', 0);
 }
 
 export function isClaudeCodeWindowsWarningDismissed(): boolean {
-  return appStore.get('claudeCodeWindowsWarningDismissed', false);
+  return getAppStore().get('claudeCodeWindowsWarningDismissed', false);
 }
 
 export function dismissClaudeCodeWindowsWarning(): void {
-  appStore.set('claudeCodeWindowsWarningDismissed', true);
+  getAppStore().set('claudeCodeWindowsWarningDismissed', true);
 }
 
 export function shouldShowClaudeCodeWindowsWarning(): boolean {
@@ -800,11 +824,11 @@ export function shouldShowClaudeCodeWindowsWarning(): boolean {
 }
 
 export function isDiscordInvitationDismissed(): boolean {
-  return appStore.get('discordInvitationDismissed', false);
+  return getAppStore().get('discordInvitationDismissed', false);
 }
 
 export function dismissDiscordInvitation(): void {
-  appStore.set('discordInvitationDismissed', true);
+  getAppStore().set('discordInvitationDismissed', true);
 }
 
 export function shouldShowDiscordInvitation(): boolean {
@@ -815,28 +839,28 @@ export function shouldShowDiscordInvitation(): boolean {
 
 // Completion Sound Settings
 export function isCompletionSoundEnabled(): boolean {
-  return appStore.get('completionSoundEnabled', true);
+  return getAppStore().get('completionSoundEnabled', true);
 }
 
 export function setCompletionSoundEnabled(enabled: boolean): void {
-  appStore.set('completionSoundEnabled', enabled);
+  getAppStore().set('completionSoundEnabled', enabled);
 }
 
 export function getCompletionSoundType(): CompletionSoundType {
-  return appStore.get('completionSoundType', 'chime');
+  return getAppStore().get('completionSoundType', 'chime');
 }
 
 export function setCompletionSoundType(soundType: CompletionSoundType): void {
-  appStore.set('completionSoundType', soundType);
+  getAppStore().set('completionSoundType', soundType);
 }
 
 // OS Notifications Settings
 export function isOSNotificationsEnabled(): boolean {
-  return appStore.get('osNotificationsEnabled', true);
+  return getAppStore().get('osNotificationsEnabled', true);
 }
 
 export function setOSNotificationsEnabled(enabled: boolean): void {
-  appStore.set('osNotificationsEnabled', enabled);
+  getAppStore().set('osNotificationsEnabled', enabled);
 }
 
 // Release Channel Settings
@@ -846,11 +870,11 @@ export function getReleaseChannel(): ReleaseChannel {
   if (envChannel === 'alpha' || envChannel === 'stable') {
     return envChannel;
   }
-  return appStore.get('releaseChannel', 'stable');
+  return getAppStore().get('releaseChannel', 'stable');
 }
 
 export function setReleaseChannel(channel: ReleaseChannel): void {
-  appStore.set('releaseChannel', channel);
+  getAppStore().set('releaseChannel', channel);
 }
 
 // User Onboarding
@@ -863,63 +887,63 @@ export interface OnboardingState {
 
 export function getOnboardingState(): OnboardingState {
   return {
-    userRole: appStore.get('userRole'),
-    userEmail: appStore.get('userEmail'),
-    onboardingNextPrompt: appStore.get('onboardingNextPrompt'),
-    onboardingCompleted: appStore.get('onboardingCompleted')
+    userRole: getAppStore().get('userRole'),
+    userEmail: getAppStore().get('userEmail'),
+    onboardingNextPrompt: getAppStore().get('onboardingNextPrompt'),
+    onboardingCompleted: getAppStore().get('onboardingCompleted')
   };
 }
 
 export function updateOnboardingState(state: Partial<OnboardingState>): void {
   if (state.userRole !== undefined) {
-    appStore.set('userRole', state.userRole);
+    getAppStore().set('userRole', state.userRole);
   }
   if (state.userEmail !== undefined) {
-    appStore.set('userEmail', state.userEmail);
+    getAppStore().set('userEmail', state.userEmail);
   }
   if (state.onboardingNextPrompt !== undefined) {
-    appStore.set('onboardingNextPrompt', state.onboardingNextPrompt);
+    getAppStore().set('onboardingNextPrompt', state.onboardingNextPrompt);
   }
   if (state.onboardingCompleted !== undefined) {
-    appStore.set('onboardingCompleted', state.onboardingCompleted);
+    getAppStore().set('onboardingCompleted', state.onboardingCompleted);
   }
 }
 
 // Default AI Model Settings
 export function getDefaultAIModel(): string | undefined {
-  return appStore.get('defaultAIModel');
+  return getAppStore().get('defaultAIModel');
 }
 
 export function setDefaultAIModel(model: string): void {
-  appStore.set('defaultAIModel', model);
+  getAppStore().set('defaultAIModel', model);
 }
 
 // Analytics Settings
 export function isAnalyticsEnabled(): boolean {
-  return appStore.get('analyticsEnabled', true); // Default to enabled
+  return getAppStore().get('analyticsEnabled', true); // Default to enabled
 }
 
 export function setAnalyticsEnabled(enabled: boolean): void {
-  appStore.set('analyticsEnabled', enabled);
+  getAppStore().set('analyticsEnabled', enabled);
 }
 
 // MockupLM Settings
 export function isMockupLMEnabled(): boolean {
-  return appStore.get('mockupLMEnabled', true); // Default to enabled
+  return getAppStore().get('mockupLMEnabled', true); // Default to enabled
 }
 
 export function setMockupLMEnabled(enabled: boolean): void {
-  appStore.set('mockupLMEnabled', enabled);
+  getAppStore().set('mockupLMEnabled', enabled);
 }
 
 // First Launch Claude Code Installation Check
 // This flag ensures we only check once ever, on the very first app launch
 export function hasCheckedClaudeCodeInstallation(): boolean {
-  return appStore.get('claudeCodeInstallationChecked', false);
+  return getAppStore().get('claudeCodeInstallationChecked', false);
 }
 
 export function markClaudeCodeInstallationChecked(): void {
-  appStore.set('claudeCodeInstallationChecked', true);
+  getAppStore().set('claudeCodeInstallationChecked', true);
 }
 
 // Session Sync Settings
@@ -940,46 +964,46 @@ export interface StytchAuthConfig {
 }
 
 export function getSessionSyncConfig(): SessionSyncConfig | undefined {
-  return appStore.get('sessionSync');
+  return getAppStore().get('sessionSync');
 }
 
 export function setSessionSyncConfig(config: SessionSyncConfig | undefined): void {
   if (config) {
-    appStore.set('sessionSync', config);
+    getAppStore().set('sessionSync', config);
   } else {
-    appStore.delete('sessionSync');
+    getAppStore().delete('sessionSync');
   }
 }
 
 // Stytch Auth Configuration
 export function getStytchAuthConfig(): StytchAuthConfig | undefined {
-  return appStore.get('stytchAuth');
+  return getAppStore().get('stytchAuth');
 }
 
 export function setStytchAuthConfig(config: StytchAuthConfig | undefined): void {
   if (config) {
-    appStore.set('stytchAuth', config);
+    getAppStore().set('stytchAuth', config);
   } else {
-    appStore.delete('stytchAuth');
+    getAppStore().delete('stytchAuth');
   }
 }
 
 // Feature Walkthrough Settings
 export function isFeatureWalkthroughCompleted(): boolean {
-  return appStore.get('featureWalkthroughCompleted', false);
+  return getAppStore().get('featureWalkthroughCompleted', false);
 }
 
 export function setFeatureWalkthroughCompleted(completed: boolean): void {
-  appStore.set('featureWalkthroughCompleted', completed);
+  getAppStore().set('featureWalkthroughCompleted', completed);
 }
 
 // Extension Settings Management
 export function getExtensionSettings(): Record<string, ExtensionSettings> {
-  return appStore.get('extensionSettings', {});
+  return getAppStore().get('extensionSettings', {});
 }
 
 export function setExtensionSettings(settings: Record<string, ExtensionSettings>): void {
-  appStore.set('extensionSettings', settings);
+  getAppStore().set('extensionSettings', settings);
 }
 
 export function getExtensionEnabled(extensionId: string): boolean {
@@ -1016,7 +1040,7 @@ export function setClaudePluginEnabled(extensionId: string, enabled: boolean): v
 
 // Claude Code settings
 export function getClaudeCodeSettings(): { projectCommandsEnabled: boolean; userCommandsEnabled: boolean } {
-  const settings = appStore.get('claudeCode', {});
+  const settings = getAppStore().get('claudeCode', {});
   return {
     projectCommandsEnabled: settings.projectCommandsEnabled ?? true,
     userCommandsEnabled: settings.userCommandsEnabled ?? true,
@@ -1024,22 +1048,22 @@ export function getClaudeCodeSettings(): { projectCommandsEnabled: boolean; user
 }
 
 export function setClaudeCodeProjectCommandsEnabled(enabled: boolean): void {
-  const current = appStore.get('claudeCode', {});
-  appStore.set('claudeCode', { ...current, projectCommandsEnabled: enabled });
+  const current = getAppStore().get('claudeCode', {});
+  getAppStore().set('claudeCode', { ...current, projectCommandsEnabled: enabled });
 }
 
 export function setClaudeCodeUserCommandsEnabled(enabled: boolean): void {
-  const current = appStore.get('claudeCode', {});
-  appStore.set('claudeCode', { ...current, userCommandsEnabled: enabled });
+  const current = getAppStore().get('claudeCode', {});
+  getAppStore().set('claudeCode', { ...current, userCommandsEnabled: enabled });
 }
 
 // Extension Development Kit (EDK) Settings
 export function isExtensionDevToolsEnabled(): boolean {
-  return appStore.get('extensionDevToolsEnabled', false); // Default to disabled
+  return getAppStore().get('extensionDevToolsEnabled', false); // Default to disabled
 }
 
 export function setExtensionDevToolsEnabled(enabled: boolean): void {
-  appStore.set('extensionDevToolsEnabled', enabled);
+  getAppStore().set('extensionDevToolsEnabled', enabled);
 }
 
 export function getExtensionConfiguration(extensionId: string): Record<string, unknown> {
@@ -1122,7 +1146,7 @@ export function getAgentPermissions(workspacePath: string): AgentPermissions | u
   // console.log(`[Store:${workspaceName}] getAgentPermissions:`, {
   //   workspacePath,
   //   key,
-  //   storePath: workspaceStore.path,
+  //   storePath: getWorkspaceStore().path,
   //   hasPermissions: !!permissions,
   //   permissionMode: permissions?.permissionMode,
   // });

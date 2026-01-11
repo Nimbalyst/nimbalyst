@@ -199,6 +199,58 @@ These patterns apply across all packages (electron, capacitor, runtime) that con
 
 Container queries respond to the actual container width, making them work correctly with resizable panels and split views on both desktop and mobile.
 
+### Main Process Initialization
+
+The Electron main process has specific initialization constraints that must be respected:
+
+#### Bootstrap and Dynamic Import
+
+`bootstrap.ts` is the entry point and uses a dynamic import for `index.ts`:
+```typescript
+import('./index.js');  // Dynamic, not static!
+```
+
+**Why dynamic import is required:**
+1. `NODE_PATH` must be set before `node-pty` can be resolved in packaged builds
+2. Static imports are resolved before any code runs
+3. Dynamic import defers loading until after `NODE_PATH` is configured
+
+**Never change this to a static import** - it will break packaged builds.
+
+#### Lazy Initialization Pattern
+
+Singletons that read `app.getPath()` must use lazy initialization:
+
+```typescript
+// BAD: Reads userData path at module load time
+const store = new Store({ name: 'settings' });
+
+// GOOD: Defers until first access
+let _store: Store | null = null;
+function getStore() {
+  if (!_store) {
+    _store = new Store({ name: 'settings' });
+  }
+  return _store;
+}
+```
+
+This ensures `app.setPath('userData')` in bootstrap.ts takes effect.
+
+#### IPC Handler Registration
+
+Use `safeHandle`/`safeOn` from `ipcRegistry.ts` instead of `ipcMain.handle`/`ipcMain.on`:
+
+```typescript
+// BAD: Crashes if handler already registered
+ipcMain.handle('my-channel', handler);
+
+// GOOD: Safe for duplicate registration
+safeHandle('my-channel', handler);
+```
+
+This prevents "second handler" errors from module duplication across chunk boundaries.
+
 ## Analytics
 
 See `/docs/ANALYTICS_GUIDE.md` for details on adding anonymous usage analytics.
