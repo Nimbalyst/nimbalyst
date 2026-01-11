@@ -12,6 +12,7 @@ import { OpenAICodexPanel } from '../GlobalSettings/panels/OpenAICodexPanel';
 import { LMStudioPanel } from '../GlobalSettings/panels/LMStudioPanel';
 import { AdvancedPanel } from '../GlobalSettings/panels/AdvancedPanel';
 import { NotificationsPanel } from '../GlobalSettings/panels/NotificationsPanel';
+import { VoiceModePanel } from './VoiceModePanel';
 import { MCPServersPanel } from '../GlobalSettings/panels/MCPServersPanel';
 import { SyncPanel, type SyncConfig } from '../GlobalSettings/panels/SyncPanel';
 import { ToolPackagesPanel } from './panels/ToolPackagesPanel';
@@ -91,13 +92,18 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
   const [syncTestStatus, setSyncTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [syncTestMessage, setSyncTestMessage] = useState<string | undefined>();
 
+  // Voice Mode settings
+  const [voiceModeEnabled, setVoiceModeEnabled] = useState(false);
+  const [voiceModeVoice, setVoiceModeVoice] = useState<'marin' | 'cedar'>('marin');
+  const [voiceModeShowTranscription, setVoiceModeShowTranscription] = useState(true);
+
   // Package counts for sidebar badge
   const [installedPackageCount, setInstalledPackageCount] = useState(0);
   const [totalPackageCount, setTotalPackageCount] = useState(0);
 
   // Valid categories for each scope
   const projectCategories: SettingsCategory[] = ['tool-packages', 'agent-permissions', 'installed-extensions', 'mcp-servers', 'claude-code', 'claude', 'openai', 'openai-codex', 'lmstudio'];
-  const userCategories: SettingsCategory[] = ['claude-code', 'claude', 'openai', 'openai-codex', 'lmstudio', 'sync', 'notifications', 'advanced', 'installed-extensions', 'mcp-servers'];
+  const userCategories: SettingsCategory[] = ['claude-code', 'claude', 'openai', 'openai-codex', 'lmstudio', 'sync', 'notifications', 'voice-mode', 'advanced', 'installed-extensions', 'mcp-servers'];
 
   // When initialCategory/initialScope props change, update state (for deep linking)
   useEffect(() => {
@@ -177,6 +183,28 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
       const syncConfigSetting = await window.electronAPI.invoke('sync:get-config');
       if (syncConfigSetting) {
         setSyncConfig(syncConfigSetting);
+      }
+
+      // Initialize voice mode handlers (lazy init to avoid boot-time issues)
+      try {
+        const initResult = await window.electronAPI.invoke('voice-mode:init');
+        // Debug logging - uncomment if needed for troubleshooting voice mode initialization
+        // console.log('[Settings] Voice mode init result:', initResult);
+
+        // Load voice mode settings
+        const voiceModeSetting = await window.electronAPI.invoke('voice-mode:get-settings');
+        // console.log('[Settings] Voice mode settings:', voiceModeSetting);
+        if (voiceModeSetting) {
+          setVoiceModeEnabled(voiceModeSetting.enabled || false);
+          setVoiceModeVoice(voiceModeSetting.voice || 'marin');
+          setVoiceModeShowTranscription(voiceModeSetting.showTranscription !== false);
+        }
+      } catch (error) {
+        console.error('[Settings] Failed to initialize/load voice mode:', error);
+        // Set defaults if init fails
+        setVoiceModeEnabled(false);
+        setVoiceModeVoice('marin');
+        setVoiceModeShowTranscription(true);
       }
 
       // Fetch ALL models once
@@ -280,6 +308,18 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
       // Save sync config
       await window.electronAPI.invoke('sync:set-config', syncConfig.enabled ? syncConfig : null);
 
+      // Save voice mode settings (ensure handlers are initialized first)
+      try {
+        await window.electronAPI.invoke('voice-mode:init');
+        await window.electronAPI.invoke('voice-mode:set-settings', {
+          enabled: voiceModeEnabled,
+          voice: voiceModeVoice,
+          showTranscription: voiceModeShowTranscription,
+        });
+      } catch (error) {
+        console.error('[Settings] Failed to save voice mode settings:', error);
+      }
+
       // Clear the model cache to force refresh with new API keys
       await window.electronAPI.aiClearModelCache?.();
 
@@ -301,7 +341,7 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
       setSaveStatus('error');
       setTimeout(() => setSaveStatus('idle'), 3000);
     }
-  }, [apiKeys, providers, showToolCalls, aiDebugLogging, completionSoundEnabled, completionSoundType, osNotificationsEnabled, releaseChannel, syncConfig]);
+  }, [apiKeys, providers, showToolCalls, aiDebugLogging, completionSoundEnabled, completionSoundType, osNotificationsEnabled, releaseChannel, syncConfig, voiceModeEnabled, voiceModeVoice, voiceModeShowTranscription]);
 
   // Keep the ref in sync with performSave so debounced calls use the latest version
   performSaveRef.current = performSave;
@@ -538,6 +578,25 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
             setOSNotificationsEnabled(value);
             debouncedSave();
           }}
+        />;
+      case 'voice-mode':
+        return <VoiceModePanel
+          enabled={voiceModeEnabled}
+          onEnabledChange={(value) => {
+            setVoiceModeEnabled(value);
+            debouncedSave();
+          }}
+          voice={voiceModeVoice}
+          onVoiceChange={(value) => {
+            setVoiceModeVoice(value);
+            debouncedSave();
+          }}
+          showTranscription={voiceModeShowTranscription}
+          onShowTranscriptionChange={(value) => {
+            setVoiceModeShowTranscription(value);
+            debouncedSave();
+          }}
+          hasOpenAIKey={!!apiKeys.openai}
         />;
       case 'installed-extensions':
         return (

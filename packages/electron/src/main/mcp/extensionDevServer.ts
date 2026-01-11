@@ -27,6 +27,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { ExtensionLogService } from '../services/ExtensionLogService';
 import { database } from '../database/initialize';
+import { findWindowByWorkspace } from '../window/WindowManager';
 
 // ============================================================================
 // Manifest Validation
@@ -1075,14 +1076,19 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
                 };
               }
 
-              // Query extension status via IPC to renderer
-              // We need to send a message to all windows and collect responses
-              const { BrowserWindow } = await import('electron');
-              const windows = BrowserWindow.getAllWindows().filter(w => !w.isDestroyed());
-
-              if (windows.length === 0) {
+              // workspacePath is REQUIRED to route to the correct window
+              if (!workspacePath) {
                 return {
-                  content: [{ type: 'text', text: 'Error: No windows available to query extension status' }],
+                  content: [{ type: 'text', text: 'Error: workspacePath is required to query extension status' }],
+                  isError: true
+                };
+              }
+
+              // Find the window for this workspace - do NOT fall back to windows[0]
+              const targetWindow = findWindowByWorkspace(workspacePath);
+              if (!targetWindow || targetWindow.isDestroyed()) {
+                return {
+                  content: [{ type: 'text', text: `Error: No window found for workspace: ${workspacePath}` }],
                   isError: true
                 };
               }
@@ -1095,9 +1101,6 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
                     isError: false
                   });
                 }, 5000);
-
-                // Send query to first available window
-                const targetWindow = windows[0];
 
                 // Use a unique channel for the response
                 const responseChannel = `extension-status-response-${Date.now()}`;

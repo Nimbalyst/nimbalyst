@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, nativeImage, nativeTheme } from 'electron';
-import { safeOn } from './utils/ipcRegistry';
+import { safeHandle, safeOn } from './utils/ipcRegistry';
 import { markBootComplete } from './utils/bootState';
 import { markStart, markEnd, checkpoint, logSummary } from './utils/startupTiming';
 import type { SessionStore } from '@nimbalyst/runtime';
@@ -58,6 +58,8 @@ import { SessionNamingService } from './services/SessionNamingService';
 import { ExtensionDevService } from './services/ExtensionDevService';
 import { MockupScreenshotService } from './services/MockupScreenshotService';
 import { registerMockupHandlers } from './ipc/MockupHandlers';
+import { initVoiceModeService } from './services/voice/VoiceModeService';
+import { initVoiceModeSettingsHandler } from './services/voice/VoiceModeSettingsHandler';
 import { registerDataModelHandlers } from './ipc/DataModelHandlers';
 import { registerExtensionHandlers, getClaudePluginPaths, initializeExtensionFileTypes } from './ipc/ExtensionHandlers';
 import { ClaudeCodeProvider } from '@nimbalyst/runtime/ai/server';
@@ -538,6 +540,14 @@ app.whenReady().then(async () => {
     }
     aiService = new AIService(runtimeSessionStore);
     markEnd('ai-service-init');
+
+    // Initialize Voice Mode handlers
+    // The renderer calls 'voice-mode:init' to trigger initialization
+    safeHandle('voice-mode:init', async () => {
+      return { success: true };
+    });
+    initVoiceModeService();
+    initVoiceModeSettingsHandler();
 
     // Initialize Agent service
     // agentService = new AgentService(aiService);

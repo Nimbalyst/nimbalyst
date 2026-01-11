@@ -11,6 +11,7 @@ export type SettingsCategory =
   | 'openai-codex'
   | 'lmstudio'
   | 'notifications'
+  | 'voice-mode'
   | 'sync'
   | 'advanced'
   | 'mcp-servers'
@@ -78,6 +79,12 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
           id: 'notifications',
           name: 'Notifications',
           icon: <MaterialSymbol icon="notifications" size={16} />,
+        },
+        {
+          id: 'voice-mode',
+          name: 'Voice Mode',
+          icon: <MaterialSymbol icon="mic" size={16} />,
+          hidden: releaseChannel !== 'alpha', // Only visible to alpha users
         },
         {
           id: 'advanced',

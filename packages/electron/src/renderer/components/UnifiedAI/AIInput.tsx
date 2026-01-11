@@ -6,6 +6,7 @@ import type { TokenUsageCategory } from '@nimbalyst/runtime/ai/server/types';
 import { AttachmentPreviewList } from '../AgenticCoding/AttachmentPreviewList';
 import { ModeTag, AIMode } from './ModeTag';
 import { ModelSelector } from './ModelSelector';
+import { VoiceModeButton } from './VoiceModeButton.tsx';
 import { ContextUsageDisplay } from './ContextUsageDisplay';
 import { MockupAnnotationIndicator } from './MockupAnnotationIndicator';
 import { TextSelectionIndicator } from './TextSelectionIndicator';
@@ -874,6 +875,8 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
             padding: '4px 0',
             marginBottom: '4px'
           }}>
+            {/* Voice Mode Button */}
+            <VoiceModeButton sessionId={sessionId} workspacePath={workspacePath} />
             {onModeChange && provider === 'claude-code' && mode && <ModeTag mode={mode} onModeChange={onModeChange} />}
 
             {onModelChange && currentModel && (

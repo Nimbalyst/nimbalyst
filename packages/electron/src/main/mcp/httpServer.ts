@@ -12,6 +12,7 @@ import { parse as parseUrl } from 'url';
 import { existsSync } from 'fs';
 import path, { isAbsolute } from 'path';
 import { MockupScreenshotService } from '../services/MockupScreenshotService';
+import { isVoiceModeActive, sendToVoiceAgent, getActiveVoiceSessionId } from '../services/voice/VoiceModeService';
 
 /**
  * Compress a base64 image to JPEG if it exceeds 0.28 MB.
@@ -219,7 +220,8 @@ export function updateDocumentState(state: any, sessionId?: string) {
   //   stateKeys: Object.keys(state || {})
   // });
 
-  documentStateBySession.set(sessionId, state);
+  // Store state with sessionId included so handlers can access it from the value
+  documentStateBySession.set(sessionId, { ...state, sessionId });
   // console.log(`[MCP Server] Session ${sessionId} associated with workspace: ${state.workspacePath}`);
 }
 
@@ -606,6 +608,23 @@ async function tryCreateServer(port: number): Promise<any> {
           }
         });
 
+        // Always add voice_agent_speak tool so it's discoverable
+        // The handler will return a non-error response if voice mode is not active
+        builtInTools.push({
+          name: 'voice_agent_speak',
+          description: 'Send a message to the voice agent to be spoken aloud to the user. This tool serves as a communication bridge between the coding agent and the voice agent, enabling the coding agent to provide spoken updates, task completion notifications, or responses to the user during voice mode sessions. Use this when you want to inform the user about progress or results while they are interacting via voice. If voice mode is not active, this tool will return a non-error response indicating voice is unavailable. Keep messages concise and conversational.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              message: {
+                type: 'string',
+                description: 'The message for the voice agent to speak to the user. Be concise and natural. This enables the coding agent to communicate with the user through the voice agent.'
+              }
+            },
+            required: ['message']
+          }
+        });
+
         // Get extension tools for the current workspace/file
         const extensionTools = getAvailableExtensionTools(workspacePath, currentFilePath);
         const extensionToolSchemas = extensionTools.map(tool => ({
@@ -618,8 +637,13 @@ async function tryCreateServer(port: number): Promise<any> {
           console.log(`[MCP Server] Including ${extensionTools.length} extension tools for file: ${currentFilePath}`);
         }
 
+        const allTools = [...builtInTools, ...extensionToolSchemas];
+        // Debug logging - uncomment if needed for troubleshooting tool registration
+        // console.log('[MCP Server] Returning tools:', allTools.map(t => t.name).join(', '));
+        // console.log('[MCP Server] voice_agent_speak in list?', allTools.some(t => t.name === 'voice_agent_speak'));
+
         return {
-          tools: [...builtInTools, ...extensionToolSchemas]
+          tools: allTools
         };
       });
 
@@ -1285,6 +1309,66 @@ async function tryCreateServer(port: number): Promise<any> {
             };
           }
 
+          case 'voice_agent_speak': {
+            const message = args?.message as string | undefined;
+
+            if (!message || typeof message !== 'string') {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: 'Error: message parameter is required and must be a string'
+                  }
+                ],
+                isError: true
+              };
+            }
+
+            // Get the active voice session directly - works regardless of document state
+            const activeVoiceSessionId = getActiveVoiceSessionId();
+
+            if (!activeVoiceSessionId) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: 'Voice mode is not currently active. The message cannot be spoken aloud. You can still respond to the user via text in the normal way.'
+                  }
+                ],
+                isError: false // Not a hard error - just means voice mode isn't active
+              };
+            }
+
+            // Debug logging - uncomment if needed for troubleshooting voice message routing
+            // console.log('[MCP Server] voice_agent_speak - sending to active voice session:', { sessionId: activeVoiceSessionId });
+
+            // Attempt to send message to voice agent
+            const success = sendToVoiceAgent(activeVoiceSessionId, message);
+            // console.log('[MCP Server] voice_agent_speak - send result:', { sessionId: activeVoiceSessionId, success, message: message.substring(0, 50) });
+
+            if (!success) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: `Failed to send message to voice agent. The voice connection may have been lost or disconnected. You can still respond to the user via text in the normal way.`
+                  }
+                ],
+                isError: false // Not a hard error - voice agent just isn't reachable
+              };
+            }
+
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `Message queued for voice agent: "${message.substring(0, 100)}${message.length > 100 ? '...' : ''}"`
+                }
+              ],
+              isError: false
+            };
+          }
+
           default: {
             // Check if this is an extension tool
             const extensionTools = getAvailableExtensionTools(workspacePath, (() => {
@@ -1301,14 +1385,27 @@ async function tryCreateServer(port: number): Promise<any> {
             // Execute extension tool via IPC to renderer
             console.log(`[MCP Server] Executing extension tool: ${toolName}`);
 
+            // workspacePath is REQUIRED - extension tools must be routed to the correct window
+            if (!workspacePath) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: `Error: workspacePath is required to execute extension tools`
+                  }
+                ],
+                isError: true
+              };
+            }
+
             // Find the correct window for this workspace
-            const windowId = workspaceToWindowMap.get(workspacePath || '');
+            const windowId = workspaceToWindowMap.get(workspacePath);
             if (!windowId) {
               return {
                 content: [
                   {
                     type: 'text',
-                    text: `Error: No window found for workspace`
+                    text: `Error: No window found for workspace: ${workspacePath}`
                   }
                 ],
                 isError: true

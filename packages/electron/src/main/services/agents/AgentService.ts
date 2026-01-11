@@ -15,10 +15,14 @@ export class AgentService {
     this.setupIpcHandlers();
   }
 
-  private getOrCreateRegistry(workspacePath?: string): AgentRegistry {
-    const key = workspacePath || 'global';
+  private getOrCreateRegistry(workspacePath: string): AgentRegistry {
+    // workspacePath is REQUIRED - agents are always scoped to a workspace
+    // (they live in .claude/ folder within the workspace)
+    if (!workspacePath) {
+      throw new Error('workspacePath is required to get agent registry - agents are workspace-scoped');
+    }
 
-    if (!this.registryByWorkspace.has(key)) {
+    if (!this.registryByWorkspace.has(workspacePath)) {
       const registry = new AgentRegistry({
         workspacePath,
         watchForChanges: true
@@ -26,7 +30,7 @@ export class AgentService {
 
       // Initialize the registry asynchronously
       registry.initialize().catch(error => {
-        console.error(`[AgentService] Failed to initialize registry for ${key}:`, error);
+        console.error(`[AgentService] Failed to initialize registry for ${workspacePath}:`, error);
       });
 
       // Listen for agent changes
@@ -37,15 +41,20 @@ export class AgentService {
         });
       });
 
-      this.registryByWorkspace.set(key, registry);
+      this.registryByWorkspace.set(workspacePath, registry);
     }
 
-    return this.registryByWorkspace.get(key)!;
+    return this.registryByWorkspace.get(workspacePath)!;
   }
 
   private setupIpcHandlers() {
     // Get all agents for a workspace
     safeHandle('agents:getAll', async (event, workspacePath?: string) => {
+      // workspacePath is REQUIRED - agents are always scoped to a workspace
+      if (!workspacePath) {
+        console.error('[AgentService] agents:getAll called without workspacePath');
+        return [];
+      }
       try {
         const registry = this.getOrCreateRegistry(workspacePath);
         const agents = registry.getAllAgents();
@@ -66,6 +75,11 @@ export class AgentService {
 
     // Get a specific agent
     safeHandle('agents:get', async (event, agentId: string, workspacePath?: string) => {
+      // workspacePath is REQUIRED - agents are always scoped to a workspace
+      if (!workspacePath) {
+        console.error('[AgentService] agents:get called without workspacePath');
+        return null;
+      }
       try {
         const registry = this.getOrCreateRegistry(workspacePath);
         const agent = registry.getAgent(agentId);
@@ -87,6 +101,11 @@ export class AgentService {
 
     // Search agents
     safeHandle('agents:search', async (event, query: string, workspacePath?: string) => {
+      // workspacePath is REQUIRED - agents are always scoped to a workspace
+      if (!workspacePath) {
+        console.error('[AgentService] agents:search called without workspacePath');
+        return [];
+      }
       try {
         const registry = this.getOrCreateRegistry(workspacePath);
         const agents = registry.searchAgents(query);
@@ -112,6 +131,10 @@ export class AgentService {
       sessionId?: string;
       workspacePath?: string;
     }) => {
+      // workspacePath is REQUIRED - agents are always scoped to a workspace
+      if (!options.workspacePath) {
+        throw new Error('workspacePath is required to execute agent');
+      }
       try {
         const registry = this.getOrCreateRegistry(options.workspacePath);
         const agent = registry.getAgent(options.agentId);
@@ -165,6 +188,11 @@ export class AgentService {
 
     // Reload agents for a workspace
     safeHandle('agents:reload', async (event, workspacePath?: string) => {
+      // workspacePath is REQUIRED - agents are always scoped to a workspace
+      if (!workspacePath) {
+        console.error('[AgentService] agents:reload called without workspacePath');
+        return false;
+      }
       try {
         const registry = this.getOrCreateRegistry(workspacePath);
         await registry.initialize();

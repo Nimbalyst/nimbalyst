@@ -76,10 +76,17 @@ export class DataModelPlatformServiceImpl implements DataModelPlatformService {
       return;
     }
 
+    // workspacePath is REQUIRED - cannot route file open without it
+    const workspacePath = (window as any).__workspacePath;
+    if (!workspacePath) {
+      console.error('[DataModelPlatformService] __workspacePath not set - cannot open data model');
+      return;
+    }
+
     // Use workspace:open-file which sends open-document event to trigger
     // handleWorkspaceFileSelect in the renderer
     electronAPI.invoke('workspace:open-file', {
-      workspacePath: (window as any).__workspacePath || '',
+      workspacePath,
       filePath: dataModelPath,
     }).catch((error: Error) => {
       console.error('[DataModelPlatformService] Failed to open data model:', error);

@@ -58,10 +58,17 @@ export class MockupPlatformServiceImpl implements MockupPlatformService {
       return;
     }
 
+    // workspacePath is REQUIRED - cannot route file open without it
+    const workspacePath = (window as any).__workspacePath;
+    if (!workspacePath) {
+      console.error('[MockupPlatformService] __workspacePath not set - cannot open mockup');
+      return;
+    }
+
     // Use workspace:open-file which sends open-document event to trigger
     // handleWorkspaceFileSelect in the renderer
     electronAPI.invoke('workspace:open-file', {
-      workspacePath: (window as any).__workspacePath || '',
+      workspacePath,
       filePath: mockupPath,
     }).catch((error: Error) => {
       console.error('[MockupPlatformService] Failed to open mockup:', error);

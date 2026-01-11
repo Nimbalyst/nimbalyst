@@ -30,6 +30,11 @@ interface ChatHeaderProps {
   onOpenSessionManager?: () => void;
   onOpenSettings?: () => void;
 
+  // Voice mode
+  voiceModeEnabled?: boolean;
+  isVoiceActive?: boolean;
+  onToggleVoice?: () => void;
+
   // Debug
   documentContext?: { filePath?: string } | null;
 }
@@ -50,6 +55,9 @@ export function ChatHeader({
   onRenameSession,
   onOpenSessionManager,
   onOpenSettings,
+  voiceModeEnabled,
+  isVoiceActive,
+  onToggleVoice,
   documentContext
 }: ChatHeaderProps) {
   // Get current session's model info for display
@@ -136,6 +144,19 @@ export function ChatHeader({
           {/* Diff test dropdown (dev mode only) */}
           {import.meta.env.DEV && (
             <DiffTestDropdown documentContext={documentContext} />
+          )}
+
+          {/* Voice mode button */}
+          {voiceModeEnabled && onToggleVoice && (
+            <button
+              className={`ai-chat-action-button ${isVoiceActive ? 'voice-active' : ''}`}
+              onClick={onToggleVoice}
+              title={isVoiceActive ? "Stop Voice Mode" : "Start Voice Mode"}
+              aria-label="Toggle Voice Mode"
+              style={{ opacity: isVoiceActive ? 1 : 0.6 }}
+            >
+              <MaterialSymbol icon={isVoiceActive ? "mic" : "mic_off"} size={18} />
+            </button>
           )}
 
           {onTogglePerformanceMetrics && (

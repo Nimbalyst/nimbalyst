@@ -142,7 +142,11 @@ export default defineConfig({
           '@excalidraw/excalidraw',
           '@excalidraw/excalidraw/index.css',
           // Native modules (require platform-specific binaries)
-          'node-pty' // PTY for terminal - native module copied via extraFiles
+          'node-pty', // PTY for terminal - native module copied via extraFiles
+          // ws optional dependencies - these are native performance optimizations
+          // that ws works fine without
+          'bufferutil',
+          'utf-8-validate'
           // NOTE: electron-log must NOT be external - it needs to be bundled for packaged builds.
           // The safeHandle/safeOn wrappers in ipcRegistry.ts handle duplicate registration.
         ]

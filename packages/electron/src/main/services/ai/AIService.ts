@@ -364,6 +364,10 @@ export class AIService {
   // but the same prompt ID is somehow passed to sendMessage twice
   private processingQueuedPromptIds = new Set<string>();
 
+  // Track mobile session creation requests to prevent duplicate processing
+  // (can happen if the same request is delivered multiple times)
+  private processingMobileSessionRequests = new Set<string>();
+
   constructor(sessionStore: SessionStore) {
     logger.main.info('[AIService] Constructor called');
     this.sessionManager = new SessionManager(sessionStore);
@@ -648,16 +652,9 @@ export class AIService {
                     logger.main.warn('[AIService] No window found for workspace:', session.workspacePath);
                   }
                 } else {
-                  // Fallback: if no workspacePath, send to first window (legacy behavior)
-                  logger.main.warn('[AIService] Session has no workspacePath, sending to first window');
-                  const { BrowserWindow } = await import('electron');
-                  const windows = BrowserWindow.getAllWindows();
-                  if (windows.length > 0) {
-                    windows[0].webContents.send('ai:queuedPromptsReceived', {
-                      sessionId,
-                      promptCount: newPromptsCount
-                    });
-                  }
+                  // Sessions MUST have a workspacePath - this indicates a data integrity issue
+                  logger.main.error('[AIService] Session has no workspacePath - cannot route queued prompts. SessionId:', sessionId);
+                  // Do NOT fall back to windows[0] - that masks the real bug
                 }
               } catch (err) {
                 logger.main.error('[AIService] Failed to insert queuedPrompts into table:', err);
@@ -680,6 +677,17 @@ export class AIService {
             hasInitialPrompt: !!request.initialPrompt
           });
 
+          // Deduplicate requests - same request can be delivered multiple times
+          if (this.processingMobileSessionRequests.has(request.requestId)) {
+            logger.main.info('[AIService] Ignoring duplicate session creation request:', request.requestId);
+            return;
+          }
+          this.processingMobileSessionRequests.add(request.requestId);
+          // Clean up after 60 seconds to prevent memory leak
+          setTimeout(() => {
+            this.processingMobileSessionRequests.delete(request.requestId);
+          }, 60000);
+
           try {
             // Find a window for this project/workspace
             const { BrowserWindow } = await import('electron');
@@ -697,36 +705,54 @@ export class AIService {
               return;
             }
 
+            // Mobile MUST provide a valid projectId - sessions cannot be created without a workspace
+            if (!request.projectId || request.projectId === 'default') {
+              logger.main.error('[AIService] Mobile session request missing valid projectId:', request.projectId);
+              if (syncProvider.sendCreateSessionResponse) {
+                syncProvider.sendCreateSessionResponse({
+                  requestId: request.requestId,
+                  success: false,
+                  error: 'projectId is required - cannot create session without workspace'
+                });
+              }
+              return;
+            }
+
             // Find the window that matches this project's workspace path
-            let targetWindow = windows[0]; // Default to first window
+            let targetWindow: BrowserWindow | undefined;
             let workspacePath: string | undefined;
 
-            if (request.projectId && request.projectId !== 'default') {
-              // Try to find a window with this workspace using findWindowByWorkspace
-              const matchedWindow = findWindowByWorkspace(request.projectId);
-              if (matchedWindow) {
-                targetWindow = matchedWindow;
-                workspacePath = request.projectId;
-              } else {
-                // Try to find by project name (last path component)
-                for (const win of windows) {
-                  const state = windowStates.get(win.id);
-                  if (state?.workspacePath) {
-                    const pathBasename = state.workspacePath.split(/[\\/]/).pop();
-                    if (pathBasename === request.projectId || state.workspacePath.includes(request.projectId)) {
-                      targetWindow = win;
-                      workspacePath = state.workspacePath;
-                      break;
-                    }
+            // Try to find a window with this workspace using findWindowByWorkspace
+            const matchedWindow = findWindowByWorkspace(request.projectId);
+            if (matchedWindow) {
+              targetWindow = matchedWindow;
+              workspacePath = request.projectId;
+            } else {
+              // Try to find by project name (last path component)
+              for (const win of windows) {
+                const state = windowStates.get(win.id);
+                if (state?.workspacePath) {
+                  const pathBasename = state.workspacePath.split(/[\\/]/).pop();
+                  if (pathBasename === request.projectId || state.workspacePath.includes(request.projectId)) {
+                    targetWindow = win;
+                    workspacePath = state.workspacePath;
+                    break;
                   }
                 }
               }
             }
 
-            // If no workspace path found yet, get it from the target window
-            if (!workspacePath) {
-              const targetState = windowStates.get(targetWindow.id);
-              workspacePath = targetState?.workspacePath ?? undefined;
+            // FAIL if no matching window found - do NOT fall back to windows[0]
+            if (!targetWindow || !workspacePath) {
+              logger.main.error('[AIService] No window found for projectId:', request.projectId);
+              if (syncProvider.sendCreateSessionResponse) {
+                syncProvider.sendCreateSessionResponse({
+                  requestId: request.requestId,
+                  success: false,
+                  error: `No open window found for project: ${request.projectId}`
+                });
+              }
+              return;
             }
 
             // Create the session using the SessionManager
@@ -747,6 +773,7 @@ export class AIService {
               workspacePath
             });
             if (session && syncProvider.syncSessionsToIndex) {
+              logger.main.info('[AIService] Syncing new session to index:', session.id);
               syncProvider.syncSessionsToIndex([{
                 id: session.id,
                 title: session.title ?? 'Untitled',
@@ -759,15 +786,20 @@ export class AIService {
                 updatedAt: session.updatedAt,
                 createdAt: session.createdAt
               }]);
+            } else {
+              logger.main.warn('[AIService] Cannot sync session - syncSessionsToIndex not available');
             }
 
             // Send success response
             if (syncProvider.sendCreateSessionResponse) {
+              logger.main.info('[AIService] Sending success response to mobile for:', request.requestId);
               syncProvider.sendCreateSessionResponse({
                 requestId: request.requestId,
                 success: true,
                 sessionId: session.id
               });
+            } else {
+              logger.main.warn('[AIService] Cannot send response - sendCreateSessionResponse not available');
             }
 
             // If there's an initial prompt, queue it for execution

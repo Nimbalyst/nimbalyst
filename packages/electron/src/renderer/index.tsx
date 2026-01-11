@@ -21,6 +21,12 @@ initMonacoEditor();
 // This must happen before React renders to avoid flash
 initializeTheme();
 
+// Initialize voice mode handlers in main process (must be triggered from renderer)
+window.electronAPI.invoke('voice-mode:init').catch(() => {
+  // Ignore errors - voice mode is optional
+});
+
+
 const rootElement = document.getElementById('root') as HTMLElement;
 // console.log('[RENDERER] Root element:', rootElement, 'at', new Date().toISOString());
 

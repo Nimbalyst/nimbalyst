@@ -523,8 +523,12 @@ export class SessionManager {
     sessionType?: 'chat' | 'planning' | 'coding' | 'terminal',
     mode?: 'planning' | 'agent'
   ): Promise<SessionData> {
+    // workspacePath is REQUIRED - sessions cannot exist outside of a workspace
+    if (!workspacePath) {
+      throw new Error('workspacePath is required to create a session - cannot fall back to default');
+    }
     const sessionId = uuidv4();
-    const workspace = workspacePath || documentContext?.filePath?.split('/').slice(0, -1).join('/') || 'default';
+    const workspace = workspacePath;
 
     await AISessionsRepository.create({
       id: sessionId,
@@ -561,7 +565,11 @@ export class SessionManager {
   }
 
   async loadSession(sessionId: string, workspacePath?: string): Promise<SessionData | null> {
-    const workspace = workspacePath || this.currentWorkspacePath || 'default';
+    // workspacePath is REQUIRED for proper session routing
+    if (!workspacePath && !this.currentWorkspacePath) {
+      throw new Error('workspacePath is required to load a session - cannot fall back to default');
+    }
+    const workspace = workspacePath || this.currentWorkspacePath!;
     const session = await AISessionsRepository.get(sessionId);
     if (!session) {
       return null;
@@ -621,7 +629,11 @@ export class SessionManager {
   }
 
   async getSessions(workspacePath?: string): Promise<SessionData[]> {
-    const workspace = workspacePath || this.currentWorkspacePath || 'default';
+    // workspacePath is REQUIRED - sessions are always scoped to a workspace
+    if (!workspacePath && !this.currentWorkspacePath) {
+      throw new Error('workspacePath is required to get sessions - cannot fall back to default');
+    }
+    const workspace = workspacePath || this.currentWorkspacePath!;
     return fetchSessionsForWorkspace(workspace);
   }
 
@@ -630,7 +642,11 @@ export class SessionManager {
    * Much faster than getSessions() - use when you only need id/title.
    */
   async getSessionList(workspacePath?: string): Promise<SessionListItem[]> {
-    const workspace = workspacePath || this.currentWorkspacePath || 'default';
+    // workspacePath is REQUIRED - sessions are always scoped to a workspace
+    if (!workspacePath && !this.currentWorkspacePath) {
+      throw new Error('workspacePath is required to get session list - cannot fall back to default');
+    }
+    const workspace = workspacePath || this.currentWorkspacePath!;
     return AISessionsRepository.list(workspace);
   }
 

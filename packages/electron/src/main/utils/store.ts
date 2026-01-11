@@ -87,6 +87,13 @@ interface AppStoreSchema {
   // Auto-update suppression (when user dismisses an update)
   updateDismissedVersion?: string;
   updateDismissedAt?: number;
+  // Voice Mode settings
+  voiceMode?: {
+    enabled: boolean; // Master toggle for voice mode feature
+    voice?: 'marin' | 'cedar'; // OpenAI voice selection
+    autoCommitAudio?: boolean; // Auto-commit audio on speech pause (VAD)
+    showTranscription?: boolean; // Show live transcription in UI
+  };
 }
 
 export interface TabState {

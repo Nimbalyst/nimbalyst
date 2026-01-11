@@ -104,16 +104,25 @@ export async function getAllSessionsForSync(includeMessages = false): Promise<Ar
   );
   const queryTime = performance.now() - queryStart;
 
-  const sessions = rows.map((row: any) => ({
+  // Filter out sessions without workspace_id - they are legacy data that cannot be routed correctly
+  // Do NOT fall back to 'default' as that masks the real issue (missing workspace tracking)
+  const validRows = rows.filter((row: any) => {
+    if (!row.workspace_id) {
+      console.warn(`[PGLiteSessionStore] Skipping session ${row.id} - missing workspace_id (legacy data)`);
+      return false;
+    }
+    return true;
+  });
+
+  const sessions = validRows.map((row: any) => ({
     id: row.id,
     title: row.title || 'Untitled',
     provider: row.provider || 'unknown',
     model: row.model,
     mode: row.mode,
-    // Ensure workspaceId is never null/undefined for Y.js sync compatibility
-    // NULL workspace_id means session was created before workspace tracking
-    workspaceId: row.workspace_id || 'default',
-    workspacePath: row.workspace_id || 'default', // workspace_id is the path in this system
+    // workspace_id is required - we filtered out sessions without it above
+    workspaceId: row.workspace_id,
+    workspacePath: row.workspace_id, // workspace_id is the path in this system
     // NOTE: Do NOT include draftInput in bulk sync - it should only sync when actually changed
     // Including it here causes spurious metadata_updated events for all sessions on startup
     messageCount: parseInt(row.message_count) || 0,
