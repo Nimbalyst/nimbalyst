@@ -20,6 +20,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.50.28] - 2026-01-11
+
+
+### Added
+- Voice control for coding agent via OpenAI Realtime API
+- Mobile now shows AI session context usage
+- Excalidraw diagrams create faster with batch tools
+
+### Changed
+- Lazy-initialize electron-store for custom user-data-dir support
+
+### Fixed
+- Excalidraw dark mode flash on load
+- Suppress Claude Agent SDK stream error dialog on session abort
+- Eliminate dynamic import to prevent electron-log duplication
+- Prevent duplicate IPC handler crashes on startup
+- Session back button returns to correct project on mobile
+- Question prompts remain accessible on mobile
+- Mobile session creation now uses correct project
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.50.27] - 2026-01-10
 
 
