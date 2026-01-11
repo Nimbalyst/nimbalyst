@@ -4,9 +4,10 @@
  * Provides cross-process communication for session state tracking.
  */
 
-import { ipcMain, BrowserWindow } from 'electron';
+import { BrowserWindow } from 'electron';
 import { getSessionStateManager } from '@nimbalyst/runtime/ai/server/SessionStateManager';
 import type { SessionStateEvent } from '@nimbalyst/runtime/ai/server/types/SessionState';
+import { safeHandle, safeOn } from '../utils/ipcRegistry';
 
 // Track if handlers are registered to prevent double registration
 let handlersRegistered = false;
@@ -32,7 +33,7 @@ export async function registerSessionStateHandlers() {
   setupSyncSubscription(stateManager);
 
   // Get active session IDs
-  ipcMain.handle('ai-session-state:get-active', async (_event) => {
+  safeHandle('ai-session-state:get-active', async (_event) => {
     try {
       const activeIds = stateManager.getActiveSessionIds();
       return { success: true, sessionIds: activeIds };
@@ -43,7 +44,7 @@ export async function registerSessionStateHandlers() {
   });
 
   // Get state for a specific session
-  ipcMain.handle('ai-session-state:get-state', async (_event, sessionId: string) => {
+  safeHandle('ai-session-state:get-state', async (_event, sessionId: string) => {
     try {
       const state = stateManager.getSessionState(sessionId);
       return { success: true, state };
@@ -54,7 +55,7 @@ export async function registerSessionStateHandlers() {
   });
 
   // Check if session is active
-  ipcMain.handle('ai-session-state:is-active', async (_event, sessionId: string) => {
+  safeHandle('ai-session-state:is-active', async (_event, sessionId: string) => {
     try {
       const isActive = stateManager.isSessionActive(sessionId);
       return { success: true, isActive };
@@ -65,7 +66,7 @@ export async function registerSessionStateHandlers() {
   });
 
   // Subscribe to state changes
-  ipcMain.handle('ai-session-state:subscribe', async (event) => {
+  safeHandle('ai-session-state:subscribe', async (event) => {
     try {
       const window = BrowserWindow.fromWebContents(event.sender);
       if (!window) {
@@ -108,7 +109,7 @@ export async function registerSessionStateHandlers() {
   });
 
   // Unsubscribe from state changes
-  ipcMain.handle('ai-session-state:unsubscribe', async (event) => {
+  safeHandle('ai-session-state:unsubscribe', async (event) => {
     try {
       const window = BrowserWindow.fromWebContents(event.sender);
       if (!window) {
@@ -131,7 +132,7 @@ export async function registerSessionStateHandlers() {
   });
 
   // Start tracking a session (called when AI starts processing)
-  ipcMain.handle('ai-session-state:start', async (_event, sessionId: string) => {
+  safeHandle('ai-session-state:start', async (_event, sessionId: string) => {
     try {
       await stateManager.startSession({ sessionId });
       return { success: true };
@@ -142,7 +143,7 @@ export async function registerSessionStateHandlers() {
   });
 
   // Update session activity
-  ipcMain.handle('ai-session-state:update-activity', async (_event, sessionId: string, status?: string, isStreaming?: boolean) => {
+  safeHandle('ai-session-state:update-activity', async (_event, sessionId: string, status?: string, isStreaming?: boolean) => {
     try {
       await stateManager.updateActivity({
         sessionId,
@@ -157,7 +158,7 @@ export async function registerSessionStateHandlers() {
   });
 
   // End tracking a session (called when AI completes)
-  ipcMain.handle('ai-session-state:end', async (_event, sessionId: string) => {
+  safeHandle('ai-session-state:end', async (_event, sessionId: string) => {
     try {
       await stateManager.endSession(sessionId);
       return { success: true };
@@ -168,7 +169,7 @@ export async function registerSessionStateHandlers() {
   });
 
   // Interrupt a session (called on error or force stop)
-  ipcMain.handle('ai-session-state:interrupt', async (_event, sessionId: string) => {
+  safeHandle('ai-session-state:interrupt', async (_event, sessionId: string) => {
     try {
       await stateManager.interruptSession(sessionId);
       return { success: true };

@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow, app, shell } from 'electron';
+import { BrowserWindow, app, shell } from 'electron';
 import { readFileSync, readdirSync, statSync, existsSync, promises as fsPromises } from 'fs';
 import * as fs from 'fs';
 import { join, basename, dirname, extname } from 'path';
@@ -26,6 +26,7 @@ import {
     updateWorkspaceState
 } from '../utils/store';
 import { loadFileIntoWindow } from '../file/FileOperations';
+import { safeHandle, safeOn } from '../utils/ipcRegistry';
 
 // Helper function to get file type from extension
 function getFileType(filePath: string): string {
@@ -166,17 +167,17 @@ async function findWorkspaceFiles(dir: string): Promise<string[]> {
 export function registerWorkspaceHandlers() {
     const analytics = AnalyticsService.getInstance();
     // Get folder contents
-    ipcMain.handle('get-folder-contents', (event, dirPath: string) => {
+    safeHandle('get-folder-contents', (event, dirPath: string) => {
         return getFolderContents(dirPath);
     });
 
     // Refresh folder contents (for when user expands a folder)
-    ipcMain.handle('refresh-folder-contents', (event, folderPath: string) => {
+    safeHandle('refresh-folder-contents', (event, folderPath: string) => {
         return getFolderContents(folderPath);
     });
 
     // Create new file
-    ipcMain.handle('create-file', async (event, filePath: string, content: string = '') => {
+    safeHandle('create-file', async (event, filePath: string, content: string = '') => {
         try {
             await writeFile(filePath, content, 'utf-8');
 
@@ -194,7 +195,7 @@ export function registerWorkspaceHandlers() {
     });
 
     // Create new folder
-    ipcMain.handle('create-folder', async (event, folderPath: string) => {
+    safeHandle('create-folder', async (event, folderPath: string) => {
         try {
             await mkdir(folderPath, { recursive: true });
             return { success: true, folderPath };
@@ -208,7 +209,7 @@ export function registerWorkspaceHandlers() {
     // Options:
     //   - encoding: 'utf-8' (default), 'latin1', 'ascii', etc., or 'binary' for base64, or 'auto' to auto-detect
     //   - binary: true to force binary/base64 reading (auto-detected by extension if not specified)
-    ipcMain.handle('read-file-content', async (event, filePath: string, options?: { encoding?: BufferEncoding | 'binary' | 'auto'; binary?: boolean }) => {
+    safeHandle('read-file-content', async (event, filePath: string, options?: { encoding?: BufferEncoding | 'binary' | 'auto'; binary?: boolean }) => {
         // Skip virtual files - they don't exist on disk
         if (filePath.startsWith('virtual://')) {
             return null;
@@ -272,7 +273,7 @@ export function registerWorkspaceHandlers() {
     });
 
     // Switch workspace file - uses unified FileOpener API
-    ipcMain.handle('switch-workspace-file', async (event, filePath: string) => {
+    safeHandle('switch-workspace-file', async (event, filePath: string) => {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (!window) {
             console.error('[SWITCH_FILE] No window found for event sender');
@@ -312,7 +313,7 @@ export function registerWorkspaceHandlers() {
     });
 
     // Build file name cache for quick open
-    ipcMain.handle('build-quick-open-cache', async (event, workspacePath: string) => {
+    safeHandle('build-quick-open-cache', async (event, workspacePath: string) => {
         try {
             // Use cross-platform Node.js file walking instead of Unix find command
             const files = await findWorkspaceFiles(workspacePath);
@@ -334,7 +335,7 @@ export function registerWorkspaceHandlers() {
     });
 
     // Search workspace file names only (fast, uses cache)
-    ipcMain.handle('search-workspace-file-names', async (event, workspacePath: string, query: string) => {
+    safeHandle('search-workspace-file-names', async (event, workspacePath: string, query: string) => {
         try {
             const trimmedQuery = query.trim().toLowerCase();
             if (!trimmedQuery) return [];
@@ -365,7 +366,7 @@ export function registerWorkspaceHandlers() {
     });
 
     // Search workspace file content using ripgrep (slower)
-    ipcMain.handle('search-workspace-file-content', async (event, workspacePath: string, query: string) => {
+    safeHandle('search-workspace-file-content', async (event, workspacePath: string, query: string) => {
         try {
             const trimmedQuery = query.trim();
             if (!trimmedQuery) return [];
@@ -430,7 +431,7 @@ export function registerWorkspaceHandlers() {
     });
 
     // Legacy handler that combines both (for backward compatibility)
-    ipcMain.handle('search-workspace-files', async (event, workspacePath: string, query: string) => {
+    safeHandle('search-workspace-files', async (event, workspacePath: string, query: string) => {
         try {
             const trimmedQuery = query.trim();
             if (!trimmedQuery) return [];
@@ -542,7 +543,7 @@ export function registerWorkspaceHandlers() {
     });
 
     // Get recent workspace files
-    ipcMain.handle('get-recent-workspace-files', async (event) => {
+    safeHandle('get-recent-workspace-files', async (event) => {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (!window) return [];
 
@@ -566,7 +567,7 @@ export function registerWorkspaceHandlers() {
     });
 
     // Add to workspace recent files
-    ipcMain.on('add-to-workspace-recent-files', async (event, filePath: string) => {
+    safeOn('add-to-workspace-recent-files', async (event, filePath: string) => {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (!window) return;
 
@@ -580,19 +581,19 @@ export function registerWorkspaceHandlers() {
     });
 
     // Get entire workspace state - no routing, no BS
-    ipcMain.handle('workspace:get-state', async (event, workspacePath: string) => {
+    safeHandle('workspace:get-state', async (event, workspacePath: string) => {
         return getWorkspaceState(workspacePath);
     });
 
     // Update workspace state - takes partial update, merges atomically
-    ipcMain.handle('workspace:update-state', async (event, workspacePath: string, updates: any) => {
+    safeHandle('workspace:update-state', async (event, workspacePath: string, updates: any) => {
         return updateWorkspaceState(workspacePath, (state) => {
             Object.assign(state, updates);
         });
     });
 
     // File operations for workspace files
-    ipcMain.handle('rename-file', async (event, oldPath: string, newName: string) => {
+    safeHandle('rename-file', async (event, oldPath: string, newName: string) => {
 
         try {
             const newPath = join(dirname(oldPath), newName);
@@ -641,7 +642,7 @@ export function registerWorkspaceHandlers() {
         }
     });
 
-    ipcMain.handle('delete-file', async (event, filePath: string) => {
+    safeHandle('delete-file', async (event, filePath: string) => {
 
         try {
             const stats = await stat(filePath);
@@ -687,7 +688,7 @@ export function registerWorkspaceHandlers() {
     });
 
     // Move file/folder
-    ipcMain.handle('move-file', async (event, sourcePath: string, targetPath: string) => {
+    safeHandle('move-file', async (event, sourcePath: string, targetPath: string) => {
 
         try {
             // Check if source exists
@@ -754,7 +755,7 @@ export function registerWorkspaceHandlers() {
     });
 
     // Copy file/folder
-    ipcMain.handle('copy-file', async (event, sourcePath: string, targetPath: string) => {
+    safeHandle('copy-file', async (event, sourcePath: string, targetPath: string) => {
 
         try {
             // Check if source exists
@@ -799,7 +800,7 @@ export function registerWorkspaceHandlers() {
         }
     });
 
-    ipcMain.handle('workspace:open-file', async (event, options: { workspacePath: string; filePath: string }) => {
+    safeHandle('workspace:open-file', async (event, options: { workspacePath: string; filePath: string }) => {
         try {
             const { filePath } = options;
 
@@ -818,7 +819,7 @@ export function registerWorkspaceHandlers() {
         }
     });
 
-    ipcMain.handle('open-in-default-app', async (event, filePath: string) => {
+    safeHandle('open-in-default-app', async (event, filePath: string) => {
         try {
             // Open file in the OS default application
             const result = await shell.openPath(filePath);
@@ -834,7 +835,7 @@ export function registerWorkspaceHandlers() {
     });
 
 
-    ipcMain.handle('show-in-finder', async (event, filePath: string) => {
+    safeHandle('show-in-finder', async (event, filePath: string) => {
 
         try {
             shell.showItemInFolder(filePath);
@@ -846,7 +847,7 @@ export function registerWorkspaceHandlers() {
     });
 
     // Plan Status Agent Session Integration
-    ipcMain.handle('plan-status:launch-agent-session', async (event, options: { workspacePath: string; planDocumentPath: string }) => {
+    safeHandle('plan-status:launch-agent-session', async (event, options: { workspacePath: string; planDocumentPath: string }) => {
         try {
             const { workspacePath, planDocumentPath } = options;
 
@@ -888,7 +889,7 @@ export function registerWorkspaceHandlers() {
         }
     });
 
-    ipcMain.handle('plan-status:open-agent-session', async (event, options: { sessionId: string; workspacePath: string; planDocumentPath?: string }) => {
+    safeHandle('plan-status:open-agent-session', async (event, options: { sessionId: string; workspacePath: string; planDocumentPath?: string }) => {
         try {
             const { sessionId, workspacePath, planDocumentPath } = options;
 
@@ -927,7 +928,7 @@ export function registerWorkspaceHandlers() {
         }
     });
 
-    ipcMain.handle('plan-status:notify-session-created', async (event, options: { sessionId: string; planDocumentPath: string }) => {
+    safeHandle('plan-status:notify-session-created', async (event, options: { sessionId: string; planDocumentPath: string }) => {
         try {
             const { sessionId, planDocumentPath } = options;
 

@@ -1,7 +1,7 @@
-import { ipcMain } from 'electron';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { HistoryManager } from '../HistoryManager';
+import { safeHandle, safeOn } from '../utils/ipcRegistry';
 
 // Initialize history manager
 const historyManager = new HistoryManager();
@@ -11,7 +11,7 @@ export async function registerHistoryHandlers() {
     await historyManager.initialize();
 
     // Create snapshot
-    ipcMain.handle('history:create-snapshot', async (event, filePath: string, state: string, type: string, description?: string) => {
+    safeHandle('history:create-snapshot', async (event, filePath: string, state: string, type: string, description?: string) => {
         try {
             await historyManager.createSnapshot(filePath, state, type as any, description);
         } catch (error) {
@@ -21,47 +21,47 @@ export async function registerHistoryHandlers() {
     });
 
     // List snapshots
-    ipcMain.handle('history:list-snapshots', async (event, filePath: string) => {
+    safeHandle('history:list-snapshots', async (event, filePath: string) => {
         return await historyManager.listSnapshots(filePath);
     });
 
     // Load snapshot
-    ipcMain.handle('history:load-snapshot', async (event, filePath: string, timestamp: string) => {
+    safeHandle('history:load-snapshot', async (event, filePath: string, timestamp: string) => {
         return await historyManager.loadSnapshot(filePath, timestamp);
     });
 
     // Delete snapshot
-    ipcMain.handle('history:delete-snapshot', async (event, filePath: string, timestamp: string) => {
+    safeHandle('history:delete-snapshot', async (event, filePath: string, timestamp: string) => {
         await historyManager.deleteSnapshot(filePath, timestamp);
     });
 
     // PHASE 4/5: Get pending AI edit tags
-    ipcMain.handle('history:get-pending-tags', async (event, filePath?: string) => {
+    safeHandle('history:get-pending-tags', async (event, filePath?: string) => {
         return await historyManager.getPendingTags(filePath);
     });
 
     // PHASE 5: Create tag (for testing)
-    ipcMain.handle('history:create-tag', async (event, filePath: string, tagId: string, content: string, sessionId: string, toolUseId: string) => {
+    safeHandle('history:create-tag', async (event, filePath: string, tagId: string, content: string, sessionId: string, toolUseId: string) => {
         await historyManager.createTag(filePath, tagId, content, sessionId, toolUseId);
     });
 
     // PHASE 5: Get tag (for testing)
-    ipcMain.handle('history:get-tag', async (event, filePath: string, tagId: string) => {
+    safeHandle('history:get-tag', async (event, filePath: string, tagId: string) => {
         return await historyManager.getTag(filePath, tagId);
     });
 
     // PHASE 5: Update tag status
-    ipcMain.handle('history:update-tag-status', async (event, filePath: string, tagId: string, status: string, workspacePath?: string) => {
+    safeHandle('history:update-tag-status', async (event, filePath: string, tagId: string, status: string, workspacePath?: string) => {
         await historyManager.updateTagStatus(filePath, tagId, status as any, workspacePath);
     });
 
     // PHASE 5: Update tag content
-    ipcMain.handle('history:update-tag-content', async (event, filePath: string, tagId: string, content: string) => {
+    safeHandle('history:update-tag-content', async (event, filePath: string, tagId: string, content: string) => {
         await historyManager.updateTagContent(filePath, tagId, content);
     });
 
     // Incremental approval tags
-    ipcMain.handle('history:create-incremental-approval-tag', async (
+    safeHandle('history:create-incremental-approval-tag', async (
         event,
         filePath: string,
         content: string,
@@ -71,37 +71,37 @@ export async function registerHistoryHandlers() {
         return await historyManager.createIncrementalApprovalTag(filePath, content, sessionId, metadata);
     });
 
-    ipcMain.handle('history:get-diff-baseline', async (event, filePath: string) => {
+    safeHandle('history:get-diff-baseline', async (event, filePath: string) => {
         return await historyManager.getDiffBaseline(filePath);
     });
 
     // Get count of files with pending-review tags in a workspace
-    ipcMain.handle('history:get-pending-count', async (event, workspacePath: string) => {
+    safeHandle('history:get-pending-count', async (event, workspacePath: string) => {
         return await historyManager.getPendingCount(workspacePath);
     });
 
     // Get count of files with pending-review tags for a specific session
-    ipcMain.handle('history:get-pending-count-for-session', async (event, workspacePath: string, sessionId: string) => {
+    safeHandle('history:get-pending-count-for-session', async (event, workspacePath: string, sessionId: string) => {
         return await historyManager.getPendingCountForSession(workspacePath, sessionId);
     });
 
     // Get list of files with pending-review tags for a specific session
-    ipcMain.handle('history:get-pending-files-for-session', async (event, workspacePath: string, sessionId: string) => {
+    safeHandle('history:get-pending-files-for-session', async (event, workspacePath: string, sessionId: string) => {
         return await historyManager.getPendingFilesForSession(workspacePath, sessionId);
     });
 
     // Clear all pending tags in a workspace
-    ipcMain.handle('history:clear-all-pending', async (event, workspacePath: string) => {
+    safeHandle('history:clear-all-pending', async (event, workspacePath: string) => {
         return await historyManager.clearAllPending(workspacePath);
     });
 
     // Clear pending tags for a specific session
-    ipcMain.handle('history:clear-pending-for-session', async (event, workspacePath: string, sessionId: string) => {
+    safeHandle('history:clear-pending-for-session', async (event, workspacePath: string, sessionId: string) => {
         return await historyManager.clearPendingForSession(workspacePath, sessionId);
     });
 
     // Debug helper: get all tags with full metadata
-    ipcMain.handle('history:get-all-tags', async (event, filePath: string) => {
+    safeHandle('history:get-all-tags', async (event, filePath: string) => {
         const { database } = await import('../database/PGLiteDatabaseWorker');
 
         const result = await database.query(`
@@ -122,7 +122,7 @@ export async function registerHistoryHandlers() {
     });
 
     // Mark all incremental-approval tags for a session as reviewed
-    ipcMain.handle('history:mark-incremental-tags-reviewed', async (event, filePath: string, sessionId: string) => {
+    safeHandle('history:mark-incremental-tags-reviewed', async (event, filePath: string, sessionId: string) => {
         const { database } = await import('../database/PGLiteDatabaseWorker');
         const now = Date.now();
 
@@ -139,12 +139,12 @@ export async function registerHistoryHandlers() {
     });
 
     // List all files with history in a workspace
-    ipcMain.handle('history:list-workspace-files', async (event, workspacePath: string) => {
+    safeHandle('history:list-workspace-files', async (event, workspacePath: string) => {
         return await historyManager.listWorkspaceFiles(workspacePath);
     });
 
     // Check which files exist on disk
-    ipcMain.handle('history:check-files-exist', async (event, filePaths: string[]) => {
+    safeHandle('history:check-files-exist', async (event, filePaths: string[]) => {
         const results: Record<string, boolean> = {};
         await Promise.all(filePaths.map(async (filePath) => {
             try {
@@ -158,7 +158,7 @@ export async function registerHistoryHandlers() {
     });
 
     // Restore a deleted file from history
-    ipcMain.handle('history:restore-deleted-file', async (event, filePath: string, timestamp: string) => {
+    safeHandle('history:restore-deleted-file', async (event, filePath: string, timestamp: string) => {
         try {
             // Load the snapshot content
             const content = await historyManager.loadSnapshot(filePath, timestamp);
@@ -178,7 +178,7 @@ export async function registerHistoryHandlers() {
     });
 
     // Batch restore multiple deleted files to their most recent versions
-    ipcMain.handle('history:batch-restore-deleted-files', async (event, filePaths: string[]) => {
+    safeHandle('history:batch-restore-deleted-files', async (event, filePaths: string[]) => {
         const results: { path: string; success: boolean; error?: string }[] = [];
 
         for (const filePath of filePaths) {

@@ -1,17 +1,9 @@
-import { ipcMain } from 'electron';
+import { safeHandle } from '../utils/ipcRegistry';
 import { database } from '../database/initialize';
 
-// Track if handlers are registered to prevent double registration
-let handlersRegistered = false;
-
 export function registerDatabaseBrowserHandlers() {
-    if (handlersRegistered) {
-        console.log('[DatabaseBrowserHandlers] Handlers already registered, skipping');
-        return;
-    }
-
     // Get list of all tables in the database
-    ipcMain.handle('database:getTables', async () => {
+    safeHandle('database:getTables', async () => {
         try {
             const result = await database.query<{ tablename: string }>(
                 `SELECT tablename FROM pg_catalog.pg_tables
@@ -26,7 +18,7 @@ export function registerDatabaseBrowserHandlers() {
     });
 
     // Get table schema (columns and types)
-    ipcMain.handle('database:getTableSchema', async (event, tableName: string) => {
+    safeHandle('database:getTableSchema', async (event, tableName: string) => {
         try {
             const result = await database.query<{
                 column_name: string;
@@ -48,7 +40,7 @@ export function registerDatabaseBrowserHandlers() {
     });
 
     // Get table data with pagination and sorting
-    ipcMain.handle('database:getTableData', async (event, tableName: string, limit: number = 100, offset: number = 0, sortColumn?: string, sortDirection?: 'asc' | 'desc') => {
+    safeHandle('database:getTableData', async (event, tableName: string, limit: number = 100, offset: number = 0, sortColumn?: string, sortDirection?: 'asc' | 'desc') => {
         try {
             // Get total count
             const countResult = await database.query<{ count: string }>(
@@ -85,7 +77,7 @@ export function registerDatabaseBrowserHandlers() {
     });
 
     // Execute arbitrary SQL query
-    ipcMain.handle('database:executeQuery', async (event, sql: string) => {
+    safeHandle('database:executeQuery', async (event, sql: string) => {
         try {
             // Safety check: only allow SELECT queries for now
             const trimmedSQL = sql.trim().toLowerCase();
@@ -110,7 +102,7 @@ export function registerDatabaseBrowserHandlers() {
     });
 
     // Get database stats
-    ipcMain.handle('database:getStats', async () => {
+    safeHandle('database:getStats', async () => {
         try {
             const stats = await database.getStats();
             return { success: true, stats };
@@ -120,6 +112,6 @@ export function registerDatabaseBrowserHandlers() {
         }
     });
 
-    handlersRegistered = true;
-    console.log('[DatabaseBrowserHandlers] Database browser handlers registered');
+    // Startup logging - uncomment if debugging handler registration
+    // console.log('[DatabaseBrowserHandlers] Database browser handlers registered');
 }

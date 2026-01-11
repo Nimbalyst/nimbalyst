@@ -1,4 +1,5 @@
-import { ipcMain, BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent, app } from 'electron';
+import { BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent, app } from 'electron';
+import { safeHandle, safeOn } from '../utils/ipcRegistry';
 import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import * as path from 'path';
@@ -1193,7 +1194,7 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
   }
   handlersRegistered = true;
 
-  ipcMain.handle('document-service:list', async (event) => {
+  safeHandle('document-service:list', async (event) => {
     try {
       // Debug logging - comment out for production
       // console.log('[DocumentService IPC] list handler called');
@@ -1206,7 +1207,7 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
     }
   });
 
-  ipcMain.handle('document-service:search', async (event, query: string) => {
+  safeHandle('document-service:search', async (event, query: string) => {
     try {
       // Debug logging - comment out for production
       // console.log('[DocumentService IPC] search handler called with query:', query);
@@ -1219,7 +1220,7 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
     }
   });
 
-  ipcMain.handle('document-service:get', async (event, id: string) => {
+  safeHandle('document-service:get', async (event, id: string) => {
     try {
       return await requireDocumentService(event).getDocument(id);
     } catch (error) {
@@ -1228,7 +1229,7 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
     }
   });
 
-  ipcMain.handle('document-service:get-by-path', async (event, path: string) => {
+  safeHandle('document-service:get-by-path', async (event, path: string) => {
     try {
       return await requireDocumentService(event).getDocumentByPath(path);
     } catch (error) {
@@ -1237,7 +1238,7 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
     }
   });
 
-  ipcMain.handle('document-service:open', async (event, payload: { documentId: string; fallback?: DocumentOpenOptions }) => {
+  safeHandle('document-service:open', async (event, payload: { documentId: string; fallback?: DocumentOpenOptions }) => {
     try {
       const { documentId, fallback } = payload ?? { documentId: '' };
       return await requireDocumentService(event).openDocument(documentId, fallback);
@@ -1248,7 +1249,7 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
   });
 
   // Handle watch subscriptions
-  ipcMain.on('document-service:watch', (event) => {
+  safeOn('document-service:watch', (event) => {
     let unsubscribe: (() => void) | undefined;
     try {
       const service = requireDocumentService(event);
@@ -1267,7 +1268,7 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
   });
 
   // Metadata IPC handlers
-  ipcMain.handle('document-service:metadata-get', async (event, id: string) => {
+  safeHandle('document-service:metadata-get', async (event, id: string) => {
     try {
       return await requireDocumentService(event).getDocumentMetadata(id);
     } catch (error) {
@@ -1276,7 +1277,7 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
     }
   });
 
-  ipcMain.handle('document-service:metadata-get-by-path', async (event, path: string) => {
+  safeHandle('document-service:metadata-get-by-path', async (event, path: string) => {
     try {
       return await requireDocumentService(event).getDocumentMetadataByPath(path);
     } catch (error) {
@@ -1285,7 +1286,7 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
     }
   });
 
-  ipcMain.handle('document-service:metadata-list', async (event) => {
+  safeHandle('document-service:metadata-list', async (event) => {
     try {
       // console.log('[DocumentService] metadata-list IPC handler called');
       const service = requireDocumentService(event);
@@ -1299,7 +1300,7 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
     }
   });
 
-  ipcMain.handle('document-service:notify-frontmatter-changed', async (event, payload: { path: string; frontmatter: Record<string, unknown> }) => {
+  safeHandle('document-service:notify-frontmatter-changed', async (event, payload: { path: string; frontmatter: Record<string, unknown> }) => {
     try {
       const { path, frontmatter } = payload;
       requireDocumentService(event).notifyFrontmatterChanged(path, frontmatter);
@@ -1310,7 +1311,7 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
     }
   });
 
-  ipcMain.handle('document-service:refresh-file-metadata', async (event, filePath: string) => {
+  safeHandle('document-service:refresh-file-metadata', async (event, filePath: string) => {
     try {
       await requireDocumentService(event).refreshFileMetadata(filePath);
       return { success: true };
@@ -1321,7 +1322,7 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
   });
 
   // Handle metadata watch subscriptions
-  ipcMain.on('document-service:metadata-watch', (event) => {
+  safeOn('document-service:metadata-watch', (event) => {
     let unsubscribe: (() => void) | undefined;
     try {
       const service = requireDocumentService(event);
@@ -1339,7 +1340,7 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
   });
 
   // Refresh workspace data (scan documents and update tracker/metadata caches)
-  ipcMain.handle('document-service:refresh-workspace', async (event) => {
+  safeHandle('document-service:refresh-workspace', async (event) => {
     try {
       await requireDocumentService(event).refreshWorkspaceData();
       return { success: true };
@@ -1350,7 +1351,7 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
   });
 
   // Virtual document handler
-  ipcMain.handle('document-service:load-virtual', async (event, virtualPath: string) => {
+  safeHandle('document-service:load-virtual', async (event, virtualPath: string) => {
     try {
       return await requireDocumentService(event).loadVirtualDocument(virtualPath);
     } catch (error) {
@@ -1360,7 +1361,7 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
   });
 
   // Tracker items handlers
-  ipcMain.handle('document-service:tracker-items-list', async (event) => {
+  safeHandle('document-service:tracker-items-list', async (event) => {
     try {
       return await requireDocumentService(event).listTrackerItems();
     } catch (error) {
@@ -1369,7 +1370,7 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
     }
   });
 
-  ipcMain.handle('document-service:tracker-items-by-type', async (event, type: TrackerItemType) => {
+  safeHandle('document-service:tracker-items-by-type', async (event, type: TrackerItemType) => {
     try {
       return await requireDocumentService(event).getTrackerItemsByType(type);
     } catch (error) {
@@ -1378,7 +1379,7 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
     }
   });
 
-  ipcMain.handle('document-service:tracker-items-by-module', async (event, module: string) => {
+  safeHandle('document-service:tracker-items-by-module', async (event, module: string) => {
     try {
       return await requireDocumentService(event).getTrackerItemsByModule(module);
     } catch (error) {
@@ -1388,7 +1389,7 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
   });
 
   // Handle tracker item watch subscriptions
-  ipcMain.on('document-service:tracker-items-watch', (event) => {
+  safeOn('document-service:tracker-items-watch', (event) => {
     // console.log('[DocumentService IPC] tracker-items-watch subscription requested');
     let unsubscribe: (() => void) | undefined;
     try {
@@ -1413,7 +1414,7 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
   });
 
   // Asset management handlers
-  ipcMain.handle('document-service:store-asset', async (event, payload: { buffer: number[]; mimeType: string; documentPath?: string }) => {
+  safeHandle('document-service:store-asset', async (event, payload: { buffer: number[]; mimeType: string; documentPath?: string }) => {
     try {
       const { buffer, mimeType, documentPath } = payload;
       const bufferObj = Buffer.from(buffer);
@@ -1424,7 +1425,7 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
     }
   });
 
-  ipcMain.handle('document-service:get-asset-path', async (event, hash: string) => {
+  safeHandle('document-service:get-asset-path', async (event, hash: string) => {
     try {
       return await requireDocumentService(event).getAssetPath(hash);
     } catch (error) {
@@ -1433,7 +1434,7 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
     }
   });
 
-  ipcMain.handle('document-service:gc-assets', async (event) => {
+  safeHandle('document-service:gc-assets', async (event) => {
     try {
       return await requireDocumentService(event).garbageCollectAssets();
     } catch (error) {

@@ -1,4 +1,5 @@
 import { BrowserWindow, dialog, app, nativeImage, ipcMain, screen, nativeTheme, Menu, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
+import { safeHandle, safeOn } from '../utils/ipcRegistry';
 import { join, basename } from 'path';
 import { existsSync } from 'fs';
 import { WindowState, FileTreeItem } from '../types';
@@ -659,13 +660,13 @@ export function getWindowId(browserWindow: BrowserWindow): number | null {
 }
 
 // IPC handler to check if a window is focused
-ipcMain.handle('window:is-focused', (event) => {
+safeHandle('window:is-focused', (event) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     return window ? window.isFocused() : false;
 });
 
 // IPC handler to force focus a window (for testing)
-ipcMain.handle('window:force-focus', (event) => {
+safeHandle('window:force-focus', (event) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     if (window) {
         window.focus();
@@ -675,7 +676,7 @@ ipcMain.handle('window:force-focus', (event) => {
 });
 
 // Handle close-window responses from renderer's custom dialog
-ipcMain.on('close-window-save', (event) => {
+safeOn('close-window-save', (event) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     if (window && !window.isDestroyed()) {
         const windowId = getWindowId(window);
@@ -693,7 +694,7 @@ ipcMain.on('close-window-save', (event) => {
     }
 });
 
-ipcMain.on('close-window-discard', (event) => {
+safeOn('close-window-discard', (event) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     if (window && !window.isDestroyed()) {
         window.destroy();

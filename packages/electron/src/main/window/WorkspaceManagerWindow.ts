@@ -1,8 +1,9 @@
-import { BrowserWindow, ipcMain, dialog, app } from 'electron';
+import { BrowserWindow, dialog, app } from 'electron';
 import { join, basename } from 'path';
 import { existsSync, mkdirSync, statSync, readdirSync } from 'fs';
 import { getRecentItems, addToRecentItems, store, getWorkspaceWindowState, getTheme } from '../utils/store';
 import { createWindow, findWindowByWorkspace } from './WindowManager';
+import { safeHandle } from '../utils/ipcRegistry';
 import { getBackgroundColor } from '../theme/ThemeManager';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
 
@@ -192,7 +193,7 @@ export function setupWorkspaceManagerHandlers() {
   }
   handlersRegistered = true;
   // Get recent workspaces with additional info
-  ipcMain.handle('workspace-manager:get-recent-workspaces', async () => {
+  safeHandle('workspace-manager:get-recent-workspaces', async () => {
     const recentWorkspaces = await getRecentItems('workspaces');
 
     // Process workspaces in parallel with Promise.all for faster loading
@@ -235,7 +236,7 @@ export function setupWorkspaceManagerHandlers() {
   });
 
   // Get workspace statistics
-  ipcMain.handle('workspace-manager:get-workspace-stats', async (event, workspacePath: string) => {
+  safeHandle('workspace-manager:get-workspace-stats', async (event, workspacePath: string) => {
     try {
       // Use higher limits for stats (when user clicks on a workspace)
       const { files, limited } = getWorkspaceFiles(workspacePath, '', 10000, 10);
@@ -279,7 +280,7 @@ export function setupWorkspaceManagerHandlers() {
   });
 
   // Open folder dialog
-  ipcMain.handle('workspace-manager:open-folder-dialog', async () => {
+  safeHandle('workspace-manager:open-folder-dialog', async () => {
     const result = await dialog.showOpenDialog({
       properties: ['openDirectory']
     });
@@ -292,7 +293,7 @@ export function setupWorkspaceManagerHandlers() {
   });
 
   // Create workspace dialog
-  ipcMain.handle('workspace-manager:create-workspace-dialog', async () => {
+  safeHandle('workspace-manager:create-workspace-dialog', async () => {
     const result = await dialog.showSaveDialog({
       title: 'Create New Workspace',
       buttonLabel: 'Create',
@@ -324,7 +325,7 @@ export function setupWorkspaceManagerHandlers() {
   });
 
   // Open workspace (reuse existing window if already open)
-  ipcMain.handle('workspace-manager:open-workspace', async (event, workspacePath: string) => {
+  safeHandle('workspace-manager:open-workspace', async (event, workspacePath: string) => {
     // Add to recent workspaces
     addToRecentItems('workspaces', workspacePath, basename(workspacePath));
 
@@ -390,7 +391,7 @@ export function setupWorkspaceManagerHandlers() {
   });
 
   // Remove from recent.workspaces
-  ipcMain.handle('workspace-manager:remove-recent', async (event, workspacePath: string) => {
+  safeHandle('workspace-manager:remove-recent', async (event, workspacePath: string) => {
     const items = (await getRecentItems('workspaces')).filter(item => item.path !== workspacePath);
     store.set('recent.workspaces', items);
     return { success: true };

@@ -1,7 +1,8 @@
 import { autoUpdater } from 'electron-updater';
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
-import log from 'electron-log';
+import { app, BrowserWindow, dialog } from 'electron';
+import log from 'electron-log/main';
 import { getReleaseChannel, store } from '../utils/store';
+import { safeHandle, safeOn } from '../utils/ipcRegistry';
 
 // Reminder suppression duration: 24 hours
 const REMINDER_SUPPRESSION_DURATION_MS = 24 * 60 * 60 * 1000;
@@ -209,7 +210,7 @@ export class AutoUpdaterService {
   }
 
   private setupIpcHandlers() {
-    ipcMain.handle('check-for-updates', async () => {
+    safeHandle('check-for-updates', async () => {
       if (this.isCheckingForUpdate) {
         return { checking: true };
       }
@@ -223,7 +224,7 @@ export class AutoUpdaterService {
       }
     });
 
-    ipcMain.handle('download-update', async () => {
+    safeHandle('download-update', async () => {
       try {
         await autoUpdater.downloadUpdate();
         return { success: true };
@@ -233,7 +234,7 @@ export class AutoUpdaterService {
       }
     });
 
-    ipcMain.handle('quit-and-install', () => {
+    safeHandle('quit-and-install', () => {
       setImmediate(() => {
         try {
           log.info('IPC: Attempting to quit and install update...');
@@ -256,12 +257,12 @@ export class AutoUpdaterService {
       });
     });
 
-    ipcMain.handle('get-current-version', () => {
+    safeHandle('get-current-version', () => {
       return app.getVersion();
     });
 
     // Toast-based update IPC handlers
-    ipcMain.on('update-toast:download', async () => {
+    safeOn('update-toast:download', async () => {
       try {
         log.info('Update toast: Starting download...');
         // In test mode, skip the actual download (tests will manually trigger progress)
@@ -280,7 +281,7 @@ export class AutoUpdaterService {
       }
     });
 
-    ipcMain.on('update-toast:install', () => {
+    safeOn('update-toast:install', () => {
       log.info('Update toast: Installing update...');
       setImmediate(() => {
         try {
@@ -304,7 +305,7 @@ export class AutoUpdaterService {
     });
 
     // Reminder suppression handlers
-    ipcMain.handle('update:check-reminder-suppression', (_event, version: string) => {
+    safeHandle('update:check-reminder-suppression', (_event, version: string) => {
       const dismissedVersion = store.get('updateDismissedVersion');
       const dismissedAt = store.get('updateDismissedAt') as number | undefined;
 
@@ -327,7 +328,7 @@ export class AutoUpdaterService {
       return { suppressed: false };
     });
 
-    ipcMain.handle('update:set-reminder-suppression', (_event, version: string) => {
+    safeHandle('update:set-reminder-suppression', (_event, version: string) => {
       store.set('updateDismissedVersion', version);
       store.set('updateDismissedAt', Date.now());
       log.info(`Update reminder suppressed for version ${version}`);
@@ -449,7 +450,7 @@ export const autoUpdaterService = new AutoUpdaterService();
 
 // Test helpers - only used in test environment
 if (process.env.NODE_ENV === 'test' || process.env.PLAYWRIGHT === '1') {
-  ipcMain.handle('test:trigger-update-available', (_event, updateInfo: { version: string; releaseNotes?: string; releaseDate?: string }) => {
+  safeHandle('test:trigger-update-available', (_event, updateInfo: { version: string; releaseNotes?: string; releaseDate?: string }) => {
     log.info('Test: Triggering update available');
     const focused = BrowserWindow.getFocusedWindow();
     const window = focused || BrowserWindow.getAllWindows().find(w => !w.isDestroyed() && w.isVisible());
@@ -463,7 +464,7 @@ if (process.env.NODE_ENV === 'test' || process.env.PLAYWRIGHT === '1') {
     }
   });
 
-  ipcMain.handle('test:trigger-download-progress', (_event, progress: { bytesPerSecond: number; percent: number; transferred: number; total: number }) => {
+  safeHandle('test:trigger-download-progress', (_event, progress: { bytesPerSecond: number; percent: number; transferred: number; total: number }) => {
     log.info(`Test: Triggering download progress ${progress.percent}%`);
     const focused = BrowserWindow.getFocusedWindow();
     const window = focused || BrowserWindow.getAllWindows().find(w => !w.isDestroyed() && w.isVisible());
@@ -472,7 +473,7 @@ if (process.env.NODE_ENV === 'test' || process.env.PLAYWRIGHT === '1') {
     }
   });
 
-  ipcMain.handle('test:trigger-update-ready', (_event, updateInfo: { version: string }) => {
+  safeHandle('test:trigger-update-ready', (_event, updateInfo: { version: string }) => {
     log.info('Test: Triggering update ready');
     const focused = BrowserWindow.getFocusedWindow();
     const window = focused || BrowserWindow.getAllWindows().find(w => !w.isDestroyed() && w.isVisible());
@@ -483,7 +484,7 @@ if (process.env.NODE_ENV === 'test' || process.env.PLAYWRIGHT === '1') {
     }
   });
 
-  ipcMain.handle('test:trigger-update-error', (_event, errorMessage: string) => {
+  safeHandle('test:trigger-update-error', (_event, errorMessage: string) => {
     log.info('Test: Triggering update error');
     const focused = BrowserWindow.getFocusedWindow();
     const window = focused || BrowserWindow.getAllWindows().find(w => !w.isDestroyed() && w.isVisible());
@@ -494,7 +495,7 @@ if (process.env.NODE_ENV === 'test' || process.env.PLAYWRIGHT === '1') {
     }
   });
 
-  ipcMain.handle('test:trigger-update-checking', () => {
+  safeHandle('test:trigger-update-checking', () => {
     log.info('Test: Triggering update checking');
     const focused = BrowserWindow.getFocusedWindow();
     const window = focused || BrowserWindow.getAllWindows().find(w => !w.isDestroyed() && w.isVisible());
@@ -503,7 +504,7 @@ if (process.env.NODE_ENV === 'test' || process.env.PLAYWRIGHT === '1') {
     }
   });
 
-  ipcMain.handle('test:trigger-update-up-to-date', () => {
+  safeHandle('test:trigger-update-up-to-date', () => {
     log.info('Test: Triggering up to date');
     const focused = BrowserWindow.getFocusedWindow();
     const window = focused || BrowserWindow.getAllWindows().find(w => !w.isDestroyed() && w.isVisible());
@@ -512,7 +513,7 @@ if (process.env.NODE_ENV === 'test' || process.env.PLAYWRIGHT === '1') {
     }
   });
 
-  ipcMain.handle('test:clear-update-suppression', () => {
+  safeHandle('test:clear-update-suppression', () => {
     log.info('Test: Clearing update suppression');
     store.delete('updateDismissedVersion');
     store.delete('updateDismissedAt');

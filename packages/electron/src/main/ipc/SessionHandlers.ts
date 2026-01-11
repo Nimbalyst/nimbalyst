@@ -1,8 +1,8 @@
-import { ipcMain } from 'electron';
 import { SessionManager } from '@nimbalyst/runtime/ai/server';
 import { AISessionsRepository } from '@nimbalyst/runtime';
 import type { AIProviderType } from '@nimbalyst/runtime/ai/server/types';
 import path from "path";
+import { safeHandle, safeOn } from '../utils/ipcRegistry';
 
 // Initialize session manager
 const sessionManager = new SessionManager();
@@ -20,13 +20,13 @@ export async function registerSessionHandlers() {
     await sessionManager.initialize();
 
     // Create session
-    ipcMain.handle('session:create', async (event, filePath: string, type: string, source?: any) => {
+    safeHandle('session:create', async (event, filePath: string, type: string, source?: any) => {
         const documentContext = filePath ? { content: '', filePath } : undefined;
         return await sessionManager.createSession(type as any, documentContext, source);
     });
 
     // Create session (new format for agentic coding)
-    ipcMain.handle('sessions:create', async (event, payload: { session: any; workspaceId: string }) => {
+    safeHandle('sessions:create', async (event, payload: { session: any; workspaceId: string }) => {
         try {
             const { session, workspaceId } = payload;
 
@@ -58,24 +58,24 @@ export async function registerSessionHandlers() {
     handlersRegistered = true;
 
     // Load session
-    ipcMain.handle('session:load', async (event, sessionId: string) => {
+    safeHandle('session:load', async (event, sessionId: string) => {
         return await sessionManager.loadSession(sessionId);
     });
 
     // Save session - maps to updateSessionMessages
-    ipcMain.handle('session:save', async (event, session: any) => {
+    safeHandle('session:save', async (event, session: any) => {
         if (session?.id && session?.messages) {
             await sessionManager.updateSessionMessages(session.id, session.messages);
         }
     });
 
     // Delete session
-    ipcMain.handle('session:delete', async (event, sessionId: string) => {
+    safeHandle('session:delete', async (event, sessionId: string) => {
         await sessionManager.deleteSession(sessionId);
     });
 
     // Update session title
-    ipcMain.handle('sessions:update-title', async (event, sessionId: string, title: string) => {
+    safeHandle('sessions:update-title', async (event, sessionId: string, title: string) => {
         await sessionManager.updateSessionTitle(sessionId, title, {
             force: true,
             markAsNamed: true,
@@ -83,22 +83,22 @@ export async function registerSessionHandlers() {
     });
 
     // Update session model
-    ipcMain.handle('sessions:update-model', async (event, sessionId: string, model: string) => {
+    safeHandle('sessions:update-model', async (event, sessionId: string, model: string) => {
         await sessionManager.updateSessionModel(sessionId, model);
     });
 
     // Update session provider and model (when switching between providers)
-    ipcMain.handle('sessions:update-provider-and-model', async (event, sessionId: string, provider: string, model: string) => {
+    safeHandle('sessions:update-provider-and-model', async (event, sessionId: string, provider: string, model: string) => {
         await sessionManager.updateSessionProviderAndModel(sessionId, provider, model);
     });
 
     // Update session draft input
-    ipcMain.handle('sessions:update-draft-input', async (event, sessionId: string, draftInput: string) => {
+    safeHandle('sessions:update-draft-input', async (event, sessionId: string, draftInput: string) => {
         await sessionManager.updateSessionDraftInput(sessionId, draftInput);
     });
 
     // Update session metadata (including mode, isArchived, etc.)
-    ipcMain.handle('sessions:update-metadata', async (event, sessionId: string, updates: any) => {
+    safeHandle('sessions:update-metadata', async (event, sessionId: string, updates: any) => {
         try {
             await AISessionsRepository.updateMetadata(sessionId, updates);
             return { success: true };
@@ -109,7 +109,7 @@ export async function registerSessionHandlers() {
     });
 
     // Update session metadata with extended fields
-    ipcMain.handle('sessions:update-session-metadata', async (event, sessionId: string, updates: any) => {
+    safeHandle('sessions:update-session-metadata', async (event, sessionId: string, updates: any) => {
         try {
             // Extract sessionType and metadata from updates
             const { sessionType, ...metadataFields } = updates;
@@ -141,7 +141,7 @@ export async function registerSessionHandlers() {
     });
 
     // List sessions for workspace
-    ipcMain.handle('sessions:list', async (event, workspacePath: string, options?: { includeArchived?: boolean }) => {
+    safeHandle('sessions:list', async (event, workspacePath: string, options?: { includeArchived?: boolean }) => {
         try {
             const startTime = performance.now();
             const entries = await AISessionsRepository.list(workspacePath, options);
@@ -170,7 +170,7 @@ export async function registerSessionHandlers() {
     });
 
     // Search sessions for workspace (full content search)
-    ipcMain.handle('sessions:search', async (event, workspacePath: string, query: string, options?: { includeArchived?: boolean }) => {
+    safeHandle('sessions:search', async (event, workspacePath: string, query: string, options?: { includeArchived?: boolean }) => {
         try {
             const entries = await AISessionsRepository.search(workspacePath, query, options);
             const sessions = [];
@@ -202,7 +202,7 @@ export async function registerSessionHandlers() {
     });
 
     // Delete session
-    ipcMain.handle('sessions:delete', async (event, sessionId: string) => {
+    safeHandle('sessions:delete', async (event, sessionId: string) => {
         try {
             await AISessionsRepository.delete(sessionId);
             return { success: true };
@@ -213,7 +213,7 @@ export async function registerSessionHandlers() {
     });
 
     // Migrate unassigned sessions to a workspace
-    ipcMain.handle('sessions:migrate-unassigned', async (event, workspacePath: string) => {
+    safeHandle('sessions:migrate-unassigned', async (event, workspacePath: string) => {
         try {
             const { migrateUnassignedSessions, countUnassignedSessions } = await import('../services/migrateUnassignedSessions');
             const { getDatabase } = await import('../services/PGLiteSessionStore');
@@ -240,7 +240,7 @@ export async function registerSessionHandlers() {
     });
 
     // Mark session as read (update read state)
-    ipcMain.handle('sessions:mark-read', async (event, sessionId: string, lastMessageTimestamp: number | null) => {
+    safeHandle('sessions:mark-read', async (event, sessionId: string, lastMessageTimestamp: number | null) => {
         try {
             const { database } = await import('../database/PGLiteDatabaseWorker');
             // Store timestamp using to_timestamp() to avoid timezone issues
@@ -267,36 +267,36 @@ export async function registerSessionHandlers() {
     });
 
     // Get active session - not implemented, returns null
-    ipcMain.handle('session:get-active', async (event, filePath: string) => {
+    safeHandle('session:get-active', async (event, filePath: string) => {
         // This API doesn't exist in current SessionManager
         // Would need to track active sessions per file separately
         return null;
     });
 
     // Set active session - not implemented, no-op
-    ipcMain.handle('session:set-active', async (event, filePath: string, sessionId: string, type: string) => {
+    safeHandle('session:set-active', async (event, filePath: string, sessionId: string, type: string) => {
         // This API doesn't exist in current SessionManager
         // Would need to track active sessions per file separately
     });
 
     // Check conflicts - not implemented, returns no conflicts
-    ipcMain.handle('session:check-conflicts', async (event, session: any, currentMarkdownHash: string) => {
+    safeHandle('session:check-conflicts', async (event, session: any, currentMarkdownHash: string) => {
         // Conflict checking isn't implemented in current system
         return { hasConflicts: false };
     });
 
     // Resolve conflict - not implemented, no-op
-    ipcMain.handle('session:resolve-conflict', async (event, session: any, resolution: string, newBaseHash?: string) => {
+    safeHandle('session:resolve-conflict', async (event, session: any, resolution: string, newBaseHash?: string) => {
         // Conflict resolution isn't implemented in current system
     });
 
     // Create checkpoint - not implemented, no-op
-    ipcMain.handle('session:create-checkpoint', async (event, sessionId: string, state: string) => {
+    safeHandle('session:create-checkpoint', async (event, sessionId: string, state: string) => {
         // Checkpoints aren't implemented in current system
     });
 
     // Get sessions by file path
-    ipcMain.handle('sessions:get-by-file', async (event, workspaceId: string, filePath: string) => {
+    safeHandle('sessions:get-by-file', async (event, workspaceId: string, filePath: string) => {
         try {
             const { database } = await import('../database/PGLiteDatabaseWorker');
 
@@ -352,7 +352,7 @@ export async function registerSessionHandlers() {
 
     // Test-only: Query database directly (for e2e tests and debugging)
     // This handler is safe to leave registered as it's read-only
-    ipcMain.handle('test:query-db', async (event, sql: string, params?: any[]) => {
+    safeHandle('test:query-db', async (event, sql: string, params?: any[]) => {
         try {
             const { database } = await import('../database/PGLiteDatabaseWorker');
             const result = await database.query(sql, params);

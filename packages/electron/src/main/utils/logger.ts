@@ -2,8 +2,14 @@ import log from 'electron-log/main';
 import Store from 'electron-store';
 import { app } from 'electron';
 
-// Initialize electron-log for IPC
-log.initialize();
+// Initialize electron-log for IPC communication with renderer.
+// Note: The ipcMain.handle patch in bootstrap.ts prevents "second handler" errors
+// if electron-log's module is evaluated multiple times.
+const INIT_FLAG = '__electron_log_initialized__';
+if (!(global as any)[INIT_FLAG]) {
+  (global as any)[INIT_FLAG] = true;
+  log.initialize();
+}
 
 // Define component scopes for logging
 export enum LogComponent {

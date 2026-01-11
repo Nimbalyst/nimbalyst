@@ -1,4 +1,5 @@
-import { BrowserWindow, ipcMain } from 'electron';
+import { BrowserWindow } from 'electron';
+import { safeHandle, safeOn } from '../utils/ipcRegistry';
 import { windowStates } from '../window/WindowManager';
 
 export interface NavigationEntry {
@@ -20,42 +21,42 @@ export class NavigationHistoryService {
   }
 
   private setupIpcHandlers() {
-    ipcMain.on('navigation:tab-changed', (event, tabId: string) => {
+    safeOn('navigation:tab-changed', (event, tabId: string) => {
       const window = BrowserWindow.fromWebContents(event.sender);
       if (!window) return;
 
       this.recordNavigation(window.id, tabId);
     });
 
-    ipcMain.handle('navigation:can-go-back', (event) => {
+    safeHandle('navigation:can-go-back', (event) => {
       const window = BrowserWindow.fromWebContents(event.sender);
       if (!window) return false;
 
       return this.canGoBack(window.id);
     });
 
-    ipcMain.handle('navigation:can-go-forward', (event) => {
+    safeHandle('navigation:can-go-forward', (event) => {
       const window = BrowserWindow.fromWebContents(event.sender);
       if (!window) return false;
 
       return this.canGoForward(window.id);
     });
 
-    ipcMain.handle('navigation:go-back', (event) => {
+    safeHandle('navigation:go-back', (event) => {
       const window = BrowserWindow.fromWebContents(event.sender);
       if (!window) return null;
 
       return this.goBack(window.id);
     });
 
-    ipcMain.handle('navigation:go-forward', (event) => {
+    safeHandle('navigation:go-forward', (event) => {
       const window = BrowserWindow.fromWebContents(event.sender);
       if (!window) return null;
 
       return this.goForward(window.id);
     });
 
-    ipcMain.handle('navigation:get-history', (event) => {
+    safeHandle('navigation:get-history', (event) => {
       const window = BrowserWindow.fromWebContents(event.sender);
       if (!window) return null;
 

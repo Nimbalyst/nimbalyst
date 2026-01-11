@@ -1,4 +1,5 @@
-import { BrowserWindow, ipcMain } from 'electron';
+import { BrowserWindow } from 'electron';
+import { safeHandle } from '../utils/ipcRegistry';
 import { logger } from '../utils/logger';
 import { getWindowId, windowStates } from '../window/WindowManager';
 import { optimizedWorkspaceWatcher } from './OptimizedWorkspaceWatcher';
@@ -23,7 +24,7 @@ function bucketFileCount(count: number): string {
 
 // Set up IPC handlers for folder expand/collapse events
 export function registerWorkspaceWatcherHandlers() {
-    ipcMain.handle('workspace-folder-expanded', async (event, folderPath: string) => {
+    safeHandle('workspace-folder-expanded', async (event, folderPath: string) => {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (!window) return;
 
@@ -60,7 +61,7 @@ export function registerWorkspaceWatcherHandlers() {
         }
     });
 
-    ipcMain.handle('workspace-folder-collapsed', async (event, folderPath: string) => {
+    safeHandle('workspace-folder-collapsed', async (event, folderPath: string) => {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (!window) return;
 

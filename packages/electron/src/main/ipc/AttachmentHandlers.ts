@@ -2,9 +2,10 @@
  * IPC handlers for chat attachment operations
  */
 
-import { ipcMain, BrowserWindow, app } from 'electron';
+import { BrowserWindow, app } from 'electron';
 import { AttachmentService } from '../services/AttachmentService';
 import { getWindowId, windowStates } from '../window/WindowManager';
+import { safeHandle, safeOn } from '../utils/ipcRegistry';
 
 // Map of workspace paths to AttachmentService instances
 const attachmentServices = new Map<string, AttachmentService>();
@@ -24,7 +25,7 @@ export function registerAttachmentHandlers() {
   /**
    * Save an attachment file
    */
-  ipcMain.handle('attachment:save', async (event, {
+  safeHandle('attachment:save', async (event, {
     fileBuffer,
     filename,
     mimeType,
@@ -80,7 +81,7 @@ export function registerAttachmentHandlers() {
   /**
    * Delete an attachment file
    */
-  ipcMain.handle('attachment:delete', async (event, {
+  safeHandle('attachment:delete', async (event, {
     attachmentId,
     sessionId
   }: {
@@ -117,7 +118,7 @@ export function registerAttachmentHandlers() {
   /**
    * Read attachment as base64 (for sending to AI providers)
    */
-  ipcMain.handle('attachment:readAsBase64', async (event, {
+  safeHandle('attachment:readAsBase64', async (event, {
     filepath
   }: {
     filepath: string;
@@ -152,7 +153,7 @@ export function registerAttachmentHandlers() {
   /**
    * Read attachment as text (for converting back to prompt text)
    */
-  ipcMain.handle('attachment:readAsText', async (event, {
+  safeHandle('attachment:readAsText', async (event, {
     filepath
   }: {
     filepath: string;
@@ -187,7 +188,7 @@ export function registerAttachmentHandlers() {
   /**
    * Validate a file before uploading
    */
-  ipcMain.handle('attachment:validate', async (event, {
+  safeHandle('attachment:validate', async (event, {
     fileSize,
     mimeType
   }: {

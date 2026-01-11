@@ -1,4 +1,3 @@
-import { ipcMain, app } from 'electron';
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
@@ -9,6 +8,7 @@ import { setupClaudeCodeEnvironment, getClaudeCodeExecutableOptions } from '@nim
 import { AnalyticsService } from "../services/analytics/AnalyticsService.ts";
 import { shouldShowClaudeCodeWindowsWarning, dismissClaudeCodeWindowsWarning } from '../utils/store';
 import os from "os";
+import { safeHandle, safeOn } from '../utils/ipcRegistry';
 
 // Use IPC component logger for this file
 const log = logger.ipc;
@@ -19,7 +19,7 @@ const analytics = AnalyticsService.getInstance();
  */
 export function registerClaudeCodeHandlers() {
   // Check if Claude Code is installed
-  ipcMain.handle('claude-code:check-installation', async () => {
+  safeHandle('claude-code:check-installation', async () => {
     const status = await claudeCodeDetector.getStatus();
     return {
       installed: status.installed,
@@ -28,19 +28,19 @@ export function registerClaudeCodeHandlers() {
   });
 
   // Get full Claude Code status
-  ipcMain.handle('claude-code:get-status', async () => {
+  safeHandle('claude-code:get-status', async () => {
     const status = await claudeCodeDetector.getStatus();
     return status;
   });
 
   // Refresh Claude Code detection (clears cache)
-  ipcMain.handle('claude-code:refresh-status', async () => {
+  safeHandle('claude-code:refresh-status', async () => {
     claudeCodeDetector.clearCache();
     const status = await claudeCodeDetector.getStatus();
     return status;
   });
   // Check login status
-  ipcMain.handle('claude-code:check-login', async () => {
+  safeHandle('claude-code:check-login', async () => {
     // Save original environment to restore later
     const originalEnv = { ...process.env };
 
@@ -104,7 +104,7 @@ export function registerClaudeCodeHandlers() {
   });
 
   // Handle claude login command
-  ipcMain.handle('claude-code:login', async () => {
+  safeHandle('claude-code:login', async () => {
     try {
       // Use the bundled CLI - no need for global installation
       const platform = process.platform;
@@ -191,7 +191,7 @@ end tell`;
   });
 
   // Handle claude logout command
-  ipcMain.handle('claude-code:logout', async () => {
+  safeHandle('claude-code:logout', async () => {
     try {
       const platform = process.platform;
       analytics.sendEvent('do_claude_code_logout', {platform: platform});
@@ -277,12 +277,12 @@ end tell`;
   });
 
   // Check if Windows Claude Code warning should be shown
-  ipcMain.handle('claude-code:should-show-windows-warning', async () => {
+  safeHandle('claude-code:should-show-windows-warning', async () => {
     return shouldShowClaudeCodeWindowsWarning();
   });
 
   // Dismiss Windows Claude Code warning permanently
-  ipcMain.handle('claude-code:dismiss-windows-warning', async () => {
+  safeHandle('claude-code:dismiss-windows-warning', async () => {
     dismissClaudeCodeWindowsWarning();
     return { success: true };
   });

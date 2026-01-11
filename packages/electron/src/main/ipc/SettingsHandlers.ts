@@ -1,4 +1,5 @@
-import { ipcMain, BrowserWindow } from 'electron';
+import { BrowserWindow } from 'electron';
+import { safeHandle, safeOn } from '../utils/ipcRegistry';
 import * as os from 'os';
 import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel, getRecentItems, getDefaultAIModel, setDefaultAIModel, isAnalyticsEnabled, setAnalyticsEnabled, isMockupLMEnabled, setMockupLMEnabled, getSessionSyncConfig, setSessionSyncConfig, SessionSyncConfig, isExtensionDevToolsEnabled, setExtensionDevToolsEnabled } from '../utils/store';
 import { logger } from '../utils/logger';
@@ -63,7 +64,7 @@ function getLocalNetworkIP(): string | null {
 
 export function registerSettingsHandlers() {
     // Get sidebar width
-    ipcMain.handle('get-sidebar-width', (_event, workspacePath: string) => {
+    safeHandle('get-sidebar-width', (_event, workspacePath: string) => {
         if (!workspacePath) {
             throw new Error('workspacePath is required for get-sidebar-width');
         }
@@ -71,7 +72,7 @@ export function registerSettingsHandlers() {
     });
 
     // Set sidebar width
-    ipcMain.on('set-sidebar-width', (_event, payload: { workspacePath: string; width: number }) => {
+    safeOn('set-sidebar-width', (_event, payload: { workspacePath: string; width: number }) => {
         if (!payload?.workspacePath) {
             logger.store.warn('[ipc] set-sidebar-width called without workspacePath');
             return;
@@ -82,18 +83,18 @@ export function registerSettingsHandlers() {
     });
 
     // Get theme (async)
-    ipcMain.handle('get-theme', () => {
+    safeHandle('get-theme', () => {
         return getTheme();
     });
 
     // Get theme (sync) - for immediate HTML script use
     // CRITICAL: Must use getThemeSync() to resolve 'system' to actual theme
-    ipcMain.on('get-theme-sync', (event) => {
+    safeOn('get-theme-sync', (event) => {
         event.returnValue = getThemeSync();
     });
 
     // Get app version (from app.getVersion)
-    ipcMain.handle('get-app-version', () => {
+    safeHandle('get-app-version', () => {
         const { app } = require('electron');
         return app.getVersion();
     });
@@ -102,33 +103,33 @@ export function registerSettingsHandlers() {
     // Use workspace:get-state and workspace:update-state instead
 
     // Completion sound settings
-    ipcMain.handle('completion-sound:is-enabled', () => {
+    safeHandle('completion-sound:is-enabled', () => {
         return isCompletionSoundEnabled();
     });
 
-    ipcMain.handle('completion-sound:set-enabled', (_event, enabled: boolean) => {
+    safeHandle('completion-sound:set-enabled', (_event, enabled: boolean) => {
         setCompletionSoundEnabled(enabled);
     });
 
-    ipcMain.handle('completion-sound:get-type', () => {
+    safeHandle('completion-sound:get-type', () => {
         return getCompletionSoundType();
     });
 
-    ipcMain.handle('completion-sound:set-type', (_event, soundType: CompletionSoundType) => {
+    safeHandle('completion-sound:set-type', (_event, soundType: CompletionSoundType) => {
         setCompletionSoundType(soundType);
     });
 
-    ipcMain.handle('completion-sound:test', (_event, soundType: CompletionSoundType) => {
+    safeHandle('completion-sound:test', (_event, soundType: CompletionSoundType) => {
         const soundService = SoundNotificationService.getInstance();
         soundService.testSound(soundType);
     });
 
     // Release channel settings
-    ipcMain.handle('release-channel:get', () => {
+    safeHandle('release-channel:get', () => {
         return getReleaseChannel();
     });
 
-    ipcMain.handle('release-channel:set', (_event, channel: ReleaseChannel) => {
+    safeHandle('release-channel:set', (_event, channel: ReleaseChannel) => {
         setReleaseChannel(channel);
         // Reconfigure auto-updater with new channel
         autoUpdaterService.reconfigureFeedURL();
@@ -136,84 +137,84 @@ export function registerSettingsHandlers() {
     });
 
     // Get recent projects
-    ipcMain.handle('settings:get-recent-projects', () => {
+    safeHandle('settings:get-recent-projects', () => {
         return getRecentItems('workspaces');
     });
 
     // Onboarding state
-    ipcMain.handle('onboarding:get', async () => {
+    safeHandle('onboarding:get', async () => {
         const { getOnboardingState } = await import('../utils/store');
         return getOnboardingState();
     });
 
-    ipcMain.handle('onboarding:update', async (_event, state: Partial<OnboardingState>) => {
+    safeHandle('onboarding:update', async (_event, state: Partial<OnboardingState>) => {
         const { updateOnboardingState } = await import('../utils/store');
         updateOnboardingState(state);
     });
 
     // Feature walkthrough state (shown on first launch)
-    ipcMain.handle('feature-walkthrough:is-completed', async () => {
+    safeHandle('feature-walkthrough:is-completed', async () => {
         const { isFeatureWalkthroughCompleted } = await import('../utils/store');
         return isFeatureWalkthroughCompleted();
     });
 
-    ipcMain.handle('feature-walkthrough:set-completed', async (_event, completed: boolean) => {
+    safeHandle('feature-walkthrough:set-completed', async (_event, completed: boolean) => {
         const { setFeatureWalkthroughCompleted } = await import('../utils/store');
         setFeatureWalkthroughCompleted(completed);
     });
 
     // Default AI model settings
-    ipcMain.handle('settings:get-default-ai-model', () => {
+    safeHandle('settings:get-default-ai-model', () => {
         return getDefaultAIModel();
     });
 
-    ipcMain.handle('settings:set-default-ai-model', (_event, model: string) => {
+    safeHandle('settings:set-default-ai-model', (_event, model: string) => {
         setDefaultAIModel(model);
     });
 
     // Analytics settings
-    ipcMain.handle('analytics:is-enabled', () => {
+    safeHandle('analytics:is-enabled', () => {
         return isAnalyticsEnabled();
     });
 
-    ipcMain.handle('analytics:set-enabled', (_event, enabled: boolean) => {
+    safeHandle('analytics:set-enabled', (_event, enabled: boolean) => {
         setAnalyticsEnabled(enabled);
     });
 
     // MockupLM settings
-    ipcMain.handle('mockupLM:is-enabled', () => {
+    safeHandle('mockupLM:is-enabled', () => {
         return isMockupLMEnabled();
     });
 
-    ipcMain.handle('mockupLM:set-enabled', (_event, enabled: boolean) => {
+    safeHandle('mockupLM:set-enabled', (_event, enabled: boolean) => {
         setMockupLMEnabled(enabled);
         logger.store.info(`[SettingsHandlers] MockupLM ${enabled ? 'enabled' : 'disabled'}`);
     });
 
     // Claude Code settings
-    ipcMain.handle('claudeCode:get-settings', async () => {
+    safeHandle('claudeCode:get-settings', async () => {
         const { getClaudeCodeSettings } = await import('../utils/store');
         return getClaudeCodeSettings();
     });
 
-    ipcMain.handle('claudeCode:set-project-commands-enabled', async (_event, enabled: boolean) => {
+    safeHandle('claudeCode:set-project-commands-enabled', async (_event, enabled: boolean) => {
         const { setClaudeCodeProjectCommandsEnabled } = await import('../utils/store');
         setClaudeCodeProjectCommandsEnabled(enabled);
         logger.store.info(`[SettingsHandlers] Claude Code project commands ${enabled ? 'enabled' : 'disabled'}`);
     });
 
-    ipcMain.handle('claudeCode:set-user-commands-enabled', async (_event, enabled: boolean) => {
+    safeHandle('claudeCode:set-user-commands-enabled', async (_event, enabled: boolean) => {
         const { setClaudeCodeUserCommandsEnabled } = await import('../utils/store');
         setClaudeCodeUserCommandsEnabled(enabled);
         logger.store.info(`[SettingsHandlers] Claude Code user commands ${enabled ? 'enabled' : 'disabled'}`);
     });
 
     // Extension Development Kit (EDK) settings
-    ipcMain.handle('extensionDevTools:is-enabled', () => {
+    safeHandle('extensionDevTools:is-enabled', () => {
         return isExtensionDevToolsEnabled();
     });
 
-    ipcMain.handle('extensionDevTools:set-enabled', async (_event, enabled: boolean) => {
+    safeHandle('extensionDevTools:set-enabled', async (_event, enabled: boolean) => {
         setExtensionDevToolsEnabled(enabled);
         logger.store.info(`[SettingsHandlers] Extension dev tools ${enabled ? 'enabled' : 'disabled'}`);
 
@@ -228,7 +229,7 @@ export function registerSettingsHandlers() {
         }
     });
 
-    ipcMain.handle('extensionDevTools:get-logs', async (_event, filter?: {
+    safeHandle('extensionDevTools:get-logs', async (_event, filter?: {
         extensionId?: string;
         lastSeconds?: number;
         logLevel?: 'error' | 'warn' | 'info' | 'debug' | 'all';
@@ -249,7 +250,7 @@ export function registerSettingsHandlers() {
         return { logs, stats };
     });
 
-    ipcMain.handle('extensionDevTools:clear-logs', async (_event, extensionId?: string) => {
+    safeHandle('extensionDevTools:clear-logs', async (_event, extensionId?: string) => {
         const { ExtensionLogService } = await import('../services/ExtensionLogService');
         const logService = ExtensionLogService.getInstance();
 
@@ -260,7 +261,7 @@ export function registerSettingsHandlers() {
         }
     });
 
-    ipcMain.handle('extensionDevTools:get-process-info', () => {
+    safeHandle('extensionDevTools:get-process-info', () => {
         // Return process start time as epoch milliseconds
         const uptimeSeconds = process.uptime();
         const startTime = Date.now() - (uptimeSeconds * 1000);
@@ -271,7 +272,7 @@ export function registerSettingsHandlers() {
     });
 
     // App restart (used by extension dev mode)
-    ipcMain.handle('app:restart', async () => {
+    safeHandle('app:restart', async () => {
         const { app } = await import('electron');
         const path = await import('path');
         const fs = await import('fs');
@@ -305,11 +306,11 @@ export function registerSettingsHandlers() {
     });
 
     // Session sync settings
-    ipcMain.handle('sync:get-config', () => {
+    safeHandle('sync:get-config', () => {
         return getSessionSyncConfig();
     });
 
-    ipcMain.handle('sync:set-config', async (_event, config: SessionSyncConfig | null) => {
+    safeHandle('sync:set-config', async (_event, config: SessionSyncConfig | null) => {
         setSessionSyncConfig(config ?? undefined);
         logger.store.info(`[SettingsHandlers] Session sync ${config?.enabled ? 'enabled' : 'disabled'}`);
 
@@ -322,7 +323,7 @@ export function registerSettingsHandlers() {
         }
     });
 
-    ipcMain.handle('sync:test-connection', async (_event, config: SessionSyncConfig) => {
+    safeHandle('sync:test-connection', async (_event, config: SessionSyncConfig) => {
         // Simple test - try to connect to the health endpoint
         if (!config.serverUrl) {
             return { success: false, error: 'Server URL is required' };
@@ -369,7 +370,7 @@ export function registerSettingsHandlers() {
     });
 
     // Get connected devices from the sync server
-    ipcMain.handle('sync:get-devices', async () => {
+    safeHandle('sync:get-devices', async () => {
         const config = getSessionSyncConfig();
 
         if (!config?.enabled || !config.serverUrl) {
@@ -415,7 +416,7 @@ export function registerSettingsHandlers() {
     });
 
     // Get sync status for the navigation gutter button
-    ipcMain.handle('sync:get-status', async (_event, workspacePath?: string) => {
+    safeHandle('sync:get-status', async (_event, workspacePath?: string) => {
         const config = getSessionSyncConfig();
 
         // Lazy init Stytch to check auth status
@@ -494,7 +495,7 @@ export function registerSettingsHandlers() {
     });
 
     // Toggle sync for a specific project
-    ipcMain.handle('sync:toggle-project', async (_event, workspacePath: string, enabled: boolean) => {
+    safeHandle('sync:toggle-project', async (_event, workspacePath: string, enabled: boolean) => {
         if (!workspacePath) {
             throw new Error('workspacePath is required for sync:toggle-project');
         }
@@ -542,7 +543,7 @@ export function registerSettingsHandlers() {
 
     // Subscribe to sync status changes and broadcast to all windows
     // This is called once when the first window requests it
-    ipcMain.handle('sync:subscribe-status', () => {
+    safeHandle('sync:subscribe-status', () => {
         if (syncStatusListenerSetup) {
             return; // Already subscribed
         }
@@ -563,7 +564,7 @@ export function registerSettingsHandlers() {
     // ============================================================
 
     // Get encryption key info (for sync pairing)
-    ipcMain.handle('credentials:get', () => {
+    safeHandle('credentials:get', () => {
         const creds = getCredentials();
         return {
             encryptionKeySeed: creds.encryptionKeySeed,
@@ -573,7 +574,7 @@ export function registerSettingsHandlers() {
     });
 
     // Reset encryption key (generates new one - invalidates paired devices)
-    ipcMain.handle('credentials:reset', () => {
+    safeHandle('credentials:reset', () => {
         const creds = resetCredentials();
         return {
             encryptionKeySeed: creds.encryptionKeySeed,
@@ -583,7 +584,7 @@ export function registerSettingsHandlers() {
     });
 
     // Generate QR pairing payload for mobile device
-    ipcMain.handle('credentials:generate-qr-payload', (_event, serverUrl: string) => {
+    safeHandle('credentials:generate-qr-payload', (_event, serverUrl: string) => {
         if (!serverUrl) {
             throw new Error('serverUrl is required for QR pairing');
         }
@@ -591,12 +592,12 @@ export function registerSettingsHandlers() {
     });
 
     // Check if secure storage (keychain) is available
-    ipcMain.handle('credentials:is-secure', () => {
+    safeHandle('credentials:is-secure', () => {
         return isUsingSecureStorage();
     });
 
     // Get local network IP for mobile pairing with local dev server
-    ipcMain.handle('network:get-local-ip', () => {
+    safeHandle('network:get-local-ip', () => {
         return getLocalNetworkIP();
     });
 
@@ -605,19 +606,19 @@ export function registerSettingsHandlers() {
     // ============================================================
 
     // Get current Stytch auth state
-    ipcMain.handle('stytch:get-auth-state', () => {
+    safeHandle('stytch:get-auth-state', () => {
         ensureStytchInitialized();
         return StytchAuth.getAuthState();
     });
 
     // Check if user is authenticated with Stytch
-    ipcMain.handle('stytch:is-authenticated', () => {
+    safeHandle('stytch:is-authenticated', () => {
         ensureStytchInitialized();
         return StytchAuth.isAuthenticated();
     });
 
     // Sign in with Google OAuth
-    ipcMain.handle('stytch:sign-in-google', async () => {
+    safeHandle('stytch:sign-in-google', async () => {
         ensureStytchInitialized();
         // Get the sync server URL from settings
         const syncConfig = getSessionSyncConfig();
@@ -642,7 +643,7 @@ export function registerSettingsHandlers() {
     });
 
     // Send magic link for passwordless authentication
-    ipcMain.handle('stytch:send-magic-link', async (_event, email: string) => {
+    safeHandle('stytch:send-magic-link', async (_event, email: string) => {
         ensureStytchInitialized();
         if (!email) {
             return { success: false, error: 'Email is required' };
@@ -670,26 +671,26 @@ export function registerSettingsHandlers() {
     });
 
     // Sign out
-    ipcMain.handle('stytch:sign-out', async () => {
+    safeHandle('stytch:sign-out', async () => {
         ensureStytchInitialized();
         await StytchAuth.signOut();
         return { success: true };
     });
 
     // Get session JWT for server authentication
-    ipcMain.handle('stytch:get-session-jwt', () => {
+    safeHandle('stytch:get-session-jwt', () => {
         ensureStytchInitialized();
         return StytchAuth.getSessionJwt();
     });
 
     // Validate and refresh the current session
-    ipcMain.handle('stytch:refresh-session', async () => {
+    safeHandle('stytch:refresh-session', async () => {
         ensureStytchInitialized();
         return StytchAuth.validateAndRefreshSession();
     });
 
     // Subscribe to auth state changes
-    ipcMain.handle('stytch:subscribe-auth-state', () => {
+    safeHandle('stytch:subscribe-auth-state', () => {
         ensureStytchInitialized();
         // Set up listener to broadcast auth state changes to all windows
         StytchAuth.onAuthStateChange((state) => {
@@ -701,7 +702,7 @@ export function registerSettingsHandlers() {
     });
 
     // Switch Stytch environment (dev only - signs out and switches to test/live)
-    ipcMain.handle('stytch:switch-environment', async (_event, environment: 'development' | 'production') => {
+    safeHandle('stytch:switch-environment', async (_event, environment: 'development' | 'production') => {
         try {
             // Reset initialized flag so next call re-initializes with new environment
             stytchInitialized = false;

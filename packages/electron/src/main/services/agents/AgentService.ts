@@ -1,7 +1,8 @@
 import type { Agent } from '@nimbalyst/runtime/agents';
 import { AgentRegistry } from './AgentRegistry';
 import { AgentExecutor } from './AgentExecutor';
-import { ipcMain, BrowserWindow } from 'electron';
+import { BrowserWindow } from 'electron';
+import { safeHandle, safeOn } from '../../utils/ipcRegistry';
 import { AIService } from '../ai/AIService';
 import * as path from 'path';
 
@@ -44,7 +45,7 @@ export class AgentService {
 
   private setupIpcHandlers() {
     // Get all agents for a workspace
-    ipcMain.handle('agents:getAll', async (event, workspacePath?: string) => {
+    safeHandle('agents:getAll', async (event, workspacePath?: string) => {
       try {
         const registry = this.getOrCreateRegistry(workspacePath);
         const agents = registry.getAllAgents();
@@ -64,7 +65,7 @@ export class AgentService {
     });
 
     // Get a specific agent
-    ipcMain.handle('agents:get', async (event, agentId: string, workspacePath?: string) => {
+    safeHandle('agents:get', async (event, agentId: string, workspacePath?: string) => {
       try {
         const registry = this.getOrCreateRegistry(workspacePath);
         const agent = registry.getAgent(agentId);
@@ -85,7 +86,7 @@ export class AgentService {
     });
 
     // Search agents
-    ipcMain.handle('agents:search', async (event, query: string, workspacePath?: string) => {
+    safeHandle('agents:search', async (event, query: string, workspacePath?: string) => {
       try {
         const registry = this.getOrCreateRegistry(workspacePath);
         const agents = registry.searchAgents(query);
@@ -104,7 +105,7 @@ export class AgentService {
     });
 
     // Execute an agent
-    ipcMain.handle('agents:execute', async (event, options: {
+    safeHandle('agents:execute', async (event, options: {
       agentId: string;
       parameters?: Record<string, any>;
       documentContext?: string;
@@ -163,7 +164,7 @@ export class AgentService {
     });
 
     // Reload agents for a workspace
-    ipcMain.handle('agents:reload', async (event, workspacePath?: string) => {
+    safeHandle('agents:reload', async (event, workspacePath?: string) => {
       try {
         const registry = this.getOrCreateRegistry(workspacePath);
         await registry.initialize();

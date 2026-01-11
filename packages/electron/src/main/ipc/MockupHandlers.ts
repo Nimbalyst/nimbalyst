@@ -6,11 +6,12 @@
  * - File existence and modification time checks
  */
 
-import { ipcMain, BrowserWindow } from 'electron';
+import { BrowserWindow } from 'electron';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { MockupScreenshotService } from '../services/MockupScreenshotService';
 import { logger } from '../utils/logger';
+import { safeHandle, safeOn } from '../utils/ipcRegistry';
 import { getWindowId, windowStates } from '../window/WindowManager';
 
 /**
@@ -18,7 +19,7 @@ import { getWindowId, windowStates } from '../window/WindowManager';
  */
 export function registerMockupHandlers(): void {
   // Handle screenshot result from renderer
-  ipcMain.handle('mockup:screenshot-result', (_event, payload: {
+  safeHandle('mockup:screenshot-result', (_event, payload: {
     requestId: string;
     success: boolean;
     imageBase64?: string;
@@ -36,7 +37,7 @@ export function registerMockupHandlers(): void {
   });
 
   // Capture mockup screenshot and save to file
-  ipcMain.handle(
+  safeHandle(
     'mockup:capture-and-save-screenshot',
     async (_event, mockupPath: string, outputPath: string) => {
       logger.main.info(`[MockupHandlers] Capturing screenshot: ${mockupPath} -> ${outputPath}`);
@@ -84,7 +85,7 @@ export function registerMockupHandlers(): void {
   );
 
   // Get file modification time
-  ipcMain.handle('file:get-modified-time', async (_event, filePath: string) => {
+  safeHandle('file:get-modified-time', async (_event, filePath: string) => {
     try {
       const stats = await fs.stat(filePath);
       return stats.mtimeMs;
@@ -95,7 +96,7 @@ export function registerMockupHandlers(): void {
   });
 
   // Check if file exists
-  ipcMain.handle('file:exists', async (_event, filePath: string) => {
+  safeHandle('file:exists', async (_event, filePath: string) => {
     try {
       await fs.access(filePath);
       return true;
@@ -105,7 +106,7 @@ export function registerMockupHandlers(): void {
   });
 
   // List all mockup files in the workspace
-  ipcMain.handle('mockup:list-mockups', async (event) => {
+  safeHandle('mockup:list-mockups', async (event) => {
     try {
       // Get the workspace path from the sender window
       const senderWindow = BrowserWindow.fromWebContents(event.sender);
@@ -165,7 +166,7 @@ export function registerMockupHandlers(): void {
   });
 
   // Create a new mockup file
-  ipcMain.handle(
+  safeHandle(
     'mockup:create-mockup',
     async (_event, name: string, directory: string) => {
       try {

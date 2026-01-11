@@ -2,8 +2,8 @@
  * IPC handlers for slash command discovery and management
  */
 
-import { ipcMain } from 'electron';
 import { SlashCommandService, SlashCommand } from '../services/SlashCommandService';
+import { safeHandle, safeOn } from '../utils/ipcRegistry';
 import { getExtensionPluginCommands } from './ExtensionHandlers';
 
 // Cache services by workspace path
@@ -26,7 +26,7 @@ function getService(workspacePath: string): SlashCommandService {
  */
 export function registerSlashCommandHandlers() {
   // List all available slash commands (custom + SDK + extension plugins)
-  ipcMain.handle('slash-command:list', async (event, payload: { workspacePath: string; sdkCommands?: string[] }) => {
+  safeHandle('slash-command:list', async (event, payload: { workspacePath: string; sdkCommands?: string[] }) => {
     try {
       const { workspacePath, sdkCommands = [] } = payload;
 
@@ -60,7 +60,7 @@ export function registerSlashCommandHandlers() {
   });
 
   // Get a specific command
-  ipcMain.handle('slash-command:get', async (event, payload: { workspacePath: string; commandName: string; sdkCommands?: string[] }) => {
+  safeHandle('slash-command:get', async (event, payload: { workspacePath: string; commandName: string; sdkCommands?: string[] }) => {
     try {
       const { workspacePath, commandName, sdkCommands = [] } = payload;
 
@@ -80,7 +80,7 @@ export function registerSlashCommandHandlers() {
   });
 
   // Clear cache for a workspace
-  ipcMain.handle('slash-command:clearCache', async (event, workspacePath: string) => {
+  safeHandle('slash-command:clearCache', async (event, workspacePath: string) => {
     try {
       if (!workspacePath) {
         console.warn('[SlashCommandHandlers] No workspace path provided');

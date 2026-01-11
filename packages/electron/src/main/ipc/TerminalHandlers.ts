@@ -4,8 +4,8 @@
  * Provides the bridge between renderer process and TerminalSessionManager.
  */
 
-import { ipcMain } from 'electron';
 import { getTerminalSessionManager } from '../services/TerminalSessionManager';
+import { safeHandle } from '../utils/ipcRegistry';
 import { AISessionsRepository } from '@nimbalyst/runtime';
 import { ulid } from 'ulid';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
@@ -26,7 +26,7 @@ export function registerTerminalHandlers(): void {
    * Create a new terminal session
    * Creates both the database session and the PTY process
    */
-  ipcMain.handle(
+  safeHandle(
     'terminal:create-session',
     async (
       _event,
@@ -92,7 +92,7 @@ export function registerTerminalHandlers(): void {
    * Initialize PTY for an existing session
    * Used when reopening a terminal session
    */
-  ipcMain.handle(
+  safeHandle(
     'terminal:initialize',
     async (
       _event,
@@ -123,14 +123,14 @@ export function registerTerminalHandlers(): void {
   /**
    * Check if a terminal is active
    */
-  ipcMain.handle('terminal:is-active', async (_event, sessionId: string) => {
+  safeHandle('terminal:is-active', async (_event, sessionId: string) => {
     return manager.isTerminalActive(sessionId);
   });
 
   /**
    * Write data to a terminal (user input)
    */
-  ipcMain.handle('terminal:write', async (_event, sessionId: string, data: string) => {
+  safeHandle('terminal:write', async (_event, sessionId: string, data: string) => {
     manager.writeToTerminal(sessionId, data);
     return { success: true };
   });
@@ -138,7 +138,7 @@ export function registerTerminalHandlers(): void {
   /**
    * Resize a terminal
    */
-  ipcMain.handle('terminal:resize', async (_event, sessionId: string, cols: number, rows: number) => {
+  safeHandle('terminal:resize', async (_event, sessionId: string, cols: number, rows: number) => {
     manager.resizeTerminal(sessionId, cols, rows);
     return { success: true };
   });
@@ -146,7 +146,7 @@ export function registerTerminalHandlers(): void {
   /**
    * Get scrollback buffer for restoration
    */
-  ipcMain.handle('terminal:get-scrollback', async (_event, sessionId: string) => {
+  safeHandle('terminal:get-scrollback', async (_event, sessionId: string) => {
     if (!sessionId || typeof sessionId !== 'string') {
       throw new Error('sessionId is required and must be a string');
     }
@@ -161,7 +161,7 @@ export function registerTerminalHandlers(): void {
   /**
    * Destroy a terminal
    */
-  ipcMain.handle('terminal:destroy', async (_event, sessionId: string) => {
+  safeHandle('terminal:destroy', async (_event, sessionId: string) => {
     await manager.destroyTerminal(sessionId);
     return { success: true };
   });
@@ -169,7 +169,7 @@ export function registerTerminalHandlers(): void {
   /**
    * Get terminal info
    */
-  ipcMain.handle('terminal:get-info', async (_event, sessionId: string) => {
+  safeHandle('terminal:get-info', async (_event, sessionId: string) => {
     return manager.getTerminalInfo(sessionId);
   });
 

@@ -8,10 +8,11 @@
  * - Directory listing
  */
 
-import { ipcMain, app } from 'electron';
+import { app } from 'electron';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { logger } from '../utils/logger';
+import { safeHandle, safeOn } from '../utils/ipcRegistry';
 import { minimatch } from 'minimatch';
 import {
   getExtensionSettings,
@@ -455,7 +456,7 @@ export async function getClaudePluginPaths(): Promise<Array<{ type: 'local'; pat
  */
 export function registerExtensionHandlers(): void {
   // Get the user extensions directory path (for installing new extensions)
-  ipcMain.handle('extensions:get-directory', async () => {
+  safeHandle('extensions:get-directory', async () => {
     try {
       return await getUserExtensionsDirectory();
     } catch (error) {
@@ -466,7 +467,7 @@ export function registerExtensionHandlers(): void {
 
   // Get all extension directories (user + built-in)
   // Used by the renderer's ExtensionLoader to discover all extensions
-  ipcMain.handle('extensions:get-all-directories', async () => {
+  safeHandle('extensions:get-all-directories', async () => {
     try {
       return await getAllExtensionDirectories();
     } catch (error) {
@@ -477,7 +478,7 @@ export function registerExtensionHandlers(): void {
 
   // List subdirectories in a directory
   // Note: This also follows symlinks to directories
-  ipcMain.handle('extensions:list-directories', async (_event, dirPath: string) => {
+  safeHandle('extensions:list-directories', async (_event, dirPath: string) => {
     try {
       const entries = await fs.readdir(dirPath, { withFileTypes: true });
       const directories: string[] = [];
@@ -509,7 +510,7 @@ export function registerExtensionHandlers(): void {
   });
 
   // Read a file as text
-  ipcMain.handle('extensions:read-file', async (_event, filePath: string) => {
+  safeHandle('extensions:read-file', async (_event, filePath: string) => {
     try {
       const content = await fs.readFile(filePath, 'utf-8');
       return content;
@@ -520,7 +521,7 @@ export function registerExtensionHandlers(): void {
   });
 
   // Write content to a file
-  ipcMain.handle('extensions:write-file', async (_event, filePath: string, content: string) => {
+  safeHandle('extensions:write-file', async (_event, filePath: string, content: string) => {
     try {
       const dir = path.dirname(filePath);
       await fs.mkdir(dir, { recursive: true });
@@ -532,7 +533,7 @@ export function registerExtensionHandlers(): void {
   });
 
   // Check if a file exists
-  ipcMain.handle('extensions:file-exists', async (_event, filePath: string) => {
+  safeHandle('extensions:file-exists', async (_event, filePath: string) => {
     try {
       await fs.access(filePath);
       return true;
@@ -544,13 +545,13 @@ export function registerExtensionHandlers(): void {
   });
 
   // Check if an extension should be visible based on its required release channel
-  ipcMain.handle('extensions:is-visible-for-channel', (_event, requiredChannel: string | undefined) => {
+  safeHandle('extensions:is-visible-for-channel', (_event, requiredChannel: string | undefined) => {
     const currentChannel = getReleaseChannel();
     return isExtensionVisibleForChannel({ requiredReleaseChannel: requiredChannel as ReleaseChannel | undefined }, currentChannel);
   });
 
   // Find files matching a glob pattern
-  ipcMain.handle(
+  safeHandle(
     'extensions:find-files',
     async (_event, dirPath: string, pattern: string) => {
       const matches: string[] = [];
@@ -590,7 +591,7 @@ export function registerExtensionHandlers(): void {
   );
 
   // Resolve a path relative to an extension
-  ipcMain.handle(
+  safeHandle(
     'extensions:resolve-path',
     (_event, extensionPath: string, relativePath: string) => {
       return path.resolve(extensionPath, relativePath);
@@ -601,7 +602,7 @@ export function registerExtensionHandlers(): void {
   // Scans both user extensions and built-in extensions directories.
   // User extensions take priority over built-in extensions with the same ID.
   // Extensions with requiredReleaseChannel are filtered based on user's release channel.
-  ipcMain.handle('extensions:list-installed', async () => {
+  safeHandle('extensions:list-installed', async () => {
     try {
       const extensions: Array<{
         id: string;
@@ -700,12 +701,12 @@ export function registerExtensionHandlers(): void {
 
   // Get Claude plugin commands from all enabled extensions
   // Used to populate slash command suggestions in the UI
-  ipcMain.handle('extensions:get-claude-plugin-commands', async () => {
+  safeHandle('extensions:get-claude-plugin-commands', async () => {
     return await getExtensionPluginCommands();
   });
 
   // Get all extension settings
-  ipcMain.handle('extensions:get-all-settings', async () => {
+  safeHandle('extensions:get-all-settings', async () => {
     try {
       return getExtensionSettings();
     } catch (error) {
@@ -715,7 +716,7 @@ export function registerExtensionHandlers(): void {
   });
 
   // Get enabled state for a specific extension
-  ipcMain.handle('extensions:get-enabled', async (_event, extensionId: string) => {
+  safeHandle('extensions:get-enabled', async (_event, extensionId: string) => {
     try {
       return getExtensionEnabled(extensionId);
     } catch (error) {
@@ -725,7 +726,7 @@ export function registerExtensionHandlers(): void {
   });
 
   // Set enabled state for a specific extension
-  ipcMain.handle('extensions:set-enabled', async (_event, extensionId: string, enabled: boolean) => {
+  safeHandle('extensions:set-enabled', async (_event, extensionId: string, enabled: boolean) => {
     try {
       setExtensionEnabled(extensionId, enabled);
       logger.main.info(`[ExtensionHandlers] Extension ${extensionId} ${enabled ? 'enabled' : 'disabled'}`);
@@ -737,7 +738,7 @@ export function registerExtensionHandlers(): void {
   });
 
   // Set Claude plugin enabled state for a specific extension
-  ipcMain.handle('extensions:set-claude-plugin-enabled', async (_event, extensionId: string, enabled: boolean) => {
+  safeHandle('extensions:set-claude-plugin-enabled', async (_event, extensionId: string, enabled: boolean) => {
     try {
       setClaudePluginEnabled(extensionId, enabled);
       logger.main.info(`[ExtensionHandlers] Claude plugin for ${extensionId} ${enabled ? 'enabled' : 'disabled'}`);
@@ -750,7 +751,7 @@ export function registerExtensionHandlers(): void {
 
   // Get configuration for a specific extension (scope-aware)
   // scope: 'user' for global config, 'workspace' for project-specific config
-  ipcMain.handle('extensions:get-config', async (_event, extensionId: string, scope?: 'user' | 'workspace', workspacePath?: string) => {
+  safeHandle('extensions:get-config', async (_event, extensionId: string, scope?: 'user' | 'workspace', workspacePath?: string) => {
     try {
       if (scope === 'workspace' && workspacePath) {
         return getWorkspaceExtensionConfiguration(workspacePath, extensionId);
@@ -763,7 +764,7 @@ export function registerExtensionHandlers(): void {
   });
 
   // Set a single configuration value for an extension (scope-aware)
-  ipcMain.handle('extensions:set-config', async (_event, extensionId: string, key: string, value: unknown, scope?: 'user' | 'workspace', workspacePath?: string) => {
+  safeHandle('extensions:set-config', async (_event, extensionId: string, key: string, value: unknown, scope?: 'user' | 'workspace', workspacePath?: string) => {
     try {
       if (scope === 'workspace' && workspacePath) {
         setWorkspaceExtensionConfiguration(workspacePath, extensionId, key, value);
@@ -779,7 +780,7 @@ export function registerExtensionHandlers(): void {
   });
 
   // Set all configuration values for an extension (scope-aware)
-  ipcMain.handle('extensions:set-config-bulk', async (_event, extensionId: string, configuration: Record<string, unknown>, scope?: 'user' | 'workspace', workspacePath?: string) => {
+  safeHandle('extensions:set-config-bulk', async (_event, extensionId: string, configuration: Record<string, unknown>, scope?: 'user' | 'workspace', workspacePath?: string) => {
     try {
       if (scope === 'workspace' && workspacePath) {
         setWorkspaceExtensionConfigurationBulk(workspacePath, extensionId, configuration);
@@ -800,7 +801,7 @@ export function registerExtensionHandlers(): void {
 
   // Install an extension from a specific path (for development)
   // This creates a symlink in the user extensions directory pointing to the dev extension
-  ipcMain.handle('extensions:dev-install', async (_event, extensionPath: string) => {
+  safeHandle('extensions:dev-install', async (_event, extensionPath: string) => {
     try {
       const normalizedPath = path.resolve(extensionPath);
       const manifestPath = path.join(normalizedPath, 'manifest.json');
@@ -847,7 +848,7 @@ export function registerExtensionHandlers(): void {
   });
 
   // Uninstall a dev extension (remove symlink and notify renderers)
-  ipcMain.handle('extensions:dev-uninstall', async (_event, extensionId: string) => {
+  safeHandle('extensions:dev-uninstall', async (_event, extensionId: string) => {
     try {
       const userExtDir = await getUserExtensionsDirectory();
 
@@ -883,7 +884,7 @@ export function registerExtensionHandlers(): void {
 
   // Notify all renderer processes to reload an extension
   // The renderers will unload the old version and load the new one
-  ipcMain.handle('extensions:dev-reload', async (_event, extensionId: string, extensionPath: string) => {
+  safeHandle('extensions:dev-reload', async (_event, extensionId: string, extensionPath: string) => {
     try {
       const { BrowserWindow } = await import('electron');
       const windows = BrowserWindow.getAllWindows();
@@ -905,7 +906,7 @@ export function registerExtensionHandlers(): void {
   });
 
   // Notify all renderer processes to unload an extension
-  ipcMain.handle('extensions:dev-unload', async (_event, extensionId: string) => {
+  safeHandle('extensions:dev-unload', async (_event, extensionId: string) => {
     try {
       const { BrowserWindow } = await import('electron');
       const windows = BrowserWindow.getAllWindows();

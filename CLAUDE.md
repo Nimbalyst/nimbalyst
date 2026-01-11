@@ -40,6 +40,7 @@ For detailed information about specific packages, see their CLAUDE.md files:
 - **Start dev server**: `cd packages/electron && npm run dev`
 - **Build for Mac**: `cd packages/electron && npm run build:mac:local`
 - **Build for Mac (notarized)**: `cd packages/electron && npm run build:mac:notarized`
+- **Main process log file**: `~/Library/Application Support/@nimbalyst/electron/logs/main.log`
 
 ### Testing
 - **Unit tests**: `npm run test:unit` - Uses vitest

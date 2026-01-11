@@ -1,4 +1,5 @@
-import { ipcMain, dialog, BrowserWindow, app } from 'electron';
+import { dialog, BrowserWindow, app } from 'electron';
+import { safeHandle, safeOn } from '../utils/ipcRegistry';
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'fs';
 import { basename, join, dirname, extname } from 'path';
 import { windowStates, savingWindows, findWindowByFilePath, createWindow, getWindowId, windows, documentServices } from '../window/WindowManager';
@@ -53,7 +54,7 @@ function hasFrontmatter(content: string): boolean {
 export function registerFileHandlers() {
     const analytics = AnalyticsService.getInstance();
     // Open file dialog - uses unified FileOpener API
-    ipcMain.handle('open-file', async (event) => {
+    safeHandle('open-file', async (event) => {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (!window) return null;
 
@@ -72,7 +73,7 @@ export function registerFileHandlers() {
     });
 
     // Save file
-    ipcMain.handle('save-file', async (event, content: string, specificFilePath: string, lastKnownContent?: string) => {
+    safeHandle('save-file', async (event, content: string, specificFilePath: string, lastKnownContent?: string) => {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (!window) {
             console.error('[SAVE] ✗ No window found for event sender');
@@ -194,7 +195,7 @@ export function registerFileHandlers() {
     });
 
     // Save file as
-    ipcMain.handle('save-file-as', async (event, content: string) => {
+    safeHandle('save-file-as', async (event, content: string) => {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (!window) return null;
 
@@ -259,7 +260,7 @@ export function registerFileHandlers() {
     });
 
     // Show error dialog
-    ipcMain.handle('show-error-dialog', async (event, title: string, message: string) => {
+    safeHandle('show-error-dialog', async (event, title: string, message: string) => {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (!window) return;
 
@@ -267,7 +268,7 @@ export function registerFileHandlers() {
     });
 
     // Update current file path from renderer (for drag-drop and file creation)
-    ipcMain.handle('set-current-file', async (event, filePath: string | null) => {
+    safeHandle('set-current-file', async (event, filePath: string | null) => {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (!window) {
             console.error('[SET_FILE] ✗ No window found for event sender');
@@ -320,7 +321,7 @@ export function registerFileHandlers() {
     });
 
     // Create document for AI tools
-    ipcMain.handle('create-document', async (event, relativePath: string, initialContent: string, overwriteIfExists: boolean = false) => {
+    safeHandle('create-document', async (event, relativePath: string, initialContent: string, overwriteIfExists: boolean = false) => {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (!window) {
             console.error('[CREATE_DOC] No window found for event sender');
@@ -394,7 +395,7 @@ export function registerFileHandlers() {
     });
 
     // Write to global ~/.claude/ directory
-    ipcMain.handle('write-global-claude-file', async (event, relativePath: string, content: string) => {
+    safeHandle('write-global-claude-file', async (event, relativePath: string, content: string) => {
         try {
             const claudeDir = join(homedir(), '.claude');
             const absolutePath = join(claudeDir, relativePath);
@@ -426,7 +427,7 @@ export function registerFileHandlers() {
     });
 
     // Read from global ~/.claude/ directory
-    ipcMain.handle('read-global-claude-file', async (event, relativePath: string) => {
+    safeHandle('read-global-claude-file', async (event, relativePath: string) => {
         try {
             const claudeDir = join(homedir(), '.claude');
             const absolutePath = join(claudeDir, relativePath);
@@ -459,7 +460,7 @@ export function registerFileHandlers() {
 
     // Append to CLAUDE.md memory files
     // Supports both user memory (~/.claude/CLAUDE.md) and project memory (<workspace>/CLAUDE.md)
-    ipcMain.handle('memory:append', async (event, { content, target, workspacePath }: { content: string; target: 'user' | 'project'; workspacePath?: string }) => {
+    safeHandle('memory:append', async (event, { content, target, workspacePath }: { content: string; target: 'user' | 'project'; workspacePath?: string }) => {
         try {
             if (!content || !content.trim()) {
                 return {
@@ -520,7 +521,7 @@ export function registerFileHandlers() {
     });
 
     // Start watching a file (when tab is opened)
-    ipcMain.handle('start-watching-file', async (event, filePath: string) => {
+    safeHandle('start-watching-file', async (event, filePath: string) => {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (!window) {
             console.error('[START_WATCH] No window found');
@@ -542,7 +543,7 @@ export function registerFileHandlers() {
     });
 
     // Stop watching a specific file (when tab is closed)
-    ipcMain.handle('stop-watching-file', async (event, filePath: string) => {
+    safeHandle('stop-watching-file', async (event, filePath: string) => {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (!window) {
             console.error('[STOP_WATCH] No window found');

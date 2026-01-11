@@ -2,15 +2,15 @@
  * IPC handlers for session-file link operations
  */
 
-import { ipcMain } from 'electron';
 import { SessionFilesRepository } from '@nimbalyst/runtime';
 import { logger } from '../utils/logger';
+import { safeHandle } from '../utils/ipcRegistry';
 
 export function setupSessionFileHandlers(): void {
   /**
    * Get all file links for a session
    */
-  ipcMain.handle('session-files:get-by-session', async (event, sessionId: string, linkType?: string) => {
+  safeHandle('session-files:get-by-session', async (event, sessionId: string, linkType?: string) => {
     try {
       const files = await SessionFilesRepository.getFilesBySession(sessionId, linkType as any);
       return { success: true, files };
@@ -23,7 +23,7 @@ export function setupSessionFileHandlers(): void {
   /**
    * Get all sessions that have links to a specific file
    */
-  ipcMain.handle('session-files:get-sessions-by-file', async (event, workspaceId: string, filePath: string, linkType?: string) => {
+  safeHandle('session-files:get-sessions-by-file', async (event, workspaceId: string, filePath: string, linkType?: string) => {
     try {
       const sessionIds = await SessionFilesRepository.getSessionsByFile(workspaceId, filePath, linkType as any);
       return { success: true, sessionIds };
@@ -36,7 +36,7 @@ export function setupSessionFileHandlers(): void {
   /**
    * Get aggregated file stats for a session (count by type)
    */
-  ipcMain.handle('session-files:get-stats', async (event, sessionId: string) => {
+  safeHandle('session-files:get-stats', async (event, sessionId: string) => {
     try {
       const [edited, referenced, read] = await Promise.all([
         SessionFilesRepository.getFilesBySession(sessionId, 'edited'),
@@ -66,7 +66,7 @@ export function setupSessionFileHandlers(): void {
   /**
    * Delete all file links for a session
    */
-  ipcMain.handle('session-files:delete-session-links', async (event, sessionId: string) => {
+  safeHandle('session-files:delete-session-links', async (event, sessionId: string) => {
     try {
       await SessionFilesRepository.deleteSessionLinks(sessionId);
       return { success: true };

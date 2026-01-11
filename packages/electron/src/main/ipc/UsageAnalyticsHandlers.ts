@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { safeHandle } from '../utils/ipcRegistry';
 import { UsageAnalyticsService } from '../services/UsageAnalyticsService';
 import { database } from '../database/PGLiteDatabaseWorker';
 
@@ -9,7 +9,7 @@ export async function registerUsageAnalyticsHandlers() {
   analyticsService = new UsageAnalyticsService(database);
 
   // Get total session count (all sessions, not just those with token data)
-  ipcMain.handle('usage-analytics:get-all-session-count', async (event, workspaceId?: string) => {
+  safeHandle('usage-analytics:get-all-session-count', async (event, workspaceId?: string) => {
     try {
       return await analyticsService!.getAllSessionCount(workspaceId);
     } catch (error) {
@@ -19,7 +19,7 @@ export async function registerUsageAnalyticsHandlers() {
   });
 
   // Get overall token usage statistics
-  ipcMain.handle('usage-analytics:get-overall-stats', async (event, workspaceId?: string) => {
+  safeHandle('usage-analytics:get-overall-stats', async (event, workspaceId?: string) => {
     try {
       return await analyticsService!.getOverallTokenUsage(workspaceId);
     } catch (error) {
@@ -29,7 +29,7 @@ export async function registerUsageAnalyticsHandlers() {
   });
 
   // Get usage broken down by provider/model
-  ipcMain.handle('usage-analytics:get-usage-by-provider', async (event, workspaceId?: string) => {
+  safeHandle('usage-analytics:get-usage-by-provider', async (event, workspaceId?: string) => {
     try {
       return await analyticsService!.getUsageByProvider(workspaceId);
     } catch (error) {
@@ -39,7 +39,7 @@ export async function registerUsageAnalyticsHandlers() {
   });
 
   // Get usage broken down by project
-  ipcMain.handle('usage-analytics:get-usage-by-project', async () => {
+  safeHandle('usage-analytics:get-usage-by-project', async () => {
     try {
       return await analyticsService!.getUsageByProject();
     } catch (error) {
@@ -49,7 +49,7 @@ export async function registerUsageAnalyticsHandlers() {
   });
 
   // Get time-series data for token usage
-  ipcMain.handle('usage-analytics:get-time-series', async (
+  safeHandle('usage-analytics:get-time-series', async (
     event,
     startDate: number,
     endDate: number,
@@ -65,7 +65,7 @@ export async function registerUsageAnalyticsHandlers() {
   });
 
   // Get activity heatmap (hour x day of week)
-  ipcMain.handle('usage-analytics:get-activity-heatmap', async (
+  safeHandle('usage-analytics:get-activity-heatmap', async (
     event,
     workspaceId?: string,
     metric?: 'sessions' | 'messages' | 'edits',
@@ -84,7 +84,7 @@ export async function registerUsageAnalyticsHandlers() {
   });
 
   // Get document edit statistics
-  ipcMain.handle('usage-analytics:get-document-stats', async (event, workspaceId?: string) => {
+  safeHandle('usage-analytics:get-document-stats', async (event, workspaceId?: string) => {
     try {
       return await analyticsService!.getDocumentEditStats(workspaceId);
     } catch (error) {
@@ -94,7 +94,7 @@ export async function registerUsageAnalyticsHandlers() {
   });
 
   // Get document edit time series
-  ipcMain.handle('usage-analytics:get-document-time-series', async (
+  safeHandle('usage-analytics:get-document-time-series', async (
     event,
     startDate: number,
     endDate: number,

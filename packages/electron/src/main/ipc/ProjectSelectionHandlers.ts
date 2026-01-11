@@ -1,4 +1,5 @@
-import { ipcMain, dialog, BrowserWindow } from 'electron';
+import { dialog, BrowserWindow } from 'electron';
+import { safeHandle, safeOn } from '../utils/ipcRegistry';
 import { getRecentItems, addToRecentItems } from '../utils/store';
 import { getWindowId, windowStates } from '../window/WindowManager';
 import { loadFileIntoWindow } from '../file/FileOperations';
@@ -7,18 +8,18 @@ import { basename } from 'path';
 
 export function registerProjectSelectionHandlers() {
   // Get recent workspaces for project selection dialog
-  ipcMain.handle('get-recent-workspaces', async () => {
+  safeHandle('get-recent-workspaces', async () => {
     return getRecentItems('workspaces');
   });
 
   // Show native folder selection dialog
-  ipcMain.handle('dialog-show-open-dialog', async (event, options) => {
+  safeHandle('dialog-show-open-dialog', async (event, options) => {
     const result = await dialog.showOpenDialog(options);
     return result;
   });
 
   // Handle project selection - user chose a project for the file
-  ipcMain.handle('project-selected', async (event, data: { filePath: string; workspacePath: string }) => {
+  safeHandle('project-selected', async (event, data: { filePath: string; workspacePath: string }) => {
     const { filePath, workspacePath } = data;
     logger.main.info(`[ProjectSelection] User selected workspace: ${workspacePath} for file: ${filePath}`);
 
@@ -58,7 +59,7 @@ export function registerProjectSelectionHandlers() {
   });
 
   // Handle project selection cancelled - close window since document mode isn't supported
-  ipcMain.handle('project-selection-cancelled', async (event, data: { filePath: string }) => {
+  safeHandle('project-selection-cancelled', async (event, data: { filePath: string }) => {
     const { filePath } = data;
     logger.main.info(`[ProjectSelection] User cancelled project selection for file: ${filePath}`);
 

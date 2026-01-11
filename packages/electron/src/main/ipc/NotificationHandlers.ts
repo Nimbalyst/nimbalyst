@@ -2,17 +2,18 @@
  * IPC Handlers for OS Notifications
  */
 
-import { ipcMain, BrowserWindow } from 'electron';
+import { BrowserWindow } from 'electron';
 import { notificationService } from '../services/NotificationService';
 import { logger } from '../utils/logger';
 import {
   isOSNotificationsEnabled,
   setOSNotificationsEnabled,
 } from '../utils/store';
+import { safeHandle } from '../utils/ipcRegistry';
 
 export function registerNotificationHandlers(): void {
   // Show OS notification
-  ipcMain.handle('notifications:show', async (event, options) => {
+  safeHandle('notifications:show', async (event, options) => {
     try {
       // Get the window ID from the event
       const window = BrowserWindow.fromWebContents(event.sender);
@@ -31,7 +32,7 @@ export function registerNotificationHandlers(): void {
   });
 
   // Clear notification for a session
-  ipcMain.handle('notifications:clear', async (_event, sessionId: string) => {
+  safeHandle('notifications:clear', async (_event, sessionId: string) => {
     try {
       notificationService.clearNotification(sessionId);
       return { success: true };
@@ -42,7 +43,7 @@ export function registerNotificationHandlers(): void {
   });
 
   // Clear all notifications
-  ipcMain.handle('notifications:clear-all', async () => {
+  safeHandle('notifications:clear-all', async () => {
     try {
       notificationService.clearAllNotifications();
       return { success: true };
@@ -53,7 +54,7 @@ export function registerNotificationHandlers(): void {
   });
 
   // Get OS notifications enabled status
-  ipcMain.handle('notifications:get-enabled', async () => {
+  safeHandle('notifications:get-enabled', async () => {
     try {
       return isOSNotificationsEnabled();
     } catch (error) {
@@ -63,7 +64,7 @@ export function registerNotificationHandlers(): void {
   });
 
   // Set OS notifications enabled status
-  ipcMain.handle('notifications:set-enabled', async (_event, enabled: boolean) => {
+  safeHandle('notifications:set-enabled', async (_event, enabled: boolean) => {
     try {
       setOSNotificationsEnabled(enabled);
       return { success: true };

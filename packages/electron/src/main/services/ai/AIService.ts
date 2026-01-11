@@ -2,7 +2,8 @@
  * Main AI service that coordinates providers and sessions
  */
 
-import { ipcMain, BrowserWindow } from 'electron';
+import { BrowserWindow } from 'electron';
+import { safeHandle } from '../../utils/ipcRegistry';
 import Store from 'electron-store';
 import { SessionManager, ProviderFactory, ModelRegistry, AIProvider } from '@nimbalyst/runtime/ai/server';
 import { getSessionStateManager } from '@nimbalyst/runtime/ai/server/SessionStateManager';
@@ -959,7 +960,7 @@ export class AIService {
 
   private setupIpcHandlers() {
     // Check if any AI provider is configured with usable models
-    ipcMain.handle('ai:hasApiKey', async () => {  // Keeping the name for backward compatibility
+    safeHandle('ai:hasApiKey', async () => {  // Keeping the name for backward compatibility
       const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
       const providerSettings = this.getSettingsStore().get('providerSettings', {}) as any;
 
@@ -991,7 +992,7 @@ export class AIService {
     });
 
     // Initialize/configure AI
-    ipcMain.handle('ai:initialize', async (event, provider?: string, apiKey?: string) => {
+    safeHandle('ai:initialize', async (event, provider?: string, apiKey?: string) => {
       if (apiKey) {
         // Save API key - always save as 'anthropic' since both providers use the same key
         const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
@@ -1003,7 +1004,7 @@ export class AIService {
     });
 
     // Create new session with provider and model selection
-    ipcMain.handle('ai:createSession', async (
+    safeHandle('ai:createSession', async (
       event,
       provider: AIProviderType,
       documentContext?: DocumentContext,
@@ -2265,22 +2266,22 @@ export class AIService {
     };
 
     // Register the handler with IPC
-    ipcMain.handle('ai:sendMessage', this.sendMessageHandler);
+    safeHandle('ai:sendMessage', this.sendMessageHandler);
 
     // Get session history (full session data with messages - slow)
-    ipcMain.handle('ai:getSessions', async (event, workspacePath?: string) => {
+    safeHandle('ai:getSessions', async (event, workspacePath?: string) => {
       return await this.sessionManager.getSessions(workspacePath);
     });
 
     // Get session list (lightweight - just metadata, no messages)
-    ipcMain.handle('ai:getSessionList', async (event, workspacePath?: string) => {
+    safeHandle('ai:getSessionList', async (event, workspacePath?: string) => {
       return await this.sessionManager.getSessionList(workspacePath);
     });
 
     // Load a session
     // trackAsResume: only pass true when user intentionally opens a session from history
     // (not for tab restoration, lazy loading, or session reloading)
-    ipcMain.handle('ai:loadSession', async (event, sessionId: string, workspacePath?: string, trackAsResume?: boolean) => {
+    safeHandle('ai:loadSession', async (event, sessionId: string, workspacePath?: string, trackAsResume?: boolean) => {
       const loadStart = performance.now();
       const session = await this.sessionManager.loadSession(sessionId, workspacePath);
       const loadTime = performance.now() - loadStart;
@@ -2311,7 +2312,7 @@ export class AIService {
     });
 
     // Clear session
-    ipcMain.handle('ai:clearSession', async (event, sessionId?: string) => {
+    safeHandle('ai:clearSession', async (event, sessionId?: string) => {
       this.sessionManager.clearCurrentSession();
 
       // Abort any ongoing request for the specific session
@@ -2332,7 +2333,7 @@ export class AIService {
     });
 
     // Update session messages
-    ipcMain.handle('ai:updateSessionMessages', async (
+    safeHandle('ai:updateSessionMessages', async (
       event,
       sessionId: string,
       messages: Message[],
@@ -2343,7 +2344,7 @@ export class AIService {
     });
 
     // Update session metadata (for queue, etc.)
-    ipcMain.handle('ai:updateSessionMetadata', async (
+    safeHandle('ai:updateSessionMetadata', async (
       event,
       sessionId: string,
       metadata: Record<string, any>,
@@ -2357,7 +2358,7 @@ export class AIService {
     // Atomically claim a queued prompt for processing
     // Returns the prompt data if successfully claimed, null if already claimed by another instance
     // Uses the new queued_prompts table with proper row-level atomic updates
-    ipcMain.handle('ai:claimQueuedPrompt', async (
+    safeHandle('ai:claimQueuedPrompt', async (
       event,
       sessionId: string,
       promptId: string
@@ -2386,7 +2387,7 @@ export class AIService {
     });
 
     // Mark a queued prompt as completed
-    ipcMain.handle('ai:completeQueuedPrompt', async (
+    safeHandle('ai:completeQueuedPrompt', async (
       event,
       promptId: string
     ) => {
@@ -2397,7 +2398,7 @@ export class AIService {
     });
 
     // Mark a queued prompt as failed
-    ipcMain.handle('ai:failQueuedPrompt', async (
+    safeHandle('ai:failQueuedPrompt', async (
       event,
       promptId: string,
       errorMessage: string
@@ -2409,7 +2410,7 @@ export class AIService {
     });
 
     // List pending prompts for a session
-    ipcMain.handle('ai:listPendingPrompts', async (
+    safeHandle('ai:listPendingPrompts', async (
       event,
       sessionId: string
     ) => {
@@ -2426,7 +2427,7 @@ export class AIService {
     });
 
     // Create a new queued prompt (for local queuing)
-    ipcMain.handle('ai:createQueuedPrompt', async (
+    safeHandle('ai:createQueuedPrompt', async (
       event,
       sessionId: string,
       prompt: string,
@@ -2467,7 +2468,7 @@ export class AIService {
     });
 
     // Delete a queued prompt (for user cancellation)
-    ipcMain.handle('ai:deleteQueuedPrompt', async (
+    safeHandle('ai:deleteQueuedPrompt', async (
       event,
       promptId: string
     ) => {
@@ -2479,7 +2480,7 @@ export class AIService {
     });
 
     // Save draft input
-    ipcMain.handle('ai:saveDraftInput', async (
+    safeHandle('ai:saveDraftInput', async (
       event,
       sessionId: string,
       draftInput: string,
@@ -2490,14 +2491,14 @@ export class AIService {
     });
 
     // Clean up empty messages from all sessions
-    ipcMain.handle('ai:cleanupEmptyMessages', async () => {
+    safeHandle('ai:cleanupEmptyMessages', async () => {
       const cleaned = this.sessionManager.cleanupAllSessions();
       console.log(`[AIService] Manual cleanup: removed ${cleaned} empty messages`);
       return { success: true, cleaned };
     });
 
     // Delete session
-    ipcMain.handle('ai:deleteSession', async (event, sessionId: string, workspacePath?: string) => {
+    safeHandle('ai:deleteSession', async (event, sessionId: string, workspacePath?: string) => {
       const success = await this.sessionManager.deleteSession(sessionId, workspacePath);
 
       // Clean up provider if it exists
@@ -2509,7 +2510,7 @@ export class AIService {
     });
 
     // Handle ExitPlanMode confirmation response from renderer
-    ipcMain.handle('ai:exitPlanModeConfirmResponse', async (event, requestId: string, sessionId: string, approved: boolean) => {
+    safeHandle('ai:exitPlanModeConfirmResponse', async (event, requestId: string, sessionId: string, approved: boolean) => {
       logger.main.info(`[AIService] ExitPlanMode confirmation response: requestId=${requestId}, approved=${approved}`);
 
       // Use repository directly - we just need session metadata (provider type),
@@ -2539,7 +2540,7 @@ export class AIService {
 
     // Handle AskUserQuestion answer response from renderer
     // Used when Claude's AskUserQuestion tool needs user input
-    ipcMain.handle('claude-code:answer-question', async (event, { questionId, answers }: { questionId: string; answers: Record<string, string> }) => {
+    safeHandle('claude-code:answer-question', async (event, { questionId, answers }: { questionId: string; answers: Record<string, string> }) => {
       logger.main.info(`[AIService] AskUserQuestion answer received: questionId=${questionId}`);
 
       // Extract sessionId from questionId (format: ask-{sessionId}-{timestamp})
@@ -2583,7 +2584,7 @@ export class AIService {
 
     // Handle AskUserQuestion cancel from renderer
     // Rejects the pending promise and aborts the AI request
-    ipcMain.handle('claude-code:cancel-question', async (event, { questionId }: { questionId: string }) => {
+    safeHandle('claude-code:cancel-question', async (event, { questionId }: { questionId: string }) => {
       logger.main.info(`[AIService] AskUserQuestion cancel received: questionId=${questionId}`);
 
       // Extract sessionId from questionId (format: ask-{sessionId}-{timestamp})
@@ -2628,7 +2629,7 @@ export class AIService {
 
     // Handle tool permission response from renderer
     // Used when a tool requires user approval
-    ipcMain.handle('claude-code:answer-tool-permission', async (event, {
+    safeHandle('claude-code:answer-tool-permission', async (event, {
       requestId,
       sessionId,
       response
@@ -2672,7 +2673,7 @@ export class AIService {
 
     // Handle tool permission cancel from renderer
     // Rejects the pending promise and aborts the AI request
-    ipcMain.handle('claude-code:cancel-tool-permission', async (event, {
+    safeHandle('claude-code:cancel-tool-permission', async (event, {
       requestId,
       sessionId
     }: {
@@ -2714,7 +2715,7 @@ export class AIService {
     });
 
     // Cancel current request
-    ipcMain.handle('ai:cancelRequest', async (event, sessionId: string, chunksReceived?: number) => {
+    safeHandle('ai:cancelRequest', async (event, sessionId: string, chunksReceived?: number) => {
       console.log(`[AIService] ai:cancelRequest received for sessionId: ${sessionId}`);
       // Abort the provider for the specific session
       if (!sessionId) {
@@ -2754,7 +2755,7 @@ export class AIService {
     });
 
     // Settings handlers
-    ipcMain.handle('ai:getSettings', async () => {
+    safeHandle('ai:getSettings', async () => {
       const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
       const providerSettings = this.getSettingsStore().get('providerSettings', {}) as any;
       const showToolCalls = this.getSettingsStore().get('showToolCalls', false) as boolean;
@@ -2769,7 +2770,7 @@ export class AIService {
       };
     });
 
-    ipcMain.handle('ai:saveSettings', async (event, settings: any) => {
+    safeHandle('ai:saveSettings', async (event, settings: any) => {
       if (settings.defaultProvider) {
         this.getSettingsStore().set('defaultProvider', settings.defaultProvider);
       }
@@ -2818,7 +2819,7 @@ export class AIService {
     });
 
     // Test connection
-    ipcMain.handle('ai:testConnection', async (event, provider: string) => {
+    safeHandle('ai:testConnection', async (event, provider: string) => {
       const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
 
       // Get the appropriate API key based on provider
@@ -2935,7 +2936,7 @@ export class AIService {
     });
 
     // Get ALL available models for configuration UI
-    ipcMain.handle('ai:getAllModels', async () => {
+    safeHandle('ai:getAllModels', async () => {
       // console.log('[AIService] ai:getAllModels called');
 
       // Clear cache to get fresh models
@@ -2974,18 +2975,18 @@ export class AIService {
     });
 
     // Clear model cache
-    ipcMain.handle('ai:clearModelCache', async () => {
+    safeHandle('ai:clearModelCache', async () => {
       ModelRegistry.clearCache();
       return { success: true };
     });
 
-    ipcMain.handle('ai:refreshSessionProvider', async (_event, sessionId: string) => {
+    safeHandle('ai:refreshSessionProvider', async (_event, sessionId: string) => {
       ProviderFactory.destroyProvider(sessionId);
       return { success: true };
     });
 
     // Get slash commands from active claude-code provider
-    ipcMain.handle('ai:getSlashCommands', async (event, sessionId?: string) => {
+    safeHandle('ai:getSlashCommands', async (event, sessionId?: string) => {
       try {
         // console.log('[AIService] ai:getSlashCommands called with sessionId:', sessionId);
 
@@ -3028,7 +3029,7 @@ export class AIService {
     });
 
     // Get ENABLED models for actual use
-    ipcMain.handle('ai:getModels', async () => {
+    safeHandle('ai:getModels', async () => {
       console.log('[AIService] ai:getModels called - fetching enabled models');
       const providerSettings = this.getSettingsStore().get('providerSettings', {}) as Record<AIProviderType, any>;
       const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
@@ -3127,7 +3128,7 @@ export class AIService {
     });
 
     // MCP integration for applyDiff results
-    ipcMain.handle('mcp:applyDiff:result', async (event, resultChannel: string, result: any) => {
+    safeHandle('mcp:applyDiff:result', async (event, resultChannel: string, result: any) => {
       // Forward result back through the result channel
       event.sender.send(resultChannel, result);
     });
@@ -3137,7 +3138,7 @@ export class AIService {
     // ============================================================
 
     // Get project-level AI provider overrides
-    ipcMain.handle('ai:getProjectSettings', async (_event, workspacePath: string) => {
+    safeHandle('ai:getProjectSettings', async (_event, workspacePath: string) => {
       if (!workspacePath) {
         return { success: false, error: 'workspacePath is required' };
       }
@@ -3151,7 +3152,7 @@ export class AIService {
     });
 
     // Save project-level AI provider overrides
-    ipcMain.handle('ai:saveProjectSettings', async (_event, workspacePath: string, overrides: any) => {
+    safeHandle('ai:saveProjectSettings', async (_event, workspacePath: string, overrides: any) => {
       if (!workspacePath) {
         return { success: false, error: 'workspacePath is required' };
       }
@@ -3167,7 +3168,7 @@ export class AIService {
     });
 
     // Get effective (merged) AI settings for a workspace
-    ipcMain.handle('ai:getEffectiveSettings', async (_event, workspacePath?: string) => {
+    safeHandle('ai:getEffectiveSettings', async (_event, workspacePath?: string) => {
 
       // Get global settings
       const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
@@ -3194,7 +3195,7 @@ export class AIService {
     });
 
     // Clear project-level AI overrides
-    ipcMain.handle('ai:clearProjectSettings', async (_event, workspacePath: string) => {
+    safeHandle('ai:clearProjectSettings', async (_event, workspacePath: string) => {
       if (!workspacePath) {
         return { success: false, error: 'workspacePath is required' };
       }

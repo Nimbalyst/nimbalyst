@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import { ipcMain } from 'electron';
+import { safeHandle } from '../../../utils/ipcRegistry';
 import type { ToolDefinition } from '@nimbalyst/runtime/ai/server/types';
 import {
   ToolRegistry as RuntimeToolRegistry,
@@ -12,13 +12,13 @@ function setupRendererToolBridge(registry: ToolRegistry): void {
   if (bridgeInitialized) return;
   bridgeInitialized = true;
 
-  ipcMain.handle('ai:registerTool', (_event, tool: ToolDefinition) => {
+  safeHandle('ai:registerTool', (_event, tool: ToolDefinition) => {
     tool.source = 'renderer';
     registry.register(tool);
     return { success: true };
   });
 
-  ipcMain.handle('ai:unregisterTool', (_event, toolName: string) => {
+  safeHandle('ai:unregisterTool', (_event, toolName: string) => {
     registry.unregister(toolName);
     return { success: true };
   });

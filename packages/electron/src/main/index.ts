@@ -1,4 +1,7 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme } from 'electron';
+import { app, BrowserWindow, dialog, nativeImage, nativeTheme } from 'electron';
+import { safeOn } from './utils/ipcRegistry';
+import { markBootComplete } from './utils/bootState';
+import { markStart, markEnd, checkpoint, logSummary } from './utils/startupTiming';
 import type { SessionStore } from '@nimbalyst/runtime';
 import * as os from 'os';
 import * as path from 'path';
@@ -172,7 +175,7 @@ function initializeLogging() {
     }
 
     // Listen for console logs from renderer (always capture errors)
-    ipcMain.on('console-log', (_event, data) => {
+    safeOn('console-log', (_event, data) => {
         // In production, only log errors and warnings
         if (process.env.NODE_ENV === 'production' && !['error', 'warn'].includes(data.level)) {
             return;
@@ -364,6 +367,8 @@ function parseCommandLineArgs() {
 
 // App ready handler
 app.whenReady().then(async () => {
+    checkpoint('app-ready');
+
     // Override console methods to capture all console output in log file
     // This must be called FIRST before any console.log calls
     overrideConsole();
@@ -387,8 +392,10 @@ app.whenReady().then(async () => {
     // This avoids loading sync code at startup and prevents IPC handler registration issues
 
     // Initialize PGLite database
+    markStart('database-init');
     try {
         runtimeSessionStore = await initializeDatabase();
+        markEnd('database-init');
         logger.main.info('Database initialization completed');
       } catch (error) {
         logger.main.error('Error initializing database:', error);
@@ -423,6 +430,7 @@ app.whenReady().then(async () => {
     }
 
     // Register all IPC handlers
+    markStart('ipc-handlers');
     registerFileHandlers();
     registerWorkspaceHandlers();
     registerWorkspaceWatcherHandlers();
@@ -446,6 +454,7 @@ app.whenReady().then(async () => {
     registerMCPConfigHandlers();
     registerDatabaseBrowserHandlers();
     registerTerminalHandlers();
+    markEnd('ipc-handlers');
 
     // Inject MCP config loader into ClaudeCodeProvider
     // This allows the runtime package to load merged user + workspace MCP configs
@@ -518,18 +527,23 @@ app.whenReady().then(async () => {
     registerExtensionHandlers();
 
     // Initialize extension file types (must happen before file operations)
+    markStart('extension-file-types');
     await initializeExtensionFileTypes();
+    markEnd('extension-file-types');
 
     // Initialize AI service
+    markStart('ai-service-init');
     if (!runtimeSessionStore) {
         throw new Error('AI session store unavailable after database initialization');
     }
     aiService = new AIService(runtimeSessionStore);
+    markEnd('ai-service-init');
 
     // Initialize Agent service
     // agentService = new AgentService(aiService);
 
     // Start MCP SSE server
+    markStart('mcp-servers');
     try {
         const result = await startMcpHttpServer(3456);
         mcpHttpServer = result.httpServer;
@@ -561,9 +575,10 @@ app.whenReady().then(async () => {
     } catch (error) {
         logger.mcp.error('Failed to start extension dev MCP server:', error);
     }
+    markEnd('mcp-servers');
 
     // Set up IPC handler to update document state for MCP
-    ipcMain.on('mcp:updateDocumentState', (event, state) => {
+    safeOn('mcp:updateDocumentState', (event, state) => {
         // Get the window that sent this message
         const window = BrowserWindow.fromWebContents(event.sender);
         const windowId = window?.id;
@@ -581,7 +596,7 @@ app.whenReady().then(async () => {
     });
 
     // Set up IPC handler for extension tool registration
-    ipcMain.on('mcp:registerExtensionTools', (event, data) => {
+    safeOn('mcp:registerExtensionTools', (event, data) => {
         const { workspacePath, tools } = data;
         if (workspacePath && tools) {
             registerExtensionTools(workspacePath, tools);
@@ -589,7 +604,7 @@ app.whenReady().then(async () => {
     });
 
     // Set up IPC handler for theme changes from renderer
-    ipcMain.on('set-theme', (event, theme: AppTheme) => {
+    safeOn('set-theme', (event, theme: AppTheme) => {
         setTheme(theme);
         updateNativeTheme();
         BrowserWindow.getAllWindows().forEach(window => {
@@ -599,20 +614,22 @@ app.whenReady().then(async () => {
     });
 
     // Set up IPC handler for Discord invitation dismissal
-    ipcMain.on('dismiss-discord-invitation', (event) => {
+    safeOn('dismiss-discord-invitation', (event) => {
         logger.main.info('User dismissed Discord invitation permanently');
         dismissDiscordInvitation();
     });
 
     // Set up IPC handler for Windows Claude Code warning dismissal
-    ipcMain.on('dismiss-claude-code-windows-warning', (event) => {
+    safeOn('dismiss-claude-code-windows-warning', (event) => {
         logger.main.info('User dismissed Windows Claude Code warning permanently');
         dismissClaudeCodeWindowsWarning();
     });
 
     // Skip session restoration if opening a specific workspace from CLI
+    markStart('session-restore');
     const shouldSkipSessionRestore = !!pendingWorkspacePath;
     const sessionRestored = shouldSkipSessionRestore ? false : await restoreSessionState();
+    markEnd('session-restore');
 
     if (pendingWorkspacePath) {
         // Handle workspace path from CLI
@@ -761,6 +778,12 @@ app.whenReady().then(async () => {
 
     // Start performance monitoring
     startPerformanceMonitoring();
+
+    // Mark boot as complete - all critical initialization is done
+    markBootComplete();
+
+    // Log startup timing summary (in dev mode or when NIMBALYST_STARTUP_TIMING=true)
+    logSummary();
 
     // Remove periodic menu updates - menus should update on events only
     // This was causing high CPU usage by updating every second

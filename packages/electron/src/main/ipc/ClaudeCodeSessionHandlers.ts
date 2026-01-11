@@ -2,8 +2,8 @@
  * IPC handlers for Claude Code session discovery and sync
  */
 
-import { ipcMain } from 'electron';
 import { logger } from '../utils/logger';
+import { safeHandle, removeHandler } from '../utils/ipcRegistry';
 import { AISessionsRepository, AgentMessagesRepository } from '@nimbalyst/runtime';
 import {
   scanAllSessions,
@@ -52,7 +52,7 @@ async function buildProviderSessionIdMap(workspacePath: string): Promise<Map<str
 export function initializeClaudeCodeSessionHandlers() {
 
   // Scan for Claude Code sessions
-  ipcMain.handle('claude-code:scan-sessions', async (event, { workspacePath }: { workspacePath?: string }) => {
+  safeHandle('claude-code:scan-sessions', async (event, { workspacePath }: { workspacePath?: string }) => {
     try {
       // Check if feature is enabled (dev mode only for now)
       if (!isSessionImportEnabled()) {
@@ -143,7 +143,7 @@ export function initializeClaudeCodeSessionHandlers() {
   });
 
   // Sync specific sessions
-  ipcMain.handle('claude-code:sync-sessions', async (event, { sessionIds, workspacePath }: { sessionIds: string[]; workspacePath?: string }) => {
+  safeHandle('claude-code:sync-sessions', async (event, { sessionIds, workspacePath }: { sessionIds: string[]; workspacePath?: string }) => {
     try {
       if (!isSessionImportEnabled()) {
         return {
@@ -207,6 +207,6 @@ export function initializeClaudeCodeSessionHandlers() {
  * Clean up handlers
  */
 export function cleanupClaudeCodeSessionHandlers() {
-  ipcMain.removeHandler('claude-code:scan-sessions');
-  ipcMain.removeHandler('claude-code:sync-sessions');
+  removeHandler('claude-code:scan-sessions');
+  removeHandler('claude-code:sync-sessions');
 }

@@ -1,4 +1,5 @@
-import { ipcMain, BrowserWindow, shell, nativeImage } from 'electron';
+import { BrowserWindow, shell, nativeImage } from 'electron';
+import { safeHandle, safeOn } from '../utils/ipcRegistry';
 import { windowStates, windows, getWindowId } from '../window/WindowManager';
 import { updateApplicationMenu } from '../menu/ApplicationMenu';
 import { startFileWatcher } from '../file/FileWatcher';
@@ -9,7 +10,7 @@ import { tmpdir } from 'os';
 
 export function registerWindowHandlers() {
     // Get initial window state
-    ipcMain.handle('get-initial-state', (event) => {
+    safeHandle('get-initial-state', (event) => {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (!window) return null;
 
@@ -37,14 +38,14 @@ export function registerWindowHandlers() {
     });
 
     // Open external URL in default browser
-    ipcMain.handle('open-external', async (event, url: string) => {
+    safeHandle('open-external', async (event, url: string) => {
         if (url && typeof url === 'string') {
             await shell.openExternal(url);
         }
     });
 
     // Get current workspace path for the calling window
-    ipcMain.handle('workspace:get-current', (event) => {
+    safeHandle('workspace:get-current', (event) => {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (!window) return null;
 
@@ -60,7 +61,7 @@ export function registerWindowHandlers() {
         };
     });
     // Set document edited state
-    ipcMain.on('set-document-edited', (event, edited: boolean) => {
+    safeOn('set-document-edited', (event, edited: boolean) => {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (!window) return;
 
@@ -80,7 +81,7 @@ export function registerWindowHandlers() {
     });
 
     // Set window title
-    ipcMain.on('set-title', (event, title: string) => {
+    safeOn('set-title', (event, title: string) => {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (window) {
             window.setTitle(title);
@@ -90,7 +91,7 @@ export function registerWindowHandlers() {
     });
 
     // Set current file path (for drag-drop)
-    ipcMain.on('set-current-file', (event, filePath: string | null) => {
+    safeOn('set-current-file', (event, filePath: string | null) => {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (!window) return;
 
@@ -129,7 +130,7 @@ export function registerWindowHandlers() {
     });
 
     // Open image in default application
-    ipcMain.handle('image:open-in-default-app', async (event, imagePath: string) => {
+    safeHandle('image:open-in-default-app', async (event, imagePath: string) => {
         try {
             // Handle data URLs by creating a temp file
             if (imagePath.startsWith('data:')) {
@@ -167,7 +168,7 @@ export function registerWindowHandlers() {
     });
 
     // Start native drag for image
-    ipcMain.handle('image:start-drag', async (event, imagePath: string) => {
+    safeHandle('image:start-drag', async (event, imagePath: string) => {
         try {
             const window = BrowserWindow.fromWebContents(event.sender);
             if (!window) {

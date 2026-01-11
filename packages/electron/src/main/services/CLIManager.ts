@@ -1,5 +1,6 @@
 import { spawn, ChildProcess, exec, execSync } from 'child_process';
-import { ipcMain, BrowserWindow, shell } from 'electron';
+import { BrowserWindow, shell } from 'electron';
+import { safeHandle } from '../utils/ipcRegistry';
 import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import * as path from 'path';
@@ -57,31 +58,31 @@ export class CLIManager {
   }
 
   private setupIPCHandlers() {
-    ipcMain.handle('cli:checkInstallation', async (_event, tool: CLITool) => {
+    safeHandle('cli:checkInstallation', async (_event, tool: CLITool) => {
       return this.checkInstallation(tool);
     });
 
-    ipcMain.handle('cli:install', async (_event, tool: CLITool, options: InstallOptions) => {
+    safeHandle('cli:install', async (_event, tool: CLITool, options: InstallOptions) => {
       return this.install(tool, options);
     });
 
-    ipcMain.handle('cli:uninstall', async (_event, tool: CLITool) => {
+    safeHandle('cli:uninstall', async (_event, tool: CLITool) => {
       return this.uninstall(tool);
     });
 
-    ipcMain.handle('cli:upgrade', async (_event, tool: CLITool) => {
+    safeHandle('cli:upgrade', async (_event, tool: CLITool) => {
       return this.upgrade(tool);
     });
 
-    ipcMain.handle('cli:checkNpmAvailable', async () => {
+    safeHandle('cli:checkNpmAvailable', async () => {
       return this.checkNpmAvailable();
     });
 
-    ipcMain.handle('cli:installNodeJs', async () => {
+    safeHandle('cli:installNodeJs', async () => {
       return this.installNodeJs();
     });
 
-    ipcMain.handle('cli:checkClaudeCodeWindowsInstallation', async (): Promise<ClaudeForWindowsInstallation> => {
+    safeHandle('cli:checkClaudeCodeWindowsInstallation', async (): Promise<ClaudeForWindowsInstallation> => {
       return this.checkClaudeCodeWindowsInstallation();
     });
   }

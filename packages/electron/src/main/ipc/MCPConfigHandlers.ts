@@ -1,4 +1,5 @@
-import { ipcMain, BrowserWindow, shell } from 'electron';
+import { BrowserWindow, shell } from 'electron';
+import { safeHandle, safeOn } from '../utils/ipcRegistry';
 import { MCPConfigService, TestProgressCallback, getCommandNotFoundHelp } from '../services/MCPConfigService';
 import { getEnhancedPath } from '../services/CLIManager';
 import { MCPConfig } from '@nimbalyst/runtime/types/MCPServerConfig';
@@ -13,7 +14,7 @@ const mcpConfigService = new MCPConfigService();
 
 export function registerMCPConfigHandlers() {
   // Read user-scope MCP configuration
-  ipcMain.handle('mcp-config:read-user', async () => {
+  safeHandle('mcp-config:read-user', async () => {
     try {
       return await mcpConfigService.readUserMCPConfig();
     } catch (error) {
@@ -23,7 +24,7 @@ export function registerMCPConfigHandlers() {
   });
 
   // Write user-scope MCP configuration
-  ipcMain.handle('mcp-config:write-user', async (_event, config: MCPConfig) => {
+  safeHandle('mcp-config:write-user', async (_event, config: MCPConfig) => {
     try {
       await mcpConfigService.writeUserMCPConfig(config);
       return { success: true };
@@ -35,7 +36,7 @@ export function registerMCPConfigHandlers() {
   });
 
   // Read workspace-scope MCP configuration
-  ipcMain.handle('mcp-config:read-workspace', async (_event, workspacePath: string) => {
+  safeHandle('mcp-config:read-workspace', async (_event, workspacePath: string) => {
     if (!workspacePath) {
       throw new Error('workspacePath is required');
     }
@@ -49,7 +50,7 @@ export function registerMCPConfigHandlers() {
   });
 
   // Write workspace-scope MCP configuration
-  ipcMain.handle('mcp-config:write-workspace', async (_event, workspacePath: string, config: MCPConfig) => {
+  safeHandle('mcp-config:write-workspace', async (_event, workspacePath: string, config: MCPConfig) => {
     if (!workspacePath) {
       throw new Error('workspacePath is required');
     }
@@ -65,7 +66,7 @@ export function registerMCPConfigHandlers() {
   });
 
   // Get merged configuration (User + Workspace)
-  ipcMain.handle('mcp-config:get-merged', async (_event, workspacePath?: string) => {
+  safeHandle('mcp-config:get-merged', async (_event, workspacePath?: string) => {
     try {
       return await mcpConfigService.getMergedConfig(workspacePath);
     } catch (error) {
@@ -75,7 +76,7 @@ export function registerMCPConfigHandlers() {
   });
 
   // Validate configuration
-  ipcMain.handle('mcp-config:validate', async (_event, config: MCPConfig) => {
+  safeHandle('mcp-config:validate', async (_event, config: MCPConfig) => {
     try {
       mcpConfigService.validateConfig(config);
       return { valid: true };
@@ -86,11 +87,11 @@ export function registerMCPConfigHandlers() {
   });
 
   // Get config file paths
-  ipcMain.handle('mcp-config:get-user-path', () => {
+  safeHandle('mcp-config:get-user-path', () => {
     return mcpConfigService.getUserConfigPath();
   });
 
-  ipcMain.handle('mcp-config:get-workspace-path', (_event, workspacePath: string) => {
+  safeHandle('mcp-config:get-workspace-path', (_event, workspacePath: string) => {
     if (!workspacePath) {
       throw new Error('workspacePath is required');
     }
@@ -98,7 +99,7 @@ export function registerMCPConfigHandlers() {
   });
 
   // Test MCP server connection with progress updates
-  ipcMain.handle('mcp-config:test-server', async (event, config: any) => {
+  safeHandle('mcp-config:test-server', async (event, config: any) => {
     try {
       // Get the window that sent this request to send progress updates
       const window = BrowserWindow.fromWebContents(event.sender);
@@ -119,7 +120,7 @@ export function registerMCPConfigHandlers() {
   });
 
   // Check OAuth authorization status for mcp-remote servers
-  ipcMain.handle('mcp-config:check-oauth-status', async (_event, serverUrl: string) => {
+  safeHandle('mcp-config:check-oauth-status', async (_event, serverUrl: string) => {
     try {
       const status = await checkMcpRemoteAuthStatus(serverUrl);
       return status;
@@ -131,7 +132,7 @@ export function registerMCPConfigHandlers() {
   });
 
   // Trigger OAuth authorization for mcp-remote servers
-  ipcMain.handle('mcp-config:trigger-oauth', async (_event, serverUrl: string) => {
+  safeHandle('mcp-config:trigger-oauth', async (_event, serverUrl: string) => {
     try {
       const result = await triggerMcpRemoteOAuth(serverUrl);
       return result;
@@ -143,7 +144,7 @@ export function registerMCPConfigHandlers() {
   });
 
   // Revoke OAuth authorization (clear tokens)
-  ipcMain.handle('mcp-config:revoke-oauth', async (_event, serverUrl: string) => {
+  safeHandle('mcp-config:revoke-oauth', async (_event, serverUrl: string) => {
     try {
       const result = await revokeMcpRemoteOAuth(serverUrl);
       return result;

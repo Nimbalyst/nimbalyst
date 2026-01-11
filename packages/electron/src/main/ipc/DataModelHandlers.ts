@@ -7,10 +7,11 @@
  * - Capturing screenshots of data models
  */
 
-import { ipcMain, BrowserWindow } from 'electron';
+import { BrowserWindow } from 'electron';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { logger } from '../utils/logger';
+import { safeHandle, removeHandler } from '../utils/ipcRegistry';
 import { getWindowId, windowStates } from '../window/WindowManager';
 
 /**
@@ -18,7 +19,7 @@ import { getWindowId, windowStates } from '../window/WindowManager';
  */
 export function registerDataModelHandlers(): void {
   // List all data model files in the workspace
-  ipcMain.handle('datamodel:list-datamodels', async (event) => {
+  safeHandle('datamodel:list-datamodels', async (event) => {
     try {
       // Get the workspace path from the sender window
       const senderWindow = BrowserWindow.fromWebContents(event.sender);
@@ -78,7 +79,7 @@ export function registerDataModelHandlers(): void {
   });
 
   // Create a new data model file
-  ipcMain.handle(
+  safeHandle(
     'datamodel:create-datamodel',
     async (_event, name: string, directory: string) => {
       try {
@@ -135,7 +136,7 @@ generator client {
 
   // Capture data model screenshot and save to file
   // Uses the generic screenshot service via IPC
-  ipcMain.handle(
+  safeHandle(
     'datamodel:capture-and-save-screenshot',
     async (event, dataModelPath: string, outputPath: string) => {
       logger.main.info(`[DataModelHandlers] Capturing screenshot: ${dataModelPath} -> ${outputPath}`);
@@ -159,7 +160,7 @@ generator client {
         }>((resolve) => {
           const requestId = `screenshot-${Date.now()}`;
           const timeout = setTimeout(() => {
-            ipcMain.removeHandler('screenshot:result-' + requestId);
+            removeHandler('screenshot:result-' + requestId);
             resolve({ success: false, error: 'Screenshot request timed out' });
           }, 30000); // 30 second timeout for headless render
 
@@ -172,12 +173,12 @@ generator client {
           }) => {
             if (payload.requestId === requestId) {
               clearTimeout(timeout);
-              ipcMain.removeHandler('screenshot:result-' + requestId);
+              removeHandler('screenshot:result-' + requestId);
               resolve(payload);
             }
           };
 
-          ipcMain.handle('screenshot:result-' + requestId, handler);
+          safeHandle('screenshot:result-' + requestId, handler);
 
           // Request screenshot from renderer using generic channel
           senderWindow.webContents.send('screenshot:capture', {
@@ -217,7 +218,7 @@ generator client {
   );
 
   // Get relative path from one file to another
-  ipcMain.handle(
+  safeHandle(
     'datamodel:get-relative-path',
     (_event, fromPath: string, toPath: string) => {
       try {

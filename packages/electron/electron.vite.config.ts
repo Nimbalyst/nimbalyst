@@ -142,7 +142,14 @@ export default defineConfig({
           '@excalidraw/excalidraw',
           '@excalidraw/excalidraw/index.css',
           // Native modules (require platform-specific binaries)
-          'node-pty' // PTY for terminal - native module copied via extraFiles
+          'node-pty', // PTY for terminal - native module copied via extraFiles
+          // Singleton modules with IPC handlers - MUST be external to prevent duplicate
+          // handler registration. When bundled, Vite can create multiple copies of these
+          // modules across chunks, causing "second handler" errors.
+          // See: https://github.com/megahertz/electron-log/issues/408
+          'electron-log',
+          'electron-log/main',
+          'electron-log/renderer'
         ]
       }
     }

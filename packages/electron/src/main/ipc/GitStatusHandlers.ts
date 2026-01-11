@@ -1,5 +1,5 @@
-import { ipcMain } from 'electron';
 import { GitStatusService } from '../services/GitStatusService';
+import { safeHandle } from '../utils/ipcRegistry';
 
 const gitStatusService = new GitStatusService();
 
@@ -11,7 +11,7 @@ export function registerGitStatusHandlers(): void {
    * @param filePaths Array of file paths to check
    * @returns Git status for each file
    */
-  ipcMain.handle('git:get-file-status', async (_event, workspacePath: string, filePaths: string[]) => {
+  safeHandle('git:get-file-status', async (_event, workspacePath: string, filePaths: string[]) => {
     try {
       const status = await gitStatusService.getFileStatus(workspacePath, filePaths);
       return { success: true, status };
@@ -31,7 +31,7 @@ export function registerGitStatusHandlers(): void {
    * @param workspacePath The workspace/repository path
    * @returns Array of file paths with uncommitted changes
    */
-  ipcMain.handle('git:get-uncommitted-files', async (_event, workspacePath: string) => {
+  safeHandle('git:get-uncommitted-files', async (_event, workspacePath: string) => {
     try {
       const files = await gitStatusService.getUncommittedFiles(workspacePath);
       return { success: true, files };
@@ -51,7 +51,7 @@ export function registerGitStatusHandlers(): void {
    * @param workspacePath The workspace path to check
    * @returns Boolean indicating if workspace is a git repository
    */
-  ipcMain.handle('git:is-repo', async (_event, workspacePath: string) => {
+  safeHandle('git:is-repo', async (_event, workspacePath: string) => {
     try {
       const isRepo = await gitStatusService.isGitRepo(workspacePath);
       return { success: true, isRepo };
@@ -71,7 +71,7 @@ export function registerGitStatusHandlers(): void {
    * @param workspacePath The workspace path to check
    * @returns Boolean indicating if workspace is a git worktree
    */
-  ipcMain.handle('git:is-worktree', async (_event, workspacePath: string) => {
+  safeHandle('git:is-worktree', async (_event, workspacePath: string) => {
     try {
       const isWorktree = await gitStatusService.isGitWorktree(workspacePath);
       return { success: true, isWorktree };
@@ -92,7 +92,7 @@ export function registerGitStatusHandlers(): void {
    * @param workspacePath The worktree path
    * @returns Array of file paths with modifications
    */
-  ipcMain.handle('git:get-worktree-modified-files', async (_event, workspacePath: string) => {
+  safeHandle('git:get-worktree-modified-files', async (_event, workspacePath: string) => {
     try {
       const files = await gitStatusService.getWorktreeModifiedFiles(workspacePath);
       return { success: true, files };
@@ -113,7 +113,7 @@ export function registerGitStatusHandlers(): void {
    * @param workspacePath The workspace/repository path
    * @returns Map of file paths to git status
    */
-  ipcMain.handle('git:get-all-file-statuses', async (_event, workspacePath: string) => {
+  safeHandle('git:get-all-file-statuses', async (_event, workspacePath: string) => {
     try {
       const statuses = await gitStatusService.getAllFileStatuses(workspacePath);
       return { success: true, statuses };
@@ -132,7 +132,7 @@ export function registerGitStatusHandlers(): void {
    *
    * @param workspacePath Optional workspace path (clears all if not specified)
    */
-  ipcMain.handle('git:clear-status-cache', async (_event, workspacePath?: string) => {
+  safeHandle('git:clear-status-cache', async (_event, workspacePath?: string) => {
     try {
       gitStatusService.clearCache(workspacePath);
       return { success: true };
