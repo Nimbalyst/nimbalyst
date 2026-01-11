@@ -18,8 +18,25 @@
  *   npm run dev -- --user-data-dir=/path/to/dir
  */
 
-import { app } from 'electron';
+import { app, dialog } from 'electron';
 import * as path from 'path';
+
+// Global uncaught exception handler - must be registered early
+// This catches errors that bubble up from async SDK operations
+process.on('uncaughtException', (error: Error & { code?: string }) => {
+  // Check if this is the known Claude Agent SDK stream error
+  // This happens when the SDK tries to write to a process stdin after it has terminated
+  if (error.code === 'ERR_STREAM_WRITE_AFTER_END' &&
+      error.stack?.includes('claude-agent-sdk')) {
+    // Log the error but don't show a dialog - this is a known SDK issue
+    console.warn('[Bootstrap] Suppressed Claude Agent SDK stream error:', error.message);
+    return;
+  }
+
+  // For other uncaught exceptions, show the native dialog
+  console.error('[Bootstrap] Uncaught exception:', error);
+  dialog.showErrorBox('Uncaught Exception', `${error.name}: ${error.message}\n\n${error.stack || ''}`);
+});
 
 // Parse --user-data-dir from command line args or environment variable
 function getCustomUserDataDir(): string | undefined {
