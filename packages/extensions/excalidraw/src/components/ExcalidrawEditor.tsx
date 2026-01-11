@@ -22,8 +22,10 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
 
   // Excalidraw state - following the Rexical pattern
   const [initialElements, setInitialElements] = useState<ExcalidrawElement[]>([]);
+  // Use theme-aware background color to prevent white flash in dark mode
+  const defaultBackgroundColor = theme === 'dark' ? '#1e1e1e' : '#ffffff';
   const [initialAppState, setInitialAppState] = useState<Partial<AppState>>({
-    viewBackgroundColor: '#ffffff',
+    viewBackgroundColor: defaultBackgroundColor,
     collaborators: [],
   });
   const [initialFiles, setInitialFiles] = useState<BinaryFiles>({});
@@ -51,7 +53,7 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
     source: 'https://excalidraw.com',
     elements: [],
     appState: {
-      viewBackgroundColor: '#ffffff',
+      viewBackgroundColor: defaultBackgroundColor,
       collaborators: [],
     },
     files: {},
@@ -86,7 +88,7 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
         const files = data.files || {};
         setInitialElements(elements);
         setInitialAppState({
-          viewBackgroundColor: '#ffffff',
+          viewBackgroundColor: defaultBackgroundColor,
           collaborators: [],
           ...data.appState,
         });
@@ -280,7 +282,7 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
   // Render Excalidraw following the exact Rexical pattern
   // Key by theme to force remount when theme changes
   return (
-    <div className="excalidraw-editor" style={{ width: '100%', height: '100%' }}>
+    <div className="excalidraw-editor" data-theme={theme} style={{ width: '100%', height: '100%' }}>
       <Excalidraw
         key={theme}
         onChange={onChange}
