@@ -9,10 +9,33 @@
  * - State persistence on close
  */
 
-import * as pty from 'node-pty';
 import type { IPty } from 'node-pty';
 import { app, BrowserWindow } from 'electron';
 import path from 'path';
+import { createRequire } from 'module';
+
+// Load node-pty using explicit path resolution.
+// In packaged builds, node-pty is in app.asar.unpacked/node_modules.
+// Using createRequire with an explicit path avoids needing NODE_PATH manipulation
+// and allows the main entry point to use static imports (no dynamic import boundary).
+function loadNodePty(): typeof import('node-pty') {
+  if (app.isPackaged) {
+    const ptyPath = path.join(
+      process.resourcesPath,
+      'app.asar.unpacked',
+      'node_modules',
+      'node-pty'
+    );
+    const require = createRequire(import.meta.url);
+    return require(ptyPath);
+  } else {
+    // In dev mode, normal require works
+    const require = createRequire(import.meta.url);
+    return require('node-pty');
+  }
+}
+
+const pty = loadNodePty();
 import { promises as fs } from 'fs';
 import os from 'os';
 import { AISessionsRepository } from '@nimbalyst/runtime';
