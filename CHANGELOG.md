@@ -20,6 +20,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.50.29] - 2026-01-11
+
+
+### Added
+- PostHog analytics for voice mode usage
+
+### Changed
+- Disabled Excalidraw relayout tool due to poor layout performance
+
+### Fixed
+- Mockup editor now shows updated content after accepting diff
+- CSV deleted rows now properly disappear after accepting diff
+- Resolved TypeScript errors in voice mode and MaterialSymbol
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.50.28] - 2026-01-11
 
 
