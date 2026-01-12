@@ -232,12 +232,28 @@ npx playwright test e2e/editor/my-test.spec.ts:55
 
 NEVER use parallel execution. NEVER use unnecessarily long timeouts when running tests.
 
+### 11. NEVER Skip or Disable Tests Without Asking
+
+If a test is failing, FIX IT. Do NOT use `test.skip()`, `test.fixme()`, or `.only()` without explicit user permission.
+
+```typescript
+// BAD - Hiding failures by skipping
+test.skip('broken test', async () => { /* ... */ });  // NEVER DO THIS
+test.fixme('will fix later', async () => { /* ... */ });  // NEVER DO THIS
+
+// GOOD - Fix the test or ask the user
+// If you can't fix it, ASK: "This test is failing because X. Should I skip it or debug further?"
+```
+
+Telling the user "all tests pass" when you've secretly disabled failing tests is unacceptable.
+
 ## Common Anti-Patterns to Avoid
 
 | Anti-Pattern | Problem | Solution |
 |--------------|---------|----------|
 | Hardcoded CSS selectors | Breaks when UI changes | Use `PLAYWRIGHT_TEST_SELECTORS` |
 | Using `.first()` to resolve ambiguity | Fails with multiple tabs/sessions | Add `data-testid`/`data-filepath` to component |
+| Using `test.skip()` to hide failures | Lies about test status | Fix the test or ask user first |
 | Multiple small incremental tests | Slow, launches app many times | One sequential test |
 | `waitForTimeout(5000)` | Wastes time | Use expect with timeout |
 | Creating files after app launch | File tree won't update | Create before `launchElectronApp` |
