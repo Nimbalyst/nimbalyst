@@ -1918,6 +1918,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       setDiffSessionInfo(null);
 
       // Notify the custom editor that diff mode has ended
+      // The editor will reload content from disk via host.loadContent()
       diffClearedCallbackRef.current?.();
 
       logger.ui.info('[TabEditor] Custom editor diff accepted successfully');
@@ -1963,9 +1964,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       setDiffSessionInfo(null);
 
       // Notify the custom editor that diff mode has ended
+      // The editor will reload content from disk via host.loadContent()
       diffClearedCallbackRef.current?.();
-
-      // The file change notification will also trigger the editor to reload with original content
 
       logger.ui.info('[TabEditor] Custom editor diff rejected successfully');
     } catch (error) {
@@ -1995,7 +1995,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
       // Read file content from disk (text)
       readFile: async (path: string): Promise<string> => {
+        // console.log('[TabEditor] readFile called for:', path);
         const result = await window.electronAPI.readFileContent(path);
+        // console.log('[TabEditor] readFile result:', { success: result?.success, contentLength: result?.content?.length, first100: result?.content?.substring(0, 100) });
         if (!result || !result.success) return '';
         return result.content;
       },
