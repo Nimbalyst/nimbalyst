@@ -16,6 +16,7 @@ export type SettingsCategory =
   | 'advanced'
   | 'mcp-servers'
   | 'installed-extensions'
+  | 'claude-plugins'
   | 'marketplace'
   | 'installed';
 
@@ -167,6 +168,12 @@ Best for quick edits and tasks that do not require multi-file operations.`,
           id: 'installed-extensions',
           name: 'Installed',
           icon: <MaterialSymbol icon="extension" size={16} />,
+        },
+        {
+          id: 'claude-plugins',
+          name: 'Claude Plugins',
+          icon: <MaterialSymbol icon="widgets" size={16} />,
+          hidden: releaseChannel !== 'alpha',
         },
         {
           id: 'mcp-servers',

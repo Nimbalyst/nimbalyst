@@ -46,6 +46,7 @@ import {
     updateWorkspaceState
 } from './utils/store';
 import { registerMCPConfigHandlers } from './ipc/MCPConfigHandlers';
+import { registerClaudeCodePluginHandlers } from './ipc/ClaudeCodePluginHandlers';
 import { MCPConfigService } from './services/MCPConfigService';
 import { registerDatabaseBrowserHandlers } from './ipc/DatabaseBrowserHandlers';
 import { registerTerminalHandlers, shutdownTerminalHandlers } from './ipc/TerminalHandlers';
@@ -454,6 +455,7 @@ app.whenReady().then(async () => {
     registerPermissionHandlers();
     registerGitStatusHandlers();
     registerMCPConfigHandlers();
+    registerClaudeCodePluginHandlers();
     registerDatabaseBrowserHandlers();
     registerTerminalHandlers();
     markEnd('ipc-handlers');
