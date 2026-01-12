@@ -598,61 +598,64 @@ export const aiTools = [
     },
   },
 
-  {
-    name: 'relayout',
-    description: 'Re-run layout engine on entire diagram',
-    parameters: {
-      type: 'object' as const,
-      properties: {
-        algorithm: {
-          type: 'string' as const,
-          enum: ['hierarchical', 'force-directed', 'grid'],
-          description: 'Layout algorithm to use',
-        },
-        direction: {
-          type: 'string' as const,
-          enum: ['TB', 'LR', 'BT', 'RL'],
-          description: 'Direction for hierarchical layout',
-        },
-      },
-    },
-    handler: async (
-      params: {
-        algorithm?: string;
-        direction?: string;
-      },
-      context: { activeFilePath?: string }
-    ) => {
-      const api = getEditorAPI(context.activeFilePath);
-      if (!api) {
-        return {
-          success: false,
-          error: 'No active Excalidraw editor found.',
-        };
-      }
-
-      const algorithm = (params.algorithm || 'hierarchical') as 'hierarchical' | 'force-directed' | 'grid';
-      const direction = (params.direction || 'TB') as 'TB' | 'LR' | 'BT' | 'RL';
-
-      const currentElements = api.getSceneElements();
-      const engine = new LayoutEngine();
-      engine.addElements(currentElements);
-
-      const positions = engine.layout({
-        algorithm,
-        direction,
-      });
-
-      const updatedElements = currentElements.map((el) => {
-        const pos = positions.get(el.id);
-        return pos ? { ...el, x: pos.x, y: pos.y } : el;
-      });
-
-      api.updateScene({ elements: updatedElements });
-
-      return { success: true };
-    },
-  },
+  // TODO: The relayout tool does a terrible job - it scatters elements randomly
+  // instead of creating a clean layout. Needs proper graph layout algorithm implementation.
+  // Commenting out until fixed.
+  // {
+  //   name: 'relayout',
+  //   description: 'Re-run layout engine on entire diagram',
+  //   parameters: {
+  //     type: 'object' as const,
+  //     properties: {
+  //       algorithm: {
+  //         type: 'string' as const,
+  //         enum: ['hierarchical', 'force-directed', 'grid'],
+  //         description: 'Layout algorithm to use',
+  //       },
+  //       direction: {
+  //         type: 'string' as const,
+  //         enum: ['TB', 'LR', 'BT', 'RL'],
+  //         description: 'Direction for hierarchical layout',
+  //       },
+  //     },
+  //   },
+  //   handler: async (
+  //     params: {
+  //       algorithm?: string;
+  //       direction?: string;
+  //     },
+  //     context: { activeFilePath?: string }
+  //   ) => {
+  //     const api = getEditorAPI(context.activeFilePath);
+  //     if (!api) {
+  //       return {
+  //         success: false,
+  //         error: 'No active Excalidraw editor found.',
+  //       };
+  //     }
+  //
+  //     const algorithm = (params.algorithm || 'hierarchical') as 'hierarchical' | 'force-directed' | 'grid';
+  //     const direction = (params.direction || 'TB') as 'TB' | 'LR' | 'BT' | 'RL';
+  //
+  //     const currentElements = api.getSceneElements();
+  //     const engine = new LayoutEngine();
+  //     engine.addElements(currentElements);
+  //
+  //     const positions = engine.layout({
+  //       algorithm,
+  //       direction,
+  //     });
+  //
+  //     const updatedElements = currentElements.map((el) => {
+  //       const pos = positions.get(el.id);
+  //       return pos ? { ...el, x: pos.x, y: pos.y } : el;
+  //     });
+  //
+  //     api.updateScene({ elements: updatedElements });
+  //
+  //     return { success: true };
+  //   },
+  // },
 
   {
     name: 'import_mermaid',
