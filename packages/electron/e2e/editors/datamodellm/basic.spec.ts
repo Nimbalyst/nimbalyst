@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { launchElectronApp, createTempWorkspace, waitForAppReady, TEST_TIMEOUTS } from '../helpers';
+import { launchElectronApp, createTempWorkspace, waitForAppReady, TEST_TIMEOUTS } from '../../helpers';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
