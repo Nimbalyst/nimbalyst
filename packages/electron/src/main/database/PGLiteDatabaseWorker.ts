@@ -157,15 +157,7 @@ export class PGLiteDatabaseWorker {
           logger.main.info('[PGLite Worker] Backups available - offering restore option');
 
           // Show dialog with restore option
-          const response = await dialog.showMessageBox({
-            type: 'warning',
-            title: 'Database Corruption Detected',
-            message: 'The application database was corrupted, but verified backups are available.\n\nNo file data has been lost.',
-            detail: `Would you like to:\n\n• Restore from backup (recommended) - Recover your AI sessions and history\nor\n• Start fresh - Create a new database and lose previous data\n\nThe corrupted database has been backed up to:\n${initResult.dataDir}.backup-[timestamp]`,
-            buttons: ['Restore from Backup', 'Start Fresh'],
-            defaultId: 0,
-            cancelId: 1
-          });
+          const response = await dialog.showMessageBox(this.getRecoveryDialogOptions());
 
           if (response.response === 0) {
             // User chose to restore from backup
@@ -221,9 +213,9 @@ export class PGLiteDatabaseWorker {
 
             const confirmResponse = await dialog.showMessageBox({
               type: 'warning',
-              title: 'Confirm Start Fresh',
-              message: 'Are you sure you want to start fresh?',
-              detail: 'This will permanently delete all AI chat sessions and document history. Your document files will not be affected.\n\nThis action cannot be undone.',
+              title: 'Start Fresh?',
+              message: 'This will clear your AI chat sessions.',
+              detail: 'Your files will not be affected, but all AI chat history will be permanently deleted.\n\nAre you sure you want to continue?',
               buttons: ['Cancel', 'Yes, Start Fresh'],
               defaultId: 0,
               cancelId: 0
@@ -492,6 +484,59 @@ export class PGLiteDatabaseWorker {
    */
   getBackupService(): DatabaseBackupService | null {
     return this.backupService;
+  }
+
+  /**
+   * Get the recovery dialog options (shared between real recovery and dev menu preview)
+   */
+  private getRecoveryDialogOptions(): Electron.MessageBoxOptions {
+    const backupStatus = this.backupService?.getBackupStatus();
+    const backupTimestamp = backupStatus?.currentBackup?.timestamp
+      || backupStatus?.previousBackup?.timestamp
+      || backupStatus?.oldestBackup?.timestamp;
+
+    let backupDateStr = '';
+    if (backupTimestamp) {
+      // Convert timestamp format from "2026-01-12T19-10-17-765Z" to valid ISO
+      const isoTimestamp = backupTimestamp.replace(/T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z/, 'T$1:$2:$3.$4Z');
+      const backupDate = new Date(isoTimestamp);
+      backupDateStr = backupDate.toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit'
+      });
+    }
+
+    return {
+      type: 'info',
+      title: 'Restore Your Data',
+      message: 'No file data has been lost.',
+      detail: backupDateStr
+        ? `Your files are safe, but your chat history will need to be restored from a backup dated ${backupDateStr}.`
+        : `Your files are safe and your AI chat sessions can be restored from a recent backup.`,
+      buttons: ['Restore (Recommended)', 'Start Fresh'],
+      defaultId: 0,
+      cancelId: 1
+    };
+  }
+
+  /**
+   * Show the database recovery dialog (for testing via developer menu)
+   * This shows the exact same dialog that would appear during actual recovery
+   */
+  async showRecoveryDialog(): Promise<void> {
+    if (!this.backupService || !this.backupService.hasBackups()) {
+      dialog.showMessageBox({
+        type: 'info',
+        title: 'No Backups Available',
+        message: 'No backups are available to test the recovery dialog.',
+        buttons: ['OK']
+      });
+      return;
+    }
+
+    dialog.showMessageBox(this.getRecoveryDialogOptions());
   }
 }
 
