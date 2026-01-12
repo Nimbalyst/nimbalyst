@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.51.0] - 2026-01-12
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+- Updated extension release channel restrictions
+
+### Fixed
+<!-- Bug fixes go here -->
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.50.31] - 2026-01-12
 
 
