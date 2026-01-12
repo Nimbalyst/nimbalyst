@@ -38,6 +38,7 @@ export function DiffModeView({ worktreePath, workspacePath, isActive }: DiffMode
   const [panelCollapsed, setPanelCollapsed] = useState(false);
   const [repoRootBranch, setRepoRootBranch] = useState<string | undefined>(undefined);
   const [commitsBehind, setCommitsBehind] = useState(0);
+  const [isMerged, setIsMerged] = useState(false);
   const [isRebasing, setIsRebasing] = useState(false);
   const isResizingRef = useRef(false);
 
@@ -97,7 +98,7 @@ export function DiffModeView({ worktreePath, workspacePath, isActive }: DiffMode
     }
   }, [workspacePath]);
 
-  // Load worktree status (commits behind)
+  // Load worktree status (commits behind, isMerged)
   const loadWorktreeStatus = useCallback(async () => {
     if (!worktreePath) return;
 
@@ -105,6 +106,7 @@ export function DiffModeView({ worktreePath, workspacePath, isActive }: DiffMode
       const result = await window.electronAPI.worktreeGetStatus(worktreePath);
       if (result?.success && result.status) {
         setCommitsBehind(result.status.commitsBehind || 0);
+        setIsMerged(result.status.isMerged || false);
       }
     } catch (err) {
       console.error('[DiffModeView] Failed to load worktree status:', err);
@@ -149,8 +151,8 @@ export function DiffModeView({ worktreePath, workspacePath, isActive }: DiffMode
     try {
       const result = await window.electronAPI.invoke('worktree:commit', worktreePath, message, stagedFiles);
       if (result?.success) {
-        // Reload files and commits
-        await Promise.all([loadChangedFiles(), loadCommits()]);
+        // Reload files, commits, and status (new commit changes isMerged state)
+        await Promise.all([loadChangedFiles(), loadCommits(), loadWorktreeStatus()]);
       } else {
         setError(result?.error || 'Failed to commit changes');
       }
@@ -158,7 +160,7 @@ export function DiffModeView({ worktreePath, workspacePath, isActive }: DiffMode
       console.error('[DiffModeView] Failed to commit:', err);
       setError('Failed to commit changes');
     }
-  }, [changedFiles, worktreePath, loadChangedFiles, loadCommits]);
+  }, [changedFiles, worktreePath, loadChangedFiles, loadCommits, loadWorktreeStatus]);
 
   // Merge to main
   const handleMerge = useCallback(async () => {
@@ -305,6 +307,7 @@ export function DiffModeView({ worktreePath, workspacePath, isActive }: DiffMode
           worktreePath={worktreePath}
           repoRootBranch={repoRootBranch}
           commitsBehind={commitsBehind}
+          isMerged={isMerged}
           isRebasing={isRebasing}
         />
       </div>

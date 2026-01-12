@@ -13,6 +13,7 @@ interface CommitSectionProps {
   hasCommits: boolean;
   hasUncommittedChanges: boolean;
   commitsBehind: number;
+  isMerged: boolean;
   baseBranch?: string;
 }
 
@@ -27,6 +28,7 @@ export function CommitSection({
   hasCommits,
   hasUncommittedChanges,
   commitsBehind,
+  isMerged,
   baseBranch,
 }: CommitSectionProps) {
   const [message, setMessage] = useState('');
@@ -44,8 +46,10 @@ export function CommitSection({
   }, [handleCommit]);
 
   const canCommit = stagedCount > 0 && message.trim().length > 0 && !isCommitting;
-  const canMerge = hasCommits && !hasUncommittedChanges && !isMerging && commitsBehind === 0;
-  const canRebase = commitsBehind > 0 && !hasUncommittedChanges && !isRebasing;
+  // If merged, ignore commitsBehind (the merge commit doesn't need to be rebased)
+  const effectiveCommitsBehind = isMerged ? 0 : commitsBehind;
+  const canMerge = hasCommits && !hasUncommittedChanges && !isMerging && !isMerged && effectiveCommitsBehind === 0;
+  const canRebase = effectiveCommitsBehind > 0 && !hasUncommittedChanges && !isRebasing;
 
   return (
     <div className="commit-section">
@@ -80,15 +84,15 @@ export function CommitSection({
         </button>
         <button
           type="button"
-          className={`commit-section-button ${commitsBehind > 0 ? 'commit-section-button--warning' : 'commit-section-button--secondary'}`}
+          className={`commit-section-button ${effectiveCommitsBehind > 0 ? 'commit-section-button--warning' : 'commit-section-button--secondary'}`}
           onClick={onRebase}
           disabled={!canRebase}
           title={
             hasUncommittedChanges
               ? 'Commit all changes before rebasing'
-              : commitsBehind === 0
+              : effectiveCommitsBehind === 0
                 ? 'Already up to date with base branch'
-                : `Bring in ${commitsBehind} commit${commitsBehind === 1 ? '' : 's'} from ${baseBranch || 'base branch'}`
+                : `Bring in ${effectiveCommitsBehind} commit${effectiveCommitsBehind === 1 ? '' : 's'} from ${baseBranch || 'base branch'}`
           }
         >
           {isRebasing ? (
@@ -99,7 +103,7 @@ export function CommitSection({
           ) : (
             <>
               <MaterialSymbol icon="sync" size={16} />
-              <span>Rebase from {baseBranch || 'base'}{commitsBehind > 0 ? ` (${commitsBehind})` : ''}</span>
+              <span>Rebase from {baseBranch || 'base'}{effectiveCommitsBehind > 0 ? ` (${effectiveCommitsBehind})` : ''}</span>
             </>
           )}
         </button>
@@ -109,13 +113,15 @@ export function CommitSection({
           onClick={onMerge}
           disabled={!canMerge}
           title={
-            commitsBehind > 0
-              ? `Rebase first to bring in ${commitsBehind} commit${commitsBehind === 1 ? '' : 's'} from ${baseBranch || 'base branch'}`
-              : hasUncommittedChanges
-                ? 'Commit all changes before merging'
-                : !hasCommits
-                  ? 'No commits to merge'
-                  : `Merge commits into ${baseBranch || 'base branch'}`
+            isMerged
+              ? 'Already merged to base branch'
+              : effectiveCommitsBehind > 0
+                ? `Rebase first to bring in ${effectiveCommitsBehind} commit${effectiveCommitsBehind === 1 ? '' : 's'} from ${baseBranch || 'base branch'}`
+                : hasUncommittedChanges
+                  ? 'Commit all changes before merging'
+                  : !hasCommits
+                    ? 'No commits to merge'
+                    : `Merge commits into ${baseBranch || 'base branch'}`
           }
         >
           {isMerging ? (

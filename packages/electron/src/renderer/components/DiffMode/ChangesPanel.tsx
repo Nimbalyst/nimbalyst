@@ -26,6 +26,7 @@ interface ChangesPanelProps {
   worktreePath: string;
   repoRootBranch?: string; // Current branch of the repo root (what worktree is compared against)
   commitsBehind: number;
+  isMerged: boolean;
   isRebasing: boolean;
 }
 
@@ -48,6 +49,7 @@ export function ChangesPanel({
   worktreePath,
   repoRootBranch,
   commitsBehind,
+  isMerged,
   isRebasing,
 }: ChangesPanelProps) {
   const [showMergeDialog, setShowMergeDialog] = useState(false);
@@ -173,6 +175,7 @@ export function ChangesPanel({
           hasCommits={commits.length > 0}
           hasUncommittedChanges={hasUncommittedChanges}
           commitsBehind={commitsBehind}
+          isMerged={isMerged}
           baseBranch={repoRootBranch}
         />
 
