@@ -164,12 +164,12 @@ export function registerSettingsHandlers() {
     });
 
     // Worktree onboarding state
-    ipcMain.handle('worktree-onboarding:is-shown', async () => {
+    safeHandle('worktree-onboarding:is-shown', async () => {
         const { isWorktreeOnboardingShown } = await import('../utils/store');
         return isWorktreeOnboardingShown();
     });
 
-    ipcMain.handle('worktree-onboarding:set-shown', async (_event, shown: boolean) => {
+    safeHandle('worktree-onboarding:set-shown', async (_event: Electron.IpcMainInvokeEvent, shown: boolean) => {
         const { setWorktreeOnboardingShown } = await import('../utils/store');
         setWorktreeOnboardingShown(shown);
     });

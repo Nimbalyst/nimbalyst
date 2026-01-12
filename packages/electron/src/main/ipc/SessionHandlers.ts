@@ -216,7 +216,7 @@ export async function registerSessionHandlers() {
     });
 
     // Update session pinned status
-    ipcMain.handle('sessions:update-pinned', async (event, sessionId: string, isPinned: boolean) => {
+    safeHandle('sessions:update-pinned', async (_event, sessionId: string, isPinned: boolean) => {
         try {
             await AISessionsRepository.updateMetadata(sessionId, { isPinned } as any);
             return { success: true };
