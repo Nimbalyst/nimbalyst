@@ -35,9 +35,22 @@
   white-space: nowrap;
 }
 
-.breadcrumb-segment:hover {
-  color: var(--text-primary);
+/* Clickable folder segments in breadcrumb */
+.breadcrumb-segment.breadcrumb-clickable {
   cursor: pointer;
+  border-radius: 4px;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.breadcrumb-segment.breadcrumb-clickable:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+.breadcrumb-segment.breadcrumb-clickable:hover .breadcrumb-icon {
+  opacity: 1;
 }
 
 .breadcrumb-icon {

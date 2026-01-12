@@ -3,7 +3,7 @@ import { useAtomValue } from 'jotai';
 import { MaterialSymbol, getFileIcon } from '@nimbalyst/runtime';
 import { FileContextMenu } from './FileContextMenu';
 import type { NewFileType, ExtensionFileType } from './NewFileMenu';
-import { fileGitStatusAtom, directoryGitStatusAtom, type FileGitStatus as AtomFileGitStatus } from '../store';
+import { fileGitStatusAtom, directoryGitStatusAtom, selectedFolderPathAtom, type FileGitStatus as AtomFileGitStatus } from '../store';
 
 interface FileTreeItem {
   name: string;
@@ -167,7 +167,11 @@ function getDirectoryGitStatus(
   return null;
 }
 
-export function FileTree({ items, currentFilePath, onFileSelect, level, showIcons = true, enableAutoScroll = true, onNewFile, onNewFolder, onRefreshFileTree, onFolderContentsLoaded, onViewHistory, onViewWorkspaceHistory, selectedFolder, onFolderSelect, gitStatusMap, extensionFileTypes = [], sharedDragState, sharedExpandedDirs, selectedPaths: selectedPathsProp, onSelectionChange, sharedSelectionState, rootItems: rootItemsProp }: FileTreeProps) {
+export function FileTree({ items, currentFilePath, onFileSelect, level, showIcons = true, enableAutoScroll = true, onNewFile, onNewFolder, onRefreshFileTree, onFolderContentsLoaded, onViewHistory, onViewWorkspaceHistory, selectedFolder: selectedFolderProp, onFolderSelect, gitStatusMap, extensionFileTypes = [], sharedDragState, sharedExpandedDirs, selectedPaths: selectedPathsProp, onSelectionChange, sharedSelectionState, rootItems: rootItemsProp }: FileTreeProps) {
+  // Subscribe to the Jotai atom for folder selection (from breadcrumb navigation)
+  const selectedFolderFromAtom = useAtomValue(selectedFolderPathAtom);
+  // Use atom value if set, otherwise use prop (for backward compatibility)
+  const selectedFolder = selectedFolderFromAtom ?? selectedFolderProp ?? null;
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -326,6 +330,65 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
       }
     }
   }, [currentFilePath, level, enableAutoScroll]);
+
+  // Track previous selectedFolder from atom to detect external changes
+  const prevSelectedFolderFromAtomRef = useRef<string | null>(null);
+
+  // Helper to find parent directories of a folder path (not just files)
+  const findParentDirsOfFolder = useCallback((treeItems: FileTreeItem[], targetFolderPath: string, parents: string[] = []): string[] | null => {
+    for (const item of treeItems) {
+      if (item.type === 'directory') {
+        // Found the target folder - return its parents
+        if (item.path === targetFolderPath) {
+          return parents;
+        }
+        // Search children
+        if (item.children) {
+          const result = findParentDirsOfFolder(item.children, targetFolderPath, [...parents, item.path]);
+          if (result) return result;
+        }
+      }
+    }
+    return null;
+  }, []);
+
+  // When selectedFolder changes via the atom (e.g., from breadcrumb click),
+  // expand parent directories and scroll to the folder
+  useEffect(() => {
+    if (level !== 0) return;
+    if (!selectedFolderFromAtom) {
+      prevSelectedFolderFromAtomRef.current = null;
+      return;
+    }
+
+    // Only act on actual changes from the atom
+    if (prevSelectedFolderFromAtomRef.current === selectedFolderFromAtom) return;
+    prevSelectedFolderFromAtomRef.current = selectedFolderFromAtom;
+
+    // Expand parent directories of the selected folder
+    const parentDirs = findParentDirsOfFolder(items, selectedFolderFromAtom);
+    if (parentDirs && parentDirs.length > 0) {
+      setExpandedDirs(prev => {
+        const newSet = new Set(prev);
+        let hasChanges = false;
+        parentDirs.forEach(dir => {
+          if (!newSet.has(dir)) {
+            newSet.add(dir);
+            hasChanges = true;
+          }
+        });
+        return hasChanges ? newSet : prev;
+      });
+    }
+
+    // Scroll to the selected folder after a brief delay for expansion to render
+    setTimeout(() => {
+      const selectedFolderElement = document.querySelector('.file-tree-directory.selected');
+      if (selectedFolderElement) {
+        selectedFolderElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }, 150);
+  }, [selectedFolderFromAtom, items, level, findParentDirsOfFolder, setExpandedDirs]);
 
   // Clear multi-selection when a file is opened from outside the tree (e.g., keyboard shortcut)
   useEffect(() => {
