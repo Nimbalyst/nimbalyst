@@ -639,6 +639,20 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     setNewDropdownOpen(!newDropdownOpen);
   };
 
+  // Handle new button click - if only one option available, trigger it directly
+  const handleNewButtonClick = () => {
+    const availableOptions = [onNewSession, onNewWorktreeSession, onNewTerminal].filter(Boolean);
+    if (availableOptions.length === 1) {
+      // Only one option available, trigger it directly
+      if (onNewSession) onNewSession();
+      else if (onNewWorktreeSession) onNewWorktreeSession();
+      else if (onNewTerminal) onNewTerminal();
+    } else {
+      // Multiple options, show dropdown
+      toggleNewDropdown();
+    }
+  };
+
   // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -814,7 +828,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                 <button
                   className="session-history-new-button"
                   data-testid="new-dropdown-button"
-                  onClick={toggleNewDropdown}
+                  onClick={handleNewButtonClick}
                   title="Create new..."
                   aria-label="Create new session, worktree, or terminal"
                 >
@@ -946,7 +960,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                 <button
                   className="session-history-new-button"
                   data-testid="new-dropdown-button"
-                  onClick={toggleNewDropdown}
+                  onClick={handleNewButtonClick}
                   title="Create new..."
                   aria-label="Create new session, worktree, or terminal"
                 >
@@ -1045,7 +1059,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                 <button
                   className="session-history-new-button"
                   data-testid="new-dropdown-button"
-                  onClick={toggleNewDropdown}
+                  onClick={handleNewButtonClick}
                   title="Create new..."
                   aria-label="Create new session or worktree"
                 >
@@ -1157,7 +1171,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
               <button
                 className="session-history-new-button"
                 data-testid="new-dropdown-button"
-                onClick={toggleNewDropdown}
+                onClick={handleNewButtonClick}
                 title="Create new..."
                 aria-label="Create new session, worktree, or terminal"
               >

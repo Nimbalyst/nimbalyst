@@ -3369,7 +3369,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             onSessionRename={handleTabRename}
             onNewSession={() => createNewSession()}
             onNewTerminal={releaseChannel === 'alpha' ? () => createNewTerminal() : undefined}
-            onNewWorktreeSession={createNewWorktreeSession}
+            onNewWorktreeSession={releaseChannel === 'alpha' ? createNewWorktreeSession : undefined}
             onAddSessionToWorktree={handleAddSessionToWorktree}
             onAddTerminalToWorktree={releaseChannel === 'alpha' ? handleAddTerminalToWorktree : undefined}
             onWorktreeFilesMode={(worktreeId) => handleWorktreeModeChange(worktreeId, 'files')}
