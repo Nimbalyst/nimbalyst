@@ -109,7 +109,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
   // Extension plugins loader (injected from electron main process)
   // Returns plugin paths from enabled extensions with Claude plugins
-  private static extensionPluginsLoader: (() => Promise<Array<{ type: 'local'; path: string }>>) | null = null;
+  // Accepts optional workspace path to include project-scoped CLI plugins
+  private static extensionPluginsLoader: ((workspacePath?: string) => Promise<Array<{ type: 'local'; path: string }>>) | null = null;
 
   // Claude Code settings loader (injected from electron main process)
   // Returns settings for project/user commands
@@ -185,7 +186,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
    * This allows the runtime package to load Claude SDK plugins from extensions
    * without directly depending on electron extension loader code
    */
-  public static setExtensionPluginsLoader(loader: (() => Promise<Array<{ type: 'local'; path: string }>>) | null): void {
+  public static setExtensionPluginsLoader(loader: ((workspacePath?: string) => Promise<Array<{ type: 'local'; path: string }>>) | null): void {
     ClaudeCodeProvider.extensionPluginsLoader = loader;
   }
 
@@ -503,9 +504,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
       // Load extension plugins if available
       // These are Claude SDK plugins bundled with Nimbalyst extensions
+      // Also includes CLI-installed plugins from ~/.claude/plugins/
       if (ClaudeCodeProvider.extensionPluginsLoader) {
         try {
-          const extensionPlugins = await ClaudeCodeProvider.extensionPluginsLoader();
+          const extensionPlugins = await ClaudeCodeProvider.extensionPluginsLoader(workspacePath);
           if (extensionPlugins.length > 0) {
             options.plugins = extensionPlugins;
             console.log(`[CLAUDE-CODE] Loaded ${extensionPlugins.length} extension plugin(s):`, extensionPlugins.map(p => p.path));

@@ -422,17 +422,108 @@ async function scanDirectoryForClaudePlugins(
 }
 
 /**
- * Get Claude Agent SDK plugin paths from enabled extensions.
+ * Structure of the Claude Code CLI installed plugins file (~/.claude/plugins/installed_plugins.json)
+ */
+interface ClaudeCliInstalledPlugins {
+  version: number;
+  plugins: Record<string, Array<{
+    scope: 'user' | 'project';
+    projectPath?: string;  // Only present for project-scoped plugins
+    installPath: string;
+    version: string;
+    installedAt: string;
+    lastUpdated: string;
+  }>>;
+}
+
+/**
+ * Get Claude CLI plugins installed via the /plugin command.
+ * Reads from ~/.claude/plugins/installed_plugins.json
+ *
+ * @param workspacePath - If provided, includes project-scoped plugins for this workspace
+ */
+async function getClaudeCliPluginPaths(workspacePath?: string): Promise<Array<{ type: 'local'; path: string }>> {
+  const plugins: Array<{ type: 'local'; path: string }> = [];
+
+  try {
+    const os = await import('os');
+    const installedPluginsPath = path.join(os.homedir(), '.claude', 'plugins', 'installed_plugins.json');
+
+    let content: string;
+    try {
+      content = await fs.readFile(installedPluginsPath, 'utf-8');
+    } catch {
+      // File doesn't exist - no CLI plugins installed
+      return [];
+    }
+
+    let installedPlugins: ClaudeCliInstalledPlugins;
+    try {
+      installedPlugins = JSON.parse(content);
+    } catch (parseError) {
+      logger.main.error(`[ExtensionHandlers] Failed to parse CLI plugins JSON at ${installedPluginsPath}:`, parseError);
+      return [];
+    }
+
+    // Normalize workspace path for comparison if provided
+    const normalizedWorkspacePath = workspacePath ? path.resolve(workspacePath) : undefined;
+
+    for (const [pluginKey, installations] of Object.entries(installedPlugins.plugins)) {
+      for (const installation of installations) {
+        // Include user-scoped plugins always
+        if (installation.scope === 'user') {
+          try {
+            await fs.access(installation.installPath);
+            plugins.push({
+              type: 'local' as const,
+              path: installation.installPath,
+            });
+            logger.main.debug(`[ExtensionHandlers] Found CLI plugin (user): ${pluginKey} at ${installation.installPath}`);
+          } catch {
+            logger.main.warn(`[ExtensionHandlers] CLI plugin path not found: ${installation.installPath}`);
+          }
+        }
+        // Include project-scoped plugins only if workspace matches
+        else if (installation.scope === 'project' && normalizedWorkspacePath && installation.projectPath) {
+          const normalizedProjectPath = path.resolve(installation.projectPath);
+          if (normalizedWorkspacePath === normalizedProjectPath || normalizedWorkspacePath.startsWith(normalizedProjectPath + path.sep)) {
+            try {
+              await fs.access(installation.installPath);
+              plugins.push({
+                type: 'local' as const,
+                path: installation.installPath,
+              });
+              logger.main.debug(`[ExtensionHandlers] Found CLI plugin (project): ${pluginKey} at ${installation.installPath}`);
+            } catch {
+              logger.main.warn(`[ExtensionHandlers] CLI plugin path not found: ${installation.installPath}`);
+            }
+          }
+        }
+      }
+    }
+  } catch (error) {
+    logger.main.error('[ExtensionHandlers] Failed to read CLI plugins:', error);
+  }
+
+  return plugins;
+}
+
+/**
+ * Get Claude Agent SDK plugin paths from enabled extensions and CLI-installed plugins.
  * This is a main-process-native implementation that directly reads extension manifests
  * without requiring the renderer-process ExtensionLoader.
  *
- * Scans both user extensions and built-in extensions directories.
+ * Scans:
+ * 1. User extensions directory
+ * 2. Built-in extensions directory
+ * 3. Claude CLI plugins (~/.claude/plugins/)
+ *
  * User extensions take priority over built-in extensions with the same ID.
  *
- * Returns paths in the format expected by the Claude Agent SDK:
- * { type: 'local', path: string }
+ * @param workspacePath - If provided, includes project-scoped CLI plugins for this workspace
+ * @returns Paths in the format expected by the Claude Agent SDK: { type: 'local', path: string }
  */
-export async function getClaudePluginPaths(): Promise<Array<{ type: 'local'; path: string }>> {
+export async function getClaudePluginPaths(workspacePath?: string): Promise<Array<{ type: 'local'; path: string }>> {
   try {
     const plugins: Array<{ type: 'local'; path: string }> = [];
     const seenExtensionIds = new Set<string>();
@@ -444,7 +535,24 @@ export async function getClaudePluginPaths(): Promise<Array<{ type: 'local'; pat
       await scanDirectoryForClaudePlugins(extensionsDir, plugins, seenExtensionIds, currentChannel);
     }
 
-    return plugins;
+    // Also scan CLI-installed plugins
+    const cliPlugins = await getClaudeCliPluginPaths(workspacePath);
+    plugins.push(...cliPlugins);
+
+    // Deduplicate by resolved path (in case same plugin is both an extension and CLI-installed)
+    const seenPaths = new Set<string>();
+    const deduplicatedPlugins: Array<{ type: 'local'; path: string }> = [];
+    for (const plugin of plugins) {
+      const resolvedPath = path.resolve(plugin.path);
+      if (!seenPaths.has(resolvedPath)) {
+        seenPaths.add(resolvedPath);
+        deduplicatedPlugins.push(plugin);
+      } else {
+        logger.main.debug(`[ExtensionHandlers] Skipping duplicate plugin: ${plugin.path}`);
+      }
+    }
+
+    return deduplicatedPlugins;
   } catch (error) {
     logger.main.error('[ExtensionHandlers] Failed to get Claude plugin paths:', error);
     return [];
