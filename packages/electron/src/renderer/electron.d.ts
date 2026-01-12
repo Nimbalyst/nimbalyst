@@ -173,7 +173,7 @@ interface ElectronAPI {
   // AI operations (flat methods)
   aiHasApiKey: () => Promise<boolean>;
   aiInitialize: (provider?: string, apiKey?: string) => Promise<any>;
-  aiCreateSession: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio', documentContext?: any, workspacePath?: string, modelId?: string, sessionType?: 'chat' | 'planning' | 'coding' | 'terminal') => Promise<any>;
+  aiCreateSession: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio', documentContext?: any, workspacePath?: string, modelId?: string, sessionType?: 'chat' | 'planning' | 'coding' | 'terminal', worktreeId?: string) => Promise<any>;
   aiSendMessage: (message: string, documentContext?: any, sessionId?: string, workspacePath?: string) => Promise<any>;
   aiGetSessions: (workspacePath?: string) => Promise<any>;
   aiLoadSession: (sessionId: string, workspacePath?: string, trackAsResume?: boolean) => Promise<any>;
@@ -241,7 +241,7 @@ interface ElectronAPI {
   ai: {
     hasApiKey: () => Promise<boolean>;
     initialize: (provider?: string, apiKey?: string) => Promise<any>;
-    createSession: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio', documentContext?: any, workspacePath?: string, modelId?: string, sessionType?: 'chat' | 'planning' | 'coding' | 'terminal') => Promise<any>;
+    createSession: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio', documentContext?: any, workspacePath?: string, modelId?: string, sessionType?: 'chat' | 'planning' | 'coding' | 'terminal', worktreeId?: string) => Promise<any>;
     sendMessage: (message: string, documentContext?: any, sessionId?: string, workspacePath?: string) => Promise<any>;
     getSessions: (workspacePath?: string) => Promise<any>;
     getSessionList: (workspacePath?: string) => Promise<any>;
@@ -397,7 +397,7 @@ interface ElectronAPI {
 
   // Terminal operations
   terminal: {
-    createSession: (workspacePath: string, cwd?: string) => Promise<{ success: boolean; sessionId: string; error?: string }>;
+    createSession: (workspacePath: string, options?: { cwd?: string; worktreeId?: string; worktreePath?: string }) => Promise<{ success: boolean; sessionId: string; error?: string }>;
     initialize: (sessionId: string, options?: { cwd?: string; cols?: number; rows?: number }) => Promise<{ success: boolean; alreadyActive?: boolean; error?: string }>;
     isActive: (sessionId: string) => Promise<boolean>;
     write: (sessionId: string, data: string) => Promise<void>;

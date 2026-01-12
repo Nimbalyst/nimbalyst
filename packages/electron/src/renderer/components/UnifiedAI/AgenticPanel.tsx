@@ -234,10 +234,6 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     });
   }, []);
 
-  useEffect(() => {
-    worktreeSessionModesRef.current = worktreeSessionModes;
-  }, [worktreeSessionModes]);
-
   // Focus input when panel becomes active (e.g., Cmd+K to switch to agent mode)
   // or when switching between session tabs
   const prevIsActiveRef = useRef(isActive);
@@ -1383,62 +1379,6 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       throw error;
     }
   }, [workspacePath, mode, loadSessions, updateWindowTitle, triggerSessionHistoryRefresh]);
-
-  // Create a new terminal session
-  const createNewTerminal = useCallback(async () => {
-    try {
-      console.log('[AgenticPanel] Creating new terminal session');
-
-      // Create terminal session via IPC
-      const result = await window.electronAPI.terminal.createSession(workspacePath, {});
-
-      if (!result.success || !result.sessionId) {
-        throw new Error(result.error || 'Failed to create terminal session');
-      }
-
-      // Load the session data
-      const sessionData = await window.electronAPI.aiLoadSession(result.sessionId, workspacePath);
-      if (!sessionData) {
-        throw new Error('Failed to load newly created terminal session');
-      }
-
-      // Count existing terminals for naming
-      const terminalCount = sessionTabs.filter(t => t.sessionData.sessionType === 'terminal').length;
-      const tabName = terminalCount > 0 ? `Terminal ${terminalCount + 1}` : 'Terminal';
-
-      const newTab: SessionTab = {
-        id: sessionData.id,
-        name: tabName,
-        sessionData: {
-          ...sessionData,
-          sessionType: 'terminal',
-        },
-        mode: 'agent',
-      };
-
-      if (mode === 'chat') {
-        setSessionTabs([newTab]);
-      } else {
-        setSessionTabs(prev => [...prev, newTab]);
-      }
-
-      setActiveTabId(sessionData.id);
-
-      await loadSessions();
-
-      // Trigger SessionHistory refresh
-      triggerSessionHistoryRefresh('new-terminal');
-
-      if (onSessionChange) {
-        onSessionChange(sessionData.id, tabName);
-      }
-
-      return sessionData;
-    } catch (error) {
-      console.error('[AgenticPanel] Failed to create terminal session:', error);
-      throw error;
-    }
-  }, [sessionTabs, workspacePath, mode, loadSessions, onSessionChange, triggerSessionHistoryRefresh]);
 
   // Add a new terminal to an existing worktree
   const handleAddTerminalToWorktree = useCallback(async (worktreeId: string) => {

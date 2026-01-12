@@ -1017,11 +1017,11 @@ export function setFeatureWalkthroughCompleted(completed: boolean): void {
 
 // Worktree Onboarding Settings
 export function isWorktreeOnboardingShown(): boolean {
-  return appStore.get('worktreeOnboardingShown', false);
+  return getAppStore().get('worktreeOnboardingShown', false);
 }
 
 export function setWorktreeOnboardingShown(shown: boolean): void {
-  appStore.set('worktreeOnboardingShown', shown);
+  getAppStore().set('worktreeOnboardingShown', shown);
 }
 
 // Extension Settings Management
