@@ -1,5 +1,5 @@
 /**
- * Monaco Editor - File Watcher Diff Approval Test
+ * Monaco Editor Diff Accept E2E Test
  *
  * Tests the file-watcher-based diff approval system for code files (Monaco editor):
  * 1. Create a code file with original content
@@ -22,8 +22,8 @@ import {
   createTempWorkspace,
   waitForAppReady,
   TEST_TIMEOUTS,
-} from '../helpers';
-import { PLAYWRIGHT_TEST_SELECTORS } from '../utils/testHelpers';
+} from '../../helpers';
+import { PLAYWRIGHT_TEST_SELECTORS } from '../../utils/testHelpers';
 
 /**
  * Helper to get Monaco editor content
@@ -79,7 +79,7 @@ async function getMonacoContent(page: Page, timeout = 5000): Promise<string> {
   });
 }
 
-test.describe('Monaco Editor - File Watcher Diff Approval', () => {
+test.describe('Monaco Editor - Diff Accept', () => {
   let electronApp: ElectronApplication;
   let page: Page;
   let workspaceDir: string;
@@ -185,15 +185,10 @@ test.describe('Monaco Editor - File Watcher Diff Approval', () => {
     console.log('[TEST] Pending tags check:', pendingTagsCheck);
 
     // Step 6: Verify diff mode is active
-    // For Monaco, we check if the Monaco diff approval bar is visible
-    console.log('[TEST] Checking for Monaco diff approval bar...');
-    const monacoDiffApprovalBar = page.locator(PLAYWRIGHT_TEST_SELECTORS.monacoDiffApprovalBar);
-    await expect(monacoDiffApprovalBar).toBeVisible({ timeout: 5000 });
-
-    // Check for Monaco diff bar label
-    const diffLabel = page.locator(PLAYWRIGHT_TEST_SELECTORS.monacoDiffApprovalBarLabel);
-    const labelText = await diffLabel.textContent();
-    console.log('[TEST] Monaco diff label text:', labelText);
+    // Monaco now uses UnifiedDiffHeader for diff approval
+    console.log('[TEST] Checking for unified diff header...');
+    const unifiedDiffHeader = page.locator(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffHeader);
+    await expect(unifiedDiffHeader).toBeVisible({ timeout: 5000 });
 
     // Verify Monaco is in diff mode by checking for the diff editor container
     const hasDiffEditor = await page.evaluate(() => {
@@ -206,9 +201,9 @@ test.describe('Monaco Editor - File Watcher Diff Approval', () => {
     console.log('[TEST] Monaco diff editor active:', hasDiffEditor);
     expect(hasDiffEditor).toBe(true);
 
-    // Step 7: Accept all changes
+    // Step 7: Accept all changes (click "Keep All" button)
     console.log('[TEST] Accepting all changes...');
-    const acceptAllButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.monacoDiffAcceptButton);
+    const acceptAllButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffAcceptAllButton);
     await expect(acceptAllButton).toBeVisible({ timeout: 3000 });
     await acceptAllButton.click();
 

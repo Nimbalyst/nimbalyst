@@ -18,7 +18,7 @@ import {
   waitForAppReady,
   dismissProjectTrustToast,
   TEST_TIMEOUTS,
-} from '../helpers';
+} from '../../helpers';
 
 let electronApp: ElectronApplication;
 let page: Page;

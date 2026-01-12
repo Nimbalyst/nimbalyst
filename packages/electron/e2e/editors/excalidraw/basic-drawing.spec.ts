@@ -1,5 +1,5 @@
 /**
- * Basic Excalidraw extension test
+ * Basic Excalidraw Drawing E2E Test
  *
  * Verifies that the Excalidraw extension can:
  * 1. Load .excalidraw files without errors
@@ -14,7 +14,7 @@ import {
   createTempWorkspace,
   waitForAppReady,
   dismissProjectTrustToast,
-} from '../helpers';
+} from '../../helpers';
 
 let electronApp: ElectronApplication;
 let page: Page;

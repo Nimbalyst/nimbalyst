@@ -1,7 +1,7 @@
 /**
- * Excalidraw Save on Close Test
+ * Excalidraw Dirty Close E2E Test
  *
- * Tests that edited content is saved when closing the tab
+ * Tests that edited content is saved when closing the tab.
  */
 
 import { test, expect, ElectronApplication, Page } from '@playwright/test';
@@ -13,13 +13,13 @@ import {
   waitForAppReady,
   dismissProjectTrustToast,
   TEST_TIMEOUTS,
-} from '../helpers';
+} from '../../helpers';
 import {
   PLAYWRIGHT_TEST_SELECTORS,
   openFileFromTree,
   closeTabByFileName,
   getTabByFileName,
-} from '../utils/testHelpers';
+} from '../../utils/testHelpers';
 
 let electronApp: ElectronApplication;
 let page: Page;

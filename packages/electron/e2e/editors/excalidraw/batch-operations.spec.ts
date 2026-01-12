@@ -1,5 +1,5 @@
 /**
- * E2E test for Excalidraw batching tools
+ * Excalidraw Batch Operations E2E Test
  *
  * Tests the batch operations:
  * - add_elements (batch rectangle creation)
@@ -15,7 +15,7 @@ import {
   createTempWorkspace,
   waitForAppReady,
   dismissProjectTrustToast,
-} from '../helpers';
+} from '../../helpers';
 
 let electronApp: ElectronApplication;
 let page: Page;

@@ -32,6 +32,11 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
 
   // Excalidraw API reference
   const [excalidrawAPI, setExcalidrawAPI] = useState<ExcalidrawImperativeAPI | null>(null);
+  // Ref to access API in callbacks without stale closures
+  const excalidrawAPIRef = useRef<ExcalidrawImperativeAPI | null>(null);
+  useEffect(() => {
+    excalidrawAPIRef.current = excalidrawAPI;
+  }, [excalidrawAPI]);
 
   // Track what we believe is on disk to ignore echoes from our own saves
   const lastKnownDiskContentRef = useRef<string>('');
@@ -152,12 +157,13 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
         const elements = data.elements as ExcalidrawElement[];
         const files = data.files || {};
 
-        // Update Excalidraw via API
-        if (excalidrawAPI) {
+        // Update Excalidraw via API (use ref to avoid stale closure)
+        const api = excalidrawAPIRef.current;
+        if (api) {
           // Suppress onChange -> setDirty while we're updating from external change
           isUpdatingFromExternalRef.current = true;
           try {
-            excalidrawAPI.updateScene({
+            api.updateScene({
               elements,
               appState: data.appState,
             });
@@ -167,6 +173,8 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
               isUpdatingFromExternalRef.current = false;
             });
           }
+        } else {
+          console.warn('[Excalidraw] API not ready for external file change update');
         }
 
         // Update previous refs to match new content
@@ -189,20 +197,21 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
         console.error('[Excalidraw] Failed to parse reloaded content:', error);
       }
     });
-  }, [host, excalidrawAPI]);
+  }, [host]);
 
   // Subscribe to save requests from host
   useEffect(() => {
     return host.onSaveRequested(async () => {
-      if (!excalidrawAPI) {
+      const api = excalidrawAPIRef.current;
+      if (!api) {
         console.error('[Excalidraw] Cannot save: API not ready');
         return;
       }
 
       try {
-        const elements = excalidrawAPI.getSceneElements();
-        const appState = excalidrawAPI.getAppState();
-        const files = excalidrawAPI.getFiles();
+        const elements = api.getSceneElements();
+        const appState = api.getAppState();
+        const files = api.getFiles();
 
         const fileData: ExcalidrawFile = {
           type: 'excalidraw',
@@ -227,7 +236,7 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
         console.error('[Excalidraw] Save failed:', error);
       }
     });
-  }, [host, excalidrawAPI]);
+  }, [host]);
 
   // Mark as dirty only when elements actually change (not just view state)
   const onChange = useCallback((

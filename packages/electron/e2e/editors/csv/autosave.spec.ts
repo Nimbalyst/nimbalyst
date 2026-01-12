@@ -1,7 +1,7 @@
 /**
- * CSV Spreadsheet Save on Close Test
+ * CSV Spreadsheet Autosave E2E Test
  *
- * Tests that edited content is saved when closing the tab
+ * Tests that edited content is automatically saved after the autosave interval.
  */
 
 import { test, expect, ElectronApplication, Page } from '@playwright/test';
@@ -13,13 +13,12 @@ import {
   waitForAppReady,
   dismissProjectTrustToast,
   TEST_TIMEOUTS,
-} from '../helpers';
+} from '../../helpers';
 import {
   PLAYWRIGHT_TEST_SELECTORS,
   openFileFromTree,
-  closeTabByFileName,
   getTabByFileName,
-} from '../utils/testHelpers';
+} from '../../utils/testHelpers';
 
 let electronApp: ElectronApplication;
 let page: Page;
@@ -40,8 +39,6 @@ test.beforeEach(async () => {
   page = await electronApp.firstWindow();
   await page.waitForLoadState('domcontentloaded');
   await waitForAppReady(page);
-
-  // Dismiss project trust toast if it appears
   await dismissProjectTrustToast(page);
 });
 
@@ -52,10 +49,10 @@ test.afterEach(async () => {
   }
 });
 
-test('edited content is saved when tab is closed', async () => {
+test('autosave clears dirty indicator and saves content', async () => {
   const csvPath = path.join(workspaceDir, 'test.csv');
 
-  // Open the CSV file using helper
+  // Open the CSV file
   await openFileFromTree(page, 'test.csv');
 
   // Wait for the CSV extension to load
@@ -64,40 +61,35 @@ test('edited content is saved when tab is closed', async () => {
 
   // Double-click on a data cell to start editing
   const dataCells = page.locator('revogr-data [role="gridcell"]');
-  const targetCell = dataCells.nth(6); // First data cell
+  const targetCell = dataCells.nth(6); // First data cell in second row
   await targetCell.dblclick();
 
   // Wait for edit input
   const editInput = page.locator('revo-grid input');
   await editInput.waitFor({ state: 'visible', timeout: 2000 });
 
-  // Type a new value using keyboard (not fill, so events fire properly)
+  // Type a new value
   await editInput.clear();
-  await page.keyboard.type('NEWVALUE');
+  await page.keyboard.type('AUTOSAVED');
   await page.waitForTimeout(100);
 
   // Press Enter to confirm the edit
   await page.keyboard.press('Enter');
-
-  // Wait for the edit to be committed and dirty flag to be set
   await page.waitForTimeout(500);
 
-  // Verify tab exists and shows dirty indicator before close
+  // Verify dirty indicator appears
   const tabElement = getTabByFileName(page, 'test.csv');
-  await expect(tabElement).toBeVisible();
   await expect(tabElement.locator(PLAYWRIGHT_TEST_SELECTORS.tabDirtyIndicator))
     .toBeVisible({ timeout: 2000 });
 
-  // Close the tab using helper (clicks close button, waits for tab to disappear)
-  await closeTabByFileName(page, 'test.csv');
+  // Wait for autosave (2s interval + 200ms debounce + buffer)
+  await page.waitForTimeout(3500);
 
-  // Wait for save to complete (async save via IPC)
-  await page.waitForTimeout(500);
+  // Verify dirty indicator cleared
+  await expect(tabElement.locator(PLAYWRIGHT_TEST_SELECTORS.tabDirtyIndicator))
+    .toHaveCount(0, { timeout: 1000 });
 
-  // Read the file and check the content
+  // Verify content saved to disk
   const savedContent = await fs.readFile(csvPath, 'utf-8');
-  console.log('Saved content:', savedContent);
-
-  // Verify the content was saved
-  expect(savedContent).toContain('NEWVALUE');
+  expect(savedContent).toContain('AUTOSAVED');
 });
