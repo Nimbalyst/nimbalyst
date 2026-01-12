@@ -157,6 +157,16 @@ let aiService: AIService | null = null;
 let runtimeSessionStore: SessionStore | null = null;
 let mcpHttpServer: any = null;
 
+// Set custom userData path if RUN_ONE_DEV_MODE environment variable is set
+// This allows running a dev instance alongside a production build without conflicts
+// This must be done before app is ready and before any calls to app.getPath('userData')
+if (process.env.RUN_ONE_DEV_MODE === 'true') {
+    const defaultUserData = app.getPath('userData');
+    const devUserData = path.join(path.dirname(defaultUserData), 'Nimbalyst-Dev');
+    app.setPath('userData', devUserData);
+    console.log(`Dev mode enabled: Using isolated userData path: ${devUserData}`);
+}
+
 // Initialize logging
 function initializeLogging() {
     // electron-log handles main process logging

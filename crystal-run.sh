@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Use a different port for crystal-run.sh to avoid conflicts with production builds
+DEV_PORT=5274
+
 # Detect if we're in a git worktree and find the main repo root
 # Sets WORKTREE_MODE=true and MAIN_REPO_ROOT if in a worktree
 detect_worktree() {
@@ -129,14 +132,16 @@ save_build_hash() {
   compute_source_hash "$pkg_dir" > "$hash_file"
 }
 
-# Kill any existing Preditor processes
-echo "Killing any existing Preditor processes..."
-pkill -f "Nimbalyst" || true
-pkill -f "nimbalyst" || true
-pkill -f "electron.*packages/electron" || true
-
-# Wait a moment for processes to fully terminate
-sleep 2
+# Kill only processes running on the crystal-run.sh port
+echo "Killing any existing Nimbalyst processes on port $DEV_PORT..."
+if lsof -ti:$DEV_PORT > /dev/null 2>&1; then
+  lsof -ti:$DEV_PORT | xargs kill -9 2>/dev/null || true
+  echo "Killed processes on port $DEV_PORT"
+  # Wait a moment for processes to fully terminate
+  sleep 2
+else
+  echo "No processes found on port $DEV_PORT"
+fi
 
 # Detect worktree mode
 detect_worktree
@@ -153,12 +158,15 @@ fi
 #   2. Main repo has the dist folder built (we'll copy it)
 build_rexical=false
 build_runtime=false
+build_extension_sdk=false
 build_extensions=false
 build_rexical_reason=""
 build_runtime_reason=""
+build_extension_sdk_reason=""
 build_extensions_reason=""
 copy_rexical_from_main=false
 copy_runtime_from_main=false
+copy_extension_sdk_from_main=false
 copy_extensions_from_main=false
 
 # Check rexical
@@ -225,6 +233,32 @@ else
   fi
 fi
 
+# Check extension-sdk
+if [ "$WORKTREE_MODE" = "true" ]; then
+  if package_has_worktree_changes "packages/extension-sdk"; then
+    # Has local changes, need to check if rebuild required
+    if needs_rebuild "packages/extension-sdk"; then
+      build_extension_sdk=true
+      build_extension_sdk_reason=" (local changes)"
+    fi
+  elif main_repo_has_dist "packages/extension-sdk"; then
+    # No local changes and main repo has dist - copy it
+    if [ ! -d "packages/extension-sdk/dist" ]; then
+      copy_extension_sdk_from_main=true
+    fi
+  else
+    # No local changes but main repo doesn't have dist - need to build
+    if needs_rebuild "packages/extension-sdk"; then
+      build_extension_sdk=true
+    fi
+  fi
+else
+  # Not in worktree, use standard rebuild check
+  if needs_rebuild "packages/extension-sdk"; then
+    build_extension_sdk=true
+  fi
+fi
+
 # Check extensions (packages/extensions/pdf-viewer)
 if [ "$WORKTREE_MODE" = "true" ]; then
   if package_has_worktree_changes "packages/extensions/pdf-viewer"; then
@@ -268,6 +302,13 @@ elif [ "$build_runtime" = true ]; then
 else
   echo "  runtime: skip (up-to-date)"
 fi
+if [ "$copy_extension_sdk_from_main" = true ]; then
+  echo "  extension-sdk: COPY from main repo (no local changes)"
+elif [ "$build_extension_sdk" = true ]; then
+  echo "  extension-sdk: BUILD$build_extension_sdk_reason"
+else
+  echo "  extension-sdk: skip (up-to-date)"
+fi
 if [ "$copy_extensions_from_main" = true ]; then
   echo "  extensions: COPY from main repo (no local changes)"
 elif [ "$build_extensions" = true ]; then
@@ -305,6 +346,17 @@ elif [ "$build_runtime" = true ]; then
   save_build_hash "packages/runtime"
 fi
 
+# Handle extension-sdk
+if [ "$copy_extension_sdk_from_main" = true ]; then
+  copy_dist_from_main_repo "packages/extension-sdk"
+elif [ "$build_extension_sdk" = true ]; then
+  echo "Building extension-sdk package..."
+  cd packages/extension-sdk
+  npm run build
+  cd ../..
+  save_build_hash "packages/extension-sdk"
+fi
+
 # Handle extensions
 if [ "$copy_extensions_from_main" = true ]; then
   copy_dist_from_main_repo "packages/extensions/pdf-viewer"
@@ -319,8 +371,8 @@ fi
 # Navigate to the electron package directory
 cd packages/electron
 
-# Run the dev app with a separate user data directory
-echo "Starting Preditor..."
-npm run dev -- --user-data-dir=/tmp/nimbalyst-dev
+# Run the dev app with custom port and isolated user data
+echo "Starting Nimbalyst on port $DEV_PORT with isolated user data..."
+VITE_PORT=$DEV_PORT RUN_ONE_DEV_MODE=true npm run dev
 
-echo "Preditor has been launched!"
+echo "Nimbalyst has been launched!"

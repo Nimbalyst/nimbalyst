@@ -40,7 +40,9 @@ export function createDatabaseBrowserWindow() {
     const currentTheme = getTheme();
     const queryParams = `mode=database-browser&theme=${currentTheme}`;
     if (process.env.NODE_ENV === 'development') {
-        databaseBrowserWindow.loadURL(`http://localhost:5273/?${queryParams}`);
+        // Use VITE_PORT if set (for isolated dev mode), otherwise default to 5273
+        const devPort = process.env.VITE_PORT || '5273';
+        databaseBrowserWindow.loadURL(`http://localhost:${devPort}/?${queryParams}`);
     } else {
         // Note: Due to code splitting, __dirname is out/main/chunks/, not out/main/
         // Use app.getAppPath() to reliably find the renderer

@@ -113,7 +113,10 @@ export default defineConfig({
   main: {
     define: {
       'process.env.OFFICIAL_BUILD': JSON.stringify(isOfficialBuild ? 'true' : 'false'),
-      'process.env.IS_DEV_MODE': JSON.stringify(isDevMode ? 'true' : 'false')
+      'process.env.IS_DEV_MODE': JSON.stringify(isDevMode ? 'true' : 'false'),
+      // Note: RUN_ONE_DEV_MODE is intentionally NOT defined here.
+      // The main process reads it from the actual runtime environment via process.env.
+      // This allows crystal-run.sh to set it at runtime without affecting normal dev mode.
     },
     plugins: [resolveWorkspaceSubpaths()],
     resolve: {
@@ -220,7 +223,7 @@ export default defineConfig({
       })()
     ].filter(Boolean),
     server: {
-      port: 5273,
+      port: process.env.VITE_PORT ? parseInt(process.env.VITE_PORT, 10) : 5273,
       strictPort: true,
       watch: {
         // Force watching rexical and runtime source files in dev mode
