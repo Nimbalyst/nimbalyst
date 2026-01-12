@@ -75,7 +75,17 @@ export function registerWorktreeHandlers(): void {
 
       logger.info('Getting worktree status', { worktreePath });
 
-      const status = await gitWorktreeService.getWorktreeStatus(worktreePath);
+      // Look up the worktree to get the stored base branch
+      const db = getDatabase();
+      let baseBranch: string | undefined;
+      if (db) {
+        const worktreeStore = createWorktreeStore(db);
+        const worktree = await worktreeStore.getByPath(worktreePath);
+        baseBranch = worktree?.baseBranch;
+        logger.info('Found worktree base branch for status', { worktreePath, baseBranch: baseBranch || 'not found' });
+      }
+
+      const status = await gitWorktreeService.getWorktreeStatus(worktreePath, baseBranch);
 
       return {
         success: true,
@@ -405,7 +415,16 @@ export function registerWorktreeHandlers(): void {
 
       logger.info('Getting file diff', { worktreePath, filePath });
 
-      const diff = await gitWorktreeService.getFileDiff(worktreePath, filePath);
+      // Look up the worktree to get the stored base branch
+      const db = getDatabase();
+      let baseBranch: string | undefined;
+      if (db) {
+        const worktreeStore = createWorktreeStore(db);
+        const worktree = await worktreeStore.getByPath(worktreePath);
+        baseBranch = worktree?.baseBranch;
+      }
+
+      const diff = await gitWorktreeService.getFileDiff(worktreePath, filePath, baseBranch);
 
       return {
         success: true,
@@ -434,7 +453,17 @@ export function registerWorktreeHandlers(): void {
 
       logger.info('Getting worktree commits', { worktreePath });
 
-      const commits = await gitWorktreeService.getWorktreeCommits(worktreePath);
+      // Look up the worktree to get the stored base branch
+      const db = getDatabase();
+      let baseBranch: string | undefined;
+      if (db) {
+        const worktreeStore = createWorktreeStore(db);
+        const worktree = await worktreeStore.getByPath(worktreePath);
+        baseBranch = worktree?.baseBranch;
+        logger.info('Found worktree base branch', { worktreePath, baseBranch: baseBranch || 'not found' });
+      }
+
+      const commits = await gitWorktreeService.getWorktreeCommits(worktreePath, baseBranch);
 
       // Convert Date objects to ISO strings for IPC serialization
       // Date objects don't survive Electron IPC correctly in arrays

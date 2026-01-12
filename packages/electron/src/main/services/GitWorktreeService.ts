@@ -199,12 +199,12 @@ export class GitWorktreeService {
    * @param worktreePath - Path to the worktree
    * @returns Status summary
    */
-  async getWorktreeStatus(worktreePath: string): Promise<WorktreeStatus> {
+  async getWorktreeStatus(worktreePath: string, baseBranchOverride?: string): Promise<WorktreeStatus> {
     if (!worktreePath) {
       throw new Error('worktreePath is required');
     }
 
-    logger.info('Getting worktree status', { worktreePath });
+    logger.info('Getting worktree status', { worktreePath, baseBranchOverride });
 
     const git: SimpleGit = simpleGit(worktreePath);
 
@@ -218,10 +218,9 @@ export class GitWorktreeService {
       const hasUncommittedChanges = !status.isClean();
       const modifiedFileCount = status.files.length;
 
-      // Get base branch from worktree metadata
-      // For now, we'll extract it from branch name or default to 'main'
-      const baseBranch = await this.inferBaseBranch(git);
-      logger.info('Inferred base branch', { baseBranch });
+      // Use provided base branch (from database) or fall back to inferring
+      const baseBranch = baseBranchOverride || await this.inferBaseBranch(git);
+      logger.info('Using base branch', { baseBranch });
 
       // Get commits ahead/behind base branch
       let commitsAhead = 0;
@@ -455,7 +454,7 @@ export class GitWorktreeService {
    * @param filePath - Relative path to the file
    * @returns File diff result with old and new content
    */
-  async getFileDiff(worktreePath: string, filePath: string): Promise<FileDiffResult> {
+  async getFileDiff(worktreePath: string, filePath: string, baseBranchOverride?: string): Promise<FileDiffResult> {
     if (!worktreePath) {
       throw new Error('worktreePath is required');
     }
@@ -466,13 +465,13 @@ export class GitWorktreeService {
     // Validate file path for security
     this.validateFilePath(filePath);
 
-    logger.info('Getting file diff', { worktreePath, filePath });
+    logger.info('Getting file diff', { worktreePath, filePath, baseBranchOverride });
 
     const git: SimpleGit = simpleGit(worktreePath);
 
     try {
-      // Get base branch
-      const baseBranch = await this.inferBaseBranch(git);
+      // Use provided base branch (from database) or fall back to inferring
+      const baseBranch = baseBranchOverride || await this.inferBaseBranch(git);
 
       // Get old content from base branch
       let oldContent = '';
@@ -641,19 +640,20 @@ ${newLines.map(line => '+' + line).join('\n')}`;
    * @param worktreePath - Path to the worktree
    * @returns Array of commit information
    */
-  async getWorktreeCommits(worktreePath: string): Promise<CommitInfo[]> {
+  async getWorktreeCommits(worktreePath: string, baseBranchOverride?: string): Promise<CommitInfo[]> {
     if (!worktreePath) {
       throw new Error('worktreePath is required');
     }
 
-    logger.info('Getting worktree commits', { worktreePath });
+    logger.info('Getting worktree commits', { worktreePath, baseBranchOverride });
 
     const git: SimpleGit = simpleGit(worktreePath);
 
     try {
       // Get current branch and base branch
       const currentBranch = (await git.revparse(['--abbrev-ref', 'HEAD'])).trim();
-      const baseBranch = await this.inferBaseBranch(git);
+      // Use provided base branch (from database) or fall back to inferring
+      const baseBranch = baseBranchOverride || await this.inferBaseBranch(git);
 
       // Get commits with file information in a single command
       // Format: hash, short hash, subject, author, date, then files separated by NUL
