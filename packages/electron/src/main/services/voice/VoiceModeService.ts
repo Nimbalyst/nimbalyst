@@ -6,6 +6,7 @@ import { BrowserWindow, ipcMain, systemPreferences } from 'electron';
 import { RealtimeAPIClient } from './RealtimeAPIClient';
 import { safeHandle } from '../../utils/ipcRegistry';
 import Store from 'electron-store';
+import { AnalyticsService } from '../analytics/AnalyticsService';
 
 // Store active voice session info
 interface VoiceSession {
@@ -14,6 +15,28 @@ interface VoiceSession {
   workspacePath: string | null;
   sessionId: string;
   cleanupCompletionListener: () => void;
+  startTime: number; // For duration tracking
+  hasExistingSession: boolean; // Whether AI session had prior messages
+}
+
+/**
+ * Get duration category for analytics (privacy-preserving)
+ */
+function getDurationCategory(durationMs: number): 'short' | 'medium' | 'long' {
+  if (durationMs < 60000) return 'short'; // < 1 minute
+  if (durationMs < 300000) return 'medium'; // 1-5 minutes
+  return 'long'; // > 5 minutes
+}
+
+/**
+ * Send voice session ended analytics event
+ */
+function sendSessionEndedEvent(reason: string, startTime: number): void {
+  const durationMs = Date.now() - startTime;
+  AnalyticsService.getInstance().sendEvent('voice_session_ended', {
+    reason,
+    durationCategory: getDurationCategory(durationMs),
+  });
 }
 
 let activeVoiceSession: VoiceSession | null = null;
@@ -114,6 +137,7 @@ export function initVoiceModeService() {
 
       // Load session to get context by calling the renderer to fetch it
       let sessionContext = 'New session with no prior messages.';
+      let hasExistingSession = false; // For analytics
       try {
         // Request session data from the renderer
         const session = await window.webContents.executeJavaScript(`
@@ -122,6 +146,7 @@ export function initVoiceModeService() {
 
         if (session) {
           const messageCount = session.messages?.length || 0;
+          hasExistingSession = messageCount > 0;
           // Session name is stored in the 'title' field, not 'name'
           const sessionName = session.title || session.name || 'Untitled';
           const userMessageCount = session.messages?.filter((m: any) => m.role === 'user').length || 0;
@@ -162,6 +187,19 @@ export function initVoiceModeService() {
       poc.setOnInterruption(() => {
         if (window && !window.isDestroyed()) {
           window.webContents.send('voice-mode:interrupt', { sessionId });
+        }
+      });
+
+      // Track when connection is closed (for timeout/error disconnect reasons)
+      const sessionStartTime = Date.now();
+      poc.setOnDisconnect((reason) => {
+        // Only send analytics if this is still the active session
+        // (user_stopped is handled separately in the disconnect handler)
+        if (activeVoiceSession?.sessionId === sessionId && reason !== 'user_stopped') {
+          sendSessionEndedEvent(reason, sessionStartTime);
+          // Clean up session on auto-disconnect
+          activeVoiceSession.cleanupCompletionListener();
+          activeVoiceSession = null;
         }
       });
 
@@ -212,8 +250,13 @@ export function initVoiceModeService() {
         window,
         workspacePath,
         sessionId,
-        cleanupCompletionListener
+        cleanupCompletionListener,
+        startTime: Date.now(),
+        hasExistingSession,
       };
+
+      // Track session started
+      AnalyticsService.getInstance().sendEvent('voice_session_started');
 
       console.log('[VoiceModeService] Voice mode activated for sessionId:', sessionId);
 
@@ -241,6 +284,9 @@ export function initVoiceModeService() {
 
       // Only disconnect if this is the active session
       if (activeVoiceSession && activeVoiceSession.sessionId === sessionId) {
+        // Track session ended before cleanup
+        sendSessionEndedEvent('user_stopped', activeVoiceSession.startTime);
+
         activeVoiceSession.poc.disconnect();
         // Clean up the completion listener
         activeVoiceSession.cleanupCompletionListener();

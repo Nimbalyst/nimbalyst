@@ -232,10 +232,18 @@ All events include `$session_id` property automatically. Dev users are marked wi
 | `quit_confirmation_shown` | `index.ts:757` | User attempts quit with active AI session | `reason` (active_ai_session) | v0.45.25 (2025-11-14) | |
 | `quit_confirmation_result` | `index.ts:774, 783` | User responds to quit confirmation dialog | `result` (quit_anyway/cancelled) | v0.45.25 (2025-11-14) | |
 
+### Voice Mode
+
+| Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |
+| --- | --- | --- | --- | --- | --- |
+| `voice_session_started` | `VoiceModeService.ts:259` | Voice session connects | None | (pending release) | |
+| `voice_session_ended` | `VoiceModeService.ts:36` | Voice session disconnects | `reason` (user_stopped/timeout/error)<br/>`durationCategory` (short/medium/long) | (pending release) | |
+| `voice_prompt_submitted` | `RealtimeAPIClient.ts:390` | Voice assistant submits prompt to coding agent | None | (pending release) | |
+
 ## Event Summary Statistics
 
-- **Total Events**: 75 unique event names
-- **Main Process Events**: 40 (via AnalyticsService)
+- **Total Events**: 78 unique event names
+- **Main Process Events**: 43 (via AnalyticsService)
 - **Renderer Process Events**: 35 (via usePostHog hook)
 - **File Operations**: 7 events
 - **Workspace Operations**: 4 events
@@ -248,6 +256,7 @@ All events include `$session_id` property automatically. Dev users are marked wi
 - **Onboarding**: 8 events
 - **Surveys & Feedback**: 3 events
 - **Permissions**: 4 events
+- **Voice Mode**: 3 events
 - **System/Infrastructure**: 10 events
 
 ## Privacy Requirements

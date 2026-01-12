@@ -7,6 +7,7 @@
 
 import WebSocket from 'ws';
 import { ipcMain } from 'electron';
+import { AnalyticsService } from '../analytics/AnalyticsService';
 
 interface RealtimeEvent {
   type: string;
@@ -47,6 +48,7 @@ export class RealtimeAPIClient {
   private onTextCallback: ((text: string) => void) | null = null;
   private onSubmitPromptCallback: ((prompt: string) => Promise<void>) | null = null;
   private onInterruptionCallback: (() => void) | null = null;
+  private onDisconnectCallback: ((reason: 'timeout' | 'error' | 'user_stopped') => void) | null = null;
   private claudeCodeSessionId: string;
   private workspacePath: string | null;
   private window: Electron.BrowserWindow;
@@ -106,6 +108,13 @@ export class RealtimeAPIClient {
    */
   setOnInterruption(callback: () => void): void {
     this.onInterruptionCallback = callback;
+  }
+
+  /**
+   * Set callback for when the connection is closed
+   */
+  setOnDisconnect(callback: (reason: 'timeout' | 'error' | 'user_stopped') => void): void {
+    this.onDisconnectCallback = callback;
   }
 
   /**
@@ -386,6 +395,9 @@ Guidelines:
         const args = JSON.parse(argsJson);
         const prompt = args.prompt;
 
+        // Track prompt submission (no content for privacy)
+        AnalyticsService.getInstance().sendEvent('voice_prompt_submitted');
+
         if (this.onSubmitPromptCallback) {
           await this.onSubmitPromptCallback(prompt);
         } else {
@@ -482,7 +494,7 @@ Guidelines:
 
       if (inactiveMs >= this.INACTIVITY_TIMEOUT_MS) {
         console.log('[RealtimeAPIClient] Session inactive for 5 minutes, disconnecting to save tokens');
-        this.disconnect();
+        this.disconnect('timeout');
       }
     }, 30000); // Check every 30 seconds
   }
@@ -549,10 +561,16 @@ Guidelines:
 
   /**
    * Disconnect from OpenAI Realtime API
+   * @param reason Optional reason for disconnect (default: 'user_stopped')
    */
-  disconnect(): void {
+  disconnect(reason: 'timeout' | 'error' | 'user_stopped' = 'user_stopped'): void {
     if (this.ws) {
       this.stopInactivityMonitor();
+
+      // Call disconnect callback before closing
+      if (this.onDisconnectCallback) {
+        this.onDisconnectCallback(reason);
+      }
 
       this.ws.close();
       this.ws = null;
