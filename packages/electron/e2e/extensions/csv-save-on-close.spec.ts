@@ -14,6 +14,12 @@ import {
   dismissProjectTrustToast,
   TEST_TIMEOUTS,
 } from '../helpers';
+import {
+  PLAYWRIGHT_TEST_SELECTORS,
+  openFileFromTree,
+  closeTabByFileName,
+  getTabByFileName,
+} from '../utils/testHelpers';
 
 let electronApp: ElectronApplication;
 let page: Page;
@@ -49,8 +55,8 @@ test.afterEach(async () => {
 test('edited content is saved when tab is closed', async () => {
   const csvPath = path.join(workspaceDir, 'test.csv');
 
-  // Open the CSV file
-  await page.locator('.file-tree-name', { hasText: 'test.csv' }).click();
+  // Open the CSV file using helper
+  await openFileFromTree(page, 'test.csv');
 
   // Wait for the CSV extension to load
   await page.waitForSelector('revo-grid', { timeout: TEST_TIMEOUTS.EDITOR_LOAD });
@@ -73,15 +79,20 @@ test('edited content is saved when tab is closed', async () => {
   // Press Enter to confirm the edit
   await page.keyboard.press('Enter');
 
-  // Wait for the edit input to disappear (editor closed)
-  await editInput.waitFor({ state: 'hidden', timeout: 2000 });
-  await page.waitForTimeout(200);
+  // Wait for the edit to be committed and dirty flag to be set
+  await page.waitForTimeout(500);
 
-  // Close the tab with Cmd+W
-  await page.keyboard.press('Meta+w');
+  // Verify tab exists and shows dirty indicator before close
+  const tabElement = getTabByFileName(page, 'test.csv');
+  await expect(tabElement).toBeVisible();
+  await expect(tabElement.locator(PLAYWRIGHT_TEST_SELECTORS.tabDirtyIndicator))
+    .toBeVisible({ timeout: 2000 });
+
+  // Close the tab using helper (clicks close button, waits for tab to disappear)
+  await closeTabByFileName(page, 'test.csv');
 
   // Wait for save to complete (async save via IPC)
-  await page.waitForTimeout(1000);
+  await page.waitForTimeout(500);
 
   // Read the file and check the content
   const savedContent = await fs.readFile(csvPath, 'utf-8');

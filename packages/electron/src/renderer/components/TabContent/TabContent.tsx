@@ -79,6 +79,8 @@ export const TabContent: React.FC<TabContentProps> = ({
   const saveFunctionsRef = useRef<Map<string, () => Promise<void>>>(new Map());
   const getContentFunctionsRef = useRef<Map<string, () => string>>(new Map());
   const loadingRef = useRef<Set<string>>(new Set());
+  // Placeholder elements for unloaded tabs (shown while loading)
+  const placeholderElementsRef = useRef<Map<string, HTMLDivElement>>(new Map());
 
   // Store props in refs so callbacks can access current values
   const propsRef = useRef({
@@ -137,10 +139,64 @@ export const TabContent: React.FC<TabContentProps> = ({
     }
   }, []);
 
+  // Inject keyframes for spinner animation (once)
+  const spinnerKeyframesInjectedRef = useRef(false);
+  useEffect(() => {
+    if (spinnerKeyframesInjectedRef.current) return;
+    spinnerKeyframesInjectedRef.current = true;
+
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes tab-spinner-spin {
+        to { transform: rotate(360deg); }
+      }
+    `;
+    document.head.appendChild(style);
+  }, []);
+
+  // Create a placeholder element with loading spinner for lazy-loaded tabs
+  const createPlaceholder = useCallback((tabId: string) => {
+    if (!containerRef.current) return;
+    if (placeholderElementsRef.current.has(tabId)) return;
+
+    const placeholder = document.createElement('div');
+    placeholder.className = 'tab-editor-placeholder';
+    placeholder.dataset.tabId = tabId;
+    placeholder.style.cssText = `
+      height: 100%;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    `;
+
+    // Add loading spinner
+    const spinner = document.createElement('div');
+    spinner.className = 'tab-loading-spinner';
+    spinner.style.cssText = `
+      width: 24px;
+      height: 24px;
+      border: 2px solid var(--text-color-muted, #666);
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: tab-spinner-spin 0.8s linear infinite;
+    `;
+    placeholder.appendChild(spinner);
+
+    containerRef.current.appendChild(placeholder);
+    placeholderElementsRef.current.set(tabId, placeholder);
+  }, []);
+
   // Create a TabEditor instance imperatively
   const createTabEditor = useCallback((tab: TabData, content: string) => {
     if (!containerRef.current) return;
     if (tabInstancesRef.current.has(tab.id)) return;
+
+    // Remove placeholder if it exists (editor is replacing it)
+    const placeholder = placeholderElementsRef.current.get(tab.id);
+    if (placeholder) {
+      placeholder.remove();
+      placeholderElementsRef.current.delete(tab.id);
+    }
 
     const element = document.createElement('div');
     element.className = 'tab-editor-wrapper';
@@ -236,13 +292,21 @@ export const TabContent: React.FC<TabContentProps> = ({
     getContentFunctionsRef.current.delete(tabId);
   }, []);
 
-  // Update visibility of all tab editors based on active tab
+  // Update visibility of all tab editors and placeholders based on active tab
   const updateVisibility = useCallback(() => {
     const activeId = activeTabIdRef.current;
 
+    // Update editor visibility
     tabInstancesRef.current.forEach((instance, tabId) => {
       const isActive = tabId === activeId;
       instance.element.style.display = isActive ? 'block' : 'none';
+    });
+
+    // Update placeholder visibility (for tabs being loaded)
+    placeholderElementsRef.current.forEach((placeholder, tabId) => {
+      const isActive = tabId === activeId;
+      // Use flex display when active to center the spinner
+      placeholder.style.display = isActive ? 'flex' : 'none';
     });
 
     // Update parent's save function
@@ -255,6 +319,7 @@ export const TabContent: React.FC<TabContentProps> = ({
   }, []);
 
   // Main effect: subscribe to tab changes and manage TabEditors imperatively
+  // LAZY LOADING: Only create editors for the active tab; others get placeholders
   useEffect(() => {
     const syncTabs = async () => {
       const snapshot = tabsActions.getSnapshot();
@@ -271,9 +336,25 @@ export const TabContent: React.FC<TabContentProps> = ({
         }
       }
 
-      // Add editors for new tabs
+      // Remove placeholders for closed tabs
+      for (const tabId of placeholderElementsRef.current.keys()) {
+        if (!currentTabIds.has(tabId)) {
+          const placeholder = placeholderElementsRef.current.get(tabId);
+          placeholder?.remove();
+          placeholderElementsRef.current.delete(tabId);
+        }
+      }
+
+      // LAZY LOADING: Only create editor for the ACTIVE tab
+      // Other tabs will get editors when they become active
       for (const tab of currentTabs) {
-        if (!tabInstancesRef.current.has(tab.id) && !loadingRef.current.has(tab.id)) {
+        const isActiveTab = tab.id === newActiveTabId;
+        const hasEditor = tabInstancesRef.current.has(tab.id);
+        const isLoading = loadingRef.current.has(tab.id);
+
+        if (isActiveTab && !hasEditor && !isLoading) {
+          // Active tab needs an editor - create placeholder while loading
+          createPlaceholder(tab.id);
           loadingRef.current.add(tab.id);
 
           // Load content then create editor
@@ -286,10 +367,11 @@ export const TabContent: React.FC<TabContentProps> = ({
             createTabEditor(tab, content);
           }
         }
+        // Non-active tabs without editors: no action needed
+        // They'll get an editor when they become active
       }
 
       // Update active tab and visibility
-      const activeChanged = activeTabIdRef.current !== newActiveTabId;
       activeTabIdRef.current = newActiveTabId;
 
       // Always update visibility after syncing tabs (editors may have been added)
@@ -302,7 +384,7 @@ export const TabContent: React.FC<TabContentProps> = ({
     // Subscribe to changes
     const unsubscribe = tabsActions.subscribe(syncTabs);
     return unsubscribe;
-  }, [tabsActions, loadContent, createTabEditor, removeTabEditor, updateVisibility]);
+  }, [tabsActions, loadContent, createTabEditor, createPlaceholder, removeTabEditor, updateVisibility]);
 
   // Handle file-save IPC event from menu (Cmd+S)
   useEffect(() => {
@@ -342,11 +424,18 @@ export const TabContent: React.FC<TabContentProps> = ({
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      // Clean up editor instances
       tabInstancesRef.current.forEach((instance) => {
         instance.root.unmount();
         instance.element.remove();
       });
       tabInstancesRef.current.clear();
+
+      // Clean up placeholder elements
+      placeholderElementsRef.current.forEach((placeholder) => {
+        placeholder.remove();
+      });
+      placeholderElementsRef.current.clear();
     };
   }, []);
 

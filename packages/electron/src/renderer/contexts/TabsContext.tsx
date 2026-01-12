@@ -8,6 +8,7 @@
 
 import React, { createContext, useContext, useRef, useCallback, useSyncExternalStore, useMemo } from 'react';
 import { getFileName } from '../utils/pathUtils';
+import { store as jotaiStore, editorDirtyAtom, makeEditorKey } from '@nimbalyst/runtime/store';
 
 export interface TabData {
   id: string;
@@ -333,11 +334,15 @@ export function TabsProvider({
     });
   }, [removeTab]);
 
-  // Close saved tabs
+  // Close saved tabs (checks Jotai atoms for dirty state - source of truth)
   const closeSavedTabs = useCallback((): void => {
     const store = storeRef.current;
     Array.from(store.tabs.values())
-      .filter(tab => !tab.isDirty)
+      .filter(tab => {
+        const editorKey = makeEditorKey(tab.filePath);
+        const isDirty = jotaiStore.get(editorDirtyAtom(editorKey));
+        return !isDirty;
+      })
       .forEach(tab => removeTab(tab.id));
   }, [removeTab]);
 
