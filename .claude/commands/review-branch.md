@@ -12,9 +12,12 @@ Perform a comprehensive read-only review of the current git branch changes.
 
 **Steps:**
 
-1. Run `git diff main...HEAD` to see all changes in the branch
-2. Run `git log main..HEAD --oneline` to see commit history (for context only, not for analysis)
-3. Run `git status` to see current state
+1. Run this command to determine the base branch and gather all git info at once:
+```bash
+MAIN_WORKTREE=$(git worktree list | head -1 | awk '{print $1}'); CURRENT_DIR=$(git rev-parse --show-toplevel); if [ "$MAIN_WORKTREE" != "$CURRENT_DIR" ]; then BASE=$(git -C "$MAIN_WORKTREE" branch --show-current); else BASE="main"; fi; echo "=== Base branch: $BASE ===" && echo "" && echo "=== STATUS ===" && git status && echo "" && echo "=== COMMIT LOG ===" && git log $BASE..HEAD --oneline && echo "" && echo "=== DIFF ===" && git diff $BASE...HEAD
+```
+   - If in a worktree, this uses the repo root's current branch as the base (not main)
+   - If not in a worktree, uses `main` as the base branch (unless the user specifies otherwise)
 
 **Analysis Required:**
 
