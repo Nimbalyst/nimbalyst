@@ -78,3 +78,12 @@
 .commit-section-button--secondary:not(:disabled):hover {
   background-color: var(--surface-hover);
 }
+
+.commit-section-button--warning {
+  background-color: var(--warning-bg, #f59e0b);
+  color: var(--warning-contrast, #ffffff);
+}
+
+.commit-section-button--warning:not(:disabled):hover {
+  background-color: var(--warning-hover, #d97706);
+}

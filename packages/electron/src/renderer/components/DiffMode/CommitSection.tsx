@@ -6,20 +6,28 @@ interface CommitSectionProps {
   stagedCount: number;
   onCommit: (message: string) => void;
   onMerge: () => void;
+  onRebase: () => void;
   isCommitting: boolean;
   isMerging: boolean;
+  isRebasing: boolean;
   hasCommits: boolean;
   hasUncommittedChanges: boolean;
+  commitsBehind: number;
+  baseBranch?: string;
 }
 
 export function CommitSection({
   stagedCount,
   onCommit,
   onMerge,
+  onRebase,
   isCommitting,
   isMerging,
+  isRebasing,
   hasCommits,
   hasUncommittedChanges,
+  commitsBehind,
+  baseBranch,
 }: CommitSectionProps) {
   const [message, setMessage] = useState('');
 
@@ -36,7 +44,8 @@ export function CommitSection({
   }, [handleCommit]);
 
   const canCommit = stagedCount > 0 && message.trim().length > 0 && !isCommitting;
-  const canMerge = hasCommits && !hasUncommittedChanges && !isMerging;
+  const canMerge = hasCommits && !hasUncommittedChanges && !isMerging && commitsBehind === 0;
+  const canRebase = commitsBehind > 0 && !hasUncommittedChanges && !isRebasing;
 
   return (
     <div className="commit-section">
@@ -71,15 +80,42 @@ export function CommitSection({
         </button>
         <button
           type="button"
+          className={`commit-section-button ${commitsBehind > 0 ? 'commit-section-button--warning' : 'commit-section-button--secondary'}`}
+          onClick={onRebase}
+          disabled={!canRebase}
+          title={
+            hasUncommittedChanges
+              ? 'Commit all changes before rebasing'
+              : commitsBehind === 0
+                ? 'Already up to date with base branch'
+                : `Bring in ${commitsBehind} commit${commitsBehind === 1 ? '' : 's'} from ${baseBranch || 'base branch'}`
+          }
+        >
+          {isRebasing ? (
+            <>
+              <MaterialSymbol icon="progress_activity" size={16} />
+              <span>Rebasing...</span>
+            </>
+          ) : (
+            <>
+              <MaterialSymbol icon="sync" size={16} />
+              <span>Rebase from {baseBranch || 'base'}{commitsBehind > 0 ? ` (${commitsBehind})` : ''}</span>
+            </>
+          )}
+        </button>
+        <button
+          type="button"
           className="commit-section-button commit-section-button--secondary"
           onClick={onMerge}
           disabled={!canMerge}
           title={
-            hasUncommittedChanges
-              ? 'Commit all changes before merging'
-              : !hasCommits
-                ? 'No commits to merge'
-                : 'Merge to main branch'
+            commitsBehind > 0
+              ? `Rebase first to bring in ${commitsBehind} commit${commitsBehind === 1 ? '' : 's'} from ${baseBranch || 'base branch'}`
+              : hasUncommittedChanges
+                ? 'Commit all changes before merging'
+                : !hasCommits
+                  ? 'No commits to merge'
+                  : `Merge commits into ${baseBranch || 'base branch'}`
           }
         >
           {isMerging ? (
@@ -90,7 +126,7 @@ export function CommitSection({
           ) : (
             <>
               <MaterialSymbol icon="merge" size={16} />
-              <span>Merge</span>
+              <span>Merge to {baseBranch || 'base'}</span>
             </>
           )}
         </button>

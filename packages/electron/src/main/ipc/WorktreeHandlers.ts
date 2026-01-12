@@ -598,5 +598,52 @@ export function registerWorktreeHandlers(): void {
     }
   });
 
+  /**
+   * Rebase worktree branch from base branch
+   * Brings in new commits from the base branch into the worktree
+   *
+   * @param worktreePath - Path to the worktree
+   * @returns Rebase result
+   */
+  ipcMain.handle('worktree:rebase', async (_event, worktreePath: string) => {
+    try {
+      if (!worktreePath) {
+        throw new Error('worktreePath is required');
+      }
+
+      logger.info('Rebasing worktree from base branch', { worktreePath });
+
+      // Look up the worktree to get the stored base branch
+      const db = getDatabase();
+      if (!db) {
+        throw new Error('Database not initialized');
+      }
+
+      const worktreeStore = createWorktreeStore(db);
+      const worktree = await worktreeStore.getByPath(worktreePath);
+
+      if (!worktree) {
+        throw new Error('Worktree not found in database');
+      }
+
+      if (!worktree.baseBranch) {
+        throw new Error('Worktree has no base branch stored');
+      }
+
+      const result = await gitWorktreeService.rebaseFromBase(worktreePath, worktree.baseBranch);
+
+      return {
+        success: result.success,
+        message: result.message,
+      };
+    } catch (error) {
+      logger.error('Failed to rebase worktree:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to rebase worktree',
+      };
+    }
+  });
+
   logger.info('Worktree handlers registered');
 }

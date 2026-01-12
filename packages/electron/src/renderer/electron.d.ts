@@ -467,6 +467,11 @@ interface ElectronAPI {
       updatedAt?: number;
     } | null;
   }>;
+  worktreeRebase: (worktreePath: string) => Promise<{
+    success: boolean;
+    error?: string;
+    message?: string;
+  }>;
 
   // Open external links
   openExternal: (url: string) => Promise<void>;

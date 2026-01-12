@@ -867,19 +867,7 @@ ${newLines.map(line => '+' + line).join('\n')}`;
       // Switch to base branch in main repo
       await mainGit.checkout(baseBranch);
 
-      // Pull latest changes - fail if this fails to avoid merging stale code
-      try {
-        await mainGit.pull('origin', baseBranch);
-        logger.info('Successfully pulled latest changes from remote');
-      } catch (pullError) {
-        logger.error('Failed to pull latest changes', { pullError });
-        return {
-          success: false,
-          message: 'Failed to pull latest changes from remote. Please update the main branch manually before merging.',
-        };
-      }
-
-      // Attempt merge
+      // Attempt merge (no remote operations - purely local)
       try {
         await mainGit.merge([worktreeBranch, '--no-ff', '-m', `Merge branch '${worktreeBranch}'`]);
 
@@ -907,6 +895,69 @@ ${newLines.map(line => '+' + line).join('\n')}`;
     } catch (error) {
       logger.error('Failed to merge to main', { error, worktreePath });
       throw new Error(`Failed to merge to main: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * Rebase the worktree branch onto the latest base branch
+   * This brings in any new commits from the base branch into the worktree
+   *
+   * @param worktreePath - Path to the worktree
+   * @param baseBranch - The base branch to rebase onto (from database)
+   * @returns Rebase result
+   */
+  async rebaseFromBase(worktreePath: string, baseBranch: string): Promise<{ success: boolean; message: string }> {
+    if (!worktreePath) {
+      throw new Error('worktreePath is required');
+    }
+    if (!baseBranch) {
+      throw new Error('baseBranch is required');
+    }
+
+    logger.info('Rebasing worktree from base branch', { worktreePath, baseBranch });
+
+    const git: SimpleGit = simpleGit(worktreePath);
+
+    try {
+      // Check for uncommitted changes
+      const status = await git.status();
+      if (!status.isClean()) {
+        return {
+          success: false,
+          message: 'Cannot rebase: uncommitted changes in worktree. Please commit or discard changes first.',
+        };
+      }
+
+      const currentBranch = (await git.revparse(['--abbrev-ref', 'HEAD'])).trim();
+      logger.info('Rebase details', { currentBranch, baseBranch });
+
+      // Perform the rebase
+      try {
+        await git.rebase([baseBranch]);
+
+        logger.info('Rebase completed successfully');
+        return {
+          success: true,
+          message: `Successfully rebased ${currentBranch} onto ${baseBranch}`,
+        };
+      } catch (rebaseError) {
+        // Check for rebase conflicts
+        const rebaseStatus = await git.status();
+        if (rebaseStatus.conflicted.length > 0) {
+          // Abort the rebase
+          await git.rebase(['--abort']);
+
+          return {
+            success: false,
+            message: `Rebase conflicts detected in ${rebaseStatus.conflicted.length} file(s). Please resolve conflicts manually using git rebase.`,
+          };
+        }
+
+        throw rebaseError;
+      }
+    } catch (error) {
+      logger.error('Failed to rebase from base', { error, worktreePath, baseBranch });
+      throw new Error(`Failed to rebase: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 

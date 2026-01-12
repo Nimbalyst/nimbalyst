@@ -15,6 +15,7 @@ interface ChangesPanelProps {
   onToggleAllStaged: (staged: boolean) => void;
   onCommit: (message: string) => void;
   onMerge: () => void;
+  onRebase: () => void;
   onSelectFile: (filePath: string) => void;
   onRefresh: () => void;
   onCollapse: () => void;
@@ -24,6 +25,8 @@ interface ChangesPanelProps {
   workspacePath: string;
   worktreePath: string;
   repoRootBranch?: string; // Current branch of the repo root (what worktree is compared against)
+  commitsBehind: number;
+  isRebasing: boolean;
 }
 
 export function ChangesPanel({
@@ -34,6 +37,7 @@ export function ChangesPanel({
   onToggleAllStaged,
   onCommit,
   onMerge,
+  onRebase,
   onSelectFile,
   onRefresh,
   onCollapse,
@@ -43,6 +47,8 @@ export function ChangesPanel({
   workspacePath,
   worktreePath,
   repoRootBranch,
+  commitsBehind,
+  isRebasing,
 }: ChangesPanelProps) {
   const [showMergeDialog, setShowMergeDialog] = useState(false);
   const [isCommitting, setIsCommitting] = useState(false);
@@ -160,10 +166,14 @@ export function ChangesPanel({
           stagedCount={stagedFiles.length}
           onCommit={handleCommit}
           onMerge={() => setShowMergeDialog(true)}
+          onRebase={onRebase}
           isCommitting={isCommitting}
           isMerging={isMerging}
+          isRebasing={isRebasing}
           hasCommits={commits.length > 0}
           hasUncommittedChanges={hasUncommittedChanges}
+          commitsBehind={commitsBehind}
+          baseBranch={repoRootBranch}
         />
 
         {/* Commits history */}

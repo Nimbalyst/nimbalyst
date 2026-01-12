@@ -37,6 +37,8 @@ export function DiffModeView({ worktreePath, workspacePath, isActive }: DiffMode
   const [rightPanelWidth, setRightPanelWidth] = useState(320);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
   const [repoRootBranch, setRepoRootBranch] = useState<string | undefined>(undefined);
+  const [commitsBehind, setCommitsBehind] = useState(0);
+  const [isRebasing, setIsRebasing] = useState(false);
   const isResizingRef = useRef(false);
 
   // Load changed files from the worktree
@@ -95,16 +97,30 @@ export function DiffModeView({ worktreePath, workspacePath, isActive }: DiffMode
     }
   }, [workspacePath]);
 
+  // Load worktree status (commits behind)
+  const loadWorktreeStatus = useCallback(async () => {
+    if (!worktreePath) return;
+
+    try {
+      const result = await window.electronAPI.worktreeGetStatus(worktreePath);
+      if (result?.success && result.status) {
+        setCommitsBehind(result.status.commitsBehind || 0);
+      }
+    } catch (err) {
+      console.error('[DiffModeView] Failed to load worktree status:', err);
+    }
+  }, [worktreePath]);
+
   // Initial load
   useEffect(() => {
     const load = async () => {
       setIsLoading(true);
       setError(null);
-      await Promise.all([loadChangedFiles(), loadCommits(), loadRepoRootBranch()]);
+      await Promise.all([loadChangedFiles(), loadCommits(), loadRepoRootBranch(), loadWorktreeStatus()]);
       setIsLoading(false);
     };
     load();
-  }, [loadChangedFiles, loadCommits, loadRepoRootBranch]);
+  }, [loadChangedFiles, loadCommits, loadRepoRootBranch, loadWorktreeStatus]);
 
   // Toggle file staged state
   const handleToggleStaged = useCallback((filePath: string) => {
@@ -150,7 +166,7 @@ export function DiffModeView({ worktreePath, workspacePath, isActive }: DiffMode
       const result = await window.electronAPI.invoke('worktree:merge', worktreePath, workspacePath);
       if (result?.success) {
         // Reload files and commits
-        await Promise.all([loadChangedFiles(), loadCommits()]);
+        await Promise.all([loadChangedFiles(), loadCommits(), loadWorktreeStatus()]);
       } else {
         setError(result?.error || result?.message || 'Failed to merge');
       }
@@ -158,7 +174,26 @@ export function DiffModeView({ worktreePath, workspacePath, isActive }: DiffMode
       console.error('[DiffModeView] Failed to merge:', err);
       setError('Failed to merge to main');
     }
-  }, [worktreePath, workspacePath, loadChangedFiles, loadCommits]);
+  }, [worktreePath, workspacePath, loadChangedFiles, loadCommits, loadWorktreeStatus]);
+
+  // Rebase from base branch
+  const handleRebase = useCallback(async () => {
+    setIsRebasing(true);
+    try {
+      const result = await window.electronAPI.worktreeRebase(worktreePath);
+      if (result?.success) {
+        // Reload files, commits, and status
+        await Promise.all([loadChangedFiles(), loadCommits(), loadWorktreeStatus()]);
+      } else {
+        setError(result?.error || result?.message || 'Failed to rebase');
+      }
+    } catch (err) {
+      console.error('[DiffModeView] Failed to rebase:', err);
+      setError('Failed to rebase from base branch');
+    } finally {
+      setIsRebasing(false);
+    }
+  }, [worktreePath, loadChangedFiles, loadCommits, loadWorktreeStatus]);
 
   // Handle resize
   const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
@@ -259,8 +294,9 @@ export function DiffModeView({ worktreePath, workspacePath, isActive }: DiffMode
           onToggleAllStaged={handleToggleAllStaged}
           onCommit={handleCommit}
           onMerge={handleMerge}
+          onRebase={handleRebase}
           onSelectFile={setSelectedFile}
-          onRefresh={() => Promise.all([loadChangedFiles(), loadCommits(), loadRepoRootBranch()])}
+          onRefresh={() => Promise.all([loadChangedFiles(), loadCommits(), loadRepoRootBranch(), loadWorktreeStatus()])}
           onCollapse={() => setPanelCollapsed(prev => !prev)}
           collapsed={panelCollapsed}
           error={error}
@@ -268,6 +304,8 @@ export function DiffModeView({ worktreePath, workspacePath, isActive }: DiffMode
           workspacePath={workspacePath}
           worktreePath={worktreePath}
           repoRootBranch={repoRootBranch}
+          commitsBehind={commitsBehind}
+          isRebasing={isRebasing}
         />
       </div>
     </div>

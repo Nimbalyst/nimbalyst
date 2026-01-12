@@ -580,6 +580,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('worktree:list', workspacePath),
   worktreeGet: (id: string) =>
     ipcRenderer.invoke('worktree:get', id),
+  worktreeRebase: (worktreePath: string) =>
+    ipcRenderer.invoke('worktree:rebase', worktreePath),
 
   // Open external links
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
