@@ -169,6 +169,21 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   permissionsPatternList: '.permissions-pattern-list',
   permissionsPatternItem: '.permissions-pattern-item',
   permissionsPatternName: '.permissions-pattern-name',
+
+  // Walkthrough Guide System
+  walkthroughCallout: '.walkthrough-callout',
+  walkthroughCalloutTitle: '.walkthrough-callout-title',
+  walkthroughCalloutBody: '.walkthrough-callout-body',
+  walkthroughCalloutProgress: '.walkthrough-callout-progress',
+  walkthroughCalloutDismiss: '.walkthrough-callout-dismiss',
+  walkthroughCalloutNextButton: '.walkthrough-callout-btn--next',
+  walkthroughCalloutBackButton: '.walkthrough-callout-btn--back',
+  walkthroughCalloutDoneButton: '.walkthrough-callout-btn--done',
+
+  // Walkthrough targets (buttons with data-testid)
+  fileTreeFilterButtonTestId: '[data-testid="file-tree-filter-button"]',
+  fileTreeQuickOpenButton: '[data-testid="file-tree-quick-open-button"]',
+  aiSessionsButton: '[data-testid="ai-sessions-button"]',
 };
 
 /**
@@ -812,4 +827,154 @@ export async function getAllowedToolPatterns(page: Page): Promise<string[]> {
   }
 
   return patterns;
+}
+
+// ============================================================================
+// Walkthrough Guide System Helpers
+// ============================================================================
+
+/**
+ * Wait for walkthrough helpers to be available on window
+ */
+export async function waitForWalkthroughHelpers(page: Page): Promise<void> {
+  await page.waitForFunction(() => (window as any).__walkthroughHelpers != null, {
+    timeout: 5000,
+  });
+}
+
+/**
+ * Reset walkthrough state to allow fresh testing
+ */
+export async function resetWalkthroughState(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    if ((window as any).__walkthroughHelpers) {
+      await (window as any).__walkthroughHelpers.resetState();
+    }
+  });
+  await page.waitForTimeout(300);
+}
+
+/**
+ * Start a specific walkthrough by ID
+ */
+export async function startWalkthrough(page: Page, walkthroughId: string): Promise<void> {
+  await page.evaluate((id) => {
+    (window as any).__walkthroughHelpers.startWalkthrough(id);
+  }, walkthroughId);
+}
+
+/**
+ * Get list of available walkthrough IDs
+ */
+export async function getAvailableWalkthroughs(page: Page): Promise<string[]> {
+  return await page.evaluate(() => {
+    return (window as any).__walkthroughHelpers?.listWalkthroughs() ?? [];
+  });
+}
+
+/**
+ * Get current walkthrough state (completed, dismissed, enabled, etc.)
+ */
+export async function getWalkthroughState(page: Page): Promise<{
+  active: string | null;
+  step: number;
+  state: { enabled: boolean; completed: string[]; dismissed: string[] };
+}> {
+  return await page.evaluate(() => {
+    return (window as any).__walkthroughHelpers.getState();
+  });
+}
+
+/**
+ * Wait for walkthrough callout to appear and verify it's visible
+ */
+export async function waitForWalkthroughCallout(
+  page: Page,
+  options: { timeout?: number } = {}
+): Promise<void> {
+  const { timeout = 5000 } = options;
+  const callout = page.locator(PLAYWRIGHT_TEST_SELECTORS.walkthroughCallout);
+  await expect(callout).toBeVisible({ timeout });
+}
+
+/**
+ * Click the Next button in the walkthrough callout
+ */
+export async function clickWalkthroughNext(page: Page): Promise<void> {
+  const nextButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.walkthroughCalloutNextButton);
+  await nextButton.click();
+  await page.waitForTimeout(300);
+}
+
+/**
+ * Click the Back button in the walkthrough callout
+ */
+export async function clickWalkthroughBack(page: Page): Promise<void> {
+  const backButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.walkthroughCalloutBackButton);
+  await backButton.click();
+  await page.waitForTimeout(300);
+}
+
+/**
+ * Dismiss walkthrough using the X button
+ */
+export async function dismissWalkthroughWithButton(page: Page): Promise<void> {
+  const dismissButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.walkthroughCalloutDismiss);
+  await dismissButton.click();
+  await page.waitForTimeout(300);
+}
+
+/**
+ * Dismiss walkthrough using Escape key
+ */
+export async function dismissWalkthroughWithEscape(page: Page): Promise<void> {
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+}
+
+/**
+ * Complete a multi-step walkthrough by clicking Next through all steps
+ */
+export async function completeWalkthrough(page: Page, stepCount: number): Promise<void> {
+  const nextButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.walkthroughCalloutNextButton);
+
+  for (let i = 0; i < stepCount; i++) {
+    await nextButton.click();
+    await page.waitForTimeout(300);
+  }
+}
+
+/**
+ * Verify walkthrough callout is not visible
+ */
+export async function verifyWalkthroughDismissed(page: Page): Promise<void> {
+  const callout = page.locator(PLAYWRIGHT_TEST_SELECTORS.walkthroughCallout);
+  await expect(callout).not.toBeVisible();
+}
+
+/**
+ * Verify walkthrough is marked as completed in state
+ */
+export async function verifyWalkthroughCompleted(
+  page: Page,
+  walkthroughId: string
+): Promise<void> {
+  const state = await getWalkthroughState(page);
+  expect(state.state.completed).toContain(walkthroughId);
+}
+
+/**
+ * Get walkthrough callout title text
+ */
+export async function getWalkthroughTitle(page: Page): Promise<string> {
+  const title = page.locator(PLAYWRIGHT_TEST_SELECTORS.walkthroughCalloutTitle);
+  return await title.textContent() ?? '';
+}
+
+/**
+ * Get walkthrough callout progress text (e.g., "1 of 2")
+ */
+export async function getWalkthroughProgress(page: Page): Promise<string> {
+  const progress = page.locator(PLAYWRIGHT_TEST_SELECTORS.walkthroughCalloutProgress);
+  return await progress.textContent() ?? '';
 }

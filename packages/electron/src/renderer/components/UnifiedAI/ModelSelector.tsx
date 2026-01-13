@@ -135,6 +135,7 @@ export function ModelSelector({
         className="model-selector-button"
         onClick={() => setIsOpen(!isOpen)}
         title={`Current model: ${getCurrentModelName()}`}
+        data-testid="model-picker"
       >
         <span className="model-selector-label">{getCurrentModelName()}</span>
         <MaterialSymbol icon="expand_more" size={14} className={`model-selector-arrow ${isOpen ? 'open' : ''}`} />

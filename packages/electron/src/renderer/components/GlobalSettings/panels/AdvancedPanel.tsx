@@ -11,6 +11,11 @@ interface AdvancedPanelProps {
   onAnalyticsEnabledChange: (value: boolean) => void;
   extensionDevToolsEnabled: boolean;
   onExtensionDevToolsEnabledChange: (value: boolean) => void;
+  walkthroughsEnabled: boolean;
+  onWalkthroughsEnabledChange: (value: boolean) => void;
+  walkthroughsViewedCount: number;
+  walkthroughsTotalCount: number;
+  onWalkthroughsReset: () => void;
 }
 
 export function AdvancedPanel({
@@ -23,7 +28,12 @@ export function AdvancedPanel({
   analyticsEnabled,
   onAnalyticsEnabledChange,
   extensionDevToolsEnabled,
-  onExtensionDevToolsEnabledChange
+  onExtensionDevToolsEnabledChange,
+  walkthroughsEnabled,
+  onWalkthroughsEnabledChange,
+  walkthroughsViewedCount,
+  walkthroughsTotalCount,
+  onWalkthroughsReset,
 }: AdvancedPanelProps) {
   const isDevelopment = import.meta.env.DEV;
   const [showReleaseChannel, setShowReleaseChannel] = useState(false);
@@ -100,6 +110,58 @@ export function AdvancedPanel({
             </div>
           </label>
         </div>
+      </div>
+
+      <div className="provider-panel-section">
+        <h4 className="provider-panel-section-title">Feature Guides</h4>
+        <p className="provider-panel-hint">
+          Contextual guides that help you discover features.
+          {walkthroughsTotalCount > 0 && (
+            <span style={{ marginLeft: '8px', color: 'var(--text-tertiary)' }}>
+              ({walkthroughsViewedCount} of {walkthroughsTotalCount} viewed)
+            </span>
+          )}
+        </p>
+
+        <div className="setting-item">
+          <label className="setting-label">
+            <input
+              type="checkbox"
+              checked={walkthroughsEnabled}
+              onChange={(e) => onWalkthroughsEnabledChange(e.target.checked)}
+              className="setting-checkbox"
+            />
+            <div className="setting-text">
+              <span className="setting-name">Show Feature Guides</span>
+              <span className="setting-description">
+                Display walkthrough guides for new features and tips to help you get the most out of Nimbalyst.
+              </span>
+            </div>
+          </label>
+        </div>
+
+        {walkthroughsViewedCount > 0 && (
+          <div className="setting-item" style={{ marginTop: '12px' }}>
+            <button
+              onClick={onWalkthroughsReset}
+              style={{
+                padding: '6px 12px',
+                fontSize: '13px',
+                fontWeight: 500,
+                color: 'var(--text-secondary)',
+                background: 'var(--surface-secondary)',
+                border: '1px solid var(--border-primary)',
+                borderRadius: '6px',
+                cursor: 'pointer',
+              }}
+            >
+              Reset All Guides
+            </button>
+            <span style={{ marginLeft: '12px', fontSize: '13px', color: 'var(--text-tertiary)' }}>
+              Show all guides again from the beginning
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="provider-panel-section">

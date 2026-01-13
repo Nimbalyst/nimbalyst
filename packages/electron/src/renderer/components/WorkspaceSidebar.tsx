@@ -8,7 +8,8 @@ import { NewFileMenu, NewFileType, ExtensionFileType, contributionToExtensionFil
 import { createInitialFileContent, createMockupContent } from '../utils/fileUtils';
 import { getFileName } from '../utils/pathUtils';
 import { getExtensionLoader } from '@nimbalyst/runtime';
-import { KeyboardShortcuts, getShortcutDisplay } from '../../shared/KeyboardShortcuts';
+import { KeyboardShortcuts } from '../../shared/KeyboardShortcuts';
+import { HelpTooltip } from '../help';
 import { store, gitStatusMapAtom, type FileGitStatus as AtomFileGitStatus } from '../store';
 import { useTabsActions } from '../contexts/TabsContext';
 import '../WorkspaceSidebar.css';
@@ -1133,31 +1134,35 @@ export function WorkspaceSidebar({
                 </span>
               </button>
               {onOpenQuickSearch && (
+                <HelpTooltip testId="file-tree-quick-open-button">
+                  <button
+                    data-testid="file-tree-quick-open-button"
+                    className="workspace-action-button"
+                    onClick={onOpenQuickSearch}
+                    aria-label="Search files"
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
+                      search
+                    </span>
+                  </button>
+                </HelpTooltip>
+              )}
+              <HelpTooltip testId="file-tree-filter-button">
                 <button
+                  ref={filterButtonRef}
+                  data-testid="file-tree-filter-button"
                   className="workspace-action-button"
-                  onClick={onOpenQuickSearch}
-                  title={`Search files (${getShortcutDisplay(KeyboardShortcuts.file.open)})`}
-                  aria-label="Search files"
+                  onClick={handleFilterButtonClick}
+                  aria-label="Filter files"
                 >
                   <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
-                    search
+                    filter_alt
                   </span>
+                  {fileTreeFilter !== 'all' && (
+                    <span className="filter-active-indicator" title="Filter active">•</span>
+                  )}
                 </button>
-              )}
-              <button
-                ref={filterButtonRef}
-                className="workspace-action-button"
-                onClick={handleFilterButtonClick}
-                title="Filter files"
-                aria-label="Filter files"
-              >
-                <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
-                  filter_alt
-                </span>
-                {fileTreeFilter !== 'all' && (
-                  <span className="filter-active-indicator" title="Filter active">•</span>
-                )}
-              </button>
+              </HelpTooltip>
             </>
           )}
         </div>

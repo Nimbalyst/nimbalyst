@@ -9,6 +9,7 @@
 
 import React from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
+import { HelpTooltip } from '../../help';
 import './MonacoDiffApprovalBar.css';
 
 export interface SessionInfo {
@@ -121,20 +122,26 @@ export const MonacoDiffApprovalBar: React.FC<MonacoDiffApprovalBarProps> = ({
           )}
         </div>
         <div className="monaco-diff-approval-bar-actions">
-          <button
-            className="monaco-diff-approval-bar-button monaco-diff-approval-bar-button-reject"
-            onClick={handleRejectClick}
-            type="button"
-          >
-            Reject All
-          </button>
-          <button
-            className="monaco-diff-approval-bar-button monaco-diff-approval-bar-button-accept"
-            onClick={handleAcceptClick}
-            type="button"
-          >
-            Accept All
-          </button>
+          <HelpTooltip testId="diff-revert-all-button">
+            <button
+              className="monaco-diff-approval-bar-button monaco-diff-approval-bar-button-reject"
+              onClick={handleRejectClick}
+              type="button"
+              data-testid="diff-revert-all-button"
+            >
+              Reject All
+            </button>
+          </HelpTooltip>
+          <HelpTooltip testId="diff-keep-all-button">
+            <button
+              className="monaco-diff-approval-bar-button monaco-diff-approval-bar-button-accept"
+              onClick={handleAcceptClick}
+              type="button"
+              data-testid="diff-keep-all-button"
+            >
+              Accept All
+            </button>
+          </HelpTooltip>
         </div>
       </div>
     </div>

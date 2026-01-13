@@ -17,6 +17,7 @@ import {
   shouldActivateMemoryMode,
   getMemoryContent,
 } from './interactivePrompts';
+import { HelpTooltip } from '../../help';
 import '../AIChat/AIChat.css';
 
 export interface AIInputRef {
@@ -876,16 +877,24 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
             marginBottom: '4px'
           }}>
             {/* Voice Mode Button */}
-            <VoiceModeButton sessionId={sessionId} workspacePath={workspacePath} />
+            <HelpTooltip testId="voice-mode-toggle">
+              <span style={{ display: 'inline-flex' }}>
+                <VoiceModeButton sessionId={sessionId} workspacePath={workspacePath} />
+              </span>
+            </HelpTooltip>
             {onModeChange && provider === 'claude-code' && mode && <ModeTag mode={mode} onModeChange={onModeChange} />}
 
             {onModelChange && currentModel && (
-              <ModelSelector
-                currentModel={currentModel}
-                onModelChange={onModelChange}
-                sessionHasMessages={sessionHasMessages}
-                currentProviderType={currentProviderType}
-              />
+              <HelpTooltip testId="model-picker">
+                <span style={{ display: 'inline-flex' }}>
+                  <ModelSelector
+                    currentModel={currentModel}
+                    onModelChange={onModelChange}
+                    sessionHasMessages={sessionHasMessages}
+                    currentProviderType={currentProviderType}
+                  />
+                </span>
+              </HelpTooltip>
             )}
             {/* Show token usage for all providers - displays "--" if no data yet */}
             <ContextUsageDisplay

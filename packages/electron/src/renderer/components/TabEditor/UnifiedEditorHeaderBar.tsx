@@ -571,6 +571,7 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
           <div className="unified-header-dropdown-container">
             <button
               ref={aiSessionsButtonRef}
+              data-testid="ai-sessions-button"
               className={`unified-header-button ${showAISessions ? 'active' : ''}`}
               onClick={() => {
                 setShowAISessions(!showAISessions);

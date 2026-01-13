@@ -1,5 +1,7 @@
-import React, { useId, useMemo, useState } from 'react';
+import React, { useId, useMemo, useState, useRef, useCallback } from 'react';
 import type { TokenUsageCategory } from '@nimbalyst/runtime/ai/server/types';
+import { MaterialSymbol } from '@nimbalyst/runtime';
+import { getHelpContent } from '../../help';
 import './ContextUsageDisplay.css';
 
 const CATEGORY_COLORS = [
@@ -58,7 +60,10 @@ export function ContextUsageDisplay({
   const hasTokenData = displayTokens > 0 || totalTokens > 0;
   const hasContextWindow = displayContextWindow > 0;
   const [tooltipVisible, setTooltipVisible] = useState(false);
+  const [helpExpanded, setHelpExpanded] = useState(false);
   const tooltipId = useId();
+  const helpContent = getHelpContent('context-indicator');
+  const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Calculate percentage used (only meaningful with context window)
   const percentage = hasContextWindow ? Math.round((displayTokens / displayContextWindow) * 100) : 0;
@@ -108,6 +113,29 @@ export function ContextUsageDisplay({
   const enableTooltip = hasTokenData && (formattedCategories.length > 0 || inputTokens > 0 || outputTokens > 0);
   const shouldShowTooltip = tooltipVisible && enableTooltip;
 
+  // Clear any pending hide timeout
+  const clearHideTimeout = useCallback(() => {
+    if (hideTimeoutRef.current) {
+      clearTimeout(hideTimeoutRef.current);
+      hideTimeoutRef.current = null;
+    }
+  }, []);
+
+  // Show tooltip immediately, hide with delay to allow moving mouse to tooltip
+  const handleMouseEnter = useCallback(() => {
+    clearHideTimeout();
+    if (enableTooltip) {
+      setTooltipVisible(true);
+    }
+  }, [enableTooltip, clearHideTimeout]);
+
+  const handleMouseLeave = useCallback(() => {
+    // Delay hiding to allow moving mouse to tooltip
+    hideTimeoutRef.current = setTimeout(() => {
+      setTooltipVisible(false);
+    }, 150);
+  }, []);
+
   const getUsageClass = (): string => {
     if (!hasTokenData) return 'usage-normal';
     if (hasContextWindow && percentage >= 90) return 'usage-critical';
@@ -130,35 +158,60 @@ export function ContextUsageDisplay({
       : `Token usage: ${formatTokensShort(displayTokens)} total tokens`
     : 'Token usage data not available yet';
 
-  const handleVisibilityChange = (visible: boolean) => {
-    if (!enableTooltip) return;
-    setTooltipVisible(visible);
-  };
-
   return (
     <div
       className={`context-usage-display ${getUsageClass()}`}
       tabIndex={hasTokenData ? 0 : -1}
       aria-label={label}
       aria-describedby={shouldShowTooltip ? tooltipId : undefined}
-      onMouseEnter={() => handleVisibilityChange(true)}
-      onMouseLeave={() => handleVisibilityChange(false)}
-      onFocus={() => handleVisibilityChange(true)}
-      onBlur={() => handleVisibilityChange(false)}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      onFocus={handleMouseEnter}
+      onBlur={handleMouseLeave}
       role="group"
+      data-testid="context-indicator"
     >
       <span className="usage-text">{getDisplayText()}</span>
 
       {shouldShowTooltip && (
-        <div className="context-usage-tooltip" id={tooltipId} role="tooltip">
+        <div
+          className="context-usage-tooltip"
+          id={tooltipId}
+          role="tooltip"
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+        >
           <div className="tooltip-header">
-            <span>{hasContextWindow ? 'Context Breakdown' : 'Token Usage'}</span>
+            <div className="tooltip-header-left">
+              <span>{hasContextWindow ? 'Context Breakdown' : 'Token Usage'}</span>
+              {helpContent && (
+                <button
+                  className="tooltip-help-button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setHelpExpanded(!helpExpanded);
+                  }}
+                  title={helpExpanded ? 'Hide help' : 'What is this?'}
+                  aria-expanded={helpExpanded}
+                >
+                  <MaterialSymbol icon={helpExpanded ? 'expand_less' : 'help'} size={14} />
+                </button>
+              )}
+            </div>
             {hasContextWindow && (
               <span className="tooltip-total">
                 {formatTokensShort(displayTokens)} / {formatTokensShort(displayContextWindow)}
               </span>
             )}
           </div>
+
+          {/* Expandable help section */}
+          {helpExpanded && helpContent && (
+            <div className="tooltip-help-section">
+              <div className="tooltip-help-title">{helpContent.title}</div>
+              <div className="tooltip-help-body">{helpContent.body}</div>
+            </div>
+          )}
 
           {/* Show input/output breakdown if available */}
           {(inputTokens > 0 || outputTokens > 0) && (

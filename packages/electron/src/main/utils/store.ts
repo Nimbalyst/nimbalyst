@@ -96,6 +96,34 @@ interface AppStoreSchema {
     autoCommitAudio?: boolean; // Auto-commit audio on speech pause (VAD)
     showTranscription?: boolean; // Show live transcription in UI
   };
+  // Walkthrough guide system state
+  walkthroughs?: WalkthroughState;
+}
+
+/**
+ * State for the walkthrough guide system.
+ * Tracks which walkthroughs have been shown, completed, or dismissed.
+ */
+export interface WalkthroughState {
+  /** Master toggle for all walkthroughs (default: true) */
+  enabled: boolean;
+  /** Walkthrough IDs that were completed (user finished all steps) */
+  completed: string[];
+  /** Walkthrough IDs that were dismissed (user skipped) */
+  dismissed: string[];
+  /** History of walkthrough interactions for analytics/rate limiting */
+  history?: Record<string, WalkthroughHistory>;
+}
+
+export interface WalkthroughHistory {
+  /** Timestamp when walkthrough was first shown */
+  shownAt: number;
+  /** Timestamp when walkthrough was completed (if applicable) */
+  completedAt?: number;
+  /** Timestamp when walkthrough was dismissed (if applicable) */
+  dismissedAt?: number;
+  /** Version of the walkthrough that was shown */
+  version?: number;
 }
 
 export interface TabState {
@@ -1195,5 +1223,139 @@ export function setWorkspaceTrusted(workspacePath: string, trusted: boolean, mod
   updateWorkspaceState(workspacePath, (state) => {
     state.agentPermissions = { permissionMode: trusted ? mode : null };
   });
+}
+
+// Walkthrough Guide System State Management
+
+const DEFAULT_WALKTHROUGH_STATE: WalkthroughState = {
+  enabled: true,
+  completed: [],
+  dismissed: [],
+  history: {},
+};
+
+/**
+ * Get the current walkthrough state.
+ * Returns default state if none exists (enabled by default).
+ */
+export function getWalkthroughState(): WalkthroughState {
+  const state = getAppStore().get('walkthroughs');
+  if (!state) {
+    return { ...DEFAULT_WALKTHROUGH_STATE };
+  }
+  return {
+    enabled: state.enabled ?? true,
+    completed: state.completed ?? [],
+    dismissed: state.dismissed ?? [],
+    history: state.history ?? {},
+  };
+}
+
+/**
+ * Enable or disable all walkthroughs globally.
+ */
+export function setWalkthroughsEnabled(enabled: boolean): void {
+  const current = getWalkthroughState();
+  getAppStore().set('walkthroughs', { ...current, enabled });
+}
+
+/**
+ * Check if walkthroughs are enabled globally.
+ */
+export function isWalkthroughsEnabled(): boolean {
+  return getWalkthroughState().enabled;
+}
+
+/**
+ * Mark a walkthrough as completed (user finished all steps).
+ */
+export function markWalkthroughCompleted(walkthroughId: string, version?: number): void {
+  const current = getWalkthroughState();
+  const completed = current.completed.includes(walkthroughId)
+    ? current.completed
+    : [...current.completed, walkthroughId];
+
+  const history = {
+    ...current.history,
+    [walkthroughId]: {
+      ...current.history?.[walkthroughId],
+      shownAt: current.history?.[walkthroughId]?.shownAt ?? Date.now(),
+      completedAt: Date.now(),
+      version,
+    },
+  };
+
+  getAppStore().set('walkthroughs', { ...current, completed, history });
+}
+
+/**
+ * Mark a walkthrough as dismissed (user skipped/closed it).
+ */
+export function markWalkthroughDismissed(walkthroughId: string, version?: number): void {
+  const current = getWalkthroughState();
+  const dismissed = current.dismissed.includes(walkthroughId)
+    ? current.dismissed
+    : [...current.dismissed, walkthroughId];
+
+  const history = {
+    ...current.history,
+    [walkthroughId]: {
+      ...current.history?.[walkthroughId],
+      shownAt: current.history?.[walkthroughId]?.shownAt ?? Date.now(),
+      dismissedAt: Date.now(),
+      version,
+    },
+  };
+
+  getAppStore().set('walkthroughs', { ...current, dismissed, history });
+}
+
+/**
+ * Record that a walkthrough was shown (for analytics).
+ */
+export function recordWalkthroughShown(walkthroughId: string, version?: number): void {
+  const current = getWalkthroughState();
+  const history = {
+    ...current.history,
+    [walkthroughId]: {
+      ...current.history?.[walkthroughId],
+      shownAt: Date.now(),
+      version,
+    },
+  };
+
+  getAppStore().set('walkthroughs', { ...current, history });
+}
+
+/**
+ * Check if a walkthrough should be shown.
+ * Returns false if disabled globally, already completed, or already dismissed.
+ */
+export function shouldShowWalkthrough(walkthroughId: string, version?: number): boolean {
+  const state = getWalkthroughState();
+
+  // Globally disabled
+  if (!state.enabled) return false;
+
+  // Already completed or dismissed
+  if (state.completed.includes(walkthroughId)) return false;
+  if (state.dismissed.includes(walkthroughId)) return false;
+
+  // If version is specified and a different version was shown, allow re-showing
+  if (version !== undefined && state.history?.[walkthroughId]?.version !== undefined) {
+    if (state.history[walkthroughId].version !== version) {
+      // New version - allow showing again
+      return true;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Reset all walkthrough state (for testing/debugging).
+ */
+export function resetWalkthroughState(): void {
+  getAppStore().set('walkthroughs', { ...DEFAULT_WALKTHROUGH_STATE });
 }
 

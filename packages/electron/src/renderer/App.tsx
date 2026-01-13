@@ -59,6 +59,7 @@ import { UpdateToast } from './components/UpdateToast';
 import { ProjectTrustToast } from './components/ProjectTrustToast';
 import { PostHogSurvey } from './components/PostHogSurvey';
 import OnboardingService from './services/OnboardingService';
+import { WalkthroughProvider } from './walkthroughs';
 import './WorkspaceWelcome.css';
 
 logger.ui.info('App.tsx loading');
@@ -1469,6 +1470,7 @@ export default function App() {
   }
 
   return (
+    <WalkthroughProvider currentMode={activeMode}>
     <div data-layout="root-container" style={{ height: '100vh', display: 'flex', flexDirection: 'row' }}>
       {/* Left: Navigation Gutter - full height */}
       <NavigationGutter
@@ -1789,5 +1791,6 @@ export default function App() {
         <PostHogSurvey onClose={() => setIsPostHogSurveyOpen(false)} />
       )}
     </div>
+    </WalkthroughProvider>
   );
 }

@@ -50,7 +50,8 @@
   position: absolute;
   right: 0;
   bottom: calc(100% + 8px);
-  width: 260px;
+  width: 280px;
+  max-width: calc(100vw - 32px);
   padding: 12px;
   border-radius: 10px;
   background-color: var(--surface-primary, #121212);
@@ -58,14 +59,71 @@
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
   z-index: 10;
   color: var(--text-primary);
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .tooltip-header {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   font-size: 12px;
   margin-bottom: 8px;
   color: var(--text-secondary);
+}
+
+.tooltip-header-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tooltip-help-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background-color: var(--surface-tertiary);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tooltip-help-button:hover {
+  background-color: var(--surface-hover);
+  color: var(--text-secondary);
+}
+
+.tooltip-help-section {
+  background-color: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  padding: 10px;
+  margin-bottom: 10px;
+  overflow: hidden;
+  box-sizing: border-box;
+  white-space: normal;
+}
+
+.tooltip-help-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+  white-space: normal;
+}
+
+.tooltip-help-body {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  white-space: normal;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .tooltip-total {

@@ -62,6 +62,7 @@ import { MockupScreenshotService } from './services/MockupScreenshotService';
 import { registerMockupHandlers } from './ipc/MockupHandlers';
 import { initVoiceModeService } from './services/voice/VoiceModeService';
 import { initVoiceModeSettingsHandler } from './services/voice/VoiceModeSettingsHandler';
+import { registerWalkthroughHandlers } from './ipc/WalkthroughHandlers';
 import { registerDataModelHandlers } from './ipc/DataModelHandlers';
 import { registerExtensionHandlers, getClaudePluginPaths, initializeExtensionFileTypes } from './ipc/ExtensionHandlers';
 import { ClaudeCodeProvider } from '@nimbalyst/runtime/ai/server';
@@ -605,6 +606,7 @@ app.whenReady().then(async () => {
     });
     initVoiceModeService();
     initVoiceModeSettingsHandler();
+    registerWalkthroughHandlers();
 
     // Initialize Agent service
     // agentService = new AgentService(aiService);
