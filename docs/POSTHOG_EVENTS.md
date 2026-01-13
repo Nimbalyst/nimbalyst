@@ -75,6 +75,14 @@ All events include `$session_id` property automatically. Dev users are marked wi
 | `workspace_file_tree_expanded` | `WorkspaceWatcher.ts:53` | File tree expands with new files detected | `depth`<br/>`fileCount` (0-10, 11-50, 51-100, 100+) | v0.45.25 (2025-11-14) | |
 | `workspace_search_used` | `QuickOpen.tsx:130, 230` | User searches workspace (files or content) | `resultCount` (0-4, 5-9, 10-49, 50-99, 100+)<br/>`queryLength` (1, 2-3, 4-9, 10+)<br/>`searchType` (file_name/content) | v0.45.25 (2025-11-14) | |
 
+### Git Worktree Operations
+
+| Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |
+| --- | --- | --- | --- | --- | --- |
+| `worktree_archived` | `WorktreeHandlers.ts:719` | User archives a worktree (sessions archived immediately, cleanup queued) | `session_count`<br/>`worktree_age_days`<br/>`failed_sessions` | (pending release as of 6d0b51b5) | |
+| `worktree_archive_completed` | `WorktreeHandlers.ts:741` | Worktree cleanup completes successfully | `session_count`<br/>`duration_ms` | (pending release as of 6d0b51b5) | |
+| `worktree_archive_failed` | `WorktreeHandlers.ts:747, 771` | Worktree archive fails | `error_type`<br/>`stage` (archiving-sessions/removing-worktree) | (pending release as of 6d0b51b5) | |
+
 ### Theme Management
 
 | Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |

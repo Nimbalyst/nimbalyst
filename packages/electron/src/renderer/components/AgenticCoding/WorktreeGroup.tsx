@@ -31,6 +31,7 @@ interface WorktreeData {
   path: string;
   branch: string;
   isPinned?: boolean;
+  isArchived?: boolean;
 }
 
 interface WorktreeGroupProps {
@@ -46,6 +47,7 @@ interface WorktreeGroupProps {
   onSessionDelete?: (sessionId: string) => void;
   onSessionArchive?: (sessionId: string) => void;
   onWorktreePinToggle?: (worktreeId: string, isPinned: boolean) => void;
+  onWorktreeArchive?: (worktreeId: string) => void;
   onSessionPinToggle?: (sessionId: string, isPinned: boolean) => void;
   onSessionRename?: (sessionId: string, newName: string) => void;
   onFilesMode?: (worktreeId: string) => void;
@@ -65,6 +67,7 @@ export const WorktreeGroup: React.FC<WorktreeGroupProps> = ({
   onSessionDelete,
   onSessionArchive,
   onWorktreePinToggle,
+  onWorktreeArchive,
   onSessionPinToggle,
   onSessionRename,
   onFilesMode,
@@ -116,6 +119,12 @@ export const WorktreeGroup: React.FC<WorktreeGroupProps> = ({
     onAddTerminal?.(worktree.id);
   }, [onAddTerminal, worktree.id]);
 
+  const handleArchive = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    onWorktreeArchive?.(worktree.id);
+  }, [onWorktreeArchive, worktree.id]);
+
   const handleFilesMode = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     onFilesMode?.(worktree.id);
@@ -154,7 +163,7 @@ export const WorktreeGroup: React.FC<WorktreeGroupProps> = ({
 
   return (
     <div
-      className="worktree-group"
+      className={`worktree-group ${worktree.isArchived ? 'archived' : ''}`}
       onMouseLeave={handleCloseContextMenu}
     >
       {/* Worktree Header */}
@@ -187,6 +196,9 @@ export const WorktreeGroup: React.FC<WorktreeGroupProps> = ({
               <span className="worktree-group-name">{worktree.displayName || worktree.name}</span>
               {worktree.isPinned && (
                 <MaterialSymbol icon="push_pin" size={12} className="worktree-group-pin-icon" />
+              )}
+              {worktree.isArchived && (
+                <span className="worktree-group-badge archived">archived</span>
               )}
             </div>
             <div className="worktree-group-row-secondary">
@@ -288,6 +300,18 @@ export const WorktreeGroup: React.FC<WorktreeGroupProps> = ({
               <MaterialSymbol icon="terminal" size={14} />
               Add Terminal
             </button>
+          )}
+          {onWorktreeArchive && (
+            <>
+              <div className="worktree-group-context-menu-divider" />
+              <button
+                className="worktree-group-context-menu-item destructive"
+                onClick={handleArchive}
+              >
+                <MaterialSymbol icon="archive" size={14} />
+                Archive Worktree
+              </button>
+            </>
           )}
         </div>
       )}

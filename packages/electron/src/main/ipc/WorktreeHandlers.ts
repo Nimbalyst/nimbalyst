@@ -10,6 +10,9 @@ import log from 'electron-log';
 import { GitWorktreeService } from '../services/GitWorktreeService';
 import { WorktreeStore, createWorktreeStore } from '../services/WorktreeStore';
 import { getDatabase } from '../database/initialize';
+import { archiveProgressManager } from '../services/ArchiveProgressManager';
+import { AISessionsRepository } from '@nimbalyst/runtime/storage/repositories/AISessionsRepository';
+import { AnalyticsService } from '../services/analytics/AnalyticsService';
 
 const logger = log.scope('WorktreeHandlers');
 
@@ -273,6 +276,7 @@ export function registerWorktreeHandlers(): void {
         createdAt: number;
         updatedAt?: number;
         isPinned?: boolean;
+        isArchived?: boolean;
         gitStatus?: {
           ahead?: number;
           behind?: number;
@@ -291,18 +295,20 @@ export function registerWorktreeHandlers(): void {
               return;
             }
 
-            // Fetch git status
+            // Fetch git status (skip for archived worktrees since they don't exist on disk)
             let gitStatus: { ahead?: number; behind?: number; uncommitted?: boolean } | undefined;
-            try {
-              const statusResult = await gitWorktreeService.getWorktreeStatus(worktree.path);
-              gitStatus = {
-                ahead: statusResult.commitsAhead,
-                behind: statusResult.commitsBehind,
-                uncommitted: statusResult.hasUncommittedChanges,
-              };
-            } catch (err) {
-              logger.warn('Failed to get git status in batch fetch', { worktreeId, error: err });
-              // Continue without git status - it's not critical
+            if (!worktree.isArchived) {
+              try {
+                const statusResult = await gitWorktreeService.getWorktreeStatus(worktree.path);
+                gitStatus = {
+                  ahead: statusResult.commitsAhead,
+                  behind: statusResult.commitsBehind,
+                  uncommitted: statusResult.hasUncommittedChanges,
+                };
+              } catch (err) {
+                logger.warn('Failed to get git status in batch fetch', { worktreeId, error: err });
+                // Continue without git status - it's not critical
+              }
             }
 
             results[worktreeId] = {
@@ -641,6 +647,162 @@ export function registerWorktreeHandlers(): void {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to rebase worktree',
+      };
+    }
+  });
+
+  /**
+   * Archive a worktree and its sessions
+   *
+   * This immediately archives all sessions for the worktree in the database,
+   * then queues the slow cleanup work (git worktree removal) to be processed
+   * serially. Returns immediately after queuing - doesn't wait for cleanup.
+   *
+   * @param worktreeId - ID of the worktree to archive
+   * @param workspacePath - Path to the main git repository
+   * @returns Success status (for immediate database operations)
+   */
+  ipcMain.handle('worktree:archive', async (_event, worktreeId: string, workspacePath: string) => {
+    try {
+      if (!worktreeId) {
+        throw new Error('worktreeId is required');
+      }
+
+      if (!workspacePath) {
+        throw new Error('workspacePath is required');
+      }
+
+      logger.info('Archiving worktree', { worktreeId, workspacePath });
+
+      // Get worktree from database
+      const db = getDatabase();
+      if (!db) {
+        throw new Error('Database not initialized');
+      }
+
+      const worktreeStore = createWorktreeStore(db);
+      const worktree = await worktreeStore.get(worktreeId);
+
+      if (!worktree) {
+        throw new Error(`Worktree not found: ${worktreeId}`);
+      }
+
+      // Security: Verify that the worktree belongs to the specified workspace
+      if (worktree.projectPath !== workspacePath) {
+        throw new Error(
+          `Security violation: Worktree project path (${worktree.projectPath}) does not match workspace path (${workspacePath})`
+        );
+      }
+
+      // Step 1: Archive all sessions for this worktree immediately (fast feedback)
+      const sessionIds = await worktreeStore.getWorktreeSessions(worktreeId);
+      logger.info('Archiving sessions for worktree', { worktreeId, sessionCount: sessionIds.length });
+
+      let failedSessions = 0;
+      for (const sessionId of sessionIds) {
+        try {
+          await AISessionsRepository.updateMetadata(sessionId, { isArchived: true });
+        } catch (err) {
+          failedSessions++;
+          logger.error('Failed to archive session', { sessionId, worktreeId, error: err });
+          // Continue archiving remaining sessions
+        }
+      }
+
+      if (failedSessions > 0) {
+        logger.warn('Some sessions failed to archive', { worktreeId, failedCount: failedSessions, totalCount: sessionIds.length });
+      }
+
+      // Mark the worktree as archived immediately (before cleanup, so UI shows it as archived right away)
+      await worktreeStore.updateArchived(worktreeId, true);
+
+      // Calculate worktree age for analytics
+      const worktreeAgeDays = Math.floor((Date.now() - worktree.createdAt) / (1000 * 60 * 60 * 24));
+      const archiveStartTime = Date.now();
+
+      // Track archive initiation
+      const analyticsService = AnalyticsService.getInstance();
+      analyticsService.sendEvent('worktree_archived', {
+        session_count: sessionIds.length,
+        worktree_age_days: worktreeAgeDays,
+        failed_sessions: failedSessions,
+      });
+
+      // Step 2: Queue the slow cleanup work
+      const cleanupCallback = async () => {
+        try {
+          // Update status to show we're removing the worktree
+          archiveProgressManager.updateTaskStatus(worktreeId, 'removing-worktree');
+
+          // Remove the git worktree from disk
+          await gitWorktreeService.deleteWorktree(worktree.path, workspacePath);
+
+          logger.info('Worktree cleanup completed', { worktreeId });
+
+          // Track successful completion
+          const durationMs = Date.now() - archiveStartTime;
+          analyticsService.sendEvent('worktree_archive_completed', {
+            session_count: sessionIds.length,
+            duration_ms: durationMs,
+          });
+        } catch (error) {
+          // Track failure
+          analyticsService.sendEvent('worktree_archive_failed', {
+            error_type: error instanceof Error ? error.constructor.name : 'Unknown',
+            stage: 'removing-worktree',
+          });
+          throw error;
+        }
+      };
+
+      archiveProgressManager.addTask(
+        worktreeId,
+        worktree.displayName || worktree.name,
+        cleanupCallback
+      );
+
+      logger.info('Worktree archive initiated', { worktreeId });
+
+      return {
+        success: true,
+      };
+    } catch (error) {
+      logger.error('Failed to archive worktree:', error);
+
+      // Track failure during setup/session archiving
+      const analyticsService = AnalyticsService.getInstance();
+      analyticsService.sendEvent('worktree_archive_failed', {
+        error_type: error instanceof Error ? error.constructor.name : 'Unknown',
+        stage: 'archiving-sessions',
+      });
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to archive worktree',
+      };
+    }
+  });
+
+  /**
+   * Get current archive tasks
+   *
+   * Used by the renderer to get the current queue status when the component mounts.
+   *
+   * @returns Array of archive tasks with their status
+   */
+  ipcMain.handle('archive:get-tasks', async () => {
+    try {
+      const tasks = archiveProgressManager.getTasks();
+      return {
+        success: true,
+        tasks,
+      };
+    } catch (error) {
+      logger.error('Failed to get archive tasks:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get archive tasks',
+        tasks: [],
       };
     }
   });

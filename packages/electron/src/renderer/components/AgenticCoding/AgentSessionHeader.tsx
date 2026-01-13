@@ -9,6 +9,7 @@ interface WorktreeWithStatus {
   path: string;
   branch: string;
   base_branch?: string;
+  isArchived?: boolean;
   gitStatus?: {
     ahead?: number;
     behind?: number;
@@ -48,19 +49,21 @@ export const AgentSessionHeader: React.FC<AgentSessionHeaderProps> = ({
 
       const worktree = result.worktree;
 
-      // Fetch git status for the worktree
+      // Fetch git status for the worktree (skip for archived worktrees since they don't exist on disk)
       let gitStatus: { ahead?: number; behind?: number; uncommitted?: boolean } | undefined;
-      try {
-        const statusResult = await window.electronAPI.invoke('worktree:get-status', worktree.path);
-        if (statusResult.success && statusResult.status) {
-          gitStatus = {
-            ahead: statusResult.status.ahead,
-            behind: statusResult.status.behind,
-            uncommitted: statusResult.status.hasUncommittedChanges,
-          };
+      if (!worktree.isArchived) {
+        try {
+          const statusResult = await window.electronAPI.invoke('worktree:get-status', worktree.path);
+          if (statusResult.success && statusResult.status) {
+            gitStatus = {
+              ahead: statusResult.status.ahead,
+              behind: statusResult.status.behind,
+              uncommitted: statusResult.status.hasUncommittedChanges,
+            };
+          }
+        } catch (err) {
+          // Continue without git status
         }
-      } catch (err) {
-        // Continue without git status
       }
 
       const data: WorktreeWithStatus = {

@@ -687,6 +687,26 @@ class PGLiteWorker {
       console.error('[PGLite Worker] Failed to add is_pinned column to worktrees:', error);
       throw error;
     }
+
+    // Add is_archived column to worktrees (migration)
+    try {
+      await this.db.exec(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'worktrees' AND column_name = 'is_archived'
+          ) THEN
+            ALTER TABLE worktrees ADD COLUMN is_archived BOOLEAN DEFAULT FALSE;
+            CREATE INDEX IF NOT EXISTS idx_worktrees_archived ON worktrees(is_archived);
+          END IF;
+        END $$;
+      `);
+      console.log('[PGLite Worker] is_archived column added to worktrees');
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to add is_archived column to worktrees:', error);
+      throw error;
+    }
   }
 
   async query(message) {

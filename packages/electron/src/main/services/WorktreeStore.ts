@@ -23,6 +23,24 @@ export interface Worktree {
   createdAt: number;
   updatedAt?: number;
   isPinned?: boolean; // Whether this worktree is pinned to the top of the list
+  isArchived?: boolean; // Whether this worktree is archived
+}
+
+/**
+ * Database row structure (matches worktrees table schema)
+ */
+interface WorktreeRow {
+  id: string;
+  workspace_id: string;
+  name: string;
+  display_name?: string;
+  path: string;
+  branch: string;
+  base_branch: string;
+  created_at: Date | string | number;
+  updated_at: Date | string | number;
+  is_pinned?: boolean;
+  is_archived?: boolean;
 }
 
 /**
@@ -121,7 +139,7 @@ export function createWorktreeStore(db: PGliteLike, ensureDbReady?: EnsureReadyF
 
       logger.info('Getting worktree', { id });
 
-      const { rows } = await db.query<any>(
+      const { rows } = await db.query<WorktreeRow>(
         `SELECT * FROM worktrees WHERE id = $1 LIMIT 1`,
         [id]
       );
@@ -143,6 +161,7 @@ export function createWorktreeStore(db: PGliteLike, ensureDbReady?: EnsureReadyF
         createdAt: toMillis(row.created_at),
         updatedAt: toMillis(row.updated_at),
         isPinned: row.is_pinned ?? false,
+        isArchived: row.is_archived ?? false,
       };
 
       return worktree;
@@ -156,7 +175,7 @@ export function createWorktreeStore(db: PGliteLike, ensureDbReady?: EnsureReadyF
 
       logger.info('Getting worktree by path', { path });
 
-      const { rows } = await db.query<any>(
+      const { rows } = await db.query<WorktreeRow>(
         `SELECT * FROM worktrees WHERE path = $1 LIMIT 1`,
         [path]
       );
@@ -178,6 +197,7 @@ export function createWorktreeStore(db: PGliteLike, ensureDbReady?: EnsureReadyF
         createdAt: toMillis(row.created_at),
         updatedAt: toMillis(row.updated_at),
         isPinned: row.is_pinned ?? false,
+        isArchived: row.is_archived ?? false,
       };
 
       return worktree;
@@ -185,15 +205,17 @@ export function createWorktreeStore(db: PGliteLike, ensureDbReady?: EnsureReadyF
 
     /**
      * List all worktrees for a workspace/project
+     * By default, excludes archived worktrees
      */
-    async list(workspaceId: string): Promise<Worktree[]> {
+    async list(workspaceId: string, includeArchived = false): Promise<Worktree[]> {
       await ensureReady();
 
-      logger.info('Listing worktrees', { workspaceId });
+      logger.info('Listing worktrees', { workspaceId, includeArchived });
 
-      const { rows } = await db.query<any>(
+      const archiveFilter = includeArchived ? '' : 'AND (is_archived = FALSE OR is_archived IS NULL)';
+      const { rows } = await db.query<WorktreeRow>(
         `SELECT * FROM worktrees
-         WHERE workspace_id = $1
+         WHERE workspace_id = $1 ${archiveFilter}
          ORDER BY created_at DESC`,
         [workspaceId]
       );
@@ -209,6 +231,7 @@ export function createWorktreeStore(db: PGliteLike, ensureDbReady?: EnsureReadyF
         createdAt: toMillis(row.created_at),
         updatedAt: toMillis(row.updated_at),
         isPinned: row.is_pinned ?? false,
+        isArchived: row.is_archived ?? false,
       }));
 
       logger.info('Found worktrees', { count: worktrees.length });
@@ -370,6 +393,24 @@ export function createWorktreeStore(db: PGliteLike, ensureDbReady?: EnsureReadyF
       );
 
       logger.info('Worktree pinned status updated', { id, isPinned });
+    },
+
+    /**
+     * Update the archived status of a worktree
+     */
+    async updateArchived(id: string, isArchived: boolean): Promise<void> {
+      await ensureReady();
+
+      logger.info('Updating worktree archived status', { id, isArchived });
+
+      await db.query(
+        `UPDATE worktrees
+         SET is_archived = $2, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1`,
+        [id, isArchived]
+      );
+
+      logger.info('Worktree archived status updated', { id, isArchived });
     },
   };
 }

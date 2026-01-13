@@ -158,6 +158,11 @@
   color: var(--warning-color);
 }
 
+.worktree-group-badge.archived {
+  background: rgba(156, 163, 175, 0.15);
+  color: var(--text-tertiary);
+}
+
 .worktree-group-count {
   flex-shrink: 0;
   font-size: 0.6875rem;
@@ -307,6 +312,12 @@
   background: rgba(239, 68, 68, 0.1);
 }
 
+.worktree-group-context-menu-divider {
+  height: 1px;
+  margin: 0.25rem 0;
+  background: var(--border-primary);
+}
+
 /* Pin icons */
 .worktree-group-pin-icon {
   flex-shrink: 0;
@@ -339,4 +350,25 @@
   color: var(--text-primary);
   outline: none;
   box-sizing: border-box;
+}
+
+/* Archived worktree styling - gray out the entire group */
+.worktree-group.archived .worktree-group-header {
+  opacity: 0.5;
+}
+
+.worktree-group.archived .worktree-group-icon {
+  color: var(--text-tertiary);
+}
+
+.worktree-group.archived .worktree-group-name {
+  color: var(--text-tertiary);
+}
+
+.worktree-group.archived .worktree-session-item {
+  opacity: 0.5;
+}
+
+.worktree-group.archived .worktree-session-item-title {
+  color: var(--text-tertiary);
 }

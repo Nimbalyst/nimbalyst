@@ -1,6 +1,14 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import {ClaudeForWindowsInstallation} from "../main/services/CLIManager.ts";
 
+interface ArchiveTask {
+  worktreeId: string;
+  worktreeName: string;
+  status: 'queued' | 'pending' | 'removing-worktree' | 'completed' | 'failed';
+  startTime: Date;
+  error?: string;
+}
+
 // Expose PLAYWRIGHT flag to renderer for test detection
 if (process.env.PLAYWRIGHT === '1') {
   contextBridge.exposeInMainWorld('PLAYWRIGHT', true);
@@ -582,6 +590,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('worktree:get', id),
   worktreeRebase: (worktreePath: string) =>
     ipcRenderer.invoke('worktree:rebase', worktreePath),
+  worktreeArchive: (worktreeId: string, workspacePath: string) =>
+    ipcRenderer.invoke('worktree:archive', worktreeId, workspacePath),
+
+  // Archive progress operations
+  archive: {
+    getTasks: () => ipcRenderer.invoke('archive:get-tasks'),
+    onProgress: (callback: (tasks: ArchiveTask[]) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, tasks: ArchiveTask[]) => callback(tasks);
+      ipcRenderer.on('archive:progress', handler);
+      return () => ipcRenderer.removeListener('archive:progress', handler);
+    },
+  },
 
   // Open external links
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),

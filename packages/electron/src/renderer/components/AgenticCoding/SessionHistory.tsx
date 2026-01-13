@@ -3,6 +3,7 @@ import { CollapsibleGroup } from './CollapsibleGroup';
 import { SessionListItem } from './SessionListItem';
 import { WorktreeGroup } from './WorktreeGroup';
 import { WorktreeSingle } from './WorktreeSingle';
+import { ArchiveProgress } from './ArchiveProgress';
 import { getTimeGroupKey, TimeGroupKey } from '../../utils/dateFormatting';
 import { getFileName } from '../../utils/pathUtils';
 import { KeyboardShortcuts, getShortcutDisplay } from '../../../shared/KeyboardShortcuts';
@@ -33,6 +34,7 @@ interface WorktreeData {
   branch: string;
   base_branch?: string;
   isPinned?: boolean; // Whether this worktree is pinned to the top
+  isArchived?: boolean; // Whether this worktree is archived
 }
 
 interface WorktreeWithStatus extends WorktreeData {
@@ -479,6 +481,40 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       }
     } catch (err) {
       console.error('[SessionHistory] Failed to archive session:', err);
+    }
+  };
+
+  const handleArchiveWorktree = async (worktreeId: string) => {
+    try {
+      // Get sessions for this worktree to notify parent to close tabs
+      const worktreeSessions = allSessions.filter(s => s.worktree_id === worktreeId);
+
+      // Archive the worktree (this queues the cleanup task)
+      const result = await window.electronAPI.worktreeArchive(worktreeId, workspacePath);
+
+      if (result.success) {
+        // Remove worktree sessions from local state immediately
+        setAllSessions(prev => prev.filter(s => s.worktree_id !== worktreeId));
+        setSessions(prev => prev.filter(s => s.worktree_id !== worktreeId));
+
+        // Notify parent to close tabs for archived sessions
+        worktreeSessions.forEach(session => {
+          if (onSessionArchive) {
+            onSessionArchive(session.id);
+          }
+        });
+
+        // Remove from worktree cache
+        setWorktreeCache(prev => {
+          const newCache = new Map(prev);
+          newCache.delete(worktreeId);
+          return newCache;
+        });
+      } else {
+        console.error('[SessionHistory] Failed to archive worktree:', result.error);
+      }
+    } catch (err) {
+      console.error('[SessionHistory] Failed to archive worktree:', err);
     }
   };
 
@@ -1398,6 +1434,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                           onSessionDelete={onSessionDelete ? handleDeleteSession : undefined}
                           onSessionArchive={handleArchiveSession}
                           onWorktreePinToggle={handleWorktreePinToggle}
+                          onWorktreeArchive={handleArchiveWorktree}
                           onSessionPinToggle={handleSessionPinToggle}
                           onSessionRename={onSessionRename}
                           onFilesMode={onWorktreeFilesMode}
@@ -1442,6 +1479,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
           </>
         )}
       </div>
+      <ArchiveProgress />
     </div>
   );
 };

@@ -21,6 +21,14 @@ interface HistoryTag {
   createdAt: string;
 }
 
+interface ArchiveTask {
+  worktreeId: string;
+  worktreeName: string;
+  status: 'queued' | 'pending' | 'removing-worktree' | 'completed' | 'failed';
+  startTime: Date;
+  error?: string;
+}
+
 interface ElectronAPI {
   // File menu callbacks
   onFileNew: (callback: () => void) => () => void;
@@ -472,6 +480,20 @@ interface ElectronAPI {
     error?: string;
     message?: string;
   }>;
+  worktreeArchive: (worktreeId: string, workspacePath: string) => Promise<{
+    success: boolean;
+    error?: string;
+  }>;
+
+  // Archive progress operations
+  archive: {
+    getTasks: () => Promise<{
+      success: boolean;
+      tasks: ArchiveTask[];
+      error?: string;
+    }>;
+    onProgress: (callback: (tasks: ArchiveTask[]) => void) => () => void;
+  };
 
   // Open external links
   openExternal: (url: string) => Promise<void>;
