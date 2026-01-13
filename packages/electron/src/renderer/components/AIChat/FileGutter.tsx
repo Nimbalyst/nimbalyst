@@ -356,11 +356,12 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick, pendin
     const hasContent = node.files.length > 0 || node.subdirectories.size > 0;
 
     return (
-      <div key={node.path} className="file-gutter__directory-node" style={{ marginLeft: `${depth * 12}px` }}>
+      <div key={node.path} className="file-gutter__directory-node">
         {node.displayPath && (
           <button
             onClick={() => toggleFolder(node.path)}
             className="file-gutter__directory-header"
+            style={{ paddingLeft: `${depth * 12 + 8}px` }}
           >
             <MaterialSymbol
               icon={isExpanded ? "expand_more" : "chevron_right"}
@@ -387,6 +388,8 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick, pendin
               const fileName = getFileName(file.filePath);
               const hasStats = type === 'edited' && (file.linesAdded || file.linesRemoved);
               const hasPendingReview = type === 'edited' && pendingReviewFiles?.has(file.filePath);
+              // Files indent one level from their parent folder
+              const fileDepth = node.displayPath ? depth + 1 : depth;
 
               return (
                 <button
@@ -394,7 +397,7 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick, pendin
                   onClick={() => handleFileClick(file.filePath)}
                   className={`file-gutter__file ${hasPendingReview ? 'file-gutter__file--pending' : ''}`}
                   title={getRelativePath(file.filePath)}
-                  style={{ marginLeft: `${(node.displayPath ? depth + 1 : depth) * 12 + 24}px` }}
+                  style={{ marginLeft: `${fileDepth * 12 + 8}px` }}
                 >
                   <div className="file-gutter__file-content">
                     {hasPendingReview && (
