@@ -20,6 +20,7 @@ import { ToolPackagesPanel } from './panels/ToolPackagesPanel';
 import { ProjectPermissionsPanel } from './panels/ProjectPermissionsPanel';
 import { ProviderOverrideWrapper } from './panels/ProviderOverrideWrapper';
 import { InstalledExtensionsPanel } from './panels/InstalledExtensionsPanel';
+import { walkthroughs } from '../../walkthroughs';
 
 export interface ProviderConfig {
   enabled: boolean;
@@ -86,6 +87,9 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
   const [releaseChannel, setReleaseChannel] = useState<'stable' | 'alpha'>('stable');
   const [analyticsEnabled, setAnalyticsEnabled] = useState(true);
   const [extensionDevToolsEnabled, setExtensionDevToolsEnabled] = useState(false);
+  const [walkthroughsEnabled, setWalkthroughsEnabled] = useState(true);
+  const [walkthroughsViewedCount, setWalkthroughsViewedCount] = useState(0);
+  const [walkthroughsTotalCount, setWalkthroughsTotalCount] = useState(0);
   const [syncConfig, setSyncConfig] = useState<SyncConfig>({
     enabled: false,
     serverUrl: '',
@@ -97,6 +101,8 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
   const [voiceModeEnabled, setVoiceModeEnabled] = useState(false);
   const [voiceModeVoice, setVoiceModeVoice] = useState<'marin' | 'cedar'>('marin');
   const [voiceModeShowTranscription, setVoiceModeShowTranscription] = useState(true);
+  const [voiceAgentPrompt, setVoiceAgentPrompt] = useState<{ prepend?: string; append?: string }>({});
+  const [codingAgentPrompt, setCodingAgentPrompt] = useState<{ prepend?: string; append?: string }>({});
 
   // Package counts for sidebar badge
   const [installedPackageCount, setInstalledPackageCount] = useState(0);
@@ -180,6 +186,20 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
       const extensionDevToolsEnabledSetting = await window.electronAPI.extensionDevTools.isEnabled();
       setExtensionDevToolsEnabled(extensionDevToolsEnabledSetting);
 
+      // Load walkthroughs enabled setting and counts
+      const walkthroughState = await window.electronAPI.invoke('walkthroughs:get-state');
+      setWalkthroughsEnabled(walkthroughState?.enabled ?? true);
+      // Calculate viewed count (completed + dismissed)
+      const completedCount = walkthroughState?.completed?.length ?? 0;
+      const dismissedCount = walkthroughState?.dismissed?.length ?? 0;
+      // Unique viewed = union of completed and dismissed (avoid double counting)
+      const viewedIds = new Set([
+        ...(walkthroughState?.completed ?? []),
+        ...(walkthroughState?.dismissed ?? []),
+      ]);
+      setWalkthroughsViewedCount(viewedIds.size);
+      setWalkthroughsTotalCount(walkthroughs.length);
+
       // Load sync config
       const syncConfigSetting = await window.electronAPI.invoke('sync:get-config');
       if (syncConfigSetting) {
@@ -199,6 +219,8 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
           setVoiceModeEnabled(voiceModeSetting.enabled || false);
           setVoiceModeVoice(voiceModeSetting.voice || 'marin');
           setVoiceModeShowTranscription(voiceModeSetting.showTranscription !== false);
+          setVoiceAgentPrompt(voiceModeSetting.voiceAgentPrompt || {});
+          setCodingAgentPrompt(voiceModeSetting.codingAgentPrompt || {});
         }
       } catch (error) {
         console.error('[Settings] Failed to initialize/load voice mode:', error);
@@ -316,6 +338,8 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
           enabled: voiceModeEnabled,
           voice: voiceModeVoice,
           showTranscription: voiceModeShowTranscription,
+          voiceAgentPrompt,
+          codingAgentPrompt,
         });
       } catch (error) {
         console.error('[Settings] Failed to save voice mode settings:', error);
@@ -342,7 +366,7 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
       setSaveStatus('error');
       setTimeout(() => setSaveStatus('idle'), 3000);
     }
-  }, [apiKeys, providers, showToolCalls, aiDebugLogging, completionSoundEnabled, completionSoundType, osNotificationsEnabled, releaseChannel, syncConfig, voiceModeEnabled, voiceModeVoice, voiceModeShowTranscription]);
+  }, [apiKeys, providers, showToolCalls, aiDebugLogging, completionSoundEnabled, completionSoundType, osNotificationsEnabled, releaseChannel, syncConfig, voiceModeEnabled, voiceModeVoice, voiceModeShowTranscription, voiceAgentPrompt, codingAgentPrompt]);
 
   // Keep the ref in sync with performSave so debounced calls use the latest version
   performSaveRef.current = performSave;
@@ -561,6 +585,17 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
             await window.electronAPI.extensionDevTools.setEnabled(value);
             debouncedSave();
           }}
+          walkthroughsEnabled={walkthroughsEnabled}
+          onWalkthroughsEnabledChange={async (value) => {
+            setWalkthroughsEnabled(value);
+            await window.electronAPI.invoke('walkthroughs:set-enabled', value);
+          }}
+          walkthroughsViewedCount={walkthroughsViewedCount}
+          walkthroughsTotalCount={walkthroughsTotalCount}
+          onWalkthroughsReset={async () => {
+            await window.electronAPI.invoke('walkthroughs:reset');
+            setWalkthroughsViewedCount(0);
+          }}
         />;
       case 'notifications':
         return <NotificationsPanel
@@ -598,6 +633,16 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
             debouncedSave();
           }}
           hasOpenAIKey={!!apiKeys.openai}
+          voiceAgentPrompt={voiceAgentPrompt}
+          onVoiceAgentPromptChange={(value) => {
+            setVoiceAgentPrompt(value);
+            debouncedSave();
+          }}
+          codingAgentPrompt={codingAgentPrompt}
+          onCodingAgentPromptChange={(value) => {
+            setCodingAgentPrompt(value);
+            debouncedSave();
+          }}
         />;
       case 'installed-extensions':
         return (

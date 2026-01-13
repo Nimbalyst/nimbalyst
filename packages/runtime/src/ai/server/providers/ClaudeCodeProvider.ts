@@ -3311,6 +3311,36 @@ IMPORTANT: Call the \`mcp__nimbalyst-session-naming__name_session\` tool ONCE at
 Do NOT call this tool more than once per session. It should be called early, typically in your first response after understanding what the user wants to accomplish.`;
       }
 
+      // Add voice mode context if this request originated from voice mode
+      const isVoiceMode = (documentContext as any)?.isVoiceMode;
+      if (isVoiceMode) {
+        // Get custom coding agent prompt settings if configured
+        const customPrompt = (documentContext as any)?.voiceModeCodingAgentPrompt as {
+          prepend?: string;
+          append?: string;
+        } | undefined;
+
+        // Apply custom prepend if configured
+        if (customPrompt?.prepend) {
+          prompt += `\n\n${customPrompt.prepend}`;
+        }
+
+        prompt += `
+
+## Voice Mode
+
+The user is interacting via voice mode. A voice assistant (GPT-4 Realtime) handles the conversation and relays requests to you.
+
+- Messages prefixed with \`[VOICE]\` are questions from the voice assistant on behalf of the user
+- For \`[VOICE]\` messages: respond with appropriate detail based on the question - the voice assistant will summarize for speech
+- You may also receive coding tasks via voice mode - handle these normally`;
+
+        // Apply custom append if configured
+        if (customPrompt?.append) {
+          prompt += `\n\n${customPrompt.append}`;
+        }
+      }
+
       return prompt;
     }
 

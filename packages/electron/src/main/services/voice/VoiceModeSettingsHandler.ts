@@ -5,10 +5,19 @@
 import Store from 'electron-store';
 import { safeHandle } from '../../utils/ipcRegistry';
 
+interface SystemPromptConfig {
+  prepend?: string;
+  append?: string;
+}
+
 interface VoiceModeSettings {
   enabled: boolean;
   voice?: 'marin' | 'cedar';
   showTranscription?: boolean;
+  // System prompt customization for voice agent (GPT-4 Realtime)
+  voiceAgentPrompt?: SystemPromptConfig;
+  // System prompt customization for coding agent (Claude) during voice mode
+  codingAgentPrompt?: SystemPromptConfig;
 }
 
 export function initVoiceModeSettingsHandler() {

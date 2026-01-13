@@ -19,6 +19,8 @@ let globalAudioPlayback: AudioPlayback | null = null;
 let globalListenersRegistered = false;
 // Callback for error notifications - set by component
 let globalErrorCallback: ((error: { type: string; message: string }) => void) | null = null;
+// Callback for programmatic stop notifications - set by component
+let globalStoppedCallback: (() => void) | null = null;
 
 function ensureGlobalListenersRegistered() {
   if (globalListenersRegistered) {
@@ -37,16 +39,26 @@ function ensureGlobalListenersRegistered() {
     // Text transcription received (not currently displayed)
   });
 
-  window.electronAPI.on('voice-mode:submit-prompt', async (payload: { sessionId: string; workspacePath: string | null; prompt: string }) => {
+  window.electronAPI.on('voice-mode:submit-prompt', async (payload: {
+    sessionId: string;
+    workspacePath: string | null;
+    prompt: string;
+    codingAgentPrompt?: { prepend?: string; append?: string };
+  }) => {
     try {
       // Queue the prompt using the existing queue system
       // This ensures prompts are processed sequentially, not concurrently
+      // Pass isVoiceMode in documentContext so the system prompt includes voice mode instructions
+      // Also pass custom coding agent prompt settings if configured
       await window.electronAPI.invoke(
         'ai:createQueuedPrompt',
         payload.sessionId,
         payload.prompt,
         undefined, // attachments
-        undefined  // documentContext
+        {
+          isVoiceMode: true,
+          voiceModeCodingAgentPrompt: payload.codingAgentPrompt,
+        }
       );
     } catch (error) {
       console.error('[VoiceModeButton] Failed to queue prompt:', error);
@@ -79,6 +91,26 @@ function ensureGlobalListenersRegistered() {
   window.electronAPI.on('voice-mode:error', (payload: { sessionId: string; error: { type: string; message: string } }) => {
     if (payload.sessionId === activeVoiceSessionId && globalErrorCallback) {
       globalErrorCallback(payload.error);
+    }
+  });
+
+  // Listen for programmatic stop events (e.g., AI assistant stopped the session)
+  window.electronAPI.on('voice-mode:stopped', (payload: { sessionId: string }) => {
+    if (payload.sessionId === activeVoiceSessionId) {
+      // Clean up audio resources
+      if (globalAudioCapture) {
+        globalAudioCapture.stop();
+        globalAudioCapture = null;
+      }
+      if (globalAudioPlayback) {
+        globalAudioPlayback.destroy();
+        globalAudioPlayback = null;
+      }
+      activeVoiceSessionId = null;
+      // Trigger UI update via the stopped callback if registered
+      if (globalStoppedCallback) {
+        globalStoppedCallback();
+      }
     }
   });
 
@@ -121,7 +153,7 @@ export function VoiceModeButton({ sessionId, workspacePath }: VoiceModeButtonPro
     loadSettings();
   }, []);
 
-  // Set up error callback when this session becomes active
+  // Set up error and stopped callbacks when this session becomes active
   useEffect(() => {
     if (isVoiceActive && sessionId === activeVoiceSessionId) {
       globalErrorCallback = (err) => {
@@ -139,10 +171,16 @@ export function VoiceModeButton({ sessionId, workspacePath }: VoiceModeButtonPro
         activeVoiceSessionId = null;
         setIsVoiceActive(false);
       };
+
+      // Callback for when session is stopped programmatically (by AI assistant)
+      globalStoppedCallback = () => {
+        setIsVoiceActive(false);
+      };
     }
     return () => {
       if (sessionId === activeVoiceSessionId) {
         globalErrorCallback = null;
+        globalStoppedCallback = null;
       }
     };
   }, [isVoiceActive, sessionId, workspacePath]);

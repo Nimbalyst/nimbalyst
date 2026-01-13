@@ -85,10 +85,120 @@ export function sendToVoiceAgent(sessionId: string, message: string): boolean {
   return success;
 }
 
+/**
+ * Stop the active voice session programmatically
+ * Called by the AI assistant via MCP tool to end voice mode
+ * Returns true if a session was stopped, false if no session was active
+ */
+export function stopVoiceSession(): boolean {
+  if (!activeVoiceSession) {
+    console.log('[VoiceModeService] No active voice session to stop');
+    return false;
+  }
+
+  const sessionId = activeVoiceSession.sessionId;
+  console.log('[VoiceModeService] Stopping voice session programmatically:', sessionId);
+
+  // Track session ended (reason: assistant_stopped)
+  sendSessionEndedEvent('assistant_stopped', activeVoiceSession.startTime);
+
+  // Disconnect from OpenAI
+  activeVoiceSession.poc.disconnect('user_stopped');
+
+  // Clean up the completion listener
+  activeVoiceSession.cleanupCompletionListener();
+
+  // Notify the renderer that voice mode was stopped
+  if (activeVoiceSession.window && !activeVoiceSession.window.isDestroyed()) {
+    activeVoiceSession.window.webContents.send('voice-mode:stopped', { sessionId });
+  }
+
+  activeVoiceSession = null;
+
+  return true;
+}
+
+/**
+ * Get a summary of the current AI session
+ * Returns session metadata, message counts, and recent activity
+ */
+export async function getSessionSummary(): Promise<{
+  success: boolean;
+  summary?: string;
+  details?: {
+    sessionId: string;
+    sessionName: string;
+    messageCount: number;
+    userMessageCount: number;
+    assistantMessageCount: number;
+    sessionDurationMinutes: number;
+    recentTopics: string[];
+  };
+  error?: string;
+}> {
+  if (!activeVoiceSession) {
+    return { success: false, error: 'No active voice session' };
+  }
+
+  try {
+    const { sessionId, window, workspacePath } = activeVoiceSession;
+
+    // Load session data from the renderer
+    const session = await window.webContents.executeJavaScript(`
+      window.electronAPI.invoke('ai:loadSession', ${JSON.stringify(sessionId)}, ${JSON.stringify(workspacePath)}, false)
+    `);
+
+    if (!session) {
+      return { success: false, error: 'Session not found' };
+    }
+
+    const messages = session.messages || [];
+    const userMessages = messages.filter((m: any) => m.role === 'user');
+    const assistantMessages = messages.filter((m: any) => m.role === 'assistant');
+    const sessionName = session.title || session.name || 'Untitled';
+
+    // Calculate session duration
+    const createdAt = session.createdAt || Date.now();
+    const sessionDurationMinutes = Math.round((Date.now() - createdAt) / 60000);
+
+    // Extract recent topics from user messages (last 5)
+    const recentUserMessages = userMessages.slice(-5);
+    const recentTopics = recentUserMessages.map((m: any) => {
+      const content = typeof m.content === 'string' ? m.content : '';
+      // Truncate to first 50 chars
+      return content.length > 50 ? content.substring(0, 50) + '...' : content;
+    });
+
+    const details = {
+      sessionId,
+      sessionName,
+      messageCount: messages.length,
+      userMessageCount: userMessages.length,
+      assistantMessageCount: assistantMessages.length,
+      sessionDurationMinutes,
+      recentTopics,
+    };
+
+    // Generate a human-readable summary
+    const summary = `Session "${sessionName}" has ${userMessages.length} user messages and ${assistantMessages.length} assistant responses over ${sessionDurationMinutes} minutes. ${recentTopics.length > 0 ? `Recent topics: ${recentTopics.join('; ')}` : 'No messages yet.'}`;
+
+    return { success: true, summary, details };
+  } catch (error) {
+    console.error('[VoiceModeService] Failed to get session summary:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
 export function initVoiceModeService() {
   // Create settings store instance (MUST match AIService store name!)
   const settingsStore = new Store<Record<string, unknown>>({
     name: 'ai-settings',  // Same as AIService!
+    watch: true,
+  });
+
+  // Voice mode settings store (for voice mode specific settings including custom prompts)
+  const voiceModeSettingsStore = new Store<Record<string, unknown>>({
+    name: 'nimbalyst-settings',
     watch: true,
   });
 
@@ -161,8 +271,15 @@ export function initVoiceModeService() {
         console.error('[VoiceModeService] Failed to load session context:', error);
       }
 
-      // Create PoC instance with agent session context
-      const poc = new RealtimeAPIClient(apiKey, sessionId, workspacePath, window, sessionContext);
+      // Load custom voice agent prompt from settings
+      const voiceModeSettings = voiceModeSettingsStore.get('voiceMode') as {
+        voiceAgentPrompt?: { prepend?: string; append?: string };
+        codingAgentPrompt?: { prepend?: string; append?: string };
+      } | undefined;
+      const customPrompt = voiceModeSettings?.voiceAgentPrompt || {};
+
+      // Create PoC instance with agent session context and custom prompt
+      const poc = new RealtimeAPIClient(apiKey, sessionId, workspacePath, window, sessionContext, customPrompt);
 
       // Set up callbacks to forward audio/text to renderer
       // Include sessionId in the event payload so the renderer can filter
@@ -178,9 +295,18 @@ export function initVoiceModeService() {
         }
       });
 
+      // Load coding agent prompt settings for inclusion in submit-prompt events
+      const codingAgentPromptSettings = voiceModeSettings?.codingAgentPrompt || {};
+
       poc.setOnSubmitPrompt(async (prompt) => {
         if (window && !window.isDestroyed()) {
-          window.webContents.send('voice-mode:submit-prompt', { sessionId, workspacePath, prompt });
+          // Include coding agent prompt settings so they can be passed to the provider
+          window.webContents.send('voice-mode:submit-prompt', {
+            sessionId,
+            workspacePath,
+            prompt,
+            codingAgentPrompt: codingAgentPromptSettings,
+          });
         }
       });
 
@@ -194,6 +320,79 @@ export function initVoiceModeService() {
         console.error('[VoiceModeService] Error from OpenAI:', error.type, error.message);
         if (window && !window.isDestroyed()) {
           window.webContents.send('voice-mode:error', { sessionId, error });
+        }
+      });
+
+      // Set up callbacks for voice agent tools
+      poc.setOnStopSession(() => {
+        return stopVoiceSession();
+      });
+
+      poc.setOnGetSessionSummary(async () => {
+        const result = await getSessionSummary();
+        return {
+          success: result.success,
+          summary: result.summary,
+          error: result.error,
+        };
+      });
+
+      poc.setOnAskCodingAgent(async (question: string) => {
+        // Send the question to the coding agent via the existing prompt system
+        // The [VOICE] prefix signals this is from the voice assistant
+        // The system prompt (via isVoiceMode in documentContext) provides full context
+        const questionPrompt = `[VOICE] ${question}`;
+
+        try {
+          if (window && !window.isDestroyed()) {
+            // Create a promise that resolves when the agent responds
+            return new Promise((resolve) => {
+              let timeoutId: NodeJS.Timeout | null = null;
+
+              // Set up a one-time listener for the response via ipcMain
+              // This listens for the same event that submit_agent_prompt uses
+              const responseHandler = (_event: any, data: { sessionId: string; summary: string }) => {
+                if (data.sessionId === sessionId) {
+                  // Clean up
+                  ipcMain.removeListener('voice-mode:agent-task-complete', responseHandler);
+                  if (timeoutId) clearTimeout(timeoutId);
+
+                  // Return the answer
+                  resolve({
+                    success: true,
+                    answer: data.summary || 'I was unable to find an answer.',
+                  });
+                }
+              };
+
+              // Listen for the response
+              ipcMain.on('voice-mode:agent-task-complete', responseHandler);
+
+              // Send the question to the renderer to queue
+              window.webContents.send('voice-mode:submit-prompt', {
+                sessionId,
+                workspacePath,
+                prompt: questionPrompt,
+              });
+
+              // Timeout after 60 seconds
+              timeoutId = setTimeout(() => {
+                ipcMain.removeListener('voice-mode:agent-task-complete', responseHandler);
+                resolve({
+                  success: false,
+                  error: 'Question timed out waiting for response',
+                });
+              }, 60000);
+            });
+          } else {
+            return { success: false, error: 'Window not available' };
+          }
+        } catch (error) {
+          console.error('[VoiceModeService] Failed to ask coding agent:', error);
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          };
         }
       });
 

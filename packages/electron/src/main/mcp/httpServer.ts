@@ -12,7 +12,7 @@ import { parse as parseUrl } from 'url';
 import { existsSync } from 'fs';
 import path, { isAbsolute } from 'path';
 import { MockupScreenshotService } from '../services/MockupScreenshotService';
-import { isVoiceModeActive, sendToVoiceAgent, getActiveVoiceSessionId } from '../services/voice/VoiceModeService';
+import { isVoiceModeActive, sendToVoiceAgent, getActiveVoiceSessionId, stopVoiceSession } from '../services/voice/VoiceModeService';
 
 /**
  * Compress a base64 image to JPEG if it exceeds 0.28 MB.
@@ -622,6 +622,17 @@ async function tryCreateServer(port: number): Promise<any> {
               }
             },
             required: ['message']
+          }
+        });
+
+        // Add voice_agent_stop tool to allow AI to end voice sessions
+        builtInTools.push({
+          name: 'voice_agent_stop',
+          description: 'Stop the current voice mode session. Use this to end voice interactions when the conversation is complete, when the user requests to stop, or when transitioning away from voice mode. This will disconnect from the voice service and clean up resources. Returns success if a session was stopped, or indicates if no session was active.',
+          inputSchema: {
+            type: 'object',
+            properties: {},
+            required: []
           }
         });
 
@@ -1367,6 +1378,33 @@ async function tryCreateServer(port: number): Promise<any> {
               ],
               isError: false
             };
+          }
+
+          case 'voice_agent_stop': {
+            // Stop the active voice session
+            const wasActive = stopVoiceSession();
+
+            if (wasActive) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: 'Voice mode session has been stopped successfully.'
+                  }
+                ],
+                isError: false
+              };
+            } else {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: 'No active voice mode session to stop.'
+                  }
+                ],
+                isError: false // Not a hard error - just means no session was active
+              };
+            }
           }
 
           default: {

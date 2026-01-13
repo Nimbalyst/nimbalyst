@@ -5,6 +5,11 @@
 import React from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 
+interface SystemPromptConfig {
+  prepend?: string;
+  append?: string;
+}
+
 interface VoiceModePanelProps {
   enabled: boolean;
   onEnabledChange: (enabled: boolean) => void;
@@ -13,6 +18,10 @@ interface VoiceModePanelProps {
   showTranscription: boolean;
   onShowTranscriptionChange: (show: boolean) => void;
   hasOpenAIKey: boolean;
+  voiceAgentPrompt?: SystemPromptConfig;
+  onVoiceAgentPromptChange?: (config: SystemPromptConfig) => void;
+  codingAgentPrompt?: SystemPromptConfig;
+  onCodingAgentPromptChange?: (config: SystemPromptConfig) => void;
 }
 
 export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
@@ -23,7 +32,13 @@ export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
   showTranscription,
   onShowTranscriptionChange,
   hasOpenAIKey,
+  voiceAgentPrompt,
+  onVoiceAgentPromptChange,
+  codingAgentPrompt,
+  onCodingAgentPromptChange,
 }) => {
+  const [showVoiceAgentPrompt, setShowVoiceAgentPrompt] = React.useState(false);
+  const [showCodingAgentPrompt, setShowCodingAgentPrompt] = React.useState(false);
   return (
     <div className="provider-panel">
       <div className="provider-panel-header">
@@ -140,6 +155,192 @@ export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
               When Claude Code finishes working, the assistant summarizes what was done
               and speaks it back to you.
             </p>
+          </div>
+
+          <div className="provider-panel-section">
+            <h4 className="provider-panel-section-title">System Prompt Customization</h4>
+            <p className="provider-panel-hint" style={{ marginBottom: '16px' }}>
+              Customize the behavior of the voice agent and coding agent during voice mode sessions.
+            </p>
+
+            {/* Voice Agent Prompt Section */}
+            <button
+              onClick={() => setShowVoiceAgentPrompt(!showVoiceAgentPrompt)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                cursor: 'pointer',
+                color: 'var(--text-primary)',
+                fontSize: '14px',
+                fontWeight: 500,
+                marginBottom: showVoiceAgentPrompt ? '12px' : '16px',
+              }}
+            >
+              <MaterialSymbol icon={showVoiceAgentPrompt ? 'expand_less' : 'expand_more'} size={20} />
+              Voice Agent Instructions
+            </button>
+
+            {showVoiceAgentPrompt && onVoiceAgentPromptChange && (
+              <div style={{ marginBottom: '24px', paddingLeft: '28px' }}>
+                <p className="provider-panel-hint" style={{ marginBottom: '12px' }}>
+                  Customize the voice assistant (GPT-4 Realtime) that handles speech interaction.
+                </p>
+
+                <div className="setting-item" style={{ marginBottom: '16px' }}>
+                  <div className="setting-text">
+                    <span className="setting-name">Prepend to Instructions</span>
+                    <span className="setting-description">
+                      Added before the default voice assistant instructions
+                    </span>
+                  </div>
+                  <textarea
+                    value={voiceAgentPrompt?.prepend || ''}
+                    onChange={(e) => onVoiceAgentPromptChange({
+                      ...voiceAgentPrompt,
+                      prepend: e.target.value,
+                    })}
+                    placeholder="e.g., Always respond in a formal tone..."
+                    style={{
+                      marginTop: '8px',
+                      width: '100%',
+                      minHeight: '80px',
+                      padding: '8px 12px',
+                      borderRadius: '4px',
+                      border: '1px solid var(--border-primary)',
+                      backgroundColor: 'var(--surface-secondary)',
+                      color: 'var(--text-primary)',
+                      fontFamily: 'inherit',
+                      fontSize: '13px',
+                      resize: 'vertical',
+                    }}
+                  />
+                </div>
+
+                <div className="setting-item">
+                  <div className="setting-text">
+                    <span className="setting-name">Append to Instructions</span>
+                    <span className="setting-description">
+                      Added after the default voice assistant instructions
+                    </span>
+                  </div>
+                  <textarea
+                    value={voiceAgentPrompt?.append || ''}
+                    onChange={(e) => onVoiceAgentPromptChange({
+                      ...voiceAgentPrompt,
+                      append: e.target.value,
+                    })}
+                    placeholder="e.g., When discussing code, always mention file names..."
+                    style={{
+                      marginTop: '8px',
+                      width: '100%',
+                      minHeight: '80px',
+                      padding: '8px 12px',
+                      borderRadius: '4px',
+                      border: '1px solid var(--border-primary)',
+                      backgroundColor: 'var(--surface-secondary)',
+                      color: 'var(--text-primary)',
+                      fontFamily: 'inherit',
+                      fontSize: '13px',
+                      resize: 'vertical',
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Coding Agent Prompt Section */}
+            <button
+              onClick={() => setShowCodingAgentPrompt(!showCodingAgentPrompt)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                cursor: 'pointer',
+                color: 'var(--text-primary)',
+                fontSize: '14px',
+                fontWeight: 500,
+                marginBottom: showCodingAgentPrompt ? '12px' : '0',
+              }}
+            >
+              <MaterialSymbol icon={showCodingAgentPrompt ? 'expand_less' : 'expand_more'} size={20} />
+              Coding Agent Instructions (Voice Mode)
+            </button>
+
+            {showCodingAgentPrompt && onCodingAgentPromptChange && (
+              <div style={{ paddingLeft: '28px' }}>
+                <p className="provider-panel-hint" style={{ marginBottom: '12px' }}>
+                  Customize the coding agent (Claude) when processing voice mode requests.
+                  These instructions are added to the system prompt only during voice mode sessions.
+                </p>
+
+                <div className="setting-item" style={{ marginBottom: '16px' }}>
+                  <div className="setting-text">
+                    <span className="setting-name">Prepend to Instructions</span>
+                    <span className="setting-description">
+                      Added before the coding agent's voice mode context
+                    </span>
+                  </div>
+                  <textarea
+                    value={codingAgentPrompt?.prepend || ''}
+                    onChange={(e) => onCodingAgentPromptChange({
+                      ...codingAgentPrompt,
+                      prepend: e.target.value,
+                    })}
+                    placeholder="e.g., When responding to voice requests, prioritize brevity..."
+                    style={{
+                      marginTop: '8px',
+                      width: '100%',
+                      minHeight: '80px',
+                      padding: '8px 12px',
+                      borderRadius: '4px',
+                      border: '1px solid var(--border-primary)',
+                      backgroundColor: 'var(--surface-secondary)',
+                      color: 'var(--text-primary)',
+                      fontFamily: 'inherit',
+                      fontSize: '13px',
+                      resize: 'vertical',
+                    }}
+                  />
+                </div>
+
+                <div className="setting-item">
+                  <div className="setting-text">
+                    <span className="setting-name">Append to Instructions</span>
+                    <span className="setting-description">
+                      Added after the coding agent's voice mode context
+                    </span>
+                  </div>
+                  <textarea
+                    value={codingAgentPrompt?.append || ''}
+                    onChange={(e) => onCodingAgentPromptChange({
+                      ...codingAgentPrompt,
+                      append: e.target.value,
+                    })}
+                    placeholder="e.g., Always summarize what you did in 1-2 sentences at the end..."
+                    style={{
+                      marginTop: '8px',
+                      width: '100%',
+                      minHeight: '80px',
+                      padding: '8px 12px',
+                      borderRadius: '4px',
+                      border: '1px solid var(--border-primary)',
+                      backgroundColor: 'var(--surface-secondary)',
+                      color: 'var(--text-primary)',
+                      fontFamily: 'inherit',
+                      fontSize: '13px',
+                      resize: 'vertical',
+                    }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </>
       )}

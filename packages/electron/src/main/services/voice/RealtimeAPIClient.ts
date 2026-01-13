@@ -38,6 +38,11 @@ interface SessionConfig {
   }>;
 }
 
+interface CustomPromptConfig {
+  prepend?: string;
+  append?: string;
+}
+
 export class RealtimeAPIClient {
   private ws: WebSocket | null = null;
   private apiKey: string;
@@ -50,10 +55,14 @@ export class RealtimeAPIClient {
   private onInterruptionCallback: (() => void) | null = null;
   private onDisconnectCallback: ((reason: 'timeout' | 'error' | 'user_stopped') => void) | null = null;
   private onErrorCallback: ((error: { type: string; message: string }) => void) | null = null;
+  private onStopSessionCallback: (() => boolean) | null = null;
+  private onGetSessionSummaryCallback: (() => Promise<{ success: boolean; summary?: string; error?: string }>) | null = null;
+  private onAskCodingAgentCallback: ((question: string) => Promise<{ success: boolean; answer?: string; error?: string }>) | null = null;
   private claudeCodeSessionId: string;
   private workspacePath: string | null;
   private window: Electron.BrowserWindow;
   private sessionContext: string;
+  private customPrompt: CustomPromptConfig;
 
   // Inactivity tracking
   private lastActivityTime: number = Date.now();
@@ -74,13 +83,15 @@ export class RealtimeAPIClient {
     claudeCodeSessionId: string,
     workspacePath: string | null,
     window: Electron.BrowserWindow,
-    sessionContext?: string
+    sessionContext?: string,
+    customPrompt?: CustomPromptConfig
   ) {
     this.apiKey = apiKey;
     this.claudeCodeSessionId = claudeCodeSessionId;
     this.workspacePath = workspacePath;
     this.window = window;
     this.sessionContext = sessionContext || 'New session with no prior messages.';
+    this.customPrompt = customPrompt || {};
   }
 
   /**
@@ -123,6 +134,27 @@ export class RealtimeAPIClient {
    */
   setOnError(callback: (error: { type: string; message: string }) => void): void {
     this.onErrorCallback = callback;
+  }
+
+  /**
+   * Set callback for stopping the voice session
+   */
+  setOnStopSession(callback: () => boolean): void {
+    this.onStopSessionCallback = callback;
+  }
+
+  /**
+   * Set callback for getting session summary
+   */
+  setOnGetSessionSummary(callback: () => Promise<{ success: boolean; summary?: string; error?: string }>): void {
+    this.onGetSessionSummaryCallback = callback;
+  }
+
+  /**
+   * Set callback for asking the coding agent questions
+   */
+  setOnAskCodingAgent(callback: (question: string) => Promise<{ success: boolean; answer?: string; error?: string }>): void {
+    this.onAskCodingAgentCallback = callback;
   }
 
   /**
@@ -273,20 +305,44 @@ export class RealtimeAPIClient {
       return;
     }
 
-    const config: SessionConfig = {
-      modalities: ['text', 'audio'],
-      instructions: `You are a voice interface for an AI coding assistant.
+    // Build instructions with optional custom prepend/append
+    const baseInstructions = `You are a voice assistant that serves as the conversational interface between the user and a coding agent (Claude).
+
+Architecture:
+- You handle voice interaction with the user
+- A separate coding agent (Claude) handles all coding tasks, file searches, and technical work
+- You relay requests to the coding agent and summarize its responses for voice
 
 Session: ${this.sessionContext}
 
+IMPORTANT: Your knowledge of this codebase is limited to the session context above. You do NOT have current knowledge of this project's code, files, implementation details, or recent changes. Do not assume you know how features work. When in doubt, ask the coding agent.
+
+Tools:
+- submit_agent_prompt: Send a coding task to the coding agent. Use for any task that requires writing code, making changes, or doing technical work.
+- ask_coding_agent: Ask the coding agent a question. Use when you need information about the project, codebase, files, or anything you don't know. The coding agent can search files, read code, and look up information.
+- stop_voice_session: End the voice conversation when the user says goodbye or wants to stop.
+- get_session_summary: Get a summary of what's been discussed in this session.
+
 Guidelines:
-- For coding tasks: use submit_agent_prompt, say "On it" or similar, then stay quiet until done
-- For "[INTERNAL: ...]" messages: briefly acknowledge completion ("Done" + one-sentence summary)
-- For simple questions: answer directly
-- For questions requiring current info or web lookup: use submit_agent_prompt to have the coding agent search the web
-- Avoid repeating status updates or over-acknowledging
-- Keep all responses under 2 sentences
-- Never read code, file paths, or technical details verbatim`,
+- For coding tasks: use submit_agent_prompt, say "On it" or similar, then stay quiet until the coding agent finishes
+- For ANY question about this project, codebase, files, features, implementation, timeouts, configurations, or how things work: ALWAYS say a brief acknowledgement first (like "Let me check on that" or "Asking the coding agent"), then use ask_coding_agent, then summarize the answer conversationally
+- Only answer directly for truly general knowledge questions completely unrelated to this project (like "what time is it" or "tell me a joke")
+- For "[INTERNAL: ...]" messages: these are completion notifications from the coding agent - briefly acknowledge ("Done" + short summary)
+- When summarizing coding agent responses: adapt length to complexity, paraphrase technical details naturally for speech
+- Never read code, file paths, or technical details verbatim`;
+
+    // Apply custom prepend/append if configured
+    let instructions = baseInstructions;
+    if (this.customPrompt.prepend) {
+      instructions = this.customPrompt.prepend + '\n\n' + instructions;
+    }
+    if (this.customPrompt.append) {
+      instructions = instructions + '\n\n' + this.customPrompt.append;
+    }
+
+    const config: SessionConfig = {
+      modalities: ['text', 'audio'],
+      instructions,
       voice: 'marin', // Use Marin voice
       input_audio_format: 'pcm16',
       output_audio_format: 'pcm16',
@@ -313,6 +369,41 @@ Guidelines:
               },
             },
             required: ['prompt'],
+          },
+        },
+        {
+          type: 'function',
+          name: 'stop_voice_session',
+          description: 'End the current voice mode session. Use this when the user says goodbye, wants to stop talking, or the conversation is complete. This will disconnect from voice mode.',
+          parameters: {
+            type: 'object',
+            properties: {},
+            required: [],
+          },
+        },
+        {
+          type: 'function',
+          name: 'get_session_summary',
+          description: 'Get a summary of the current AI session. Returns information about the session name, message counts, duration, and recent topics discussed. Use this when the user asks about what has been discussed or wants a recap.',
+          parameters: {
+            type: 'object',
+            properties: {},
+            required: [],
+          },
+        },
+        {
+          type: 'function',
+          name: 'ask_coding_agent',
+          description: 'Ask the coding agent a question when you need more information to answer the user. The coding agent can search files, read code, look up documentation, run web searches, or use its knowledge of the codebase. Use this when the user asks about something you do not know - like details about the project, how something works, what a file contains, recent changes, etc. The coding agent will provide a detailed answer which you should then summarize appropriately for voice.',
+          parameters: {
+            type: 'object',
+            properties: {
+              question: {
+                type: 'string',
+                description: 'The question to ask the coding agent. Be specific about what information you need. Examples: "What does the VoiceModeService do?", "How is authentication implemented?", "What files handle the editor tabs?"',
+              },
+            },
+            required: ['question'],
           },
         },
       ],
@@ -410,34 +501,116 @@ Guidelines:
    * Handle function call from OpenAI
    */
   private async handleFunctionCall(callId: string, name: string, argsJson: string): Promise<void> {
-    if (name === 'submit_agent_prompt') {
-      try {
-        const args = JSON.parse(argsJson);
-        const prompt = args.prompt;
+    switch (name) {
+      case 'submit_agent_prompt': {
+        try {
+          const args = JSON.parse(argsJson);
+          const prompt = args.prompt;
 
-        // Track prompt submission (no content for privacy)
-        AnalyticsService.getInstance().sendEvent('voice_prompt_submitted');
+          // Track prompt submission (no content for privacy)
+          AnalyticsService.getInstance().sendEvent('voice_prompt_submitted');
 
-        if (this.onSubmitPromptCallback) {
-          await this.onSubmitPromptCallback(prompt);
-        } else {
-          throw new Error('No submit prompt callback registered');
+          if (this.onSubmitPromptCallback) {
+            await this.onSubmitPromptCallback(prompt);
+          } else {
+            throw new Error('No submit prompt callback registered');
+          }
+
+          this.sendFunctionCallResult(callId, {
+            success: true,
+            message: 'Task queued successfully. You will be notified when it completes.',
+          });
+        } catch (error) {
+          console.error('[RealtimeAPIClient] Failed to submit prompt to agent:', error);
+          this.sendFunctionCallResult(callId, {
+            success: false,
+            error: error instanceof Error ? error.message : String(error),
+          });
         }
-
-        this.sendFunctionCallResult(callId, {
-          success: true,
-          message: 'Task queued successfully. You will be notified when it completes.',
-        });
-      } catch (error) {
-        console.error('[RealtimeAPIClient] Failed to submit prompt to agent:', error);
-        this.sendFunctionCallResult(callId, {
-          success: false,
-          error: error instanceof Error ? error.message : String(error),
-        });
+        break;
       }
-    } else {
-      console.error('[RealtimeAPIClient] Unknown function call:', name);
-      this.sendFunctionCallResult(callId, { error: 'Unknown function' });
+
+      case 'stop_voice_session': {
+        try {
+          if (this.onStopSessionCallback) {
+            const stopped = this.onStopSessionCallback();
+            this.sendFunctionCallResult(callId, {
+              success: stopped,
+              message: stopped ? 'Voice session ended.' : 'No active session to stop.',
+            });
+          } else {
+            this.sendFunctionCallResult(callId, {
+              success: false,
+              error: 'Stop session callback not registered',
+            });
+          }
+        } catch (error) {
+          console.error('[RealtimeAPIClient] Failed to stop session:', error);
+          this.sendFunctionCallResult(callId, {
+            success: false,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+        break;
+      }
+
+      case 'get_session_summary': {
+        try {
+          if (this.onGetSessionSummaryCallback) {
+            const result = await this.onGetSessionSummaryCallback();
+            this.sendFunctionCallResult(callId, result);
+          } else {
+            this.sendFunctionCallResult(callId, {
+              success: false,
+              error: 'Session summary callback not registered',
+            });
+          }
+        } catch (error) {
+          console.error('[RealtimeAPIClient] Failed to get session summary:', error);
+          this.sendFunctionCallResult(callId, {
+            success: false,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+        break;
+      }
+
+      case 'ask_coding_agent': {
+        try {
+          const args = JSON.parse(argsJson);
+          const question = args.question;
+
+          if (!question) {
+            this.sendFunctionCallResult(callId, {
+              success: false,
+              error: 'question parameter is required',
+            });
+            break;
+          }
+
+          if (this.onAskCodingAgentCallback) {
+            const result = await this.onAskCodingAgentCallback(question);
+            this.sendFunctionCallResult(callId, result);
+          } else {
+            this.sendFunctionCallResult(callId, {
+              success: false,
+              error: 'Ask coding agent callback not registered',
+            });
+          }
+        } catch (error) {
+          console.error('[RealtimeAPIClient] Failed to ask coding agent:', error);
+          this.sendFunctionCallResult(callId, {
+            success: false,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+        break;
+      }
+
+      default: {
+        console.error('[RealtimeAPIClient] Unknown function call:', name);
+        this.sendFunctionCallResult(callId, { error: 'Unknown function' });
+      }
     }
   }
 
