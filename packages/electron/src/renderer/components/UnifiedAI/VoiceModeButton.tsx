@@ -6,9 +6,12 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useAtomValue } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import { AudioCapture } from '../../utils/audioCapture';
 import { AudioPlayback } from '../../utils/audioPlayback';
+import { VoiceTranscriptionDisplay } from './VoiceTranscriptionDisplay';
+import { voiceModeEnabledAtom, showTranscriptionAtom } from '../../store/atoms/appSettings';
 
 // Global singleton state - only ONE voice session can be active at a time
 let activeVoiceSessionId: string | null = null;
@@ -123,34 +126,18 @@ interface VoiceModeButtonProps {
 }
 
 export function VoiceModeButton({ sessionId, workspacePath }: VoiceModeButtonProps) {
-  const [voiceModeEnabled, setVoiceModeEnabled] = useState(false);
+  // Subscribe to voice mode settings from Jotai atoms
+  // These update automatically when settings change in SettingsView
+  const voiceModeEnabled = useAtomValue(voiceModeEnabledAtom);
+  const showTranscription = useAtomValue(showTranscriptionAtom);
+
   const [isVoiceActive, setIsVoiceActive] = useState(activeVoiceSessionId === sessionId);
-  const [isLoading, setIsLoading] = useState(true);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<{ type: string; message: string } | null>(null);
 
-  // Load voice mode settings on mount
+  // Ensure global IPC listeners are registered once
   useEffect(() => {
-    async function loadSettings() {
-      try {
-        // Ensure global IPC listeners are registered (one-time setup)
-        ensureGlobalListenersRegistered();
-
-        // Initialize voice mode handlers
-        await window.electronAPI.invoke('voice-mode:init');
-
-        // Get settings
-        const settings = await window.electronAPI.invoke('voice-mode:get-settings');
-        setVoiceModeEnabled(settings?.enabled || false);
-      } catch (error) {
-        console.error('[VoiceModeButton] Failed to load settings:', error);
-        setVoiceModeEnabled(false);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    loadSettings();
+    ensureGlobalListenersRegistered();
   }, []);
 
   // Set up error and stopped callbacks when this session becomes active
@@ -322,6 +309,13 @@ export function VoiceModeButton({ sessionId, workspacePath }: VoiceModeButtonPro
 
   return (
     <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+      {/* Floating transcription display */}
+      {showTranscription && (
+        <VoiceTranscriptionDisplay
+          isActive={isVoiceActive}
+          sessionId={sessionId || ''}
+        />
+      )}
       <button
         onClick={handleToggleVoice}
         disabled={isConnecting}

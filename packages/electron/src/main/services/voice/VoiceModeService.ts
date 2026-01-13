@@ -271,15 +271,29 @@ export function initVoiceModeService() {
         console.error('[VoiceModeService] Failed to load session context:', error);
       }
 
-      // Load custom voice agent prompt from settings
+      // Load custom voice agent prompt, turn detection settings, and voice
       const voiceModeSettings = voiceModeSettingsStore.get('voiceMode') as {
+        voice?: 'alloy' | 'ash' | 'ballad' | 'coral' | 'echo' | 'sage' | 'shimmer' | 'verse' | 'marin' | 'cedar';
         voiceAgentPrompt?: { prepend?: string; append?: string };
         codingAgentPrompt?: { prepend?: string; append?: string };
+        turnDetection?: {
+          mode: 'server_vad' | 'push_to_talk';
+          vadThreshold?: number;
+          silenceDuration?: number;
+          interruptible?: boolean;
+        };
       } | undefined;
       const customPrompt = voiceModeSettings?.voiceAgentPrompt || {};
+      const turnDetection = voiceModeSettings?.turnDetection || {
+        mode: 'server_vad' as const,
+        vadThreshold: 0.5,
+        silenceDuration: 500,
+        interruptible: true,
+      };
+      const selectedVoice = voiceModeSettings?.voice || 'alloy';
 
-      // Create PoC instance with agent session context and custom prompt
-      const poc = new RealtimeAPIClient(apiKey, sessionId, workspacePath, window, sessionContext, customPrompt);
+      // Create PoC instance with agent session context, custom prompt, turn detection, and voice
+      const poc = new RealtimeAPIClient(apiKey, sessionId, workspacePath, window, sessionContext, customPrompt, turnDetection, selectedVoice);
 
       // Set up callbacks to forward audio/text to renderer
       // Include sessionId in the event payload so the renderer can filter
@@ -580,6 +594,81 @@ export function initVoiceModeService() {
       return {
         success: false,
         message: `Commit audio failed: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  });
+
+  /**
+   * Preview a voice using OpenAI's TTS API
+   */
+  safeHandle('voice-mode:preview-voice', async (event, voiceId: string) => {
+    try {
+      // Get OpenAI API key
+      const apiKeys = settingsStore.get('apiKeys') as Record<string, string> | undefined;
+      const apiKey = apiKeys?.openai;
+
+      if (!apiKey) {
+        return {
+          success: false,
+          message: 'OpenAI API key not configured',
+        };
+      }
+
+      // TTS API supports: alloy, ash, coral, echo, fable, nova, onyx, sage, shimmer
+      // Realtime API adds: ballad, marin, cedar, verse
+      // Map unsupported voices to similar TTS voices for preview
+      const ttsVoiceMap: Record<string, string> = {
+        'ballad': 'nova',    // Warm and melodic -> Nova
+        'marin': 'alloy',    // Natural conversational -> Alloy
+        'cedar': 'onyx',     // Deep and resonant -> Onyx
+        'verse': 'fable',    // Dynamic and engaging -> Fable
+      };
+
+      const ttsVoice = ttsVoiceMap[voiceId] || voiceId;
+      const isApproximation = ttsVoiceMap[voiceId] !== undefined;
+
+      // Use OpenAI's TTS API to generate a preview
+      const response = await fetch('https://api.openai.com/v1/audio/speech', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'tts-1',
+          input: isApproximation
+            ? `Hello! I'm ${voiceId}. This preview uses a similar voice. The actual voice in conversation will sound slightly different.`
+            : `Hello! I'm ${voiceId}. This is how I sound when speaking to you.`,
+          voice: ttsVoice,
+          response_format: 'mp3',
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`TTS API error: ${response.status} - ${errorText}`);
+      }
+
+      // Get the audio data
+      const audioBuffer = await response.arrayBuffer();
+      const audioBase64 = Buffer.from(audioBuffer).toString('base64');
+
+      // Get the window that made the request
+      const window = BrowserWindow.fromWebContents(event.sender);
+      if (window) {
+        // Send audio to renderer for playback
+        window.webContents.send('voice-mode:preview-audio', {
+          voiceId,
+          audioBase64,
+          format: 'mp3',
+        });
+      }
+
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Voice preview failed: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
   });

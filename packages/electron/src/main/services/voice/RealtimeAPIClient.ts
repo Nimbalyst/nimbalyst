@@ -43,6 +43,16 @@ interface CustomPromptConfig {
   append?: string;
 }
 
+interface TurnDetectionConfig {
+  mode: 'server_vad' | 'push_to_talk';
+  vadThreshold?: number;
+  silenceDuration?: number;
+  interruptible?: boolean;
+}
+
+// All available OpenAI Realtime API voices
+type VoiceId = 'alloy' | 'ash' | 'ballad' | 'coral' | 'echo' | 'sage' | 'shimmer' | 'verse' | 'marin' | 'cedar';
+
 export class RealtimeAPIClient {
   private ws: WebSocket | null = null;
   private apiKey: string;
@@ -63,6 +73,8 @@ export class RealtimeAPIClient {
   private window: Electron.BrowserWindow;
   private sessionContext: string;
   private customPrompt: CustomPromptConfig;
+  private turnDetection: TurnDetectionConfig;
+  private voice: VoiceId;
 
   // Inactivity tracking
   private lastActivityTime: number = Date.now();
@@ -84,7 +96,9 @@ export class RealtimeAPIClient {
     workspacePath: string | null,
     window: Electron.BrowserWindow,
     sessionContext?: string,
-    customPrompt?: CustomPromptConfig
+    customPrompt?: CustomPromptConfig,
+    turnDetection?: TurnDetectionConfig,
+    voice?: VoiceId
   ) {
     this.apiKey = apiKey;
     this.claudeCodeSessionId = claudeCodeSessionId;
@@ -92,6 +106,13 @@ export class RealtimeAPIClient {
     this.window = window;
     this.sessionContext = sessionContext || 'New session with no prior messages.';
     this.customPrompt = customPrompt || {};
+    this.turnDetection = turnDetection || {
+      mode: 'server_vad',
+      vadThreshold: 0.5,
+      silenceDuration: 500,
+      interruptible: true,
+    };
+    this.voice = voice || 'alloy';
   }
 
   /**
@@ -340,21 +361,27 @@ Guidelines:
       instructions = instructions + '\n\n' + this.customPrompt.append;
     }
 
+    // Build turn detection config based on settings
+    // 'push_to_talk' mode uses type: 'none' which disables automatic turn detection
+    const turnDetectionConfig = this.turnDetection.mode === 'push_to_talk'
+      ? undefined // No automatic turn detection - user must manually commit audio
+      : {
+          type: 'server_vad' as const,
+          threshold: this.turnDetection.vadThreshold ?? 0.5,
+          prefix_padding_ms: 300,
+          silence_duration_ms: this.turnDetection.silenceDuration ?? 500,
+        };
+
     const config: SessionConfig = {
       modalities: ['text', 'audio'],
       instructions,
-      voice: 'marin', // Use Marin voice
+      voice: this.voice,
       input_audio_format: 'pcm16',
       output_audio_format: 'pcm16',
       input_audio_transcription: {
         model: 'whisper-1',
       },
-      turn_detection: {
-        type: 'server_vad', // Server-side Voice Activity Detection
-        threshold: 0.5,
-        prefix_padding_ms: 300,
-        silence_duration_ms: 500,
-      },
+      turn_detection: turnDetectionConfig,
       tools: [
         {
           type: 'function',

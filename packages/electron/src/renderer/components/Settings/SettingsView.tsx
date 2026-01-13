@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useAtom } from 'jotai';
 import { usePostHog } from 'posthog-js/react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import { SettingsSidebar, type SettingsCategory } from './SettingsSidebar';
@@ -21,6 +22,13 @@ import { ProjectPermissionsPanel } from './panels/ProjectPermissionsPanel';
 import { ProviderOverrideWrapper } from './panels/ProviderOverrideWrapper';
 import { InstalledExtensionsPanel } from './panels/InstalledExtensionsPanel';
 import { walkthroughs } from '../../walkthroughs';
+import {
+  voiceModeSettingsAtom,
+  setVoiceModeSettingsAtom,
+  type VoiceModeSettings,
+  type VoiceId,
+  type TurnDetectionConfig,
+} from '../../store/atoms/appSettings';
 
 export interface ProviderConfig {
   enabled: boolean;
@@ -97,12 +105,15 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
   const [syncTestStatus, setSyncTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [syncTestMessage, setSyncTestMessage] = useState<string | undefined>();
 
-  // Voice Mode settings
-  const [voiceModeEnabled, setVoiceModeEnabled] = useState(false);
-  const [voiceModeVoice, setVoiceModeVoice] = useState<'marin' | 'cedar'>('marin');
-  const [voiceModeShowTranscription, setVoiceModeShowTranscription] = useState(true);
-  const [voiceAgentPrompt, setVoiceAgentPrompt] = useState<{ prepend?: string; append?: string }>({});
-  const [codingAgentPrompt, setCodingAgentPrompt] = useState<{ prepend?: string; append?: string }>({});
+  // Voice Mode settings - using Jotai atoms for cross-component reactivity
+  // When settings change here, VoiceModeButton updates automatically
+  const [voiceModeSettings, setVoiceModeSettings] = useAtom(voiceModeSettingsAtom);
+  const [, updateVoiceModeSettings] = useAtom(setVoiceModeSettingsAtom);
+
+  // Helper to update specific voice mode settings
+  const handleVoiceModeChange = useCallback((updates: Partial<VoiceModeSettings>) => {
+    updateVoiceModeSettings(updates);
+  }, [updateVoiceModeSettings]);
 
   // Package counts for sidebar badge
   const [installedPackageCount, setInstalledPackageCount] = useState(0);
@@ -206,29 +217,8 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
         setSyncConfig(syncConfigSetting);
       }
 
-      // Initialize voice mode handlers (lazy init to avoid boot-time issues)
-      try {
-        const initResult = await window.electronAPI.invoke('voice-mode:init');
-        // Debug logging - uncomment if needed for troubleshooting voice mode initialization
-        // console.log('[Settings] Voice mode init result:', initResult);
-
-        // Load voice mode settings
-        const voiceModeSetting = await window.electronAPI.invoke('voice-mode:get-settings');
-        // console.log('[Settings] Voice mode settings:', voiceModeSetting);
-        if (voiceModeSetting) {
-          setVoiceModeEnabled(voiceModeSetting.enabled || false);
-          setVoiceModeVoice(voiceModeSetting.voice || 'marin');
-          setVoiceModeShowTranscription(voiceModeSetting.showTranscription !== false);
-          setVoiceAgentPrompt(voiceModeSetting.voiceAgentPrompt || {});
-          setCodingAgentPrompt(voiceModeSetting.codingAgentPrompt || {});
-        }
-      } catch (error) {
-        console.error('[Settings] Failed to initialize/load voice mode:', error);
-        // Set defaults if init fails
-        setVoiceModeEnabled(false);
-        setVoiceModeVoice('marin');
-        setVoiceModeShowTranscription(true);
-      }
+      // Voice mode settings are loaded from Jotai atom (initialized in index.tsx)
+      // No need to load here - the atom is already hydrated
 
       // Fetch ALL models once
       try {
@@ -331,19 +321,8 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
       // Save sync config
       await window.electronAPI.invoke('sync:set-config', syncConfig.enabled ? syncConfig : null);
 
-      // Save voice mode settings (ensure handlers are initialized first)
-      try {
-        await window.electronAPI.invoke('voice-mode:init');
-        await window.electronAPI.invoke('voice-mode:set-settings', {
-          enabled: voiceModeEnabled,
-          voice: voiceModeVoice,
-          showTranscription: voiceModeShowTranscription,
-          voiceAgentPrompt,
-          codingAgentPrompt,
-        });
-      } catch (error) {
-        console.error('[Settings] Failed to save voice mode settings:', error);
-      }
+      // Voice mode settings are saved automatically via Jotai setter atom (debounced)
+      // No need to save here
 
       // Clear the model cache to force refresh with new API keys
       await window.electronAPI.aiClearModelCache?.();
@@ -366,7 +345,7 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
       setSaveStatus('error');
       setTimeout(() => setSaveStatus('idle'), 3000);
     }
-  }, [apiKeys, providers, showToolCalls, aiDebugLogging, completionSoundEnabled, completionSoundType, osNotificationsEnabled, releaseChannel, syncConfig, voiceModeEnabled, voiceModeVoice, voiceModeShowTranscription, voiceAgentPrompt, codingAgentPrompt]);
+  }, [apiKeys, providers, showToolCalls, aiDebugLogging, completionSoundEnabled, completionSoundType, osNotificationsEnabled, releaseChannel, syncConfig]);
 
   // Keep the ref in sync with performSave so debounced calls use the latest version
   performSaveRef.current = performSave;
@@ -617,32 +596,19 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
         />;
       case 'voice-mode':
         return <VoiceModePanel
-          enabled={voiceModeEnabled}
-          onEnabledChange={(value) => {
-            setVoiceModeEnabled(value);
-            debouncedSave();
-          }}
-          voice={voiceModeVoice}
-          onVoiceChange={(value) => {
-            setVoiceModeVoice(value);
-            debouncedSave();
-          }}
-          showTranscription={voiceModeShowTranscription}
-          onShowTranscriptionChange={(value) => {
-            setVoiceModeShowTranscription(value);
-            debouncedSave();
-          }}
+          enabled={voiceModeSettings.enabled}
+          onEnabledChange={(value) => handleVoiceModeChange({ enabled: value })}
+          voice={voiceModeSettings.voice}
+          onVoiceChange={(value) => handleVoiceModeChange({ voice: value })}
+          showTranscription={voiceModeSettings.showTranscription}
+          onShowTranscriptionChange={(value) => handleVoiceModeChange({ showTranscription: value })}
+          turnDetection={voiceModeSettings.turnDetection}
+          onTurnDetectionChange={(value) => handleVoiceModeChange({ turnDetection: value })}
           hasOpenAIKey={!!apiKeys.openai}
-          voiceAgentPrompt={voiceAgentPrompt}
-          onVoiceAgentPromptChange={(value) => {
-            setVoiceAgentPrompt(value);
-            debouncedSave();
-          }}
-          codingAgentPrompt={codingAgentPrompt}
-          onCodingAgentPromptChange={(value) => {
-            setCodingAgentPrompt(value);
-            debouncedSave();
-          }}
+          voiceAgentPrompt={voiceModeSettings.voiceAgentPrompt}
+          onVoiceAgentPromptChange={(value) => handleVoiceModeChange({ voiceAgentPrompt: value })}
+          codingAgentPrompt={voiceModeSettings.codingAgentPrompt}
+          onCodingAgentPromptChange={(value) => handleVoiceModeChange({ codingAgentPrompt: value })}
         />;
       case 'installed-extensions':
         return (

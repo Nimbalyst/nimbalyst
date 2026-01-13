@@ -10,19 +10,71 @@ interface SystemPromptConfig {
   append?: string;
 }
 
+interface TurnDetectionConfig {
+  mode: 'server_vad' | 'push_to_talk';
+  vadThreshold?: number;
+  silenceDuration?: number;
+  interruptible?: boolean;
+}
+
+// Voice type - all available OpenAI Realtime voices
+type VoiceId = 'alloy' | 'ash' | 'ballad' | 'coral' | 'echo' | 'sage' | 'shimmer' | 'verse' | 'marin' | 'cedar';
+
 interface VoiceModePanelProps {
   enabled: boolean;
   onEnabledChange: (enabled: boolean) => void;
-  voice: 'marin' | 'cedar';
-  onVoiceChange: (voice: 'marin' | 'cedar') => void;
+  voice: VoiceId;
+  onVoiceChange: (voice: VoiceId) => void;
   showTranscription: boolean;
   onShowTranscriptionChange: (show: boolean) => void;
+  turnDetection?: TurnDetectionConfig;
+  onTurnDetectionChange?: (config: TurnDetectionConfig) => void;
   hasOpenAIKey: boolean;
   voiceAgentPrompt?: SystemPromptConfig;
   onVoiceAgentPromptChange?: (config: SystemPromptConfig) => void;
   codingAgentPrompt?: SystemPromptConfig;
   onCodingAgentPromptChange?: (config: SystemPromptConfig) => void;
 }
+
+// Default turn detection config
+const DEFAULT_TURN_DETECTION: TurnDetectionConfig = {
+  mode: 'server_vad',
+  vadThreshold: 0.5,
+  silenceDuration: 500,
+  interruptible: true,
+};
+
+// Available OpenAI Realtime API voices with descriptions
+// Some voices are Realtime-only and use approximations for TTS preview
+// Gender categorization based on OpenAI documentation and community observations
+const VOICE_OPTIONS: Array<{
+  id: string;
+  name: string;
+  description: string;
+  gender: 'male' | 'female' | 'neutral';
+  realtimeOnly?: boolean; // If true, preview uses a similar voice approximation
+}> = [
+  // Male voices
+  { id: 'ash', name: 'Ash', description: 'Clear and confident', gender: 'male' },
+  { id: 'echo', name: 'Echo', description: 'Smooth and resonant', gender: 'male' },
+  { id: 'verse', name: 'Verse', description: 'Dynamic and engaging', gender: 'male', realtimeOnly: true },
+  { id: 'cedar', name: 'Cedar', description: 'Deep and authoritative', gender: 'male', realtimeOnly: true },
+  // Female voices
+  { id: 'coral', name: 'Coral', description: 'Warm and friendly', gender: 'female' },
+  { id: 'sage', name: 'Sage', description: 'Thoughtful and calm', gender: 'female' },
+  { id: 'shimmer', name: 'Shimmer', description: 'Bright and cheerful', gender: 'female' },
+  { id: 'ballad', name: 'Ballad', description: 'Melodic and expressive', gender: 'female', realtimeOnly: true },
+  { id: 'marin', name: 'Marin', description: 'Natural and conversational', gender: 'female', realtimeOnly: true },
+  // Neutral voices
+  { id: 'alloy', name: 'Alloy', description: 'Balanced and versatile', gender: 'neutral' },
+];
+
+// Group voices by gender for the dropdown
+const VOICE_GROUPS = [
+  { label: 'Male', voices: VOICE_OPTIONS.filter(v => v.gender === 'male') },
+  { label: 'Female', voices: VOICE_OPTIONS.filter(v => v.gender === 'female') },
+  { label: 'Neutral', voices: VOICE_OPTIONS.filter(v => v.gender === 'neutral') },
+];
 
 export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
   enabled,
@@ -31,6 +83,8 @@ export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
   onVoiceChange,
   showTranscription,
   onShowTranscriptionChange,
+  turnDetection,
+  onTurnDetectionChange,
   hasOpenAIKey,
   voiceAgentPrompt,
   onVoiceAgentPromptChange,
@@ -39,6 +93,77 @@ export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
 }) => {
   const [showVoiceAgentPrompt, setShowVoiceAgentPrompt] = React.useState(false);
   const [showCodingAgentPrompt, setShowCodingAgentPrompt] = React.useState(false);
+  const [isPreviewPlaying, setIsPreviewPlaying] = React.useState(false);
+  const audioRef = React.useRef<HTMLAudioElement | null>(null);
+
+  // Listen for preview audio from main process
+  React.useEffect(() => {
+    const handlePreviewAudio = (payload: { voiceId: string; audioBase64: string; format: string }) => {
+      // Create audio element and play
+      const audio = new Audio(`data:audio/${payload.format};base64,${payload.audioBase64}`);
+      audioRef.current = audio;
+      setIsPreviewPlaying(true);
+
+      audio.onended = () => {
+        setIsPreviewPlaying(false);
+        audioRef.current = null;
+      };
+
+      audio.onerror = () => {
+        setIsPreviewPlaying(false);
+        audioRef.current = null;
+      };
+
+      audio.play().catch(() => {
+        setIsPreviewPlaying(false);
+        audioRef.current = null;
+      });
+    };
+
+    window.electronAPI?.on('voice-mode:preview-audio', handlePreviewAudio);
+
+    return () => {
+      // Stop any playing audio on unmount
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
+  }, []);
+
+  // Use defaults for turn detection
+  const currentTurnDetection = { ...DEFAULT_TURN_DETECTION, ...turnDetection };
+
+  const handleTurnDetectionChange = (updates: Partial<TurnDetectionConfig>) => {
+    if (onTurnDetectionChange) {
+      onTurnDetectionChange({ ...currentTurnDetection, ...updates });
+    }
+  };
+
+  const handlePreviewVoice = async () => {
+    if (isPreviewPlaying) {
+      // Stop current preview
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      setIsPreviewPlaying(false);
+      return;
+    }
+
+    setIsPreviewPlaying(true);
+    try {
+      const result = await window.electronAPI?.invoke('voice-mode:preview-voice', voice);
+      if (!result?.success) {
+        console.error('[VoiceModePanel] Preview failed:', result?.message);
+        setIsPreviewPlaying(false);
+      }
+      // Audio will be received via IPC and played automatically
+    } catch (error) {
+      console.error('[VoiceModePanel] Preview error:', error);
+      setIsPreviewPlaying(false);
+    }
+  };
   return (
     <div className="provider-panel">
       <div className="provider-panel-header">
@@ -87,12 +212,80 @@ export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
               <div className="setting-text">
                 <span className="setting-name">Voice</span>
                 <span className="setting-description">
-                  Choose the voice for the assistant
+                  Choose the voice for the assistant. Each voice has its own personality and tone.
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+                <select
+                  value={voice}
+                  onChange={(e) => onVoiceChange(e.target.value as VoiceId)}
+                  style={{
+                    flex: 1,
+                    padding: '6px 12px',
+                    borderRadius: '4px',
+                    border: '1px solid var(--border-primary)',
+                    backgroundColor: 'var(--surface-secondary)',
+                    color: 'var(--text-primary)',
+                  }}
+                >
+                  {VOICE_GROUPS.map((group) => (
+                    <optgroup key={group.label} label={group.label}>
+                      {group.voices.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.name} - {v.description}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+                <button
+                  onClick={handlePreviewVoice}
+                  disabled={isPreviewPlaying && !audioRef.current}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: '4px',
+                    border: '1px solid var(--border-primary)',
+                    backgroundColor: isPreviewPlaying ? 'var(--color-accent)' : 'var(--surface-secondary)',
+                    color: isPreviewPlaying ? 'white' : 'var(--text-primary)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                  }}
+                  title={isPreviewPlaying ? 'Stop preview' : 'Preview this voice'}
+                >
+                  <MaterialSymbol icon={isPreviewPlaying ? 'stop' : 'play_arrow'} size={16} />
+                  {isPreviewPlaying ? 'Stop' : 'Preview'}
+                </button>
+              </div>
+              <p className="provider-panel-hint" style={{ marginTop: '8px', fontSize: '12px' }}>
+                Preview plays a short sample using OpenAI's TTS API.
+                {VOICE_OPTIONS.find(v => v.id === voice)?.realtimeOnly && (
+                  <span style={{ color: 'var(--text-secondary)' }}>
+                    {' '}This voice is Realtime-only; preview uses a similar voice.
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+
+          <div className="provider-panel-section">
+            <h4 className="provider-panel-section-title">Turn Detection</h4>
+            <p className="provider-panel-hint" style={{ marginBottom: '16px' }}>
+              Control how the assistant detects when you're speaking and when you're done.
+            </p>
+
+            {/* Mode Selection */}
+            <div className="setting-item" style={{ marginBottom: '16px' }}>
+              <div className="setting-text">
+                <span className="setting-name">Input Mode</span>
+                <span className="setting-description">
+                  Choose how voice input is captured
                 </span>
               </div>
               <select
-                value={voice}
-                onChange={(e) => onVoiceChange(e.target.value as 'marin' | 'cedar')}
+                value={currentTurnDetection.mode}
+                onChange={(e) => handleTurnDetectionChange({ mode: e.target.value as 'server_vad' | 'push_to_talk' })}
                 style={{
                   marginTop: '8px',
                   padding: '6px 12px',
@@ -102,9 +295,83 @@ export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
                   color: 'var(--text-primary)',
                 }}
               >
-                <option value="marin">Marin (Default)</option>
-                <option value="cedar">Cedar</option>
+                <option value="server_vad">Voice Activity Detection (automatic)</option>
+                <option value="push_to_talk">Push to Talk (hold button)</option>
               </select>
+            </div>
+
+            {/* VAD-specific settings */}
+            {currentTurnDetection.mode === 'server_vad' && (
+              <>
+                {/* VAD Threshold */}
+                <div className="setting-item" style={{ marginBottom: '16px' }}>
+                  <div className="setting-text">
+                    <span className="setting-name">Voice Detection Sensitivity</span>
+                    <span className="setting-description">
+                      How sensitive the microphone is to your voice. Lower = more sensitive (picks up quiet speech), Higher = less sensitive (requires louder speech).
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '8px' }}>
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Sensitive</span>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={(currentTurnDetection.vadThreshold || 0.5) * 100}
+                      onChange={(e) => handleTurnDetectionChange({ vadThreshold: parseInt(e.target.value) / 100 })}
+                      style={{ flex: 1 }}
+                    />
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Less sensitive</span>
+                    <span style={{ fontSize: '12px', color: 'var(--text-primary)', minWidth: '36px' }}>
+                      {Math.round((currentTurnDetection.vadThreshold || 0.5) * 100)}%
+                    </span>
+                  </div>
+                </div>
+
+                {/* Silence Duration */}
+                <div className="setting-item" style={{ marginBottom: '16px' }}>
+                  <div className="setting-text">
+                    <span className="setting-name">Pause Before Processing</span>
+                    <span className="setting-description">
+                      How long to wait after you stop speaking before processing your request. Shorter = faster response, Longer = more time for natural pauses.
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '8px' }}>
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Faster</span>
+                    <input
+                      type="range"
+                      min="200"
+                      max="1500"
+                      step="100"
+                      value={currentTurnDetection.silenceDuration || 500}
+                      onChange={(e) => handleTurnDetectionChange({ silenceDuration: parseInt(e.target.value) })}
+                      style={{ flex: 1 }}
+                    />
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Slower</span>
+                    <span style={{ fontSize: '12px', color: 'var(--text-primary)', minWidth: '50px' }}>
+                      {((currentTurnDetection.silenceDuration || 500) / 1000).toFixed(1)}s
+                    </span>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Interruptible setting */}
+            <div className="setting-item">
+              <label className="setting-label">
+                <input
+                  type="checkbox"
+                  checked={currentTurnDetection.interruptible !== false}
+                  onChange={(e) => handleTurnDetectionChange({ interruptible: e.target.checked })}
+                  className="setting-checkbox"
+                />
+                <div className="setting-text">
+                  <span className="setting-name">Allow Interruptions</span>
+                  <span className="setting-description">
+                    You can interrupt the assistant while it's speaking by starting to talk
+                  </span>
+                </div>
+              </label>
             </div>
           </div>
 
@@ -122,7 +389,7 @@ export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
                 <div className="setting-text">
                   <span className="setting-name">Show Live Transcription</span>
                   <span className="setting-description">
-                    Display real-time transcription of your speech and the assistant's responses
+                    Display a floating transcription of your speech above the input area
                   </span>
                 </div>
               </label>

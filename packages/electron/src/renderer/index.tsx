@@ -11,6 +11,7 @@ import {beforePostHogSendWeb} from "../main/services/analytics/analytics-utils.t
 import { initMonacoEditor } from './utils/monacoConfig';
 import { store } from '@nimbalyst/runtime/store';
 import { initializeTheme } from './hooks/useTheme';
+import { voiceModeSettingsAtom, initVoiceModeSettings } from './store/atoms/appSettings';
 
 // console.log('[RENDERER] Imports complete at', new Date().toISOString());
 
@@ -21,8 +22,11 @@ initMonacoEditor();
 // This must happen before React renders to avoid flash
 initializeTheme();
 
-// Initialize voice mode handlers in main process (must be triggered from renderer)
-window.electronAPI.invoke('voice-mode:init').catch(() => {
+// Initialize voice mode settings atom from main process
+// This loads settings and hydrates the Jotai atom before React renders
+initVoiceModeSettings().then((settings) => {
+  store.set(voiceModeSettingsAtom, settings);
+}).catch(() => {
   // Ignore errors - voice mode is optional
 });
 

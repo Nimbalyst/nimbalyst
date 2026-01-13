@@ -10,10 +10,26 @@ interface SystemPromptConfig {
   append?: string;
 }
 
+interface TurnDetectionConfig {
+  // 'server_vad' for automatic voice activity detection, 'push_to_talk' for manual
+  mode: 'server_vad' | 'push_to_talk';
+  // VAD threshold (0.0 to 1.0) - higher = less sensitive, requires louder speech
+  vadThreshold?: number;
+  // How long to wait (ms) after speech stops before processing (100-2000ms)
+  silenceDuration?: number;
+  // Whether user can interrupt the assistant while it's speaking
+  interruptible?: boolean;
+}
+
+// All available OpenAI Realtime API voices
+type VoiceId = 'alloy' | 'ash' | 'ballad' | 'coral' | 'echo' | 'sage' | 'shimmer' | 'verse' | 'marin' | 'cedar';
+
 interface VoiceModeSettings {
   enabled: boolean;
-  voice?: 'marin' | 'cedar';
+  voice?: VoiceId;
   showTranscription?: boolean;
+  // Turn detection / VAD settings
+  turnDetection?: TurnDetectionConfig;
   // System prompt customization for voice agent (GPT-4 Realtime)
   voiceAgentPrompt?: SystemPromptConfig;
   // System prompt customization for coding agent (Claude) during voice mode
@@ -36,14 +52,14 @@ export function initVoiceModeSettingsHandler() {
       const settings = settingsStore.get('voiceMode') as VoiceModeSettings | undefined;
       return settings || {
         enabled: false,
-        voice: 'marin',
+        voice: 'alloy',
         showTranscription: true,
       };
     } catch (error) {
       console.error('[VoiceModeSettings] Failed to get settings', { error });
       return {
         enabled: false,
-        voice: 'marin',
+        voice: 'alloy',
         showTranscription: true,
       };
     }
