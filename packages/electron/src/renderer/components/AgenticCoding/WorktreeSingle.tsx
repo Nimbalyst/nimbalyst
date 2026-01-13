@@ -9,7 +9,7 @@ interface SessionListItemData {
   updatedAt: number;
   provider: string;
   model?: string;
-  sessionType?: 'chat' | 'planning' | 'coding';
+  sessionType?: 'chat' | 'planning' | 'coding' | 'terminal';
   messageCount: number;
   isProcessing?: boolean;
   hasUnread?: boolean;

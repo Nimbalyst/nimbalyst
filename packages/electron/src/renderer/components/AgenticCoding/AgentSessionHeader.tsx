@@ -29,7 +29,7 @@ export const AgentSessionHeader: React.FC<AgentSessionHeaderProps> = ({
   isProcessing = false
 }) => {
   // Use cached data immediately if available
-  const cachedData = sessionData?.worktreeId ? worktreeCache.get(sessionData.worktreeId) : null;
+  const cachedData = sessionData?.worktreeId ? worktreeCache.get(sessionData.worktreeId) ?? null : null;
   const [worktreeData, setWorktreeData] = useState<WorktreeWithStatus | null>(cachedData);
   const fetchingRef = useRef<string | null>(null);
 

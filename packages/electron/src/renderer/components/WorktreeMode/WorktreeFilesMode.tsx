@@ -96,6 +96,7 @@ const WorktreeFilesModeInner = forwardRef<WorktreeFilesModeRef, WorktreeFilesMod
   const [fileTreeFilter, setFileTreeFilter] = useState<FileTreeFilter>('all');
   const [showFileIcons, setShowFileIcons] = useState(true);
   const [showGitStatus, setShowGitStatus] = useState(true);
+  const [enableAutoScroll, setEnableAutoScroll] = useState(true);
   const [gitStatusMap, setGitStatusMap] = useState<Map<string, FileGitStatus>>(new Map());
   const [gitUncommittedPaths, setGitUncommittedPaths] = useState<Set<string>>(new Set());
   const [gitWorktreePaths, setGitWorktreePaths] = useState<Set<string>>(new Set());
@@ -404,9 +405,9 @@ const WorktreeFilesModeInner = forwardRef<WorktreeFilesModeRef, WorktreeFilesMod
       if (!response?.success || !Array.isArray(response.files)) {
         return new Set();
       }
-      const normalized = response.files
-        .map((file: any) => resolveSessionFilePath(file.filePath, workspacePath))
-        .filter((value): value is string => Boolean(value));
+      const mapped: (string | null)[] = response.files
+        .map((file: any) => resolveSessionFilePath(file.filePath, workspacePath));
+      const normalized = mapped.filter((value): value is string => Boolean(value));
       return new Set(normalized);
     };
 
@@ -610,16 +611,7 @@ const WorktreeFilesModeInner = forwardRef<WorktreeFilesModeRef, WorktreeFilesMod
             isActive={isActive}
           >
             <TabContent
-              tabs={tabs.tabs}
-              activeTabId={tabs.activeTabId}
-              theme={theme}
-              onTabDirtyChange={(tabId, isDirty) => {
-                const tab = tabsActions.getTabState(tabId);
-                if (tab && tab.isDirty !== isDirty) {
-                  tabsActions.updateTab(tabId, { isDirty });
-                }
-              }}
-              onTabClose={(tabId) => tabsActions.removeTab(tabId)}
+              onTabClose={(tabId: string) => tabsActions.removeTab(tabId)}
               workspaceId={worktreePath}
             />
           </TabManager>
@@ -730,9 +722,11 @@ const WorktreeFilesModeInner = forwardRef<WorktreeFilesModeRef, WorktreeFilesMod
           currentFilter={fileTreeFilter}
           showIcons={showFileIcons}
           showGitStatus={showGitStatus}
+          enableAutoScroll={enableAutoScroll}
           onFilterChange={setFileTreeFilter}
           onShowIconsChange={setShowFileIcons}
           onShowGitStatusChange={setShowGitStatus}
+          onEnableAutoScrollChange={setEnableAutoScroll}
           hasActiveClaudeSession={Boolean(sessionId)}
           claudeSessionFileCounts={{ read: aiReadPaths.size, written: aiWrittenPaths.size }}
           isGitRepo={isGitRepo}
@@ -745,10 +739,9 @@ const WorktreeFilesModeInner = forwardRef<WorktreeFilesModeRef, WorktreeFilesMod
 
       {isNewFileModalOpen && (
         <InputModal
+          isOpen={isNewFileModalOpen}
           title="Create File"
-          description={`Create a new file in ${getFileName(newFileDirectory || worktreePath) || 'worktree'}`}
           placeholder="example.md"
-          confirmLabel="Create"
           onCancel={() => {
             setIsNewFileModalOpen(false);
             setNewFileDirectory(null);

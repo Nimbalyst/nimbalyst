@@ -347,7 +347,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
 
         // Filter out worktree sessions in non-agent mode
         if (mode !== 'agent') {
-          searchResults = searchResults.filter(session => !session.worktree_id);
+          searchResults = searchResults.filter((session: SessionItem) => !session.worktree_id);
         }
 
         setSessions(searchResults);
