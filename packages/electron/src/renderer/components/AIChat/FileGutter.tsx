@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useAtom, useSetAtom } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import { getFileName } from '../../utils/pathUtils';
+import { diffTreeGroupByDirectoryAtom, setDiffTreeGroupByDirectoryAtom } from '../../store/atoms/projectState';
 import './FileGutter.css';
 
 interface FileGutterProps {
@@ -36,7 +38,8 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick, pendin
   const [files, setFiles] = useState<FileData[]>([]);
   const [isExpanded, setIsExpanded] = useState(true);
   const [gitStatus, setGitStatus] = useState<Record<string, FileGitStatus>>({});
-  const [groupByDirectory, setGroupByDirectory] = useState(false);
+  const [groupByDirectory] = useAtom(diffTreeGroupByDirectoryAtom);
+  const setGroupByDirectory = useSetAtom(setDiffTreeGroupByDirectoryAtom);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
 
   // Convert absolute path to relative path from workspace root
@@ -167,6 +170,15 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick, pendin
   const collapseAll = () => {
     setExpandedFolders(new Set());
   };
+
+  // Auto-expand all folders when groupByDirectory is enabled
+  useEffect(() => {
+    if (groupByDirectory && groupedFiles.length > 0) {
+      const tree = buildDirectoryTree(groupedFiles);
+      const allPaths = getAllFolderPaths(tree);
+      setExpandedFolders(new Set(allPaths));
+    }
+  }, [groupByDirectory]);
 
   useEffect(() => {
     if (!sessionId) {

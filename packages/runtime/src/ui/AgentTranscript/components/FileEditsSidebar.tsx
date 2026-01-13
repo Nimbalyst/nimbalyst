@@ -10,6 +10,10 @@ interface FileEditsSidebarProps {
   workspacePath?: string;
   /** Set of file paths that have pending AI edits awaiting review */
   pendingReviewFiles?: Set<string>;
+  /** Whether to group files by directory (controlled externally) */
+  groupByDirectory?: boolean;
+  /** Callback when groupByDirectory changes */
+  onGroupByDirectoryChange?: (value: boolean) => void;
 }
 
 interface FileGitStatus {
@@ -29,11 +33,16 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
   fileEdits,
   onFileClick,
   workspacePath,
-  pendingReviewFiles
+  pendingReviewFiles,
+  groupByDirectory: groupByDirectoryProp,
+  onGroupByDirectoryChange
 }) => {
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [gitStatus, setGitStatus] = useState<Record<string, FileGitStatus>>({});
-  const [groupByDirectory, setGroupByDirectory] = useState(false);
+  // Use prop if provided, otherwise use local state
+  const [localGroupByDirectory, setLocalGroupByDirectory] = useState(false);
+  const groupByDirectory = groupByDirectoryProp ?? localGroupByDirectory;
+  const setGroupByDirectory = onGroupByDirectoryChange ?? setLocalGroupByDirectory;
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
 
   // Convert absolute path to relative path from workspace root
@@ -290,6 +299,26 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
   const collapseAll = () => {
     setExpandedFolders(new Set());
   };
+
+  // Auto-expand all folders when groupByDirectory is enabled
+  useEffect(() => {
+    if (groupByDirectory) {
+      const allPaths: string[] = [];
+      if (groupedByType.edited.length > 0) {
+        const tree = buildDirectoryTree(groupedByType.edited);
+        getAllFolderPaths(tree, allPaths);
+      }
+      if (groupedByType.referenced.length > 0) {
+        const tree = buildDirectoryTree(groupedByType.referenced);
+        getAllFolderPaths(tree, allPaths);
+      }
+      if (groupedByType.read.length > 0) {
+        const tree = buildDirectoryTree(groupedByType.read);
+        getAllFolderPaths(tree, allPaths);
+      }
+      setExpandedFolders(new Set(allPaths));
+    }
+  }, [groupByDirectory]);
 
   const getOperationIcon = (operation: string) => {
     switch (operation) {

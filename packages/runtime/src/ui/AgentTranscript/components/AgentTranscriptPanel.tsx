@@ -44,6 +44,10 @@ interface AgentTranscriptPanelProps {
   renderFilesHeader?: () => React.ReactNode;
   /** Optional: Set of file paths that have pending AI edits awaiting review */
   pendingReviewFiles?: Set<string>;
+  /** Whether to group files by directory in the sidebar */
+  groupByDirectory?: boolean;
+  /** Callback when groupByDirectory changes */
+  onGroupByDirectoryChange?: (value: boolean) => void;
 }
 
 export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
@@ -64,7 +68,9 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
   onUnarchive,
   readFile,
   renderFilesHeader,
-  pendingReviewFiles
+  pendingReviewFiles,
+  groupByDirectory,
+  onGroupByDirectoryChange
 }) => {
   // Use prop if provided, otherwise fall back to sessionData.workspacePath
   const effectiveWorkspacePath = workspacePathProp || sessionData.workspacePath;
@@ -346,6 +352,8 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
                   onFileClick={onFileClick}
                   workspacePath={effectiveWorkspacePath}
                   pendingReviewFiles={pendingReviewFiles}
+                  groupByDirectory={groupByDirectory}
+                  onGroupByDirectoryChange={onGroupByDirectoryChange}
                 />
               </div>
 

@@ -1,4 +1,5 @@
 import React, { useCallback, useRef, useImperativeHandle, forwardRef, useEffect, useState } from 'react';
+import { useAtom, useSetAtom } from 'jotai';
 import { usePostHog } from 'posthog-js/react';
 import { AgentTranscriptPanel, TodoItem, FileEditSummary, storeAskUserQuestionAnswers } from '@nimbalyst/runtime';
 import type { SessionData, ChatAttachment } from '@nimbalyst/runtime/ai/server/types';
@@ -12,6 +13,7 @@ import { ExitPlanModeConfirmation, ExitPlanModeConfirmationData } from './ExitPl
 import { AskUserQuestionConfirmation, AskUserQuestionData } from './AskUserQuestionConfirmation';
 import { ToolPermissionConfirmation, ToolPermissionData } from './ToolPermissionConfirmation';
 import { SlashCommandSuggestions } from './SlashCommandSuggestions';
+import { diffTreeGroupByDirectoryAtom, setDiffTreeGroupByDirectoryAtom } from '../../store/atoms/projectState';
 
 interface Todo {
   status: 'pending' | 'in_progress' | 'completed';
@@ -141,6 +143,10 @@ const TranscriptSectionComponent: React.FC<TranscriptSectionProps> = ({
   // Track files with pending AI edits for this session
   const [pendingReviewFiles, setPendingReviewFiles] = useState<Set<string>>(new Set());
 
+  // Diff tree grouping state (persisted per project)
+  const [groupByDirectory] = useAtom(diffTreeGroupByDirectoryAtom);
+  const setGroupByDirectory = useSetAtom(setDiffTreeGroupByDirectoryAtom);
+
   // Fetch pending review files for this session
   useEffect(() => {
     if (!workspacePath || !sessionId) {
@@ -242,6 +248,8 @@ const TranscriptSectionComponent: React.FC<TranscriptSectionProps> = ({
             <PendingReviewBanner workspacePath={workspacePath} sessionId={sessionId} />
           ) : undefined}
           pendingReviewFiles={pendingReviewFiles}
+          groupByDirectory={groupByDirectory}
+          onGroupByDirectoryChange={setGroupByDirectory}
         />
       </div>
 

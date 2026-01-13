@@ -52,6 +52,13 @@ export interface FileTreeState {
 }
 
 /**
+ * Diff tree view settings.
+ */
+export interface DiffTreeState {
+  groupByDirectory: boolean;
+}
+
+/**
  * Complete project state for persistence.
  */
 export interface ProjectState {
@@ -59,6 +66,7 @@ export interface ProjectState {
   contexts: Record<EditorContext, ContextTabState>;
   layout: PanelLayout;
   fileTree: FileTreeState;
+  diffTree: DiffTreeState;
   lastOpenedFile: string | null;
   recentFiles: string[];
 }
@@ -85,6 +93,9 @@ const defaultProjectState: ProjectState = {
   fileTree: {
     expandedDirs: [],
     activeFilter: null,
+  },
+  diffTree: {
+    groupByDirectory: false,
   },
   lastOpenedFile: null,
   recentFiles: [],
@@ -187,6 +198,13 @@ export const persistedExpandedDirsAtom = atom(
  * Recent files list.
  */
 export const recentFilesAtom = atom((get) => get(projectStateAtom).recentFiles);
+
+/**
+ * Diff tree group by directory setting.
+ */
+export const diffTreeGroupByDirectoryAtom = atom(
+  (get) => get(projectStateAtom).diffTree.groupByDirectory
+);
 
 // === Setter atoms (update slice + trigger persist) ===
 
@@ -297,6 +315,22 @@ export const setExpandedDirsAtom = atom(null, (get, set, dirs: string[]) => {
 });
 
 /**
+ * Set diff tree group by directory.
+ */
+export const setDiffTreeGroupByDirectoryAtom = atom(
+  null,
+  (get, set, groupByDirectory: boolean) => {
+    const state = get(projectStateAtom);
+    const newState = {
+      ...state,
+      diffTree: { ...state.diffTree, groupByDirectory },
+    };
+    set(projectStateAtom, newState);
+    schedulePersist(newState);
+  }
+);
+
+/**
  * Add a file to recent files.
  */
 export const addRecentFileAtom = atom(null, (get, set, filePath: string) => {
@@ -358,6 +392,7 @@ export const loadProjectStateAtom = atom(
       ...state,
       layout: { ...defaultProjectState.layout, ...state.layout },
       fileTree: { ...defaultProjectState.fileTree, ...state.fileTree },
+      diffTree: { ...defaultProjectState.diffTree, ...state.diffTree },
       contexts: { ...defaultProjectState.contexts, ...state.contexts },
     };
     set(projectStateAtom, merged);
