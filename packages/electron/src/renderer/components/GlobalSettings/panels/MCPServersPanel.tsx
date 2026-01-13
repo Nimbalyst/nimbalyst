@@ -170,6 +170,11 @@ const CATEGORY_ORDER: TemplateCategory[] = ['development', 'productivity', 'auto
 
 // Help text for common env vars
 const ENV_VAR_HELP: Record<string, { label: string; help: string; link?: string }> = {
+  GITHUB_PERSONAL_ACCESS_TOKEN: {
+    label: 'GitHub Personal Access Token',
+    help: 'Create a PAT with repo scope',
+    link: 'https://github.com/settings/tokens/new?scopes=repo'
+  },
   BRAVE_API_KEY: {
     label: 'Brave Search API Key',
     help: 'Get from Brave Search API dashboard',
@@ -242,10 +247,13 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     name: 'GitHub',
     description: 'Repository management and code collaboration',
     docsUrl: 'https://github.com/github/github-mcp-server',
-    authType: 'oauth',
+    authType: 'api-key',
     config: {
       command: 'npx',
-      args: ['-y', 'mcp-remote', 'https://api.githubcopilot.com/mcp/']
+      args: ['-y', '@modelcontextprotocol/server-github'],
+      env: {
+        GITHUB_PERSONAL_ACCESS_TOKEN: '${GITHUB_PERSONAL_ACCESS_TOKEN}'
+      }
     }
   },
   {
