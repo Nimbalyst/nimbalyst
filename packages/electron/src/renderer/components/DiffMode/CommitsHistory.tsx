@@ -1,0 +1,66 @@
+import React from 'react';
+import { MaterialSymbol } from '@nimbalyst/runtime';
+import type { CommitInfo } from './DiffModeView';
+import './CommitsHistory.css';
+
+interface CommitsHistoryProps {
+  commits: CommitInfo[];
+}
+
+function formatDate(date: Date): string {
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffMins < 1) {
+    return 'just now';
+  }
+  if (diffMins < 60) {
+    return `${diffMins}m ago`;
+  }
+  if (diffHours < 24) {
+    return `${diffHours}h ago`;
+  }
+  if (diffDays < 7) {
+    return `${diffDays}d ago`;
+  }
+
+  return date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+export function CommitsHistory({ commits }: CommitsHistoryProps) {
+  if (commits.length === 0) {
+    return (
+      <div className="commits-history commits-history--empty">
+        <p>No commits in this branch</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="commits-history">
+      {commits.map(commit => (
+        <div key={commit.hash} className="commits-history-item" title={commit.hash}>
+          <div className="commits-history-icon">
+            <MaterialSymbol icon="commit" size={14} />
+          </div>
+          <div className="commits-history-content">
+            <div className="commits-history-message">{commit.message}</div>
+            <div className="commits-history-meta">
+              <span className="commits-history-hash">{commit.shortHash}</span>
+              <span className="commits-history-separator">-</span>
+              <span className="commits-history-date">{formatDate(commit.date)}</span>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default CommitsHistory;

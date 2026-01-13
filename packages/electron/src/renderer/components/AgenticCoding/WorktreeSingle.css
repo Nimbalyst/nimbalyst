@@ -1,0 +1,123 @@
+.worktree-single {
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  cursor: pointer;
+  border-radius: 0.375rem;
+  background: var(--surface-tertiary);
+  margin: 0 0.5rem 0.5rem 0.5rem;
+  transition: background-color 0.15s ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.worktree-single:hover {
+  background: var(--surface-hover);
+}
+
+.worktree-single.active {
+  background: var(--surface-selected);
+}
+
+.worktree-single:focus {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -2px;
+}
+
+.worktree-single-icon-wrapper {
+  position: relative;
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+}
+
+.worktree-single-wt-icon {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 0.375rem;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary-color);
+}
+
+.worktree-single-wt-icon svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.worktree-single-ai-badge {
+  position: absolute;
+  bottom: -0.25rem;
+  right: -0.25rem;
+  width: 0.875rem;
+  height: 0.875rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--surface-primary);
+  overflow: hidden;
+}
+
+.worktree-single-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.worktree-single-name-row {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 0.125rem;
+}
+
+.worktree-single.active .worktree-single-name-row {
+  font-weight: 600;
+}
+
+.worktree-single-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-top: 0.125rem;
+  flex-wrap: wrap;
+}
+
+.worktree-single-badge {
+  font-size: 0.5625rem;
+  padding: 0.0625rem 0.375rem;
+  border-radius: 0.625rem;
+  font-weight: 500;
+}
+
+.worktree-single-badge.ahead {
+  background: rgba(74, 158, 255, 0.15);
+  color: var(--primary-color);
+}
+
+.worktree-single-badge.behind {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--warning-color);
+}
+
+.worktree-single-badge.uncommitted {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--warning-color);
+}
+
+.worktree-single-message-count {
+  flex-shrink: 0;
+  font-size: 0.6875rem;
+  color: var(--text-tertiary);
+  padding: 0.125rem 0.375rem;
+  background: var(--surface-secondary);
+  border-radius: 0.75rem;
+  font-weight: 500;
+  margin-left: auto;
+}

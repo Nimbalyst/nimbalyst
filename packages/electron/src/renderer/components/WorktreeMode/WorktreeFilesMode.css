@@ -1,0 +1,185 @@
+.worktree-files-mode {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  min-height: 0;
+  background: var(--surface-primary, #121417);
+}
+
+.worktree-agent-mode {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface-primary, #121417);
+}
+
+.worktree-changes-mode {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface-primary, #121417);
+}
+
+.worktree-files-editor {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.worktree-files-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary, #9aa0a6);
+  gap: 12px;
+}
+
+.worktree-files-empty button {
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  background: var(--accent-primary, #2563eb);
+  color: #fff;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.worktree-resize-handle {
+  width: 4px;
+  cursor: col-resize;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 10;
+}
+
+.worktree-resize-handle-inner {
+  width: 1px;
+  height: 100%;
+  margin: 0 auto;
+  background: var(--border-primary, rgba(255, 255, 255, 0.08));
+  transition: background-color 0.2s, width 0.2s;
+}
+
+.worktree-resize-handle:hover .worktree-resize-handle-inner,
+.worktree-resize-handle:active .worktree-resize-handle-inner {
+  width: 3px;
+  background: var(--primary-color, #2563eb);
+}
+
+.worktree-resize-handle.is-hidden {
+  pointer-events: none;
+  opacity: 0;
+}
+
+.worktree-files-right-panel {
+  min-width: 48px;
+  border-left: none;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-secondary, #1a1d21);
+  flex-shrink: 0;
+}
+
+.worktree-files-right-panel.collapsed {
+  /* Width controlled by inline style */
+}
+
+.worktree-right-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  gap: 8px;
+}
+
+.worktree-right-tabs {
+  display: inline-flex;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 999px;
+}
+
+.worktree-right-tabs button {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary, #9aa0a6);
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.worktree-right-tabs button.is-active {
+  background: var(--surface-tertiary, rgba(255, 255, 255, 0.08));
+  color: var(--text-primary, #f5f7fb);
+}
+
+.worktree-right-actions {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.worktree-right-actions button {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary, #9aa0a6);
+  border-radius: 6px;
+  padding: 4px;
+  cursor: pointer;
+}
+
+.worktree-right-actions button:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary, #f5f7fb);
+}
+
+.worktree-files-right-panel.collapsed .worktree-right-tabs,
+.worktree-files-right-panel.collapsed .worktree-files-panel,
+.worktree-files-right-panel.collapsed .worktree-chat-panel {
+  display: none;
+}
+
+.worktree-right-panel-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.worktree-chat-panel,
+.worktree-files-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.worktree-chat-panel > div {
+  flex: 1;
+  min-height: 0;
+}
+
+.worktree-files-panel {
+  flex-direction: column;
+  padding: 4px 0;
+  overflow: hidden;
+}
+
+.worktree-files-tree {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 8px;
+}
+
+.worktree-files-empty-state {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary, #9aa0a6);
+  padding: 16px;
+  text-align: center;
+}

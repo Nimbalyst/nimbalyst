@@ -1,0 +1,39 @@
+.worktree-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--surface-secondary, #1f2329);
+  border-radius: 999px;
+  padding: 4px;
+  margin-bottom: 8px;
+}
+
+.worktree-mode-toggle button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary, #9aa0a6);
+  background: transparent;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.worktree-mode-toggle button:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary, #f5f7fb);
+}
+
+.worktree-mode-toggle button.is-active {
+  background: var(--accent-primary, #2563eb);
+  color: #fff;
+  box-shadow: 0 0 1px rgba(0, 0, 0, 0.2);
+}
+
+.worktree-mode-toggle button.is-active .material-symbols-rounded {
+  color: inherit;
+}

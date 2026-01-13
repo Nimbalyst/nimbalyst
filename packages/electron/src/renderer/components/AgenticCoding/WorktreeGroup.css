@@ -1,0 +1,342 @@
+.worktree-group {
+  margin-bottom: 0.25rem;
+}
+
+.worktree-group-header {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: var(--surface-tertiary);
+  font-size: 0.8125rem;
+  color: var(--text-primary);
+  transition: background-color 0.15s ease;
+  border-radius: 0.375rem;
+  margin: 0 0.5rem;
+  width: calc(100% - 1rem);
+}
+
+.worktree-group-header:hover {
+  background: var(--surface-hover);
+}
+
+.worktree-group-header-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 0;
+  padding: 0.5rem 0.5rem 0.5rem 0.75rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: inherit;
+  color: inherit;
+  text-align: left;
+}
+
+.worktree-group-header-toggle:focus {
+  outline: none;
+}
+
+.worktree-group-header-toggle:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -2px;
+  border-radius: 0.25rem;
+}
+
+/* Mode buttons container */
+.worktree-group-mode-buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+  padding-right: 0.5rem;
+  flex-shrink: 0;
+}
+
+.worktree-group-mode-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.worktree-group-mode-button:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.worktree-group-mode-button:focus {
+  outline: none;
+}
+
+.worktree-group-mode-button:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -2px;
+}
+
+.worktree-group-chevron {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  transition: transform 0.2s ease;
+  transform: rotate(0deg);
+  margin-top: 0.125rem;
+}
+
+.worktree-group-chevron.expanded {
+  transform: rotate(90deg);
+}
+
+.worktree-group-icon {
+  flex-shrink: 0;
+  width: 1.125rem;
+  height: 1.125rem;
+  color: var(--primary-color);
+  margin-top: 0.0625rem;
+}
+
+.worktree-group-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.worktree-group-content-wrapper {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.worktree-group-row-primary {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.worktree-group-row-secondary {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex-wrap: wrap;
+}
+
+.worktree-group-name {
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.worktree-group-badge {
+  font-size: 0.5625rem;
+  padding: 0.0625rem 0.375rem;
+  border-radius: 0.625rem;
+  font-weight: 500;
+}
+
+.worktree-group-badge.ahead {
+  background: rgba(74, 158, 255, 0.15);
+  color: var(--primary-color);
+}
+
+.worktree-group-badge.behind {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--warning-color);
+}
+
+.worktree-group-badge.uncommitted {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--warning-color);
+}
+
+.worktree-group-count {
+  flex-shrink: 0;
+  font-size: 0.6875rem;
+  color: var(--text-tertiary);
+}
+
+.worktree-group-content {
+  padding: 0.25rem 0 0.25rem 1rem;
+  animation: worktreeSlideDown 0.2s ease-out;
+}
+
+@keyframes worktreeSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Session item within worktree group */
+.worktree-session-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.75rem;
+  margin: 0 0.5rem 0.125rem 0.5rem;
+  cursor: pointer;
+  border-radius: 0.25rem;
+  transition: background-color 0.15s ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.worktree-session-item:hover {
+  background: var(--surface-hover);
+}
+
+.worktree-session-item.active {
+  background: var(--surface-selected);
+}
+
+.worktree-session-item:focus {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -2px;
+}
+
+.worktree-session-item-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.worktree-session-item-title {
+  flex: 1;
+  font-size: 0.75rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.worktree-session-item.active .worktree-session-item-title {
+  font-weight: 500;
+}
+
+.worktree-session-item-right {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.worktree-session-item-count {
+  font-size: 0.625rem;
+  color: var(--text-tertiary);
+  padding: 0.0625rem 0.25rem;
+  background: var(--surface-secondary);
+  border-radius: 0.5rem;
+  font-weight: 500;
+}
+
+.worktree-session-item-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.worktree-session-item-status.processing {
+  color: var(--primary-color);
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.worktree-session-item-status.pending-prompt {
+  color: var(--warning-color);
+}
+
+.worktree-session-item-status.unread {
+  color: var(--primary-color);
+}
+
+/* Context Menu */
+.worktree-group-context-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 140px;
+  background: var(--surface-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 0.375rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 0.25rem;
+}
+
+.worktree-group-context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 0.8125rem;
+  color: var(--text-primary);
+  text-align: left;
+  border-radius: 0.25rem;
+  transition: background-color 0.15s ease;
+}
+
+.worktree-group-context-menu-item:hover {
+  background: var(--surface-hover);
+}
+
+.worktree-group-context-menu-item.destructive {
+  color: var(--error-color);
+}
+
+.worktree-group-context-menu-item.destructive:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+/* Pin icons */
+.worktree-group-pin-icon {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  opacity: 0.7;
+}
+
+.worktree-session-item-pin-icon {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  opacity: 0.7;
+  margin-left: -0.25rem;
+}
+
+.worktree-session-item.active .worktree-session-item-pin-icon {
+  color: var(--primary-color);
+  opacity: 0.8;
+}
+
+/* Inline rename input */
+.worktree-session-item-rename-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.125rem 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border: 1px solid var(--primary-color);
+  border-radius: 0.25rem;
+  background: var(--surface-primary);
+  color: var(--text-primary);
+  outline: none;
+  box-sizing: border-box;
+}

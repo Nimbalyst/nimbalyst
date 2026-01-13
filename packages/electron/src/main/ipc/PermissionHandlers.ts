@@ -1,19 +1,34 @@
 /**
  * IPC handlers for agent permission settings
+ *
+ * WORKTREE SUPPORT: All handlers that deal with workspace permissions resolve
+ * worktree paths to their parent project. This ensures worktrees inherit and
+ * share permissions with their parent project.
  */
 import { dialog, BrowserWindow } from 'electron';
-import { getPermissionService } from '../services/PermissionService';
+import { getPermissionService, resolveWorkspacePathForPermissions } from '../services/PermissionService';
 import { ClaudeSettingsManager } from '../services/ClaudeSettingsManager';
 import { logger } from '../utils/logger';
 import { safeHandle, safeOn } from '../utils/ipcRegistry';
+import { resolveProjectPath, isWorktreePath } from '../utils/workspaceDetection';
 
 /**
- * Broadcast permission changes to all renderer processes
+ * Broadcast permission changes to all renderer processes.
+ * If the path is a worktree, broadcasts to both the worktree path and the parent project path.
  */
 function broadcastPermissionChange(workspacePath: string): void {
   const windows = BrowserWindow.getAllWindows();
+  const projectPath = resolveProjectPath(workspacePath);
+
   for (const window of windows) {
+    // Always broadcast for the original path
     window.webContents.send('permissions:changed', { workspacePath });
+
+    // If this was a worktree, also broadcast for the parent project
+    // so windows viewing the main project are notified too
+    if (isWorktreePath(workspacePath)) {
+      window.webContents.send('permissions:changed', { workspacePath: projectPath });
+    }
   }
 }
 
@@ -36,17 +51,21 @@ export function registerPermissionHandlers(): void {
 
   // Get workspace permissions (trust status, allowed/denied patterns, mode, directories)
   // Now reads from Claude settings files (.claude/settings.local.json) for patterns
+  // NOTE: Resolves worktree paths to parent project
   safeHandle('permissions:getWorkspacePermissions', async (_event, workspacePath: string) => {
     if (!workspacePath) {
       throw new Error('workspacePath is required');
     }
 
     const workspaceName = workspacePath.split('/').pop() || workspacePath;
-    const claudeSettingsManager = ClaudeSettingsManager.getInstance();
 
     try {
+      // Resolve worktree paths to parent project for permission lookups
+      const resolvedPath = await resolveWorkspacePathForPermissions(workspacePath);
+      const claudeSettingsManager = ClaudeSettingsManager.getInstance();
+
       // Get trust mode from our store (still managed by us)
-      const permissionMode = permissionService.getPermissionMode(workspacePath);
+      const permissionMode = permissionService.getPermissionMode(resolvedPath);
       const isTrusted = permissionMode !== null;
       logger.main.info(`[PermissionHandlers:${workspaceName}] getWorkspacePermissions - permissionMode:`, { permissionMode, isTrusted });
 
@@ -105,15 +124,21 @@ export function registerPermissionHandlers(): void {
   });
 
   // Trust a workspace for agent operations
+  // NOTE: Resolves worktree paths to parent project
   safeHandle('permissions:trustWorkspace', async (_event, workspacePath: string) => {
     if (!workspacePath) {
       throw new Error('workspacePath is required');
     }
 
     try {
-      permissionService.trustWorkspace(workspacePath);
-      logger.main.info('[PermissionHandlers] Workspace trusted:', workspacePath);
-      broadcastPermissionChange(workspacePath);
+      // Resolve worktree paths to parent project
+      const resolvedPath = await resolveWorkspacePathForPermissions(workspacePath);
+      permissionService.trustWorkspace(resolvedPath);
+      logger.main.info('[PermissionHandlers] Workspace trusted:', resolvedPath);
+
+      // Broadcast using resolved path (parent project for worktrees)
+      // This notifies all windows, which will fetch permissions for their own workspace
+      broadcastPermissionChange(resolvedPath);
       return { success: true };
     } catch (error) {
       logger.main.error('[PermissionHandlers] Failed to trust workspace:', error);
@@ -122,15 +147,20 @@ export function registerPermissionHandlers(): void {
   });
 
   // Revoke workspace trust
+  // NOTE: Resolves worktree paths to parent project
   safeHandle('permissions:revokeWorkspaceTrust', async (_event, workspacePath: string) => {
     if (!workspacePath) {
       throw new Error('workspacePath is required');
     }
 
     try {
-      permissionService.revokeWorkspaceTrust(workspacePath);
-      logger.main.info('[PermissionHandlers] Workspace trust revoked:', workspacePath);
-      broadcastPermissionChange(workspacePath);
+      // Resolve worktree paths to parent project
+      const resolvedPath = await resolveWorkspacePathForPermissions(workspacePath);
+      permissionService.revokeWorkspaceTrust(resolvedPath);
+      logger.main.info('[PermissionHandlers] Workspace trust revoked:', resolvedPath);
+
+      // Broadcast using resolved path (parent project for worktrees)
+      broadcastPermissionChange(resolvedPath);
       return { success: true };
     } catch (error) {
       logger.main.error('[PermissionHandlers] Failed to revoke workspace trust:', error);
@@ -215,6 +245,7 @@ export function registerPermissionHandlers(): void {
   });
 
   // Set permission mode
+  // NOTE: Resolves worktree paths to parent project
   safeHandle('permissions:setPermissionMode', async (_event, workspacePath: string, mode: 'ask' | 'allow-all' | 'bypass-all') => {
     if (!workspacePath) {
       throw new Error('workspacePath is required');
@@ -224,12 +255,16 @@ export function registerPermissionHandlers(): void {
     }
 
     try {
-      logger.main.info('[PermissionHandlers] Setting permission mode:', { workspacePath, mode });
-      permissionService.setPermissionMode(workspacePath, mode);
+      // Resolve worktree paths to parent project
+      const resolvedPath = await resolveWorkspacePathForPermissions(workspacePath);
+      logger.main.info('[PermissionHandlers] Setting permission mode:', { workspacePath, resolvedPath, mode });
+      permissionService.setPermissionMode(resolvedPath, mode);
       // Verify it was saved correctly
-      const savedMode = permissionService.getPermissionMode(workspacePath);
+      const savedMode = permissionService.getPermissionMode(resolvedPath);
       logger.main.info('[PermissionHandlers] Permission mode after save:', { mode, savedMode, isTrusted: savedMode !== null });
-      broadcastPermissionChange(workspacePath);
+
+      // Broadcast using resolved path (parent project for worktrees)
+      broadcastPermissionChange(resolvedPath);
       return { success: true };
     } catch (error) {
       logger.main.error('[PermissionHandlers] Failed to set permission mode:', error);

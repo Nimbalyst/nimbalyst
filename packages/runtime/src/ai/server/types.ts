@@ -118,6 +118,11 @@ export interface SessionData {
   title?: string;
   draftInput?: string;
 
+  // Worktree association
+  worktreeId?: string;  // ID of the associated worktree
+  worktreePath?: string;  // Path to the worktree directory
+  worktreeProjectPath?: string;  // Path to the parent project (for permission lookups)
+
   // Time tracking
   createdAt: number;  // Creation timestamp
   updatedAt: number;  // Last update timestamp
@@ -130,6 +135,9 @@ export interface SessionData {
 
   // Archive state
   isArchived?: boolean;  // Whether the session is archived
+
+  // Pin state
+  isPinned?: boolean;  // Whether the session is pinned to the top of the list
 
   // Token usage tracking (for providers that support it)
   tokenUsage?: {

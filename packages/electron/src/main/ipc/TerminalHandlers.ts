@@ -33,10 +33,15 @@ export function registerTerminalHandlers(): void {
       payload: {
         workspacePath: string;
         cwd?: string;
+        worktreeId?: string;
+        worktreePath?: string;
       }
     ) => {
       try {
         const sessionId = ulid();
+
+        // For worktree terminals, use the worktree path as cwd
+        const terminalCwd = payload.worktreePath || payload.cwd || payload.workspacePath;
 
         // Create session in database
         await AISessionsRepository.create({
@@ -45,11 +50,13 @@ export function registerTerminalHandlers(): void {
           title: 'Terminal',
           workspaceId: payload.workspacePath,
           sessionType: 'terminal',
+          worktreeId: payload.worktreeId,
+          worktreePath: payload.worktreePath,
         });
 
         // Create PTY process
         await manager.createTerminal(sessionId, {
-          cwd: payload.cwd || payload.workspacePath,
+          cwd: terminalCwd,
         });
 
         const terminalInfo = manager.getTerminalInfo(sessionId);
@@ -61,7 +68,7 @@ export function registerTerminalHandlers(): void {
             terminal: {
               shell: terminalInfo?.shell.name || 'unknown',
               shellPath: terminalInfo?.shell.path || '',
-              cwd: terminalInfo?.cwd || payload.workspacePath,
+              cwd: terminalInfo?.cwd || terminalCwd,
               historyFile: terminalInfo?.historyFile || '',
               scrollback: scrollbackBuffer,
               scrollbackUpdatedAt: scrollbackBuffer ? Date.now() : undefined,

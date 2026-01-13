@@ -159,6 +159,8 @@ export async function registerSessionHandlers() {
                 sessionType: entry.sessionType || 'chat',
                 messageCount: entry.messageCount || 0,
                 isArchived: entry.isArchived || false,
+                isPinned: (entry as any).isPinned || false,  // Include isPinned from repository
+                worktreeId: entry.worktreeId,  // Include worktreeId from repository
                 metadata: {}
             }));
 
@@ -189,6 +191,7 @@ export async function registerSessionHandlers() {
                         sessionType: session.sessionType || 'chat',
                         messageCount: entry.messageCount || 0,
                         isArchived: entry.isArchived || false,
+                        worktreeId: session.worktreeId,  // Include worktreeId from session data
                         metadata: session.metadata || {}
                     });
                 }
@@ -208,6 +211,17 @@ export async function registerSessionHandlers() {
             return { success: true };
         } catch (error) {
             console.error('[SessionHandlers] Failed to delete session:', error);
+            return { success: false, error: String(error) };
+        }
+    });
+
+    // Update session pinned status
+    safeHandle('sessions:update-pinned', async (_event, sessionId: string, isPinned: boolean) => {
+        try {
+            await AISessionsRepository.updateMetadata(sessionId, { isPinned } as any);
+            return { success: true };
+        } catch (error) {
+            console.error('[SessionHandlers] Failed to update session pinned status:', error);
             return { success: false, error: String(error) };
         }
     });

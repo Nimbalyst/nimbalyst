@@ -61,6 +61,58 @@ Renderer processes cannot access Node.js APIs directly for security reasons. Use
 - **Empty responses**: Check that window state has a valid workspace path
 - **Service resolution**: Main process resolves services based on workspace path
 
+## Main Process Initialization
+
+The Electron main process has specific initialization constraints that must be respected:
+
+### Bootstrap and Dynamic Import
+
+`bootstrap.ts` is the entry point and uses a dynamic import for `index.ts`:
+```typescript
+import('./index.js');  // Dynamic, not static!
+```
+
+**Why dynamic import is required:**
+1. `NODE_PATH` must be set before `node-pty` can be resolved in packaged builds
+2. Static imports are resolved before any code runs
+3. Dynamic import defers loading until after `NODE_PATH` is configured
+
+**Never change this to a static import** - it will break packaged builds.
+
+### Lazy Initialization Pattern
+
+Singletons that read `app.getPath()` must use lazy initialization:
+
+```typescript
+// BAD: Reads userData path at module load time
+const store = new Store({ name: 'settings' });
+
+// GOOD: Defers until first access
+let _store: Store | null = null;
+function getStore() {
+  if (!_store) {
+    _store = new Store({ name: 'settings' });
+  }
+  return _store;
+}
+```
+
+This ensures `app.setPath('userData')` in bootstrap.ts takes effect.
+
+### IPC Handler Registration
+
+Use `safeHandle`/`safeOn` from `ipcRegistry.ts` instead of `ipcMain.handle`/`ipcMain.on`:
+
+```typescript
+// BAD: Crashes if handler already registered
+ipcMain.handle('my-channel', handler);
+
+// GOOD: Safe for duplicate registration
+safeHandle('my-channel', handler);
+```
+
+This prevents "second handler" errors from module duplication across chunk boundaries.
+
 ## Data Persistence
 
 The app uses **PGLite** (PostgreSQL in WebAssembly) for all data storage.
@@ -258,6 +310,28 @@ The Electron app includes a Window > Theme menu to switch between all themes. Th
 - **File watching**: Automatic updates when files change on disk
 - **Recent files**: Quick access to recently opened files in projects
 
+## AI Provider Implementation Details
+
+### Key Files for Claude Providers
+- **Claude API Provider**:
+  - Main implementation: `packages/runtime/src/ai/server/providers/ClaudeProvider.ts`
+  - UI panel: `src/renderer/components/AIModels/panels/ClaudePanel.tsx`
+  - Uses Anthropic SDK directly with API key authentication
+  - Supports model selection from predefined list in `packages/runtime/src/ai/modelConstants.ts`
+
+- **Claude Code Provider**:
+  - Implementation: `packages/runtime/src/ai/server/providers/ClaudeCodeProvider.ts`
+  - UI panel: `src/renderer/components/AIModels/panels/ClaudeCodePanel.tsx`
+  - Installation manager: `src/renderer/components/AIModels/services/CLIInstaller.ts`
+  - Requires separate installation of `@anthropic-ai/claude-agent-sdk` package
+  - Dynamically loads SDK from user's installation
+
+### Provider Factory
+- Location: `packages/runtime/src/ai/server/ProviderFactory.ts`
+- Creates and manages provider instances based on type
+- Provider types: `claude`, `claude-code`, `openai`, `openai-codex`, `lmstudio`
+- Each provider is cached per session for efficiency
+
 ## macOS Code Signing & Notarization
 
 The Electron app supports notarized distribution for macOS:
@@ -267,6 +341,21 @@ The Electron app supports notarized distribution for macOS:
 - **Binary handling**: Properly signs ripgrep and other bundled tools
 - **JAR exclusion**: Automatically removes JAR files that can't be notarized
 - **Entitlements**: Configured for hardened runtime with necessary exceptions
+
+## Git Worktree Integration
+
+Nimbalyst supports creating git worktrees for isolated AI coding sessions. See [/docs/WORKTREES.md](/docs/WORKTREES.md) for comprehensive documentation.
+
+### Database Schema
+- `worktrees` table: Stores worktree metadata (id, workspace_id, name, path, branch, base_branch)
+- `ai_sessions.worktree_id`: Foreign key linking sessions to worktrees (nullable)
+
+### IPC Channels
+- `worktree:create` - Create new worktree
+- `worktree:get-status` - Get git status (ahead/behind, uncommitted changes)
+- `worktree:delete` - Delete worktree
+- `worktree:list` - List all worktrees for workspace
+- `worktree:get` - Get single worktree by ID
 
 ## Testing
 

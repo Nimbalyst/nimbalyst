@@ -1,0 +1,135 @@
+.merge-confirm-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.merge-confirm-dialog {
+  width: 100%;
+  max-width: 440px;
+  background-color: var(--surface-primary);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.24);
+  outline: none;
+}
+
+.merge-confirm-dialog-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 24px 16px;
+  color: var(--text-primary);
+}
+
+.merge-confirm-dialog-header h2 {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.merge-confirm-dialog-body {
+  padding: 0 24px 20px;
+}
+
+.merge-confirm-dialog-body p {
+  margin: 0 0 16px;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.merge-confirm-dialog-body p strong {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.merge-confirm-dialog-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  margin-bottom: 16px;
+  background-color: var(--color-warning-muted);
+  border-radius: 8px;
+  color: var(--color-warning);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.merge-confirm-dialog-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background-color: var(--surface-secondary);
+  border-radius: 8px;
+}
+
+.merge-confirm-dialog-info-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8125rem;
+}
+
+.merge-confirm-dialog-info-label {
+  color: var(--text-tertiary);
+  min-width: 60px;
+}
+
+.merge-confirm-dialog-info-value {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+
+.merge-confirm-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 24px 20px;
+  border-top: 1px solid var(--border-primary);
+}
+
+.merge-confirm-dialog-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+.merge-confirm-dialog-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.merge-confirm-dialog-button--primary {
+  background-color: var(--accent-primary);
+  color: var(--accent-contrast);
+}
+
+.merge-confirm-dialog-button--primary:not(:disabled):hover {
+  background-color: var(--accent-hover);
+}
+
+.merge-confirm-dialog-button--secondary {
+  background-color: var(--surface-tertiary);
+  color: var(--text-primary);
+}
+
+.merge-confirm-dialog-button--secondary:hover {
+  background-color: var(--surface-hover);
+}

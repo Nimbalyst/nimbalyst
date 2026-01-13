@@ -5,16 +5,18 @@ import { SessionDropdown } from '../AIChat/SessionDropdown';
 import { SessionHistory } from '../AgenticCoding/SessionHistory';
 import { SessionImportDialog } from '../AgenticCoding/SessionImportDialog';
 import { ResizablePanel } from '../AgenticCoding/ResizablePanel';
-import { TabBar } from '../TabManager/TabBar';
-import type { Tab } from '../TabManager/TabManager';
+import { AgentSessionHeader } from '../AgenticCoding/AgentSessionHeader';
 import { useFileMention } from '../../hooks/useFileMention';
 import type { TypeaheadOption } from '../Typeahead/GenericTypeahead';
 import type { AIMode } from './ModeTag';
 import { DiffTestDropdown } from "../AIChat/DiffTestDropdown.tsx";
+import { WorktreeContentMode } from '../WorktreeMode/WorktreeModeToggle';
+import WorktreeFilesMode, { WorktreeFilesModeRef } from '../WorktreeMode/WorktreeFilesMode';
 import { getFileName } from '../../utils/pathUtils';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
 import { TerminalPanel } from '../Terminal/TerminalPanel';
 import { store, sessionProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom } from '../../store';
+import { WorktreeOnboardingModal } from '../WorktreeOnboardingModal';
 
 export interface AgenticPanelRef {
   createNewSession: (planPath?: string) => Promise<void>;
@@ -105,8 +107,8 @@ function stripSystemMessage(content: string): string {
  * Key features:
  * - Supports both 'chat' mode (sidebar) and 'agent' mode (full window)
  * - Manages session collection and active session
- * - Shows SessionHistory in agent mode (hidden in chat mode)
- * - Shows TabBar in agent mode (single session dropdown in chat mode)
+ * - Shows SessionHistory in agent mode (left nav for switching sessions)
+ * - Shows session header with title/worktree info in agent mode
  * - Coordinates session lifecycle (create, load, delete)
  * - Handles streaming state across all sessions
  * - Persists state to workspace
@@ -152,16 +154,25 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
   // Session history layout state (agent mode only)
   const [sessionHistoryWidth, setSessionHistoryWidth] = useState(240);
-  const [sessionHistoryCollapsed, setSessionHistoryCollapsed] = useState(mode === 'chat'); // Collapsed in chat mode
+  // IMPORTANT: SessionHistory must ALWAYS be visible in agent mode (never collapsed)
+  // Only collapse in chat mode
+  const [sessionHistoryCollapsed, setSessionHistoryCollapsed] = useState(mode === 'chat');
   const [collapsedGroups, setCollapsedGroups] = useState<string[]>([]);
   const [sortOrder, setSortOrder] = useState<'updated' | 'created'>('updated');
   const [sessionHistoryRefreshTrigger, setSessionHistoryRefreshTrigger] = useState(0);
   const [renamedSession, setRenamedSession] = useState<{ id: string; title: string } | null>(null);
   const [updatedSession, setUpdatedSession] = useState<{ id: string; timestamp: number } | null>(null);
+  const [renamedWorktree, setRenamedWorktree] = useState<{ worktreeId: string; displayName: string } | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [worktreeModes, setWorktreeModes] = useState<Map<string, WorktreeContentMode>>(new Map());
+  const [worktreeOnboardingOpen, setWorktreeOnboardingOpen] = useState(false);
+  const worktreeModesRef = useRef(worktreeModes);
 
   // Reload coordination for database-backed session state
   const reloadTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  // Debounce timer for persisting worktree modes
+  const persistWorktreeModesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastReloadAtRef = useRef<Map<string, number>>(new Map());
   const reloadInProgressRef = useRef<Set<string>>(new Set()); // Track in-flight reloads
   const sessionTabsRef = useRef<SessionTab[]>(sessionTabs);
@@ -171,6 +182,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // Ref to hold processQueuedPrompts function (defined later, used in openSessionInTab)
   const processQueuedPromptsRef = useRef<((sessionId: string, tab: SessionTab) => Promise<void>) | null>(null);
   const openSessionInTabRef = useRef<((sessionId: string) => Promise<void>) | null>(null);
+
+  // Track sessions currently being loaded to prevent duplicate loading from rapid clicks
+  const loadingSessionsRef = useRef<Set<string>>(new Set());
   // NOTE: Prompt ID tracking is now done via globalProcessingPromptIds (module-level)
   // to prevent duplicate execution across multiple AgenticPanel instances
 
@@ -179,6 +193,10 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
   // Session view refs for focusing input
   const sessionViewRefsRef = useRef<Map<string, React.RefObject<AISessionViewRef>>>(new Map());
+  const worktreeFilesModeRefsRef = useRef<Map<string, React.RefObject<WorktreeFilesModeRef>>>(new Map());
+
+  // Track pending WorktreeFilesMode mounts
+  const worktreeFilesModeReadyResolversRef = useRef<Map<string, () => void>>(new Map());
 
   // Initialization
   const initializedRef = useRef(false);
@@ -191,6 +209,10 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   useEffect(() => {
     workspacePathRef.current = workspacePath;
   }, [workspacePath]);
+
+  useEffect(() => {
+    worktreeModesRef.current = worktreeModes;
+  }, [worktreeModes]);
 
   // Update window title when active session changes (only in agent mode)
   const updateWindowTitle = useCallback((sessionName?: string) => {
@@ -280,6 +302,51 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     return refsMap.get(sessionId)!;
   }, []);
 
+  const getWorktreeFilesModeRef = useCallback((sessionId: string) => {
+    const refsMap = worktreeFilesModeRefsRef.current;
+    if (!refsMap.has(sessionId)) {
+      refsMap.set(sessionId, createRef<WorktreeFilesModeRef>());
+    }
+    return refsMap.get(sessionId)!;
+  }, []);
+
+  // Handle WorktreeFilesMode mounted callback
+  const handleWorktreeFilesModeMounted = useCallback((sessionId: string) => {
+    const resolver = worktreeFilesModeReadyResolversRef.current.get(sessionId);
+    if (resolver) {
+      resolver();
+      worktreeFilesModeReadyResolversRef.current.delete(sessionId);
+    }
+  }, []);
+
+  // Wait for WorktreeFilesMode to mount
+  const waitForWorktreeFilesModeReady = useCallback((sessionId: string, timeoutMs = 5000): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      // Check if ref is already available
+      const existingRef = worktreeFilesModeRefsRef.current.get(sessionId);
+      if (existingRef?.current) {
+        resolve();
+        return;
+      }
+
+      // Set up promise resolver
+      worktreeFilesModeReadyResolversRef.current.set(sessionId, resolve);
+
+      // Set up timeout
+      const timeoutId = setTimeout(() => {
+        worktreeFilesModeReadyResolversRef.current.delete(sessionId);
+        reject(new Error(`WorktreeFilesMode mount timeout for session ${sessionId}`));
+      }, timeoutMs);
+
+      // Clean up timeout when resolved
+      const originalResolver = resolve;
+      worktreeFilesModeReadyResolversRef.current.set(sessionId, () => {
+        clearTimeout(timeoutId);
+        originalResolver();
+      });
+    });
+  }, []);
+
   // Mark a session as read - called whenever a session becomes active
   const markSessionAsRead = useCallback(async (sessionId: string) => {
     const tab = sessionTabsRef.current.find(t => t.id === sessionId);
@@ -338,7 +405,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         if (result?.sessionHistoryLayout) {
           const layout = result.sessionHistoryLayout;
           setSessionHistoryWidth(layout.width ?? 240);
-          setSessionHistoryCollapsed(layout.collapsed ?? false);
+          // CRITICAL: Never collapse SessionHistory in agent mode
+          // The panel must always be visible to show the "New Worktree" button
+          setSessionHistoryCollapsed(false);
           setCollapsedGroups(layout.collapsedGroups ?? []);
           setSortOrder(layout.sortOrder ?? 'updated');
         }
@@ -348,6 +417,41 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     };
     loadLayout();
   }, [workspacePath, mode]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadWorktreeModes = async () => {
+      if (!workspacePath || !window.electronAPI?.invoke) {
+        setWorktreeModes(new Map());
+        return;
+      }
+      try {
+        const workspaceState = await window.electronAPI.invoke('workspace:get-state', workspacePath);
+        if (cancelled) return;
+        // Support both old key (agentWorktreeSessionModes) and new key (agentWorktreeModes) for migration
+        const savedModes = workspaceState?.agentWorktreeModes ?? workspaceState?.agentWorktreeSessionModes;
+        if (savedModes) {
+          setWorktreeModes(new Map(Object.entries(savedModes) as [string, WorktreeContentMode][]));
+        } else {
+          setWorktreeModes(new Map());
+        }
+      } catch (err) {
+        console.error('[AgenticPanel] Failed to load worktree modes:', err);
+        if (!cancelled) {
+          setWorktreeModes(new Map());
+        }
+      }
+    };
+    loadWorktreeModes();
+    return () => {
+      cancelled = true;
+      // Clean up pending persistence timer
+      if (persistWorktreeModesTimerRef.current) {
+        clearTimeout(persistWorktreeModesTimerRef.current);
+        persistWorktreeModesTimerRef.current = null;
+      }
+    };
+  }, [workspacePath]);
 
   // Save session history layout to workspace state when it changes (agent mode only)
   useEffect(() => {
@@ -359,7 +463,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           agenticCodingWindowState: {
             sessionHistoryLayout: {
               width: sessionHistoryWidth,
-              collapsed: sessionHistoryCollapsed,
+              // Never save collapsed=true for agent mode - panel must always be visible
+              collapsed: false,
               collapsedGroups,
               sortOrder
             }
@@ -666,6 +771,36 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     }, delay));
   }, []); // No dependencies - uses refs for all values
 
+  // Persist worktree modes to workspace state (debounced to prevent race conditions)
+  const persistWorktreeModes = useCallback((modes: Map<string, WorktreeContentMode>) => {
+    // Clear any pending persistence
+    if (persistWorktreeModesTimerRef.current) {
+      clearTimeout(persistWorktreeModesTimerRef.current);
+    }
+
+    // Debounce persistence by 500ms to handle rapid mode switching
+    persistWorktreeModesTimerRef.current = setTimeout(async () => {
+      if (!workspacePath || !window.electronAPI?.invoke) return;
+      try {
+        await window.electronAPI.invoke('workspace:update-state', workspacePath, {
+          agentWorktreeModes: Object.fromEntries(modes)
+        });
+      } catch (err) {
+        console.error('[AgenticPanel] Failed to save worktree modes:', err);
+      }
+    }, 500);
+  }, [workspacePath]);
+
+  // Handle worktree mode change (agent/files/changes)
+  const handleWorktreeModeChange = useCallback((worktreeId: string, nextMode: WorktreeContentMode) => {
+    setWorktreeModes(prev => {
+      const updated = new Map(prev);
+      updated.set(worktreeId, nextMode);
+      persistWorktreeModes(updated);
+      return updated;
+    });
+  }, [persistWorktreeModes]);
+
   // Open a session in a new tab (agent mode) or load it (chat mode)
   const openSessionInTab = useCallback(async (sessionId: string) => {
     // console.log('[AgenticPanel] openSessionInTab called with sessionId:', sessionId);
@@ -682,14 +817,25 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         setActiveTabId(sessionId);
         updateWindowTitle(existingTab.name);
         await markSessionAsRead(sessionId);
+        // Switch to agent mode for this worktree when selecting a session
+        if (existingTab.sessionData.worktreeId) {
+          handleWorktreeModeChange(existingTab.sessionData.worktreeId, 'agent');
+        }
         return;
       }
+    }
+
+    // Prevent duplicate loading from rapid clicks
+    if (loadingSessionsRef.current.has(sessionId)) {
+      // console.log('[AgenticPanel] Session already loading, ignoring duplicate request');
+      return;
     }
 
     // Chat mode or new session: always load fresh data
     // Pass trackAsResume: true because user intentionally opened this session from history
 
     // console.log('[AgenticPanel] Loading session from database...');
+    loadingSessionsRef.current.add(sessionId);
     try {
       const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspacePath, true);
       // console.log('[AgenticPanel] Session data loaded:', sessionData);
@@ -735,6 +881,11 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         // console.log('[AgenticPanel] Set active tab ID to:', sessionData.id);
         updateWindowTitle(tabName);
 
+        // Switch to agent mode for this worktree when selecting a session
+        if (sessionData.worktreeId) {
+          handleWorktreeModeChange(sessionData.worktreeId, 'agent');
+        }
+
         // Mark as read when opening a new session
         await markSessionAsRead(sessionData.id);
         // console.log('[AgenticPanel] Session marked as read');
@@ -750,8 +901,10 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       }
     } catch (err) {
       console.error('[AgenticPanel] Failed to load session:', err);
+    } finally {
+      loadingSessionsRef.current.delete(sessionId);
     }
-  }, [sessionTabs, workspacePath, mode, updateWindowTitle, markSessionAsRead]);
+  }, [sessionTabs, workspacePath, mode, updateWindowTitle, markSessionAsRead, handleWorktreeModeChange]);
 
   // Keep ref in sync with openSessionInTab
   openSessionInTabRef.current = openSessionInTab;
@@ -1036,6 +1189,269 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     }
   }, [sessionTabs, workspacePath, mode, loadSessions, updateWindowTitle, triggerSessionHistoryRefresh]);
 
+  // Internal function to actually create the worktree session
+  const doCreateWorktreeSession = useCallback(async () => {
+    try {
+      // Step 1: Create the worktree
+      const worktreeResult = await window.electronAPI.worktreeCreate(workspacePath);
+      if (!worktreeResult.success || !worktreeResult.worktree) {
+        throw new Error(worktreeResult.error || 'Failed to create worktree');
+      }
+
+      const worktree = worktreeResult.worktree;
+
+      // Step 2: Create session with worktree association
+      // Always use claude-code for worktree sessions
+      const defaultModel = 'claude-code:sonnet';
+      const provider = 'claude-code';
+
+      const session = await window.electronAPI.aiCreateSession(
+        provider as 'claude' | 'claude-code' | 'openai' | 'lmstudio',
+        undefined,
+        workspacePath,
+        defaultModel,
+        'coding',
+        worktree.id // Pass worktreeId
+      );
+
+      // Add metadata for worktree session
+      await window.electronAPI.invoke('sessions:update-session-metadata', session.id, {
+        sessionType: 'coding',
+        fileEdits: [],
+        todos: [],
+        worktreeId: worktree.id,
+        worktreePath: worktree.path,
+      });
+
+      const tabName = `Worktree: ${worktree.name}`;
+
+      // Wait for session to be fully loaded before switching
+      const sessionData = await window.electronAPI.aiLoadSession(session.id, workspacePath);
+      if (!sessionData) {
+        throw new Error('Failed to load newly created worktree session');
+      }
+
+      const newTab: SessionTab = {
+        id: sessionData.id,
+        name: tabName,
+        sessionData,
+        draftInput: sessionData.draftInput,
+        mode: 'agent',
+        model: defaultModel
+      };
+
+      if (mode === 'chat') {
+        setSessionTabs([newTab]);
+      } else {
+        setSessionTabs(prev => [...prev, newTab]);
+      }
+
+      // Wait for session to be fully created before switching to it
+      await new Promise(resolve => setTimeout(resolve, 100));
+      setActiveTabId(sessionData.id);
+
+      // Reload sessions to update the UI
+      await loadSessions();
+
+      // Trigger SessionHistory refresh
+      triggerSessionHistoryRefresh('new-session');
+
+      updateWindowTitle(tabName);
+
+      // Focus the input after UI updates
+      setTimeout(() => {
+        const ref = sessionViewRefsRef.current.get(sessionData.id);
+        ref?.current?.focusInput();
+      }, 100);
+
+      return sessionData;
+    } catch (error) {
+      console.error('[AgenticPanel] Failed to create worktree session:', error);
+      errorNotificationService.showError('Worktree Creation Failed', String(error));
+      throw error;
+    }
+  }, [workspacePath, mode, loadSessions, updateWindowTitle, triggerSessionHistoryRefresh]);
+
+  // Create a new worktree session (may show onboarding modal first)
+  const createNewWorktreeSession = useCallback(async () => {
+    // Check if onboarding has been shown before
+    const onboardingShown = await window.electronAPI.invoke('worktree-onboarding:is-shown');
+
+    if (!onboardingShown) {
+      // Show onboarding modal first - actual creation happens in the continue handler
+      setWorktreeOnboardingOpen(true);
+      return;
+    }
+
+    // Proceed directly with creation
+    return doCreateWorktreeSession();
+  }, [doCreateWorktreeSession]);
+
+  // Handler for worktree onboarding modal continue
+  const handleWorktreeOnboardingContinue = useCallback(async () => {
+    // Mark as shown
+    await window.electronAPI.invoke('worktree-onboarding:set-shown', true);
+    setWorktreeOnboardingOpen(false);
+    // Proceed with creation
+    await doCreateWorktreeSession();
+  }, [doCreateWorktreeSession]);
+
+  // Handler for worktree onboarding modal cancel
+  const handleWorktreeOnboardingCancel = useCallback(() => {
+    // Mark as shown even on cancel (they saw it)
+    window.electronAPI.invoke('worktree-onboarding:set-shown', true);
+    setWorktreeOnboardingOpen(false);
+  }, []);
+
+  // Add a new session to an existing worktree
+  const handleAddSessionToWorktree = useCallback(async (worktreeId: string) => {
+    try {
+      // Get worktree data
+      const worktreeResult = await window.electronAPI.invoke('worktree:get', worktreeId);
+      if (!worktreeResult.success || !worktreeResult.worktree) {
+        throw new Error(worktreeResult.error || 'Worktree not found');
+      }
+
+      const worktree = worktreeResult.worktree;
+
+      // Create session with worktree association using default provider
+      const defaultModel = 'claude-code:sonnet';
+      const provider = 'claude-code';
+
+      const session = await window.electronAPI.aiCreateSession(
+        provider as 'claude' | 'claude-code' | 'openai' | 'lmstudio',
+        undefined,
+        workspacePath,
+        defaultModel,
+        'coding',
+        worktree.id
+      );
+
+      // Add metadata for worktree session
+      await window.electronAPI.invoke('sessions:update-session-metadata', session.id, {
+        sessionType: 'coding',
+        fileEdits: [],
+        todos: [],
+        worktreeId: worktree.id,
+        worktreePath: worktree.path,
+      });
+
+      const tabName = `Worktree: ${worktree.name}`;
+
+      // Load the session
+      const sessionData = await window.electronAPI.aiLoadSession(session.id, workspacePath);
+      if (!sessionData) {
+        throw new Error('Failed to load newly created worktree session');
+      }
+
+      const newTab: SessionTab = {
+        id: sessionData.id,
+        name: tabName,
+        sessionData,
+        draftInput: sessionData.draftInput,
+        mode: 'agent',
+        model: defaultModel
+      };
+
+      if (mode === 'chat') {
+        setSessionTabs([newTab]);
+      } else {
+        setSessionTabs(prev => [...prev, newTab]);
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+      setActiveTabId(sessionData.id);
+
+      await loadSessions();
+      triggerSessionHistoryRefresh('new-session');
+
+      updateWindowTitle(tabName);
+
+      setTimeout(() => {
+        const ref = sessionViewRefsRef.current.get(sessionData.id);
+        ref?.current?.focusInput();
+      }, 100);
+
+      return sessionData;
+    } catch (error) {
+      console.error('[AgenticPanel] Failed to add session to worktree:', error);
+      errorNotificationService.showError('Failed to Add Session', String(error));
+      throw error;
+    }
+  }, [workspacePath, mode, loadSessions, updateWindowTitle, triggerSessionHistoryRefresh]);
+
+  // Add a new terminal to an existing worktree
+  const handleAddTerminalToWorktree = useCallback(async (worktreeId: string) => {
+    try {
+      console.log('[AgenticPanel] Adding terminal to worktree:', worktreeId);
+
+      // Get worktree data
+      const worktreeResult = await window.electronAPI.invoke('worktree:get', worktreeId);
+      if (!worktreeResult.success || !worktreeResult.worktree) {
+        throw new Error(worktreeResult.error || 'Worktree not found');
+      }
+
+      const worktree = worktreeResult.worktree;
+
+      // Create terminal session with worktree association
+      const result = await window.electronAPI.terminal.createSession(workspacePath, {
+        worktreeId: worktree.id,
+        worktreePath: worktree.path,
+      });
+
+      if (!result.success || !result.sessionId) {
+        throw new Error(result.error || 'Failed to create terminal session');
+      }
+
+      // Load the session data
+      const sessionData = await window.electronAPI.aiLoadSession(result.sessionId, workspacePath);
+      if (!sessionData) {
+        throw new Error('Failed to load newly created terminal session');
+      }
+
+      // Count existing terminals in this worktree for naming
+      const worktreeTerminalCount = sessionTabs.filter(
+        t => t.sessionData.sessionType === 'terminal' && t.sessionData.worktreeId === worktreeId
+      ).length;
+      const tabName = worktreeTerminalCount > 0
+        ? `Terminal (${worktree.displayName || worktree.name}) ${worktreeTerminalCount + 1}`
+        : `Terminal (${worktree.displayName || worktree.name})`;
+
+      const newTab: SessionTab = {
+        id: sessionData.id,
+        name: tabName,
+        sessionData: {
+          ...sessionData,
+          sessionType: 'terminal',
+          worktreeId: worktree.id,
+          worktreePath: worktree.path,
+        },
+        mode: 'agent',
+      };
+
+      if (mode === 'chat') {
+        setSessionTabs([newTab]);
+      } else {
+        setSessionTabs(prev => [...prev, newTab]);
+      }
+
+      setActiveTabId(sessionData.id);
+
+      await loadSessions();
+
+      // Trigger SessionHistory refresh
+      triggerSessionHistoryRefresh('new-worktree-terminal');
+
+      updateWindowTitle(tabName);
+
+      return sessionData;
+    } catch (error) {
+      console.error('[AgenticPanel] Failed to add terminal to worktree:', error);
+      errorNotificationService.showError('Failed to Add Terminal', String(error));
+      throw error;
+    }
+  }, [sessionTabs, workspacePath, mode, loadSessions, updateWindowTitle, triggerSessionHistoryRefresh]);
+
   // Load or create initial session
   useEffect(() => {
     if (initializedRef.current) return;
@@ -1191,7 +1607,13 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           }
         } else if (mode === 'agent') {
           // In agent mode, create a session by default
-          await createNewSession(planDocumentPath);
+          try {
+            await createNewSession(planDocumentPath);
+          } catch (err) {
+            // Don't show error UI if initial session creation fails in agent mode
+            // User can manually create a session using "New Session" or "New Worktree" buttons
+            console.error('[AgenticPanel] Failed to create initial session in agent mode:', err);
+          }
         }
         // In chat mode, don't create a session automatically - wait for user
       } catch (err) {
@@ -1471,6 +1893,37 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       cleanup3?.();
     };
   }, [mode, isActive]);
+
+  // Listen for worktree display name updates (when first session in worktree is named)
+  useEffect(() => {
+    const handleWorktreeDisplayNameUpdated = (data: { worktreeId: string; displayName: string }) => {
+      if (!data || !data.worktreeId) return;
+
+      console.log('[AgenticPanel] Worktree display name updated:', data.worktreeId, '->', data.displayName);
+
+      // Update session history to reflect the new worktree display name
+      setRenamedWorktree({ worktreeId: data.worktreeId, displayName: data.displayName });
+    };
+
+    const cleanup = window.electronAPI.on('worktree:display-name-updated', handleWorktreeDisplayNameUpdated);
+
+    return () => {
+      cleanup?.();
+    };
+  }, []);
+
+  // Listen for developer menu trigger to show worktree onboarding modal
+  useEffect(() => {
+    const handleShowWorktreeOnboarding = () => {
+      setWorktreeOnboardingOpen(true);
+    };
+
+    const cleanup = window.electronAPI.on('show-worktree-onboarding', handleShowWorktreeOnboarding);
+
+    return () => {
+      cleanup?.();
+    };
+  }, []);
 
   // Listen for queued prompts notification - triggers processing from the queued_prompts table
   // The actual prompts are fetched from the database, not from the IPC payload
@@ -2158,7 +2611,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           sessionType,  // Include sessionType for MCP tool availability
           attachments: attachments.length > 0 ? attachments : undefined,
           queuedPromptId,  // For deduplication in main process
-          contentMode: mode === 'agent' ? 'agent' : 'files'  // For analytics tracking
+          contentMode: mode  // For analytics tracking
         };
 
         // IMPORTANT: Refresh mockup annotations from window at send time
@@ -2198,10 +2651,10 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           hasMockupDrawing: !!contextToSend.mockupDrawing
         });
       } else if (attachments.length > 0) {
-        contextToSend = { attachments, sessionType, workspacePath, queuedPromptId, contentMode: mode === 'agent' ? 'agent' : 'files' };  // Include workspacePath even without document
+        contextToSend = { attachments, sessionType, workspacePath, queuedPromptId, contentMode: mode };  // Include workspacePath even without document
       } else {
         // Even without document context or attachments, pass sessionType and workspacePath
-        contextToSend = { sessionType, workspacePath, queuedPromptId, contentMode: mode === 'agent' ? 'agent' : 'files' };  // Include workspacePath for routing
+        contextToSend = { sessionType, workspacePath, queuedPromptId, contentMode: mode };  // Include workspacePath for routing
       }
 
       await window.electronAPI.aiSendMessage(
@@ -2274,21 +2727,6 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       window.removeEventListener('trigger-slash-command', handleSlashCommand as EventListener);
     };
   }, [activeTabId, handleSendMessage]);
-
-  // Handle file click - use the canonical file opening path
-  const handleFileClick = useCallback(async (filePath: string) => {
-    try {
-      if (onFileOpen) {
-        // Use the canonical file opening function from App
-        // This goes through App.handleWorkspaceFileSelect -> editorModeRef.selectFile -> handleWorkspaceFileSelect -> addTab
-        await onFileOpen(filePath);
-      } else {
-        console.error('[AgenticPanel] onFileOpen not provided - cannot open file');
-      }
-    } catch (err) {
-      console.error('[AgenticPanel] Failed to open file:', err);
-    }
-  }, [onFileOpen]);
 
   // Track sessions currently being processed to prevent duplicate processing
   const processingQueueRef = useRef(new Set<string>());
@@ -2498,14 +2936,78 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     });
   }, [sessionTabs, activeTabId, updateWindowTitle]);
 
-  const handleTabReorder = useCallback((fromIndex: number, toIndex: number) => {
-    setSessionTabs(prev => {
-      const newTabs = [...prev.filter(t => t != null)];
-      const [movedTab] = newTabs.splice(fromIndex, 1);
-      newTabs.splice(toIndex, 0, movedTab);
-      return newTabs;
-    });
-  }, []);
+  // Handle file click - route to worktree editor if applicable
+  const handleFileClick = useCallback(async (sessionId: string, filePath: string) => {
+    const tab = sessionTabsRef.current.find(t => t.id === sessionId);
+    const worktreeId = tab?.sessionData.worktreeId;
+    const isWorktreeSession = Boolean(worktreeId && tab?.sessionData.worktreePath);
+
+    if (isWorktreeSession && worktreeId) {
+      const currentMode = worktreeModesRef.current.get(worktreeId) ?? 'agent';
+
+      // Switch to files mode if not already there
+      if (currentMode !== 'files') {
+        handleWorktreeModeChange(worktreeId, 'files');
+      }
+
+      // Always wait for WorktreeFilesMode to be ready (even if already in files mode)
+      // The component might be mounting or the ref might not be set yet
+      const editorRef = worktreeFilesModeRefsRef.current.get(sessionId);
+      if (!editorRef?.current) {
+        try {
+          await waitForWorktreeFilesModeReady(sessionId);
+        } catch (err) {
+          console.error('[AgenticPanel] WorktreeFilesMode mount timeout:', err);
+          errorNotificationService.showError(
+            'Failed to open file',
+            'The file editor could not be initialized. Please try again.'
+          );
+          return;
+        }
+      }
+
+      // Now try to open the file
+      const finalEditorRef = worktreeFilesModeRefsRef.current.get(sessionId);
+      if (finalEditorRef?.current) {
+        try {
+          finalEditorRef.current.openFile(filePath);
+        } catch (err) {
+          console.error('[AgenticPanel] Failed to open file in worktree mode:', err);
+          errorNotificationService.showError(
+            'Failed to open file',
+            `Could not open ${getFileName(filePath)}. The file may not exist or may be inaccessible.`
+          );
+        }
+        return;
+      } else {
+        console.error('[AgenticPanel] WorktreeFilesMode ref still not available after wait - this should not happen');
+        errorNotificationService.showError(
+          'Failed to open file',
+          'The file editor is not ready. Please try again in a moment.'
+        );
+        return;
+      }
+    }
+
+    // Fallback to old files mode for non-worktree sessions
+    try {
+      if (onFileOpen) {
+        await onFileOpen(filePath);
+      } else {
+        console.error('[AgenticPanel] onFileOpen not provided - cannot open file');
+        errorNotificationService.showError(
+          'Failed to open file',
+          'File opening is not available. Please restart the application.'
+        );
+      }
+    } catch (err) {
+      console.error('[AgenticPanel] Failed to open file:', err);
+      errorNotificationService.showError(
+        'Failed to open file',
+        `Could not open ${getFileName(filePath)}. The file may not exist or may be inaccessible.`
+      );
+    }
+  }, [handleWorktreeModeChange, onFileOpen, waitForWorktreeFilesModeReady]);
 
   // Expose methods to parent via ref
   useImperativeHandle(ref, () => ({
@@ -2544,33 +3046,6 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       handleTabSelect(filtered[prevIndex].id);
     }
   }), [createNewSession, openSessionInTab, activeTabId, handleTabClose, sessionTabs, handleTabSelect, closedSessions]);
-
-  const handleTogglePin = useCallback((tabId: string) => {
-    setSessionTabs(prev => {
-      const filtered = prev.filter(t => t != null);
-      const tab = filtered.find(t => t.id === tabId);
-      if (!tab) return filtered;
-
-      const newIsPinned = !tab.isPinned;
-      const updatedTab = { ...tab, isPinned: newIsPinned };
-
-      let newTabs = filtered.map(t => t.id === tabId ? updatedTab : t);
-
-      if (newIsPinned) {
-        newTabs = newTabs.filter(t => t.id !== tabId);
-        const lastPinnedIndex = newTabs.findIndex(t => !t.isPinned);
-        const insertIndex = lastPinnedIndex === -1 ? newTabs.length : lastPinnedIndex;
-        newTabs.splice(insertIndex, 0, updatedTab);
-      } else {
-        newTabs = newTabs.filter(t => t.id !== tabId);
-        const firstUnpinnedIndex = newTabs.findIndex(t => !t.isPinned);
-        const insertIndex = firstUnpinnedIndex === -1 ? newTabs.length : firstUnpinnedIndex;
-        newTabs.splice(insertIndex, 0, updatedTab);
-      }
-
-      return newTabs;
-    });
-  }, []);
 
   const handleTabRename = useCallback(async (tabId: string, newName: string) => {
     // Update the tab name in sessionTabs
@@ -2725,22 +3200,6 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadedSessionIdsKey]);
 
-  // Convert SessionTab to Tab format for TabBar
-  const convertToTabs = (sessionTabs: SessionTab[]): Tab[] => {
-    return sessionTabs.filter(tab => tab != null).map(tab => ({
-      id: tab.id,
-      filePath: `session://${tab.id}`,
-      fileName: tab.name,
-      content: '',
-      isDirty: false,
-      isPinned: tab.isPinned || false,
-      isVirtual: true,
-      isProcessing: processingSessions.has(tab.id),
-      // Only show unread for inactive tabs that aren't processing
-      hasUnread: tab.id !== activeTabId && !processingSessions.has(tab.id) && hasUnreadMessages(tab)
-    }));
-  };
-
   if (loading) {
     return (
       <div className="agentic-panel agentic-panel--loading" style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--surface-primary)' }}>
@@ -2833,7 +3292,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             fileMentionOptions={fileMentionOptions}
             onFileMentionSearch={handleFileMentionSearch}
             onFileMentionSelect={handleFileMentionSelect}
-            onFileClick={handleFileClick}
+            onFileClick={(filePath) => handleFileClick(activeTab.id, filePath)}
             isLoading={processingSessions.has(activeTab.id)}
             aiMode={activeTab.mode || 'agent'}
             onAIModeChange={(newMode) => handleModeChange(activeTab.id, newMode)}
@@ -2881,6 +3340,10 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   }
 
   // Agent mode: multi-tab with session history
+  const activeAgentTab = activeTabId ? sessionTabs.find(tab => tab.id === activeTabId) : null;
+  const activeWorktreeId = activeAgentTab?.sessionData.worktreeId;
+  const activeAgentWorktreeMode: WorktreeContentMode = activeWorktreeId ? (worktreeModes.get(activeWorktreeId) ?? 'agent') : 'agent';
+
   return (
     <div className="agentic-panel agentic-panel--agent" style={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--surface-primary)' }}>
       <ResizablePanel
@@ -2898,6 +3361,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             unreadSessions={unreadSessions}
             pendingPromptSessions={pendingPromptSessions}
             renamedSession={renamedSession}
+            renamedWorktree={renamedWorktree}
             updatedSession={updatedSession}
             onSessionSelect={openSessionInTab}
             onSessionDelete={deleteSession}
@@ -2905,6 +3369,11 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             onSessionRename={handleTabRename}
             onNewSession={() => createNewSession()}
             onNewTerminal={releaseChannel === 'alpha' ? () => createNewTerminal() : undefined}
+            onNewWorktreeSession={releaseChannel === 'alpha' ? createNewWorktreeSession : undefined}
+            onAddSessionToWorktree={handleAddSessionToWorktree}
+            onAddTerminalToWorktree={releaseChannel === 'alpha' ? handleAddTerminalToWorktree : undefined}
+            onWorktreeFilesMode={(worktreeId) => handleWorktreeModeChange(worktreeId, 'files')}
+            onWorktreeChangesMode={(worktreeId) => handleWorktreeModeChange(worktreeId, 'changes')}
             onImportSessions={handleOpenImportDialog}
             onOpenQuickSearch={onOpenQuickSearch}
             collapsedGroups={collapsedGroups}
@@ -2912,51 +3381,108 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             sortOrder={sortOrder}
             onSortOrderChange={setSortOrder}
             refreshTrigger={sessionHistoryRefreshTrigger}
+            mode={mode}
           />
         }
         rightPanel={
           <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-            {/* Tabs */}
-            {sessionTabs.length > 0 && (
-              <div className="ai-session-tabs-container">
-                <TabBar
-                tabs={convertToTabs(sessionTabs)}
-                activeTabId={activeTabId}
-                onTabSelect={handleTabSelect}
-                onTabClose={handleTabClose}
-                onNewTab={() => createNewSession()}
-                onTogglePin={handleTogglePin}
-                onTabReorder={handleTabReorder}
-                onReopenLastClosed={reopenLastClosedSession}
-                hasClosedTabs={closedSessions.length > 0}
-                onTabRename={handleTabRename}
-                allowRename={true}
-                isActive={isActive}
+            {/* Session Header */}
+            {activeAgentTab && (
+              <AgentSessionHeader
+                sessionData={activeAgentTab.sessionData}
+                isProcessing={processingSessions.has(activeAgentTab.id)}
               />
-              </div>
             )}
 
             {/* Session views */}
-            {sessionTabs.filter(tab => tab != null).map(tab => (
-              tab.sessionData.sessionType === 'terminal' ? (
-                <div
-                  key={tab.id}
-                  style={{
-                    flex: 1,
-                    display: tab.id === activeTabId ? 'flex' : 'none',
-                    flexDirection: 'column',
-                    height: '100%',
-                    overflow: 'hidden',
-                  }}
-                  data-testid={`terminal-session-${tab.id}`}
-                >
-                  <TerminalPanel
+            {sessionTabs.filter(tab => tab != null).map(tab => {
+              // Terminal sessions render TerminalPanel (check first, before worktree)
+              if (tab.sessionData.sessionType === 'terminal') {
+                return (
+                  <div
+                    key={tab.id}
+                    style={{
+                      flex: 1,
+                      display: tab.id === activeTabId ? 'flex' : 'none',
+                      flexDirection: 'column',
+                      height: '100%',
+                      overflow: 'hidden',
+                    }}
+                    data-testid={`terminal-session-${tab.id}`}
+                  >
+                    <TerminalPanel
+                      sessionId={tab.id}
+                      workspacePath={tab.sessionData.worktreePath || workspacePath}
+                      isActive={tab.id === activeTabId}
+                    />
+                  </div>
+                );
+              }
+
+              const isWorktreeSession = Boolean(tab.sessionData.worktreeId && tab.sessionData.worktreePath);
+              const currentMode: WorktreeContentMode = tab.sessionData.worktreeId
+                ? (worktreeModes.get(tab.sessionData.worktreeId) ?? 'agent')
+                : 'agent';
+
+              // Always render WorktreeFilesMode for worktree sessions to preserve tab state
+              if (isWorktreeSession && tab.sessionData.worktreePath) {
+                return (
+                  <WorktreeFilesMode
+                    key={`worktree-${tab.id}`}
+                    ref={getWorktreeFilesModeRef(tab.id)}
                     sessionId={tab.id}
+                    sessionData={tab.sessionData}
+                    worktreePath={tab.sessionData.worktreePath}
                     workspacePath={workspacePath}
                     isActive={tab.id === activeTabId}
+                    mode={currentMode}
+                    onMounted={handleWorktreeFilesModeMounted}
+                    chatPanel={(
+                      <AISessionView
+                        key={`chat-${tab.id}`}
+                        ref={getSessionViewRef(tab.id)}
+                        sessionId={tab.id}
+                        sessionData={tab.sessionData}
+                        isActive={tab.id === activeTabId}
+                        mode={currentMode === 'agent' ? 'agent' : 'chat'}
+                        workspacePath={workspacePath}
+                        documentContext={documentContext}
+                        draftInput={tab.draftInput}
+                        draftAttachments={tab.draftAttachments}
+                        onDraftInputChange={handleDraftInputChange}
+                        onDraftAttachmentsChange={handleDraftAttachmentsChange}
+                        onSendMessage={handleSendMessage}
+                        onCancelRequest={handleCancelRequest}
+                        onNavigateHistory={handleNavigateHistory}
+                        fileMentionOptions={fileMentionOptions}
+                        onFileMentionSearch={handleFileMentionSearch}
+                        onFileMentionSelect={handleFileMentionSelect}
+                        onFileClick={(filePath) => handleFileClick(tab.id, filePath)}
+                        isLoading={processingSessions.has(tab.id)}
+                        aiMode={tab.mode || 'agent'}
+                        onAIModeChange={(newMode) => handleModeChange(tab.id, newMode)}
+                        currentModel={tab.model || tab.sessionData.model || 'claude-code'}
+                        onModelChange={(newModel) => handleModelChange(tab.id, newModel)}
+                        sessionHasMessages={(tab.sessionData.messages?.length ?? 0) > 0}
+                        currentProviderType={
+                          tab.sessionData.provider === 'claude-code' || tab.sessionData.provider === 'openai-codex'
+                            ? 'agent'
+                            : tab.sessionData.provider
+                              ? 'model'
+                              : null
+                        }
+                        isArchived={tab.isArchived}
+                        onCloseAndArchive={handleCloseAndArchive}
+                        onUnarchive={handleUnarchive}
+                      />
+                    )}
                   />
-                </div>
-              ) : (
+                );
+              }
+
+              // Non-worktree sessions render standalone AISessionView
+              // (Terminal sessions are handled at the top of the loop)
+              return (
                 <AISessionView
                   key={tab.id}
                   ref={getSessionViewRef(tab.id)}
@@ -2976,7 +3502,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                   fileMentionOptions={fileMentionOptions}
                   onFileMentionSearch={handleFileMentionSearch}
                   onFileMentionSelect={handleFileMentionSelect}
-                  onFileClick={handleFileClick}
+                  onFileClick={(filePath) => handleFileClick(tab.id, filePath)}
                   isLoading={processingSessions.has(tab.id)}
                   aiMode={tab.mode || 'agent'}
                   onAIModeChange={(newMode) => handleModeChange(tab.id, newMode)}
@@ -2994,8 +3520,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                   onCloseAndArchive={handleCloseAndArchive}
                   onUnarchive={handleUnarchive}
                 />
-              )
-            ))}
+              );
+            })}
 
             {/* Empty state */}
             {sessionTabs.length === 0 && (
@@ -3021,6 +3547,13 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         onImport={handleImportSessions}
         currentWorkspacePath={workspacePath}
         filterByWorkspace={true}  // Only show sessions for current workspace
+      />
+
+      {/* Worktree Onboarding Modal */}
+      <WorktreeOnboardingModal
+        isOpen={worktreeOnboardingOpen}
+        onContinue={handleWorktreeOnboardingContinue}
+        onCancel={handleWorktreeOnboardingCancel}
       />
     </div>
   );

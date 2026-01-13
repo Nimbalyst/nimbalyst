@@ -103,7 +103,9 @@ export function createWorkspaceManagerWindow() {
   const loadContent = () => {
     const currentTheme = getTheme();
     if (process.env.NODE_ENV === 'development') {
-      return workspaceManagerWindow!.loadURL(`http://localhost:5273/?mode=workspace-manager&theme=${currentTheme}`);
+      // Use VITE_PORT if set (for isolated dev mode), otherwise default to 5273
+      const devPort = process.env.VITE_PORT || '5273';
+      return workspaceManagerWindow!.loadURL(`http://localhost:${devPort}/?mode=workspace-manager&theme=${currentTheme}`);
     } else {
       // Note: Due to code splitting, __dirname is out/main/chunks/, not out/main/
       // Use app.getAppPath() to reliably find the renderer

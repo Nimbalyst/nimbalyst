@@ -8,12 +8,18 @@
  *
  * This allows Nimbalyst to be a UI layer on top of Claude Code's permission system,
  * ensuring permissions work consistently between Nimbalyst and the Claude CLI.
+ *
+ * WORKTREE SUPPORT: When a workspace is a git worktree, settings are read/written
+ * from/to the parent project's .claude/ directory. This ensures worktrees share
+ * the same permission patterns as their parent project.
  */
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { watch, FSWatcher } from 'fs';
 import { logger } from '../utils/logger';
+import { resolveWorkspacePathForPermissions } from './PermissionService';
+import { resolveProjectPath } from '../utils/workspaceDetection';
 
 const log = logger.main;
 
@@ -78,17 +84,21 @@ export class ClaudeSettingsManager {
   }
 
   /**
-   * Get the path to the project-level shared settings file
+   * Get the path to the project-level shared settings file.
+   * Resolves worktree paths to parent project so settings are inherited.
    */
   private getProjectSharedPath(workspacePath: string): string {
-    return path.join(workspacePath, '.claude', 'settings.json');
+    const projectPath = resolveProjectPath(workspacePath);
+    return path.join(projectPath, '.claude', 'settings.json');
   }
 
   /**
-   * Get the path to the project-level local settings file
+   * Get the path to the project-level local settings file.
+   * Resolves worktree paths to parent project so settings are inherited.
    */
   private getProjectLocalPath(workspacePath: string): string {
-    return path.join(workspacePath, '.claude', 'settings.local.json');
+    const projectPath = resolveProjectPath(workspacePath);
+    return path.join(projectPath, '.claude', 'settings.local.json');
   }
 
   /**
@@ -161,11 +171,15 @@ export class ClaudeSettingsManager {
 
   /**
    * Get effective settings merged from all sources
+   * NOTE: Resolves worktree paths to parent project for settings lookup
    */
   async getEffectiveSettings(workspacePath: string): Promise<EffectiveClaudeSettings> {
+    // Resolve worktree paths to parent project
+    const resolvedPath = await resolveWorkspacePathForPermissions(workspacePath);
+
     const [projectShared, projectLocal, userLevel] = await Promise.all([
-      this.readSettingsFile(this.getProjectSharedPath(workspacePath)),
-      this.readSettingsFile(this.getProjectLocalPath(workspacePath)),
+      this.readSettingsFile(this.getProjectSharedPath(resolvedPath)),
+      this.readSettingsFile(this.getProjectLocalPath(resolvedPath)),
       this.readSettingsFile(this.getUserLevelPath()),
     ]);
 
@@ -193,6 +207,7 @@ export class ClaudeSettingsManager {
   /**
    * Add an allowed tool pattern to the project-local settings
    * (personal, not shared with team)
+   * NOTE: Resolves worktree paths to parent project
    */
   async addAllowedTool(workspacePath: string, pattern: string): Promise<void> {
     // SECURITY: Never save compound command patterns - they must be approved each time
@@ -241,7 +256,9 @@ export class ClaudeSettingsManager {
       }
     }
 
-    const filePath = this.getProjectLocalPath(workspacePath);
+    // Resolve worktree paths to parent project
+    const resolvedPath = await resolveWorkspacePathForPermissions(workspacePath);
+    const filePath = this.getProjectLocalPath(resolvedPath);
     const settings = (await this.readSettingsFile(filePath)) || {};
 
     if (!settings.permissions) {
@@ -258,9 +275,12 @@ export class ClaudeSettingsManager {
 
   /**
    * Remove an allowed tool pattern from the project-local settings
+   * NOTE: Resolves worktree paths to parent project
    */
   async removeAllowedTool(workspacePath: string, pattern: string): Promise<void> {
-    const filePath = this.getProjectLocalPath(workspacePath);
+    // Resolve worktree paths to parent project
+    const resolvedPath = await resolveWorkspacePathForPermissions(workspacePath);
+    const filePath = this.getProjectLocalPath(resolvedPath);
     const settings = await this.readSettingsFile(filePath);
 
     if (settings?.permissions?.allow) {
@@ -272,9 +292,12 @@ export class ClaudeSettingsManager {
 
   /**
    * Add an additional directory to the project-local settings
+   * NOTE: Resolves worktree paths to parent project
    */
   async addAdditionalDirectory(workspacePath: string, directory: string): Promise<void> {
-    const filePath = this.getProjectLocalPath(workspacePath);
+    // Resolve worktree paths to parent project
+    const resolvedPath = await resolveWorkspacePathForPermissions(workspacePath);
+    const filePath = this.getProjectLocalPath(resolvedPath);
     const settings = (await this.readSettingsFile(filePath)) || {};
 
     if (!settings.permissions) {
@@ -294,9 +317,12 @@ export class ClaudeSettingsManager {
 
   /**
    * Remove an additional directory from the project-local settings
+   * NOTE: Resolves worktree paths to parent project
    */
   async removeAdditionalDirectory(workspacePath: string, directory: string): Promise<void> {
-    const filePath = this.getProjectLocalPath(workspacePath);
+    // Resolve worktree paths to parent project
+    const resolvedPath = await resolveWorkspacePathForPermissions(workspacePath);
+    const filePath = this.getProjectLocalPath(resolvedPath);
     const settings = await this.readSettingsFile(filePath);
 
     if (settings?.permissions?.additionalDirectories) {
@@ -410,25 +436,34 @@ export class ClaudeSettingsManager {
 
   /**
    * Check if a pattern is in the project-local allowed list
+   * NOTE: Resolves worktree paths to parent project
    */
   async isPatternAllowedLocally(workspacePath: string, pattern: string): Promise<boolean> {
-    const settings = await this.readSettingsFile(this.getProjectLocalPath(workspacePath));
+    // Resolve worktree paths to parent project
+    const resolvedPath = await resolveWorkspacePathForPermissions(workspacePath);
+    const settings = await this.readSettingsFile(this.getProjectLocalPath(resolvedPath));
     return settings?.permissions?.allow?.includes(pattern) ?? false;
   }
 
   /**
    * Get all patterns from project-local settings
+   * NOTE: Resolves worktree paths to parent project
    */
   async getLocalPatterns(workspacePath: string): Promise<ClaudePermissions | undefined> {
-    const settings = await this.readSettingsFile(this.getProjectLocalPath(workspacePath));
+    // Resolve worktree paths to parent project
+    const resolvedPath = await resolveWorkspacePathForPermissions(workspacePath);
+    const settings = await this.readSettingsFile(this.getProjectLocalPath(resolvedPath));
     return settings?.permissions;
   }
 
   /**
    * Get all patterns from project-shared settings
+   * NOTE: Resolves worktree paths to parent project
    */
   async getSharedPatterns(workspacePath: string): Promise<ClaudePermissions | undefined> {
-    const settings = await this.readSettingsFile(this.getProjectSharedPath(workspacePath));
+    // Resolve worktree paths to parent project
+    const resolvedPath = await resolveWorkspacePathForPermissions(workspacePath);
+    const settings = await this.readSettingsFile(this.getProjectSharedPath(resolvedPath));
     return settings?.permissions;
   }
 }

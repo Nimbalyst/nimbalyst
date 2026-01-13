@@ -387,10 +387,8 @@ export class AIService {
     });
 
     // Register built-in tools (which now includes file tools)
-    // console.log('[AIService] Registering built-in tools...');
     for (const tool of BUILT_IN_TOOLS) {
       toolRegistry.register(tool);
-      // console.log(`[AIService] Registered tool: ${tool.name}`);
     }
 
     // Delay initialization until first use
@@ -469,7 +467,6 @@ export class AIService {
 
         // If we have an env variable and no stored key, save it
         if (process.env.ANTHROPIC_API_KEY && !apiKeys['anthropic']) {
-          // console.log('Initializing API key from environment variable');
           apiKeys['anthropic'] = process.env.ANTHROPIC_API_KEY;
           this.getSettingsStore().set('apiKeys', apiKeys);
         }
@@ -883,6 +880,12 @@ export class AIService {
     return provider;
   }
 
+  /**
+   * Automatically runs the /context command for claude-code sessions to fetch accurate token usage.
+   * @param session The AI session
+   * @param workspacePath The workspace path to use (should be worktree path for worktree sessions)
+   * @param event The IPC event for sending updates
+   */
   private async runAutoContextCommand(
     session: SessionData,
     workspacePath: string,
@@ -1042,16 +1045,45 @@ export class AIService {
       documentContext?: DocumentContext,
       workspacePath?: string,
       modelId?: string,
-      sessionType?: 'chat' | 'planning' | 'coding' | 'terminal'
+      sessionType?: 'chat' | 'planning' | 'coding' | 'terminal',
+      worktreeId?: string
     ) => {
       // TODO: Debug logging - uncomment if needed
-      // console.log('[AIService] ai:createSession called:', {
       //   provider,
       //   modelId,
       //   hasDocumentContext: !!documentContext,
       //   workspacePath,
-      //   sessionType
+      //   sessionType,
+      //   worktreeId
       // });
+
+      // If worktreeId is provided, fetch the worktree data to get its path and project path
+      let worktreePath: string | undefined;
+      let worktreeProjectPath: string | undefined;
+      if (worktreeId) {
+        const { getDatabase } = await import('../../database/initialize');
+        const { createWorktreeStore } = await import('../WorktreeStore');
+        const db = getDatabase();
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        const worktreeStore = createWorktreeStore(db);
+        const worktree = await worktreeStore.get(worktreeId);
+        if (!worktree) {
+          throw new Error(`Worktree ${worktreeId} not found in database`);
+        }
+
+        // Validate that the worktree directory actually exists
+        if (!fs.existsSync(worktree.path)) {
+          throw new Error(
+            `Worktree directory does not exist: ${worktree.path}\n` +
+            `The worktree may have been deleted manually. Please remove the worktree from the UI and create a new one.`
+          );
+        }
+
+        worktreePath = worktree.path;
+        worktreeProjectPath = worktree.projectPath;  // Store for permission lookups
+      }
 
       // Check if provider is enabled for this workspace (considers project overrides)
       if (!this.isProviderEnabledForWorkspace(provider, workspacePath)) {
@@ -1117,14 +1149,18 @@ export class AIService {
         }
       }
 
-      // Create session
+      // Create session with worktree association
       const session = await this.sessionManager.createSession(
         provider,
         documentContext,
         workspacePath,
         providerConfig,
         model,
-        sessionType || 'chat' // Default to 'chat' if not specified
+        sessionType || 'chat', // Default to 'chat' if not specified
+        undefined, // mode
+        worktreeId,
+        worktreePath,
+        worktreeProjectPath
       );
 
       // Track AI chat feature first use
@@ -1233,7 +1269,6 @@ export class AIService {
       if (!workspacePath) {
         const windowState = windowStates.get(event.sender.id);
         workspacePath = windowState?.workspacePath || undefined;
-        // console.log(`[AIService] Got workspace path from window ${event.sender.id}:`, workspacePath);
       }
 
       // Require workspace path for AI operations
@@ -1249,7 +1284,6 @@ export class AIService {
         throw new Error(`Session ${sessionId} not found`);
       }
 
-      // console.log(`[AIService] Loaded session ${sessionId} with provider: ${session.provider}, model: ${session.model} (took ${perfLog.sessionLoadTime}ms)`);
 
       // Verify we got the right session
       if (session.id !== sessionId) {
@@ -1257,12 +1291,15 @@ export class AIService {
         throw new Error(`Session mismatch: requested ${sessionId} but got ${session.id}`);
       }
 
+      // CRITICAL: If session has a worktree, use its path instead of workspace path
+      // This ensures Claude Code runs in the worktree directory
+      const effectiveWorkspacePath = session.worktreePath || workspacePath;
+
+      // For worktree sessions, use the parent project path for permission lookups
+      // This is passed through documentContext to avoid changing sendMessage signature
+      const permissionsPath = session.worktreeProjectPath || effectiveWorkspacePath;
+
       // Comprehensive logging of what we're sending to Claude
-      // console.group('🤖 [AIService] Sending message to AI provider');
-      // console.log('📝 User Message:', message);
-      // console.log('🏢 Provider:', session.provider);
-      // console.log('🤖 Model:', session.model || 'default');
-      // console.log('📄 Document Context:', {
       //   hasDocument: !!documentContext,
       //   filePath: documentContext?.filePath || 'none',
       //   fileType: documentContext?.fileType || 'none',
@@ -1270,22 +1307,18 @@ export class AIService {
       // });
 
       if (documentContext?.content) {
-        // console.log('📋 Document Content Preview (first 500 chars):',
         //   documentContext.content.substring(0, 500) +
         //   (documentContext.content.length > 500 ? '...' : ''));
 
         // Check for frontmatter
         const frontmatterMatch = documentContext.content.match(/^---\n([\s\S]*?)\n---/);
         if (frontmatterMatch) {
-          // console.log('🏷️ Document Frontmatter:', frontmatterMatch[1]);
         } else {
-          // console.log('⚠️ No frontmatter found in document');
         }
       }
 
       // Show available tools
       const tools = toolRegistry.getAll();
-      // console.log('🔧 Available Tools:', tools.map(t => t.name));
       console.groupEnd();
 
       perfLog.provider = session.provider;
@@ -1317,19 +1350,15 @@ export class AIService {
       const isProviderClaudeCode = session.provider === 'claude-code';
 
       // if (isProviderClaudeCode) {
-      //   console.log('[CLAUDE-CODE-SERVICE] Getting provider for claude-code, session:', session.id);
       // }
 
-      // console.log(`[AIService] Getting provider for: ${session.provider}, sessionId: ${session.id}`);
       let provider = ProviderFactory.getProvider(session.provider as AIProviderType, session.id);
       perfLog.getProviderTime = Date.now() - providerStartTime;
 
       // If provider doesn't exist, create and initialize it
       if (!provider) {
         if (isProviderClaudeCode) {
-          // console.log('[CLAUDE-CODE-SERVICE] Provider not found, creating new claude-code provider');
         }
-        // console.log(`[AIService] Provider not found, creating new ${session.provider} provider`);
         const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
 
         // Get the correct API key based on provider
@@ -1365,12 +1394,10 @@ export class AIService {
 
         // Create the provider
         if (isProviderClaudeCode) {
-          // console.log('[CLAUDE-CODE-SERVICE] Creating claude-code provider instance');
         }
         provider = ProviderFactory.createProvider(session.provider, session.id);
 
         if (isProviderClaudeCode) {
-          // console.log('[CLAUDE-CODE-SERVICE] Provider instance created, preparing config');
         }
 
         const reinitConfig: any = {
@@ -1387,7 +1414,6 @@ export class AIService {
         // Only add model if it exists (openai-codex manages selection itself)
         if ((session.model || session.providerConfig?.model) && session.provider !== 'openai-codex') {
           const fullModel = session.model || session.providerConfig?.model;
-          // console.log('[AIService] Reinitializing provider with model:', {
           //   sessionModel: session.model,
           //   providerConfigModel: session.providerConfig?.model,
           //   fullModel,
@@ -1399,7 +1425,6 @@ export class AIService {
               reinitConfig.model = fullModel;
             } else if (fullModel.includes(':')) {
               reinitConfig.model = fullModel.split(':').slice(1).join(':');
-              // console.log('[AIService] Stripped model prefix:', {
               //   original: fullModel,
               //   stripped: reinitConfig.model
               // });
@@ -1411,10 +1436,8 @@ export class AIService {
 
         if (isProviderClaudeCode) {
           const safeConfig = { ...reinitConfig, apiKey: reinitConfig.apiKey ? '***' : undefined };
-          // console.log('[CLAUDE-CODE-SERVICE] About to initialize claude-code provider with config:', JSON.stringify(safeConfig, null, 2));
         }
         const safeConfig = { ...reinitConfig, apiKey: reinitConfig.apiKey ? '***' : undefined };
-        // console.log('[AIService] About to initialize provider with config:', JSON.stringify(safeConfig, null, 2));
         const initStartTime = Date.now();
 
         try {
@@ -1422,9 +1445,7 @@ export class AIService {
           perfLog.providerInitTime = Date.now() - initStartTime;
 
           if (isProviderClaudeCode) {
-            // console.log(`[CLAUDE-CODE-SERVICE] Provider initialization completed in ${perfLog.providerInitTime}ms`);
           }
-          // console.log(`[AIService] Provider initialization took ${perfLog.providerInitTime}ms`);
         } catch (initError) {
           if (isProviderClaudeCode) {
             console.error('[CLAUDE-CODE-SERVICE] Failed to initialize provider:', initError);
@@ -1436,25 +1457,22 @@ export class AIService {
         // CRITICAL: Restore provider session data from database
         // This is essential for session resumption (e.g., Claude Code sessions)
         if (session.providerSessionId && provider.setProviderSessionData) {
-          // console.log(`[AIService] Restoring provider session data for ${session.provider}`);
           provider.setProviderSessionData(session.id, { claudeSessionId: session.providerSessionId });
         }
 
         // Register tool handler - targetFilePath will be determined dynamically per tool call
-        const toolHandler = this.createToolHandler(event.sender, documentContext, session.id, workspacePath);
+        const toolHandler = this.createToolHandler(event.sender, documentContext, session.id, effectiveWorkspacePath);
         provider.registerToolHandler(toolHandler);
       }
 
       // NOTE: No longer tracking provider per-window - each session has its own provider instance
-      // console.log(`[AIService] Using provider for session ${session.id}: ${session.provider}`);
 
       // Re-register tool handler with the CURRENT document context from this message
       // This ensures applyDiff targets the correct file even when switching tabs
-      // console.log(`[AIService] Re-registering tool handler with document context:`, {
       //   filePath: documentContext?.filePath,
       //   hasContext: !!documentContext
       // });
-      const toolHandler = this.createToolHandler(event.sender, documentContext, session.id, workspacePath);
+      const toolHandler = this.createToolHandler(event.sender, documentContext, session.id, effectiveWorkspacePath);
       provider.registerToolHandler(toolHandler);
 
       // Listen for message:logged events and forward to renderer to trigger UI updates
@@ -1524,7 +1542,7 @@ export class AIService {
       try {
         await sessionFileTracker.trackUserMessage(
           session.id,
-          workspacePath,
+          effectiveWorkspacePath,
           message,
           session.messages.length // Current message index
         );
@@ -1537,7 +1555,7 @@ export class AIService {
       }
 
       // Track ai_message_sent analytics event
-      const slashCommandInfo = detectNimbalystSlashCommand(message, workspacePath);
+      const slashCommandInfo = detectNimbalystSlashCommand(message, effectiveWorkspacePath);
       const contentMode = (documentContext as any)?.contentMode;
       this.analytics.sendEvent('ai_message_sent', {
         provider: session.provider,
@@ -1583,7 +1601,6 @@ export class AIService {
         // Get existing messages from session for context
         const sessionMessages = session.messages || [];
 
-        // console.log(`[AIService] Starting message stream (${sessionMessages.length} context messages)`);
         const streamStartTime = Date.now();
 
         // Send performance metrics to renderer
@@ -1598,10 +1615,8 @@ export class AIService {
         // Stream the response
         const isClaudeCode = session.provider === 'claude-code';
         const logPrefix = isClaudeCode ? '[CLAUDE-CODE-SERVICE]' : '[AIService]';
-        // console.log(`🚀 ${logPrefix} Starting to stream response from provider: ${session.provider}`);
 
         if (isClaudeCode) {
-          // console.log(`[CLAUDE-CODE-SERVICE] Calling sendMessage with:`, JSON.stringify({
           //   messageLength: message.length,
           //   hasContext: !!documentContext,
           //   sessionId: session.id,
@@ -1628,15 +1643,16 @@ export class AIService {
           ...documentContext,
           sessionType: (documentContext as any)?.sessionType ?? session.sessionType,
           mode: (documentContext as any)?.mode ?? session.mode,
+          permissionsPath,  // For worktree sessions, this is the parent project path
           attachments
-        } as any : { sessionType: session.sessionType, mode: session.mode, attachments } as any;
+        } as any : { sessionType: session.sessionType, mode: session.mode, permissionsPath, attachments } as any;
 
         // Update MCP document state for Claude Code provider so it knows which file-scoped tools to show
         if (isClaudeCode && contextWithSession?.filePath && contextWithSession?.workspacePath) {
           const { updateDocumentState, registerWorkspaceWindow } = await import('../../mcp/httpServer');
           updateDocumentState({
             filePath: contextWithSession.filePath,
-            workspacePath: contextWithSession.workspacePath,
+            workspacePath: effectiveWorkspacePath,
             fileType: contextWithSession.fileType
           }, session.id);
 
@@ -1644,18 +1660,17 @@ export class AIService {
           const { BrowserWindow } = await import('electron');
           const window = BrowserWindow.fromWebContents(event.sender);
           if (window) {
-            registerWorkspaceWindow(contextWithSession.workspacePath, window.id);
+            registerWorkspaceWindow(effectiveWorkspacePath, window.id);
           }
         }
 
-        for await (const chunk of provider.sendMessage(messageToSend, contextWithSession, session.id, sessionMessages, workspacePath, attachments)) {
+        for await (const chunk of provider.sendMessage(messageToSend, contextWithSession, session.id, sessionMessages, effectiveWorkspacePath, attachments)) {
           if (!chunk) continue;
           chunkCount++;
 
           if (!firstChunkTime) {
             firstChunkTime = Date.now();
             perfLog.timeToFirstChunk = firstChunkTime - startTime;
-            // console.log(`${logPrefix} First chunk received after ${perfLog.timeToFirstChunk}ms`);
 
             // Send first chunk metrics
             event.sender.send('ai:performanceMetrics', {
@@ -1678,9 +1693,7 @@ export class AIService {
                 });
               }
               // if (isClaudeCode && textChunks <= 5) {
-              //   console.log(`[CLAUDE-CODE-SERVICE] Text chunk #${textChunks}: ${chunkContent.length} chars, first 100:`, chunkContent.substring(0, 100));
               // }
-              // console.log(`${logPrefix} Forwarding text chunk #${textChunks}: ${chunkContent.length} chars, total: ${fullResponse.length}`);
               // Send ACCUMULATED response to renderer (not just the chunk)
               event.sender.send('ai:streamResponse', {
                 sessionId: session.id,
@@ -1694,12 +1707,7 @@ export class AIService {
                 toolCallCount++;
                 toolCalls.push(chunk.toolCall);
                 lastTextSection = '';  // Reset so notification shows text after last tool call
-                // console.group('🔨 [AIService] Tool call received from AI');
-                // console.log('Tool name:', chunk.toolCall.name);
-                // console.log('Tool arguments:', chunk.toolCall.arguments);
                 console.groupEnd();
-                // console.log(`[AIService] Tool call #${toolCallCount}: ${chunk.toolCall.name}`);
-                // console.log(`[AIService] Tool arguments:`, JSON.stringify(chunk.toolCall.arguments, null, 2));
 
                 // Track file interactions for all tool calls
                 // Also attach file watchers for edited files to detect subsequent changes
@@ -1851,7 +1859,6 @@ export class AIService {
 
               // Forward streaming edit start event to renderer
               // Include targetFilePath so renderer knows which file to edit
-              // console.log('[AIService] Forwarding stream_edit_start to renderer:', chunk.config);
               event.sender.send('ai:streamEditStart', {
                 sessionId: session.id,
                 targetFilePath: documentContext?.filePath,
@@ -1862,7 +1869,6 @@ export class AIService {
 
             case 'stream_edit_content':
               // Forward streaming content to renderer
-              // console.log('[AIService] Forwarding stream_edit_content to renderer:', chunk.content?.substring(0, 50));
               event.sender.send('ai:streamEditContent', {
                 sessionId: session.id,
                 content: chunk.content
@@ -1871,7 +1877,6 @@ export class AIService {
 
             case 'stream_edit_end':
               // Forward streaming end event to renderer
-              // console.log('[AIService] Forwarding stream_edit_end to renderer');
               event.sender.send('ai:streamEditEnd', {
                 sessionId: session.id,
                 ...(chunk.error ? { error: chunk.error } : {})
@@ -1881,7 +1886,6 @@ export class AIService {
               // Also attach file watcher for the edited file
               if (documentContext?.filePath && workspacePath) {
                 try {
-                  // console.log('[AIService] Tracking streamContent file interaction for:', documentContext.filePath);
                   // Get window from event sender to enable file watcher attachment
                   const window = BrowserWindow.fromWebContents(event.sender);
                   await sessionFileTracker.trackToolExecution(
@@ -1892,7 +1896,6 @@ export class AIService {
                     { success: !chunk.error },
                     window  // Pass window to enable file watcher attachment for edited files
                   );
-                  // console.log('[AIService] streamContent tracking completed');
                   // Notify renderer that files were tracked
                   event.sender.send('session-files:updated', session.id);
                 } catch (trackError) {
@@ -1931,10 +1934,7 @@ export class AIService {
 
             case 'complete':
               // if (isClaudeCode) {
-              //   console.log('[CLAUDE-CODE-SERVICE] COMPLETE CHUNK RECEIVED!');
-              //   console.log('[CLAUDE-CODE-SERVICE] Final response length:', fullResponse.length);
               // }
-              // console.log(`${logPrefix} COMPLETE CHUNK RECEIVED! Sending completion signal to UI`);
               perfLog.totalTime = Date.now() - startTime;
               perfLog.streamTime = Date.now() - streamStartTime;
               perfLog.chunkCount = chunkCount;
@@ -1947,12 +1947,9 @@ export class AIService {
               // Capture modelUsage for claude-code provider (provides per-model breakdown with input/output tokens)
               const modelUsage = chunk.modelUsage;
 
-              // console.log('[AIService] Stream complete - Performance metrics:', perfLog);
               // if (tokenUsage) {
-              //   console.log('[AIService] Token usage:', tokenUsage);
               // }
               // if (modelUsage) {
-              //   console.log('[AIService] modelUsage from claude-code:', JSON.stringify(modelUsage));
               // }
               if (fullResponse) {
                 logger.ai.info('[AIService] Assistant final response', {
@@ -2134,7 +2131,6 @@ export class AIService {
               if (session.provider === 'claude-code' && session.messages.length === 0) {
                 const initData = (provider as any).getInitData?.();
                 if (initData) {
-                  // console.log('[AIService] Tracking Claude Code session initialization:', initData);
                   this.analytics.sendEvent('claude_code_session_started', {
                     mcpServerCount: initData.mcpServerCount,
                     slashCommandCount: initData.slashCommandCount,
@@ -2147,14 +2143,12 @@ export class AIService {
               }
 
               // Send complete response
-              // console.log('[AIService] Sending FINAL ai:streamResponse with isComplete=true, content length:', fullResponse.length);
               event.sender.send('ai:streamResponse', {
                 sessionId: session.id,
                 content: fullResponse,
                 isComplete: true,
                 autoContextPending: session.provider === 'claude-code'
               });
-              // console.log('[AIService] COMPLETION SIGNAL SENT TO UI!');
 
               // Mark session as complete immediately so UI shows agent is ready
               // This must happen before auto-context so the UI updates right away
@@ -2171,7 +2165,6 @@ export class AIService {
                 ? notificationText.substring(0, 100) + (notificationText.length > 100 ? '...' : '')
                 : 'Response complete';
 
-              // console.log('[AIService] Calling notification service for session:', session.id);
               await notificationService.showNotification({
                 title: 'Nimbalyst AI Response Ready',
                 body: `${session.provider}: ${notificationBody}`,
@@ -2179,13 +2172,13 @@ export class AIService {
                 workspacePath: workspacePath,
                 provider: session.provider
               });
-              // console.log('[AIService] Notification service call completed');
 
               // AUTO-FETCH CONTEXT USAGE: For claude-code provider, automatically send /context to get accurate token usage.
               // We defer awaiting the promise until after streaming completes so that queued prompts don't start early.
               // Skip if the response ended with an error (e.g., context overflow) to avoid showing the /context request to the user.
+              // CRITICAL: Use effectiveWorkspacePath so /context runs in the worktree directory for worktree sessions
               if (session.provider === 'claude-code' && !hadError) {
-                autoContextPromise = this.runAutoContextCommand(session, workspacePath, event);
+                autoContextPromise = this.runAutoContextCommand(session, effectiveWorkspacePath, event);
               } else if (session.provider === 'claude-code' && hadError) {
                 console.log('[AIService] Skipping auto /context due to error in response');
               }
@@ -2317,7 +2310,6 @@ export class AIService {
       const loadStart = performance.now();
       const session = await this.sessionManager.loadSession(sessionId, workspacePath);
       const loadTime = performance.now() - loadStart;
-      // console.log(`[ai:loadSession] PERF: sessionManager.loadSession took ${loadTime.toFixed(1)}ms for ${sessionId}, messages: ${session?.messages?.length || 0}`);
       if (!session) {
         console.log(`[SESSION] Session not found: ${sessionId} (this is normal if the session was deleted)`);
         return null;
@@ -2969,15 +2961,12 @@ export class AIService {
 
     // Get ALL available models for configuration UI
     safeHandle('ai:getAllModels', async () => {
-      // console.log('[AIService] ai:getAllModels called');
-
       // Clear cache to get fresh models
       ModelRegistry.clearCache();
 
       const providerSettings = this.getSettingsStore().get('providerSettings', {}) as Record<AIProviderType, any>;
       const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
 
-      // console.log('[AIService] ai:getAllModels - API keys available:', {
       //   anthropic: !!apiKeys['anthropic'],
       //   openai: !!apiKeys['openai'],
       //   lmstudio_url: apiKeys['lmstudio_url']
@@ -3020,39 +3009,30 @@ export class AIService {
     // Get slash commands from active claude-code provider
     safeHandle('ai:getSlashCommands', async (event, sessionId?: string) => {
       try {
-        // console.log('[AIService] ai:getSlashCommands called with sessionId:', sessionId);
 
         // Get provider from session
         let provider: AIProvider | undefined;
         if (sessionId) {
-          // console.log('[AIService] Getting provider from ProviderFactory with sessionId:', sessionId);
           provider = ProviderFactory.getProvider('claude-code', sessionId) ?? undefined;
-          // console.log('[AIService] Provider from ProviderFactory:', provider ? 'found' : 'not found');
         }
 
         // Check if provider has getSlashCommands method
         if (provider) {
-          // console.log('[AIService] Provider found, checking for getSlashCommands method');
-          // console.log('[AIService] Has getSlashCommands:', 'getSlashCommands' in provider);
 
           if ('getSlashCommands' in provider && typeof (provider as any).getSlashCommands === 'function') {
             const commands = (provider as any).getSlashCommands();
-            // console.log('[AIService] Retrieved slash commands from provider:', commands);
 
             // If commands array is empty, return empty array
             if (commands.length === 0) {
-              // console.log('[AIService] Provider returned empty commands');
               return { success: true, commands: [] };
             }
 
             return { success: true, commands };
           } else {
-            // console.log('[AIService] Provider does not have getSlashCommands method');
           }
         }
 
         // No provider found - return empty commands
-        // console.log('[AIService] No provider found');
         return { success: true, commands: [] };
       } catch (error) {
         console.error('[AIService] Error getting slash commands:', error);
@@ -3077,7 +3057,6 @@ export class AIService {
         ...apiKeys,
         lmstudio_url: providerSettings['lmstudio']?.baseUrl || 'http://127.0.0.1:8234'
       };
-      // console.log('[AIService] ai:getModels - calling ModelRegistry.getAllModels');
       const allModels = await ModelRegistry.getAllModels(modelsConfig);
 
       // Log claude-code models specifically
@@ -3240,7 +3219,6 @@ export class AIService {
 
   private createToolHandler(webContents: Electron.WebContents, documentContext?: DocumentContext, sessionId?: string, workspaceId?: string): ToolHandler {
     const executor = new ToolExecutor(webContents, sessionId, workspaceId);
-    // console.log(`[AIService] createToolHandler called with documentContext.filePath:`, documentContext?.filePath);
 
     // Capture targetFilePath from documentContext at message-send time
     // This prevents race conditions if user switches tabs while waiting for AI response

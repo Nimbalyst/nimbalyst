@@ -93,6 +93,15 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   sessionHistory: '.session-history',
   sessionHistoryItem: '.session-history-item',
   sessionHistoryNewButton: '.session-history-new-button',
+  newWorktreeSessionButton: '[data-testid="new-worktree-session-button"]',
+
+  // Worktree sessions
+  worktreeSingle: '.worktree-single',
+  worktreeSingleActive: '.worktree-single.active',
+  worktreeSingleBadge: '.worktree-single-wt-badge',
+  worktreeSingleName: '.worktree-single-name',
+  worktreeSingleTitle: '.worktree-single-title',
+  worktreeSingleMessageCount: '.worktree-single-message-count',
 
   // Editor
   contentEditable: '[contenteditable="true"]',

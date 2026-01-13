@@ -145,21 +145,22 @@ export function registerFileHandlers() {
                 const documentService = documentServices.get(workspacePath);
                 // console.log('[SAVE] Workspace mode:', workspacePath, 'documentService exists:', !!documentService);
                 if (documentService) {
-                    // Add a small delay to ensure file is fully written before reading
-                    setTimeout(async () => {
-                        try {
-                            await documentService.refreshFileMetadata(filePath);
-                            // Also refresh tracker items for this file
-                            const relativePath = filePath.startsWith(workspacePath)
-                                ? filePath.substring(workspacePath.length + 1)
-                                : filePath;
-                            // console.log('[SAVE] Updating tracker items for:', relativePath);
-                            await (documentService as any).updateTrackerItemsCache(relativePath);
-                            // console.log('[SAVE] Tracker items update completed');
-                        } catch (err) {
-                            console.error('[SAVE] Failed to refresh metadata/tracker items:', err);
-                        }
-                    }, 50);
+                    // Only refresh if file is actually in the workspace (not in a worktree)
+                    if (filePath.startsWith(workspacePath)) {
+                        // Add a small delay to ensure file is fully written before reading
+                        setTimeout(async () => {
+                            try {
+                                await documentService.refreshFileMetadata(filePath);
+                                // Also refresh tracker items for this file
+                                const relativePath = filePath.substring(workspacePath.length + 1);
+                                // console.log('[SAVE] Updating tracker items for:', relativePath);
+                                await (documentService as any).updateTrackerItemsCache(relativePath);
+                                // console.log('[SAVE] Tracker items update completed');
+                            } catch (err) {
+                                console.error('[SAVE] Failed to refresh metadata/tracker items:', err);
+                            }
+                        }, 50);
+                    }
                 }
             } else {
                 console.log('[SAVE] Not in workspace mode, state:', state);

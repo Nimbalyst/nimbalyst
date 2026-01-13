@@ -163,6 +163,17 @@ export function registerSettingsHandlers() {
         setFeatureWalkthroughCompleted(completed);
     });
 
+    // Worktree onboarding state
+    safeHandle('worktree-onboarding:is-shown', async () => {
+        const { isWorktreeOnboardingShown } = await import('../utils/store');
+        return isWorktreeOnboardingShown();
+    });
+
+    safeHandle('worktree-onboarding:set-shown', async (_event: Electron.IpcMainInvokeEvent, shown: boolean) => {
+        const { setWorktreeOnboardingShown } = await import('../utils/store');
+        setWorktreeOnboardingShown(shown);
+    });
+
     // Default AI model settings
     safeHandle('settings:get-default-ai-model', () => {
         return getDefaultAIModel();

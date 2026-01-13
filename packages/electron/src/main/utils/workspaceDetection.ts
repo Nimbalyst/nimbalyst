@@ -4,6 +4,46 @@ import { app } from 'electron';
 import { getRecentItems } from './store';
 
 /**
+ * Resolve a workspace path to its parent project path.
+ * If the path is a worktree (matches {project}_worktrees/{name}/ pattern),
+ * returns the parent project path. Otherwise returns the original path.
+ *
+ * This is used by the permission system to ensure worktrees inherit
+ * trust status and tool patterns from their parent project.
+ *
+ * @param workspacePath - The workspace path to resolve
+ * @returns The parent project path, or the original path if not a worktree
+ */
+export function resolveProjectPath(workspacePath: string): string {
+  if (!workspacePath) {
+    return workspacePath;
+  }
+
+  // Normalize the path to remove trailing slashes for consistent matching
+  const normalizedPath = workspacePath.replace(/\/+$/, '');
+
+  // Match pattern: /{project}_worktrees/{name}
+  // This matches our worktree creation pattern in GitWorktreeService
+  const match = normalizedPath.match(/^(.+)_worktrees\/[^/]+$/);
+  return match ? match[1] : workspacePath;
+}
+
+/**
+ * Check if a path is a worktree path.
+ *
+ * @param workspacePath - The path to check
+ * @returns true if the path appears to be a worktree
+ */
+export function isWorktreePath(workspacePath: string): boolean {
+  if (!workspacePath) {
+    return false;
+  }
+
+  const normalizedPath = workspacePath.replace(/\/+$/, '');
+  return /_worktrees\/[^/]+$/.test(normalizedPath);
+}
+
+/**
  * Detects which known workspace (if any) contains the given file path.
  * Checks recent workspaces and returns the workspace path if the file
  * is located within any known workspace directory.
@@ -149,7 +189,9 @@ export function getExtensionSDKDocsPath(): string | null {
 
 /**
  * Gets additional directories that should be accessible to Claude for the given workspace.
- * Currently, this adds the Extension SDK documentation when working on an extension project.
+ * This includes:
+ * - Extension SDK documentation when working on an extension project
+ * - Parent project directory when working in a worktree
  *
  * @param workspacePath - The current workspace path
  * @returns Array of additional directory paths Claude should have access to
@@ -157,8 +199,18 @@ export function getExtensionSDKDocsPath(): string | null {
 export function getAdditionalDirectoriesForWorkspace(workspacePath: string): string[] {
   const additionalDirs: string[] = [];
 
+  // If this is a worktree, add the parent project directory
+  // This ensures Claude can access files in the main project if needed
+  // (e.g., for reading .claude/settings.json or shared configs)
+  if (isWorktreePath(workspacePath)) {
+    const projectPath = resolveProjectPath(workspacePath);
+    additionalDirs.push(projectPath);
+  }
+
   // If this is an extension project, add the SDK docs
-  if (isExtensionProject(workspacePath)) {
+  // Check the resolved project path for extension detection
+  const projectPath = resolveProjectPath(workspacePath);
+  if (isExtensionProject(projectPath)) {
     const sdkDocsPath = getExtensionSDKDocsPath();
     if (sdkDocsPath) {
       additionalDirs.push(sdkDocsPath);

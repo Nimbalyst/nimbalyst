@@ -1,10 +1,13 @@
 import { BrowserWindow } from 'electron';
 import { SessionManager, ClaudeCodeProvider } from '@nimbalyst/runtime/ai/server';
+import { AISessionsRepository } from '@nimbalyst/runtime';
 import {
   startSessionNamingServer,
   setUpdateSessionTitleFn,
   shutdownSessionNamingHttpServer
 } from '../mcp/sessionNamingServer';
+import { getDatabase } from '../database/initialize';
+import { createWorktreeStore } from './WorktreeStore';
 
 /**
  * Service to manage the session naming MCP server
@@ -61,6 +64,32 @@ export class SessionNamingService {
           }
 
           console.log(`[SessionNamingService] Updated session ${sessionId} to: "${title}"`);
+
+          // If this session belongs to a worktree, update the worktree's display name
+          // (only if it hasn't been set yet - first session named wins)
+          try {
+            const session = await AISessionsRepository.get(sessionId);
+            if (session?.worktreeId) {
+              const db = getDatabase();
+              if (db) {
+                const worktreeStore = createWorktreeStore(db);
+                const updated = await worktreeStore.updateDisplayNameIfEmpty(session.worktreeId, title);
+                if (updated) {
+                  console.log(`[SessionNamingService] Updated worktree ${session.worktreeId} display name to: "${title}"`);
+                  // Notify all windows that the worktree display name has changed
+                  for (const window of windows) {
+                    window.webContents.send('worktree:display-name-updated', {
+                      worktreeId: session.worktreeId,
+                      displayName: title
+                    });
+                  }
+                }
+              }
+            }
+          } catch (error) {
+            // Log but don't fail the session naming if worktree update fails
+            console.error('[SessionNamingService] Failed to update worktree display name:', error);
+          }
         });
 
         // Start the MCP server

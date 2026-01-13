@@ -199,57 +199,104 @@ These patterns apply across all packages (electron, capacitor, runtime) that con
 
 Container queries respond to the actual container width, making them work correctly with resizable panels and split views on both desktop and mobile.
 
-### Main Process Initialization
+## AI Features
 
-The Electron main process has specific initialization constraints that must be respected:
+### AI Provider Types
 
-#### Bootstrap and Dynamic Import
+The application supports two categories of AI providers. See [AI_PROVIDER_TYPES.md](docs/AI_PROVIDER_TYPES.md) for detailed documentation.
 
-`bootstrap.ts` is the entry point and uses a dynamic import for `index.ts`:
-```typescript
-import('./index.js');  // Dynamic, not static!
-```
+- **Agent Providers** (Claude Agent, OpenAI Codex): Full MCP support, file system access via tools, multi-file operations, session persistence
+- **Chat Providers** (Claude Chat, OpenAI, LM Studio): Direct API calls, files attached as context, faster responses, local model support
 
-**Why dynamic import is required:**
-1. `NODE_PATH` must be set before `node-pty` can be resolved in packaged builds
-2. Static imports are resolved before any code runs
-3. Dynamic import defers loading until after `NODE_PATH` is configured
+### AI Providers
 
-**Never change this to a static import** - it will break packaged builds.
+The application supports multiple AI providers, including two distinct ways to access Claude:
 
-#### Lazy Initialization Pattern
+#### Claude (Anthropic API)
+- **Direct API integration**: Uses the official Anthropic SDK (`@anthropic-ai/sdk`)
+- **Provider ID**: `claude`
+- **Location**: `packages/runtime/src/ai/server/providers/ClaudeProvider.ts`
+- **Features**:
+  - Standard Claude models (Opus 4.1, Opus 4, Sonnet 4, Sonnet 3.7)
+  - Streaming responses with tool use support
+  - Direct API key authentication
+  - Full control over model selection
+- **When to use**: For standard AI chat and code assistance using Claude models directly
 
-Singletons that read `app.getPath()` must use lazy initialization:
+#### Claude Code (MCP Integration)
+- **MCP Protocol**: Uses Model Context Protocol for enhanced code-aware features
+- **Provider ID**: `claude-code`
+- **Implementation**: `packages/runtime/src/ai/server/providers/ClaudeCodeProvider.ts`
+  - Dynamically loads `@anthropic-ai/claude-agent-sdk` SDK from user's installation
+  - Requires local installation via npm
+  - Provides MCP features through SDK
+- **Features**:
+  - Enhanced code understanding through MCP
+  - File system awareness and manipulation
+  - Advanced code editing capabilities
+  - Manages its own model selection internally (do not pass model IDs)
+- **Installation**: Requires `npm install -g @anthropic-ai/claude-agent-sdk` or local installation
+- **When to use**: For advanced code editing tasks that benefit from MCP's context protocol
+- **Internal MCP Servers**: See [INTERNAL_MCP_SERVERS.md](docs/INTERNAL_MCP_SERVERS.md) for how to implement and add new MCP servers
 
-```typescript
-// BAD: Reads userData path at module load time
-const store = new Store({ name: 'settings' });
+#### Other Providers
+- **OpenAI**: GPT-4 and GPT-3.5 models via OpenAI API
+- **LM Studio**: Local model support for privacy-focused usage
+- **Multiple provider support**: Extensible architecture for adding new AI providers
 
-// GOOD: Defers until first access
-let _store: Store | null = null;
-function getStore() {
-  if (!_store) {
-    _store = new Store({ name: 'settings' });
-  }
-  return _store;
-}
-```
+### AI Chat Panel
+- **Multi-provider support**: Works with Claude, OpenAI, LM Studio, and Claude Code
+- **Document-aware**: Sends current document context with messages when a document is open
+- **No-document handling**: Clear messaging when no document is open, prevents edit attempts
+- **Session management**: Multiple chat sessions per project
+- **Edit streaming**: Real-time streaming of code edits directly to the editor
+- **Dynamic UI**: Provider-specific icons and names throughout the interface
+- **Keyboard shortcut**: Cmd+Shift+A to toggle the AI Chat panel
 
-This ensures `app.setPath('userData')` in bootstrap.ts takes effect.
+### Session Manager
+- **Global session view**: Access all AI chat sessions across all projects (Cmd+Alt+S)
+- **Session search**: Filter sessions by content, project, or date
+- **Session details**: View full conversation history for any session
+- **Session actions**: Open, export, or delete sessions
+- **Left navigation design**: Clean interface with session list on left, details on right
 
-#### IPC Handler Registration
+### AI Model Configuration
+- **Dynamic model selection**: Models are fetched from provider APIs when available
+- **No hardcoded models**: Providers manage their own model defaults
+- **Claude Code specifics**: Never pass model IDs to claude-code provider - it manages its own model selection
+- **LM Studio detection**: Automatically detects local models running in LM Studio
+- **Model management**: Select/deselect all buttons for bulk model configuration
+- **Smart defaults**: Doesn't auto-select all models when enabling a provider
 
-Use `safeHandle`/`safeOn` from `ipcRegistry.ts` instead of `ipcMain.handle`/`ipcMain.on`:
+### Custom Tool Widgets
 
-```typescript
-// BAD: Crashes if handler already registered
-ipcMain.handle('my-channel', handler);
+Custom widgets can replace the generic tool call display for specific MCP tools. See [CUSTOM_TOOL_WIDGETS.md](docs/CUSTOM_TOOL_WIDGETS.md) for implementation details.
 
-// GOOD: Safe for duplicate registration
-safeHandle('my-channel', handler);
-```
+### Git Worktree Integration
 
-This prevents "second handler" errors from module duplication across chunk boundaries.
+Nimbalyst supports creating git worktrees for isolated AI coding sessions. See [WORKTREES.md](docs/WORKTREES.md) for comprehensive documentation.
+
+**Quick overview:**
+- Create worktrees directly from the agent mode UI via "New Worktree" button
+- Each worktree runs on its own branch in a separate directory
+- Claude Code sessions execute in the worktree directory context
+- One worktree can have multiple sessions (one-to-many relationship)
+- Visual distinction: Worktree sessions display with a badge overlay on the AI icon
+
+For implementation details (database schema, IPC channels), see `/packages/electron/CLAUDE.md`.
+
+## Data Persistence
+
+The Nimbalyst app uses **PGLite** (PostgreSQL in WebAssembly) for all data storage.
+
+**CRITICAL: Never use localStorage in the renderer process.** All persistent state must be stored via IPC to the main process using either:
+- **app-settings store** for global app settings
+- **workspace-settings store** for per-project state
+- **PGLite database** for complex data like AI sessions and document history
+
+localStorage is not reliable in Electron and data can be lost. Use the existing store infrastructure instead.
+
+For implementation details (database schema, data locations, timestamp handling), see `/packages/electron/CLAUDE.md`.
 
 ## Analytics
 
@@ -348,11 +395,18 @@ When working on extensions in `packages/extensions/`:
 
 ## Documentation
 
+- **AGENT\_PERMISSIONS.md**: Agent tool permission system and approval flow
 - **ANALYTICS\_GUIDE.md**: How to add PostHog analytics events
 - **POSTHOG\_EVENTS.md**: Canonical reference for all analytics events
 - **PLAYWRIGHT.md**: E2E testing patterns and best practices
 - **AI\_PROVIDER\_TYPES.md**: AI provider architecture
 - **CUSTOM\_TOOL\_WIDGETS.md**: Custom MCP tool widget implementation
 - **INTERNAL\_MCP\_SERVERS.md**: How to implement internal MCP servers
+- **WORKTREES.md**: Git worktree integration for isolated AI coding sessions
 - **THEMING.md**: Theming system documentation (in electron package)
 - **RELEASING.md**: Release process
+
+## Support
+
+User support documentation is located in the `support/` folder:
+- **force-restore-database-backup.md**: Instructions for manually restoring the database from backup

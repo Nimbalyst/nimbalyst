@@ -1,7 +1,9 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CollapsibleGroup } from './CollapsibleGroup';
 import { SessionListItem } from './SessionListItem';
-import { groupSessionsByTime, TimeGroupKey } from '../../utils/dateFormatting';
+import { WorktreeGroup } from './WorktreeGroup';
+import { WorktreeSingle } from './WorktreeSingle';
+import { getTimeGroupKey, TimeGroupKey } from '../../utils/dateFormatting';
 import { getFileName } from '../../utils/pathUtils';
 import { KeyboardShortcuts, getShortcutDisplay } from '../../../shared/KeyboardShortcuts';
 import './SessionHistory.css';
@@ -19,6 +21,26 @@ interface SessionItem {
   hasUnread?: boolean;
   hasPendingPrompt?: boolean;
   isArchived?: boolean;
+  isPinned?: boolean; // Whether this session is pinned to the top
+  worktree_id?: string | null; // Associated worktree ID if this is a worktree session
+}
+
+interface WorktreeData {
+  id: string;
+  name: string;
+  displayName?: string;
+  path: string;
+  branch: string;
+  base_branch?: string;
+  isPinned?: boolean; // Whether this worktree is pinned to the top
+}
+
+interface WorktreeWithStatus extends WorktreeData {
+  gitStatus?: {
+    ahead?: number;
+    behind?: number;
+    uncommitted?: boolean;
+  };
 }
 
 interface SessionHistoryProps {
@@ -29,6 +51,7 @@ interface SessionHistoryProps {
   unreadSessions?: Set<string>; // IDs of sessions with unread messages
   pendingPromptSessions?: Set<string>; // IDs of sessions with pending permission/question prompts
   renamedSession?: { id: string; title: string } | null; // Session that was just renamed
+  renamedWorktree?: { worktreeId: string; displayName: string } | null; // Worktree that just got a display name
   updatedSession?: { id: string; timestamp: number } | null; // Session that was just updated
   onSessionSelect: (sessionId: string) => void;
   onSessionDelete?: (sessionId: string) => void;
@@ -36,6 +59,11 @@ interface SessionHistoryProps {
   onSessionRename?: (sessionId: string, newName: string) => void; // Callback when session is renamed
   onNewSession?: () => void;
   onNewTerminal?: () => void; // Callback for creating a new terminal session
+  onNewWorktreeSession?: () => void; // Callback for creating new worktree session
+  onAddSessionToWorktree?: (worktreeId: string) => void; // Callback for adding session to existing worktree
+  onAddTerminalToWorktree?: (worktreeId: string) => void; // Callback for adding terminal to existing worktree
+  onWorktreeFilesMode?: (worktreeId: string) => void; // Callback to open Files mode for a worktree
+  onWorktreeChangesMode?: (worktreeId: string) => void; // Callback to open Changes mode for a worktree
   onImportSessions?: () => void; // Callback for opening import dialog
   onOpenQuickSearch?: () => void; // Callback for opening session quick search (Cmd+L)
   collapsedGroups: string[];
@@ -43,6 +71,7 @@ interface SessionHistoryProps {
   sortOrder?: 'updated' | 'created'; // Sort order for sessions
   onSortOrderChange?: (sortOrder: 'updated' | 'created') => void; // Callback when sort order changes
   refreshTrigger?: number; // Optional trigger to force refresh
+  mode?: 'chat' | 'agent'; // Mode determines which sessions to show
 }
 
 // Generate a consistent color based on workspace path
@@ -59,6 +88,69 @@ function generateWorkspaceColor(path: string): string {
   return `hsl(${hue}, 65%, 55%)`;
 }
 
+// Component to render a worktree session with async data loading
+interface WorktreeSessionItemProps {
+  session: SessionItem;
+  worktreeId: string;
+  isActive: boolean;
+  onSessionSelect: (sessionId: string) => void;
+  fetchWorktreeData: (worktreeId: string) => Promise<WorktreeWithStatus | null>;
+}
+
+const WorktreeSessionItem: React.FC<WorktreeSessionItemProps> = ({
+  session,
+  worktreeId,
+  isActive,
+  onSessionSelect,
+  fetchWorktreeData
+}) => {
+  const [worktreeData, setWorktreeData] = useState<WorktreeWithStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadWorktreeData = async () => {
+      setLoading(true);
+      const data = await fetchWorktreeData(worktreeId);
+      if (mounted) {
+        setWorktreeData(data);
+        setLoading(false);
+      }
+    };
+
+    loadWorktreeData();
+
+    return () => {
+      mounted = false;
+    };
+  }, [worktreeId, fetchWorktreeData]);
+
+  // Show loading state or fallback if data not available
+  if (loading || !worktreeData) {
+    return (
+      <WorktreeSingle
+        session={session}
+        worktreeName={loading ? 'Loading...' : 'Unknown worktree'}
+        worktreePath=""
+        isActive={isActive}
+        onClick={() => onSessionSelect(session.id)}
+      />
+    );
+  }
+
+  return (
+    <WorktreeSingle
+      session={session}
+      worktreeName={worktreeData.name}
+      worktreePath={worktreeData.path}
+      gitStatus={worktreeData.gitStatus}
+      isActive={isActive}
+      onClick={() => onSessionSelect(session.id)}
+    />
+  );
+};
+
 const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   workspacePath,
   activeSessionId,
@@ -67,6 +159,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   unreadSessions = new Set(),
   pendingPromptSessions = new Set(),
   renamedSession = null,
+  renamedWorktree = null,
   updatedSession = null,
   onSessionSelect,
   onSessionDelete,
@@ -74,13 +167,19 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   onSessionRename,
   onNewSession,
   onNewTerminal,
+  onNewWorktreeSession,
+  onAddSessionToWorktree,
+  onAddTerminalToWorktree,
+  onWorktreeFilesMode,
+  onWorktreeChangesMode,
   onImportSessions,
   onOpenQuickSearch,
   collapsedGroups,
   onCollapsedGroupsChange,
   sortOrder: controlledSortOrder,
   onSortOrderChange,
-  refreshTrigger
+  refreshTrigger,
+  mode = 'agent'
 }) => {
   const [allSessions, setAllSessions] = useState<SessionItem[]>([]); // All sessions from DB
   const [sessions, setSessions] = useState<SessionItem[]>([]); // Filtered sessions to display
@@ -92,11 +191,13 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   const sortBy = controlledSortOrder ?? internalSortOrder;
   const setSortBy = onSortOrderChange ?? setInternalSortOrder;
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
+  const [newDropdownOpen, setNewDropdownOpen] = useState(false);
   const [contentSearchTriggered, setContentSearchTriggered] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
   const [lastSelectedId, setLastSelectedId] = useState<string | null>(null); // For shift+click range selection
+  const [worktreeCache, setWorktreeCache] = useState<Map<string, WorktreeWithStatus>>(new Map()); // Cache worktree data
 
   // Track scroll position to restore after refresh
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -145,7 +246,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
           messageCount: s.messageCount || 0,
           isProcessing: false,  // Will be updated by visual indicator effect
           hasUnread: false,     // Will be updated by visual indicator effect
-          isArchived: s.isArchived || false
+          isArchived: s.isArchived || false,
+          isPinned: s.isPinned || false,
+          worktree_id: s.worktreeId || null
         }));
 
         // Merge incoming sessions with existing ones to preserve React keys and reduce flicker
@@ -227,7 +330,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       const result = await window.electronAPI.invoke('sessions:search', workspacePath, query.trim(), { includeArchived: showArchived });
 
       if (result.success && Array.isArray(result.sessions)) {
-        const searchResults = result.sessions.map((s: any) => ({
+        let searchResults = result.sessions.map((s: any) => ({
           id: s.id,
           title: s.title || s.name || 'Untitled Session',
           createdAt: s.createdAt,
@@ -238,8 +341,15 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
           messageCount: s.messageCount || 0,
           isProcessing: false,
           hasUnread: false,
-          isArchived: s.isArchived || false
+          isArchived: s.isArchived || false,
+          worktree_id: s.worktreeId || null
         }));
+
+        // Filter out worktree sessions in non-agent mode
+        if (mode !== 'agent') {
+          searchResults = searchResults.filter(session => !session.worktree_id);
+        }
+
         setSessions(searchResults);
       }
     } catch (err) {
@@ -248,7 +358,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     } finally {
       setIsSearching(false);
     }
-  }, [workspacePath, showArchived]);
+  }, [workspacePath, showArchived, mode]);
 
   // Load all sessions on mount and when refreshTrigger changes
   useEffect(() => {
@@ -260,19 +370,25 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     // Reset content search trigger when query changes
     setContentSearchTriggered(false);
 
+    // Filter out worktree sessions in non-agent mode
+    let sessionsToFilter = allSessions;
+    if (mode !== 'agent') {
+      sessionsToFilter = allSessions.filter(session => !session.worktree_id);
+    }
+
     if (!searchQuery.trim()) {
-      // No search query - show all sessions
-      setSessions(allSessions);
+      // No search query - show all sessions (filtered by mode)
+      setSessions(sessionsToFilter);
       return;
     }
 
     // Filter sessions by title in memory (case-insensitive)
     const query = searchQuery.toLowerCase();
-    const filtered = allSessions.filter(session =>
+    const filtered = sessionsToFilter.filter(session =>
       (session.title ?? '').toLowerCase().includes(query)
     );
     setSessions(filtered);
-  }, [searchQuery, allSessions]);
+  }, [searchQuery, allSessions, mode]);
 
   // Function to trigger content search (database query for message content)
   const searchMessageContents = useCallback(() => {
@@ -304,6 +420,24 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       }));
     }
   }, [renamedSession]);
+
+  // Update worktree display name when first session in worktree is named
+  useEffect(() => {
+    if (renamedWorktree) {
+      setWorktreeCache(prev => {
+        const existing = prev.get(renamedWorktree.worktreeId);
+        if (existing) {
+          const updated = new Map(prev);
+          updated.set(renamedWorktree.worktreeId, {
+            ...existing,
+            displayName: renamedWorktree.displayName
+          });
+          return updated;
+        }
+        return prev;
+      });
+    }
+  }, [renamedWorktree]);
 
   // Update session timestamp when updated (efficient update without database reload)
   useEffect(() => {
@@ -391,9 +525,12 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       // Use lastSelectedId, or fall back to activeSessionId as the anchor
       const anchorId = lastSelectedId || activeSessionId;
       if (anchorId) {
-        // Get visual order from grouped sessions (flattened)
-        const grouped = groupSessionsByTime(sessions, sortBy === 'updated' ? 'updatedAt' : 'createdAt');
-        const visualOrderIds = (Object.keys(grouped) as TimeGroupKey[]).flatMap(key => grouped[key].map(s => s.id));
+        // Get visual order from grouped items (flattened) - only include regular sessions, not worktree sessions
+        const visualOrderIds = groupKeys.flatMap(key =>
+          groupedItems[key]
+            .filter(item => item.type === 'session')
+            .map(item => (item as { type: 'session'; session: SessionItem }).session.id)
+        );
 
         const anchorIndex = visualOrderIds.indexOf(anchorId);
         const currentIndex = visualOrderIds.indexOf(sessionId);
@@ -459,6 +596,36 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     clearSelection();
   };
 
+  // Toggle pin status for a session
+  const handleSessionPinToggle = useCallback(async (sessionId: string, isPinned: boolean) => {
+    try {
+      await window.electronAPI.invoke('sessions:update-pinned', sessionId, isPinned);
+      // Update local state
+      setAllSessions(prev => prev.map(s => s.id === sessionId ? { ...s, isPinned } : s));
+      setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, isPinned } : s));
+    } catch (error) {
+      console.error('[SessionHistory] Failed to toggle session pin:', error);
+    }
+  }, []);
+
+  // Toggle pin status for a worktree
+  const handleWorktreePinToggle = useCallback(async (worktreeId: string, isPinned: boolean) => {
+    try {
+      await window.electronAPI.invoke('worktree:update-pinned', worktreeId, isPinned);
+      // Update worktree cache
+      setWorktreeCache(prev => {
+        const updated = new Map(prev);
+        const worktree = updated.get(worktreeId);
+        if (worktree) {
+          updated.set(worktreeId, { ...worktree, isPinned });
+        }
+        return updated;
+      });
+    } catch (error) {
+      console.error('[SessionHistory] Failed to toggle worktree pin:', error);
+    }
+  }, []);
+
   const toggleSortDropdown = () => {
     setSortDropdownOpen(!sortDropdownOpen);
   };
@@ -468,23 +635,156 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     setSortDropdownOpen(false);
   };
 
-  // Close dropdown when clicking outside
+  const toggleNewDropdown = () => {
+    setNewDropdownOpen(!newDropdownOpen);
+  };
+
+  // Handle new button click - if only one option available, trigger it directly
+  const handleNewButtonClick = () => {
+    const availableOptions = [onNewSession, onNewWorktreeSession, onNewTerminal].filter(Boolean);
+    if (availableOptions.length === 1) {
+      // Only one option available, trigger it directly
+      if (onNewSession) onNewSession();
+      else if (onNewWorktreeSession) onNewWorktreeSession();
+      else if (onNewTerminal) onNewTerminal();
+    } else {
+      // Multiple options, show dropdown
+      toggleNewDropdown();
+    }
+  };
+
+  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (sortDropdownOpen) {
-        const target = e.target as HTMLElement;
-        if (!target.closest('.session-history-sort-dropdown')) {
-          setSortDropdownOpen(false);
-        }
+      const target = e.target as HTMLElement;
+      if (sortDropdownOpen && !target.closest('.session-history-sort-dropdown')) {
+        setSortDropdownOpen(false);
+      }
+      if (newDropdownOpen && !target.closest('.session-history-new-dropdown')) {
+        setNewDropdownOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [sortDropdownOpen]);
+  }, [sortDropdownOpen, newDropdownOpen]);
 
-  // Group sessions by time - use the selected sort field
-  const groupedSessions = groupSessionsByTime(sessions, sortBy === 'updated' ? 'updatedAt' : 'createdAt');
-  const groupKeys = Object.keys(groupedSessions) as TimeGroupKey[];
+  // Group worktree sessions by worktree_id and compute worktree timestamps
+  const worktreeGroupsData = useMemo(() => {
+    const groups = new Map<string, { sessions: SessionItem[]; latestTimestamp: number }>();
+    for (const session of sessions) {
+      if (session.worktree_id) {
+        const existing = groups.get(session.worktree_id);
+        const sessionTimestamp = sortBy === 'updated' ? (session.updatedAt || session.createdAt) : session.createdAt;
+        if (existing) {
+          existing.sessions.push(session);
+          existing.latestTimestamp = Math.max(existing.latestTimestamp, sessionTimestamp);
+        } else {
+          groups.set(session.worktree_id, { sessions: [session], latestTimestamp: sessionTimestamp });
+        }
+      }
+    }
+    return groups;
+  }, [sessions, sortBy]);
+
+  // Get all worktree IDs for batch fetching
+  const sortedWorktreeIds = useMemo(() => {
+    return Array.from(worktreeGroupsData.keys());
+  }, [worktreeGroupsData]);
+
+  // Create unified list items that can be either a session or a worktree group
+  type UnifiedListItem =
+    | { type: 'session'; session: SessionItem; timestamp: number }
+    | { type: 'worktree'; worktreeId: string; sessions: SessionItem[]; timestamp: number };
+
+  // Build unified time-grouped data with both sessions and worktrees interleaved
+  const groupedItems = useMemo(() => {
+    const timestampField = sortBy === 'updated' ? 'updatedAt' : 'createdAt';
+    const items: UnifiedListItem[] = [];
+
+    // Add regular sessions (those without worktree_id)
+    for (const session of sessions) {
+      if (!session.worktree_id) {
+        const timestamp = timestampField === 'updatedAt' ? (session.updatedAt || session.createdAt) : session.createdAt;
+        items.push({ type: 'session', session, timestamp });
+      }
+    }
+
+    // Add worktree groups as single items
+    for (const [worktreeId, data] of worktreeGroupsData) {
+      items.push({ type: 'worktree', worktreeId, sessions: data.sessions, timestamp: data.latestTimestamp });
+    }
+
+    // Sort items: pinned items first (worktrees and sessions), then by timestamp
+    items.sort((a, b) => {
+      // Determine pinned status for each item
+      const aPinned = a.type === 'session'
+        ? (a.session.isPinned ?? false)
+        : (worktreeCache.get(a.worktreeId)?.isPinned ?? false);
+      const bPinned = b.type === 'session'
+        ? (b.session.isPinned ?? false)
+        : (worktreeCache.get(b.worktreeId)?.isPinned ?? false);
+
+      // Pinned items come first
+      if (aPinned && !bPinned) return -1;
+      if (!aPinned && bPinned) return 1;
+
+      // Within same pinned status, sort by timestamp (newest first)
+      return b.timestamp - a.timestamp;
+    });
+
+    // Group into time buckets
+    const groups: Record<TimeGroupKey, UnifiedListItem[]> = {
+      'Today': [],
+      'Yesterday': [],
+      'This Week': [],
+      'Last Week': [],
+      'This Month': [],
+      'Last Month': [],
+      'Older': []
+    };
+
+    for (const item of items) {
+      const groupKey = getTimeGroupKey(item.timestamp);
+      groups[groupKey].push(item);
+    }
+
+    // Remove empty groups
+    return Object.fromEntries(
+      Object.entries(groups).filter(([_, items]) => items.length > 0)
+    ) as Record<TimeGroupKey, UnifiedListItem[]>;
+  }, [sessions, worktreeGroupsData, sortBy, worktreeCache]);
+
+  const groupKeys = Object.keys(groupedItems) as TimeGroupKey[];
+
+  // Batch fetch all worktree data when sortedWorktreeIds changes (prevents N+1 query problem)
+  useEffect(() => {
+    const missingWorktreeIds = sortedWorktreeIds.filter(id => !worktreeCache.has(id));
+
+    if (missingWorktreeIds.length === 0) {
+      return;
+    }
+
+    const fetchBatch = async () => {
+      try {
+        const result = await window.electronAPI.invoke('worktree:get-batch', missingWorktreeIds);
+
+        if (result.success && result.worktrees) {
+          // Update cache with all fetched worktrees at once
+          setWorktreeCache(prev => {
+            const updated = new Map(prev);
+            for (const [worktreeId, worktreeData] of Object.entries(result.worktrees)) {
+              updated.set(worktreeId, worktreeData as WorktreeWithStatus);
+            }
+            return updated;
+          });
+        }
+      } catch (err) {
+        console.error('[SessionHistory] Failed to batch fetch worktrees:', err);
+      }
+    };
+
+    fetchBatch();
+  }, [sortedWorktreeIds, worktreeCache]);
 
   if (loading) {
     return (
@@ -523,32 +823,67 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                 </svg>
               </button>
             )}
-            {onNewSession && (
-              <button
-                className="session-history-new-button"
-                data-testid="new-session-button"
-                onClick={() => onNewSession()}
-                title={`New session (${getShortcutDisplay(KeyboardShortcuts.file.newSession)})`}
-                aria-label="Create new session"
-              >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                </svg>
-              </button>
-            )}
-            {onNewTerminal && (
-              <button
-                className="session-history-new-terminal-button"
-                data-testid="new-terminal-button"
-                onClick={() => onNewTerminal()}
-                title="New terminal"
-                aria-label="Create new terminal"
-              >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M3 5L7 9L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M9 13H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                </svg>
-              </button>
+            {(onNewSession || onNewWorktreeSession || onNewTerminal) && (
+              <div className="session-history-new-dropdown">
+                <button
+                  className="session-history-new-button"
+                  data-testid="new-dropdown-button"
+                  onClick={handleNewButtonClick}
+                  title="Create new..."
+                  aria-label="Create new session, worktree, or terminal"
+                >
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  </svg>
+                </button>
+                {newDropdownOpen && (
+                  <div className="session-history-new-menu">
+                    {onNewSession && (
+                      <button
+                        className="session-history-new-option"
+                        data-testid="new-session-button"
+                        onClick={() => { onNewSession(); setNewDropdownOpen(false); }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                        </svg>
+                        <span>New Session</span>
+                        <span className="session-history-new-option-shortcut">{getShortcutDisplay(KeyboardShortcuts.file.newSession)}</span>
+                      </button>
+                    )}
+                    {onNewWorktreeSession && (
+                      <button
+                        className="session-history-new-option"
+                        data-testid="new-worktree-session-button"
+                        onClick={() => { onNewWorktreeSession(); setNewDropdownOpen(false); }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                          <path d="M5 13v-2.5a1.5 1.5 0 0 1 1.5-1.5h3"/>
+                          <path d="M9.5 9V4.5"/>
+                          <circle cx="5" cy="4.5" r="1.5"/>
+                          <circle cx="9.5" cy="4.5" r="1.5"/>
+                          <path d="M5 6v2.5a1.5 1.5 0 0 0 1.5 1.5"/>
+                          <path d="M12 7v4M10 9h4"/>
+                        </svg>
+                        <span>New Worktree</span>
+                      </button>
+                    )}
+                    {onNewTerminal && (
+                      <button
+                        className="session-history-new-option"
+                        data-testid="new-terminal-button"
+                        onClick={() => { onNewTerminal(); setNewDropdownOpen(false); }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M3 5L7 9L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M9 13H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                        </svg>
+                        <span>New Terminal</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -619,22 +954,70 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
             <h3 className="session-history-header-name">{workspaceName}</h3>
             <div className="session-history-header-path">{workspacePath}</div>
           </div>
-          {onNewSession && (
-            <button
-              className="session-history-new-button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onNewSession();
-              }}
-              title={`New session (${getShortcutDisplay(KeyboardShortcuts.file.newSession)})`}
-              aria-label="Create new session"
-              type="button"
-            >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-              </svg>
-            </button>
-          )}
+          <div className="session-history-header-buttons">
+            {(onNewSession || onNewWorktreeSession || onNewTerminal) && (
+              <div className="session-history-new-dropdown">
+                <button
+                  className="session-history-new-button"
+                  data-testid="new-dropdown-button"
+                  onClick={handleNewButtonClick}
+                  title="Create new..."
+                  aria-label="Create new session, worktree, or terminal"
+                >
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  </svg>
+                </button>
+                {newDropdownOpen && (
+                  <div className="session-history-new-menu">
+                    {onNewSession && (
+                      <button
+                        className="session-history-new-option"
+                        data-testid="new-session-button"
+                        onClick={() => { onNewSession(); setNewDropdownOpen(false); }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                        </svg>
+                        <span>New Session</span>
+                        <span className="session-history-new-option-shortcut">{getShortcutDisplay(KeyboardShortcuts.file.newSession)}</span>
+                      </button>
+                    )}
+                    {onNewWorktreeSession && (
+                      <button
+                        className="session-history-new-option"
+                        data-testid="new-worktree-session-button"
+                        onClick={() => { onNewWorktreeSession(); setNewDropdownOpen(false); }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                          <path d="M5 13v-2.5a1.5 1.5 0 0 1 1.5-1.5h3"/>
+                          <path d="M9.5 9V4.5"/>
+                          <circle cx="5" cy="4.5" r="1.5"/>
+                          <circle cx="9.5" cy="4.5" r="1.5"/>
+                          <path d="M5 6v2.5a1.5 1.5 0 0 0 1.5 1.5"/>
+                          <path d="M12 7v4M10 9h4"/>
+                        </svg>
+                        <span>New Worktree</span>
+                      </button>
+                    )}
+                    {onNewTerminal && (
+                      <button
+                        className="session-history-new-option"
+                        data-testid="new-terminal-button"
+                        onClick={() => { onNewTerminal(); setNewDropdownOpen(false); }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M3 5L7 9L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M9 13H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                        </svg>
+                        <span>New Terminal</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
         <div className="session-history-section-label">Agent Sessions</div>
         <div className="session-history-error">
@@ -657,22 +1040,84 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
             <h3 className="session-history-header-name">{workspaceName}</h3>
             <div className="session-history-header-path">{workspacePath}</div>
           </div>
-          {onNewSession && (
-            <button
-              className="session-history-new-button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onNewSession();
-              }}
-              title={`New session (${getShortcutDisplay(KeyboardShortcuts.file.newSession)})`}
-              aria-label="Create new session"
-              type="button"
-            >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-              </svg>
-            </button>
-          )}
+          <div className="session-history-header-buttons">
+            {onImportSessions && (
+              <button
+                className="session-history-import-button"
+                data-testid="import-sessions-button"
+                onClick={onImportSessions}
+                title="Import Claude Agent sessions"
+                aria-label="Import sessions"
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M13.5 8.5V12.5C13.5 13.0523 13.0523 13.5 12.5 13.5H3.5C2.94772 13.5 2.5 13.0523 2.5 12.5V8.5M8 2.5V10.5M8 10.5L5.5 8M8 10.5L10.5 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            )}
+            {(onNewSession || onNewWorktreeSession) && (
+              <div className="session-history-new-dropdown">
+                <button
+                  className="session-history-new-button"
+                  data-testid="new-dropdown-button"
+                  onClick={handleNewButtonClick}
+                  title="Create new..."
+                  aria-label="Create new session or worktree"
+                >
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  </svg>
+                </button>
+                {newDropdownOpen && (
+                  <div className="session-history-new-menu">
+                    {onNewSession && (
+                      <button
+                        className="session-history-new-option"
+                        data-testid="new-session-button"
+                        onClick={() => { onNewSession(); setNewDropdownOpen(false); }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                        </svg>
+                        <span>New Session</span>
+                        <span className="session-history-new-option-shortcut">{getShortcutDisplay(KeyboardShortcuts.file.newSession)}</span>
+                      </button>
+                    )}
+                    {onNewWorktreeSession && (
+                      <button
+                        className="session-history-new-option"
+                        data-testid="new-worktree-session-button"
+                        onClick={() => { onNewWorktreeSession(); setNewDropdownOpen(false); }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                          <path d="M5 13v-2.5a1.5 1.5 0 0 1 1.5-1.5h3"/>
+                          <path d="M9.5 9V4.5"/>
+                          <circle cx="5" cy="4.5" r="1.5"/>
+                          <circle cx="9.5" cy="4.5" r="1.5"/>
+                          <path d="M5 6v2.5a1.5 1.5 0 0 0 1.5 1.5"/>
+                          <path d="M12 7v4M10 9h4"/>
+                        </svg>
+                        <span>New Worktree</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            {onNewTerminal && (
+              <button
+                className="session-history-new-terminal-button"
+                data-testid="new-terminal-button"
+                onClick={() => onNewTerminal()}
+                title="New terminal"
+                aria-label="Create new terminal"
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M3 5L7 9L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M9 13H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+              </button>
+            )}
+          </div>
         </div>
         <div className="session-history-section-label">Agent Sessions</div>
         <div className="session-history-empty">
@@ -721,32 +1166,67 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
               </svg>
             </button>
           )}
-          {onNewSession && (
-            <button
-              className="session-history-new-button"
-              data-testid="new-session-button"
-              onClick={onNewSession}
-              title={`New session (${getShortcutDisplay(KeyboardShortcuts.file.newSession)})`}
-              aria-label="Create new session"
-            >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-              </svg>
-            </button>
-          )}
-          {onNewTerminal && (
-            <button
-              className="session-history-new-terminal-button"
-              data-testid="new-terminal-button"
-              onClick={() => onNewTerminal()}
-              title="New terminal"
-              aria-label="Create new terminal"
-            >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M3 5L7 9L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M9 13H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-            </button>
+          {(onNewSession || onNewWorktreeSession || onNewTerminal) && (
+            <div className="session-history-new-dropdown">
+              <button
+                className="session-history-new-button"
+                data-testid="new-dropdown-button"
+                onClick={handleNewButtonClick}
+                title="Create new..."
+                aria-label="Create new session, worktree, or terminal"
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+              </button>
+              {newDropdownOpen && (
+                <div className="session-history-new-menu">
+                  {onNewSession && (
+                    <button
+                      className="session-history-new-option"
+                      data-testid="new-session-button"
+                      onClick={() => { onNewSession(); setNewDropdownOpen(false); }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                      </svg>
+                      <span>New Session</span>
+                      <span className="session-history-new-option-shortcut">{getShortcutDisplay(KeyboardShortcuts.file.newSession)}</span>
+                    </button>
+                  )}
+                  {onNewWorktreeSession && (
+                    <button
+                      className="session-history-new-option"
+                      data-testid="new-worktree-session-button"
+                      onClick={() => { onNewWorktreeSession(); setNewDropdownOpen(false); }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                        <path d="M5 13v-2.5a1.5 1.5 0 0 1 1.5-1.5h3"/>
+                        <path d="M9.5 9V4.5"/>
+                        <circle cx="5" cy="4.5" r="1.5"/>
+                        <circle cx="9.5" cy="4.5" r="1.5"/>
+                        <path d="M5 6v2.5a1.5 1.5 0 0 0 1.5 1.5"/>
+                        <path d="M12 7v4M10 9h4"/>
+                      </svg>
+                      <span>New Worktree</span>
+                    </button>
+                  )}
+                  {onNewTerminal && (
+                    <button
+                      className="session-history-new-option"
+                      data-testid="new-terminal-button"
+                      onClick={() => { onNewTerminal(); setNewDropdownOpen(false); }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M3 5L7 9L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        <path d="M9 13H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                      </svg>
+                      <span>New Terminal</span>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -884,47 +1364,82 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
             </p>
           </div>
         ) : (
-          groupKeys.map(groupKey => {
-            const groupSessions = groupedSessions[groupKey];
-            const isExpanded = !collapsedGroups.includes(groupKey);
+          <>
+            {/* Unified time groups with interleaved sessions and worktrees */}
+            {groupKeys.map(groupKey => {
+              const items = groupedItems[groupKey];
+              const isExpanded = !collapsedGroups.includes(groupKey);
 
-            return (
-              <CollapsibleGroup
-                key={groupKey}
-                title={groupKey}
-                isExpanded={isExpanded}
-                onToggle={() => handleToggleGroup(groupKey)}
-                count={groupSessions.length}
-              >
-                {groupSessions.map(session => (
-                  <SessionListItem
-                    key={session.id}
-                    id={session.id}
-                    title={session.title || 'Untitled Session'}
-                    createdAt={session.createdAt}
-                    updatedAt={session.updatedAt}
-                    isActive={session.id === activeSessionId}
-                    isLoaded={loadedSessionIds.includes(session.id)}
-                    isArchived={session.isArchived}
-                    isSelected={selectedSessionIds.has(session.id)}
-                    sortBy={sortBy}
-                    onClick={(e) => handleSessionClick(session.id, e)}
-                    onDelete={onSessionDelete ? () => handleDeleteSession(session.id) : undefined}
-                    onArchive={() => handleArchiveSession(session.id)}
-                    onUnarchive={() => handleUnarchiveSession(session.id)}
-                    onRename={onSessionRename ? (newName: string) => onSessionRename(session.id, newName) : undefined}
-                    provider={session.provider}
-                    model={session.model}
-                    messageCount={session.messageCount}
-                    isProcessing={session.isProcessing}
-                    hasUnread={session.hasUnread}
-                    hasPendingPrompt={session.hasPendingPrompt}
-                    sessionType={session.sessionType}
-                  />
-                ))}
-              </CollapsibleGroup>
-            );
-          })
+              return (
+                <CollapsibleGroup
+                  key={groupKey}
+                  title={groupKey}
+                  isExpanded={isExpanded}
+                  onToggle={() => handleToggleGroup(groupKey)}
+                  count={items.length}
+                >
+                  {items.map(item => {
+                    if (item.type === 'worktree') {
+                      const worktreeData = worktreeCache.get(item.worktreeId);
+                      const isWorktreeExpanded = !collapsedGroups.includes(`worktree:${item.worktreeId}`);
+
+                      return (
+                        <WorktreeGroup
+                          key={`worktree-${item.worktreeId}`}
+                          worktree={worktreeData || { id: item.worktreeId, name: 'Loading...', path: '', branch: '' }}
+                          gitStatus={worktreeData?.gitStatus}
+                          sessions={item.sessions}
+                          activeSessionId={activeSessionId}
+                          isExpanded={isWorktreeExpanded}
+                          onToggle={() => handleToggleGroup(`worktree:${item.worktreeId}`)}
+                          onSessionSelect={onSessionSelect}
+                          onAddSession={onAddSessionToWorktree || (() => {})}
+                          onAddTerminal={onAddTerminalToWorktree}
+                          onSessionDelete={onSessionDelete ? handleDeleteSession : undefined}
+                          onSessionArchive={handleArchiveSession}
+                          onWorktreePinToggle={handleWorktreePinToggle}
+                          onSessionPinToggle={handleSessionPinToggle}
+                          onSessionRename={onSessionRename}
+                          onFilesMode={onWorktreeFilesMode}
+                          onChangesMode={onWorktreeChangesMode}
+                        />
+                      );
+                    } else {
+                      const session = item.session;
+                      return (
+                        <SessionListItem
+                          key={session.id}
+                          id={session.id}
+                          title={session.title || 'Untitled Session'}
+                          createdAt={session.createdAt}
+                          updatedAt={session.updatedAt}
+                          isActive={session.id === activeSessionId}
+                          isLoaded={loadedSessionIds.includes(session.id)}
+                          isArchived={session.isArchived}
+                          isPinned={session.isPinned}
+                          isSelected={selectedSessionIds.has(session.id)}
+                          sortBy={sortBy}
+                          onClick={(e) => handleSessionClick(session.id, e)}
+                          onDelete={onSessionDelete ? () => handleDeleteSession(session.id) : undefined}
+                          onArchive={() => handleArchiveSession(session.id)}
+                          onUnarchive={() => handleUnarchiveSession(session.id)}
+                          onRename={onSessionRename ? (newName: string) => onSessionRename(session.id, newName) : undefined}
+                          onPinToggle={(isPinned) => handleSessionPinToggle(session.id, isPinned)}
+                          provider={session.provider}
+                          model={session.model}
+                          messageCount={session.messageCount}
+                          isProcessing={session.isProcessing}
+                          hasUnread={session.hasUnread}
+                          hasPendingPrompt={session.hasPendingPrompt}
+                          sessionType={session.sessionType}
+                        />
+                      );
+                    }
+                  })}
+                </CollapsibleGroup>
+              );
+            })}
+          </>
         )}
       </div>
     </div>
@@ -957,6 +1472,7 @@ export const SessionHistory = React.memo(SessionHistoryComponent, (prevProps, ne
   if (prevProps.activeSessionId !== nextProps.activeSessionId) return false;
   if (prevProps.refreshTrigger !== nextProps.refreshTrigger) return false;
   if (prevProps.sortOrder !== nextProps.sortOrder) return false;
+  if (prevProps.mode !== nextProps.mode) return false;
 
   // Compare arrays by value
   if (!arraysEqual(prevProps.loadedSessionIds ?? [], nextProps.loadedSessionIds ?? [])) return false;

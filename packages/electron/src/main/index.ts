@@ -32,6 +32,7 @@ import { registerPermissionHandlers } from './ipc/PermissionHandlers';
 import { registerGitStatusHandlers } from './ipc/GitStatusHandlers';
 import { registerProjectSelectionHandlers } from './ipc/ProjectSelectionHandlers';
 import { registerUsageAnalyticsHandlers } from './ipc/UsageAnalyticsHandlers';
+import { registerWorktreeHandlers } from './ipc/WorktreeHandlers';
 import {
     type AppTheme,
     dismissClaudeCodeWindowsWarning,
@@ -156,6 +157,16 @@ let aiService: AIService | null = null;
 // let agentService: AgentService | null = null;
 let runtimeSessionStore: SessionStore | null = null;
 let mcpHttpServer: any = null;
+
+// Set custom userData path if RUN_ONE_DEV_MODE environment variable is set
+// This allows running a dev instance alongside a production build without conflicts
+// This must be done before app is ready and before any calls to app.getPath('userData')
+if (process.env.RUN_ONE_DEV_MODE === 'true') {
+    const defaultUserData = app.getPath('userData');
+    const devUserData = path.join(path.dirname(defaultUserData), 'Nimbalyst-Dev');
+    app.setPath('userData', devUserData);
+    console.log(`Dev mode enabled: Using isolated userData path: ${devUserData}`);
+}
 
 // Initialize logging
 function initializeLogging() {
@@ -454,6 +465,7 @@ app.whenReady().then(async () => {
     registerNotificationHandlers();
     registerPermissionHandlers();
     registerGitStatusHandlers();
+    registerWorktreeHandlers();
     registerMCPConfigHandlers();
     registerClaudeCodePluginHandlers();
     registerDatabaseBrowserHandlers();
@@ -517,6 +529,10 @@ app.whenReady().then(async () => {
 
     // Inject trust checker
     // Checks if a workspace is trusted before allowing tool execution
+    // NOTE: For worktree sessions, AIService pre-resolves the worktree path to the parent
+    // project (worktreeProjectPath) and passes it via documentContext.permissionsPath.
+    // ClaudeCodeProvider then uses permissionsPath for trust checks, ensuring this
+    // checker receives the parent project path, not the worktree path.
     const permissionService = getPermissionService();
     ClaudeCodeProvider.setTrustChecker((workspacePath) => {
       const mode = permissionService.getPermissionMode(workspacePath);

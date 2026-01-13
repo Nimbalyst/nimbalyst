@@ -581,6 +581,112 @@ class PGLiteWorker {
       console.error('[PGLite Worker] Failed to create queued_prompts table:', error);
       throw error;
     }
+
+    // Worktrees table - stores git worktree metadata
+    console.log('[PGLite Worker] Creating worktrees table...');
+    try {
+      await this.db.exec(`
+        CREATE TABLE IF NOT EXISTS worktrees (
+          id TEXT PRIMARY KEY,
+          workspace_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          path TEXT NOT NULL,
+          branch TEXT NOT NULL,
+          base_branch TEXT DEFAULT 'main',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_worktrees_workspace ON worktrees(workspace_id);
+        CREATE INDEX IF NOT EXISTS idx_worktrees_path ON worktrees(path);
+      `);
+      console.log('[PGLite Worker] worktrees table created successfully');
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to create worktrees table:', error);
+      throw error;
+    }
+
+    // Add worktree_id column to ai_sessions (migration)
+    try {
+      await this.db.exec(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'ai_sessions' AND column_name = 'worktree_id'
+          ) THEN
+            ALTER TABLE ai_sessions ADD COLUMN worktree_id TEXT REFERENCES worktrees(id) ON DELETE SET NULL;
+          END IF;
+        END $$;
+      `);
+
+      // Create index for worktree sessions
+      await this.db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_ai_sessions_worktree ON ai_sessions(worktree_id);
+      `);
+
+      console.log('[PGLite Worker] worktree_id column added to ai_sessions');
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to add worktree_id column:', error);
+      throw error;
+    }
+
+    // Add display_name column to worktrees (migration)
+    try {
+      await this.db.exec(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'worktrees' AND column_name = 'display_name'
+          ) THEN
+            ALTER TABLE worktrees ADD COLUMN display_name TEXT;
+          END IF;
+        END $$;
+      `);
+      console.log('[PGLite Worker] display_name column added to worktrees');
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to add display_name column:', error);
+      throw error;
+    }
+
+    // Add is_pinned column to ai_sessions (migration)
+    try {
+      await this.db.exec(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'ai_sessions' AND column_name = 'is_pinned'
+          ) THEN
+            ALTER TABLE ai_sessions ADD COLUMN is_pinned BOOLEAN DEFAULT FALSE;
+          END IF;
+        END $$;
+      `);
+      console.log('[PGLite Worker] is_pinned column added to ai_sessions');
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to add is_pinned column to ai_sessions:', error);
+      throw error;
+    }
+
+    // Add is_pinned column to worktrees (migration)
+    try {
+      await this.db.exec(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'worktrees' AND column_name = 'is_pinned'
+          ) THEN
+            ALTER TABLE worktrees ADD COLUMN is_pinned BOOLEAN DEFAULT FALSE;
+          END IF;
+        END $$;
+      `);
+      console.log('[PGLite Worker] is_pinned column added to worktrees');
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to add is_pinned column to worktrees:', error);
+      throw error;
+    }
   }
 
   async query(message) {

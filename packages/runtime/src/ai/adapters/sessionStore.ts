@@ -12,10 +12,12 @@ export interface SessionListItem {
   sessionType?: string;
   mode?: SessionMode;
   workspaceId: string;
+  worktreeId?: string;  // ID of the associated worktree if this is a worktree session
   createdAt: number;
   updatedAt: number;
   messageCount?: number;
   isArchived?: boolean;
+  isPinned?: boolean;  // Whether this session is pinned to the top of the list
 }
 
 export interface CreateSessionPayload {
@@ -27,6 +29,9 @@ export interface CreateSessionPayload {
   title?: string;
   workspaceId: string;
   filePath?: string;
+  worktreeId?: string;  // ID of the associated worktree
+  worktreePath?: string;  // Path to the worktree directory
+  worktreeProjectPath?: string;  // Path to the parent project (for permission lookups)
   providerConfig?: Record<string, unknown>;
   providerSessionId?: string;
   documentContext?: Record<string, unknown> | undefined;

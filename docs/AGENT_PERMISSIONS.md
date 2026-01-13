@@ -17,7 +17,7 @@ When an AI agent runs in Nimbalyst, it can execute various tools: reading files,
 
 ## Permission Modes
 
-When you first open a project with the AI agent, you'll see a trust dialog with two options:
+When you first open a project with the AI agent, you'll see a trust dialog. There are three permission modes:
 
 ### Ask for Approval (Recommended)
 
@@ -26,14 +26,22 @@ When you first open a project with the AI agent, you'll see a trust dialog with 
 - When approving, you choose the scope:
   - **Just this time** - One-time approval, won't be remembered
   - **For this session** - Allowed until you close the project
-  - **Always in this project** - Permanently remembered for this project
+  - **Always in this project** - Permanently saved to `.claude/settings.local.json`
 - All approved patterns can be managed in **Settings > Agent Permissions**
 
 ### Always Allow (Risky)
 
-- All tools run without prompting
-- Useful for fully trusted projects where you want maximum speed
+- All file operations (Edit, Write, Read, Glob, etc.) are auto-approved
+- Bash commands and WebFetch still require approval unless in settings
+- Useful for trusted projects with heavy file editing
 - Denied patterns are still respected
+
+### Bypass All (Dangerous)
+
+- **All operations auto-approved, no prompts at all**
+- Bypasses all safety checks and Claude Code settings
+- Only for testing/development on fully trusted code
+- Not recommended for normal use
 
 ## What Gets Auto-Approved
 
@@ -138,6 +146,39 @@ Control which domains the agent can fetch or curl:
 3. Click "Add URL Pattern"
 4. Enter the pattern and optional description
 
+## Approval Scopes
+
+When a tool requires approval, you choose one of four scopes:
+
+| Scope | What Happens | Persistence |
+|-------|--------------|-------------|
+| **Just this time** | Approves this single call only | None |
+| **For this session** | Approves until you restart the app | Memory only |
+| **Always in this project** | Saves pattern to settings file | `.claude/settings.local.json` |
+| **Allow all domains** | WebFetch only: allows all URLs | `.claude/settings.local.json` |
+
+### Scope Details
+
+**Just this time** (`once`)
+- Single-use approval for this exact tool call
+- Not cached anywhere
+- Next similar call will prompt again
+
+**For this session** (`session`)
+- Pattern cached in memory for the current app session
+- On app restart, the pattern is forgotten (will prompt again unless also in settings)
+- Useful for temporary tasks you don't want to permanently allow
+
+**Always in this project** (`always`)
+- Saved to `.claude/settings.local.json` in the project's `.claude/` folder
+- Persists across sessions and syncs with Claude CLI
+- Also cached in session memory to avoid re-prompting
+
+**Allow all domains** (`always-all`)
+- WebFetch-specific scope
+- Saves a wildcard pattern that allows all domains
+- Cannot be used for Bash commands (too dangerous)
+
 ## Managing Approved Patterns
 
 All patterns you've approved (or denied) are saved and can be managed:
@@ -165,10 +206,11 @@ This is especially useful when:
 ┌─────────────────────────────────────────────────────────────┐
 │                     Renderer Process                         │
 ├─────────────────────────────────────────────────────────────┤
-│  ProjectTrustToast    - First-time trust dialog             │
-│  TrustIndicator       - Nav gutter status icon              │
-│  ProjectPermissionsPanel - Full settings UI                 │
+│  ProjectTrustToast         - First-time trust dialog        │
+│  TrustIndicator            - Nav gutter status icon         │
+│  ProjectPermissionsPanel   - Full settings UI               │
 │  ToolPermissionConfirmation - Inline approval dialog        │
+│  InteractivePromptWidget   - Embedded permission in transcript│
 └─────────────────────────────────────────────────────────────┘
                               │
                               │ IPC
@@ -176,8 +218,10 @@ This is especially useful when:
 ┌─────────────────────────────────────────────────────────────┐
 │                      Main Process                            │
 ├─────────────────────────────────────────────────────────────┤
-│  PermissionService    - Singleton managing all permissions  │
-│  PermissionHandlers   - IPC handlers for renderer           │
+│  PermissionService      - Workspace trust state management  │
+│  ClaudeSettingsManager  - Settings file read/write          │
+│  PermissionHandlers     - IPC handlers for renderer         │
+│  AIService              - Tool permission IPC handlers      │
 └─────────────────────────────────────────────────────────────┘
                               │
                               │
@@ -185,10 +229,19 @@ This is especially useful when:
 ┌─────────────────────────────────────────────────────────────┐
 │                    Runtime Package                           │
 ├─────────────────────────────────────────────────────────────┤
-│  PermissionEngine     - Core evaluation logic               │
-│  commandParser        - Bash command parsing                │
-│  directoryScope       - Path validation                     │
-│  dangerousPatterns    - Risk detection                      │
+│  ClaudeCodeProvider  - canUseTool handler, pattern gen      │
+│  sessionApprovedPatterns - Session-level pattern cache      │
+│  pendingToolPermissions - Awaiting approval requests        │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Settings Files                            │
+├─────────────────────────────────────────────────────────────┤
+│  ~/.claude/settings.json         - User-level defaults      │
+│  .claude/settings.json           - Project shared patterns  │
+│  .claude/settings.local.json     - Project personal patterns│
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -205,39 +258,87 @@ This is especially useful when:
 
 ### Storage
 
-Permissions are stored per-workspace in `workspace-settings.json`:
+The permission system uses a dual storage approach:
+
+**Workspace Trust State** (managed by PermissionService):
+- Trust status and permission mode stored in Nimbalyst's internal workspace settings
+- Controls whether the agent can run at all in a workspace
+- Stored separately from Claude Code's settings files
+
+#### Workspace Trust Storage
+
+Trust state is stored per-workspace in Nimbalyst's workspace settings store:
 
 ```json
 {
   "agentPermissions": {
-    "isTrusted": true,
-    "trustedAt": 1703001234567,
-    "permissionMode": "ask",
-    "allowedPatterns": [
-      {
-        "pattern": "bash:npm:test",
-        "displayName": "npm test",
-        "addedAt": 1703001234567
-      }
-    ],
-    "deniedPatterns": [],
-    "additionalDirectories": [
-      {
-        "path": "/Users/dev/shared-config",
-        "canWrite": false,
-        "addedAt": 1703001234567
-      }
-    ],
-    "allowedUrlPatterns": [
-      {
-        "pattern": "*.github.com",
-        "description": "GitHub API access",
-        "addedAt": 1703001234567
-      }
-    ]
+    "permissionMode": "ask"
   }
 }
 ```
+
+| permissionMode Value | Meaning |
+|---------------------|---------|
+| `null` | Untrusted - agent cannot run, trust dialog shown |
+| `"ask"` | Trusted with smart permissions (recommended) |
+| `"allow-all"` | Trusted with auto-approve for file operations |
+| `"bypass-all"` | Trusted with all operations auto-approved |
+
+When `permissionMode` is `null` or undefined, the workspace is considered untrusted and the ProjectTrustToast dialog will be shown before the agent can operate.
+
+**Tool Patterns** (managed by ClaudeSettingsManager):
+- Uses Claude Code's native settings file format
+- Compatible with Claude CLI (`claude` command)
+- Settings are merged from multiple sources
+
+#### Settings File Hierarchy
+
+Settings are read and merged in this order (later files override earlier):
+
+| File | Scope | Purpose |
+|------|-------|---------|
+| `~/.claude/settings.json` | User-level | Global defaults for all projects |
+| `.claude/settings.json` | Project-shared | Team settings (commit to git) |
+| `.claude/settings.local.json` | Project-personal | Your patterns (gitignored) |
+
+When you approve a pattern with "Always in this project", it's saved to `.claude/settings.local.json`:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm test:*)",
+      "Bash(git commit:*)",
+      "WebFetch(domain:api.github.com)"
+    ],
+    "deny": []
+  },
+  "additionalDirectories": [
+    "/Users/dev/shared-config"
+  ]
+}
+```
+
+#### Pattern Format
+
+Patterns use Claude Code SDK format:
+
+| Tool | Pattern Format | Example |
+|------|---------------|---------|
+| Bash | `Bash(command:*)` | `Bash(npm test:*)` |
+| Bash (git) | `Bash(git subcommand:*)` | `Bash(git commit:*)` |
+| WebFetch | `WebFetch(domain:host)` | `WebFetch(domain:github.com)` |
+| WebFetch (all) | `WebFetch` | Allows all domains |
+| MCP tools | `mcp__server__tool` | `mcp__server__function_name` |
+
+#### Session-Level Caching
+
+In addition to file-based persistence, patterns are cached in memory:
+
+- The `sessionApprovedPatterns` Set holds all patterns approved this session
+- Patterns approved with "session" or "always" scope are added to this cache
+- This prevents re-prompting for the same pattern within one app session
+- The Claude SDK doesn't hot-reload settings files, so this cache is essential for "always" approvals to take effect immediately
 
 ## Integration with Claude Code SDK
 
@@ -373,6 +474,47 @@ These are flagged with warnings even if the pattern is allowed.
 Web requests are checked against:
 1. Allowed URL patterns
 2. Blocked domains (if configured)
+
+## Cross-Device Support
+
+The permission system supports approval from mobile devices and cross-session workflows:
+
+### How It Works
+
+1. **Request Persistence**: Permission requests are stored as messages in the AgentMessagesRepository
+2. **Polling Mechanism**: Mobile/remote clients poll for pending requests via `pollForPermissionResponse()`
+3. **Response Messages**: Responses are also persisted as messages with a linking `requestId`
+4. **Desktop Fast Path**: Desktop uses IPC for immediate response, with polling as fallback
+
+### Message Types
+
+```typescript
+// Permission request stored in database
+{
+  type: 'permission_request',
+  requestId: 'unique-id',
+  toolName: 'Bash',
+  pattern: 'Bash(npm test:*)',
+  description: 'Run npm test',
+  timestamp: 1703001234567
+}
+
+// Permission response stored in database
+{
+  type: 'permission_response',
+  requestId: 'unique-id',  // Links to request
+  decision: 'allow',
+  scope: 'always',
+  respondedBy: 'mobile',
+  timestamp: 1703001234568
+}
+```
+
+### Use Cases
+
+- Approve tool calls from the mobile app while desktop is running
+- Resume sessions across devices with pending permissions
+- Review and respond to permissions asynchronously
 
 ## Testing
 

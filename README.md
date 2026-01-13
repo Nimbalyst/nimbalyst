@@ -47,6 +47,7 @@ cd packages/electron && npm run build:mac:local
 - **Implementation planning**: Spin up AI coding agents that can read your repository, outline proposed changes, and turn them into actionable tasks.
 - **Documentation copilots**: Generate architecture notes, release checklists, and onboarding docs that stay grounded in your source of truth.
 - **Live task tracking**: Keep features, ideas, and todos synced inside the document so every conversation has an owner and next step.
+- **Git worktree isolation**: Create isolated AI coding sessions in separate git worktrees, enabling safe experimentation on dedicated branches without affecting your main workspace.
 
 ### 🔥 Core Editor Features
 - **Rich Text Editing**: Full-featured WYSIWYG editor with support for bold, italic, underline, strikethrough, and more

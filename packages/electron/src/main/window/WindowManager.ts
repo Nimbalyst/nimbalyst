@@ -445,7 +445,9 @@ export function createWindow(
                 // console.log('[MAIN] Loading from ELECTRON_RENDERER_URL:', url.toString());
                 return window.loadURL(url.toString());
             } else if (process.env.NODE_ENV === 'development') {
-                const url = `http://localhost:5273?${themeParam}`;
+                // Use VITE_PORT if set (for isolated dev mode), otherwise default to 5273
+                const devPort = process.env.VITE_PORT || '5273';
+                const url = `http://localhost:${devPort}?${themeParam}`;
                 // console.log('[MAIN] Loading from dev server:', url);
                 return window.loadURL(url);
             } else {

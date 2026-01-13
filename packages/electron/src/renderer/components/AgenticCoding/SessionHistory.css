@@ -418,6 +418,7 @@
 
 .session-history-new-button,
 .session-history-new-terminal-button,
+.session-history-worktree-button,
 .session-history-import-button,
 .session-history-search-button {
   display: flex;
@@ -435,6 +436,7 @@
 
 .session-history-new-button:hover,
 .session-history-new-terminal-button:hover,
+.session-history-worktree-button:hover,
 .session-history-import-button:hover,
 .session-history-search-button:hover {
   background: var(--surface-hover);
@@ -443,6 +445,7 @@
 
 .session-history-new-button:active,
 .session-history-new-terminal-button:active,
+.session-history-worktree-button:active,
 .session-history-import-button:active,
 .session-history-search-button:active {
   background: var(--surface-tertiary);
@@ -450,7 +453,61 @@
 
 .session-history-new-button svg,
 .session-history-new-terminal-button svg,
+.session-history-worktree-button svg,
 .session-history-import-button svg,
 .session-history-search-button svg {
   display: block;
+}
+
+/* New dropdown (session/worktree/terminal) */
+.session-history-new-dropdown {
+  position: relative;
+}
+
+.session-history-new-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 160px;
+  background-color: var(--surface-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 0.25rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  overflow: hidden;
+}
+
+.session-history-new-option {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  text-align: left;
+  gap: 0.5rem;
+}
+
+.session-history-new-option:hover {
+  background-color: var(--surface-hover);
+}
+
+.session-history-new-option svg {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.session-history-new-option span {
+  flex: 1;
+}
+
+.session-history-new-option-shortcut {
+  flex: 0 0 auto !important;
+  font-size: 0.6875rem;
+  color: var(--text-secondary);
+  opacity: 0.7;
 }

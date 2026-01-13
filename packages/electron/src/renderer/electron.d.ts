@@ -173,7 +173,7 @@ interface ElectronAPI {
   // AI operations (flat methods)
   aiHasApiKey: () => Promise<boolean>;
   aiInitialize: (provider?: string, apiKey?: string) => Promise<any>;
-  aiCreateSession: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio', documentContext?: any, workspacePath?: string, modelId?: string, sessionType?: 'chat' | 'planning' | 'coding' | 'terminal') => Promise<any>;
+  aiCreateSession: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio', documentContext?: any, workspacePath?: string, modelId?: string, sessionType?: 'chat' | 'planning' | 'coding' | 'terminal', worktreeId?: string) => Promise<any>;
   aiSendMessage: (message: string, documentContext?: any, sessionId?: string, workspacePath?: string) => Promise<any>;
   aiGetSessions: (workspacePath?: string) => Promise<any>;
   aiLoadSession: (sessionId: string, workspacePath?: string, trackAsResume?: boolean) => Promise<any>;
@@ -241,7 +241,7 @@ interface ElectronAPI {
   ai: {
     hasApiKey: () => Promise<boolean>;
     initialize: (provider?: string, apiKey?: string) => Promise<any>;
-    createSession: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio', documentContext?: any, workspacePath?: string, modelId?: string, sessionType?: 'chat' | 'planning' | 'coding' | 'terminal') => Promise<any>;
+    createSession: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio', documentContext?: any, workspacePath?: string, modelId?: string, sessionType?: 'chat' | 'planning' | 'coding' | 'terminal', worktreeId?: string) => Promise<any>;
     sendMessage: (message: string, documentContext?: any, sessionId?: string, workspacePath?: string) => Promise<any>;
     getSessions: (workspacePath?: string) => Promise<any>;
     getSessionList: (workspacePath?: string) => Promise<any>;
@@ -397,7 +397,7 @@ interface ElectronAPI {
 
   // Terminal operations
   terminal: {
-    createSession: (workspacePath: string, cwd?: string) => Promise<{ success: boolean; sessionId: string; error?: string }>;
+    createSession: (workspacePath: string, options?: { cwd?: string; worktreeId?: string; worktreePath?: string }) => Promise<{ success: boolean; sessionId: string; error?: string }>;
     initialize: (sessionId: string, options?: { cwd?: string; cols?: number; rows?: number }) => Promise<{ success: boolean; alreadyActive?: boolean; error?: string }>;
     isActive: (sessionId: string) => Promise<boolean>;
     write: (sessionId: string, data: string) => Promise<void>;
@@ -408,6 +408,70 @@ interface ElectronAPI {
     onOutput: (callback: (data: { sessionId: string; data: string }) => void) => () => void;
     onExited: (callback: (data: { sessionId: string; exitCode: number }) => void) => () => void;
   };
+
+  // Worktree operations
+  worktreeCreate: (workspacePath: string, name?: string) => Promise<{
+    success: boolean;
+    error?: string;
+    worktree?: {
+      id: string;
+      name: string;
+      path: string;
+      branch: string;
+      baseBranch: string;
+      projectPath: string;
+      createdAt: number;
+      updatedAt?: number;
+    };
+  }>;
+  worktreeGetStatus: (worktreePath: string) => Promise<{
+    success: boolean;
+    error?: string;
+    status?: {
+      hasUncommittedChanges: boolean;
+      modifiedFileCount: number;
+      commitsAhead: number;
+      commitsBehind: number;
+      isMerged: boolean;
+    };
+  }>;
+  worktreeDelete: (worktreeId: string, workspacePath: string) => Promise<{
+    success: boolean;
+    error?: string;
+  }>;
+  worktreeList: (workspacePath: string) => Promise<{
+    success: boolean;
+    error?: string;
+    worktrees?: Array<{
+      id: string;
+      name: string;
+      path: string;
+      branch: string;
+      baseBranch: string;
+      projectPath: string;
+      createdAt: number;
+      updatedAt?: number;
+    }>;
+  }>;
+  worktreeGet: (id: string) => Promise<{
+    success: boolean;
+    error?: string;
+    worktree?: {
+      id: string;
+      name: string;
+      path: string;
+      branch: string;
+      baseBranch: string;
+      projectPath: string;
+      createdAt: number;
+      updatedAt?: number;
+    } | null;
+  }>;
+  worktreeRebase: (worktreePath: string) => Promise<{
+    success: boolean;
+    error?: string;
+    message?: string;
+  }>;
 
   // Open external links
   openExternal: (url: string) => Promise<void>;
