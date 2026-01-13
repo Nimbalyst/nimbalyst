@@ -414,12 +414,51 @@ app.whenReady().then(async () => {
       } catch (error) {
         logger.main.error('Error initializing database:', error);
 
-        // Show error dialog to user
         const errorMessage = error instanceof Error ? error.message : String(error);
-        dialog.showErrorBox(
-            'Database Initialization Failed',
-            `Failed to initialize the database system.\n\nError: ${errorMessage}\n\nThe application cannot continue without the database.`
-        );
+
+        // Detect WASM runtime crash (PGLite uses WASM internally)
+        const isWasmRuntimeCrash = errorMessage.includes('exit(1)') ||
+                                   errorMessage.includes('Program terminated') ||
+                                   errorMessage.includes('ExitStatus');
+
+        // Send analytics about the failure
+        try {
+            const analytics = AnalyticsService.getInstance();
+            if (isWasmRuntimeCrash) {
+                // Track as a known error for monitoring specific failure patterns
+                analytics.sendEvent('known_error', {
+                    errorId: 'pglite_wasm_runtime_crash',
+                    context: 'database_initialization'
+                });
+            } else {
+                // Track generic database initialization failure
+                analytics.sendEvent('known_error', {
+                    errorId: 'database_initialization_failed',
+                    context: 'database_initialization',
+                    errorMessage: errorMessage.slice(0, 200) // Truncate for privacy
+                });
+            }
+        } catch {
+            // Analytics failure shouldn't block error handling
+        }
+
+        // Show appropriate error dialog
+        if (isWasmRuntimeCrash) {
+            dialog.showErrorBox(
+                'Database Initialization Failed',
+                `The database system failed to start due to a system-level issue.\n\n` +
+                `This can sometimes happen when system resources are constrained.\n\n` +
+                `Please try:\n` +
+                `1. Restart the application\n` +
+                `2. If that doesn't work, restart your computer\n\n` +
+                `The application will now close.`
+            );
+        } else {
+            dialog.showErrorBox(
+                'Database Initialization Failed',
+                `Failed to initialize the database system.\n\nError: ${errorMessage}\n\nThe application cannot continue without the database.`
+            );
+        }
 
         // Exit the app
         app.quit();

@@ -238,8 +238,27 @@ analyticsService.sendEvent('window_closed', {
 });
 ```
 
-### Tracking Errors
-(TBD, not implemented yet)
+### Tracking Known Errors
+
+Use the `known_error` event to track recognized error conditions that we want to monitor. This provides a single event type for all known errors, with an `errorId` property to distinguish between them.
+
+```typescript
+// Track a known error condition
+analyticsService.sendEvent('known_error', {
+  errorId: 'pglite_wasm_runtime_crash',  // Unique identifier for this error type
+  context: 'database_initialization',     // Where the error occurred
+  // Optional: include a truncated error message for unknown variants
+  // errorMessage: errorMessage.slice(0, 200),
+});
+```
+
+**Guidelines for known errors:**
+
+1. **Use a unique `errorId`**: Choose a descriptive snake_case identifier (e.g., `pglite_wasm_runtime_crash`)
+2. **Include `context`**: Describe where in the application the error occurred
+3. **Truncate error messages**: If including raw error text, truncate to 200 chars to avoid PII in stack traces
+4. **Document in POSTHOG_EVENTS.md**: Add new error IDs to the "Known Error IDs" table
+5. **Don't include file paths**: Error messages may contain paths - sanitize or omit them
 
 ## Lifecycle Management
 
