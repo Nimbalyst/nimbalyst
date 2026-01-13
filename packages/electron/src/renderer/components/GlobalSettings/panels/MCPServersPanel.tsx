@@ -1194,6 +1194,33 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
           )}
         </div>
 
+        {/* Custom/Scratch - always show unless searching */}
+        {!templateSearch && (
+          <div className="mcp-template-category">
+            <h4 className="mcp-template-category-title">Custom Configuration</h4>
+            <div className="mcp-template-grid">
+              <div
+                className="mcp-template-card mcp-template-scratch-card"
+                onClick={() => handleTemplateSelect(null)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleTemplateSelect(null);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+                aria-label="Start from scratch - Configure all settings manually"
+              >
+                <div className="mcp-template-scratch-text">
+                  + Start from scratch<br />
+                  <small>Configure all settings manually</small>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Templates by Category */}
         {CATEGORY_ORDER.map(category => {
           const templates = templatesByCategory[category];
@@ -1243,33 +1270,6 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
         {filteredTemplates.length === 0 && templateSearch && (
           <div className="mcp-template-no-results" role="status" aria-live="polite">
             No templates match "{templateSearch}"
-          </div>
-        )}
-
-        {/* Custom/Scratch - always show unless searching */}
-        {!templateSearch && (
-          <div className="mcp-template-category">
-            <h4 className="mcp-template-category-title">Custom Configuration</h4>
-            <div className="mcp-template-grid">
-              <div
-                className="mcp-template-card mcp-template-scratch-card"
-                onClick={() => handleTemplateSelect(null)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handleTemplateSelect(null);
-                  }
-                }}
-                role="button"
-                tabIndex={0}
-                aria-label="Start from scratch - Configure all settings manually"
-              >
-                <div className="mcp-template-scratch-text">
-                  + Start from scratch<br />
-                  <small>Configure all settings manually</small>
-                </div>
-              </div>
-            </div>
           </div>
         )}
       </div>
