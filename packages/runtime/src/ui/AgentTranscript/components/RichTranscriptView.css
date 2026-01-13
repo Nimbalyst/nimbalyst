@@ -386,7 +386,9 @@
   font-weight: 600;
   display: flex;
   flex-wrap: wrap;
+  align-items: baseline;
   gap: 0.25rem;
+  line-height: 1.4;
 }
 
 .rich-transcript-edit-card__file {
@@ -473,7 +475,9 @@
   border-radius: 0.25rem;
   padding: 0.5rem;
   white-space: pre-wrap;
-  line-height: 1.4;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  line-height: 1.5;
 }
 
 .rich-transcript-edit-card__diffs {

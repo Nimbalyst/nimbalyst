@@ -63,7 +63,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ edit, filePath: contextF
     return (
       <div className="diff-viewer" style={{ maxHeight }}>
         {renderFileHeader(filePath)}
-        <div className="diff-content">
+        <div className="diff-content"><div className="diff-content-inner">
           {/* Show removed lines */}
           {oldLines.length > 0 && oldLines.some((line: string) => line.trim()) && (
             <>
@@ -87,7 +87,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ edit, filePath: contextF
               ))}
             </>
           )}
-        </div>
+        </div></div>
       </div>
     );
   }
@@ -112,7 +112,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ edit, filePath: contextF
           return (
             <div key={idx} className="diff-viewer" style={{ maxHeight, marginBottom: idx < replacements.length - 1 ? '0.5rem' : '0' }}>
               {renderFileHeader(`${filePath}${replacements.length > 1 ? ` (${idx + 1}/${replacements.length})` : ''}`)}
-              <div className="diff-content">
+              <div className="diff-content"><div className="diff-content-inner">
                 {/* Show removed lines */}
                 {oldLines.length > 0 && oldLines.some((line: string) => line.trim()) && (
                   <>
@@ -136,7 +136,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ edit, filePath: contextF
                     ))}
                   </>
                 )}
-              </div>
+              </div></div>
             </div>
           );
         })}
@@ -150,14 +150,14 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ edit, filePath: contextF
     return (
       <div className="diff-viewer" style={{ maxHeight }}>
         {renderFileHeader(filePath)}
-        <div className="diff-content">
+        <div className="diff-content"><div className="diff-content-inner">
           {lines.map((line: string, i: number) => (
             <div key={`add-${i}`} className="diff-line added">
               <span className="diff-line-marker">+</span>
               <span className="diff-line-content">{line || ' '}</span>
             </div>
           ))}
-        </div>
+        </div></div>
       </div>
     );
   }
@@ -166,7 +166,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ edit, filePath: contextF
   return (
     <div className="diff-viewer" style={{ maxHeight }}>
       {renderFileHeader(filePath)}
-      <div className="diff-content">
+      <div className="diff-content"><div className="diff-content-inner">
         {edit.operation && (
           <div className="diff-line info">
             <span className="diff-line-marker">•</span>
@@ -179,7 +179,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ edit, filePath: contextF
             <span className="diff-line-content">{edit.instruction}</span>
           </div>
         )}
-      </div>
+      </div></div>
     </div>
   );
 };
