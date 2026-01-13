@@ -251,6 +251,15 @@ The `known_error` event uses an `errorId` property to identify specific error co
 | `quit_confirmation_shown` | `index.ts:757` | User attempts quit with active AI session | `reason` (active_ai_session) | v0.45.25 (2025-11-14) |  |
 | `quit_confirmation_result` | `index.ts:774, 783` | User responds to quit confirmation dialog | `result` (quit_anyway/cancelled) | v0.45.25 (2025-11-14) |  |
 
+### Voice Mode
+
+| Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |
+| --- | --- | --- | --- | --- | --- |
+| `voice_mode_enabled` | `appSettings.ts:135` | User enables voice mode in settings | None | (pending release) |  |
+| `voice_mode_disabled` | `appSettings.ts:135` | User disables voice mode in settings | None | (pending release) |  |
+| `voice_session_started` | `VoiceModeService.ts:479` | User starts a voice session (clicks mic button) | None | (pending release) |  |
+| `voice_session_ended` | `VoiceModeService.ts:36` | Voice session ends | `reason` (user_stopped/timeout/error)<br/>`durationCategory` (short < 1min / medium 1-5min / long > 5min) | (pending release) |  |
+
 ### Mobile App
 
 | Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |

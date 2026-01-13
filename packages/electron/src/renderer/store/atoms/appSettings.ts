@@ -16,6 +16,7 @@
  */
 
 import { atom } from 'jotai';
+import posthog from 'posthog-js';
 
 // Voice type - all available OpenAI Realtime voices
 export type VoiceId = 'alloy' | 'ash' | 'ballad' | 'coral' | 'echo' | 'sage' | 'shimmer' | 'verse' | 'marin' | 'cedar';
@@ -128,6 +129,12 @@ export const setVoiceModeSettingsAtom = atom(
   (get, set, updates: Partial<VoiceModeSettings>) => {
     const current = get(voiceModeSettingsAtom);
     const newSettings = { ...current, ...updates };
+
+    // Track when voice mode is enabled/disabled
+    if (updates.enabled !== undefined && updates.enabled !== current.enabled) {
+      posthog.capture(updates.enabled ? 'voice_mode_enabled' : 'voice_mode_disabled');
+    }
+
     set(voiceModeSettingsAtom, newSettings);
     schedulePersist(newSettings);
   }
