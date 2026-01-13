@@ -198,3 +198,116 @@
   color: var(--warning-color);
   flex-shrink: 0;
 }
+
+/* Header Container */
+.file-gutter__header-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.25rem 0.5rem;
+}
+
+/* Control Bar */
+.file-gutter__controls {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.file-gutter__control-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--border-primary);
+  border-radius: 0.25rem;
+  background-color: var(--surface-primary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.file-gutter__control-button:hover:not(:disabled) {
+  background-color: var(--surface-hover);
+  color: var(--text-primary);
+  border-color: var(--border-secondary);
+}
+
+.file-gutter__control-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.file-gutter__control-button--active {
+  background-color: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.file-gutter__control-button--active:hover {
+  background-color: var(--primary-color-dark, var(--primary-color));
+  border-color: var(--primary-color-dark, var(--primary-color));
+}
+
+/* Directory Node */
+.file-gutter__directory-node {
+  margin-bottom: 0.125rem;
+}
+
+.file-gutter__directory-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background-color: transparent;
+  border: none;
+  border-radius: 0.25rem;
+  transition: all 0.2s;
+  cursor: pointer;
+  text-align: left;
+}
+
+.file-gutter__directory-header:hover {
+  background-color: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.file-gutter__directory-chevron {
+  flex-shrink: 0;
+  transition: transform 0.2s;
+  color: var(--text-tertiary);
+}
+
+.file-gutter__directory-icon {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.file-gutter__directory-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-gutter__directory-count {
+  flex-shrink: 0;
+  padding: 0.125rem 0.25rem;
+  background-color: var(--surface-tertiary);
+  border-radius: 0.25rem;
+  font-size: 9px;
+  color: var(--text-tertiary);
+}
+
+.file-gutter__directory-children {
+  margin-top: 0.125rem;
+}

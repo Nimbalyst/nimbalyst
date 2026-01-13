@@ -24,10 +24,20 @@ interface FileGitStatus {
   gitStatusCode?: string;
 }
 
+interface DirectoryNode {
+  path: string;
+  displayPath: string;
+  files: FileData[];
+  subdirectories: Map<string, DirectoryNode>;
+  fileCount: number;
+}
+
 export function FileGutter({ sessionId, workspacePath, type, onFileClick, pendingReviewFiles }: FileGutterProps) {
   const [files, setFiles] = useState<FileData[]>([]);
   const [isExpanded, setIsExpanded] = useState(true);
   const [gitStatus, setGitStatus] = useState<Record<string, FileGitStatus>>({});
+  const [groupByDirectory, setGroupByDirectory] = useState(false);
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
 
   // Convert absolute path to relative path from workspace root
   const getRelativePath = (filePath: string): string => {
@@ -57,6 +67,106 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick, pendin
     });
     return Array.from(groups.values());
   }, [files]);
+
+  // Build directory tree from file list
+  const buildDirectoryTree = (fileList: FileData[]): DirectoryNode => {
+    const root: DirectoryNode = {
+      path: '',
+      displayPath: '',
+      files: [],
+      subdirectories: new Map(),
+      fileCount: 0
+    };
+
+    fileList.forEach(file => {
+      const relativePath = getRelativePath(file.filePath);
+      const parts = relativePath.split('/');
+
+      if (parts.length === 1) {
+        root.files.push(file);
+        root.fileCount++;
+        return;
+      }
+
+      let currentNode = root;
+      const dirParts = parts.slice(0, -1);
+
+      dirParts.forEach((part, index) => {
+        const pathSoFar = dirParts.slice(0, index + 1).join('/');
+
+        if (!currentNode.subdirectories.has(part)) {
+          currentNode.subdirectories.set(part, {
+            path: pathSoFar,
+            displayPath: part,
+            files: [],
+            subdirectories: new Map(),
+            fileCount: 0
+          });
+        }
+
+        currentNode = currentNode.subdirectories.get(part)!;
+      });
+
+      currentNode.files.push(file);
+      currentNode.fileCount++;
+    });
+
+    return collapseDirectoryTree(root);
+  };
+
+  const collapseDirectoryTree = (node: DirectoryNode): DirectoryNode => {
+    node.subdirectories.forEach((subdir, key) => {
+      node.subdirectories.set(key, collapseDirectoryTree(subdir));
+    });
+
+    if (node.subdirectories.size === 1 && node.files.length === 0) {
+      const [childKey, childNode] = Array.from(node.subdirectories.entries())[0];
+      const newDisplayPath = node.displayPath
+        ? `${node.displayPath}/${childNode.displayPath}`
+        : childNode.displayPath;
+
+      return {
+        ...childNode,
+        displayPath: newDisplayPath
+      };
+    }
+
+    return node;
+  };
+
+  const toggleFolder = (folderPath: string) => {
+    setExpandedFolders(prev => {
+      const next = new Set(prev);
+      if (next.has(folderPath)) {
+        next.delete(folderPath);
+      } else {
+        next.add(folderPath);
+      }
+      return next;
+    });
+  };
+
+  const getAllFolderPaths = (node: DirectoryNode, paths: string[] = []): string[] => {
+    if (node.path) {
+      paths.push(node.path);
+    }
+    node.subdirectories.forEach(subdir => {
+      getAllFolderPaths(subdir, paths);
+    });
+    return paths;
+  };
+
+  const expandAll = () => {
+    if (groupedFiles.length > 0) {
+      const tree = buildDirectoryTree(groupedFiles);
+      const allPaths = getAllFolderPaths(tree);
+      setExpandedFolders(new Set(allPaths));
+    }
+  };
+
+  const collapseAll = () => {
+    setExpandedFolders(new Set());
+  };
 
   useEffect(() => {
     if (!sessionId) {
@@ -229,74 +339,193 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick, pendin
     return <MaterialSymbol icon="edit_document" size={14} className="file-gutter__section-icon" />;
   };
 
+  const renderDirectoryNode = (node: DirectoryNode, depth: number = 0): React.ReactNode => {
+    const isExpanded = expandedFolders.has(node.path);
+    const hasContent = node.files.length > 0 || node.subdirectories.size > 0;
+
+    return (
+      <div key={node.path} className="file-gutter__directory-node" style={{ marginLeft: `${depth * 12}px` }}>
+        {node.displayPath && (
+          <button
+            onClick={() => toggleFolder(node.path)}
+            className="file-gutter__directory-header"
+          >
+            <MaterialSymbol
+              icon={isExpanded ? "expand_more" : "chevron_right"}
+              size={14}
+              className="file-gutter__directory-chevron"
+            />
+            <MaterialSymbol
+              icon={isExpanded ? "folder_open" : "folder"}
+              size={14}
+              className="file-gutter__directory-icon"
+            />
+            <span className="file-gutter__directory-path">{node.displayPath}</span>
+            <span className="file-gutter__directory-count">{node.fileCount}</span>
+          </button>
+        )}
+
+        {(isExpanded || !node.displayPath) && hasContent && (
+          <div className="file-gutter__directory-children">
+            {Array.from(node.subdirectories.values()).map(subdir =>
+              renderDirectoryNode(subdir, node.displayPath ? depth + 1 : depth)
+            )}
+
+            {node.files.map((file) => {
+              const fileName = getFileName(file.filePath);
+              const hasStats = type === 'edited' && (file.linesAdded || file.linesRemoved);
+              const hasPendingReview = type === 'edited' && pendingReviewFiles?.has(file.filePath);
+
+              return (
+                <button
+                  key={file.filePath}
+                  onClick={() => handleFileClick(file.filePath)}
+                  className={`file-gutter__file ${hasPendingReview ? 'file-gutter__file--pending' : ''}`}
+                  title={getRelativePath(file.filePath)}
+                  style={{ marginLeft: `${(node.displayPath ? depth + 1 : depth) * 12 + 24}px` }}
+                >
+                  <div className="file-gutter__file-content">
+                    {hasPendingReview && (
+                      <MaterialSymbol
+                        icon="rate_review"
+                        size={14}
+                        className="file-gutter__pending-icon"
+                        title="Pending review"
+                      />
+                    )}
+                    {file.operation && (
+                      <div className="file-gutter__file-operation-icon">
+                        {getOperationIcon(file.operation)}
+                      </div>
+                    )}
+                    {renderGitStatus(file.filePath)}
+                    <div className="file-gutter__file-info">
+                      <div className="file-gutter__file-name">
+                        {fileName}
+                      </div>
+                    </div>
+                    {hasStats && (
+                      <div className="file-gutter__file-stats">
+                        {file.linesAdded ? (
+                          <span className="file-gutter__file-stats-added">+{file.linesAdded}</span>
+                        ) : null}
+                        {file.linesRemoved ? (
+                          <span className="file-gutter__file-stats-removed">-{file.linesRemoved}</span>
+                        ) : null}
+                      </div>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const label = type === 'referenced' ? 'Referenced' : 'Edited';
 
   return (
     <div className={`file-gutter file-gutter--${type}`}>
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="file-gutter__header"
-      >
-        <div className="file-gutter__header-content">
-          {getSectionIcon()}
-          <span>{label}</span>
-          <span className="file-gutter__count">{groupedFiles.length}</span>
-        </div>
-        <MaterialSymbol
-          icon="expand_more"
-          size={16}
-          className={`file-gutter__chevron ${isExpanded ? '' : 'file-gutter__chevron--collapsed'}`}
-        />
-      </button>
+      <div className="file-gutter__header-container">
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="file-gutter__header"
+        >
+          <div className="file-gutter__header-content">
+            {getSectionIcon()}
+            <span>{label}</span>
+            <span className="file-gutter__count">{groupedFiles.length}</span>
+          </div>
+          <MaterialSymbol
+            icon="expand_more"
+            size={16}
+            className={`file-gutter__chevron ${isExpanded ? '' : 'file-gutter__chevron--collapsed'}`}
+          />
+        </button>
+
+        {groupedFiles.length > 0 && (
+          <div className="file-gutter__controls">
+            <button
+              onClick={() => setGroupByDirectory(!groupByDirectory)}
+              className={`file-gutter__control-button ${groupByDirectory ? 'file-gutter__control-button--active' : ''}`}
+              title="Group by directory"
+            >
+              <MaterialSymbol icon="folder" size={16} />
+            </button>
+            <button
+              onClick={expandAll}
+              disabled={!groupByDirectory}
+              className="file-gutter__control-button"
+              title="Expand all"
+            >
+              <MaterialSymbol icon="unfold_more" size={16} />
+            </button>
+            <button
+              onClick={collapseAll}
+              disabled={!groupByDirectory}
+              className="file-gutter__control-button"
+              title="Collapse all"
+            >
+              <MaterialSymbol icon="unfold_less" size={16} />
+            </button>
+          </div>
+        )}
+      </div>
 
       {isExpanded && (
         <div className="file-gutter__files">
-          {groupedFiles.map((file) => {
-            const fileName = getFileName(file.filePath);
-            const hasStats = type === 'edited' && (file.linesAdded || file.linesRemoved);
-            const hasPendingReview = type === 'edited' && pendingReviewFiles?.has(file.filePath);
+          {groupByDirectory ? (
+            renderDirectoryNode(buildDirectoryTree(groupedFiles))
+          ) : (
+            groupedFiles.map((file) => {
+              const fileName = getFileName(file.filePath);
+              const hasStats = type === 'edited' && (file.linesAdded || file.linesRemoved);
+              const hasPendingReview = type === 'edited' && pendingReviewFiles?.has(file.filePath);
 
-            return (
-              <button
-                key={file.filePath}
-                onClick={() => handleFileClick(file.filePath)}
-                className={`file-gutter__file ${hasPendingReview ? 'file-gutter__file--pending' : ''}`}
-                title={getRelativePath(file.filePath)}
-              >
-                <div className="file-gutter__file-content">
-                  {hasPendingReview && (
-                    <MaterialSymbol
-                      icon="rate_review"
-                      size={14}
-                      className="file-gutter__pending-icon"
-                      title="Pending review"
-                    />
-                  )}
-                  {file.operation && (
-                    <div className="file-gutter__file-operation-icon">
-                      {getOperationIcon(file.operation)}
+              return (
+                <button
+                  key={file.filePath}
+                  onClick={() => handleFileClick(file.filePath)}
+                  className={`file-gutter__file ${hasPendingReview ? 'file-gutter__file--pending' : ''}`}
+                  title={getRelativePath(file.filePath)}
+                >
+                  <div className="file-gutter__file-content">
+                    {hasPendingReview && (
+                      <MaterialSymbol
+                        icon="rate_review"
+                        size={14}
+                        className="file-gutter__pending-icon"
+                        title="Pending review"
+                      />
+                    )}
+                    {file.operation && (
+                      <div className="file-gutter__file-operation-icon">
+                        {getOperationIcon(file.operation)}
+                      </div>
+                    )}
+                    {renderGitStatus(file.filePath)}
+                    <div className="file-gutter__file-info">
+                      <div className="file-gutter__file-name">
+                        {fileName}
+                      </div>
                     </div>
-                  )}
-                  {renderGitStatus(file.filePath)}
-                  <div className="file-gutter__file-info">
-                    <div className="file-gutter__file-name">
-                      {fileName}
-                    </div>
+                    {hasStats && (
+                      <div className="file-gutter__file-stats">
+                        {file.linesAdded ? (
+                          <span className="file-gutter__file-stats-added">+{file.linesAdded}</span>
+                        ) : null}
+                        {file.linesRemoved ? (
+                          <span className="file-gutter__file-stats-removed">-{file.linesRemoved}</span>
+                        ) : null}
+                      </div>
+                    )}
                   </div>
-                  {hasStats && (
-                    <div className="file-gutter__file-stats">
-                      {file.linesAdded ? (
-                        <span className="file-gutter__file-stats-added">+{file.linesAdded}</span>
-                      ) : null}
-                      {file.linesRemoved ? (
-                        <span className="file-gutter__file-stats-removed">-{file.linesRemoved}</span>
-                      ) : null}
-                    </div>
-                  )}
-                </div>
-              </button>
-            );
-          })}
+                </button>
+              );
+            })
+          )}
         </div>
       )}
     </div>
