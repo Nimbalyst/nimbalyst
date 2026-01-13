@@ -28,6 +28,11 @@ export const ArchiveProgress: React.FC<ArchiveProgressProps> = ({ onWorktreeArch
 
   // Load initial tasks and subscribe to progress updates
   useEffect(() => {
+    // Guard against archive API not being available (e.g., during hot reload before preload rebuilds)
+    if (!window.electronAPI?.archive) {
+      return;
+    }
+
     // Get initial tasks
     window.electronAPI.archive.getTasks().then((result: { success: boolean; tasks: ArchiveTask[] }) => {
       if (result.success) {
