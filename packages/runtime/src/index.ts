@@ -57,6 +57,21 @@ export type {
   DocumentHeaderProvider,
   DocumentHeaderComponentProps,
 } from './plugins/TrackerPlugin';
+// Generic Frontmatter Plugin
+// Import triggers registration with DocumentHeaderRegistry (priority 50, below tracker's 100)
+export {
+  GenericFrontmatterHeader,
+  shouldRenderGenericFrontmatter,
+  extractFrontmatter,
+  parseFields,
+  inferFieldType,
+  updateFieldInFrontmatter,
+  hasGenericFrontmatter,
+} from './plugins/FrontmatterPlugin';
+export type {
+  InferredField,
+  InferredFieldType,
+} from './plugins/FrontmatterPlugin';
 // Virtual Documents
 export * from './constants/virtualDocs';
 export * from './documents/virtualDocTypes';

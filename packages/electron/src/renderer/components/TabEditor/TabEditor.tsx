@@ -30,6 +30,8 @@ import {
 } from 'rexical';
 import { $getRoot, $getSelection, $isRangeSelection, SKIP_SCROLL_INTO_VIEW_TAG, COMMAND_PRIORITY_LOW } from 'lexical';
 import { DocumentHeaderContainer } from '@nimbalyst/runtime/plugins/TrackerPlugin/documentHeader';
+// Side-effect import: registers GenericFrontmatterHeader with DocumentHeaderRegistry
+import '@nimbalyst/runtime/plugins/FrontmatterPlugin';
 import { setTextSelection, clearTextSelection } from '../UnifiedAI/TextSelectionIndicator';
 import { FixedTabHeaderContainer, FixedTabHeaderRegistry } from '@nimbalyst/runtime/plugins/shared/fixedTabHeader';
 import { UnifiedDiffHeader, LexicalDiffHeaderAdapter } from '../UnifiedDiffHeader';

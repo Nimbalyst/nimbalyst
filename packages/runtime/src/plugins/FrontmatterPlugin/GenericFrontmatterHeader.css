@@ -1,0 +1,300 @@
+/**
+ * Generic Frontmatter Header styles
+ * Follows patterns from StatusBar.css but with a simpler layout
+ */
+
+.frontmatter-header {
+  background: var(--surface-secondary);
+  padding: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  position: relative;
+  z-index: 1;
+}
+
+.frontmatter-header-collapsed {
+  padding: 8px 12px;
+}
+
+.frontmatter-header-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 4px 8px;
+  margin: -4px -8px 12px -8px;
+  border-radius: 4px;
+  transition: background 0.15s ease;
+}
+
+.frontmatter-header-title:hover {
+  background: var(--surface-hover);
+}
+
+.frontmatter-title-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.frontmatter-title-left .material-symbols-outlined {
+  font-size: 20px;
+}
+
+.frontmatter-collapse-icon {
+  color: var(--text-secondary);
+}
+
+.frontmatter-toggle {
+  background: transparent;
+  border: none;
+  padding: 6px 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s;
+  font-size: 13px;
+  width: 100%;
+}
+
+.frontmatter-toggle:hover {
+  background: var(--surface-tertiary);
+  color: var(--text-primary);
+}
+
+.frontmatter-field-count {
+  margin-left: auto;
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.frontmatter-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.frontmatter-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.frontmatter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 140px;
+  flex: 0 0 auto;
+}
+
+.frontmatter-field label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.frontmatter-field input[type="text"],
+.frontmatter-field input[type="number"],
+.frontmatter-field input[type="date"],
+.frontmatter-field input[type="url"] {
+  padding: 6px 8px;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  background: var(--surface-primary);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  transition: border-color 0.2s;
+}
+
+.frontmatter-field input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb, 59, 130, 246), 0.1);
+}
+
+/* Checkbox field */
+.frontmatter-field-checkbox {
+  flex-direction: row;
+  align-items: center;
+}
+
+.frontmatter-field-checkbox label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.frontmatter-field-checkbox input[type="checkbox"] {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+}
+
+/* Link field */
+.frontmatter-field-link {
+  min-width: 200px;
+  flex: 1;
+}
+
+.frontmatter-link-container {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.frontmatter-link-container input {
+  flex: 1;
+}
+
+.frontmatter-link-open {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  color: var(--text-secondary);
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.frontmatter-link-open:hover {
+  background: var(--surface-tertiary);
+  color: var(--primary-color);
+}
+
+/* Tags field */
+.frontmatter-field-tags {
+  min-width: 200px;
+  flex: 1;
+}
+
+.frontmatter-tags-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 4px;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  background: var(--surface-primary);
+  min-height: 32px;
+}
+
+.frontmatter-tags-container:focus-within {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb, 59, 130, 246), 0.1);
+}
+
+.frontmatter-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: var(--surface-tertiary);
+  border-radius: 12px;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.frontmatter-tag-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 2px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  border-radius: 50%;
+  transition: all 0.15s;
+}
+
+.frontmatter-tag-remove:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.frontmatter-tag-input {
+  border: none !important;
+  background: transparent !important;
+  padding: 2px 4px !important;
+  font-size: 12px;
+  min-width: 80px;
+  flex: 1;
+  box-shadow: none !important;
+}
+
+.frontmatter-tag-input:focus {
+  outline: none;
+}
+
+.frontmatter-tag-input::placeholder {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+/* Error state */
+.frontmatter-header-error {
+  background: var(--surface-secondary);
+}
+
+.frontmatter-error-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 8px 12px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 6px;
+  color: var(--text-primary);
+}
+
+.frontmatter-error-banner .material-symbols-outlined {
+  color: #ef4444;
+  flex-shrink: 0;
+}
+
+.frontmatter-error-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.frontmatter-error-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: #ef4444;
+}
+
+.frontmatter-error-message {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-family: monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .frontmatter-fields {
+    flex-direction: column;
+  }
+
+  .frontmatter-field {
+    width: 100%;
+  }
+}
