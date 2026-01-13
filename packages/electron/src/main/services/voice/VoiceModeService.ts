@@ -190,6 +190,13 @@ export function initVoiceModeService() {
         }
       });
 
+      poc.setOnError((error) => {
+        console.error('[VoiceModeService] Error from OpenAI:', error.type, error.message);
+        if (window && !window.isDestroyed()) {
+          window.webContents.send('voice-mode:error', { sessionId, error });
+        }
+      });
+
       // Track when connection is closed (for timeout/error disconnect reasons)
       const sessionStartTime = Date.now();
       poc.setOnDisconnect((reason) => {

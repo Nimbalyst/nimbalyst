@@ -29,6 +29,11 @@ export class AudioPlayback {
       throw new Error('Audio context not initialized');
     }
 
+    // Resume AudioContext if it's suspended (required by browser autoplay policies)
+    if (this.audioContext.state === 'suspended') {
+      await this.audioContext.resume();
+    }
+
     try {
       // Decode base64 to ArrayBuffer
       const pcm16Buffer = this.base64ToArrayBuffer(pcm16Base64);

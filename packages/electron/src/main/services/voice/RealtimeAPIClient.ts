@@ -49,6 +49,7 @@ export class RealtimeAPIClient {
   private onSubmitPromptCallback: ((prompt: string) => Promise<void>) | null = null;
   private onInterruptionCallback: (() => void) | null = null;
   private onDisconnectCallback: ((reason: 'timeout' | 'error' | 'user_stopped') => void) | null = null;
+  private onErrorCallback: ((error: { type: string; message: string }) => void) | null = null;
   private claudeCodeSessionId: string;
   private workspacePath: string | null;
   private window: Electron.BrowserWindow;
@@ -118,6 +119,13 @@ export class RealtimeAPIClient {
   }
 
   /**
+   * Set callback for errors (quota exceeded, rate limits, etc.)
+   */
+  setOnError(callback: (error: { type: string; message: string }) => void): void {
+    this.onErrorCallback = callback;
+  }
+
+  /**
    * Connect to OpenAI Realtime API via WebSocket
    */
   async connect(): Promise<void> {
@@ -184,9 +192,21 @@ export class RealtimeAPIClient {
         break;
 
       case 'response.done':
-        const usage = (event as any).response?.usage;
+        const response = (event as any).response;
+        const usage = response?.usage;
         if (usage) {
           this.trackTokenUsage(usage);
+        }
+        // Check for failed response with error
+        if (response?.status === 'failed' && response?.status_details?.error) {
+          const error = response.status_details.error;
+          console.error('[RealtimeAPIClient] Response failed:', error.type, error.message);
+          if (this.onErrorCallback) {
+            this.onErrorCallback({
+              type: error.type || 'unknown_error',
+              message: error.message || 'Voice mode encountered an error',
+            });
+          }
         }
         this.currentResponseId = null;
         this.hasActiveResponse = false;

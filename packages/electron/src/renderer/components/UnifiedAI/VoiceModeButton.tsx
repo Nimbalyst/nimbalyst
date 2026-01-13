@@ -17,6 +17,8 @@ let globalAudioPlayback: AudioPlayback | null = null;
 
 // Register global IPC listeners ONCE (not per button click!)
 let globalListenersRegistered = false;
+// Callback for error notifications - set by component
+let globalErrorCallback: ((error: { type: string; message: string }) => void) | null = null;
 
 function ensureGlobalListenersRegistered() {
   if (globalListenersRegistered) {
@@ -73,6 +75,13 @@ function ensureGlobalListenersRegistered() {
     }
   });
 
+  // Listen for error events (quota exceeded, rate limits, etc.)
+  window.electronAPI.on('voice-mode:error', (payload: { sessionId: string; error: { type: string; message: string } }) => {
+    if (payload.sessionId === activeVoiceSessionId && globalErrorCallback) {
+      globalErrorCallback(payload.error);
+    }
+  });
+
   globalListenersRegistered = true;
 }
 
@@ -85,6 +94,8 @@ export function VoiceModeButton({ sessionId, workspacePath }: VoiceModeButtonPro
   const [voiceModeEnabled, setVoiceModeEnabled] = useState(false);
   const [isVoiceActive, setIsVoiceActive] = useState(activeVoiceSessionId === sessionId);
   const [isLoading, setIsLoading] = useState(true);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [error, setError] = useState<{ type: string; message: string } | null>(null);
 
   // Load voice mode settings on mount
   useEffect(() => {
@@ -110,6 +121,32 @@ export function VoiceModeButton({ sessionId, workspacePath }: VoiceModeButtonPro
     loadSettings();
   }, []);
 
+  // Set up error callback when this session becomes active
+  useEffect(() => {
+    if (isVoiceActive && sessionId === activeVoiceSessionId) {
+      globalErrorCallback = (err) => {
+        setError(err);
+        // Auto-disconnect on error
+        if (globalAudioCapture) {
+          globalAudioCapture.stop();
+          globalAudioCapture = null;
+        }
+        if (globalAudioPlayback) {
+          globalAudioPlayback.destroy();
+          globalAudioPlayback = null;
+        }
+        window.electronAPI.invoke('voice-mode:test-disconnect', workspacePath || null, sessionId || '');
+        activeVoiceSessionId = null;
+        setIsVoiceActive(false);
+      };
+    }
+    return () => {
+      if (sessionId === activeVoiceSessionId) {
+        globalErrorCallback = null;
+      }
+    };
+  }, [isVoiceActive, sessionId, workspacePath]);
+
   // Clean up if this component unmounts while its session is active
   useEffect(() => {
     return () => {
@@ -130,6 +167,9 @@ export function VoiceModeButton({ sessionId, workspacePath }: VoiceModeButtonPro
   }, [sessionId, workspacePath]);
 
   const handleToggleVoice = async () => {
+    // Clear any previous error when user tries again
+    setError(null);
+
     const isThisSessionActive = activeVoiceSessionId === sessionId;
 
     if (isThisSessionActive) {
@@ -156,6 +196,7 @@ export function VoiceModeButton({ sessionId, workspacePath }: VoiceModeButtonPro
       }
     } else {
       // Start voice mode for this session
+      setIsConnecting(true);
       try {
         // If another session is active, stop it first
         if (activeVoiceSessionId !== null && activeVoiceSessionId !== sessionId) {
@@ -180,6 +221,8 @@ export function VoiceModeButton({ sessionId, workspacePath }: VoiceModeButtonPro
         const result = await window.electronAPI.invoke('voice-mode:test-connection', workspacePath || null, sessionId || '');
         if (!result.success) {
           console.error('[VoiceModeButton] Failed to start voice mode:', result.message);
+          setError({ type: 'connection_failed', message: result.message || 'Failed to connect to voice service' });
+          setIsConnecting(false);
           return;
         }
 
@@ -197,6 +240,7 @@ export function VoiceModeButton({ sessionId, workspacePath }: VoiceModeButtonPro
         setIsVoiceActive(true);
       } catch (error) {
         console.error('[VoiceModeButton] Failed to start voice mode:', error);
+        setError({ type: 'connection_failed', message: error instanceof Error ? error.message : 'Failed to start voice mode' });
         // Clean up on error
         if (globalAudioCapture) {
           globalAudioCapture.stop();
@@ -207,6 +251,8 @@ export function VoiceModeButton({ sessionId, workspacePath }: VoiceModeButtonPro
           globalAudioPlayback = null;
         }
         activeVoiceSessionId = null;
+      } finally {
+        setIsConnecting(false);
       }
     }
   };
@@ -215,29 +261,120 @@ export function VoiceModeButton({ sessionId, workspacePath }: VoiceModeButtonPro
     return null;
   }
 
+  // Determine button state and appearance
+  const getButtonIcon = () => {
+    if (isConnecting) return 'sync';
+    if (isVoiceActive) return 'mic';
+    return 'mic_off';
+  };
+
+  const getButtonTitle = () => {
+    if (isConnecting) return 'Connecting...';
+    if (error) return `Error: ${getErrorMessage(error)}`;
+    if (isVoiceActive) return 'Stop Voice Mode';
+    return 'Start Voice Mode';
+  };
+
+  const getButtonColor = () => {
+    if (error) return 'var(--error-color, #dc3545)';
+    if (isConnecting) return 'var(--warning-color, #ffc107)';
+    if (isVoiceActive) return 'var(--primary-color)';
+    return 'transparent';
+  };
+
   return (
-    <button
-      onClick={handleToggleVoice}
-      style={{
-        padding: '0.375rem',
-        borderRadius: '0.375rem',
-        fontSize: '0.8125rem',
-        fontWeight: 500,
-        backgroundColor: isVoiceActive ? 'var(--primary-color)' : 'transparent',
-        color: isVoiceActive ? 'white' : 'var(--text-secondary)',
-        border: '1px solid var(--border-primary)',
-        cursor: 'pointer',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '0.25rem',
-        transition: 'all 0.15s ease',
-        opacity: isVoiceActive ? 1 : 0.7,
-      }}
-      onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-      onMouseLeave={(e) => e.currentTarget.style.opacity = isVoiceActive ? '1' : '0.7'}
-      title={isVoiceActive ? "Stop Voice Mode" : "Start Voice Mode"}
-    >
-      <MaterialSymbol icon={isVoiceActive ? "mic" : "mic_off"} size={16} />
-    </button>
+    <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+      <button
+        onClick={handleToggleVoice}
+        disabled={isConnecting}
+        data-testid="voice-mode-toggle"
+        style={{
+          padding: '0.375rem',
+          borderRadius: '0.375rem',
+          fontSize: '0.8125rem',
+          fontWeight: 500,
+          backgroundColor: getButtonColor(),
+          color: (isVoiceActive || isConnecting || error) ? 'white' : 'var(--text-secondary)',
+          border: error ? '1px solid var(--error-color, #dc3545)' : '1px solid var(--border-primary)',
+          cursor: isConnecting ? 'wait' : 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.25rem',
+          transition: 'all 0.15s ease',
+          opacity: (isVoiceActive || isConnecting || error) ? 1 : 0.7,
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+        onMouseLeave={(e) => e.currentTarget.style.opacity = (isVoiceActive || isConnecting || error) ? '1' : '0.7'}
+        title={getButtonTitle()}
+      >
+        <MaterialSymbol
+          icon={getButtonIcon()}
+          size={16}
+          style={isConnecting ? { animation: 'spin 1s linear infinite' } : undefined}
+        />
+      </button>
+      {error && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 'calc(100% + 8px)',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            backgroundColor: 'var(--background-primary)',
+            border: '1px solid var(--error-color, #dc3545)',
+            borderRadius: '0.5rem',
+            padding: '0.75rem',
+            minWidth: '200px',
+            maxWidth: '300px',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+            zIndex: 1000,
+          }}
+        >
+          <div style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '0.5rem',
+            color: 'var(--text-primary)',
+          }}>
+            <MaterialSymbol icon="error" size={18} style={{ color: 'var(--error-color, #dc3545)', flexShrink: 0 }} />
+            <div style={{ fontSize: '0.8125rem', lineHeight: '1.4' }}>
+              <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Voice Mode Error</div>
+              <div style={{ color: 'var(--text-secondary)' }}>{getErrorMessage(error)}</div>
+            </div>
+            <button
+              onClick={(e) => { e.stopPropagation(); setError(null); }}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: '0',
+                marginLeft: 'auto',
+                color: 'var(--text-tertiary)',
+              }}
+            >
+              <MaterialSymbol icon="close" size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
+}
+
+/**
+ * Get a user-friendly error message based on error type
+ */
+function getErrorMessage(error: { type: string; message: string }): string {
+  switch (error.type) {
+    case 'insufficient_quota':
+      return 'OpenAI API quota exceeded. Please check your billing at platform.openai.com.';
+    case 'rate_limit_exceeded':
+      return 'Too many requests. Please wait a moment and try again.';
+    case 'invalid_api_key':
+      return 'Invalid OpenAI API key. Please check your settings.';
+    case 'connection_failed':
+      return error.message || 'Failed to connect to voice service.';
+    default:
+      return error.message || 'An unexpected error occurred.';
+  }
 }
