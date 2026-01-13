@@ -20,6 +20,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.51.1] - 2026-01-13
+
+
+### Added
+- Git worktree integration for isolated AI coding sessions (alpha)
+- Worktree archiving with background cleanup queue
+- Multiple sessions per worktree support
+- Terminal session support for git worktrees
+- Session and worktree pinning in agent view
+- File mode layout for worktree sessions
+- Git rebase support for worktree branches
+- Worktree permission inheritance
+- Inline rename for sessions and terminals
+- Claude Code plugin marketplace GUI (alpha)
+- Walkthrough guide system for feature discovery
+- Voice mode settings UI with reactive state management
+- Voice agent tools and system prompt customization
+- PostHog analytics for voice mode, mobile app, and AI message queuing
+- Diff tree grouping preference persists per project
+- Directory grouping in file edits panels
+- Error detection and analytics for database initialization failures
+
+### Changed
+- Worktree mode changed from per-session to per-worktree
+- Worktree comparisons now relative to repo root branch
+- Expanded worktree name pool to 16,384 combinations
+- Softer database recovery dialog messaging
+- MCP server manual add option moved to top of templates
+- Removed broken GitLab and Slack MCP servers
+
+### Fixed
+- Prevent crash when archive API unavailable during hot reload
+- Voice transcription display now visible and no longer duplicates text
+- Diff viewer text no longer overlaps on long lines
+- Mobile back button now returns to session list instead of projects
+- Prevent incorrect "behind base" indicator after worktree merge
+- Use stored base branch for worktree git comparisons
+- Restore terminal working directory in worktree sessions
+- Resizable chat panel in file view
+- Improved worktree file opening robustness and error handling
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.51.0] - 2026-01-12
 
 
