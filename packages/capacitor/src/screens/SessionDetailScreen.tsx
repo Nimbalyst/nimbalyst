@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom';
 import { useSync } from '../contexts/CollabV3SyncContext';
 import { getSessionJwt } from '../services/StytchAuthService';
+import { analyticsService } from '../services/AnalyticsService';
 import { AgentTranscriptPanel, transformAgentMessagesToUI, PromptsMenuButton } from '@nimbalyst/runtime';
 import { AIInput, InteractivePromptWidget } from '@nimbalyst/runtime/ui';
 import type { SessionData, ChatAttachment, PromptMarker } from '@nimbalyst/runtime';
@@ -211,7 +212,7 @@ interface SessionDetailScreenProps {
 export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenProps) {
   const navigate = useNavigate();
   const { sessionId } = useParams<{ sessionId: string }>();
-  const { config, sendIndexUpdate, sessions, sendSessionControlMessage } = useSync();
+  const { config, sendIndexUpdate, allSessions, sendSessionControlMessage } = useSync();
 
   const [messages, setMessages] = useState<SyncedMessage[]>([]);
   const [metadata, setMetadata] = useState<Partial<WireSessionMetadata>>({});
@@ -245,6 +246,11 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
     lastSequenceRef.current = 0;
     pendingMessagesRef.current = [];
     isSyncingRef.current = false;
+
+    // Track session viewed (no session details for privacy)
+    if (sessionId) {
+      analyticsService.capture('mobile_session_viewed');
+    }
   }, [sessionId]);
 
   // Decrypt a message
@@ -488,7 +494,8 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
   }, [sessionId, messages, metadata]);
 
   // Get title from index entry (syncs correctly) or fall back to metadata
-  const indexEntry = sessions.find((s) => s.id === sessionId);
+  // Use allSessions (unfiltered) to ensure we find the session regardless of selected project
+  const indexEntry = allSessions.find((s) => s.id === sessionId);
   const title = indexEntry?.title || metadata.title || 'Untitled Session';
 
   // Detect pending interactive prompts from messages
@@ -637,6 +644,11 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
       return;
     }
 
+    // Track message sent from mobile (privacy: no message content)
+    analyticsService.capture('mobile_ai_message_sent', {
+      hasAttachments: attachments.length > 0,
+    });
+
     setIsSending(true);
     try {
       // Create a queued prompt entry
@@ -692,7 +704,7 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
             onClick={() => {
               // Navigate back to the session list for this project
               const projectId = metadata.project_id || indexEntry?.workspaceId || 'default';
-              navigate(`/project/${projectId}/sessions`);
+              navigate(`/project/${encodeURIComponent(projectId)}/sessions`);
             }}
             className="mr-2 p-1 text-[var(--text-primary)] active:opacity-70"
             aria-label="Go back"
