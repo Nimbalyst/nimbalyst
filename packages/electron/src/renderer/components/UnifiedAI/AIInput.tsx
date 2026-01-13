@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, KeyboardEvent, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { useAtomValue } from 'jotai';
 import { GenericTypeahead, TypeaheadOption } from '../Typeahead/GenericTypeahead';
 import { extractTriggerMatch, insertAtTrigger, TriggerMatch } from '../Typeahead/typeaheadUtils';
 import type { ChatAttachment } from '@nimbalyst/runtime';
@@ -7,6 +8,7 @@ import { AttachmentPreviewList } from '../AgenticCoding/AttachmentPreviewList';
 import { ModeTag, AIMode } from './ModeTag';
 import { ModelSelector } from './ModelSelector';
 import { VoiceModeButton } from './VoiceModeButton.tsx';
+import { VoiceTranscriptionDisplay } from './VoiceTranscriptionDisplay';
 import { ContextUsageDisplay } from './ContextUsageDisplay';
 import { MockupAnnotationIndicator } from './MockupAnnotationIndicator';
 import { TextSelectionIndicator } from './TextSelectionIndicator';
@@ -18,6 +20,7 @@ import {
   getMemoryContent,
 } from './interactivePrompts';
 import { HelpTooltip } from '../../help';
+import { showTranscriptionAtom } from '../../store/atoms/appSettings';
 import '../AIChat/AIChat.css';
 
 export interface AIInputRef {
@@ -141,6 +144,10 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
     const [slashCommandOptions, setSlashCommandOptions] = useState<TypeaheadOption[]>([]);
     const [allSlashCommands, setAllSlashCommands] = useState<any[]>([]);
     const [dragActive, setDragActive] = useState(false);
+
+    // Voice mode state
+    const [isVoiceActive, setIsVoiceActive] = useState(false);
+    const showTranscription = useAtomValue(showTranscriptionAtom);
 
     // Prompt box resize state
     // userSetHeight: null means auto-size to content, number means user manually resized
@@ -837,6 +844,14 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
           title="Drag to resize prompt box"
         />
 
+        {/* Voice transcription display - floating above the input */}
+        {showTranscription && sessionId && (
+          <VoiceTranscriptionDisplay
+            isActive={isVoiceActive}
+            sessionId={sessionId}
+          />
+        )}
+
         {/* Memory mode indicator */}
         {isMemoryMode && (
           <MemoryPromptIndicator
@@ -879,7 +894,11 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
             {/* Voice Mode Button */}
             <HelpTooltip testId="voice-mode-toggle">
               <span style={{ display: 'inline-flex' }}>
-                <VoiceModeButton sessionId={sessionId} workspacePath={workspacePath} />
+                <VoiceModeButton
+                  sessionId={sessionId}
+                  workspacePath={workspacePath}
+                  onVoiceActiveChange={setIsVoiceActive}
+                />
               </span>
             </HelpTooltip>
             {onModeChange && provider === 'claude-code' && mode && <ModeTag mode={mode} onModeChange={onModeChange} />}

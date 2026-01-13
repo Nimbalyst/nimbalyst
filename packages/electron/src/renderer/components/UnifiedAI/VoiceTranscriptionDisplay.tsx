@@ -39,6 +39,7 @@ export function VoiceTranscriptionDisplay({ isActive, sessionId }: VoiceTranscri
 
     // Listen for user speech transcription (input_audio_transcription)
     const handleTextReceived = (payload: { sessionId: string; text: string; type?: string }) => {
+      console.log('[VoiceTranscriptionDisplay] Received text:', payload);
       if (payload.sessionId !== sessionId) return;
 
       // This is typically partial transcription - update current user text
@@ -72,23 +73,32 @@ export function VoiceTranscriptionDisplay({ isActive, sessionId }: VoiceTranscri
 
     // When user finishes speaking (commit), add the transcription as an entry
     const handleUserComplete = (payload: { sessionId: string; transcript: string }) => {
-      if (payload.sessionId !== sessionId || !payload.transcript) return;
+      console.log('[VoiceTranscriptionDisplay] Received transcript-complete:', payload);
+      if (payload.sessionId !== sessionId) return;
+      if (!payload.transcript || payload.transcript.trim() === '') {
+        console.log('[VoiceTranscriptionDisplay] Empty transcript, ignoring');
+        return;
+      }
 
       setCurrentUserText('');
       setEntries(prev => [...prev, {
         id: `user-${Date.now()}`,
         type: 'user',
-        text: payload.transcript,
+        text: payload.transcript.trim(),
         timestamp: Date.now(),
       }]);
     };
 
-    // Register listeners
-    window.electronAPI.on('voice-mode:text-received', handleTextReceived);
-    window.electronAPI.on('voice-mode:transcript-complete', handleUserComplete);
+    // Register listeners - store cleanup functions
+    console.log('[VoiceTranscriptionDisplay] Registering IPC listeners for session:', sessionId);
+    const removeTextReceived = window.electronAPI.on('voice-mode:text-received', handleTextReceived);
+    const removeTranscriptComplete = window.electronAPI.on('voice-mode:transcript-complete', handleUserComplete);
 
     return () => {
-      // Note: electron API doesn't have removeListener, but the component unmounts when voice mode ends
+      // Clean up listeners to prevent duplicates
+      console.log('[VoiceTranscriptionDisplay] Cleaning up IPC listeners for session:', sessionId);
+      removeTextReceived?.();
+      removeTranscriptComplete?.();
     };
   }, [isActive, sessionId]);
 
@@ -138,10 +148,9 @@ export function VoiceTranscriptionDisplay({ isActive, sessionId }: VoiceTranscri
           flexDirection: 'column',
           gap: '6px',
           padding: '8px 12px',
-          background: 'var(--surface-elevated, rgba(0, 0, 0, 0.8))',
+          background: 'var(--surface-tertiary)',
           borderRadius: '8px',
-          backdropFilter: 'blur(8px)',
-          border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.1))',
+          border: '1px solid var(--border-primary)',
         }}
       >
         {/* Past entries */}
@@ -160,13 +169,13 @@ export function VoiceTranscriptionDisplay({ isActive, sessionId }: VoiceTranscri
               style={{
                 fontSize: '11px',
                 fontWeight: 600,
-                color: entry.type === 'user' ? 'var(--color-accent)' : 'var(--color-success)',
+                color: entry.type === 'user' ? 'var(--accent-primary)' : 'var(--success-color)',
                 textTransform: 'uppercase',
                 flexShrink: 0,
                 marginTop: '2px',
               }}
             >
-              {entry.type === 'user' ? 'You' : 'AI'}
+              {entry.type === 'user' ? 'YOU' : 'AI'}
             </span>
             <span
               style={{
@@ -193,13 +202,13 @@ export function VoiceTranscriptionDisplay({ isActive, sessionId }: VoiceTranscri
               style={{
                 fontSize: '11px',
                 fontWeight: 600,
-                color: 'var(--color-accent)',
+                color: 'var(--accent-primary)',
                 textTransform: 'uppercase',
                 flexShrink: 0,
                 marginTop: '2px',
               }}
             >
-              You
+              YOU
             </span>
             <span
               style={{

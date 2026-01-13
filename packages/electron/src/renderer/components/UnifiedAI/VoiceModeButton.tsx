@@ -10,8 +10,7 @@ import { useAtomValue } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import { AudioCapture } from '../../utils/audioCapture';
 import { AudioPlayback } from '../../utils/audioPlayback';
-import { VoiceTranscriptionDisplay } from './VoiceTranscriptionDisplay';
-import { voiceModeEnabledAtom, showTranscriptionAtom } from '../../store/atoms/appSettings';
+import { voiceModeEnabledAtom } from '../../store/atoms/appSettings';
 
 // Global singleton state - only ONE voice session can be active at a time
 let activeVoiceSessionId: string | null = null;
@@ -123,13 +122,13 @@ function ensureGlobalListenersRegistered() {
 interface VoiceModeButtonProps {
   sessionId?: string; // The AI session this button controls
   workspacePath?: string; // The workspace path for this session
+  onVoiceActiveChange?: (isActive: boolean) => void; // Callback when voice mode activates/deactivates
 }
 
-export function VoiceModeButton({ sessionId, workspacePath }: VoiceModeButtonProps) {
+export function VoiceModeButton({ sessionId, workspacePath, onVoiceActiveChange }: VoiceModeButtonProps) {
   // Subscribe to voice mode settings from Jotai atoms
   // These update automatically when settings change in SettingsView
   const voiceModeEnabled = useAtomValue(voiceModeEnabledAtom);
-  const showTranscription = useAtomValue(showTranscriptionAtom);
 
   const [isVoiceActive, setIsVoiceActive] = useState(activeVoiceSessionId === sessionId);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -157,11 +156,13 @@ export function VoiceModeButton({ sessionId, workspacePath }: VoiceModeButtonPro
         window.electronAPI.invoke('voice-mode:test-disconnect', workspacePath || null, sessionId || '');
         activeVoiceSessionId = null;
         setIsVoiceActive(false);
+        onVoiceActiveChange?.(false);
       };
 
       // Callback for when session is stopped programmatically (by AI assistant)
       globalStoppedCallback = () => {
         setIsVoiceActive(false);
+        onVoiceActiveChange?.(false);
       };
     }
     return () => {
@@ -170,7 +171,7 @@ export function VoiceModeButton({ sessionId, workspacePath }: VoiceModeButtonPro
         globalStoppedCallback = null;
       }
     };
-  }, [isVoiceActive, sessionId, workspacePath]);
+  }, [isVoiceActive, sessionId, workspacePath, onVoiceActiveChange]);
 
   // Clean up if this component unmounts while its session is active
   useEffect(() => {
@@ -216,6 +217,7 @@ export function VoiceModeButton({ sessionId, workspacePath }: VoiceModeButtonPro
         await window.electronAPI.invoke('voice-mode:test-disconnect', workspacePath || null, sessionId || '');
         activeVoiceSessionId = null;
         setIsVoiceActive(false);
+        onVoiceActiveChange?.(false);
       } catch (error) {
         console.error('[VoiceModeButton] Failed to stop voice mode:', error);
       }
@@ -263,6 +265,7 @@ export function VoiceModeButton({ sessionId, workspacePath }: VoiceModeButtonPro
 
         activeVoiceSessionId = sessionId || null;
         setIsVoiceActive(true);
+        onVoiceActiveChange?.(true);
       } catch (error) {
         console.error('[VoiceModeButton] Failed to start voice mode:', error);
         setError({ type: 'connection_failed', message: error instanceof Error ? error.message : 'Failed to start voice mode' });
@@ -309,13 +312,6 @@ export function VoiceModeButton({ sessionId, workspacePath }: VoiceModeButtonPro
 
   return (
     <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-      {/* Floating transcription display */}
-      {showTranscription && (
-        <VoiceTranscriptionDisplay
-          isActive={isVoiceActive}
-          sessionId={sessionId || ''}
-        />
-      )}
       <button
         onClick={handleToggleVoice}
         disabled={isConnecting}
