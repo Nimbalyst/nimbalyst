@@ -199,69 +199,6 @@ These patterns apply across all packages (electron, capacitor, runtime) that con
 
 Container queries respond to the actual container width, making them work correctly with resizable panels and split views on both desktop and mobile.
 
-### Main Process Initialization
-
-The Electron main process has specific initialization constraints that must be respected:
-
-#### Bootstrap and Dynamic Import
-
-`bootstrap.ts` is the entry point and uses a dynamic import for `index.ts`:
-```typescript
-import('./index.js');  // Dynamic, not static!
-```
-
-**Why dynamic import is required:**
-1. `NODE_PATH` must be set before `node-pty` can be resolved in packaged builds
-2. Static imports are resolved before any code runs
-3. Dynamic import defers loading until after `NODE_PATH` is configured
-
-**Never change this to a static import** - it will break packaged builds.
-
-#### Lazy Initialization Pattern
-
-Singletons that read `app.getPath()` must use lazy initialization:
-
-```typescript
-// BAD: Reads userData path at module load time
-const store = new Store({ name: 'settings' });
-
-// GOOD: Defers until first access
-let _store: Store | null = null;
-function getStore() {
-  if (!_store) {
-    _store = new Store({ name: 'settings' });
-  }
-  return _store;
-}
-```
-
-This ensures `app.setPath('userData')` in bootstrap.ts takes effect.
-
-#### IPC Handler Registration
-
-Use `safeHandle`/`safeOn` from `ipcRegistry.ts` instead of `ipcMain.handle`/`ipcMain.on`:
-
-```typescript
-// BAD: Crashes if handler already registered
-ipcMain.handle('my-channel', handler);
-
-// GOOD: Safe for duplicate registration
-safeHandle('my-channel', handler);
-```
-
-This prevents "second handler" errors from module duplication across chunk boundaries.
-
-### Document Service
-- **Main process**: `ElectronDocumentService` handles file scanning, metadata extraction, and caching
-- **Renderer process**: `RendererDocumentService` acts as a facade, using IPC via `window.electronAPI` to communicate with main process
-- **Metadata API**: Supports frontmatter extraction and caching for all markdown documents with bounded file reads (4KB)
-- **IPC channels**: `document-service:*` for all document-related operations including metadata
-
-### Common IPC Issues
-- **window.api undefined**: The preload exposes `window.electronAPI`, not `window.api`. Ensure renderer services use the correct reference.
-- **Empty responses**: If IPC calls return empty data, check that the window state is properly set to workspace mode with a valid workspace path.
-- **Service resolution**: The main process resolves services based on the window's workspace path. No workspace = no service.
-
 ## AI Features
 
 ### AI Provider Types
@@ -331,28 +268,6 @@ The application supports multiple AI providers, including two distinct ways to a
 - **Model management**: Select/deselect all buttons for bulk model configuration
 - **Smart defaults**: Doesn't auto-select all models when enabling a provider
 
-### Provider Implementation Details
-
-#### Key Files for Claude Providers
-- **Claude API Provider**:
-  - Main implementation: `packages/runtime/src/ai/server/providers/ClaudeProvider.ts`
-  - UI panel: `packages/electron/src/renderer/components/AIModels/panels/ClaudePanel.tsx`
-  - Uses Anthropic SDK directly with API key authentication
-  - Supports model selection from predefined list in `packages/runtime/src/ai/modelConstants.ts`
-
-- **Claude Code Provider**:
-  - Implementation: `packages/runtime/src/ai/server/providers/ClaudeCodeProvider.ts`
-  - UI panel: `packages/electron/src/renderer/components/AIModels/panels/ClaudeCodePanel.tsx`
-  - Installation manager: `packages/electron/src/renderer/components/AIModels/services/CLIInstaller.ts`
-  - Requires separate installation of `@anthropic-ai/claude-agent-sdk` package
-  - Dynamically loads SDK from user's installation
-
-#### Provider Factory
-- Location: `packages/runtime/src/ai/server/ProviderFactory.ts`
-- Creates and manages provider instances based on type
-- Provider types: `claude`, `claude-code`, `openai`, `openai-codex`, `lmstudio`
-- Each provider is cached per session for efficiency
-
 ### Custom Tool Widgets
 
 Custom widgets can replace the generic tool call display for specific MCP tools. See [CUSTOM_TOOL_WIDGETS.md](docs/CUSTOM_TOOL_WIDGETS.md) for implementation details.
@@ -368,94 +283,20 @@ Nimbalyst supports creating git worktrees for isolated AI coding sessions. See [
 - One worktree can have multiple sessions (one-to-many relationship)
 - Visual distinction: Worktree sessions display with a badge overlay on the AI icon
 
-**Database schema:**
-- `worktrees` table: Stores worktree metadata (id, workspace_id, name, path, branch, base_branch)
-- `ai_sessions.worktree_id`: Foreign key linking sessions to worktrees (nullable)
-
-**IPC channels:**
-- `worktree:create` - Create new worktree
-- `worktree:get-status` - Get git status (ahead/behind, uncommitted changes)
-- `worktree:delete` - Delete worktree
-- `worktree:list` - List all worktrees for workspace
-- `worktree:get` - Get single worktree by ID
+For implementation details (database schema, IPC channels), see `/packages/electron/CLAUDE.md`.
 
 ## Data Persistence
 
-The Nimbalyst app uses **PGLite** (PostgreSQL in WebAssembly) for all data storage, providing a robust database system that works both in development and packaged builds.
+The Nimbalyst app uses **PGLite** (PostgreSQL in WebAssembly) for all data storage.
 
 **CRITICAL: Never use localStorage in the renderer process.** All persistent state must be stored via IPC to the main process using either:
-- **app-settings store** (`packages/electron/src/main/utils/store.ts`) for global app settings
+- **app-settings store** for global app settings
 - **workspace-settings store** for per-project state
 - **PGLite database** for complex data like AI sessions and document history
 
 localStorage is not reliable in Electron and data can be lost. Use the existing store infrastructure instead.
 
-### Database System
-- **Technology**: PGLite (PostgreSQL in WebAssembly) running in Node.js worker thread
-- **Storage**: Persistent file-based database with ACID compliance
-- **Worker architecture**: Isolated worker thread prevents module conflicts
-- **Bundling**: PGLite is fully bundled in packaged apps for reliable distribution
-
-### Database Tables
-- **ai\_sessions**: AI chat conversations with full message history, document context, and provider configurations
-- **worktrees**: Git worktree metadata for isolated AI coding sessions (see [WORKTREES.md](docs/WORKTREES.md))
-- **app\_settings**: Global application settings (theme, providers, shortcuts, etc.)
-- **project\_state**: Per-project state including window bounds, UI layout, open tabs, file tree, and editor settings
-- **session\_state**: Global session restoration data for windows and focus order
-- **document\_history**: Compressed document edit history with binary content storage
-
-### Data Locations
-- **Database**: `~/Library/Application Support/@nimbalyst/electron/pglite-db/` (macOS)
-- **Logs**: `~/Library/Application Support/@nimbalyst/electron/logs/` - Application logs
-- **Debug log**: `~/Library/Application Support/@nimbalyst/electron/nimbalyst-debug.log` - Debug console output
-- **Legacy files**: `~/Library/Application Support/@nimbalyst/electron/history/` - Preserved file-based history (migrated to database)
-
-### Migration System
-- **Automatic migration**: File-based data automatically migrates to database on first startup
-- **History preservation**: Original history files preserved after migration (not deleted)
-- **Legacy app migration**: Automatically migrates from old Stravu Editor data paths
-- **Version tracking**: Database includes migration timestamps and version information
-
-### Database Features
-- **Compression**: Document history stored as compressed binary data (BYTEA)
-- **JSON support**: Rich JSON fields for complex data structures (JSONB columns)
-- **Indexing**: Optimized indexes for fast queries on projects, timestamps, and file paths
-- **Protocol server**: Optional PostgreSQL protocol server for external database access
-
-### CRITICAL: Date/Timestamp Handling
-
-**Problem:** PostgreSQL TIMESTAMP columns store UTC time, but PGlite returns Date objects that JavaScript interprets as LOCAL time, creating a timezone mismatch.
-
-**Example of the bug:**
-```javascript
-// PostgreSQL stores: "2025-11-19 04:25:00" (UTC)
-// PGlite returns: Date object parsed as "2025-11-19 04:25:00 EST" (local)
-// This is WRONG - should be "2025-11-18 23:25:00 EST"
-```
-
-**Solution implemented:**
-- The `toMillis()` function in `PGLiteSessionStore.ts` handles timezone conversion
-- It extracts Date components and treats them as UTC using `Date.UTC()`
-- JavaScript's `toLocaleString()` then correctly displays in the user's timezone
-
-**Rules when working with database timestamps:**
-
-1. **DO**: Use `CURRENT_TIMESTAMP` for database inserts/updates
-```sql
-   UPDATE ai_sessions SET updated_at = CURRENT_TIMESTAMP WHERE id = $1
-```
-
-2. **DON'T**: Use `Date.now()` with `to_timestamp()` - causes double conversion
-```sql
-   -- WRONG - Don't do this!
-   UPDATE ai_sessions SET updated_at = to_timestamp($1 / 1000.0) WHERE id = $1
-```
-
-3. **DO**: Retrieve timestamps through `toMillis()` function
-```typescript
-   // This correctly converts PGlite Date objects to Unix milliseconds
-   const createdAt = toMillis(row.created_at);
-```
+For implementation details (database schema, data locations, timestamp handling), see `/packages/electron/CLAUDE.md`.
 
 ## Analytics
 
