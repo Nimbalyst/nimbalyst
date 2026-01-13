@@ -46,7 +46,6 @@ const TEMPLATE_ICON_CONFIG: Record<string, IconConfig> = {
   // Brand icons from Simple Icons CDN
   linear: { type: 'simple-icons', slug: 'linear' },
   github: { type: 'simple-icons', slug: 'github' },
-  slack: { type: 'simple-icons', slug: 'slack' },
   'brave-search': { type: 'simple-icons', slug: 'brave' },
   posthog: { type: 'simple-icons', slug: 'posthog' },
   atlassian: { type: 'simple-icons', slug: 'atlassian' },
@@ -141,7 +140,6 @@ const TEMPLATE_CATEGORIES: Record<string, TemplateCategory> = {
   asana: 'productivity',
   atlassian: 'productivity',
   notion: 'productivity',
-  slack: 'productivity',
   zapier: 'automation',
   'sequential-thinking': 'ai',
   'knowledge-graph-memory': 'ai',
@@ -254,17 +252,6 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
       env: {
         GITHUB_PERSONAL_ACCESS_TOKEN: '${GITHUB_PERSONAL_ACCESS_TOKEN}'
       }
-    }
-  },
-  {
-    id: 'slack',
-    name: 'Slack',
-    description: 'Team communication and messaging',
-    docsUrl: 'https://docs.slack.dev/ai/mcp-server/',
-    authType: 'oauth',
-    config: {
-      command: 'npx',
-      args: ['-y', 'mcp-remote', 'https://api.slack.com/mcp/sse']
     }
   },
   {
