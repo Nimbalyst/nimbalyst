@@ -381,6 +381,8 @@ export function initVoiceModeService() {
         // The system prompt (via isVoiceMode in documentContext) provides full context
         const questionPrompt = `[VOICE] ${question}`;
 
+        console.log('[VoiceModeService] ask_coding_agent called with question:', question);
+
         try {
           if (window && !window.isDestroyed()) {
             // Create a promise that resolves when the agent responds
@@ -394,6 +396,12 @@ export function initVoiceModeService() {
                   // Clean up
                   ipcMain.removeListener('voice-mode:agent-task-complete', responseHandler);
                   if (timeoutId) clearTimeout(timeoutId);
+
+                  // Log what we received
+                  console.log('[VoiceModeService] ask_coding_agent received response:', {
+                    summaryLength: data.summary?.length,
+                    summaryPreview: data.summary?.substring(0, 500),
+                  });
 
                   // Return the answer
                   resolve({

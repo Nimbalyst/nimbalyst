@@ -74,6 +74,12 @@ function ensureGlobalListenersRegistered() {
       // Extract summary from the agent's final response
       const summary = data.content || 'Task completed';
 
+      console.log('[VoiceModeButton] Agent task complete, sending to main:', {
+        sessionId: data.sessionId,
+        contentLength: data.content?.length,
+        contentPreview: data.content?.substring(0, 500),
+      });
+
       // Notify main process that the agent finished, including the summary
       window.electronAPI.send('voice-mode:agent-task-complete', {
         sessionId: data.sessionId,
