@@ -115,12 +115,13 @@ export async function getEncryptionKeySeed(): Promise<string | null> {
 /**
  * Parse QR code payload and create credentials.
  *
- * New QR payload format (v2 - Stytch auth):
+ * QR payload format (v3 - with analytics):
  * {
- *   version: 2,
+ *   version: 3,
  *   serverUrl: "wss://...",
  *   encryptionKeySeed: "base64-key-seed",
- *   expiresAt: timestamp
+ *   expiresAt: timestamp,
+ *   analyticsId: "nimbalyst_xxx..."  // Desktop's PostHog distinctId
  * }
  *
  * Note: Auth credentials (userId, authToken) are no longer in QR.
@@ -131,6 +132,8 @@ export interface QRPayload {
   serverUrl: string;
   encryptionKeySeed: string;
   expiresAt: number;
+  // v3: Desktop's PostHog analytics ID for identity linking
+  analyticsId?: string;
   // Legacy fields (v1) - ignored but accepted for backwards compat
   userId?: string;
   authToken?: string;

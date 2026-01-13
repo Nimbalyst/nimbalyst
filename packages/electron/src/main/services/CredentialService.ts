@@ -18,6 +18,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { logger } from '../utils/logger';
+import { AnalyticsService } from './analytics/AnalyticsService';
 
 /**
  * Encryption credentials for E2E encrypted sync.
@@ -193,7 +194,7 @@ export function isUsingSecureStorage(): boolean {
 /**
  * Generate QR pairing payload for mobile device.
  *
- * The QR code only contains the encryption key seed and server URL.
+ * The QR code contains the encryption key seed, server URL, and analytics ID.
  * Mobile devices authenticate independently via Stytch OAuth.
  *
  * @param serverUrl - The sync server URL
@@ -205,16 +206,21 @@ export function generateQRPairingPayload(
   serverUrl: string;
   encryptionKeySeed: string;
   expiresAt: number;
+  analyticsId: string;
 } {
   const credentials = getCredentials();
 
   // QR code expires in 15 minutes for security
   const expiresAt = Date.now() + 15 * 60 * 1000;
 
+  // Include analytics ID for identity linking (v3)
+  const analyticsId = AnalyticsService.getInstance().getDistinctId();
+
   return {
-    version: 2, // Version 2 = encryption key only, no auth credentials
+    version: 3, // Version 3 = includes analyticsId for identity linking
     serverUrl,
     encryptionKeySeed: credentials.encryptionKeySeed,
     expiresAt,
+    analyticsId,
   };
 }

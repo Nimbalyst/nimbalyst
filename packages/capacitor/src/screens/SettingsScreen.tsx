@@ -18,6 +18,7 @@ import {
   saveSession,
   type StytchSession,
 } from '../services/StytchAuthService';
+import { analyticsService } from '../services/AnalyticsService';
 
 export function SettingsScreen() {
   const navigate = useNavigate();
@@ -56,6 +57,11 @@ export function SettingsScreen() {
   useEffect(() => {
     async function refreshSession() {
       const session = await loadSession();
+      if (session && !stytchSession) {
+        // New session detected - track login and set email for analytics
+        analyticsService.setEmail(session.email);
+        analyticsService.capture('mobile_login_completed');
+      }
       setStytchSession(session);
       if (session && isLoggingIn) {
         setIsLoggingIn(false);
@@ -65,7 +71,7 @@ export function SettingsScreen() {
     // Check periodically in case auth completed in background
     const interval = setInterval(refreshSession, 1000);
     return () => clearInterval(interval);
-  }, [isLoggingIn]);
+  }, [isLoggingIn, stytchSession]);
 
   const handleScanQR = async () => {
     setScanError(null);
@@ -123,6 +129,14 @@ export function SettingsScreen() {
       const creds = await saveFromQRPayload(payload);
       setCredentials(creds);
       setScanError(null);
+
+      // Adopt desktop's analytics ID if provided (v3+ QR codes)
+      if (payload.analyticsId) {
+        await analyticsService.setDistinctIdFromPairing(payload.analyticsId);
+      }
+
+      // Track successful pairing
+      analyticsService.capture('mobile_pairing_completed');
 
       // Trigger reconnect to use new credentials
       await reconnect();

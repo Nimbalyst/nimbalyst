@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { usePostHog } from 'posthog-js/react';
 import { QRPairingModal } from './QRPairingModal';
 
 /** Format a timestamp as relative time (e.g., "5 minutes ago") */
@@ -223,6 +224,7 @@ export function SyncPanel({
   testStatus,
   testMessage,
 }: SyncPanelProps) {
+  const posthog = usePostHog();
   const isDevelopment = import.meta.env.DEV;
 
   // Compute effective server URL early so it can be used throughout
@@ -282,10 +284,16 @@ export function SyncPanel({
         isAuthenticated: state.isAuthenticated,
         user: state.user,
       });
+
+      // Set email in PostHog for identity linking when user logs in via Stytch
+      const userEmail = state.user?.emails?.[0]?.email;
+      if (state.isAuthenticated && userEmail && posthog) {
+        posthog.people.set({ email: userEmail });
+      }
     });
 
     return unsubscribe;
-  }, []);
+  }, [posthog]);
 
   // Load projects from workspace store
   useEffect(() => {

@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSync } from '../contexts/CollabV3SyncContext';
 import { SyncStatusBadge } from '../components/SyncStatusBadge';
+import { analyticsService } from '../services/AnalyticsService';
 
 export function ProjectListScreen() {
   const navigate = useNavigate();
@@ -69,6 +70,8 @@ export function ProjectListScreen() {
   }, [isPulling, pullDistance, pullThreshold]);
 
   const handleProjectClick = (projectId: string) => {
+    // Track project selection (no project name for privacy)
+    analyticsService.capture('mobile_project_selected');
     // URL-encode the project ID since it may contain slashes (file paths)
     navigate(`/project/${encodeURIComponent(projectId)}/sessions`);
   };
