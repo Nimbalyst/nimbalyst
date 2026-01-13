@@ -30,6 +30,9 @@ export function registerWorktreeHandlers(): void {
    * @returns Worktree data including id, path, branch, etc.
    */
   ipcMain.handle('worktree:create', async (_event, workspacePath: string, name?: string) => {
+    const startTime = Date.now();
+    const timings: Record<string, number> = {};
+
     try {
       if (!workspacePath) {
         throw new Error('workspacePath is required');
@@ -37,26 +40,72 @@ export function registerWorktreeHandlers(): void {
 
       logger.info('Creating worktree', { workspacePath, name });
 
-      // Create the git worktree
-      const worktree = await gitWorktreeService.createWorktree(workspacePath, { name });
-
-      // Store worktree metadata in database
+      // Get database early for de-duplication
       const db = getDatabase();
       if (!db) {
         throw new Error('Database not initialized');
       }
 
       const worktreeStore = createWorktreeStore(db);
-      await worktreeStore.create(worktree);
 
-      logger.info('Worktree created successfully', { id: worktree.id, path: worktree.path });
+      // If no custom name provided, generate a unique name using all three sources
+      let finalName = name;
+      if (!finalName) {
+        // Gather existing names from all three sources in parallel
+        const dedupeStartTime = Date.now();
+
+        const [dbNames, filesystemNames, branchNames] = await Promise.all([
+          worktreeStore.getAllNames(),
+          Promise.resolve(gitWorktreeService.getExistingWorktreeDirectories(workspacePath)),
+          gitWorktreeService.getAllBranchNames(workspacePath),
+        ]);
+
+        timings.deduplication = Date.now() - dedupeStartTime;
+
+        // Combine all existing names into a single set
+        const existingNames = new Set<string>();
+        for (const name of dbNames) existingNames.add(name);
+        for (const name of filesystemNames) existingNames.add(name);
+        for (const name of branchNames) existingNames.add(name);
+
+        logger.info('Gathered existing names for de-duplication', {
+          dbCount: dbNames.size,
+          filesystemCount: filesystemNames.size,
+          branchCount: branchNames.size,
+          totalUnique: existingNames.size,
+          durationMs: timings.deduplication,
+        });
+
+        // Generate a unique name
+        finalName = gitWorktreeService.generateUniqueWorktreeName(existingNames);
+      }
+
+      // Create the git worktree
+      const gitCreateStartTime = Date.now();
+      const worktree = await gitWorktreeService.createWorktree(workspacePath, { name: finalName });
+      timings.gitWorktreeCreate = Date.now() - gitCreateStartTime;
+
+      // Store worktree metadata in database
+      const dbInsertStartTime = Date.now();
+      await worktreeStore.create(worktree);
+      timings.dbInsert = Date.now() - dbInsertStartTime;
+
+      const totalDuration = Date.now() - startTime;
+      logger.info('Worktree created successfully', {
+        id: worktree.id,
+        path: worktree.path,
+        name: worktree.name,
+        totalDurationMs: totalDuration,
+        timings,
+      });
 
       return {
         success: true,
         worktree,
       };
     } catch (error) {
-      logger.error('Failed to create worktree:', error);
+      const totalDuration = Date.now() - startTime;
+      logger.error('Failed to create worktree:', { error, durationMs: totalDuration, timings });
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to create worktree',

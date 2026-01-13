@@ -369,14 +369,59 @@ export class GitWorktreeService {
    * @private
    */
   private generateWorktreeName(): string {
+    // 128 adjectives x 128 nouns = 16,384 combinations
     const adjectives = [
-      'swift', 'bright', 'clever', 'quick', 'bold', 'keen', 'wise', 'neat',
-      'cool', 'fair', 'calm', 'warm', 'kind', 'brave', 'sharp', 'clear',
+      // Nature/weather (16)
+      'swift', 'bright', 'calm', 'cool', 'warm', 'clear', 'wild', 'crisp',
+      'fresh', 'misty', 'sunny', 'windy', 'frosty', 'dusty', 'hazy', 'foggy',
+      // Character traits (16)
+      'bold', 'brave', 'keen', 'wise', 'kind', 'fair', 'quick', 'clever',
+      'sharp', 'neat', 'steady', 'loyal', 'humble', 'noble', 'proud', 'silent',
+      // Colors/appearance (16)
+      'golden', 'silver', 'copper', 'amber', 'azure', 'coral', 'ivory', 'jade',
+      'ruby', 'onyx', 'pearl', 'rusty', 'mossy', 'sandy', 'snowy', 'dusky',
+      // Size/intensity (16)
+      'vast', 'tiny', 'grand', 'mighty', 'gentle', 'fierce', 'subtle', 'vivid',
+      'dense', 'sparse', 'ample', 'narrow', 'broad', 'steep', 'hollow', 'solid',
+      // Time/age (16)
+      'ancient', 'young', 'ageless', 'early', 'late', 'timely', 'lasting', 'brief',
+      'sudden', 'gradual', 'constant', 'fleeting', 'endless', 'daily', 'nightly', 'weekly',
+      // Texture/material (16)
+      'smooth', 'rough', 'soft', 'hard', 'silky', 'velvet', 'glossy', 'matte',
+      'grainy', 'polished', 'woven', 'carved', 'molten', 'frozen', 'liquid', 'crystal',
+      // Sound/movement (16)
+      'quiet', 'loud', 'still', 'moving', 'dancing', 'flowing', 'rushing', 'gliding',
+      'soaring', 'drifting', 'spinning', 'rolling', 'leaping', 'resting', 'humming', 'singing',
+      // Abstract qualities (16)
+      'pure', 'true', 'deep', 'light', 'dark', 'bright', 'dim', 'radiant',
+      'serene', 'tranquil', 'vibrant', 'mellow', 'zesty', 'tangy', 'savory', 'earthy',
     ];
 
     const nouns = [
-      'falcon', 'river', 'mountain', 'forest', 'ocean', 'thunder', 'wind', 'star',
-      'cloud', 'dawn', 'storm', 'meadow', 'canyon', 'glacier', 'valley', 'peak',
+      // Birds (16)
+      'falcon', 'hawk', 'eagle', 'raven', 'owl', 'crane', 'finch', 'sparrow',
+      'heron', 'dove', 'lark', 'wren', 'robin', 'osprey', 'condor', 'cardinal',
+      // Landforms (16)
+      'mountain', 'valley', 'canyon', 'glacier', 'ridge', 'cliff', 'mesa', 'dune',
+      'summit', 'crater', 'bluff', 'gorge', 'basin', 'plateau', 'ravine', 'slope',
+      // Water features (16)
+      'river', 'stream', 'brook', 'creek', 'lake', 'pond', 'spring', 'bay',
+      'cove', 'delta', 'marsh', 'reef', 'tide', 'wave', 'rapids', 'falls',
+      // Sky/weather (16)
+      'cloud', 'storm', 'thunder', 'wind', 'star', 'moon', 'dawn', 'dusk',
+      'aurora', 'comet', 'nova', 'nebula', 'zenith', 'horizon', 'gale', 'breeze',
+      // Trees/plants (16)
+      'oak', 'pine', 'cedar', 'maple', 'birch', 'willow', 'aspen', 'spruce',
+      'elm', 'ash', 'fern', 'moss', 'ivy', 'lotus', 'orchid', 'bamboo',
+      // Animals (16)
+      'wolf', 'fox', 'bear', 'deer', 'elk', 'moose', 'lynx', 'otter',
+      'badger', 'beaver', 'marten', 'ferret', 'mink', 'stoat', 'hare', 'vole',
+      // Terrain features (16)
+      'path', 'trail', 'pass', 'ford', 'bridge', 'gate', 'arch', 'tower',
+      'spire', 'beacon', 'cairn', 'haven', 'grove', 'glade', 'dell', 'hollow',
+      // Elements/minerals (16)
+      'stone', 'flint', 'quartz', 'granite', 'marble', 'obsidian', 'basalt', 'shale',
+      'ember', 'flame', 'spark', 'frost', 'mist', 'vapor', 'smoke', 'shadow',
     ];
 
     const adjective = adjectives[Math.floor(Math.random() * adjectives.length)];
@@ -397,6 +442,99 @@ export class GitWorktreeService {
       logger.error('Failed to get current branch', { error });
       throw new Error(`Failed to get current branch: ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+
+  /**
+   * Get all local branch names (for de-duplication when creating worktrees)
+   *
+   * @param workspacePath - Path to the git repository
+   * @returns Set of branch names (without refs/heads/ prefix)
+   */
+  async getAllBranchNames(workspacePath: string): Promise<Set<string>> {
+    if (!workspacePath) {
+      throw new Error('workspacePath is required');
+    }
+
+    logger.info('Getting all branch names', { workspacePath });
+
+    const git: SimpleGit = simpleGit(workspacePath);
+
+    try {
+      // Get all local branches
+      const branchSummary = await git.branchLocal();
+      const branchNames = new Set<string>();
+
+      for (const branchName of branchSummary.all) {
+        branchNames.add(branchName);
+
+        // Also extract worktree name from worktree branches (worktree/name -> name)
+        if (branchName.startsWith('worktree/')) {
+          branchNames.add(branchName.substring('worktree/'.length));
+        }
+      }
+
+      logger.info('Found branch names', { count: branchNames.size });
+      return branchNames;
+    } catch (error) {
+      logger.error('Failed to get branch names', { error, workspacePath });
+      throw new Error(`Failed to get branch names: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * Get all directory names in the worktrees directory (for de-duplication)
+   *
+   * @param workspacePath - Path to the main git repository
+   * @returns Set of existing worktree directory names
+   */
+  getExistingWorktreeDirectories(workspacePath: string): Set<string> {
+    const projectName = path.basename(workspacePath);
+    const worktreesDir = path.resolve(workspacePath, '..', `${projectName}_worktrees`);
+
+    const names = new Set<string>();
+
+    if (fs.existsSync(worktreesDir)) {
+      try {
+        const entries = fs.readdirSync(worktreesDir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.isDirectory()) {
+            names.add(entry.name);
+          }
+        }
+        logger.info('Found existing worktree directories', { count: names.size, worktreesDir });
+      } catch (error) {
+        logger.warn('Failed to read worktrees directory', { error, worktreesDir });
+      }
+    }
+
+    return names;
+  }
+
+  /**
+   * Generate a unique worktree name that doesn't conflict with existing names
+   *
+   * @param existingNames - Set of names that are already taken (from db, filesystem, branches)
+   * @returns A unique worktree name
+   */
+  generateUniqueWorktreeName(existingNames: Set<string>): string {
+    const maxAttempts = 100; // Prevent infinite loop
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const name = this.generateWorktreeName();
+
+      if (!existingNames.has(name)) {
+        logger.info('Generated unique worktree name', { name, attempts: attempt + 1 });
+        return name;
+      }
+    }
+
+    // Fallback: append timestamp if we can't find a unique name after many attempts
+    const fallbackName = `${this.generateWorktreeName()}-${Date.now()}`;
+    logger.warn('Could not find unique name after max attempts, using timestamp fallback', {
+      fallbackName,
+      existingNamesCount: existingNames.size,
+    });
+    return fallbackName;
   }
 
   /**

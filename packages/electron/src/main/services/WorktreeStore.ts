@@ -412,6 +412,25 @@ export function createWorktreeStore(db: PGliteLike, ensureDbReady?: EnsureReadyF
 
       logger.info('Worktree archived status updated', { id, isArchived });
     },
+
+    /**
+     * Get all worktree names ever used (for de-duplication).
+     * Returns names from all worktrees across all workspaces.
+     */
+    async getAllNames(): Promise<Set<string>> {
+      await ensureReady();
+
+      logger.info('Getting all worktree names for de-duplication');
+
+      const { rows } = await db.query<{ name: string }>(
+        `SELECT DISTINCT name FROM worktrees`
+      );
+
+      const names = new Set(rows.map(row => row.name));
+      logger.info('Found worktree names', { count: names.size });
+
+      return names;
+    },
   };
 }
 
