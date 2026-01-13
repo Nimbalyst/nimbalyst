@@ -39,6 +39,8 @@ interface DataModelStore {
 
   // Dirty tracking
   isDirty: boolean;
+  /** True after loadFromFile completes and initial setup (like fitView) is done */
+  hasCompletedInitialLoad: boolean;
 
   // Callbacks (set by the editor component)
   onDirtyChange?: (isDirty: boolean) => void;
@@ -47,6 +49,8 @@ interface DataModelStore {
   loadFromFile: (data: DataModelFile) => void;
   toFileData: () => DataModelFile;
   setCallbacks: (callbacks: { onDirtyChange?: (isDirty: boolean) => void }) => void;
+  /** Mark initial load as complete - dirty changes will now be reported */
+  markInitialLoadComplete: () => void;
 
   // Actions - Entity management
   addEntity: (entity: Partial<Pick<Entity, 'id'>> & Omit<Entity, 'id'>) => void;
@@ -90,6 +94,7 @@ export function createDataModelStore() {
     selectedRelationshipId: null,
     hoveredEntityId: null,
     isDirty: false,
+    hasCompletedInitialLoad: false,
     onDirtyChange: undefined,
 
     // Load from file content
@@ -101,6 +106,7 @@ export function createDataModelStore() {
         entityViewMode: data.entityViewMode || 'standard',
         viewport: data.viewport || { x: 0, y: 0, zoom: 1 },
         isDirty: false,
+        hasCompletedInitialLoad: false, // Will be set true after initial fitView completes
         selectedEntityId: null,
         selectedRelationshipId: null,
         hoveredEntityId: null,
@@ -123,6 +129,11 @@ export function createDataModelStore() {
     // Set callbacks
     setCallbacks: (callbacks) => {
       set({ onDirtyChange: callbacks.onDirtyChange });
+    },
+
+    // Mark initial load as complete - dirty changes will now be reported
+    markInitialLoadComplete: () => {
+      set({ hasCompletedInitialLoad: true });
     },
 
     // Helper to mark dirty and notify
@@ -274,8 +285,13 @@ export function createDataModelStore() {
     // View control
     setViewport: (x, y, zoom) => {
       set((state) => {
-        state.onDirtyChange?.(true);
-        return { viewport: { x, y, zoom }, isDirty: true };
+        // Skip dirty notification during initial load (fitView can trigger this)
+        if (state.hasCompletedInitialLoad) {
+          state.onDirtyChange?.(true);
+          return { viewport: { x, y, zoom }, isDirty: true };
+        }
+        // During initial load, just update viewport without marking dirty
+        return { viewport: { x, y, zoom } };
       });
     },
 

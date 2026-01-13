@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
 import type { ConfigTheme } from 'rexical';
 import { useTabsActions, type TabData } from '../../contexts/TabsContext';
+import { store, editorDirtyAtom, makeEditorKey } from '@nimbalyst/runtime/store';
 import { useTabNavigation } from '../../hooks/useTabNavigation';
 import { handleWorkspaceFileSelect as handleWorkspaceFileSelectUtil } from '../../utils/workspaceFileOperations';
 import { createInitialFileContent, createMockupContent } from '../../utils/fileUtils';
@@ -73,8 +74,6 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   // TabEditor calls setDocumentEdited directly for the macOS indicator
   const isDirtyRef = useRef(false);
 
-  // Tab states tracking
-  const tabStatesRef = useRef<Map<string, { isDirty: boolean }>>(new Map());
   const tabsRef = useRef<any>(null);
 
   // Dialog states
@@ -209,8 +208,15 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
       return;
     }
     const tab = currentTabs.getTabState(tabId);
+    if (!tab) {
+      console.error('[EditorMode.handleTabClose] Tab not found:', tabId);
+      return;
+    }
+    // Check dirty state from Jotai atom (the source of truth)
+    const editorKey = makeEditorKey(tab.filePath);
+    const isDirty = store.get(editorDirtyAtom(editorKey));
     // Save dirty tabs before closing to prevent data loss
-    if (tab?.isDirty && saveTabByIdRef.current) {
+    if (isDirty && saveTabByIdRef.current) {
       await saveTabByIdRef.current(tabId);
     }
     currentTabs.removeTab(tabId);

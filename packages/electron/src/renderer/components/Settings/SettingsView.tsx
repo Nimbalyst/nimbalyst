@@ -14,6 +14,7 @@ import { AdvancedPanel } from '../GlobalSettings/panels/AdvancedPanel';
 import { NotificationsPanel } from '../GlobalSettings/panels/NotificationsPanel';
 import { VoiceModePanel } from './VoiceModePanel';
 import { MCPServersPanel } from '../GlobalSettings/panels/MCPServersPanel';
+import { ClaudeCodePluginsPanel } from '../GlobalSettings/panels/ClaudeCodePluginsPanel';
 import { SyncPanel, type SyncConfig } from '../GlobalSettings/panels/SyncPanel';
 import { ToolPackagesPanel } from './panels/ToolPackagesPanel';
 import { ProjectPermissionsPanel } from './panels/ProjectPermissionsPanel';
@@ -102,8 +103,8 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
   const [totalPackageCount, setTotalPackageCount] = useState(0);
 
   // Valid categories for each scope
-  const projectCategories: SettingsCategory[] = ['tool-packages', 'agent-permissions', 'installed-extensions', 'mcp-servers', 'claude-code', 'claude', 'openai', 'openai-codex', 'lmstudio'];
-  const userCategories: SettingsCategory[] = ['claude-code', 'claude', 'openai', 'openai-codex', 'lmstudio', 'sync', 'notifications', 'voice-mode', 'advanced', 'installed-extensions', 'mcp-servers'];
+  const projectCategories: SettingsCategory[] = ['tool-packages', 'agent-permissions', 'installed-extensions', 'claude-plugins', 'mcp-servers', 'claude-code', 'claude', 'openai', 'openai-codex', 'lmstudio'];
+  const userCategories: SettingsCategory[] = ['claude-code', 'claude', 'openai', 'openai-codex', 'lmstudio', 'sync', 'notifications', 'voice-mode', 'advanced', 'installed-extensions', 'claude-plugins', 'mcp-servers'];
 
   // When initialCategory/initialScope props change, update state (for deep linking)
   useEffect(() => {
@@ -608,6 +609,13 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
       case 'mcp-servers':
         return (
           <MCPServersPanel
+            scope={scope === 'project' ? 'workspace' : 'user'}
+            workspacePath={scope === 'project' ? workspacePath ?? undefined : undefined}
+          />
+        );
+      case 'claude-plugins':
+        return (
+          <ClaudeCodePluginsPanel
             scope={scope === 'project' ? 'workspace' : 'user'}
             workspacePath={scope === 'project' ? workspacePath ?? undefined : undefined}
           />

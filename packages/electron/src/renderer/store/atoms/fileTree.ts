@@ -100,6 +100,12 @@ export const isDirExpandedAtom = atomFamily((dirPath: string) =>
 export const selectedFilePathAtom = atom<string | null>(null);
 
 /**
+ * Currently selected folder path in the tree.
+ * Used for folder navigation (e.g., clicking breadcrumb folders).
+ */
+export const selectedFolderPathAtom = atom<string | null>(null);
+
+/**
  * Derived: Active file path from the main editor context.
  * WorkspaceSidebar subscribes to this for auto-scroll functionality.
  * This allows the file tree to react to tab switches without requiring
@@ -236,4 +242,14 @@ export const revealFileAtom = atom(null, (get, set, filePath: string) => {
 
   // Select the file
   set(selectedFilePathAtom, filePath);
+});
+
+/**
+ * Select a folder path for navigation.
+ * Used when navigating from breadcrumb clicks.
+ * Note: Directory expansion is handled by FileTree component when it
+ * subscribes to this atom change.
+ */
+export const revealFolderAtom = atom(null, (_get, set, folderPath: string) => {
+  set(selectedFolderPathAtom, folderPath);
 });

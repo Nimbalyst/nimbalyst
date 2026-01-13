@@ -45,6 +45,7 @@ import { FeatureTrackingService } from '../services/analytics/FeatureTrackingSer
 
 // Import shared SDK docs path function
 import { getExtensionSDKDocsPath } from '../utils/workspaceDetection';
+import { database } from '../database/PGLiteDatabaseWorker';
 
 // Create window list menu items
 function createWindowListMenu(): any[] {
@@ -1213,7 +1214,7 @@ export async function createApplicationMenu() {
                 },
                 { type: 'separator' },
                 {
-                    label: 'Onboarding',
+                    label: 'Show Dialogs',
                     submenu: [
                         {
                             label: 'Show Onboarding',
@@ -1283,6 +1284,13 @@ export async function createApplicationMenu() {
                             click: async () => {
                                 const { setWorktreeOnboardingShown } = await import('../utils/store');
                                 setWorktreeOnboardingShown(false);
+                            }
+                        },
+                        { type: 'separator' },
+                        {
+                            label: 'Show Database Recovery Dialog',
+                            click: async () => {
+                                database.showRecoveryDialog();
                             }
                         }
                     ]

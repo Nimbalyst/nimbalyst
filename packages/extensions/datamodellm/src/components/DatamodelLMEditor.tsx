@@ -89,6 +89,19 @@ export function DatamodelLMEditor({ host }: EditorHostProps) {
     };
   }, [host, store]);
 
+  // Mark initial load as complete after a short delay
+  // This allows React Flow's fitView to finish before we start tracking dirty state
+  useEffect(() => {
+    if (isLoading) return;
+
+    // Give React Flow time to complete fitView, then start tracking dirty changes
+    const timer = setTimeout(() => {
+      store.getState().markInitialLoadComplete();
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [isLoading, store]);
+
   // Set up callbacks for dirty tracking (only once on mount)
   useEffect(() => {
     store.getState().setCallbacks({

@@ -1,5 +1,7 @@
 /**
- * E2E test for Excalidraw Mermaid import
+ * Excalidraw Mermaid Import E2E Test
+ *
+ * Tests that Mermaid diagrams can be imported into Excalidraw.
  */
 
 import { test, expect, ElectronApplication, Page } from '@playwright/test';
@@ -10,7 +12,7 @@ import {
   createTempWorkspace,
   waitForAppReady,
   dismissProjectTrustToast,
-} from '../helpers';
+} from '../../helpers';
 
 let electronApp: ElectronApplication;
 let page: Page;

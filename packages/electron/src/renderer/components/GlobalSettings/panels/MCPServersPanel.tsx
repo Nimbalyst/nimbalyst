@@ -46,7 +46,6 @@ const TEMPLATE_ICON_CONFIG: Record<string, IconConfig> = {
   // Brand icons from Simple Icons CDN
   linear: { type: 'simple-icons', slug: 'linear' },
   github: { type: 'simple-icons', slug: 'github' },
-  slack: { type: 'simple-icons', slug: 'slack' },
   'brave-search': { type: 'simple-icons', slug: 'brave' },
   posthog: { type: 'simple-icons', slug: 'posthog' },
   atlassian: { type: 'simple-icons', slug: 'atlassian' },
@@ -141,7 +140,6 @@ const TEMPLATE_CATEGORIES: Record<string, TemplateCategory> = {
   asana: 'productivity',
   atlassian: 'productivity',
   notion: 'productivity',
-  slack: 'productivity',
   zapier: 'automation',
   'sequential-thinking': 'ai',
   'knowledge-graph-memory': 'ai',
@@ -170,6 +168,11 @@ const CATEGORY_ORDER: TemplateCategory[] = ['development', 'productivity', 'auto
 
 // Help text for common env vars
 const ENV_VAR_HELP: Record<string, { label: string; help: string; link?: string }> = {
+  GITHUB_PERSONAL_ACCESS_TOKEN: {
+    label: 'GitHub Personal Access Token',
+    help: 'Create a PAT with repo scope',
+    link: 'https://github.com/settings/tokens/new?scopes=repo'
+  },
   BRAVE_API_KEY: {
     label: 'Brave Search API Key',
     help: 'Get from Brave Search API dashboard',
@@ -242,21 +245,13 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     name: 'GitHub',
     description: 'Repository management and code collaboration',
     docsUrl: 'https://github.com/github/github-mcp-server',
-    authType: 'oauth',
+    authType: 'api-key',
     config: {
       command: 'npx',
-      args: ['-y', 'mcp-remote', 'https://api.githubcopilot.com/mcp/']
-    }
-  },
-  {
-    id: 'slack',
-    name: 'Slack',
-    description: 'Team communication and messaging',
-    docsUrl: 'https://docs.slack.dev/ai/mcp-server/',
-    authType: 'oauth',
-    config: {
-      command: 'npx',
-      args: ['-y', 'mcp-remote', 'https://api.slack.com/mcp/sse']
+      args: ['-y', '@modelcontextprotocol/server-github'],
+      env: {
+        GITHUB_PERSONAL_ACCESS_TOKEN: '${GITHUB_PERSONAL_ACCESS_TOKEN}'
+      }
     }
   },
   {
@@ -1199,6 +1194,33 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
           )}
         </div>
 
+        {/* Custom/Scratch - always show unless searching */}
+        {!templateSearch && (
+          <div className="mcp-template-category">
+            <h4 className="mcp-template-category-title">Custom Configuration</h4>
+            <div className="mcp-template-grid">
+              <div
+                className="mcp-template-card mcp-template-scratch-card"
+                onClick={() => handleTemplateSelect(null)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleTemplateSelect(null);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+                aria-label="Start from scratch - Configure all settings manually"
+              >
+                <div className="mcp-template-scratch-text">
+                  + Start from scratch<br />
+                  <small>Configure all settings manually</small>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Templates by Category */}
         {CATEGORY_ORDER.map(category => {
           const templates = templatesByCategory[category];
@@ -1248,33 +1270,6 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
         {filteredTemplates.length === 0 && templateSearch && (
           <div className="mcp-template-no-results" role="status" aria-live="polite">
             No templates match "{templateSearch}"
-          </div>
-        )}
-
-        {/* Custom/Scratch - always show unless searching */}
-        {!templateSearch && (
-          <div className="mcp-template-category">
-            <h4 className="mcp-template-category-title">Custom Configuration</h4>
-            <div className="mcp-template-grid">
-              <div
-                className="mcp-template-card mcp-template-scratch-card"
-                onClick={() => handleTemplateSelect(null)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handleTemplateSelect(null);
-                  }
-                }}
-                role="button"
-                tabIndex={0}
-                aria-label="Start from scratch - Configure all settings manually"
-              >
-                <div className="mcp-template-scratch-text">
-                  + Start from scratch<br />
-                  <small>Configure all settings manually</small>
-                </div>
-              </div>
-            </div>
           </div>
         )}
       </div>

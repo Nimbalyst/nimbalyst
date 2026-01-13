@@ -163,7 +163,12 @@ export function WorkspaceSidebar({
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
   const [isDragOverRoot, setIsDragOverRoot] = useState(false);
   const [draggedItem, setDraggedItem] = useState<any | null>(null);
-  const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
+  // Selected folder state - internal to sidebar, FileTree now uses Jotai atom for external selection
+  const [selectedFolder, setSelectedFolderInternal] = useState<string | null>(null);
+  const setSelectedFolder = useCallback((value: string | null) => {
+    setSelectedFolderInternal(value);
+    onSelectedFolderChange?.(value);
+  }, [onSelectedFolderChange]);
   const [fileTreeFilter, setFileTreeFilter] = useState<FileTreeFilter>('all');
   const [showFileIcons, setShowFileIcons] = useState(true);
   const [showGitStatus, setShowGitStatus] = useState(true);

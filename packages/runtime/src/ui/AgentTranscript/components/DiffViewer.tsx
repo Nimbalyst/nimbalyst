@@ -51,8 +51,11 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ edit, filePath: contextF
     const oldTextRaw = edit.old_string || edit.oldText || '';
     const newTextRaw = edit.new_string || edit.newText || '';
 
+    // TODO: Re-evaluate context stripping - for now show full context from LLM
     // Strip common prefix and suffix to show only what changed
-    const { oldText, newText } = stripCommonContext(oldTextRaw, newTextRaw);
+    // const { oldText, newText } = stripCommonContext(oldTextRaw, newTextRaw);
+    const oldText = oldTextRaw;
+    const newText = newTextRaw;
 
     const oldLines = oldText.split('\n');
     const newLines = newText.split('\n');
@@ -97,8 +100,11 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ edit, filePath: contextF
           const oldTextRaw = replacement.oldText || replacement.old_text || '';
           const newTextRaw = replacement.newText || replacement.new_text || '';
 
+          // TODO: Re-evaluate context stripping - for now show full context from LLM
           // Strip common prefix and suffix to show only what changed
-          const { oldText, newText } = stripCommonContext(oldTextRaw, newTextRaw);
+          // const { oldText, newText } = stripCommonContext(oldTextRaw, newTextRaw);
+          const oldText = oldTextRaw;
+          const newText = newTextRaw;
 
           const oldLines = oldText.split('\n');
           const newLines = newText.split('\n');

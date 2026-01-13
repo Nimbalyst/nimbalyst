@@ -1,7 +1,7 @@
 /**
- * CSV Spreadsheet Trailing Empty Columns Test
+ * CSV Spreadsheet Trailing Empty Columns E2E Test
  *
- * Tests that trailing empty columns are trimmed when saving CSV files
+ * Tests that trailing empty columns are trimmed when saving CSV files.
  */
 
 import { test, expect, ElectronApplication, Page } from '@playwright/test';
@@ -13,7 +13,7 @@ import {
   waitForAppReady,
   dismissProjectTrustToast,
   TEST_TIMEOUTS,
-} from '../helpers';
+} from '../../helpers';
 
 let electronApp: ElectronApplication;
 let page: Page;

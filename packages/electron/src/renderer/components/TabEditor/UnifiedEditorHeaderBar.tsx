@@ -10,6 +10,7 @@
  */
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { useSetAtom } from 'jotai';
 import { $isHeadingNode } from '@lexical/rich-text';
 import { $getRoot } from 'lexical';
 import {
@@ -17,6 +18,7 @@ import {
   $convertFromEnhancedMarkdownString,
   getEditorTransformers,
 } from 'rexical';
+import { revealFolderAtom } from '../../store';
 import './UnifiedEditorHeaderBar.css';
 
 // Tracker type info
@@ -199,6 +201,9 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
   onOpenExtensionSettings,
   onToggleDebugTree,
 }) => {
+  // Jotai atom for folder navigation
+  const revealFolder = useSetAtom(revealFolderAtom);
+
   // Dropdown states
   const [showAISessions, setShowAISessions] = useState(false);
   const [showTOC, setShowTOC] = useState(false);
@@ -227,10 +232,11 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
   const workspacePath = workspaceId;
 
   // Parse breadcrumb segments from file path relative to workspace root
+  // Returns array of { name, folderPath } where folderPath is the absolute path to that folder
   const breadcrumbSegments = React.useMemo(() => {
     if (!workspacePath) {
       // Fallback: just show the filename
-      return [fileName];
+      return [{ name: fileName, folderPath: null }];
     }
 
     // Get path relative to workspace root
@@ -243,10 +249,25 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
       }
     }
 
-    // Split into segments
+    // Split into segments and compute folder paths
     const parts = relativePath.split('/').filter(Boolean);
-    return parts;
+    return parts.map((name, index) => {
+      // For folder segments, compute the absolute folder path
+      // For the last segment (filename), folderPath is null
+      const isFile = index === parts.length - 1;
+      const folderPath = isFile
+        ? null
+        : workspacePath + '/' + parts.slice(0, index + 1).join('/');
+      return { name, folderPath };
+    });
   }, [filePath, workspacePath, fileName]);
+
+  // Handle breadcrumb folder click
+  const handleBreadcrumbClick = useCallback((folderPath: string | null) => {
+    if (folderPath) {
+      revealFolder(folderPath);
+    }
+  }, [revealFolder]);
 
   // Load AI sessions
   const loadAISessions = useCallback(async () => {
@@ -516,9 +537,14 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
       <div className="unified-header-breadcrumb">
         {breadcrumbSegments.map((segment, index) => {
           const isLast = index === breadcrumbSegments.length - 1;
+          const isClickable = !isLast && segment.folderPath;
           return (
             <React.Fragment key={index}>
-              <span className={`breadcrumb-segment ${isLast ? 'breadcrumb-filename' : ''}`}>
+              <span
+                className={`breadcrumb-segment ${isLast ? 'breadcrumb-filename' : ''} ${isClickable ? 'breadcrumb-clickable' : ''}`}
+                onClick={isClickable ? () => handleBreadcrumbClick(segment.folderPath) : undefined}
+                title={isClickable ? `Go to ${segment.name} in file tree` : undefined}
+              >
                 {!isLast && (
                   <svg className="breadcrumb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
@@ -530,7 +556,7 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
                     <polyline points="14 2 14 8 20 8"/>
                   </svg>
                 )}
-                {segment}
+                {segment.name}
               </span>
               {!isLast && <span className="breadcrumb-separator">/</span>}
             </React.Fragment>

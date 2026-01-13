@@ -32,6 +32,11 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
 
   // Excalidraw API reference
   const [excalidrawAPI, setExcalidrawAPI] = useState<ExcalidrawImperativeAPI | null>(null);
+  // Ref to access API in callbacks without stale closures
+  const excalidrawAPIRef = useRef<ExcalidrawImperativeAPI | null>(null);
+  useEffect(() => {
+    excalidrawAPIRef.current = excalidrawAPI;
+  }, [excalidrawAPI]);
 
   // Track what we believe is on disk to ignore echoes from our own saves
   const lastKnownDiskContentRef = useRef<string>('');
@@ -42,9 +47,18 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
   // Track when we're programmatically updating the scene (to suppress onChange -> dirty)
   const isUpdatingFromExternalRef = useRef(false);
 
-  // Track previous elements to detect actual content changes vs view-only changes
-  const previousElementsRef = useRef<readonly ExcalidrawElement[]>([]);
+  // Track previous state to detect actual content changes
+  // NOTE: Excalidraw reuses the same array reference (mutates in place), so we track
+  // a Map of element id -> version instead of the array reference
+  const previousElementVersionsRef = useRef<Map<string, number>>(new Map());
   const previousFilesCountRef = useRef<number>(0);
+  // Track appState that gets saved (scroll, zoom, background color)
+  const previousAppStateRef = useRef<{
+    scrollX: number;
+    scrollY: number;
+    zoom: number;
+    viewBackgroundColor: string;
+  } | null>(null);
 
   // Default empty Excalidraw file
   const createEmptyFile = (): ExcalidrawFile => ({
@@ -95,8 +109,19 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
         setInitialFiles(files);
 
         // Initialize previous refs for change detection
-        previousElementsRef.current = elements;
+        const versionMap = new Map<string, number>();
+        for (const el of elements) {
+          versionMap.set(el.id, el.version);
+        }
+        previousElementVersionsRef.current = versionMap;
         previousFilesCountRef.current = Object.keys(files).length;
+        // Initialize appState tracking
+        previousAppStateRef.current = {
+          scrollX: data.appState?.scrollX ?? 0,
+          scrollY: data.appState?.scrollY ?? 0,
+          zoom: typeof data.appState?.zoom === 'object' ? data.appState.zoom.value : (data.appState?.zoom ?? 1),
+          viewBackgroundColor: data.appState?.viewBackgroundColor ?? defaultBackgroundColor,
+        };
 
         lastKnownDiskContentRef.current = content || '';
         setIsLoading(false);
@@ -132,12 +157,13 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
         const elements = data.elements as ExcalidrawElement[];
         const files = data.files || {};
 
-        // Update Excalidraw via API
-        if (excalidrawAPI) {
+        // Update Excalidraw via API (use ref to avoid stale closure)
+        const api = excalidrawAPIRef.current;
+        if (api) {
           // Suppress onChange -> setDirty while we're updating from external change
           isUpdatingFromExternalRef.current = true;
           try {
-            excalidrawAPI.updateScene({
+            api.updateScene({
               elements,
               appState: data.appState,
             });
@@ -147,31 +173,45 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
               isUpdatingFromExternalRef.current = false;
             });
           }
+        } else {
+          console.warn('[Excalidraw] API not ready for external file change update');
         }
 
         // Update previous refs to match new content
-        previousElementsRef.current = elements;
+        const versionMap = new Map<string, number>();
+        for (const el of elements) {
+          versionMap.set(el.id, el.version);
+        }
+        previousElementVersionsRef.current = versionMap;
         previousFilesCountRef.current = Object.keys(files).length;
+        // Update appState tracking
+        previousAppStateRef.current = {
+          scrollX: data.appState?.scrollX ?? 0,
+          scrollY: data.appState?.scrollY ?? 0,
+          zoom: typeof data.appState?.zoom === 'object' ? data.appState.zoom.value : (data.appState?.zoom ?? 1),
+          viewBackgroundColor: data.appState?.viewBackgroundColor ?? defaultBackgroundColor,
+        };
 
         lastKnownDiskContentRef.current = newContent;
       } catch (error) {
         console.error('[Excalidraw] Failed to parse reloaded content:', error);
       }
     });
-  }, [host, excalidrawAPI]);
+  }, [host]);
 
   // Subscribe to save requests from host
   useEffect(() => {
     return host.onSaveRequested(async () => {
-      if (!excalidrawAPI) {
+      const api = excalidrawAPIRef.current;
+      if (!api) {
         console.error('[Excalidraw] Cannot save: API not ready');
         return;
       }
 
       try {
-        const elements = excalidrawAPI.getSceneElements();
-        const appState = excalidrawAPI.getAppState();
-        const files = excalidrawAPI.getFiles();
+        const elements = api.getSceneElements();
+        const appState = api.getAppState();
+        const files = api.getFiles();
 
         const fileData: ExcalidrawFile = {
           type: 'excalidraw',
@@ -196,7 +236,7 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
         console.error('[Excalidraw] Save failed:', error);
       }
     });
-  }, [host, excalidrawAPI]);
+  }, [host]);
 
   // Mark as dirty only when elements actually change (not just view state)
   const onChange = useCallback((
@@ -211,23 +251,18 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
 
     // Check if elements actually changed (not just selection/view state)
     // Excalidraw fires onChange for every state change including cursor, selection, zoom
-    const prevElements = previousElementsRef.current;
+    // NOTE: Excalidraw reuses the same array reference (mutates in place), so we cannot
+    // use reference equality. Instead, we track element IDs and versions.
+    const prevVersions = previousElementVersionsRef.current;
 
-    // Fast path: same reference means no change
-    if (elements === prevElements) {
-      return;
-    }
-
-    // Check if elements actually differ
-    let elementsChanged = elements.length !== prevElements.length;
+    // Check if elements actually differ by comparing versions
+    let elementsChanged = elements.length !== prevVersions.size;
 
     if (!elementsChanged) {
       // Check if any element version changed
-      for (let i = 0; i < elements.length; i++) {
-        const curr = elements[i];
-        const prev = prevElements[i];
-        // Elements have version numbers that increment on changes
-        if (curr.id !== prev.id || curr.version !== prev.version) {
+      for (const element of elements) {
+        const prevVersion = prevVersions.get(element.id);
+        if (prevVersion === undefined || prevVersion !== element.version) {
           elementsChanged = true;
           break;
         }
@@ -238,12 +273,32 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
     const currFilesCount = Object.keys(files).length;
     const filesChanged = currFilesCount !== previousFilesCountRef.current;
 
+    // Check if appState that we save has changed (scroll, zoom, background color)
+    const prevAppState = previousAppStateRef.current;
+    const zoomValue = typeof appState.zoom === 'object' ? appState.zoom.value : appState.zoom;
+    const appStateChanged = prevAppState === null ||
+      prevAppState.scrollX !== appState.scrollX ||
+      prevAppState.scrollY !== appState.scrollY ||
+      prevAppState.zoom !== zoomValue ||
+      prevAppState.viewBackgroundColor !== appState.viewBackgroundColor;
+
     // Update previous refs for next comparison
-    previousElementsRef.current = elements;
+    // Store a Map of id -> version for accurate tracking
+    const newVersions = new Map<string, number>();
+    for (const element of elements) {
+      newVersions.set(element.id, element.version);
+    }
+    previousElementVersionsRef.current = newVersions;
     previousFilesCountRef.current = currFilesCount;
+    previousAppStateRef.current = {
+      scrollX: appState.scrollX,
+      scrollY: appState.scrollY,
+      zoom: zoomValue,
+      viewBackgroundColor: appState.viewBackgroundColor,
+    };
 
     // Only mark dirty if actual content changed
-    if (elementsChanged || filesChanged) {
+    if (elementsChanged || filesChanged || appStateChanged) {
       host.setDirty(true);
     }
   }, [host]);

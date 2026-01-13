@@ -1,5 +1,5 @@
 /**
- * Test: CSV spreadsheet should not steal focus from quick open dialog
+ * CSV Spreadsheet Quick Open Focus E2E Test
  *
  * Regression test for focus stealing issue where RevoGrid would capture
  * keyboard input even when quick open dialog was open.
@@ -14,7 +14,7 @@ import {
   waitForAppReady,
   dismissProjectTrustToast,
   TEST_TIMEOUTS,
-} from '../helpers';
+} from '../../helpers';
 
 let electronApp: ElectronApplication;
 let page: Page;

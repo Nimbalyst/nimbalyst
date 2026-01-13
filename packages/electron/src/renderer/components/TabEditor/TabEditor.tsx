@@ -554,17 +554,16 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
         logger.ui.info(`[TabEditor] Restoring pending AI edit on mount: tagId=${pendingTag.id}, status=${pendingTag.status}`);
 
-        // Set the ref so other parts of the component know we're in diff mode
-        setPendingAIEditTag({
-          tagId: pendingTag.id,
-          sessionId: pendingTag.sessionId,
-          filePath: filePath
-        });
-
         // If content differs, apply the diff
         if (oldContent !== newContent) {
           // Route through EditorHost callback if custom editor has subscribed to diff requests
           if (diffRequestCallbackRef.current) {
+            // Set the ref so other parts of the component know we're in diff mode
+            setPendingAIEditTag({
+              tagId: pendingTag.id,
+              sessionId: pendingTag.sessionId,
+              filePath: filePath
+            });
             setShowCustomEditorDiffBar(true);
             // Fetch session info for the diff approval bar
             fetchDiffSessionInfo(pendingTag.sessionId, pendingTag.createdAt ? new Date(pendingTag.createdAt).getTime() : Date.now());
@@ -581,6 +580,20 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             onDirtyChange?.(false);
             return;
           }
+
+          // Custom editors that don't support diff mode: skip diff mode entirely
+          // The new content is already on disk, just don't enter diff mode
+          if (isCustom) {
+            logger.ui.info(`[TabEditor] Custom editor doesn't support diff mode, skipping: ${fileName}`);
+            return;
+          }
+
+          // Set the ref so other parts of the component know we're in diff mode
+          setPendingAIEditTag({
+            tagId: pendingTag.id,
+            sessionId: pendingTag.sessionId,
+            filePath: filePath
+          });
 
           // For code files, use Monaco diff mode
           if (!isMarkdown) {
@@ -845,7 +858,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       if (editorHostSaveRequestCallbackRef.current) {
         try {
           logger.ui.info(`[TabEditor] Requesting save from custom editor: ${fileName}`);
-          editorHostSaveRequestCallbackRef.current();
+          await editorHostSaveRequestCallbackRef.current();
         } catch (error) {
           logger.ui.error(`[TabEditor] Custom editor save request failed for ${filePath}:`, error);
         }
@@ -1225,9 +1238,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         // Apply time-based heuristic to avoid reloading after own save
         // BUT: Skip this for custom editors with pending AI edits (they need to reload)
         const timeSinceLastSave = lastSaveTimeRef.current ? Date.now() - lastSaveTimeRef.current : Infinity;
-        // console.log(`[TabEditor] File change for ${fileName}: timeSinceLastSave=${timeSinceLastSave}ms, isCustom=${isCustom}, hasPendingAI=${hasPendingAIEditForCustomEditor}`);
         if (timeSinceLastSave < 2000 && !hasPendingAIEditForCustomEditor) {
-          console.log(`[TabEditor] Skipping file change - recent save (${timeSinceLastSave}ms ago)`);
+          // console.log(`[TabEditor] Skipping file change - recent save (${timeSinceLastSave}ms ago)`);
           processingFileChangeRef.current = false;
           return;
         }
@@ -1312,9 +1324,17 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
         // Protect dirty files from being overwritten
         // BUT: Skip this check if there's a pending AI edit tag - the diff mode handles it
+        // Also skip if this is an echo from our own recent save (within 2s AND content matches)
         if (isDirtyRef.current && (!pendingTags || pendingTags.length === 0)) {
+          // Check if this is an echo from our own save - need BOTH time AND content match
+          // to avoid false positives where content happens to match for other reasons
+          if (timeSinceLastSave < 2000 && newContent === lastSavedContentRef.current) {
+            // This is our own save coming back - ignore it completely (don't clear dirty)
+            processingFileChangeRef.current = false;
+            return;
+          }
           // Store the new content and show dialog
-          console.log(`[TabEditor] FILE WATCHER: Showing conflict dialog (isDirty=${isDirtyRef.current}, pendingTags=${pendingTags.length})`);
+          logger.ui.info(`[TabEditor] FILE WATCHER: Showing conflict dialog for ${fileName}`);
           setConflictDialogContent(newContent);
           setShowConflictDialog(true);
           // Don't reset flag yet - let finally block handle it
@@ -2033,8 +2053,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         if (isDirtyRef.current !== isDirty) {
           isDirtyRef.current = isDirty;
           // Update tab dirty indicator via DOM (no React state cascade)
-          onDirtyChange?.(isDirty);
-          // Notify parent to update tab store (for save-on-close to work)
           onDirtyChange?.(isDirty);
           // Update macOS window dirty indicator if this is the active tab
           if (isActive && window.electronAPI?.setDocumentEdited) {

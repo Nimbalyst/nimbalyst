@@ -7,7 +7,6 @@
   "main": "dist/index.js",
   "styles": "dist/index.css",
   "apiVersion": "1.0.0",
-  "requiredReleaseChannel": "alpha",
   "permissions": {
     "filesystem": true
   },

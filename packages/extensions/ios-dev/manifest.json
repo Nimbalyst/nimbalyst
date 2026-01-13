@@ -6,6 +6,7 @@
   "author": "Nimbalyst",
   "main": "dist/index.mjs",
   "apiVersion": "1.0.0",
+  "requiredReleaseChannel": "alpha",
   "permissions": {
     "filesystem": true,
     "ai": true,

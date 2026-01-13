@@ -7,7 +7,7 @@
  */
 
 import type { JSX } from 'react';
-import React, { Suspense, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 
 import { CheckListPlugin } from '@lexical/react/LexicalCheckListPlugin';
 import { ClearEditorPlugin } from '@lexical/react/LexicalClearEditorPlugin';
@@ -171,11 +171,21 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
     }
   }, [editor, config]);
 
+  // Track whether initial load has completed to avoid false dirty state
+  const hasCompletedInitialLoadRef = useRef(false);
+
   // Handle content changes - report dirty state (no serialization)
   useEffect(() => {
     const removeUpdateListener = editor.registerUpdateListener(({dirtyElements, dirtyLeaves}) => {
       // Only trigger if there are actual changes
       if (dirtyElements.size === 0 && dirtyLeaves.size === 0) return;
+
+      // Skip the first update which is the initial content load
+      // This prevents false dirty state from content normalization during import
+      if (!hasCompletedInitialLoadRef.current) {
+        hasCompletedInitialLoadRef.current = true;
+        return;
+      }
 
       // Report dirty state - TabEditor handles deduplication
       if (config.onDirtyChange) {

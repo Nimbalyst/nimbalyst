@@ -68,7 +68,10 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   diffRejectAllButton: 'button.diff-reject-all-button[data-action="reject-all"]',
   acceptAllButton: 'button.diff-accept-all-button[data-action="accept-all"]', // Alias for compatibility
   rejectAllButton: 'button.diff-reject-all-button[data-action="reject-all"]', // Alias for compatibility
-  diffApprovalBar: '.diff-approval-bar',
+  diffApprovalBar: '.diff-approval-bar', // Legacy - Lexical now uses unifiedDiffHeader
+  unifiedDiffHeader: '.unified-diff-header', // Used by Lexical, Monaco, and custom editors
+  unifiedDiffAcceptAllButton: '.unified-diff-header-button-accept',
+  unifiedDiffRejectAllButton: '.unified-diff-header-button-reject',
   diffChangeCounter: '.diff-change-counter',
 
   // Monaco diff approval (Code files)
