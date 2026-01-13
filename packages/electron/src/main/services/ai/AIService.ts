@@ -634,6 +634,17 @@ export class AIService {
                   return;
                 }
 
+                // Track ai_message_queued analytics event for each prompt from mobile
+                // Note: Mobile doesn't currently support attachments or documentContext
+                for (let i = 0; i < newPromptsCount; i++) {
+                  AnalyticsService.getInstance().sendEvent('ai_message_queued', {
+                    provider: session.provider,
+                    source: 'mobile',
+                    hasDocumentContext: false,
+                    hasAttachments: false,
+                  });
+                }
+
                 // Only notify the window that owns this session's workspace
                 // This prevents duplicate execution when multiple windows are open
                 if (session.workspacePath) {
@@ -2474,6 +2485,22 @@ export class AIService {
       });
 
       logger.main.info(`[AIService] createQueuedPrompt: created ${promptId} for session ${sessionId}`);
+
+      // Track ai_message_queued analytics event
+      try {
+        const { AISessionsRepository } = await import('@nimbalyst/runtime/storage/repositories/AISessionsRepository');
+        const session = await AISessionsRepository.get(sessionId);
+        if (session) {
+          AnalyticsService.getInstance().sendEvent('ai_message_queued', {
+            provider: session.provider,
+            source: 'local',
+            hasDocumentContext: !!documentContext,
+            hasAttachments: !!(attachments && attachments.length > 0),
+          });
+        }
+      } catch (analyticsError) {
+        logger.main.warn('[AIService] Failed to track ai_message_queued:', analyticsError);
+      }
 
       // Notify the renderer to process the queue
       // This ensures locally-queued prompts get processed (same as mobile sync path)
