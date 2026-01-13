@@ -97,7 +97,10 @@ function ensureGlobalListenersRegistered() {
   });
 
   // Listen for programmatic stop events (e.g., AI assistant stopped the session)
-  window.electronAPI.on('voice-mode:stopped', (payload: { sessionId: string }) => {
+  window.electronAPI.on('voice-mode:stopped', async (payload: {
+    sessionId: string;
+    tokenUsage?: { inputAudio: number; outputAudio: number; text: number; total: number };
+  }) => {
     if (payload.sessionId === activeVoiceSessionId) {
       // Clean up audio resources
       if (globalAudioCapture) {
@@ -108,6 +111,19 @@ function ensureGlobalListenersRegistered() {
         globalAudioPlayback.destroy();
         globalAudioPlayback = null;
       }
+
+      // Persist voice token usage to session metadata
+      if (payload.tokenUsage && payload.tokenUsage.total > 0) {
+        try {
+          await window.electronAPI.invoke('ai:updateSessionMetadata', payload.sessionId, {
+            voiceTokenUsage: payload.tokenUsage,
+          });
+          console.log('[VoiceModeButton] Persisted voice token usage:', payload.tokenUsage);
+        } catch (error) {
+          console.error('[VoiceModeButton] Failed to persist voice token usage:', error);
+        }
+      }
+
       activeVoiceSessionId = null;
       // Trigger UI update via the stopped callback if registered
       if (globalStoppedCallback) {
@@ -214,7 +230,23 @@ export function VoiceModeButton({ sessionId, workspacePath, onVoiceActiveChange 
         }
 
         // Disconnect from OpenAI
-        await window.electronAPI.invoke('voice-mode:test-disconnect', workspacePath || null, sessionId || '');
+        const result = await window.electronAPI.invoke('voice-mode:test-disconnect', workspacePath || null, sessionId || '') as {
+          success: boolean;
+          tokenUsage?: { inputAudio: number; outputAudio: number; text: number; total: number };
+        };
+
+        // Persist voice token usage to session metadata
+        if (result.tokenUsage && result.tokenUsage.total > 0 && sessionId) {
+          try {
+            await window.electronAPI.invoke('ai:updateSessionMetadata', sessionId, {
+              voiceTokenUsage: result.tokenUsage,
+            });
+            console.log('[VoiceModeButton] Persisted voice token usage:', result.tokenUsage);
+          } catch (persistError) {
+            console.error('[VoiceModeButton] Failed to persist voice token usage:', persistError);
+          }
+        }
+
         activeVoiceSessionId = null;
         setIsVoiceActive(false);
         onVoiceActiveChange?.(false);

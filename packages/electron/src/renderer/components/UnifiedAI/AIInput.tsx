@@ -9,6 +9,7 @@ import { ModeTag, AIMode } from './ModeTag';
 import { ModelSelector } from './ModelSelector';
 import { VoiceModeButton } from './VoiceModeButton.tsx';
 import { VoiceTranscriptionDisplay } from './VoiceTranscriptionDisplay';
+import { VoiceContextIndicator } from './VoiceContextIndicator';
 import { ContextUsageDisplay } from './ContextUsageDisplay';
 import { MockupAnnotationIndicator } from './MockupAnnotationIndicator';
 import { TextSelectionIndicator } from './TextSelectionIndicator';
@@ -892,7 +893,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
             marginBottom: '4px'
           }}>
             {/* Voice Mode Button */}
-            <HelpTooltip testId="voice-mode-toggle">
+            <HelpTooltip testId="voice-mode-toggle" disabled={isVoiceActive}>
               <span style={{ display: 'inline-flex' }}>
                 <VoiceModeButton
                   sessionId={sessionId}
@@ -901,6 +902,13 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
                 />
               </span>
             </HelpTooltip>
+            {/* Voice context indicator - shows token usage when voice mode is active */}
+            {sessionId && (
+              <VoiceContextIndicator
+                isActive={isVoiceActive}
+                sessionId={sessionId}
+              />
+            )}
             {onModeChange && provider === 'claude-code' && mode && <ModeTag mode={mode} onModeChange={onModeChange} />}
 
             {onModelChange && currentModel && (

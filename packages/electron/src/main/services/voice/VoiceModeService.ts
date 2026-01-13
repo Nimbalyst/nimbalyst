@@ -102,15 +102,21 @@ export function stopVoiceSession(): boolean {
   // Track session ended (reason: assistant_stopped)
   sendSessionEndedEvent('assistant_stopped', activeVoiceSession.startTime);
 
+  // Get final token usage before disconnecting
+  const finalTokenUsage = activeVoiceSession.poc.getTokenUsage();
+
   // Disconnect from OpenAI
   activeVoiceSession.poc.disconnect('user_stopped');
 
   // Clean up the completion listener
   activeVoiceSession.cleanupCompletionListener();
 
-  // Notify the renderer that voice mode was stopped
+  // Notify the renderer that voice mode was stopped, include final token usage for persistence
   if (activeVoiceSession.window && !activeVoiceSession.window.isDestroyed()) {
-    activeVoiceSession.window.webContents.send('voice-mode:stopped', { sessionId });
+    activeVoiceSession.window.webContents.send('voice-mode:stopped', {
+      sessionId,
+      tokenUsage: finalTokenUsage,
+    });
   }
 
   activeVoiceSession = null;
@@ -309,6 +315,24 @@ export function initVoiceModeService() {
         }
       });
 
+      poc.setOnUserTranscript((transcript) => {
+        if (window && !window.isDestroyed()) {
+          window.webContents.send('voice-mode:transcript-complete', { sessionId, transcript });
+        }
+      });
+
+      poc.setOnUserTranscriptDelta((delta, itemId) => {
+        if (window && !window.isDestroyed()) {
+          window.webContents.send('voice-mode:transcript-delta', { sessionId, delta, itemId });
+        }
+      });
+
+      poc.setOnTokenUsage((usage) => {
+        if (window && !window.isDestroyed()) {
+          window.webContents.send('voice-mode:token-usage', { sessionId, usage });
+        }
+      });
+
       // Load coding agent prompt settings for inclusion in submit-prompt events
       const codingAgentPromptSettings = voiceModeSettings?.codingAgentPrompt || {};
 
@@ -502,10 +526,15 @@ export function initVoiceModeService() {
         throw new Error('Session ID is required for voice mode');
       }
 
+      let tokenUsage: { inputAudio: number; outputAudio: number; text: number; total: number } | undefined;
+
       // Only disconnect if this is the active session
       if (activeVoiceSession && activeVoiceSession.sessionId === sessionId) {
         // Track session ended before cleanup
         sendSessionEndedEvent('user_stopped', activeVoiceSession.startTime);
+
+        // Get final token usage before disconnect
+        tokenUsage = activeVoiceSession.poc.getTokenUsage();
 
         activeVoiceSession.poc.disconnect();
         // Clean up the completion listener
@@ -516,6 +545,7 @@ export function initVoiceModeService() {
       return {
         success: true,
         message: 'Disconnected',
+        tokenUsage,
       };
     } catch (error) {
       return {

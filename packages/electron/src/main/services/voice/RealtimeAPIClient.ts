@@ -61,6 +61,9 @@ export class RealtimeAPIClient {
   private connected: boolean = false;
   private onAudioCallback: ((audioBase64: string) => void) | null = null;
   private onTextCallback: ((text: string) => void) | null = null;
+  private onUserTranscriptCallback: ((transcript: string) => void) | null = null;
+  private onUserTranscriptDeltaCallback: ((delta: string, itemId: string) => void) | null = null;
+  private onTokenUsageCallback: ((usage: { inputAudio: number; outputAudio: number; text: number; total: number }) => void) | null = null;
   private onSubmitPromptCallback: ((prompt: string) => Promise<void>) | null = null;
   private onInterruptionCallback: (() => void) | null = null;
   private onDisconnectCallback: ((reason: 'timeout' | 'error' | 'user_stopped') => void) | null = null;
@@ -123,10 +126,31 @@ export class RealtimeAPIClient {
   }
 
   /**
-   * Set callback for received text
+   * Set callback for received text (assistant responses)
    */
   setOnText(callback: (text: string) => void): void {
     this.onTextCallback = callback;
+  }
+
+  /**
+   * Set callback for user speech transcription (final/complete)
+   */
+  setOnUserTranscript(callback: (transcript: string) => void): void {
+    this.onUserTranscriptCallback = callback;
+  }
+
+  /**
+   * Set callback for user speech transcription delta (streaming/partial)
+   */
+  setOnUserTranscriptDelta(callback: (delta: string, itemId: string) => void): void {
+    this.onUserTranscriptDeltaCallback = callback;
+  }
+
+  /**
+   * Set callback for token usage updates (for live context indicator)
+   */
+  setOnTokenUsage(callback: (usage: { inputAudio: number; outputAudio: number; text: number; total: number }) => void): void {
+    this.onTokenUsageCallback = callback;
   }
 
   /**
@@ -304,6 +328,24 @@ export class RealtimeAPIClient {
 
       case 'input_audio_buffer.speech_stopped':
         this.updateActivity();
+        break;
+
+      case 'conversation.item.input_audio_transcription.delta':
+        // Streaming transcription delta - shows partial text while user is speaking
+        const delta = (event as any).delta as string;
+        const deltaItemId = (event as any).item_id as string;
+        if (delta && this.onUserTranscriptDeltaCallback) {
+          this.onUserTranscriptDeltaCallback(delta, deltaItemId);
+        }
+        break;
+
+      case 'conversation.item.input_audio_transcription.completed':
+        // User's speech has been transcribed (final result)
+        const transcript = (event as any).transcript as string;
+        console.log('[RealtimeAPIClient] User transcript received:', transcript);
+        if (transcript && this.onUserTranscriptCallback) {
+          this.onUserTranscriptCallback(transcript);
+        }
         break;
 
       case 'error':
@@ -765,6 +807,16 @@ Guidelines:
         total: totalTokens
       }
     });
+
+    // Notify listener of updated token usage
+    if (this.onTokenUsageCallback) {
+      this.onTokenUsageCallback({
+        inputAudio: this.inputAudioTokens,
+        outputAudio: this.outputAudioTokens,
+        text: this.textTokens,
+        total: totalTokens,
+      });
+    }
   }
 
   /**

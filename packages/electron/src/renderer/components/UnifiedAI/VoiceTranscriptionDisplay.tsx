@@ -37,16 +37,16 @@ export function VoiceTranscriptionDisplay({ isActive, sessionId }: VoiceTranscri
       return;
     }
 
-    // Listen for user speech transcription (input_audio_transcription)
-    const handleTextReceived = (payload: { sessionId: string; text: string; type?: string }) => {
-      console.log('[VoiceTranscriptionDisplay] Received text:', payload);
+    // Listen for streaming transcription deltas (shows partial text while user speaks)
+    const handleTranscriptDelta = (payload: { sessionId: string; delta: string; itemId: string }) => {
       if (payload.sessionId !== sessionId) return;
-
-      // This is typically partial transcription - update current user text
-      setCurrentUserText(payload.text);
+      // For whisper-1, delta contains the full transcript so far
+      // For gpt-4o-transcribe models, it streams incrementally
+      // Either way, we just display the latest delta as the current text
+      setCurrentUserText(payload.delta);
     };
 
-    // Listen for assistant responses
+    // Listen for assistant text responses (voice agent speaking)
     const handleAssistantText = (payload: { sessionId: string; text: string }) => {
       if (payload.sessionId !== sessionId) return;
 
@@ -91,14 +91,16 @@ export function VoiceTranscriptionDisplay({ isActive, sessionId }: VoiceTranscri
 
     // Register listeners - store cleanup functions
     console.log('[VoiceTranscriptionDisplay] Registering IPC listeners for session:', sessionId);
-    const removeTextReceived = window.electronAPI.on('voice-mode:text-received', handleTextReceived);
+    const removeTranscriptDelta = window.electronAPI.on('voice-mode:transcript-delta', handleTranscriptDelta);
     const removeTranscriptComplete = window.electronAPI.on('voice-mode:transcript-complete', handleUserComplete);
+    const removeTextReceived = window.electronAPI.on('voice-mode:text-received', handleAssistantText);
 
     return () => {
       // Clean up listeners to prevent duplicates
       console.log('[VoiceTranscriptionDisplay] Cleaning up IPC listeners for session:', sessionId);
-      removeTextReceived?.();
+      removeTranscriptDelta?.();
       removeTranscriptComplete?.();
+      removeTextReceived?.();
     };
   }, [isActive, sessionId]);
 
@@ -131,98 +133,87 @@ export function VoiceTranscriptionDisplay({ isActive, sessionId }: VoiceTranscri
     <div
       ref={containerRef}
       style={{
-        position: 'absolute',
-        bottom: '100%',
-        left: 0,
-        right: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '6px',
+        padding: '8px 12px',
         marginBottom: '8px',
-        maxHeight: '200px',
-        overflow: 'hidden',
-        pointerEvents: 'none',
-        zIndex: 100,
+        maxHeight: '150px',
+        overflowY: 'auto',
+        background: 'var(--surface-tertiary)',
+        borderRadius: '8px',
+        border: '1px solid var(--border-primary)',
       }}
     >
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '6px',
-          padding: '8px 12px',
-          background: 'var(--surface-tertiary)',
-          borderRadius: '8px',
-          border: '1px solid var(--border-primary)',
-        }}
-      >
-        {/* Past entries */}
-        {entries.map(entry => (
-          <div
-            key={entry.id}
+      {/* Past entries */}
+      {entries.map(entry => (
+        <div
+          key={entry.id}
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '8px',
+            opacity: Math.max(0.3, 1 - (Date.now() - entry.timestamp) / ENTRY_TIMEOUT_MS),
+            transition: 'opacity 0.5s ease-out',
+          }}
+        >
+          <span
             style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: '8px',
-              opacity: Math.max(0.3, 1 - (Date.now() - entry.timestamp) / ENTRY_TIMEOUT_MS),
-              transition: 'opacity 0.5s ease-out',
+              fontSize: '11px',
+              fontWeight: 600,
+              color: entry.type === 'user' ? 'var(--accent-primary)' : 'var(--success-color)',
+              textTransform: 'uppercase',
+              flexShrink: 0,
+              marginTop: '2px',
             }}
           >
-            <span
-              style={{
-                fontSize: '11px',
-                fontWeight: 600,
-                color: entry.type === 'user' ? 'var(--accent-primary)' : 'var(--success-color)',
-                textTransform: 'uppercase',
-                flexShrink: 0,
-                marginTop: '2px',
-              }}
-            >
-              {entry.type === 'user' ? 'YOU' : 'AI'}
-            </span>
-            <span
-              style={{
-                fontSize: '13px',
-                color: 'var(--text-primary)',
-                lineHeight: '1.4',
-              }}
-            >
-              {entry.text}
-            </span>
-          </div>
-        ))}
+            {entry.type === 'user' ? 'YOU' : 'AI'}
+          </span>
+          <span
+            style={{
+              fontSize: '13px',
+              color: 'var(--text-primary)',
+              lineHeight: '1.4',
+            }}
+          >
+            {entry.text}
+          </span>
+        </div>
+      ))}
 
-        {/* Current user speech (live transcription) */}
-        {currentUserText && (
-          <div
+      {/* Current user speech (live transcription) */}
+      {currentUserText && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '8px',
+          }}
+        >
+          <span
             style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: '8px',
+              fontSize: '11px',
+              fontWeight: 600,
+              color: 'var(--accent-primary)',
+              textTransform: 'uppercase',
+              flexShrink: 0,
+              marginTop: '2px',
             }}
           >
-            <span
-              style={{
-                fontSize: '11px',
-                fontWeight: 600,
-                color: 'var(--accent-primary)',
-                textTransform: 'uppercase',
-                flexShrink: 0,
-                marginTop: '2px',
-              }}
-            >
-              YOU
-            </span>
-            <span
-              style={{
-                fontSize: '13px',
-                color: 'var(--text-secondary)',
-                lineHeight: '1.4',
-                fontStyle: 'italic',
-              }}
-            >
-              {currentUserText}...
-            </span>
-          </div>
-        )}
-      </div>
+            YOU
+          </span>
+          <span
+            style={{
+              fontSize: '13px',
+              color: 'var(--text-secondary)',
+              lineHeight: '1.4',
+              fontStyle: 'italic',
+            }}
+          >
+            {currentUserText}...
+          </span>
+        </div>
+      )}
     </div>
   );
 }
