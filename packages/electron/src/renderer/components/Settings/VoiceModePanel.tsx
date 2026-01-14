@@ -34,6 +34,7 @@ interface VoiceModePanelProps {
   onVoiceAgentPromptChange?: (config: SystemPromptConfig) => void;
   codingAgentPrompt?: SystemPromptConfig;
   onCodingAgentPromptChange?: (config: SystemPromptConfig) => void;
+  workspacePath?: string;
 }
 
 // Default turn detection config
@@ -90,11 +91,80 @@ export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
   onVoiceAgentPromptChange,
   codingAgentPrompt,
   onCodingAgentPromptChange,
+  workspacePath,
 }) => {
   const [showVoiceAgentPrompt, setShowVoiceAgentPrompt] = React.useState(false);
   const [showCodingAgentPrompt, setShowCodingAgentPrompt] = React.useState(false);
   const [isPreviewPlaying, setIsPreviewPlaying] = React.useState(false);
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
+
+  // Project summary state
+  const [projectSummaryExists, setProjectSummaryExists] = React.useState<boolean | null>(null);
+  const [isGeneratingSummary, setIsGeneratingSummary] = React.useState(false);
+  const [summaryError, setSummaryError] = React.useState<string | null>(null);
+  const [summaryPath, setSummaryPath] = React.useState<string | null>(null);
+
+  // Check if project summary exists
+  React.useEffect(() => {
+    if (!workspacePath) {
+      setProjectSummaryExists(null);
+      return;
+    }
+
+    const checkSummary = async () => {
+      try {
+        const path = `${workspacePath}/nimbalyst-local/voice-project-summary.md`;
+        const exists = await window.electronAPI?.invoke('file:exists', path);
+        setProjectSummaryExists(exists);
+        if (exists) {
+          setSummaryPath(path);
+        }
+      } catch {
+        setProjectSummaryExists(false);
+      }
+    };
+
+    checkSummary();
+  }, [workspacePath]);
+
+  // Generate project summary
+  const handleGenerateSummary = async () => {
+    if (!workspacePath) return;
+
+    setIsGeneratingSummary(true);
+    setSummaryError(null);
+
+    try {
+      const result = await window.electronAPI?.invoke('voice-mode:generate-project-summary', workspacePath);
+      if (result?.success) {
+        setProjectSummaryExists(true);
+        setSummaryPath(result.path);
+      } else {
+        setSummaryError(result?.message || 'Failed to generate summary');
+      }
+    } catch (error) {
+      setSummaryError(error instanceof Error ? error.message : 'Unknown error');
+    } finally {
+      setIsGeneratingSummary(false);
+    }
+  };
+
+  // Open summary file in editor
+  const handleOpenSummary = async () => {
+    if (summaryPath && workspacePath) {
+      await window.electronAPI?.invoke('workspace:open-file', { workspacePath, filePath: summaryPath });
+    }
+  };
+
+  // Auto-generate summary when voice mode is first enabled
+  const handleEnabledChange = async (newEnabled: boolean) => {
+    onEnabledChange(newEnabled);
+
+    // If enabling voice mode and no summary exists, generate one
+    if (newEnabled && workspacePath && projectSummaryExists === false) {
+      handleGenerateSummary();
+    }
+  };
 
   // Listen for preview audio from main process
   React.useEffect(() => {
@@ -189,7 +259,7 @@ export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
             <input
               type="checkbox"
               checked={enabled}
-              onChange={(e) => onEnabledChange(e.target.checked)}
+              onChange={(e) => handleEnabledChange(e.target.checked)}
               className="setting-checkbox"
               disabled={!hasOpenAIKey}
             />
@@ -395,6 +465,97 @@ export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
               </label>
             </div>
           </div>
+
+          {/* Project Summary Section */}
+          {workspacePath && (
+            <div className="provider-panel-section">
+              <h4 className="provider-panel-section-title">Project Summary</h4>
+              <p className="provider-panel-hint" style={{ marginBottom: '12px' }}>
+                The voice assistant uses an AI-generated summary of your project to understand context.
+                This summary is stored in <code style={{ fontSize: '12px', background: 'var(--surface-secondary)', padding: '2px 4px', borderRadius: '3px' }}>nimbalyst-local/voice-project-summary.md</code>.
+              </p>
+
+              {isGeneratingSummary ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-secondary)' }}>
+                  <MaterialSymbol icon="sync" size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                  Generating project summary using Claude...
+                </div>
+              ) : projectSummaryExists ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <MaterialSymbol icon="check_circle" size={16} style={{ color: 'var(--success-color)' }} />
+                  <span style={{ color: 'var(--text-secondary)' }}>Summary exists</span>
+                  <button
+                    onClick={handleOpenSummary}
+                    style={{
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      border: '1px solid var(--border-primary)',
+                      backgroundColor: 'var(--surface-secondary)',
+                      color: 'var(--text-primary)',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                    title="Open summary file"
+                  >
+                    <MaterialSymbol icon="open_in_new" size={14} />
+                    View
+                  </button>
+                  <button
+                    onClick={handleGenerateSummary}
+                    style={{
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      border: '1px solid var(--border-primary)',
+                      backgroundColor: 'var(--surface-secondary)',
+                      color: 'var(--text-primary)',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                    title="Regenerate summary"
+                  >
+                    <MaterialSymbol icon="refresh" size={14} />
+                    Regenerate
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <button
+                    onClick={handleGenerateSummary}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: '4px',
+                      border: '1px solid var(--border-primary)',
+                      backgroundColor: 'var(--accent-primary)',
+                      color: 'white',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <MaterialSymbol icon="auto_awesome" size={16} />
+                    Generate Project Summary
+                  </button>
+                  <p className="provider-panel-hint" style={{ marginTop: '8px', fontSize: '12px' }}>
+                    This will read your CLAUDE.md, README.md, and package.json to create a concise summary.
+                  </p>
+                </div>
+              )}
+
+              {summaryError && (
+                <p style={{ color: 'var(--error-color)', marginTop: '8px', fontSize: '12px' }}>
+                  {summaryError}
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="provider-panel-section">
             <h4 className="provider-panel-section-title">Usage & Pricing</h4>

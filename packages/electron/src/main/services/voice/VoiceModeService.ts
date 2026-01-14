@@ -266,15 +266,97 @@ export function initVoiceModeService() {
           // Session name is stored in the 'title' field, not 'name'
           const sessionName = session.title || session.name || 'Untitled';
           const userMessageCount = session.messages?.filter((m: any) => m.role === 'user').length || 0;
+          const sessionMode = session.mode || 'agent'; // 'agent' or 'planning'
+
+          // Build context parts
+          const contextParts: string[] = [];
+          contextParts.push(`Session: "${sessionName}"`);
+          contextParts.push(`Mode: ${sessionMode === 'planning' ? 'Planning mode (read-only exploration)' : 'Agent mode (can make changes)'}`);
 
           if (messageCount === 0) {
-            sessionContext = `Session "${sessionName}" - New session with no messages yet.`;
+            contextParts.push('Status: New session with no messages yet.');
           } else {
-            sessionContext = `Session "${sessionName}" - ${userMessageCount} user ${userMessageCount === 1 ? 'prompt' : 'prompts'} so far, ${messageCount} total messages in conversation.`;
+            contextParts.push(`Activity: ${userMessageCount} user ${userMessageCount === 1 ? 'prompt' : 'prompts'}, ${messageCount} total messages.`);
+
+            // Extract recent activity from messages (last few tool calls or key actions)
+            const recentMessages = (session.messages || []).slice(-10);
+            const recentToolCalls = recentMessages
+              .filter((m: any) => m.role === 'assistant' && m.toolCalls?.length > 0)
+              .flatMap((m: any) => m.toolCalls || [])
+              .slice(-5);
+
+            if (recentToolCalls.length > 0) {
+              const toolSummary = recentToolCalls.map((tc: any) => {
+                if (tc.name === 'Edit' || tc.name === 'Write') {
+                  const filePath = tc.arguments?.file_path || tc.arguments?.filePath;
+                  return filePath ? `edited ${filePath.split('/').pop()}` : 'edited a file';
+                } else if (tc.name === 'Read') {
+                  const filePath = tc.arguments?.file_path || tc.arguments?.filePath;
+                  return filePath ? `read ${filePath.split('/').pop()}` : 'read a file';
+                } else if (tc.name === 'Bash') {
+                  return 'ran a command';
+                } else if (tc.name === 'Grep' || tc.name === 'Glob') {
+                  return 'searched files';
+                }
+                return tc.name?.toLowerCase() || 'used a tool';
+              }).join(', ');
+              contextParts.push(`Recent: ${toolSummary}`);
+            }
           }
+
+          sessionContext = contextParts.join('\n');
         }
       } catch (error) {
         console.error('[VoiceModeService] Failed to load session context:', error);
+      }
+
+      // Get files that have been read or edited during this session
+      try {
+        const { SessionFilesRepository } = await import('@nimbalyst/runtime/storage/repositories/SessionFilesRepository');
+        const [editedFiles, readFiles] = await Promise.all([
+          SessionFilesRepository.getFilesBySession(sessionId, 'edited'),
+          SessionFilesRepository.getFilesBySession(sessionId, 'read'),
+        ]);
+
+        // Combine and dedupe, prioritizing edited files
+        const allFiles = [...editedFiles];
+        for (const file of readFiles) {
+          if (!allFiles.some(f => f.filePath === file.filePath)) {
+            allFiles.push(file);
+          }
+        }
+
+        if (allFiles.length > 0) {
+          // Show up to 8 files, with edited files first
+          const fileList = allFiles.slice(0, 8).map(f => {
+            const fileName = f.filePath.split('/').pop();
+            const isEdited = editedFiles.some(e => e.filePath === f.filePath);
+            return isEdited ? `${fileName} (edited)` : fileName;
+          }).join(', ');
+          sessionContext += `\nSession files: ${fileList}`;
+        }
+      } catch (error) {
+        // Ignore - session files are optional context
+        console.error('[VoiceModeService] Failed to load session files:', error);
+      }
+
+      // Load AI-generated project summary for voice mode context
+      // This is stored in nimbalyst-local/voice-project-summary.md and generated on demand
+      if (workspacePath) {
+        try {
+          const fs = await import('fs/promises');
+          const path = await import('path');
+
+          const summaryPath = path.join(workspacePath, 'nimbalyst-local', 'voice-project-summary.md');
+          const summaryContent = await fs.readFile(summaryPath, 'utf-8').catch(() => null);
+
+          if (summaryContent) {
+            // Include the full summary - it's already AI-curated to be concise and voice-friendly
+            sessionContext += `\n\nProject Summary:\n${summaryContent.trim()}`;
+          }
+        } catch (error) {
+          // Ignore - summary file is optional
+        }
       }
 
       // Load custom voice agent prompt, turn detection settings, and voice
@@ -707,6 +789,120 @@ export function initVoiceModeService() {
       return {
         success: false,
         message: `Voice preview failed: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  });
+
+  /**
+   * Generate a voice-friendly project summary using Claude
+   * Stores the result in nimbalyst-local/voice-project-summary.md
+   */
+  safeHandle('voice-mode:generate-project-summary', async (event, workspacePath: string) => {
+    try {
+      if (!workspacePath) {
+        return { success: false, message: 'Workspace path is required' };
+      }
+
+      const fs = await import('fs/promises');
+      const path = await import('path');
+
+      // Get Anthropic API key
+      const apiKeys = settingsStore.get('apiKeys') as Record<string, string> | undefined;
+      const apiKey = apiKeys?.anthropic;
+
+      if (!apiKey) {
+        return { success: false, message: 'Anthropic API key not configured' };
+      }
+
+      // Read relevant project files for context
+      const contextFiles: { name: string; content: string }[] = [];
+
+      // Try to read CLAUDE.md
+      try {
+        const claudeMd = await fs.readFile(path.join(workspacePath, 'CLAUDE.md'), 'utf-8');
+        contextFiles.push({ name: 'CLAUDE.md', content: claudeMd.slice(0, 15000) }); // Limit size
+      } catch { /* ignore */ }
+
+      // Try to read README.md
+      try {
+        const readme = await fs.readFile(path.join(workspacePath, 'README.md'), 'utf-8');
+        contextFiles.push({ name: 'README.md', content: readme.slice(0, 8000) });
+      } catch { /* ignore */ }
+
+      // Try to read package.json
+      try {
+        const pkgJson = await fs.readFile(path.join(workspacePath, 'package.json'), 'utf-8');
+        contextFiles.push({ name: 'package.json', content: pkgJson });
+      } catch { /* ignore */ }
+
+      if (contextFiles.length === 0) {
+        return { success: false, message: 'No project files found (CLAUDE.md, README.md, or package.json)' };
+      }
+
+      // Build the prompt
+      const prompt = `You are generating a concise project summary for a voice assistant that helps developers with this codebase. The voice assistant needs a quick overview it can reference during conversations.
+
+Based on the following project files, generate a voice-friendly summary (400-600 words) that covers:
+1. What the project is and what it does (1-2 sentences)
+2. Key technologies and frameworks used
+3. Main directory/package structure (if it's a monorepo)
+4. Important conventions or patterns to be aware of
+5. Current focus areas or notable features
+
+Keep it conversational and scannable - this will be read by an AI, not displayed to humans. Avoid code blocks, bullet points with symbols, and overly technical jargon. Use natural sentences.
+
+${contextFiles.map(f => `--- ${f.name} ---\n${f.content}`).join('\n\n')}
+
+Generate the summary now:`;
+
+      // Call Anthropic API directly
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1024,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return { success: false, message: `API error: ${response.status} - ${errorText}` };
+      }
+
+      const result = await response.json() as { content: Array<{ type: string; text?: string }> };
+      const summary = result.content.find(c => c.type === 'text')?.text;
+
+      if (!summary) {
+        return { success: false, message: 'No summary generated' };
+      }
+
+      // Ensure nimbalyst-local directory exists
+      const nimbalystLocalDir = path.join(workspacePath, 'nimbalyst-local');
+      await fs.mkdir(nimbalystLocalDir, { recursive: true });
+
+      // Write the summary
+      const summaryPath = path.join(nimbalystLocalDir, 'voice-project-summary.md');
+      await fs.writeFile(summaryPath, summary.trim(), 'utf-8');
+
+      console.log('[VoiceModeService] Generated project summary:', summaryPath);
+
+      return {
+        success: true,
+        message: 'Project summary generated',
+        path: summaryPath,
+        summary: summary.trim(),
+      };
+    } catch (error) {
+      console.error('[VoiceModeService] Failed to generate project summary:', error);
+      return {
+        success: false,
+        message: `Failed to generate summary: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
   });
