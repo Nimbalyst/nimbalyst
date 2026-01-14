@@ -443,6 +443,23 @@ interface ElectronAPI {
       isMerged: boolean;
     };
   }>;
+  worktreeGetByPath: (worktreePath: string) => Promise<{
+    success: boolean;
+    error?: string;
+    worktree?: {
+      id: string;
+      name: string;
+      displayName?: string;
+      path: string;
+      branch: string;
+      baseBranch: string;
+      projectPath: string;
+      createdAt: number;
+      updatedAt?: number;
+      isPinned?: boolean;
+      isArchived?: boolean;
+    } | null;
+  }>;
   worktreeDelete: (worktreeId: string, workspacePath: string) => Promise<{
     success: boolean;
     error?: string;

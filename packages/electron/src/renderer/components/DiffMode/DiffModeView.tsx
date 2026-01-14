@@ -3,6 +3,7 @@ import { DiffFileTabs } from './DiffFileTabs';
 import { DiffContent } from './DiffContent';
 import { ChangesPanel } from './ChangesPanel';
 import { MergeConflictDialog } from './MergeConflictDialog';
+import { ArchiveWorktreeDialog } from './ArchiveWorktreeDialog';
 import './DiffModeView.css';
 
 export interface ChangedFile {
@@ -25,9 +26,10 @@ interface DiffModeViewProps {
   workspacePath: string;
   worktreeId?: string;
   isActive: boolean;
+  onArchived?: () => void;
 }
 
-export function DiffModeView({ worktreePath, workspacePath, worktreeId, isActive }: DiffModeViewProps) {
+export function DiffModeView({ worktreePath, workspacePath, worktreeId, isActive, onArchived }: DiffModeViewProps) {
   const [changedFiles, setChangedFiles] = useState<ChangedFile[]>([]);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
 
@@ -43,6 +45,8 @@ export function DiffModeView({ worktreePath, workspacePath, worktreeId, isActive
   const [isMerged, setIsMerged] = useState(false);
   const [isRebasing, setIsRebasing] = useState(false);
   const [mergeConflictFiles, setMergeConflictFiles] = useState<string[] | null>(null);
+  const [worktreeName, setWorktreeName] = useState<string>('');
+  const [showArchiveDialog, setShowArchiveDialog] = useState(false);
   const isResizingRef = useRef(false);
 
   // Load changed files from the worktree
@@ -87,6 +91,21 @@ export function DiffModeView({ worktreePath, workspacePath, worktreeId, isActive
     }
   }, [worktreePath]);
 
+  // Load worktree info
+  // Load worktree name for archive dialog
+  const loadWorktreeName = useCallback(async () => {
+    if (!worktreePath) return;
+
+    try {
+      const result = await window.electronAPI.worktreeGetByPath(worktreePath);
+      if (result?.success && result.worktree) {
+        setWorktreeName(result.worktree.displayName || result.worktree.name);
+      }
+    } catch (err) {
+      console.error('[DiffModeView] Failed to load worktree name:', err);
+    }
+  }, [worktreePath]);
+
   // Load repo root's current branch
   const loadRepoRootBranch = useCallback(async () => {
     if (!workspacePath) return;
@@ -121,11 +140,11 @@ export function DiffModeView({ worktreePath, workspacePath, worktreeId, isActive
     const load = async () => {
       setIsLoading(true);
       setError(null);
-      await Promise.all([loadChangedFiles(), loadCommits(), loadRepoRootBranch(), loadWorktreeStatus()]);
+      await Promise.all([loadWorktreeName(), loadChangedFiles(), loadCommits(), loadRepoRootBranch(), loadWorktreeStatus()]);
       setIsLoading(false);
     };
     load();
-  }, [loadChangedFiles, loadCommits, loadRepoRootBranch, loadWorktreeStatus]);
+  }, [loadWorktreeName, loadChangedFiles, loadCommits, loadRepoRootBranch, loadWorktreeStatus]);
 
   // Toggle file staged state
   const handleToggleStaged = useCallback((filePath: string) => {
@@ -172,6 +191,8 @@ export function DiffModeView({ worktreePath, workspacePath, worktreeId, isActive
       if (result?.success) {
         // Reload files and commits
         await Promise.all([loadChangedFiles(), loadCommits(), loadWorktreeStatus()]);
+        // Show archive dialog after successful merge
+        setShowArchiveDialog(true);
       } else {
         // Check if this is a merge conflict error (detected before merge started)
         if ((result?.message === 'merge-conflict-detected' || result?.message === 'merge-conflict-in-main') && result?.conflictedFiles) {
@@ -349,6 +370,37 @@ Please proceed with this strategy.`;
     }
   }, [workspacePath, worktreePath, worktreeId, repoRootBranch, mergeConflictFiles]);
 
+  // Handle archive worktree
+  const handleArchiveWorktree = useCallback(async () => {
+    if (!worktreeId) {
+      console.error('[DiffModeView] Cannot archive: worktreeId not available');
+      return;
+    }
+
+    console.log('[DiffModeView] Archiving worktree:', { worktreeId, hasCallback: !!onArchived });
+
+    try {
+      await window.electronAPI.worktreeArchive(worktreeId, workspacePath);
+      console.log('[DiffModeView] Archive complete, closing dialog and calling onArchived');
+      setShowArchiveDialog(false);
+      // Notify parent that worktree was archived
+      if (onArchived) {
+        console.log('[DiffModeView] Calling onArchived callback');
+        onArchived();
+      } else {
+        console.warn('[DiffModeView] No onArchived callback provided');
+      }
+    } catch (err) {
+      console.error('[DiffModeView] Failed to archive worktree:', err);
+      setError('Failed to archive worktree');
+    }
+  }, [worktreeId, workspacePath, onArchived]);
+
+  // Handle keep worktree (dismiss dialog)
+  const handleKeepWorktree = useCallback(() => {
+    setShowArchiveDialog(false);
+  }, []);
+
   // Handle resize
   const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -472,6 +524,15 @@ Please proceed with this strategy.`;
           conflictedFiles={mergeConflictFiles}
           onResolveWithAgent={handleResolveConflictsWithAgent}
           onCancel={() => setMergeConflictFiles(null)}
+        />
+      )}
+
+      {/* Archive dialog */}
+      {showArchiveDialog && (
+        <ArchiveWorktreeDialog
+          worktreeName={worktreeName}
+          onArchive={handleArchiveWorktree}
+          onKeep={handleKeepWorktree}
         />
       )}
     </div>

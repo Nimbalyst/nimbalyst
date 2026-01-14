@@ -43,6 +43,7 @@ interface WorktreeFilesModeProps {
   chatPanel: React.ReactNode;
   onMounted?: (sessionId: string) => void;
   onMaximize?: () => void;
+  onArchived?: () => void;
 }
 
 const SPECIAL_DIRECTORIES = ['nimbalyst-local'];
@@ -89,7 +90,8 @@ const WorktreeFilesModeInner = forwardRef<WorktreeFilesModeRef, WorktreeFilesMod
   mode,
   chatPanel,
   onMounted,
-  onMaximize
+  onMaximize,
+  onArchived
 }, ref) {
   const { theme } = useTheme();
   const tabsActions = useTabsActions();
@@ -591,6 +593,7 @@ const WorktreeFilesModeInner = forwardRef<WorktreeFilesModeRef, WorktreeFilesMod
           workspacePath={workspacePath}
           worktreeId={sessionData.worktreeId}
           isActive={isActive}
+          onArchived={onArchived}
         />
       </div>
     );

@@ -287,6 +287,50 @@ export function registerWorktreeHandlers(): void {
   });
 
   /**
+   * Get worktree by path
+   *
+   * @param worktreePath - Path to the worktree
+   * @returns Worktree data or null if not found
+   */
+  ipcMain.handle('worktree:get-by-path', async (_event, worktreePath: string) => {
+    try {
+      if (!worktreePath) {
+        throw new Error('worktreePath is required');
+      }
+
+      logger.info('Getting worktree by path', { worktreePath });
+
+      const db = getDatabase();
+      if (!db) {
+        throw new Error('Database not initialized');
+      }
+
+      const worktreeStore = createWorktreeStore(db);
+      const worktree = await worktreeStore.getByPath(worktreePath);
+
+      if (!worktree) {
+        logger.info('Worktree not found', { worktreePath });
+        return {
+          success: true,
+          worktree: null,
+        };
+      }
+
+      return {
+        success: true,
+        worktree,
+      };
+    } catch (error) {
+      logger.error('Failed to get worktree by path:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get worktree by path',
+        worktree: null,
+      };
+    }
+  });
+
+  /**
    * Batch fetch worktrees with their git status
    * Efficiently fetches multiple worktrees and their status in a single IPC call
    *
