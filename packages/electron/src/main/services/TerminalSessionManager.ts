@@ -15,15 +15,14 @@ import path from 'path';
 import { createRequire } from 'module';
 
 // Load node-pty using explicit path resolution.
-// In packaged builds, node-pty is in app.asar.unpacked/node_modules.
-// Using createRequire with an explicit path avoids needing NODE_PATH manipulation
-// and allows the main entry point to use static imports (no dynamic import boundary).
+// In packaged builds, node-pty is in Resources/node-pty.
+// IMPORTANT: The path must NOT contain "app.asar" because node-pty's unixTerminal.js
+// does helperPath.replace('app.asar', 'app.asar.unpacked') which incorrectly transforms
+// paths already containing "app.asar.unpacked" into "app.asar.unpacked.unpacked".
 function loadNodePty(): typeof import('node-pty') {
   if (app.isPackaged) {
     const ptyPath = path.join(
       process.resourcesPath,
-      'app.asar.unpacked',
-      'node_modules',
       'node-pty'
     );
     const require = createRequire(import.meta.url);

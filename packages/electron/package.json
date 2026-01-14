@@ -149,8 +149,7 @@
     "asarUnpack": [
       "node_modules/**/*.node",
       "node_modules/@anthropic-ai/**/*",
-      "node_modules/openai/**/*",
-      "node_modules/node-pty/**/*"
+      "node_modules/openai/**/*"
     ],
     "files": [
       "out/**/*",
@@ -161,7 +160,7 @@
     "extraFiles": [
       {
         "from": "../../node_modules/node-pty",
-        "to": "Resources/app.asar.unpacked/node_modules/node-pty"
+        "to": "Resources/node-pty"
       }
     ],
     "extraResources": [
