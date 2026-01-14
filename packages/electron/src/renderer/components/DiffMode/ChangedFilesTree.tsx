@@ -16,6 +16,7 @@ interface FileTreeNode {
   status?: 'added' | 'modified' | 'deleted';
   staged?: boolean;
   children?: FileTreeNode[];
+  displayPath?: string; // Flattened display path for single-child chains
 }
 
 function buildFileTree(files: ChangedFile[]): FileTreeNode[] {
@@ -51,7 +52,39 @@ function buildFileTree(files: ChangedFile[]): FileTreeNode[] {
     }
   }
 
-  return root;
+  // Flatten single-child directory chains
+  function flattenNode(node: FileTreeNode): FileTreeNode {
+    if (node.type === 'file' || !node.children || node.children.length !== 1) {
+      // If it's a file or has 0 or 2+ children, just recursively flatten children
+      if (node.children) {
+        node.children = node.children.map(flattenNode);
+      }
+      return node;
+    }
+
+    // Single child - check if we can flatten
+    const child = node.children[0];
+
+    if (child.type === 'file') {
+      // Don't flatten if the single child is a file - keep the directory separate
+      node.children = node.children.map(flattenNode);
+      return node;
+    }
+
+    // Flatten the chain: combine directory names
+    const flattenedPath = `${node.name}/${child.name}`;
+    const flattened: FileTreeNode = {
+      ...child,
+      name: child.name,
+      displayPath: flattenedPath,
+      children: child.children,
+    };
+
+    // Continue flattening down the chain
+    return flattenNode(flattened);
+  }
+
+  return root.map(flattenNode);
 }
 
 function getStatusBadge(status: 'added' | 'modified' | 'deleted'): string {
@@ -148,7 +181,7 @@ export function ChangedFilesTree({ files, onToggleStaged, onSelectFile }: Change
             ) : (
               <>
                 <MaterialSymbol icon="folder" size={14} />
-                <span className="changed-files-tree-folder-name">{node.name}</span>
+                <span className="changed-files-tree-folder-name">{node.displayPath || node.name}</span>
               </>
             )}
           </div>
