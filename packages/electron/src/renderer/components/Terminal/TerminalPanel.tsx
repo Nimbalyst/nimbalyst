@@ -276,6 +276,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
         backgroundColor: 'var(--terminal-bg)',
         display: 'flex',
         flexDirection: 'column',
+        padding: '8px',
       }}
     >
       <div
@@ -283,7 +284,6 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
         className="terminal-container"
         style={{
           flex: 1,
-          padding: '8px',
           overflow: 'hidden',
         }}
         data-testid="terminal-container"
