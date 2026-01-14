@@ -52,7 +52,6 @@ export function QRPairingModal({ isOpen, onClose, serverUrl }: QRPairingModalPro
   const [effectiveUrl, setEffectiveUrl] = useState(serverUrl);
 
   const isLocalServer = isLocalDevServer(serverUrl);
-  const isDev = import.meta.env.DEV;
 
   // Fetch local IP when modal opens
   useEffect(() => {
@@ -233,8 +232,8 @@ export function QRPairingModal({ isOpen, onClose, serverUrl }: QRPairingModalPro
                 Regenerate QR Code
               </button>
 
-              {/* Dev mode: Copy JSON payload for browser testing */}
-              {isDev && qrPayload && (
+              {/* Copy pairing data for manual setup (alternative to QR scanning) */}
+              {qrPayload && (
                 <div className="qr-dev-copy">
                   <button
                     className="qr-dev-copy-button"
@@ -242,9 +241,9 @@ export function QRPairingModal({ isOpen, onClose, serverUrl }: QRPairingModalPro
                     style={{
                       marginTop: '12px',
                       padding: '8px 16px',
-                      backgroundColor: copied ? '#22c55e' : '#f97316',
-                      color: 'white',
-                      border: 'none',
+                      backgroundColor: copied ? '#22c55e' : 'var(--surface-tertiary)',
+                      color: copied ? 'white' : 'var(--text-secondary)',
+                      border: '1px solid var(--border-primary)',
                       borderRadius: '6px',
                       cursor: 'pointer',
                       fontSize: '13px',
@@ -266,7 +265,7 @@ export function QRPairingModal({ isOpen, onClose, serverUrl }: QRPairingModalPro
                         </>
                       )}
                     </svg>
-                    {copied ? 'Copied!' : 'Copy JSON (Dev Mode)'}
+                    {copied ? 'Copied!' : 'Copy Pairing Data'}
                   </button>
                   <p style={{
                     marginTop: '8px',
@@ -274,7 +273,7 @@ export function QRPairingModal({ isOpen, onClose, serverUrl }: QRPairingModalPro
                     color: 'var(--text-tertiary)',
                     textAlign: 'center',
                   }}>
-                    Paste this into the mobile app's Manual Configuration form
+                    Can't scan? Paste this into the mobile app's Manual Setup
                   </p>
                 </div>
               )}
