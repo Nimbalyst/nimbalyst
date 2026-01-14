@@ -3437,7 +3437,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                     isActive={tab.id === activeTabId}
                     mode={currentMode}
                     onMounted={handleWorktreeFilesModeMounted}
-                    onMaximize={tab.sessionData.worktreeId ? () => handleWorktreeModeChange(tab.sessionData.worktreeId, 'agent') : undefined}
+                    onMaximize={tab.sessionData.worktreeId ? () => handleWorktreeModeChange(tab.sessionData.worktreeId!, 'agent') : undefined}
                     chatPanel={(
                       <AISessionView
                         key={`chat-${tab.id}`}
