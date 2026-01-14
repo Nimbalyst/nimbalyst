@@ -132,15 +132,83 @@ save_build_hash() {
   compute_source_hash "$pkg_dir" > "$hash_file"
 }
 
-# Kill only processes running on the crystal-run.sh port
-echo "Killing any existing Nimbalyst processes on port $DEV_PORT..."
+# Kill all dev processes (from any crystal-run.sh invocation), but NOT packaged apps from DMG
+echo "Killing any existing dev processes from crystal-run.sh..."
+
+killed_any=false
+
+# Kill all Electron processes that are dev builds, not packaged apps
+# Dev builds will have RUN_ONE_DEV_MODE in their environment or run from a git repo
+for pid in $(pgrep -i electron 2>/dev/null); do
+  # Get the executable path to check if it's a packaged app
+  exe_path=$(ps -p "$pid" -o comm= 2>/dev/null)
+
+  # Skip if it's from /Applications or /Volumes (packaged apps)
+  if [[ "$exe_path" =~ ^/Applications ]] || [[ "$exe_path" =~ ^/Volumes ]]; then
+    continue
+  fi
+
+  # Get the full command line to check for dev indicators
+  cmd_line=$(ps -p "$pid" -o command= 2>/dev/null)
+
+  # Check if this is a dev process by looking for:
+  # 1. packages/electron in the path (dev build location)
+  # 2. RUN_ONE_DEV_MODE in environment
+  # 3. Running from a git repository
+  if [[ "$cmd_line" =~ packages/electron ]] || [[ "$cmd_line" =~ RUN_ONE_DEV_MODE ]]; then
+    echo "  Killing Electron dev process $pid"
+    kill -9 "$pid" 2>/dev/null || true
+    killed_any=true
+    continue
+  fi
+
+  # Also check working directory - dev processes run from git repos
+  if command -v lsof >/dev/null 2>&1; then
+    proc_cwd=$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | grep '^n' | cut -c2-)
+    # If cwd contains 'git' or 'nimnim' (repo name), it's likely a dev process
+    if [[ "$proc_cwd" =~ /git/ ]] || [[ "$proc_cwd" =~ nimnim ]]; then
+      echo "  Killing Electron dev process $pid (cwd: $proc_cwd)"
+      kill -9 "$pid" 2>/dev/null || true
+      killed_any=true
+    fi
+  fi
+done
+
+# Kill all Vite dev servers (these are always dev, never packaged)
+for pid in $(pgrep -f "vite.*--port" 2>/dev/null); do
+  echo "  Killing Vite dev server $pid"
+  kill -9 "$pid" 2>/dev/null || true
+  killed_any=true
+done
+
+# Kill any node processes that are running Vite from packages/electron
+for pid in $(pgrep -f "node.*packages/electron" 2>/dev/null); do
+  echo "  Killing node process $pid (packages/electron)"
+  kill -9 "$pid" 2>/dev/null || true
+  killed_any=true
+done
+
+# Also kill by checking the specific port used by crystal-run.sh
 if lsof -ti:$DEV_PORT > /dev/null 2>&1; then
-  lsof -ti:$DEV_PORT | xargs kill -9 2>/dev/null || true
-  echo "Killed processes on port $DEV_PORT"
+  for pid in $(lsof -ti:$DEV_PORT 2>/dev/null); do
+    # Get the executable path
+    exe_path=$(ps -p "$pid" -o comm= 2>/dev/null)
+
+    # Only kill if it's NOT from /Applications or /Volumes
+    if [[ ! "$exe_path" =~ ^/Applications ]] && [[ ! "$exe_path" =~ ^/Volumes ]]; then
+      echo "  Killing process $pid on port $DEV_PORT"
+      kill -9 "$pid" 2>/dev/null || true
+      killed_any=true
+    fi
+  done
+fi
+
+if [ "$killed_any" = true ]; then
+  echo "Killed dev processes"
   # Wait a moment for processes to fully terminate
   sleep 2
 else
-  echo "No processes found on port $DEV_PORT"
+  echo "No dev processes found to kill"
 fi
 
 # Detect worktree mode
