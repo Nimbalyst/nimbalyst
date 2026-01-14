@@ -1006,8 +1006,10 @@ ${newLines.map(line => '+' + line).join('\n')}`;
       await mainGit.checkout(baseBranch);
 
       // Attempt merge (no remote operations - purely local)
+      // Allow fast-forward when possible to keep history clean
+      // If base branch has diverged, a merge commit will be created automatically
       try {
-        await mainGit.merge([worktreeBranch, '--no-ff', '-m', `Merge branch '${worktreeBranch}'`]);
+        await mainGit.merge([worktreeBranch]);
 
         logger.info('Merge completed successfully');
         return {

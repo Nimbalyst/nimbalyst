@@ -121,7 +121,7 @@ export function CommitSection({
                   ? 'Commit all changes before merging'
                   : !hasCommits
                     ? 'No commits to merge'
-                    : `Merge commits into ${baseBranch || 'base branch'}`
+                    : `Merge commits into ${baseBranch || 'base branch'}. Will fast-forward if possible, otherwise creates a merge commit. All individual commits are preserved.`
           }
         >
           {isMerging ? (
