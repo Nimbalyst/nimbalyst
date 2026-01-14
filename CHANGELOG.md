@@ -20,6 +20,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.51.2] - 2026-01-13
+
+
+### Added
+- Maximize button to worktree files mode
+
+### Changed
+- Folder nesting in diff screen now more IntelliJ-like
+- Strengthen wording around session naming tool call to ensure it's called before ending turn
+
+### Fixed
+- Terminal spawn failing in packaged app (posix_spawnp failed)
+- Session history now uses worktree creation time for 'created' sort
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.51.1] - 2026-01-13
 
 
