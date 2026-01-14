@@ -20,6 +20,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.51.3] - 2026-01-14
+
+
+### Added
+- Commit squashing feature to git worktree DiffMode
+- Auto-stash functionality for merge operations
+- Fast-forward merges for git worktrees
+- Improved collapsed right panel UI in worktree mode
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- TypeScript compilation errors
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.51.2] - 2026-01-13
 
 
