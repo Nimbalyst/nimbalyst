@@ -351,17 +351,16 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick, pendin
     return <MaterialSymbol icon="edit_document" size={14} className="file-gutter__section-icon" />;
   };
 
-  const renderDirectoryNode = (node: DirectoryNode, depth: number = 0): React.ReactNode => {
+  const renderDirectoryNode = (node: DirectoryNode, isNested: boolean = false): React.ReactNode => {
     const isExpanded = expandedFolders.has(node.path);
     const hasContent = node.files.length > 0 || node.subdirectories.size > 0;
 
     return (
-      <div key={node.path} className="file-gutter__directory-node">
+      <div key={node.path} className={`file-gutter__directory-node ${isNested ? 'file-gutter__directory-node--nested' : ''}`}>
         {node.displayPath && (
           <button
             onClick={() => toggleFolder(node.path)}
             className="file-gutter__directory-header"
-            style={{ paddingLeft: `${depth * 12 + 8}px` }}
           >
             <MaterialSymbol
               icon={isExpanded ? "expand_more" : "chevron_right"}
@@ -381,15 +380,13 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick, pendin
         {(isExpanded || !node.displayPath) && hasContent && (
           <div className="file-gutter__directory-children">
             {Array.from(node.subdirectories.values()).map(subdir =>
-              renderDirectoryNode(subdir, node.displayPath ? depth + 1 : depth)
+              renderDirectoryNode(subdir, true)
             )}
 
             {node.files.map((file) => {
               const fileName = getFileName(file.filePath);
               const hasStats = type === 'edited' && (file.linesAdded || file.linesRemoved);
               const hasPendingReview = type === 'edited' && pendingReviewFiles?.has(file.filePath);
-              // Files indent one level from their parent folder
-              const fileDepth = node.displayPath ? depth + 1 : depth;
 
               return (
                 <button
@@ -397,7 +394,6 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick, pendin
                   onClick={() => handleFileClick(file.filePath)}
                   className={`file-gutter__file ${hasPendingReview ? 'file-gutter__file--pending' : ''}`}
                   title={getRelativePath(file.filePath)}
-                  style={{ marginLeft: `${fileDepth * 12 + 8}px` }}
                 >
                   <div className="file-gutter__file-content">
                     {hasPendingReview && (

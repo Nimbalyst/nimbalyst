@@ -110,11 +110,10 @@
 .file-edits-sidebar__file {
   width: 100%;
   text-align: left;
-  padding: 0.375rem 0.5rem;
-  border-radius: 0.375rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
   border: 1px solid transparent;
   transition: all 0.2s;
-  margin-bottom: 0.125rem;
   background: transparent;
 }
 
@@ -284,6 +283,10 @@
   margin-bottom: 0.125rem;
 }
 
+.file-edits-sidebar__directory-node--nested {
+  margin-left: 12px;
+}
+
 .file-edits-sidebar__directory-header {
   width: 100%;
   display: flex;
@@ -294,7 +297,7 @@
   font-weight: 500;
   color: var(--text-secondary);
   background-color: transparent;
-  border: none;
+  border: 1px solid transparent;
   border-radius: 0.25rem;
   transition: all 0.2s;
   cursor: pointer;
@@ -336,4 +339,5 @@
 
 .file-edits-sidebar__directory-children {
   margin-top: 0.125rem;
+  padding-left: 12px;
 }

@@ -258,6 +258,10 @@
   margin-bottom: 0.125rem;
 }
 
+.file-gutter__directory-node--nested {
+  margin-left: 12px;
+}
+
 .file-gutter__directory-header {
   width: 100%;
   display: flex;
