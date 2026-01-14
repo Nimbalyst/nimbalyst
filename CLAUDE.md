@@ -436,6 +436,28 @@ When working on extensions in `packages/extensions/`:
 - For Playwright tests, write one test case and get it working before writing more
 - See `/docs/PLAYWRIGHT.md` for comprehensive testing patterns
 
+## Walkthrough Guides & Help Content
+
+The application includes a walkthrough guide system for feature discovery and contextual help. See [WALKTHROUGHS.md](docs/WALKTHROUGHS.md) for complete documentation.
+
+### Key Concepts
+
+- **HelpContent**: Centralized registry of help text in `packages/electron/src/renderer/help/HelpContent.ts`, keyed by `data-testid`
+- **HelpTooltip**: Wrapper component that shows help on hover for any element with a `data-testid`
+- **Walkthroughs**: Multi-step floating guides defined in `packages/electron/src/renderer/walkthroughs/definitions/`
+
+### Adding Help Content
+
+1. Add entry to `HelpContent.ts` with title, body, and optional keyboard shortcut
+2. Add `data-testid` attribute to the target UI element
+3. Wrap element with `<HelpTooltip testId="...">` for hover tooltip
+4. Create a walkthrough definition if a multi-step guide is needed
+
+### Two Display Patterns
+
+1. **HelpTooltip wrapper** - For elements without existing tooltips
+2. **Inline help icon** - For elements that already have their own popup (like context indicator)
+
 ## Documentation
 
 - **AGENT\_PERMISSIONS.md**: Agent tool permission system and approval flow
@@ -446,6 +468,7 @@ When working on extensions in `packages/extensions/`:
 - **AI\_PROVIDER\_TYPES.md**: AI provider architecture
 - **CUSTOM\_TOOL\_WIDGETS.md**: Custom MCP tool widget implementation
 - **INTERNAL\_MCP\_SERVERS.md**: How to implement internal MCP servers
+- **WALKTHROUGHS.md**: Walkthrough guide system and help content
 - **WORKTREES.md**: Git worktree integration for isolated AI coding sessions
 - **THEMING.md**: Theming system documentation (in electron package)
 - **RELEASING.md**: Release process
