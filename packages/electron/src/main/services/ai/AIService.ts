@@ -92,6 +92,25 @@ function bucketAgeInDays(timestampMs: number): string {
 }
 
 /**
+ * Extract file extension from a file path for analytics.
+ * Handles compound extensions like .mockup.html
+ */
+function getFileExtensionForAnalytics(filePath: string | undefined): string | undefined {
+  if (!filePath) return undefined;
+
+  const lowerPath = filePath.toLowerCase();
+
+  // Check for known compound extensions first
+  if (lowerPath.endsWith('.mockup.html')) {
+    return '.mockup.html';
+  }
+
+  // Standard single extension
+  const lastDot = filePath.lastIndexOf('.');
+  return lastDot >= 0 ? filePath.substring(lastDot).toLowerCase() : undefined;
+}
+
+/**
  * Detect if a message starts with a Nimbalyst package slash command.
  * Returns command info if found, null otherwise.
  */
@@ -1568,6 +1587,7 @@ export class AIService {
       // Track ai_message_sent analytics event
       const slashCommandInfo = detectNimbalystSlashCommand(message, effectiveWorkspacePath);
       const contentMode = (documentContext as any)?.contentMode;
+      const fileExtension = getFileExtensionForAnalytics(documentContext?.filePath);
       this.analytics.sendEvent('ai_message_sent', {
         provider: session.provider,
         hasDocumentContext: !!documentContext,
@@ -1575,6 +1595,8 @@ export class AIService {
         attachmentCount: attachments?.length || 0,
         messageLength: bucketMessageLength(message.length),
         contentMode: contentMode || 'unknown',
+        // Include file extension when document context is present
+        ...(fileExtension && { fileExtension }),
         // Slash command tracking - only included if a Nimbalyst package command was used
         ...(slashCommandInfo && {
           usedSlashCommand: true,
@@ -2503,11 +2525,13 @@ export class AIService {
         const { AISessionsRepository } = await import('@nimbalyst/runtime/storage/repositories/AISessionsRepository');
         const session = await AISessionsRepository.get(sessionId);
         if (session) {
+          const fileExtension = getFileExtensionForAnalytics(documentContext?.filePath);
           AnalyticsService.getInstance().sendEvent('ai_message_queued', {
             provider: session.provider,
             source: 'local',
             hasDocumentContext: !!documentContext,
             hasAttachments: !!(attachments && attachments.length > 0),
+            ...(fileExtension && { fileExtension }),
           });
         }
       } catch (analyticsError) {
