@@ -144,6 +144,20 @@
   display: none;
 }
 
+.worktree-files-right-panel.collapsed .worktree-right-actions button:not(:last-child) {
+  display: none;
+}
+
+.worktree-files-right-panel.collapsed .worktree-right-panel-header {
+  justify-content: center;
+  padding: 8px 4px;
+}
+
+.worktree-files-right-panel.collapsed .worktree-right-actions {
+  width: 100%;
+  justify-content: center;
+}
+
 .worktree-right-panel-body {
   flex: 1;
   min-height: 0;
