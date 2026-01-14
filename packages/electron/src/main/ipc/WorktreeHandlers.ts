@@ -856,5 +856,79 @@ export function registerWorktreeHandlers(): void {
     }
   });
 
+  /**
+   * Check if commits exist on other branches besides the current one
+   *
+   * @param worktreePath - Path to the worktree
+   * @param commitHashes - Array of commit hashes to check
+   * @returns Whether commits exist on other branches
+   */
+  ipcMain.handle('worktree:check-commits-existence', async (_event, worktreePath: string, commitHashes: string[]) => {
+    try {
+      if (!worktreePath) {
+        throw new Error('worktreePath is required');
+      }
+
+      if (!commitHashes || !Array.isArray(commitHashes)) {
+        throw new Error('commitHashes must be an array');
+      }
+
+      logger.info('Checking commits existence', { worktreePath, commitCount: commitHashes.length });
+
+      const existsElsewhere = await gitWorktreeService.checkCommitsExistElsewhere(worktreePath, commitHashes);
+
+      return {
+        success: true,
+        existsElsewhere,
+      };
+    } catch (error) {
+      logger.error('Failed to check commits existence:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to check commits existence',
+        existsElsewhere: false,
+      };
+    }
+  });
+
+  /**
+   * Squash multiple commits into a single commit
+   *
+   * @param worktreePath - Path to the worktree
+   * @param commitHashes - Array of commit hashes to squash (must be consecutive)
+   * @param message - Commit message for the squashed commit
+   * @returns The new commit hash
+   */
+  ipcMain.handle('worktree:squash-commits', async (_event, worktreePath: string, commitHashes: string[], message: string) => {
+    try {
+      if (!worktreePath) {
+        throw new Error('worktreePath is required');
+      }
+
+      if (!commitHashes || !Array.isArray(commitHashes)) {
+        throw new Error('commitHashes must be an array');
+      }
+
+      if (!message) {
+        throw new Error('message is required');
+      }
+
+      logger.info('Squashing commits', { worktreePath, commitCount: commitHashes.length });
+
+      const newCommitHash = await gitWorktreeService.squashCommits(worktreePath, commitHashes, message);
+
+      return {
+        success: true,
+        commitHash: newCommitHash,
+      };
+    } catch (error) {
+      logger.error('Failed to squash commits:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to squash commits',
+      };
+    }
+  });
+
   logger.info('Worktree handlers registered');
 }

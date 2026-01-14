@@ -189,3 +189,81 @@
   color: var(--accent-hover);
   text-decoration: underline;
 }
+
+/* Squash actions */
+.changes-panel-squash-actions {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.changes-panel-squash-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background-color: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  width: 100%;
+}
+
+.changes-panel-squash-button:hover {
+  background-color: var(--surface-hover);
+  border-color: var(--accent-primary);
+}
+
+.changes-panel-squash-actions--active {
+  background-color: var(--surface-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.changes-panel-squash-info {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.changes-panel-squash-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.changes-panel-squash-cancel,
+.changes-panel-squash-confirm {
+  flex: 1;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: none;
+}
+
+.changes-panel-squash-cancel {
+  background-color: var(--surface-tertiary);
+  color: var(--text-primary);
+}
+
+.changes-panel-squash-cancel:hover {
+  background-color: var(--surface-hover);
+}
+
+.changes-panel-squash-confirm {
+  background-color: var(--accent-primary);
+  color: white;
+}
+
+.changes-panel-squash-confirm:hover:not(:disabled) {
+  background-color: var(--accent-hover);
+}
+
+.changes-panel-squash-confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
