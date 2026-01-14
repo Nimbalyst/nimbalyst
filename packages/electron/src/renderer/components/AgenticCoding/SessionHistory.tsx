@@ -33,6 +33,7 @@ interface WorktreeData {
   path: string;
   branch: string;
   base_branch?: string;
+  createdAt?: number;
   isPinned?: boolean; // Whether this worktree is pinned to the top
   isArchived?: boolean; // Whether this worktree is archived
 }
