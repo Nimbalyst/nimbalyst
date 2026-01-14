@@ -645,6 +645,21 @@ export class TerminalSessionManager {
   }
 
   /**
+   * Destroy terminals for specific session IDs (used when archiving worktrees)
+   */
+  async destroyTerminalsForSessions(sessionIds: string[]): Promise<void> {
+    console.log(`[TerminalSessionManager] Destroying terminals for ${sessionIds.length} sessions`);
+    let destroyedCount = 0;
+    for (const sessionId of sessionIds) {
+      if (this.terminals.has(sessionId)) {
+        await this.destroyTerminal(sessionId);
+        destroyedCount++;
+      }
+    }
+    console.log(`[TerminalSessionManager] Destroyed ${destroyedCount} terminals out of ${sessionIds.length} sessions`);
+  }
+
+  /**
    * Get terminal info for a session
    */
   getTerminalInfo(sessionId: string): { shell: ShellInfo; cwd: string; cols: number; rows: number; historyFile?: string } | null {

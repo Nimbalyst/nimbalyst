@@ -13,6 +13,7 @@ import { getDatabase } from '../database/initialize';
 import { archiveProgressManager } from '../services/ArchiveProgressManager';
 import { AISessionsRepository } from '@nimbalyst/runtime/storage/repositories/AISessionsRepository';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
+import { getTerminalSessionManager } from '../services/TerminalSessionManager';
 
 const logger = log.scope('WorktreeHandlers');
 
@@ -747,9 +748,10 @@ export function registerWorktreeHandlers(): void {
   /**
    * Archive a worktree and its sessions
    *
-   * This immediately archives all sessions for the worktree in the database,
-   * then queues the slow cleanup work (git worktree removal) to be processed
-   * serially. Returns immediately after queuing - doesn't wait for cleanup.
+   * This immediately kills any running terminal processes for the worktree's sessions,
+   * archives all sessions in the database, then queues the slow cleanup work
+   * (git worktree removal) to be processed serially. Returns immediately after
+   * queuing - doesn't wait for cleanup.
    *
    * @param worktreeId - ID of the worktree to archive
    * @param workspacePath - Path to the main git repository
@@ -787,8 +789,16 @@ export function registerWorktreeHandlers(): void {
         );
       }
 
-      // Step 1: Archive all sessions for this worktree immediately (fast feedback)
+      // Step 1: Get all sessions for this worktree
       const sessionIds = await worktreeStore.getWorktreeSessions(worktreeId);
+      logger.info('Found sessions for worktree', { worktreeId, sessionCount: sessionIds.length });
+
+      // Step 2: Kill any running terminal processes for these sessions
+      const terminalManager = getTerminalSessionManager();
+      await terminalManager.destroyTerminalsForSessions(sessionIds);
+      logger.info('Destroyed terminal processes for worktree sessions', { worktreeId });
+
+      // Step 3: Archive all sessions for this worktree immediately (fast feedback)
       logger.info('Archiving sessions for worktree', { worktreeId, sessionCount: sessionIds.length });
 
       let failedSessions = 0;
