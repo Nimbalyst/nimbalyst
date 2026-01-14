@@ -987,13 +987,29 @@ ${newLines.map(line => '+' + line).join('\n')}`;
         };
       }
 
-      // Check for uncommitted changes in main repo
+      // Check for uncommitted changes in main repo and auto-stash if needed
+      const statusStartTime = Date.now();
       const mainStatus = await mainGit.status();
+      const statusDuration = Date.now() - statusStartTime;
+      logger.info('Main repo status check complete', { statusDuration, isClean: mainStatus.isClean(), fileCount: mainStatus.files.length });
+
+      let didStash = false;
       if (!mainStatus.isClean()) {
-        return {
-          success: false,
-          message: 'Cannot merge: uncommitted changes in main repository. Please commit or stash changes first.',
-        };
+        logger.info('Auto-stashing uncommitted changes in main repository', { fileCount: mainStatus.files.length });
+        const stashStartTime = Date.now();
+        try {
+          // Don't use -u flag to avoid stashing large untracked files (performance issue)
+          await mainGit.stash(['push', '-m', 'Auto-stash before merge']);
+          const stashDuration = Date.now() - stashStartTime;
+          didStash = true;
+          logger.info('Auto-stash successful', { stashDuration });
+        } catch (stashError) {
+          logger.error('Failed to auto-stash changes', { stashError });
+          return {
+            success: false,
+            message: 'Cannot merge: uncommitted changes in main repository and auto-stash failed. Please commit or stash changes manually.',
+          };
+        }
       }
 
       // Get worktree branch name
@@ -1003,15 +1019,41 @@ ${newLines.map(line => '+' + line).join('\n')}`;
       logger.info('Merge details', { worktreeBranch, baseBranch });
 
       // Switch to base branch in main repo
+      const checkoutStartTime = Date.now();
       await mainGit.checkout(baseBranch);
+      const checkoutDuration = Date.now() - checkoutStartTime;
+      logger.info('Checkout complete', { checkoutDuration, baseBranch });
 
       // Attempt merge (no remote operations - purely local)
       // Allow fast-forward when possible to keep history clean
       // If base branch has diverged, a merge commit will be created automatically
       try {
+        const mergeStartTime = Date.now();
         await mainGit.merge([worktreeBranch]);
+        const mergeDuration = Date.now() - mergeStartTime;
 
-        logger.info('Merge completed successfully');
+        logger.info('Merge completed successfully', { mergeDuration });
+
+        // Pop the stash if we auto-stashed
+        if (didStash) {
+          try {
+            const popStartTime = Date.now();
+            await mainGit.stash(['pop']);
+            const popDuration = Date.now() - popStartTime;
+            logger.info('Auto-stash popped successfully', { popDuration });
+          } catch (popError) {
+            logger.warn('Failed to pop stash after merge', { popError });
+            return {
+              success: true,
+              message: `Successfully merged ${worktreeBranch} into ${baseBranch}. Warning: Auto-stashed changes could not be restored automatically. Use 'git stash pop' to restore them.`,
+            };
+          }
+          return {
+            success: true,
+            message: `Successfully merged ${worktreeBranch} into ${baseBranch}. Auto-stashed changes have been restored.`,
+          };
+        }
+
         return {
           success: true,
           message: `Successfully merged ${worktreeBranch} into ${baseBranch}`,
@@ -1020,14 +1062,34 @@ ${newLines.map(line => '+' + line).join('\n')}`;
         // Check for merge conflicts
         const status = await mainGit.status();
         if (status.conflicted.length > 0) {
-          // Abort the merge
+          // Abort the merge first, before restoring stash
           await mainGit.merge(['--abort']);
+
+          // If merge failed and we stashed, try to restore the stash AFTER abort
+          if (didStash) {
+            try {
+              await mainGit.stash(['pop']);
+              logger.info('Auto-stash popped after merge abort');
+            } catch (popError) {
+              logger.warn('Failed to pop stash after merge abort', { popError });
+            }
+          }
 
           return {
             success: false,
             message: 'Merge conflicts detected. Please resolve conflicts manually.',
             conflictedFiles: status.conflicted,
           };
+        }
+
+        // Non-conflict merge error - restore stash before throwing
+        if (didStash) {
+          try {
+            await mainGit.stash(['pop']);
+            logger.info('Auto-stash popped after non-conflict merge failure');
+          } catch (popError) {
+            logger.warn('Failed to pop stash after merge failure', { popError });
+          }
         }
 
         throw mergeError;
