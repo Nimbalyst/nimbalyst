@@ -20,6 +20,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.51.4] - 2026-01-14
+
+
+### Added
+- Archive worktree dialog after successful merge
+- Automatic terminal process cleanup when archiving worktrees
+- Worktree merge workflow now offers archive option
+- Pinned sessions appear at top of session list
+- Worktree system prompt instructions to keep agent in worktree context
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- `/context` command now works correctly in worktrees
+- Terminal no longer gets cut off at the bottom
+- Merge conflict detection and resolution with Claude Agent for worktrees
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.51.3] - 2026-01-14
 
 
