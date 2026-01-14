@@ -4,7 +4,46 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Codebase Overview
 
-This is Nimbalyst - a rich text editor built with Meta's Lexical framework. It's a monorepo containing multiple packages including the Electron desktop app, the core editor (Rexical), runtime services, and mobile support via Capacitor.
+Nimbalyst is an extensible, AI-native workspace that supports multiple editor types through a unified extension system. While it originated as a Lexical-based markdown editor, the architecture is evolving toward a fully pluggable model where **all editors** - including the core Lexical editor, Monaco code editor, spreadsheets, diagrams, and custom visual editors - are provided through extensions.
+
+This is a monorepo containing multiple packages including the Electron desktop app, the core editor (Rexical), runtime services, extension SDK, and mobile support via Capacitor.
+
+## Extension Architecture (Core Vision)
+
+**The extension system is the foundation for all future development.** Every editor type and file handler will ultimately be provided through extensions, creating a cohesive, pluggable lifecycle for all content types.
+
+### What Extensions Provide
+
+Extensions can contribute:
+- **Custom Editors**: Full editor implementations for specific file types (Monaco for code, RevoGrid for CSV/spreadsheets, Excalidraw for diagrams, DataModelLM for visual data modeling, mockup editors, etc.)
+- **File Type Handlers**: Associate file extensions with specific editors
+- **AI Tools via MCP**: Expose functionality to AI agents through the Model Context Protocol
+- **Custom UI Components**: Panels, widgets, and tool call renderers
+
+### Current Editor Types
+
+Nimbalyst supports diverse editor types beyond traditional text:
+- **Lexical** (`.md`, `.txt`): Rich text markdown editing with tables, images, code blocks
+- **Monaco** (`.ts`, `.js`, `.json`, etc.): Full VS Code-style code editing with syntax highlighting, intellisense
+- **RevoGrid** (`.csv`): Spreadsheet-style editing with formulas, sorting, filtering
+- **Excalidraw** (`.excalidraw`): Whiteboard-style diagrams and drawings
+- **DataModelLM** (`.datamodel`): Visual Prisma schema editor
+- **Mockup Editor** (`.mockup.html`): Visual HTML mockup creation
+
+### EditorHost Contract
+
+All editors (including built-in ones) communicate through the `EditorHost` interface, ensuring consistent lifecycle management:
+
+```typescript
+interface EditorHost {
+  loadContent(): Promise<string>;      // Load file content on mount
+  saveContent(content: string): void;  // Save when user saves
+  setDirty(dirty: boolean): void;      // Track unsaved changes
+  onFileChanged(callback): void;       // Handle external file changes
+}
+```
+
+This contract ensures that extensions integrate seamlessly with tabs, dirty indicators, file watching, and AI edit streaming regardless of the underlying editor technology.
 
 ## Monorepo Structure
 

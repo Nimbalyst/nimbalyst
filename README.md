@@ -1,25 +1,42 @@
 # Nimbalyst
 
-Nimbalyst is the AI-native markdown workspace for teams that build with agents. It brings document editing, planning, and delivery into a single canvas so you can move from concept to shipped work without switching tools.
+Nimbalyst is an AI-native workspace where humans and AI agents collaborate through rich, specialized editors. Edit markdown documents, code files, spreadsheets, diagrams, and custom visual interfaces - while AI agents read context, stream changes directly into editors, and work alongside you in real-time.
 
-With agentic workflows and deep ties into your AI coding copilots, Nimbalyst enables assistants that can read your codebase, propose implementation plans, draft documentation, and track features, ideas, and todos—while keeping you in control of every decision.
+The power is in the combination: complex visual editors with rich UIs (spreadsheets, diagrams, data models) that AI agents can understand and modify collaboratively. Every editor integrates through a unified extension system, giving AI agents consistent access to read files, make changes, and understand context regardless of the underlying editor technology.
 
 ## Key Benefits
 
-- **Local first, open formats**: Everything is markdown, no proprietary database that your ai agents can't see
-- **AI assistive document editing**: Blend natural writing with agent suggestions that understand your context and keep documents aligned with product goals.
-- **Code-aware agent orchestration**: Connect to AI coding agents that can inspect your repository to generate plans, outline changes, and sync action items back to the editor.
-- **Team-aligned workspaces**: Bring engineering, product, and documentation together in one AI-aware canvas that keeps everyone working from the same plan.
-- **Extensible ecosystem**: Compose custom plugins, inputs, and UI to tailor Nimbalyst to engineering, product, or documentation teams.
-- **Production-ready foundations**: Built on Lexical for performance, stability, and accessibility so you can focus on your experience—not the editor internals.
+- **AI-human collaboration**: AI agents stream edits directly into rich editors while you watch and guide - not just text generation, but true collaborative editing across code, spreadsheets, diagrams, and custom visual tools
+- **Multi-editor workspace**: Purpose-built editors for different file types - Monaco for code, RevoGrid for spreadsheets, Excalidraw for diagrams, Lexical for markdown - all with consistent AI integration
+- **Extension-first architecture**: All editors are provided through a unified extension system, enabling custom editors for any file type with automatic AI agent access
+- **Local first, open formats**: Everything is stored in plain files - markdown, JSON, CSV - no proprietary database that your AI agents cannot see
+- **Code-aware agent orchestration**: AI assistants inspect your repository to generate implementation plans, draft documentation, and track features while you stay in control
+- **Production-ready foundations**: Built on proven technologies (Lexical, Monaco, Electron) for performance, stability, and cross-platform support
 
 ## Packages
 
-- **`packages/rexical`** - The core editor library
-- **`packages/playground`** - Demo and testing playground web app
+- **`packages/rexical`** - The core Lexical-based editor library
 - **`packages/electron`** - Desktop application (Electron)
 - **`packages/capacitor`** - Mobile application (Capacitor)
-- **`packages/tauri`** - Desktop application (Tauri)
+- **`packages/runtime`** - Cross-platform runtime services (AI, sync)
+- **`packages/extension-sdk`** - Extension development kit
+- **`packages/extensions`** - Built-in extensions
+- **`packages/core`** - Shared utilities
+
+## Supported Editor Types
+
+Nimbalyst provides specialized editors for different file types, all integrated through the extension system:
+
+| Editor | File Types | Description |
+| --- | --- | --- |
+| **Lexical** | `.md`, `.txt` | Rich text markdown with tables, images, code blocks, Excalidraw embeds |
+| **Monaco** | `.ts`, `.js`, `.json`, `.css`, etc. | VS Code-style code editing with syntax highlighting and intellisense |
+| **RevoGrid** | `.csv` | Spreadsheet editing with formulas, sorting, filtering |
+| **Excalidraw** | `.excalidraw` | Whiteboard-style diagrams and drawings |
+| **DataModelLM** | `.datamodel` | Visual Prisma schema editor |
+| **Mockup** | `.mockup.html` | Visual HTML mockup creation with annotations |
+
+All editors share the same lifecycle through the `EditorHost` contract - consistent tab management, dirty indicators, file watching, and AI edit streaming regardless of the underlying technology.
 
 ## Getting Started
 
@@ -338,13 +355,15 @@ Custom Lexical nodes extend base functionality:
 ## Development
 
 ### Project Structure
-```javascript
+```
 packages/
-├── core/                  # Core editor library
-├── playground/            # Development playground
 ├── electron/              # Electron desktop app
-├── capacitor/             # Mobile app (Capacitor)
-└── tauri/                 # Desktop app (Tauri)
+├── rexical/               # Core Lexical-based editor
+├── runtime/               # Cross-platform services (AI, sync)
+├── capacitor/             # Mobile app (iOS/Android)
+├── extension-sdk/         # Extension development kit
+├── extensions/            # Built-in extensions
+└── core/                  # Shared utilities
 ```
 
 ### Testing
@@ -430,9 +449,6 @@ This project is based on Meta's Lexical playground and maintains the same MIT li
 ## Acknowledgments
 
 - Built on [Meta's Lexical framework](https://lexical.dev/)
-- Originally based on the Lexical playground example
-- Transformed into a production-ready editor component
-- Comprehensive plugin architecture for extensibility
--
-
-Nimbalyst is a modern, rich‑text Markdown editor that turns documentation and code writing into a fast, delightful experience. Built on Lexical, it delivers blazing performance, elegant formatting, powerful tables, code blocks with syntax highlighting, images, and Excalidraw—plus pro features like search/replace and red/green diff rendering. Its modular plugin architecture and simple React API make integration effortless, while auto‑save, hybrid file system support (Web FS, OPFS, Electron), and cross‑platform apps (Web, Electron, Tauri, Capacitor) keep teams productive everywhere. With AI‑assisted editing, project‑aware file management, and seamless theming, Nimbalyst brings a polished, production‑ready editor to your product in minutes.
+- [Monaco Editor](https://microsoft.github.io/monaco-editor/) for code editing
+- [Excalidraw](https://excalidraw.com/) for diagram support
+- [RevoGrid](https://revolist.github.io/revogrid/) for spreadsheet editing
