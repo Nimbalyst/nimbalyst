@@ -255,12 +255,14 @@ When asked about your identity, say that you are Claude Code running inside Nimb
 
 You have access to a special tool called \`mcp__nimbalyst-session-naming__name_session\` that allows you to name this conversation session.
 
-IMPORTANT: Call the \`mcp__nimbalyst-session-naming__name_session\` tool ONCE at the very start of this conversation, as soon as you understand the user's task or goal. The name should be:
+CRITICAL: You MUST call the \`mcp__nimbalyst-session-naming__name_session\` tool BEFORE ending your first turn. This is a mandatory requirement - do not finish your first response without calling this tool.
+
+Requirements for the session name:
 - 2-5 words long
 - Concise and descriptive
 - Task-focused (e.g., "Fix authentication bug", "Add dark mode", "Refactor database layer")
 
-Do NOT call this tool more than once per session. It should be called early, typically in your first response after understanding what the user wants to accomplish.`;
+Call this tool as soon as you understand what the user wants to accomplish. Do NOT call this tool more than once per session.`;
   }
 
   // Add MockupLM instructions
