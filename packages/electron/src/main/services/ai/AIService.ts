@@ -3144,6 +3144,14 @@ export class AIService {
           if (model.provider === 'claude-code' && provider.models.includes('claude-code')) {
             return true;
           }
+          // For Claude Code: if base model is selected, also include 1M variant
+          // e.g., if 'claude-code:sonnet' is selected, also include 'claude-code:sonnet-1m'
+          if (model.provider === 'claude-code' && model.id.endsWith('-1m')) {
+            const baseModelId = model.id.replace(/-1m$/, '');
+            if (provider.models.includes(baseModelId)) {
+              return true;
+            }
+          }
           return provider.models.includes(model.id);
         }
         // Otherwise include all models for this provider

@@ -285,11 +285,23 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     const raw = configured.includes(':') ? configured.split(':').pop()! : configured;
     const normalized = raw?.toLowerCase();
 
-    if (normalized && (CLAUDE_CODE_VARIANTS as readonly string[]).includes(normalized)) {
-      return normalized as ClaudeCodeVariant;
+    // Strip -1m suffix if present (handled via betas option instead)
+    const withoutContext = normalized?.replace(/-1m$/, '');
+
+    if (withoutContext && (CLAUDE_CODE_VARIANTS as readonly string[]).includes(withoutContext)) {
+      return withoutContext as ClaudeCodeVariant;
     }
 
     return fallback;
+  }
+
+  /**
+   * Check if the configured model uses 1M context window
+   */
+  private is1MModel(): boolean {
+    const configured = this.config.model || ClaudeCodeProvider.DEFAULT_MODEL;
+    const raw = configured.includes(':') ? configured.split(':').pop()! : configured;
+    return raw?.toLowerCase().endsWith('-1m') || false;
   }
 
 
@@ -466,6 +478,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         cwd: workspacePath,
         abortController: this.abortController,
         model: this.resolveModelVariant(),
+        // Enable 1M context beta if using a 1M model variant
+        ...(this.is1MModel() && { betas: ['context-1m-2025-08-07'] }),
         // Use 'default' permission mode so canUseTool fires for AskUserQuestion and Bash
         // We auto-approve most tools in canUseTool, but check permissions for Bash
         permissionMode: 'default',
@@ -3396,16 +3410,37 @@ The user is interacting via voice mode. A voice assistant (GPT-4 Realtime) handl
   }
 
   /**
-   * Get Claude Code model
+   * Get Claude Code models.
+   * Returns standard models plus Sonnet 1M variant (access controlled by Anthropic).
    */
-  static getModels(): AIModel[] {
-    const models = CLAUDE_CODE_VARIANTS.map(variant => ({
-      id: `claude-code:${variant}`,
-      name: `Claude Agent · ${CLAUDE_CODE_MODEL_LABELS[variant]} ${CLAUDE_CODE_VARIANT_VERSIONS[variant]}`,
-      provider: 'claude-code' as const,
-      maxTokens: 8192,
-      contextWindow: 200000
-    }));
+  static async getModels(): Promise<AIModel[]> {
+    const models: AIModel[] = [];
+
+    // Add models in desired order
+    for (const variant of CLAUDE_CODE_VARIANTS) {
+      // Add base model
+      models.push({
+        id: `claude-code:${variant}`,
+        name: `Claude Agent · ${CLAUDE_CODE_MODEL_LABELS[variant]} ${CLAUDE_CODE_VARIANT_VERSIONS[variant]}`,
+        provider: 'claude-code' as const,
+        maxTokens: 8192,
+        contextWindow: 200000
+      });
+
+      // Add 1M variant right after Sonnet
+      // Access is controlled by Anthropic via account permissions
+      // If user doesn't have access, the SDK will return an error when they try to use it
+      if (variant === 'sonnet') {
+        models.push({
+          id: 'claude-code:sonnet-1m',
+          name: `Claude Agent · Sonnet ${CLAUDE_CODE_VARIANT_VERSIONS.sonnet} (1M)`,
+          provider: 'claude-code' as const,
+          maxTokens: 8192,
+          contextWindow: 1000000
+        });
+      }
+    }
+
     return models;
   }
 
