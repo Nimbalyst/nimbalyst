@@ -706,16 +706,21 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
 
   // Group worktree sessions by worktree_id and compute worktree timestamps
   const worktreeGroupsData = useMemo(() => {
-    const groups = new Map<string, { sessions: SessionItem[]; latestTimestamp: number }>();
+    const groups = new Map<string, { sessions: SessionItem[]; timestamp: number }>();
     for (const session of sessions) {
       if (session.worktree_id) {
         const existing = groups.get(session.worktree_id);
-        const sessionTimestamp = sortBy === 'updated' ? (session.updatedAt || session.createdAt) : session.createdAt;
         if (existing) {
           existing.sessions.push(session);
-          existing.latestTimestamp = Math.max(existing.latestTimestamp, sessionTimestamp);
+          // For 'updated', track the latest session update. For 'created', we'll use worktree.createdAt later
+          if (sortBy === 'updated') {
+            const sessionTimestamp = session.updatedAt || session.createdAt;
+            existing.timestamp = Math.max(existing.timestamp, sessionTimestamp);
+          }
         } else {
-          groups.set(session.worktree_id, { sessions: [session], latestTimestamp: sessionTimestamp });
+          // Initial timestamp (will be replaced with worktree.createdAt for 'created' sort)
+          const initialTimestamp = sortBy === 'updated' ? (session.updatedAt || session.createdAt) : 0;
+          groups.set(session.worktree_id, { sessions: [session], timestamp: initialTimestamp });
         }
       }
     }
@@ -747,7 +752,13 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
 
     // Add worktree groups as single items
     for (const [worktreeId, data] of worktreeGroupsData) {
-      items.push({ type: 'worktree', worktreeId, sessions: data.sessions, timestamp: data.latestTimestamp });
+      // For 'created' sort, use the worktree's actual creation time, not the latest session time
+      let timestamp = data.timestamp;
+      if (sortBy === 'created') {
+        const worktreeData = worktreeCache.get(worktreeId);
+        timestamp = worktreeData?.createdAt || 0;
+      }
+      items.push({ type: 'worktree', worktreeId, sessions: data.sessions, timestamp });
     }
 
     // Sort items: pinned items first (worktrees and sessions), then by timestamp
