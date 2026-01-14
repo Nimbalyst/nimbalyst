@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarcodeScanner, BarcodeFormat } from '@capacitor-mlkit/barcode-scanning';
+import { CapacitorBarcodeScanner, CapacitorBarcodeScannerTypeHint } from '@capacitor/barcode-scanner';
 import { useSync, INACTIVITY_TIMEOUT_OPTIONS } from '../contexts/CollabV3SyncContext';
 import { SyncStatusBadge } from '../components/SyncStatusBadge';
 import {
@@ -77,36 +77,17 @@ export function SettingsScreen() {
     setScanError(null);
 
     try {
-      // Check if barcode scanning is supported
-      const { supported } = await BarcodeScanner.isSupported();
-      if (!supported) {
-        setScanError('Barcode scanning is not supported on this device');
-        return;
-      }
-
-      // Request camera permission
-      const { camera } = await BarcodeScanner.requestPermissions();
-      if (camera !== 'granted' && camera !== 'limited') {
-        setScanError('Camera permission is required to scan QR codes');
-        return;
-      }
-
       setIsScanning(true);
 
-      // Start scanning
-      const result = await BarcodeScanner.scan({
-        formats: [BarcodeFormat.QrCode],
+      // Start scanning - the plugin handles permissions internally
+      const result = await CapacitorBarcodeScanner.scanBarcode({
+        hint: CapacitorBarcodeScannerTypeHint.QR_CODE,
       });
 
       setIsScanning(false);
 
-      if (result.barcodes.length > 0) {
-        const rawValue = result.barcodes[0].rawValue;
-        if (rawValue) {
-          await handleQRData(rawValue);
-        } else {
-          setScanError('Could not read QR code data');
-        }
+      if (result.ScanResult) {
+        await handleQRData(result.ScanResult);
       } else {
         setScanError('No QR code detected');
       }
@@ -701,7 +682,7 @@ export function SettingsScreen() {
               </div>
             )}
           </div>
-        
+
       </main>
     </div>
   );
