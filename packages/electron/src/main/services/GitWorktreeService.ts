@@ -997,6 +997,9 @@ ${newLines.map(line => '+' + line).join('\n')}`;
       const worktreeBranch = await worktreeGit.revparse(['--abbrev-ref', 'HEAD']);
       const baseBranch = await this.inferBaseBranch(mainGit);
 
+      // Track whether we stashed changes
+      let didStash = false;
+
       // CRITICAL: Check if any uncommitted files would be affected by the merge
       // If a file has uncommitted changes AND the worktree branch modifies it, always ask Claude
       if (!mainStatus.isClean()) {
@@ -1039,6 +1042,7 @@ ${newLines.map(line => '+' + line).join('\n')}`;
         try {
           // Don't use -u flag to avoid stashing large untracked files (performance issue)
           await mainGit.stash(['push', '-m', 'Auto-stash before merge']);
+          didStash = true;
           const stashDuration = Date.now() - stashStartTime;
           logger.info('Auto-stash successful', { stashDuration });
         } catch (stashError) {

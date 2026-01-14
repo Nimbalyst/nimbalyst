@@ -954,6 +954,26 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     });
   }, [activeTabId, updateWindowTitle]);
 
+  // Close all sessions for a worktree when it's archived
+  const closeArchivedWorktree = useCallback((worktreeId: string) => {
+    console.log('[AgenticPanel] closeArchivedWorktree called for worktreeId:', worktreeId);
+
+    // Find all sessions for this worktree
+    const worktreeSessions = sessionTabsRef.current.filter(
+      tab => tab?.sessionData?.worktreeId === worktreeId
+    );
+
+    console.log('[AgenticPanel] Found worktree sessions to close:', worktreeSessions.map(s => s.id));
+
+    // Close each session
+    worktreeSessions.forEach(session => {
+      closeArchivedSession(session.id);
+    });
+
+    // Refresh session history to show archived state
+    setSessionHistoryRefreshTrigger(prev => prev + 1);
+  }, [closeArchivedSession]);
+
   // Close and archive session from the floating action button
   const handleCloseAndArchive = useCallback(async (sessionId: string) => {
     try {
@@ -3522,8 +3542,10 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                     onMounted={handleWorktreeFilesModeMounted}
                     onMaximize={tab.sessionData.worktreeId ? () => handleWorktreeModeChange(tab.sessionData.worktreeId!, 'agent') : undefined}
                     onArchived={() => {
-                      console.log('[AgenticPanel] onArchived called for tab:', tab.id);
-                      closeArchivedSession(tab.id);
+                      if (tab.sessionData.worktreeId) {
+                        console.log('[AgenticPanel] onArchived called, closing all sessions for worktreeId:', tab.sessionData.worktreeId);
+                        closeArchivedWorktree(tab.sessionData.worktreeId);
+                      }
                     }}
                     chatPanel={(
                       <AISessionView
