@@ -42,6 +42,7 @@ interface WorktreeFilesModeProps {
   mode: WorktreeContentMode;
   chatPanel: React.ReactNode;
   onMounted?: (sessionId: string) => void;
+  onMaximize?: () => void;
 }
 
 const SPECIAL_DIRECTORIES = ['nimbalyst-local'];
@@ -87,7 +88,8 @@ const WorktreeFilesModeInner = forwardRef<WorktreeFilesModeRef, WorktreeFilesMod
   isActive,
   mode,
   chatPanel,
-  onMounted
+  onMounted,
+  onMaximize
 }, ref) {
   const { theme } = useTheme();
   const tabsActions = useTabsActions();
@@ -667,6 +669,15 @@ const WorktreeFilesModeInner = forwardRef<WorktreeFilesModeRef, WorktreeFilesMod
             <button type="button" title="Refresh files" onClick={refreshFileTree}>
               <MaterialSymbol icon="refresh" size={18} />
             </button>
+            {onMaximize && (
+              <button
+                type="button"
+                title="Maximize agent view"
+                onClick={onMaximize}
+              >
+                <MaterialSymbol icon="fullscreen" size={18} />
+              </button>
+            )}
             <button
               type="button"
               title={panelCollapsed ? 'Expand panel' : 'Collapse panel'}
