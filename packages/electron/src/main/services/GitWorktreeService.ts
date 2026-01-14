@@ -987,34 +987,83 @@ ${newLines.map(line => '+' + line).join('\n')}`;
         };
       }
 
-      // Check for uncommitted changes in main repo and auto-stash if needed
+      // Check for uncommitted changes in main repo
       const statusStartTime = Date.now();
       const mainStatus = await mainGit.status();
       const statusDuration = Date.now() - statusStartTime;
       logger.info('Main repo status check complete', { statusDuration, isClean: mainStatus.isClean(), fileCount: mainStatus.files.length });
 
-      let didStash = false;
+      // Get worktree branch name and base branch early (need for conflict detection)
+      const worktreeBranch = await worktreeGit.revparse(['--abbrev-ref', 'HEAD']);
+      const baseBranch = await this.inferBaseBranch(mainGit);
+
+      // CRITICAL: Check if any uncommitted files would be affected by the merge
+      // If a file has uncommitted changes AND the worktree branch modifies it, always ask Claude
       if (!mainStatus.isClean()) {
+        // Get list of files modified in main (uncommitted)
+        const uncommittedFiles = mainStatus.files
+          .filter(f => f.working_dir !== ' ' && f.working_dir !== '?') // Modified or new, not untracked
+          .map(f => f.path);
+
+        if (uncommittedFiles.length > 0) {
+          logger.info('Found uncommitted changes in main', { uncommittedFiles });
+
+          // Get list of files changed in worktree branch compared to base
+          try {
+            const worktreeDiff = await mainGit.diff([baseBranch, worktreeBranch, '--name-only']);
+            const worktreeChangedFiles = worktreeDiff.split('\n').filter(f => f.trim().length > 0);
+
+            logger.info('Files changed in worktree branch', { worktreeChangedFiles });
+
+            // Check if any uncommitted files are also changed in worktree
+            const overlappingFiles = uncommittedFiles.filter(f => worktreeChangedFiles.includes(f));
+
+            if (overlappingFiles.length > 0) {
+              // Same file(s) modified in both places - always ask Claude to handle it
+              logger.warn('Files modified in both main (uncommitted) and worktree (committed)', { overlappingFiles });
+              return {
+                success: false,
+                message: 'merge-conflict-detected',
+                conflictedFiles: overlappingFiles,
+              };
+            }
+          } catch (diffError) {
+            logger.error('Failed to check worktree changes', { diffError });
+            // Fall through to stash and merge
+          }
+        }
+
+        // No overlapping files - safe to auto-stash
         logger.info('Auto-stashing uncommitted changes in main repository', { fileCount: mainStatus.files.length });
         const stashStartTime = Date.now();
         try {
           // Don't use -u flag to avoid stashing large untracked files (performance issue)
           await mainGit.stash(['push', '-m', 'Auto-stash before merge']);
           const stashDuration = Date.now() - stashStartTime;
-          didStash = true;
           logger.info('Auto-stash successful', { stashDuration });
         } catch (stashError) {
           logger.error('Failed to auto-stash changes', { stashError });
+
+          // Check if this is a merge conflict preventing stash
+          const errorMessage = stashError instanceof Error ? stashError.message : String(stashError);
+          if (errorMessage.includes('needs merge') || errorMessage.includes('needs update')) {
+            // There are merge conflicts in the main repository
+            const conflictedFiles = mainStatus.conflicted || [];
+
+            // Return a special error that the IPC handler can detect
+            return {
+              success: false,
+              message: 'merge-conflict-in-main',
+              conflictedFiles,
+            };
+          }
+
           return {
             success: false,
             message: 'Cannot merge: uncommitted changes in main repository and auto-stash failed. Please commit or stash changes manually.',
           };
         }
       }
-
-      // Get worktree branch name
-      const worktreeBranch = await worktreeGit.revparse(['--abbrev-ref', 'HEAD']);
-      const baseBranch = await this.inferBaseBranch(mainGit);
 
       logger.info('Merge details', { worktreeBranch, baseBranch });
 

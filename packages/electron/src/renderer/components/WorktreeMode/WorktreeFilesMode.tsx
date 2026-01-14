@@ -589,6 +589,7 @@ const WorktreeFilesModeInner = forwardRef<WorktreeFilesModeRef, WorktreeFilesMod
         <DiffModeView
           worktreePath={worktreePath}
           workspacePath={workspacePath}
+          worktreeId={sessionData.worktreeId}
           isActive={isActive}
         />
       </div>

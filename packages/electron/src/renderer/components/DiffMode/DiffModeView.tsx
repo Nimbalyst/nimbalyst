@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { DiffFileTabs } from './DiffFileTabs';
 import { DiffContent } from './DiffContent';
 import { ChangesPanel } from './ChangesPanel';
+import { MergeConflictDialog } from './MergeConflictDialog';
 import './DiffModeView.css';
 
 export interface ChangedFile {
@@ -22,10 +23,11 @@ export interface CommitInfo {
 interface DiffModeViewProps {
   worktreePath: string;
   workspacePath: string;
+  worktreeId?: string;
   isActive: boolean;
 }
 
-export function DiffModeView({ worktreePath, workspacePath, isActive }: DiffModeViewProps) {
+export function DiffModeView({ worktreePath, workspacePath, worktreeId, isActive }: DiffModeViewProps) {
   const [changedFiles, setChangedFiles] = useState<ChangedFile[]>([]);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
 
@@ -40,6 +42,7 @@ export function DiffModeView({ worktreePath, workspacePath, isActive }: DiffMode
   const [commitsBehind, setCommitsBehind] = useState(0);
   const [isMerged, setIsMerged] = useState(false);
   const [isRebasing, setIsRebasing] = useState(false);
+  const [mergeConflictFiles, setMergeConflictFiles] = useState<string[] | null>(null);
   const isResizingRef = useRef(false);
 
   // Load changed files from the worktree
@@ -170,7 +173,13 @@ export function DiffModeView({ worktreePath, workspacePath, isActive }: DiffMode
         // Reload files and commits
         await Promise.all([loadChangedFiles(), loadCommits(), loadWorktreeStatus()]);
       } else {
-        setError(result?.error || result?.message || 'Failed to merge');
+        // Check if this is a merge conflict error (detected before merge started)
+        if ((result?.message === 'merge-conflict-detected' || result?.message === 'merge-conflict-in-main') && result?.conflictedFiles) {
+          // Show merge conflict dialog
+          setMergeConflictFiles(result.conflictedFiles);
+        } else {
+          setError(result?.error || result?.message || 'Failed to merge');
+        }
       }
     } catch (err) {
       console.error('[DiffModeView] Failed to merge:', err);
@@ -212,6 +221,133 @@ export function DiffModeView({ worktreePath, workspacePath, isActive }: DiffMode
       setError('Failed to squash commits');
     }
   }, [worktreePath, loadCommits, loadChangedFiles, loadWorktreeStatus]);
+
+  // Resolve merge conflicts with Claude Agent
+  const handleResolveConflictsWithAgent = useCallback(async () => {
+    if (!mergeConflictFiles || mergeConflictFiles.length === 0) return;
+
+    console.log('[DiffModeView] Resolving conflicts with agent', { mergeConflictFiles, workspacePath });
+
+    // Close the dialog
+    setMergeConflictFiles(null);
+
+    try {
+      // Get the worktree branch name from the path
+      const worktreeName = worktreePath.split('/').pop() || 'unknown';
+      const worktreeBranch = `worktree/${worktreeName}`;
+      const mainBranch = repoRootBranch || 'main';
+
+      // Create a very specific prompt for resolving the merge conflicts
+      const conflictFilesList = mergeConflictFiles.map(f => `  - ${f}`).join('\n');
+      const draftMessage = `I need to merge the worktree branch into main, preserving both committed and uncommitted changes.
+
+**Context:**
+- Main repository: ${workspacePath}
+- Main branch: ${mainBranch}
+- Worktree location: ${worktreePath}
+- Worktree branch: ${worktreeBranch}
+
+**The Situation:**
+I'm trying to merge commits from ${worktreeBranch} into ${mainBranch}. These files have both uncommitted changes in main AND committed changes in the worktree:
+${conflictFilesList}
+
+**IMPORTANT - The desired end state:**
+For each file, the final result should have:
+1. The committed changes from ${worktreeBranch} (merged and committed)
+2. The uncommitted changes from ${mainBranch} (still unstaged, on top of the merged version)
+
+**What you need to do:**
+
+**Step 1: Stash the uncommitted changes**
+\`\`\`bash
+cd ${workspacePath}
+git stash push -m "Uncommitted changes before worktree merge"
+\`\`\`
+
+**Step 2: Merge the worktree branch**
+\`\`\`bash
+git merge --no-ff ${worktreeBranch}
+\`\`\`
+This applies the committed changes from the worktree.
+
+**Step 3: Reapply the uncommitted changes**
+\`\`\`bash
+git stash pop
+\`\`\`
+
+**Step 4: Resolve conflicts from stash pop**
+The \`git stash pop\` will likely create conflicts in ${mergeConflictFiles.join(', ')} because both the merge and the stash modified these files.
+
+For each conflicted file:
+- Open the file and look for conflict markers (\`<<<<<<< Updated upstream\`, \`=======\`, \`>>>>>>> Stashed changes\`)
+- Between \`<<<<<<< Updated upstream\` and \`=======\` is the newly merged version (this is what we want to keep as the base)
+- Between \`=======\` and \`>>>>>>> Stashed changes\` is the uncommitted changes (this is what we want on top)
+- **Merge both sections**: Keep the merged version as the base, then apply the uncommitted changes on top
+- Remove all conflict markers
+- The file should now have both the merged changes AND the uncommitted changes
+
+**Step 5: Verify the result**
+\`\`\`bash
+git status
+\`\`\`
+Should show the files as modified (uncommitted). The working directory should have:
+- The committed changes from ${worktreeBranch} (in the last commit)
+- The uncommitted changes (as unstaged modifications)
+
+**DO NOT** stage or commit these changes - they should remain uncommitted.
+
+Please proceed with this strategy.`;
+
+      console.log('[DiffModeView] Creating AI session in main repo workspace...');
+      // Create the session in the MAIN REPO workspace (so it appears in session list)
+      // but associate it with the worktree via worktreeId
+      const sessionResult = await window.electronAPI.aiCreateSession(
+        'claude-code',
+        undefined, // documentContext
+        workspacePath, // workspacePath (main repo - so session appears in main session list)
+        undefined, // modelId (use default)
+        'coding', // sessionType
+        worktreeId  // worktreeId (associate with the worktree)
+      );
+
+      console.log('[DiffModeView] Session result:', sessionResult);
+
+      // The session result uses 'id' not 'sessionId'
+      if (sessionResult?.id) {
+        const sessionId = sessionResult.id;
+
+        // Load the session data first (use workspacePath since session was created in main repo workspace)
+        console.log('[DiffModeView] Loading session...', sessionId);
+        const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspacePath);
+        console.log('[DiffModeView] Session data:', sessionData);
+
+        if (sessionData) {
+          // Save the draft input so it appears in the text box but isn't sent yet
+          console.log('[DiffModeView] Saving draft input...');
+          await window.electronAPI.aiSaveDraftInput(
+            sessionId,
+            draftMessage,
+            workspacePath
+          );
+
+          // Dispatch a custom event to notify the AgenticPanel to open this session
+          // Use workspacePath since that's where the session was created
+          console.log('[DiffModeView] Dispatching event...');
+          window.dispatchEvent(new CustomEvent('open-ai-session', {
+            detail: {
+              sessionId,
+              workspacePath: workspacePath,
+              draftInput: draftMessage
+            }
+          }));
+          console.log('[DiffModeView] Event dispatched successfully');
+        }
+      }
+    } catch (err) {
+      console.error('[DiffModeView] Failed to create agent session for conflict resolution:', err);
+      setError('Failed to create Claude Agent session for conflict resolution');
+    }
+  }, [workspacePath, worktreePath, worktreeId, repoRootBranch, mergeConflictFiles]);
 
   // Handle resize
   const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
@@ -328,6 +464,16 @@ export function DiffModeView({ worktreePath, workspacePath, isActive }: DiffMode
           isRebasing={isRebasing}
         />
       </div>
+
+      {/* Merge conflict dialog */}
+      {mergeConflictFiles && mergeConflictFiles.length > 0 && (
+        <MergeConflictDialog
+          workspacePath={workspacePath}
+          conflictedFiles={mergeConflictFiles}
+          onResolveWithAgent={handleResolveConflictsWithAgent}
+          onCancel={() => setMergeConflictFiles(null)}
+        />
+      )}
     </div>
   );
 }

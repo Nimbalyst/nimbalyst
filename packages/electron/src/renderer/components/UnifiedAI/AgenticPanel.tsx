@@ -2541,9 +2541,11 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     globalSendingSessions.add(sessionId);
     setSendingSessions(prev => new Set(prev).add(sessionId));
 
-    // Get the session to determine sessionType
+    // Get the session to determine sessionType and workspace path
     const currentTab = sessionTabs.filter(tab => tab != null).find(tab => tab.id === sessionId);
     const sessionType = currentTab?.sessionData?.sessionType || (mode === 'agent' ? 'coding' : 'chat');
+    // Use the session's workspacePath (where it was created), not worktreePath (which is just metadata)
+    const effectiveWorkspacePath = currentTab?.sessionData?.workspacePath || workspacePath;
 
     // Add user message immediately
     setSessionTabs(prev => {
@@ -2607,7 +2609,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
         contextToSend = {
           ...serializableContext,
-          workspacePath,  // CRITICAL: Add workspacePath for MCP tool routing
+          workspacePath: effectiveWorkspacePath,  // CRITICAL: Add workspacePath for MCP tool routing (worktree path if session is in worktree)
           sessionType,  // Include sessionType for MCP tool availability
           attachments: attachments.length > 0 ? attachments : undefined,
           queuedPromptId,  // For deduplication in main process
@@ -2651,17 +2653,17 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           hasMockupDrawing: !!contextToSend.mockupDrawing
         });
       } else if (attachments.length > 0) {
-        contextToSend = { attachments, sessionType, workspacePath, queuedPromptId, contentMode: mode };  // Include workspacePath even without document
+        contextToSend = { attachments, sessionType, workspacePath: effectiveWorkspacePath, queuedPromptId, contentMode: mode };  // Include workspacePath even without document
       } else {
         // Even without document context or attachments, pass sessionType and workspacePath
-        contextToSend = { sessionType, workspacePath, queuedPromptId, contentMode: mode };  // Include workspacePath for routing
+        contextToSend = { sessionType, workspacePath: effectiveWorkspacePath, queuedPromptId, contentMode: mode };  // Include workspacePath for routing
       }
 
       await window.electronAPI.aiSendMessage(
         message,
         contextToSend,
         sessionId,
-        workspacePath
+        effectiveWorkspacePath
       );
     } catch (err) {
       console.error('[AgenticPanel] Failed to send message:', err);
@@ -2727,6 +2729,87 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       window.removeEventListener('trigger-slash-command', handleSlashCommand as EventListener);
     };
   }, [activeTabId, handleSendMessage]);
+
+  // Listen for open-ai-session events (e.g., from merge conflict resolution)
+  useEffect(() => {
+    const handleOpenSession = async (event: CustomEvent<{ sessionId: string; workspacePath: string; draftInput?: string }>) => {
+      const { sessionId, workspacePath: eventWorkspacePath, draftInput } = event.detail;
+
+      console.log('[AgenticPanel] Received open-ai-session event', {
+        sessionId,
+        eventWorkspacePath
+      });
+
+      // Try to load the session with the event's workspace path first
+      // This allows worktree sessions to be opened even when the panel's workspacePath is different
+      console.log(`[AgenticPanel] Attempting to open session: ${sessionId}`);
+
+      try {
+        // Load the session data using the event's workspace path
+        console.log('[AgenticPanel] Calling aiLoadSession with:', { sessionId, eventWorkspacePath });
+        const sessionData = await window.electronAPI.aiLoadSession(sessionId, eventWorkspacePath);
+        console.log('[AgenticPanel] aiLoadSession returned:', sessionData ? { id: sessionData.id, mode: sessionData.mode, hasData: true } : 'null');
+
+        if (!sessionData) {
+          console.error('[AgenticPanel] Failed to load session data for external open - sessionData is null');
+          return;
+        }
+
+        // Use functional state update to avoid dependency on sessionTabs
+        setSessionTabs(prev => {
+          // Check if session is already open in a tab
+          const existingTabIndex = prev.findIndex(tab => tab.id === sessionId);
+          console.log('[AgenticPanel] Checking for existing tab:', { existingTabIndex, sessionTabsLength: prev.length });
+
+          if (existingTabIndex >= 0) {
+            // Session already open, just activate it
+            console.log('[AgenticPanel] Session already open in tab, activating it');
+            setActiveTabId(sessionId);
+            return prev; // No change to tabs
+          }
+
+          // Create a new tab for this session
+          const newTab: SessionTab = {
+            id: sessionData.id,
+            name: `Session ${prev.length + 1}`,
+            sessionData,
+            draftInput: draftInput || sessionData.draftInput || '',
+            mode: sessionData.mode || 'agent',
+            model: sessionData.model || 'claude-sonnet-4-5-20250929'
+          };
+
+          console.log('[AgenticPanel] Creating new tab:', { tabId: newTab.id, tabName: newTab.name, mode: newTab.mode });
+          const updated = [...prev, newTab];
+          console.log('[AgenticPanel] Updated sessionTabs:', updated.map(t => ({ id: t.id, name: t.name })));
+          return updated;
+        });
+
+        console.log('[AgenticPanel] Setting active tab to:', sessionData.id);
+        setActiveTabId(sessionData.id);
+
+        console.log('[AgenticPanel] Calling loadSessions...');
+        await loadSessions();
+
+        console.log('[AgenticPanel] Triggering session history refresh...');
+        triggerSessionHistoryRefresh('new-session');
+
+        // If this is a worktree session, switch the worktree mode to 'agent'
+        if (sessionData.worktreeId) {
+          console.log('[AgenticPanel] Switching worktree mode to agent:', sessionData.worktreeId);
+          handleWorktreeModeChange(sessionData.worktreeId, 'agent');
+        }
+
+        console.log('[AgenticPanel] Session open complete!');
+      } catch (err) {
+        console.error('[AgenticPanel] Failed to open session from external event:', err);
+      }
+    };
+
+    window.addEventListener('open-ai-session', handleOpenSession as EventListener);
+    return () => {
+      window.removeEventListener('open-ai-session', handleOpenSession as EventListener);
+    };
+  }, [loadSessions, handleWorktreeModeChange]);
 
   // Track sessions currently being processed to prevent duplicate processing
   const processingQueueRef = useRef(new Set<string>());

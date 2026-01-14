@@ -582,10 +582,21 @@ export class SessionManager {
       throw new Error('workspacePath is required to load a session - cannot fall back to default');
     }
     const workspace = workspacePath || this.currentWorkspacePath!;
+    console.log('[SessionManager] Loading session:', { sessionId, workspace });
+
     const session = await AISessionsRepository.get(sessionId);
     if (!session) {
+      console.log('[SessionManager] Session not found in database:', sessionId);
       return null;
     }
+
+    console.log('[SessionManager] Session found in database:', {
+      sessionId: session.id,
+      sessionWorkspacePath: session.workspacePath,
+      requestedWorkspace: workspace,
+      worktreeId: session.worktreeId,
+      worktreePath: session.worktreePath
+    });
 
     // Validate workspace ownership to prevent cross-workspace session loading
     // This prevents bugs where a session ID from one workspace could be loaded
