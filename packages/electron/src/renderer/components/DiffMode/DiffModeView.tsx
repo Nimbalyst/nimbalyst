@@ -197,6 +197,22 @@ export function DiffModeView({ worktreePath, workspacePath, isActive }: DiffMode
     }
   }, [worktreePath, loadChangedFiles, loadCommits, loadWorktreeStatus]);
 
+  // Squash commits
+  const handleSquash = useCallback(async (commitHashes: string[], message: string) => {
+    try {
+      const result = await window.electronAPI.invoke('worktree:squash-commits', worktreePath, commitHashes, message);
+      if (result?.success) {
+        // Reload commits, files, and status
+        await Promise.all([loadCommits(), loadChangedFiles(), loadWorktreeStatus()]);
+      } else {
+        setError(result?.error || 'Failed to squash commits');
+      }
+    } catch (err) {
+      console.error('[DiffModeView] Failed to squash commits:', err);
+      setError('Failed to squash commits');
+    }
+  }, [worktreePath, loadCommits, loadChangedFiles, loadWorktreeStatus]);
+
   // Handle resize
   const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -297,6 +313,7 @@ export function DiffModeView({ worktreePath, workspacePath, isActive }: DiffMode
           onCommit={handleCommit}
           onMerge={handleMerge}
           onRebase={handleRebase}
+          onSquash={handleSquash}
           onSelectFile={setSelectedFile}
           onRefresh={() => Promise.all([loadChangedFiles(), loadCommits(), loadRepoRootBranch(), loadWorktreeStatus()])}
           onCollapse={() => setPanelCollapsed(prev => !prev)}

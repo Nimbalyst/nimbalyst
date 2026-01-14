@@ -4,6 +4,7 @@ import { ChangedFilesTree } from './ChangedFilesTree';
 import { CommitSection } from './CommitSection';
 import { CommitsHistory } from './CommitsHistory';
 import { MergeConfirmDialog } from './MergeConfirmDialog';
+import { SquashCommitModal } from './SquashCommitModal';
 import type { ChangedFile, CommitInfo } from './DiffModeView';
 import './ChangesPanel.css';
 
@@ -16,6 +17,7 @@ interface ChangesPanelProps {
   onCommit: (message: string) => void;
   onMerge: () => void;
   onRebase: () => void;
+  onSquash: (commitHashes: string[], message: string) => Promise<void>;
   onSelectFile: (filePath: string) => void;
   onRefresh: () => void;
   onCollapse: () => void;
@@ -39,6 +41,7 @@ export function ChangesPanel({
   onCommit,
   onMerge,
   onRebase,
+  onSquash,
   onSelectFile,
   onRefresh,
   onCollapse,
@@ -55,6 +58,11 @@ export function ChangesPanel({
   const [showMergeDialog, setShowMergeDialog] = useState(false);
   const [isCommitting, setIsCommitting] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
+  const [selectedCommits, setSelectedCommits] = useState<Set<string>>(new Set());
+  const [showSquashModal, setShowSquashModal] = useState(false);
+  const [squashWarning, setSquashWarning] = useState<string | undefined>();
+  const [isSquashing, setIsSquashing] = useState(false);
+  const [isCheckingCommits, setIsCheckingCommits] = useState(false);
 
   const handleCommit = async (message: string) => {
     setIsCommitting(true);
@@ -75,8 +83,160 @@ export function ChangesPanel({
     }
   };
 
+  const handleToggleCommit = (hash: string) => {
+    setSelectedCommits(prev => {
+      const next = new Set(prev);
+
+      if (next.has(hash)) {
+        // Always allow deselection
+        next.delete(hash);
+        return next;
+      }
+
+      // For selection, check if it would create a consecutive range
+      const commitIndex = commits.findIndex(c => c.hash === hash);
+      if (commitIndex === -1) return prev;
+
+      if (next.size === 0) {
+        // First selection, always allowed
+        next.add(hash);
+        return next;
+      }
+
+      // Find indices of currently selected commits
+      const selectedIndices = Array.from(next)
+        .map(h => commits.findIndex(c => c.hash === h))
+        .filter(idx => idx !== -1)
+        .sort((a, b) => a - b);
+
+      if (selectedIndices.length === 0) {
+        next.add(hash);
+        return next;
+      }
+
+      const minIndex = selectedIndices[0];
+      const maxIndex = selectedIndices[selectedIndices.length - 1];
+
+      // Only allow selection if it's adjacent to the current range
+      if (commitIndex === minIndex - 1 || commitIndex === maxIndex + 1) {
+        next.add(hash);
+        return next;
+      }
+
+      // Also allow if it fills a gap in the current range
+      if (commitIndex > minIndex && commitIndex < maxIndex) {
+        next.add(hash);
+        return next;
+      }
+
+      // Otherwise, don't allow the selection (non-consecutive)
+      return prev;
+    });
+  };
+
+  const handleClearSelection = () => {
+    setSelectedCommits(new Set());
+  };
+
+  const handleSquashClick = () => {
+    if (selectedCommits.size < 2) {
+      return;
+    }
+
+    // Show modal immediately - we'll check existence when confirming
+    setShowSquashModal(true);
+  };
+
+  const handleSquashConfirm = async (message: string) => {
+    // Capture the current selection at confirmation time
+    const commitsToSquash = Array.from(selectedCommits);
+
+    // If we haven't checked yet, check now before squashing
+    if (!squashWarning) {
+      setIsCheckingCommits(true);
+      let warningToShow: string | undefined;
+      try {
+        const result = await window.electronAPI.invoke(
+          'worktree:check-commits-existence',
+          worktreePath,
+          commitsToSquash
+        );
+
+        if (result?.success && result.existsElsewhere) {
+          warningToShow = 'Warning: Some of these commits exist on other branches. Squashing will rewrite history and may cause issues when merging.';
+        }
+      } catch (err) {
+        console.error('Failed to check commit existence:', err);
+      } finally {
+        setIsCheckingCommits(false);
+      }
+
+      // If there's a warning, show it and wait for re-confirmation
+      if (warningToShow) {
+        setSquashWarning(warningToShow);
+        return; // Stay in modal with warning displayed
+      }
+    }
+
+    // Proceed with squash
+    setShowSquashModal(false);
+    setIsSquashing(true);
+    try {
+      await onSquash(commitsToSquash, message);
+      setSelectedCommits(new Set());
+      setSquashWarning(undefined);
+    } finally {
+      setIsSquashing(false);
+    }
+  };
+
   const hasUncommittedChanges = files.length > 0;
   const allStaged = files.length > 0 && stagedFiles.length === files.length;
+
+  // Calculate which commits can be selected (for disabling checkboxes)
+  const getSelectableCommits = (): Set<string> => {
+    if (selectedCommits.size === 0) {
+      // All commits can be selected when nothing is selected
+      return new Set(commits.map(c => c.hash));
+    }
+
+    const selectedIndices = Array.from(selectedCommits)
+      .map(h => commits.findIndex(c => c.hash === h))
+      .filter(idx => idx !== -1)
+      .sort((a, b) => a - b);
+
+    if (selectedIndices.length === 0) {
+      return new Set(commits.map(c => c.hash));
+    }
+
+    const minIndex = selectedIndices[0];
+    const maxIndex = selectedIndices[selectedIndices.length - 1];
+
+    const selectable = new Set<string>();
+
+    commits.forEach((commit, index) => {
+      // Already selected commits are selectable (for deselection)
+      if (selectedCommits.has(commit.hash)) {
+        selectable.add(commit.hash);
+        return;
+      }
+
+      // Adjacent commits can be selected
+      if (index === minIndex - 1 || index === maxIndex + 1) {
+        selectable.add(commit.hash);
+        return;
+      }
+
+      // Commits within the range can be selected (filling gaps)
+      if (index > minIndex && index < maxIndex) {
+        selectable.add(commit.hash);
+      }
+    });
+
+    return selectable;
+  };
+
+  const selectableCommits = getSelectableCommits();
 
   if (collapsed) {
     return (
@@ -187,7 +347,41 @@ export function ChangesPanel({
               <span className="changes-panel-section-count">{commits.length}</span>
             )}
           </div>
-          <CommitsHistory commits={commits} />
+          {commits.length > 1 && selectedCommits.size > 0 && (
+            <div className="changes-panel-squash-actions changes-panel-squash-actions--active">
+              <div className="changes-panel-squash-info">
+                {selectedCommits.size === 1 ? (
+                  <span>Select at least one more commit</span>
+                ) : (
+                  <span>{selectedCommits.size} commits selected</span>
+                )}
+              </div>
+              <div className="changes-panel-squash-buttons">
+                <button
+                  type="button"
+                  className="changes-panel-squash-cancel"
+                  onClick={handleClearSelection}
+                >
+                  Clear
+                </button>
+                <button
+                  type="button"
+                  className="changes-panel-squash-confirm"
+                  onClick={handleSquashClick}
+                  disabled={selectedCommits.size < 2 || isSquashing}
+                >
+                  {isSquashing ? 'Squashing...' : `Squash ${selectedCommits.size} Commits`}
+                </button>
+              </div>
+            </div>
+          )}
+          <CommitsHistory
+            commits={commits}
+            selectedCommits={selectedCommits}
+            selectableCommits={selectableCommits}
+            onToggleCommit={handleToggleCommit}
+            selectionMode={commits.length > 1}
+          />
         </div>
       </div>
 
@@ -199,6 +393,21 @@ export function ChangesPanel({
           hasUncommittedChanges={hasUncommittedChanges}
           onConfirm={handleMergeConfirm}
           onCancel={() => setShowMergeDialog(false)}
+        />
+      )}
+
+      {/* Squash commit modal */}
+      {showSquashModal && (
+        <SquashCommitModal
+          isOpen={showSquashModal}
+          commitCount={selectedCommits.size}
+          warningMessage={squashWarning}
+          isChecking={isCheckingCommits}
+          onConfirm={handleSquashConfirm}
+          onCancel={() => {
+            setShowSquashModal(false);
+            setSquashWarning(undefined);
+          }}
         />
       )}
     </div>

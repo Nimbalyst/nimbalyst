@@ -73,3 +73,38 @@
 .commits-history-separator {
   opacity: 0.5;
 }
+
+/* Selection mode styles */
+.commits-history-item--selectable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.commits-history-item--selected {
+  background-color: var(--surface-selected, rgba(var(--accent-rgb), 0.1));
+  border-left: 2px solid var(--accent-primary);
+}
+
+.commits-history-item--selected:hover {
+  background-color: var(--surface-selected-hover, rgba(var(--accent-rgb), 0.15));
+}
+
+.commits-history-checkbox {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 2px;
+}
+
+.commits-history-checkbox input[type="checkbox"] {
+  cursor: pointer;
+}
+
+.commits-history-item--disabled {
+  opacity: 0.5;
+  cursor: not-allowed !important;
+}
+
+.commits-history-item--disabled .commits-history-checkbox input[type="checkbox"] {
+  cursor: not-allowed;
+}

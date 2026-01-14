@@ -1206,6 +1206,129 @@ ${newLines.map(line => '+' + line).join('\n')}`;
       throw new Error(`Failed to get changed files: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
+
+  /**
+   * Check if commits exist on other branches besides the current one
+   *
+   * @param worktreePath - Path to the worktree
+   * @param commitHashes - Array of commit hashes to check
+   * @returns Whether any commits exist on other branches
+   */
+  async checkCommitsExistElsewhere(worktreePath: string, commitHashes: string[]): Promise<boolean> {
+    if (!worktreePath) {
+      throw new Error('worktreePath is required');
+    }
+
+    if (!commitHashes || commitHashes.length === 0) {
+      return false;
+    }
+
+    logger.info('Checking if commits exist on other branches', { worktreePath, commitCount: commitHashes.length });
+
+    const git: SimpleGit = simpleGit(worktreePath);
+
+    try {
+      // Get current branch
+      const currentBranch = await git.revparse(['--abbrev-ref', 'HEAD']);
+
+      // For each commit, check if it exists on any branch other than current
+      for (const hash of commitHashes) {
+        // Get all branches that contain this commit
+        const result = await git.raw(['branch', '--contains', hash, '--all']);
+        const branches = result.split('\n').map(b => b.trim().replace(/^\* /, ''));
+
+        // Filter out current branch and check if commit exists elsewhere
+        const otherBranches = branches.filter(b =>
+          b &&
+          b !== currentBranch &&
+          !b.startsWith('remotes/origin/' + currentBranch)
+        );
+
+        if (otherBranches.length > 0) {
+          logger.info('Commit exists on other branches', { hash, otherBranches });
+          return true;
+        }
+      }
+
+      return false;
+    } catch (error) {
+      logger.error('Failed to check commit existence', { error, worktreePath });
+      // If check fails, return false to allow squashing (user can proceed at own risk)
+      return false;
+    }
+  }
+
+  /**
+   * Squash multiple commits into a single commit
+   *
+   * @param worktreePath - Path to the worktree
+   * @param commitHashes - Array of commit hashes to squash (must be consecutive)
+   * @param message - Commit message for the squashed commit
+   * @returns The new commit hash
+   */
+  async squashCommits(worktreePath: string, commitHashes: string[], message: string): Promise<string> {
+    if (!worktreePath) {
+      throw new Error('worktreePath is required');
+    }
+
+    if (!commitHashes || commitHashes.length < 2) {
+      throw new Error('At least 2 commits are required for squashing');
+    }
+
+    if (!message) {
+      throw new Error('Commit message is required');
+    }
+
+    logger.info('Squashing commits', { worktreePath, commitCount: commitHashes.length });
+
+    const git: SimpleGit = simpleGit(worktreePath);
+
+    try {
+      // Get all commits to validate the selection is consecutive
+      const allCommits = await git.log();
+      const commitIndices = commitHashes.map(hash => {
+        const index = allCommits.all.findIndex(c => c.hash === hash || c.hash.startsWith(hash));
+        if (index === -1) {
+          throw new Error(`Commit not found: ${hash}`);
+        }
+        return index;
+      });
+
+      // Sort indices to find the range
+      commitIndices.sort((a, b) => a - b);
+
+      // Verify commits are consecutive
+      for (let i = 1; i < commitIndices.length; i++) {
+        if (commitIndices[i] !== commitIndices[i - 1] + 1) {
+          throw new Error('Selected commits must be consecutive');
+        }
+      }
+
+      // Find the oldest commit (highest index) to use as the base
+      const oldestIndex = commitIndices[commitIndices.length - 1];
+      const oldestCommit = allCommits.all[oldestIndex];
+
+      // Use reset --soft to move HEAD to the commit before the oldest selected commit
+      // This keeps all changes from the squashed commits in the staging area
+      const baseCommit = oldestCommit.hash + '~1';
+
+      logger.info('Resetting to base commit', { baseCommit });
+      await git.reset(['--soft', baseCommit]);
+
+      // Create a new commit with all the changes
+      logger.info('Creating squashed commit', { message });
+      await git.commit(message);
+
+      // Get the new commit hash
+      const newCommit = await git.revparse(['HEAD']);
+
+      logger.info('Successfully squashed commits', { newCommit });
+      return newCommit;
+    } catch (error) {
+      logger.error('Failed to squash commits', { error, worktreePath });
+      throw new Error(`Failed to squash commits: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
 }
 
 // Export singleton instance
