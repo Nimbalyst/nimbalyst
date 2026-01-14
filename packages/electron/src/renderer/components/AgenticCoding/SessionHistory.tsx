@@ -742,12 +742,19 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   const groupedItems = useMemo(() => {
     const timestampField = sortBy === 'updated' ? 'updatedAt' : 'createdAt';
     const items: UnifiedListItem[] = [];
+    const pinnedItems: UnifiedListItem[] = [];
 
     // Add regular sessions (those without worktree_id)
     for (const session of sessions) {
       if (!session.worktree_id) {
         const timestamp = timestampField === 'updatedAt' ? (session.updatedAt || session.createdAt) : session.createdAt;
-        items.push({ type: 'session', session, timestamp });
+        const item = { type: 'session' as const, session, timestamp };
+
+        if (session.isPinned) {
+          pinnedItems.push(item);
+        } else {
+          items.push(item);
+        }
       }
     }
 
@@ -759,28 +766,17 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
         const worktreeData = worktreeCache.get(worktreeId);
         timestamp = worktreeData?.createdAt || 0;
       }
-      items.push({ type: 'worktree', worktreeId, sessions: data.sessions, timestamp });
+      const item = { type: 'worktree' as const, worktreeId, sessions: data.sessions, timestamp };
+
+      const worktreeData = worktreeCache.get(worktreeId);
+      if (worktreeData?.isPinned) {
+        pinnedItems.push(item);
+      } else {
+        items.push(item);
+      }
     }
 
-    // Sort items: pinned items first (worktrees and sessions), then by timestamp
-    items.sort((a, b) => {
-      // Determine pinned status for each item
-      const aPinned = a.type === 'session'
-        ? (a.session.isPinned ?? false)
-        : (worktreeCache.get(a.worktreeId)?.isPinned ?? false);
-      const bPinned = b.type === 'session'
-        ? (b.session.isPinned ?? false)
-        : (worktreeCache.get(b.worktreeId)?.isPinned ?? false);
-
-      // Pinned items come first
-      if (aPinned && !bPinned) return -1;
-      if (!aPinned && bPinned) return 1;
-
-      // Within same pinned status, sort by timestamp (newest first)
-      return b.timestamp - a.timestamp;
-    });
-
-    // Group into time buckets
+    // Group non-pinned items into time buckets
     const groups: Record<TimeGroupKey, UnifiedListItem[]> = {
       'Today': [],
       'Yesterday': [],
@@ -796,13 +792,31 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       groups[groupKey].push(item);
     }
 
-    // Remove empty groups
-    return Object.fromEntries(
-      Object.entries(groups).filter(([_, items]) => items.length > 0)
-    ) as Record<TimeGroupKey, UnifiedListItem[]>;
+    // Sort items within each group by timestamp (newest first)
+    for (const groupKey of Object.keys(groups) as TimeGroupKey[]) {
+      groups[groupKey].sort((a, b) => b.timestamp - a.timestamp);
+    }
+
+    // Sort pinned items by timestamp (newest first)
+    pinnedItems.sort((a, b) => b.timestamp - a.timestamp);
+
+    // If we have pinned items, add them as a "Pinned" group at the beginning
+    const result: Record<string, UnifiedListItem[]> = {};
+    if (pinnedItems.length > 0) {
+      result['Pinned'] = pinnedItems;
+    }
+
+    // Add time-based groups
+    for (const [groupKey, groupItems] of Object.entries(groups)) {
+      if (groupItems.length > 0) {
+        result[groupKey] = groupItems;
+      }
+    }
+
+    return result as Record<TimeGroupKey | 'Pinned', UnifiedListItem[]>;
   }, [sessions, worktreeGroupsData, sortBy, worktreeCache]);
 
-  const groupKeys = Object.keys(groupedItems) as TimeGroupKey[];
+  const groupKeys = Object.keys(groupedItems) as (TimeGroupKey | 'Pinned')[];
 
   // Batch fetch all worktree data when sortedWorktreeIds changes (prevents N+1 query problem)
   useEffect(() => {
