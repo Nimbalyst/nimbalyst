@@ -27,6 +27,11 @@ export interface DocumentContext {
     timestamp: number;
   };
   textSelectionTimestamp?: number | null;
+
+  // Worktree context (for isolated AI coding sessions)
+  worktreeId?: string;  // ID of the associated worktree
+  worktreePath?: string;  // Path to the worktree directory
+  worktreeProjectPath?: string;  // Path to the parent project (for permission lookups)
 }
 
 export interface ChatAttachment {

@@ -1649,14 +1649,26 @@ export class AIService {
           });
         }
 
-        // Add sessionType, mode, and attachments to documentContext for provider to use in system prompt
+        // Add sessionType, mode, attachments, and worktree info to documentContext for provider to use in system prompt
         const contextWithSession = documentContext ? {
           ...documentContext,
           sessionType: (documentContext as any)?.sessionType ?? session.sessionType,
           mode: (documentContext as any)?.mode ?? session.mode,
           permissionsPath,  // For worktree sessions, this is the parent project path
-          attachments
-        } as any : { sessionType: session.sessionType, mode: session.mode, permissionsPath, attachments } as any;
+          attachments,
+          // Include worktree context so provider can warn Claude Code about the isolated environment
+          worktreeId: session.worktreeId,
+          worktreePath: session.worktreePath,
+          worktreeProjectPath: session.worktreeProjectPath
+        } as any : {
+          sessionType: session.sessionType,
+          mode: session.mode,
+          permissionsPath,
+          attachments,
+          worktreeId: session.worktreeId,
+          worktreePath: session.worktreePath,
+          worktreeProjectPath: session.worktreeProjectPath
+        } as any;
 
         // Update MCP document state for Claude Code provider so it knows which file-scoped tools to show
         if (isClaudeCode && contextWithSession?.filePath && contextWithSession?.workspacePath) {

@@ -3295,6 +3295,21 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       let prompt = `You are an AI assistant integrated into the Nimbalyst editor's agentic coding workspace.
 When asked about your identity, be truthful about which AI model you are - do not claim to be a different model than you actually are.`;
 
+      // Add worktree warning if this session is running in a worktree
+      const worktreePath = documentContext?.worktreePath;
+      if (worktreePath) {
+        prompt += `
+
+## Git Worktree Environment
+
+IMPORTANT: You are working in a git worktree at ${worktreePath}. This is an isolated environment for this coding session.
+
+- Make sure to stay in this worktree directory
+- Do not modify files in the main branch unless explicitly asked by the user
+- All changes you make will be on the worktree's branch, not the main branch
+- The worktree allows you to work on this task without affecting the main codebase`;
+      }
+
       // Add session naming instructions if MCP server is available
       if (ClaudeCodeProvider.sessionNamingServerPort !== null) {
         prompt += `
