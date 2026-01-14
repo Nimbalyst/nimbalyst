@@ -601,9 +601,13 @@ export class SessionManager {
     // Validate workspace ownership to prevent cross-workspace session loading
     // This prevents bugs where a session ID from one workspace could be loaded
     // in another workspace (e.g., if the tab state got corrupted)
-    if (session.workspacePath && session.workspacePath !== workspace) {
+    // For worktree sessions: accept either the parent workspace path OR the worktree path
+    const isValidWorkspace = session.workspacePath === workspace ||
+      (session.worktreePath && session.worktreePath === workspace);
+
+    if (session.workspacePath && !isValidWorkspace) {
       console.warn(
-        `[SessionManager] Rejecting session ${sessionId}: belongs to ${session.workspacePath}, not ${workspace}`
+        `[SessionManager] Rejecting session ${sessionId}: belongs to ${session.workspacePath} (worktree: ${session.worktreePath}), not ${workspace}`
       );
       return null;
     }
