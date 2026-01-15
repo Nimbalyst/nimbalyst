@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
-import { useAtomValue } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { usePostHog } from 'posthog-js/react';
 import { logger } from './utils/logger';
 import type { LexicalCommand } from 'rexical';
@@ -70,6 +70,7 @@ import {
 } from './extensions/panels';
 import { setStorageBackend } from '@nimbalyst/runtime';
 import { extensionPanelAIContextAtom } from './store/atoms/extensionPanels';
+import { setDiffTreeGroupByDirectoryAtom } from './store/atoms/projectState';
 import './WorkspaceWelcome.css';
 
 logger.ui.info('App.tsx loading');
@@ -275,6 +276,9 @@ export default function App() {
   // Extension panel AI context (synced from PanelContainer when aiSupported panels are active)
   const extensionPanelAIContext = useAtomValue(extensionPanelAIContextAtom);
 
+  // Diff tree grouping state - setter for hydration from workspace state
+  const setDiffTreeGroupByDirectory = useSetAtom(setDiffTreeGroupByDirectoryAtom);
+
   // Check if a fullscreen extension panel is active (hides other content modes)
   const activeFullscreenPanel = activeExtensionPanel ? getPanelById(activeExtensionPanel) : null;
   const isFullscreenPanelActive = activeFullscreenPanel?.placement === 'fullscreen';
@@ -476,7 +480,7 @@ export default function App() {
     initializeElectronStorageBackend(workspacePath);
   }, [workspacePath]);
 
-  // Load active mode from workspace state
+  // Load active mode and diff tree state from workspace state
   useEffect(() => {
     if (!workspacePath || !window.electronAPI?.invoke) return;
 
@@ -490,11 +494,16 @@ export default function App() {
         } else {
           console.log('[App Layout] No activeMode in state (keys:', Object.keys(state || {}), ')');
         }
+
+        // Hydrate diff tree grouping state into Jotai atom
+        if (state?.diffTreeGroupByDirectory !== undefined) {
+          setDiffTreeGroupByDirectory({ groupByDirectory: state.diffTreeGroupByDirectory, workspacePath });
+        }
       })
       .catch(error => {
         console.error('[ContentMode] Failed to load active mode:', error);
       });
-  }, [workspacePath]);
+  }, [workspacePath, setDiffTreeGroupByDirectory]);
 
   // Save active mode when it changes
   useEffect(() => {

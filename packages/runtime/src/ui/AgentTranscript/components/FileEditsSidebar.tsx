@@ -300,7 +300,7 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
     setExpandedFolders(new Set());
   };
 
-  // Auto-expand all folders when groupByDirectory is enabled
+  // Auto-expand all folders when groupByDirectory is enabled or files change
   useEffect(() => {
     if (groupByDirectory) {
       const allPaths: string[] = [];
@@ -318,7 +318,7 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
       }
       setExpandedFolders(new Set(allPaths));
     }
-  }, [groupByDirectory]);
+  }, [groupByDirectory, groupedByType]);
 
   const getOperationIcon = (operation: string) => {
     switch (operation) {

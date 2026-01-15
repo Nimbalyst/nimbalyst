@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAtom, useSetAtom } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import { getFileName } from '../../utils/pathUtils';
@@ -39,8 +39,18 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick, pendin
   const [isExpanded, setIsExpanded] = useState(true);
   const [gitStatus, setGitStatus] = useState<Record<string, FileGitStatus>>({});
   const [groupByDirectory] = useAtom(diffTreeGroupByDirectoryAtom);
-  const setGroupByDirectory = useSetAtom(setDiffTreeGroupByDirectoryAtom);
+  const setDiffTreeGroupByDirectory = useSetAtom(setDiffTreeGroupByDirectoryAtom);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+
+  // Wrapper to pass workspacePath to the setter atom
+  const setGroupByDirectory = useCallback((value: boolean) => {
+    if (workspacePath) {
+      setDiffTreeGroupByDirectory({ groupByDirectory: value, workspacePath });
+    }
+  }, [workspacePath, setDiffTreeGroupByDirectory]);
+
+  // Note: groupByDirectory is hydrated from workspace state once at app init (in App.tsx)
+  // No need to load it here - just use the Jotai atom value
 
   // Convert absolute path to relative path from workspace root
   const getRelativePath = (filePath: string): string => {
@@ -171,14 +181,14 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick, pendin
     setExpandedFolders(new Set());
   };
 
-  // Auto-expand all folders when groupByDirectory is enabled
+  // Auto-expand all folders when groupByDirectory is enabled or files change
   useEffect(() => {
     if (groupByDirectory && groupedFiles.length > 0) {
       const tree = buildDirectoryTree(groupedFiles);
       const allPaths = getAllFolderPaths(tree);
       setExpandedFolders(new Set(allPaths));
     }
-  }, [groupByDirectory]);
+  }, [groupByDirectory, groupedFiles]);
 
   useEffect(() => {
     if (!sessionId) {
