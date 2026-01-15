@@ -906,6 +906,54 @@ export function getEnhancedPath(): string {
   }
 
   if (process.platform === 'darwin' || process.platform === 'linux') {
+    // Try to get PATH from user's actual shell environment
+    // This is more reliable than hardcoding paths
+    try {
+      const shell = process.env.SHELL || '/bin/zsh';
+      const shellName = path.basename(shell);
+      const homeDir = os.homedir();
+
+      // For packaged apps, explicitly source shell config files
+      // This ensures we get the full PATH with all version managers (nvm, volta, fnm, etc.)
+      let command: string;
+      if (shellName === 'zsh') {
+        // Source zsh config files in the correct order
+        const sourceCommand =
+          `source /etc/zprofile 2>/dev/null || true; ` +
+          `source ${homeDir}/.zprofile 2>/dev/null || true; ` +
+          `source /etc/zshrc 2>/dev/null || true; ` +
+          `source ${homeDir}/.zshrc 2>/dev/null || true; `;
+        command = `${shell} -c '${sourceCommand}echo $PATH'`;
+      } else if (shellName === 'bash') {
+        // Source bash config files
+        const sourceCommand =
+          `source /etc/profile 2>/dev/null || true; ` +
+          `source ${homeDir}/.bash_profile 2>/dev/null || true; ` +
+          `source ${homeDir}/.bashrc 2>/dev/null || true; `;
+        command = `${shell} -c '${sourceCommand}echo $PATH'`;
+      } else {
+        // For other shells, use interactive login shell
+        command = `${shell} -ilc 'echo $PATH' 2>/dev/null`;
+      }
+
+      const shellPath = execSync(command, {
+        encoding: 'utf8',
+        timeout: 3000,
+        env: { HOME: homeDir }
+      }).trim();
+
+      if (shellPath && shellPath.length > 0 && !shellPath.includes('command not found')) {
+        console.log(`[getEnhancedPath] Got PATH from ${shellName}: ${shellPath.substring(0, 200)}...`);
+        paths.push(shellPath);
+      } else {
+        console.warn(`[getEnhancedPath] Got empty or invalid PATH from ${shellName}`);
+      }
+    } catch (e: any) {
+      console.warn('[getEnhancedPath] Could not get PATH from shell:', e.message || e);
+      // This is expected to fail in some cases (shell not found, permission issues, etc.)
+      // We'll fall back to the hardcoded paths below
+    }
+
     // Common Unix paths
     paths.push('/usr/local/bin');
     paths.push('/usr/bin');
@@ -935,17 +983,25 @@ export function getEnhancedPath(): string {
       paths.push('/snap/bin');
     }
 
-    // NVM paths
-    const nvmDir = process.env.NVM_DIR || path.join(os.homedir(), '.nvm');
-    try {
-      // Try to find current NVM node
-      const nvmCurrent = path.join(nvmDir, 'current', 'bin');
-      paths.push(nvmCurrent);
-    } catch (e) {
-      // Ignore
+    // Node.js version manager paths
+    const homeDir = os.homedir();
+
+    // NVM (Node Version Manager)
+    const nvmDir = process.env.NVM_DIR || path.join(homeDir, '.nvm');
+    paths.push(path.join(nvmDir, 'current', 'bin'));
+
+    // Volta
+    paths.push(path.join(homeDir, '.volta', 'bin'));
+
+    // fnm (Fast Node Manager)
+    if (process.env.FNM_DIR) {
+      paths.push(path.join(process.env.FNM_DIR, 'bin'));
     }
 
-    // Try to get npm prefix if npm exists somewhere
+    // asdf (version manager)
+    paths.push(path.join(homeDir, '.asdf', 'shims'));
+
+    // Try to get npm global bin directory
     try {
       const npmPrefix = execSync('npm config get prefix 2>/dev/null', {
         encoding: 'utf8',
@@ -958,6 +1014,24 @@ export function getEnhancedPath(): string {
     } catch (e) {
       // Ignore if npm is not available
     }
+
+    // Try to get yarn global bin directory
+    try {
+      const yarnBin = execSync('yarn global bin 2>/dev/null', {
+        encoding: 'utf8',
+        shell: '/bin/sh',
+        timeout: 2000
+      }).trim();
+      if (yarnBin && yarnBin.length > 0) {
+        paths.push(yarnBin);
+      }
+    } catch (e) {
+      // Ignore if yarn is not available
+    }
+
+    // Yarn global paths (fallback if yarn command not available)
+    paths.push(path.join(homeDir, '.yarn', 'bin'));
+    paths.push(path.join(homeDir, '.config', 'yarn', 'global', 'node_modules', '.bin'));
   } else if (process.platform === 'win32') {
     // On Windows, GUI apps don't inherit the full user PATH from shell sessions.
     // Query the actual user PATH from the registry to get the complete PATH.
@@ -997,6 +1071,10 @@ export function getEnhancedPath(): string {
       paths.push(path.join(userProfile, '.bun', 'bin'));
       // Deno default installation path
       paths.push(path.join(userProfile, '.deno', 'bin'));
+      // Volta
+      paths.push(path.join(userProfile, '.volta', 'bin'));
+      // Yarn
+      paths.push(path.join(userProfile, 'AppData', 'Local', 'Yarn', 'bin'));
     }
 
     // NVM for Windows
@@ -1007,6 +1085,11 @@ export function getEnhancedPath(): string {
     const nvmSymlink = process.env.NVM_SYMLINK;
     if (nvmSymlink) {
       paths.push(nvmSymlink);
+    }
+
+    // fnm for Windows
+    if (process.env.FNM_DIR) {
+      paths.push(process.env.FNM_DIR);
     }
   }
 
