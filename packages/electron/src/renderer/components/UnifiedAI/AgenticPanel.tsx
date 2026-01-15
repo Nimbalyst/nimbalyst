@@ -2752,8 +2752,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
   // Listen for open-ai-session events (e.g., from merge conflict resolution)
   useEffect(() => {
-    const handleOpenSession = async (event: CustomEvent<{ sessionId: string; workspacePath: string; draftInput?: string }>) => {
-      const { sessionId, workspacePath: eventWorkspacePath, draftInput } = event.detail;
+    const handleOpenSession = async (event: Event) => {
+      const customEvent = event as CustomEvent<{ sessionId: string; workspacePath: string; draftInput?: string }>;
+      const { sessionId, workspacePath: eventWorkspacePath, draftInput } = customEvent.detail;
 
       console.log('[AgenticPanel] Received open-ai-session event', {
         sessionId,
@@ -2834,9 +2835,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       }
     };
 
-    window.addEventListener('open-ai-session', handleOpenSession as EventListener);
+    window.addEventListener('open-ai-session', handleOpenSession);
     return () => {
-      window.removeEventListener('open-ai-session', handleOpenSession as EventListener);
+      window.removeEventListener('open-ai-session', handleOpenSession);
     };
   }, [workspacePath, loadSessions, handleWorktreeModeChange]);
 
