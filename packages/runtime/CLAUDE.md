@@ -104,6 +104,10 @@ See `/docs/AI_PROVIDER_TYPES.md` for detailed documentation.
 
 Custom widgets can replace the generic tool call display for specific MCP tools. See `/docs/CUSTOM_TOOL_WIDGETS.md` for implementation details.
 
+### System Prompts
+
+For detailed information about how AI system prompts are constructed and how to update them, see `src/ai/CLAUDE.md`.
+
 ## Linear Integration
 
 We use the Linear MCP integration with the "NIM" project for issue tracking.
