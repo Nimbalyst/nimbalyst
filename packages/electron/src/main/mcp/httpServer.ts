@@ -595,6 +595,32 @@ async function tryCreateServer(port: number): Promise<any> {
                           type: 'array',
                           items: { type: 'string' },
                           description: 'Optional colors for chart series (hex codes or CSS color names)'
+                        },
+                        errorBars: {
+                          type: 'object',
+                          description: 'Optional error bars configuration. Supports bar, line, area, and scatter charts.',
+                          properties: {
+                            dataKey: {
+                              type: 'string',
+                              description: 'Key in data objects for the y-axis series to add error bars to (required when yAxisKey is an array)'
+                            },
+                            errorKey: {
+                              type: 'string',
+                              description: 'Key in data objects containing error values (symmetric errors)'
+                            },
+                            errorKeyLower: {
+                              type: 'string',
+                              description: 'Key in data objects for lower error values (asymmetric errors)'
+                            },
+                            errorKeyUpper: {
+                              type: 'string',
+                              description: 'Key in data objects for upper error values (asymmetric errors)'
+                            },
+                            strokeWidth: {
+                              type: 'number',
+                              description: 'Width of error bar lines (default: 2)'
+                            }
+                          }
                         }
                       },
                       required: ['chartType', 'data', 'xAxisKey', 'yAxisKey']
@@ -1303,6 +1329,53 @@ async function tryCreateServer(port: number): Promise<any> {
                     content: [{ type: 'text', text: `Error: ${itemPrefix}.chart.yAxisKey is required.` }],
                     isError: true
                   };
+                }
+
+                // Validate error bars if provided
+                if (chart.errorBars) {
+                  const errorBars = chart.errorBars as Record<string, unknown>;
+
+                  // Check that we have either symmetric or asymmetric error data
+                  const hasSymmetric = typeof errorBars.errorKey === 'string';
+                  const hasAsymmetric = typeof errorBars.errorKeyLower === 'string' && typeof errorBars.errorKeyUpper === 'string';
+
+                  if (!hasSymmetric && !hasAsymmetric) {
+                    return {
+                      content: [{ type: 'text', text: `Error: ${itemPrefix}.chart.errorBars must have either "errorKey" (for symmetric errors) or both "errorKeyLower" and "errorKeyUpper" (for asymmetric errors).` }],
+                      isError: true
+                    };
+                  }
+
+                  if (hasSymmetric && hasAsymmetric) {
+                    return {
+                      content: [{ type: 'text', text: `Error: ${itemPrefix}.chart.errorBars cannot have both "errorKey" and "errorKeyLower"/"errorKeyUpper". Use one or the other.` }],
+                      isError: true
+                    };
+                  }
+
+                  // Validate strokeWidth if provided
+                  if (errorBars.strokeWidth !== undefined && typeof errorBars.strokeWidth !== 'number') {
+                    return {
+                      content: [{ type: 'text', text: `Error: ${itemPrefix}.chart.errorBars.strokeWidth must be a number.` }],
+                      isError: true
+                    };
+                  }
+
+                  // Validate dataKey if provided (used for multi-series charts)
+                  if (errorBars.dataKey !== undefined && typeof errorBars.dataKey !== 'string') {
+                    return {
+                      content: [{ type: 'text', text: `Error: ${itemPrefix}.chart.errorBars.dataKey must be a string.` }],
+                      isError: true
+                    };
+                  }
+
+                  // Pie charts don't support error bars
+                  if (chart.chartType === 'pie') {
+                    return {
+                      content: [{ type: 'text', text: `Error: ${itemPrefix}.chart.errorBars is not supported for pie charts.` }],
+                      isError: true
+                    };
+                  }
                 }
 
                 displayedItems.push(`${chart.chartType} chart: ${item.description}`);

@@ -27,7 +27,8 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  Cell
+  Cell,
+  ErrorBar
 } from 'recharts';
 import type { CustomToolWidgetProps } from './index';
 import { isDarkThemeAtom } from '../../../../store/atoms/theme';
@@ -63,6 +64,48 @@ function getThemeColors(isDark: boolean): string[] {
   return isDark ? DARK_COLORS : LIGHT_COLORS;
 }
 
+/**
+ * Render error bar component based on configuration
+ * Supports both symmetric (errorKey) and asymmetric (errorKeyLower/errorKeyUpper) error bars
+ */
+function renderErrorBar(errorBars: ErrorBarConfig | undefined, isDark: boolean) {
+  if (!errorBars) return null;
+
+  // Validate that we have either symmetric or asymmetric error data
+  const hasSymmetric = !!errorBars.errorKey;
+  const hasAsymmetric = !!(errorBars.errorKeyLower && errorBars.errorKeyUpper);
+
+  if (!hasSymmetric && !hasAsymmetric) {
+    console.warn('[VisualDisplayWidget] Error bars configured but no error data keys provided');
+    return null;
+  }
+
+  const strokeWidth = errorBars.strokeWidth ?? 2;
+  const stroke = isDark ? 'var(--text-secondary)' : 'var(--text-primary)';
+
+  if (hasSymmetric) {
+    // Symmetric error bars
+    return <ErrorBar dataKey={errorBars.errorKey!} stroke={stroke} strokeWidth={strokeWidth} />;
+  } else {
+    // Asymmetric error bars (lower and upper bounds)
+    return (
+      <>
+        <ErrorBar dataKey={errorBars.errorKeyLower!} direction="y" stroke={stroke} strokeWidth={strokeWidth} />
+        <ErrorBar dataKey={errorBars.errorKeyUpper!} direction="y" stroke={stroke} strokeWidth={strokeWidth} />
+      </>
+    );
+  }
+}
+
+// Error bar configuration
+interface ErrorBarConfig {
+  dataKey?: string; // For multi-series charts, specify which series to add error bars to
+  errorKey?: string; // Symmetric error values
+  errorKeyLower?: string; // Lower error values (asymmetric)
+  errorKeyUpper?: string; // Upper error values (asymmetric)
+  strokeWidth?: number; // Line width
+}
+
 // Chart configuration for rendering
 interface ChartConfig {
   chartType: 'bar' | 'line' | 'pie' | 'area' | 'scatter';
@@ -70,6 +113,7 @@ interface ChartConfig {
   xAxisKey: string;
   yAxisKey: string | string[];
   colors?: string[];
+  errorBars?: ErrorBarConfig;
 }
 
 // New schema types
@@ -83,6 +127,7 @@ interface ChartContent {
   xAxisKey: string;
   yAxisKey: string | string[];
   colors?: string[];
+  errorBars?: ErrorBarConfig;
 }
 
 interface DisplayItem {
@@ -299,8 +344,11 @@ class VisualErrorBoundary extends React.Component<
 /**
  * Render a bar chart
  */
-function renderBarChart(config: ChartConfig, colors: string[]) {
+function renderBarChart(config: ChartConfig, colors: string[], isDark: boolean) {
   const yKeys = Array.isArray(config.yAxisKey) ? config.yAxisKey : [config.yAxisKey];
+
+  // Determine which series to attach error bars to
+  const errorBarDataKey = config.errorBars?.dataKey || yKeys[0];
 
   return (
     <BarChart data={config.data}>
@@ -317,7 +365,9 @@ function renderBarChart(config: ChartConfig, colors: string[]) {
       />
       {yKeys.length > 1 && <Legend />}
       {yKeys.map((key, index) => (
-        <Bar key={key} dataKey={key} fill={colors[index % colors.length]} isAnimationActive={false} />
+        <Bar key={key} dataKey={key} fill={colors[index % colors.length]} isAnimationActive={false}>
+          {key === errorBarDataKey && renderErrorBar(config.errorBars, isDark)}
+        </Bar>
       ))}
     </BarChart>
   );
@@ -326,8 +376,11 @@ function renderBarChart(config: ChartConfig, colors: string[]) {
 /**
  * Render a line chart
  */
-function renderLineChart(config: ChartConfig, colors: string[]) {
+function renderLineChart(config: ChartConfig, colors: string[], isDark: boolean) {
   const yKeys = Array.isArray(config.yAxisKey) ? config.yAxisKey : [config.yAxisKey];
+
+  // Determine which series to attach error bars to
+  const errorBarDataKey = config.errorBars?.dataKey || yKeys[0];
 
   return (
     <LineChart data={config.data}>
@@ -352,7 +405,9 @@ function renderLineChart(config: ChartConfig, colors: string[]) {
           strokeWidth={2}
           dot={{ fill: colors[index % colors.length], strokeWidth: 0, r: 3 }}
           isAnimationActive={false}
-        />
+        >
+          {key === errorBarDataKey && renderErrorBar(config.errorBars, isDark)}
+        </Line>
       ))}
     </LineChart>
   );
@@ -396,8 +451,11 @@ function renderPieChart(config: ChartConfig, colors: string[]) {
 /**
  * Render an area chart
  */
-function renderAreaChart(config: ChartConfig, colors: string[]) {
+function renderAreaChart(config: ChartConfig, colors: string[], isDark: boolean) {
   const yKeys = Array.isArray(config.yAxisKey) ? config.yAxisKey : [config.yAxisKey];
+
+  // Determine which series to attach error bars to
+  const errorBarDataKey = config.errorBars?.dataKey || yKeys[0];
 
   return (
     <AreaChart data={config.data}>
@@ -422,7 +480,9 @@ function renderAreaChart(config: ChartConfig, colors: string[]) {
           fill={colors[index % colors.length]}
           fillOpacity={0.3}
           isAnimationActive={false}
-        />
+        >
+          {key === errorBarDataKey && renderErrorBar(config.errorBars, isDark)}
+        </Area>
       ))}
     </AreaChart>
   );
@@ -431,7 +491,7 @@ function renderAreaChart(config: ChartConfig, colors: string[]) {
 /**
  * Render a scatter chart
  */
-function renderScatterChart(config: ChartConfig, colors: string[]) {
+function renderScatterChart(config: ChartConfig, colors: string[], isDark: boolean) {
   const yKey = Array.isArray(config.yAxisKey) ? config.yAxisKey[0] : config.yAxisKey;
 
   return (
@@ -452,6 +512,7 @@ function renderScatterChart(config: ChartConfig, colors: string[]) {
         {config.data.map((_, index) => (
           <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
         ))}
+        {renderErrorBar(config.errorBars, isDark)}
       </Scatter>
     </ScatterChart>
   );
@@ -578,7 +639,8 @@ const ChartItemRenderer: React.FC<{
     data: item.chart.data,
     xAxisKey: item.chart.xAxisKey,
     yAxisKey: item.chart.yAxisKey,
-    colors: item.chart.colors
+    colors: item.chart.colors,
+    errorBars: item.chart.errorBars
   };
 
   const colors = chartConfig.colors || getThemeColors(isDark);
@@ -587,15 +649,15 @@ const ChartItemRenderer: React.FC<{
   const renderChart = () => {
     switch (chartConfig.chartType) {
       case 'bar':
-        return renderBarChart(chartConfig, colors);
+        return renderBarChart(chartConfig, colors, isDark);
       case 'line':
-        return renderLineChart(chartConfig, colors);
+        return renderLineChart(chartConfig, colors, isDark);
       case 'pie':
         return renderPieChart(chartConfig, colors);
       case 'area':
-        return renderAreaChart(chartConfig, colors);
+        return renderAreaChart(chartConfig, colors, isDark);
       case 'scatter':
-        return renderScatterChart(chartConfig, colors);
+        return renderScatterChart(chartConfig, colors, isDark);
       default:
         return null;
     }
