@@ -677,7 +677,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   extensions: {
     listInstalled: () => ipcRenderer.invoke('extensions:list-installed'),
     getAllSettings: () => ipcRenderer.invoke('extensions:get-all-settings'),
-    getEnabled: (extensionId: string) => ipcRenderer.invoke('extensions:get-enabled', extensionId),
+    getEnabled: (extensionId: string, defaultEnabled?: boolean) => ipcRenderer.invoke('extensions:get-enabled', extensionId, defaultEnabled),
     setEnabled: (extensionId: string, enabled: boolean) => ipcRenderer.invoke('extensions:set-enabled', extensionId, enabled),
     setClaudePluginEnabled: (extensionId: string, enabled: boolean) => ipcRenderer.invoke('extensions:set-claude-plugin-enabled', extensionId, enabled),
     getClaudePluginCommands: () => ipcRenderer.invoke('extensions:get-claude-plugin-commands') as Promise<Array<{

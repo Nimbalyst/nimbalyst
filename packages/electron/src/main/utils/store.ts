@@ -1077,10 +1077,22 @@ export function setExtensionSettings(settings: Record<string, ExtensionSettings>
   getAppStore().set('extensionSettings', settings);
 }
 
-export function getExtensionEnabled(extensionId: string): boolean {
+/**
+ * Get whether an extension is enabled.
+ *
+ * @param extensionId - The extension ID to check
+ * @param defaultEnabled - The manifest's defaultEnabled value (undefined means true).
+ *                         Only used if the user hasn't explicitly set a preference.
+ * @returns Whether the extension should be enabled
+ */
+export function getExtensionEnabled(extensionId: string, defaultEnabled?: boolean): boolean {
   const settings = getExtensionSettings();
-  // Default to enabled if not explicitly set
-  return settings[extensionId]?.enabled ?? true;
+  // If user has explicitly set a preference, use it
+  if (settings[extensionId]?.enabled !== undefined) {
+    return settings[extensionId].enabled;
+  }
+  // Otherwise use manifest default (true if not specified)
+  return defaultEnabled !== false;
 }
 
 export function setExtensionEnabled(extensionId: string, enabled: boolean): void {

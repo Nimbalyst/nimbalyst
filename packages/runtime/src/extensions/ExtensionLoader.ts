@@ -1221,8 +1221,12 @@ let extensionLoader: ExtensionLoader | null = null;
 /**
  * Callback to query persisted enabled state for extensions.
  * Allows platform-specific persistence (Electron store, etc.)
+ *
+ * @param extensionId - The extension ID to check
+ * @param defaultEnabled - The manifest's defaultEnabled value (undefined means true)
+ * @returns Whether the extension should be enabled
  */
-let enabledStateProvider: ((extensionId: string) => Promise<boolean>) | null = null;
+let enabledStateProvider: ((extensionId: string, defaultEnabled?: boolean) => Promise<boolean>) | null = null;
 
 /**
  * Configuration service provider interface.
@@ -1240,9 +1244,11 @@ let configurationServiceProvider: ConfigurationServiceProvider | null = null;
  * Set a callback that will be called to get the persisted enabled state
  * for each extension when it's loaded. This allows the platform layer
  * (Electron, Capacitor) to provide persistence.
+ *
+ * @param provider - Function that takes extensionId and defaultEnabled, returns whether to enable
  */
 export function setEnabledStateProvider(
-  provider: (extensionId: string) => Promise<boolean>
+  provider: (extensionId: string, defaultEnabled?: boolean) => Promise<boolean>
 ): void {
   enabledStateProvider = provider;
 }
@@ -1284,17 +1290,17 @@ export async function initializeExtensions(): Promise<void> {
   // console.info(`[ExtensionLoader] Found ${discovered.length} extension(s)`);
 
   for (const ext of discovered) {
-    // Check persisted enabled state
+    // Check persisted enabled state, passing manifest's defaultEnabled
     let shouldLoad = true;
     if (enabledStateProvider) {
       try {
-        shouldLoad = await enabledStateProvider(ext.manifest.id);
+        shouldLoad = await enabledStateProvider(ext.manifest.id, ext.manifest.defaultEnabled);
       } catch (error) {
         console.warn(
           `[ExtensionLoader] Failed to check enabled state for ${ext.manifest.id}, defaulting to enabled:`,
           error
         );
-        shouldLoad = true;
+        shouldLoad = ext.manifest.defaultEnabled !== false;
       }
     }
 

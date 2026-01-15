@@ -53,6 +53,16 @@ export interface ExtensionManifest {
    * - 'alpha': Only visible to users on the alpha release channel
    */
   requiredReleaseChannel?: 'stable' | 'alpha';
+
+  /**
+   * Default enabled state for the extension.
+   * - true: Extension is enabled by default when first discovered (default if not specified)
+   * - false: Extension is disabled by default; user must manually enable it
+   *
+   * This only affects the initial state. Once the user has toggled the extension,
+   * their preference is persisted and this setting is ignored.
+   */
+  defaultEnabled?: boolean;
 }
 
 /**
