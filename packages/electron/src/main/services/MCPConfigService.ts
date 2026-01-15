@@ -416,7 +416,8 @@ export class MCPConfigService {
       try {
         // Expand environment variables and use enhanced PATH for GUI apps
         // (GUI apps on macOS don't inherit shell PATH, so npx/uvx/etc. may not be found)
-        const env: NodeJS.ProcessEnv = { ...process.env, PATH: getEnhancedPath() };
+        const enhancedPath = getEnhancedPath();
+        const env: NodeJS.ProcessEnv = { ...process.env, PATH: enhancedPath };
         if (config.env) {
           for (const [key, value] of Object.entries(config.env)) {
             env[key] = this.expandEnvVar(value, env);
@@ -448,6 +449,7 @@ export class MCPConfigService {
         logger.mcp.info(`[MCP Test] Command: ${command} (original: ${config.command})`);
         logger.mcp.info(`[MCP Test] Args: ${JSON.stringify(expandedArgs)} (original: ${JSON.stringify(config.args)})`);
         logger.mcp.info(`[MCP Test] Env keys: ${Object.keys(config.env || {}).join(', ')}`);
+        logger.mcp.info(`[MCP Test] Enhanced PATH (first 300 chars): ${enhancedPath.substring(0, 300)}...`);
 
         onProgress?.('connecting', 'Starting server...');
 
@@ -611,6 +613,8 @@ export class MCPConfigService {
           // Provide helpful error message for command not found
           if (error.code === 'ENOENT') {
             const commandHelp = this.getCommandNotFoundHelp(config.command || '');
+            logger.mcp.error(`[MCP Test] Command not found in PATH: ${config.command}`);
+            logger.mcp.error(`[MCP Test] Enhanced PATH used: ${enhancedPath.substring(0, 500)}...`);
             resolveOnce({ success: false, error: commandHelp.message, helpUrl: commandHelp.helpUrl });
           } else {
             resolveOnce({ success: false, error: error.message });
