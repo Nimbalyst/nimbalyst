@@ -24,7 +24,7 @@ import { AgentMessagesRepository } from '../../../storage/repositories/AgentMess
 import path from 'path';
 import fs from 'fs';
 import { app } from 'electron';
-import { buildClaudeCodeSystemPromptAddendum } from '../../prompt';
+import { buildClaudeCodeSystemPrompt } from '../../prompt';
 import { setupClaudeCodeEnvironment, getClaudeCodeExecutableOptions } from '../../../electron/claudeCodeEnvironment';
 import { SessionManager } from '../SessionManager';
 
@@ -426,6 +426,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
       // Build system prompt with document context
       const promptBuildStart = Date.now();
+      console.log('[CLAUDE-CODE] sendMessage - documentContext keys:', documentContext ? Object.keys(documentContext) : 'undefined');
+      console.log('[CLAUDE-CODE] sendMessage - documentContext.sessionType:', (documentContext as any)?.sessionType);
       const systemPrompt = this.buildSystemPrompt(documentContext);
 
       // Require workspace path
@@ -462,6 +464,14 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         // No loader configured, enable all sources
         settingSources = ['user', 'project', 'local'];
       }
+
+      // Log the complete system prompt being sent to SDK for debugging
+      console.log('[CLAUDE-CODE] ========================================');
+      console.log('[CLAUDE-CODE] COMPLETE SYSTEM PROMPT BEING APPENDED TO SDK:');
+      console.log('[CLAUDE-CODE] Length:', systemPrompt.length, 'characters');
+      console.log('[CLAUDE-CODE] ========================================');
+      console.log(systemPrompt);
+      console.log('[CLAUDE-CODE] ========================================');
 
       const options: any = {
         // The SDK might internally need the CLI path
@@ -3302,81 +3312,25 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   }
 
   protected buildSystemPrompt(documentContext?: DocumentContext): string {
-    // Check if this is an agentic coding session
     const sessionType = (documentContext as any)?.sessionType;
-    if (sessionType === 'coding') {
-      // Minimal prompt for agentic coding mode - let Claude Code work naturally
-      let prompt = `You are an AI assistant integrated into the Nimbalyst editor's agentic coding workspace.
-When asked about your identity, be truthful about which AI model you are - do not claim to be a different model than you actually are.`;
-
-      // Add worktree warning if this session is running in a worktree
-      const worktreePath = documentContext?.worktreePath;
-      if (worktreePath) {
-        prompt += `
-
-## Git Worktree Environment
-
-IMPORTANT: You are working in a git worktree at ${worktreePath}. This is an isolated environment for this coding session.
-
-- Make sure to stay in this worktree directory
-- Do not modify files in the main branch unless explicitly asked by the user
-- All changes you make will be on the worktree's branch, not the main branch
-- The worktree allows you to work on this task without affecting the main codebase`;
-      }
-
-      // Add session naming instructions if MCP server is available
-      if (ClaudeCodeProvider.sessionNamingServerPort !== null) {
-        prompt += `
-
-## Session Naming
-
-You have access to a special tool called \`mcp__nimbalyst-session-naming__name_session\` that allows you to name this conversation session.
-
-IMPORTANT: Call the \`mcp__nimbalyst-session-naming__name_session\` tool ONCE at the very start of this conversation, as soon as you understand the user's task or goal. The name should be:
-- 2-5 words long
-- Concise and descriptive
-- Task-focused (e.g., "Fix authentication bug", "Add dark mode", "Refactor database layer")
-
-Do NOT call this tool more than once per session. It should be called early, typically in your first response after understanding what the user wants to accomplish.`;
-      }
-
-      // Add voice mode context if this request originated from voice mode
-      const isVoiceMode = (documentContext as any)?.isVoiceMode;
-      if (isVoiceMode) {
-        // Get custom coding agent prompt settings if configured
-        const customPrompt = (documentContext as any)?.voiceModeCodingAgentPrompt as {
-          prepend?: string;
-          append?: string;
-        } | undefined;
-
-        // Apply custom prepend if configured
-        if (customPrompt?.prepend) {
-          prompt += `\n\n${customPrompt.prepend}`;
-        }
-
-        prompt += `
-
-## Voice Mode
-
-The user is interacting via voice mode. A voice assistant (GPT-4 Realtime) handles the conversation and relays requests to you.
-
-- Messages prefixed with \`[VOICE]\` are questions from the voice assistant on behalf of the user
-- For \`[VOICE]\` messages: respond with appropriate detail based on the question - the voice assistant will summarize for speech
-- You may also receive coding tasks via voice mode - handle these normally`;
-
-        // Apply custom append if configured
-        if (customPrompt?.append) {
-          prompt += `\n\n${customPrompt.append}`;
-        }
-      }
-
-      return prompt;
-    }
-
-    // For non-coding sessions, use the addendum-based approach
     const hasSessionNaming = ClaudeCodeProvider.sessionNamingServerPort !== null;
-    const addendum = buildClaudeCodeSystemPromptAddendum(documentContext, hasSessionNaming);
-    return addendum;
+    const worktreePath = documentContext?.worktreePath;
+    const isVoiceMode = (documentContext as any)?.isVoiceMode;
+    const voiceModeCodingAgentPrompt = (documentContext as any)?.voiceModeCodingAgentPrompt;
+
+    console.log('[CLAUDE-CODE] buildSystemPrompt - sessionType:', sessionType);
+
+    const prompt = buildClaudeCodeSystemPrompt({
+      sessionType,
+      hasSessionNaming,
+      worktreePath,
+      isVoiceMode,
+      voiceModeCodingAgentPrompt,
+      documentContext
+    });
+
+    console.log('[CLAUDE-CODE] Built system prompt - length:', prompt.length, 'characters');
+    return prompt;
   }
 
   /**
