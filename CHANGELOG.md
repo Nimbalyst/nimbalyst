@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.51.7] - 2026-01-15
+
+
+### Added
+- Analytics tracking for git repository status in workspace_opened event
+
+### Changed
+- Better instructions around charting and error bars
+
+### Fixed
+<!-- Bug fixes go here -->
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.51.6] - 2026-01-15
 
 
