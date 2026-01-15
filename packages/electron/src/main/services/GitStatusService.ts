@@ -575,6 +575,43 @@ export class GitStatusService {
   }
 
   /**
+   * Check if a workspace has a GitHub remote
+   *
+   * @param workspacePath The workspace path to check
+   * @returns True if the workspace has a GitHub remote URL
+   */
+  async hasGitHubRemote(workspacePath: string): Promise<boolean> {
+    if (!workspacePath) {
+      return false;
+    }
+
+    // Check if this is a git repository
+    if (!this.isGitRepository(workspacePath)) {
+      return false;
+    }
+
+    // Check if git is available
+    if (!isGitAvailable()) {
+      return false;
+    }
+
+    try {
+      // Get remote URL (typically origin)
+      const remoteUrl = execSync('git remote get-url origin', {
+        cwd: workspacePath,
+        encoding: 'utf8',
+        timeout: 5000
+      }).trim();
+
+      // Check if URL contains github.com
+      return remoteUrl.includes('github.com');
+    } catch (error) {
+      // If command fails (no remote), return false
+      return false;
+    }
+  }
+
+  /**
    * Clear the cache for a specific workspace or all workspaces
    */
   clearCache(workspacePath?: string): void {

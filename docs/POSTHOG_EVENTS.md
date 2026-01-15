@@ -70,7 +70,7 @@ All events include `$session_id` property automatically. Dev users are marked wi
 
 | Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |
 | --- | --- | --- | --- | --- | --- |
-| `workspace_opened` | `SessionState.ts:122`<br/>`index.ts:406`<br/>`WorkspaceManagerWindow.ts:292` | Workspace opened from startup, CLI, or dialog | `fileCount` (1-10, 11-50, 51-100, 100+)<br/>`hasSubfolders`<br/>`source` (startup_restore/cli) | v0.45.25 (2025-11-14) |  |
+| `workspace_opened` | `SessionState.ts:122`<br/>`index.ts:406`<br/>`WorkspaceManagerWindow.ts:292` | Workspace opened from startup, CLI, or dialog | `fileCount` (1-10, 11-50, 51-100, 100+)<br/>`hasSubfolders`<br/>`source` (startup_restore/cli/dialog)<br/>`isGitRepository`<br/>`isGitHub` | v0.45.25 (2025-11-14) | (pending release): Added isGitRepository and isGitHub properties |
 | `workspace_opened_with_filter` | `index.ts:433` | Workspace opened with git-worktree filter | `filter` (git-worktree)<br/>`$set_once: ever_opened_direct_to_worktree` | v0.45.25 (2025-11-14) |  |
 | `workspace_file_tree_expanded` | `WorkspaceWatcher.ts:53` | File tree expands with new files detected | `depth`<br/>`fileCount` (0-10, 11-50, 51-100, 100+) | v0.45.25 (2025-11-14) |  |
 | `workspace_search_used` | `QuickOpen.tsx:130, 230` | User searches workspace (files or content) | `resultCount` (0-4, 5-9, 10-49, 50-99, 100+)<br/>`queryLength` (1, 2-3, 4-9, 10+)<br/>`searchType` (file_name/content) | v0.45.25 (2025-11-14) |  |

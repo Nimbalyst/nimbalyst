@@ -8,6 +8,7 @@ import { getFolderContents } from '../utils/FileTree';
 import { basename } from 'path';
 import { logger } from '../utils/logger';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
+import { GitStatusService } from '../services/GitStatusService';
 
 // Save session state
 export async function saveSessionState() {
@@ -95,7 +96,7 @@ export async function restoreSessionState(): Promise<boolean> {
 
         // Wait for previous window to be ready before creating next
         await new Promise<void>((resolve) => {
-            setTimeout(() => {
+            setTimeout(async () => {
                 let window: BrowserWindow | null = null;
 
                 if (sessionWindow.mode === 'workspace' && sessionWindow.workspacePath) {
@@ -125,11 +126,28 @@ export async function restoreSessionState(): Promise<boolean> {
                             else if (fileCount > 50) fileCountBucket = '51-100';
                             else if (fileCount > 10) fileCountBucket = '11-50';
 
+                            // Check git repository status (defaults to false if git not available)
+                            let isGitRepository = false;
+                            let isGitHub = false;
+
+                            try {
+                                const gitStatusService = new GitStatusService();
+                                isGitRepository = await gitStatusService.isGitRepo(sessionWindow.workspacePath);
+                                if (isGitRepository) {
+                                    isGitHub = await gitStatusService.hasGitHubRemote(sessionWindow.workspacePath);
+                                }
+                            } catch (gitError) {
+                                // Git checks failed - continue with defaults (false, false)
+                                logger.session.error('Error checking git status:', gitError);
+                            }
+
                             const analytics = AnalyticsService.getInstance();
                             analytics.sendEvent('workspace_opened', {
                                 fileCount: fileCountBucket,
                                 hasSubfolders,
                                 source: 'startup_restore',
+                                isGitRepository,
+                                isGitHub,
                             });
                         } catch (error) {
                             logger.session.error('Error tracking workspace_opened event:', error);

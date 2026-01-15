@@ -6,6 +6,7 @@ import { createWindow, findWindowByWorkspace } from './WindowManager';
 import { safeHandle } from '../utils/ipcRegistry';
 import { getBackgroundColor } from '../theme/ThemeManager';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
+import { GitStatusService } from '../services/GitStatusService';
 
 let workspaceManagerWindow: BrowserWindow | null = null;
 
@@ -349,11 +350,29 @@ export function setupWorkspaceManagerHandlers() {
     // Track workspace opened analytics event (use quick scan for analytics)
     try {
       const { files } = getWorkspaceFiles(workspacePath, '', 1000, 8);
+
+      // Check git repository status (defaults to false if git not available)
+      let isGitRepository = false;
+      let isGitHub = false;
+
+      try {
+        const gitStatusService = new GitStatusService();
+        isGitRepository = await gitStatusService.isGitRepo(workspacePath);
+        if (isGitRepository) {
+          isGitHub = await gitStatusService.hasGitHubRemote(workspacePath);
+        }
+      } catch (gitError) {
+        // Git checks failed - continue with defaults (false, false)
+        console.error('Error checking git status:', gitError);
+      }
+
       const analytics = AnalyticsService.getInstance();
       analytics.sendEvent('workspace_opened', {
         fileCount: bucketFileCount(files.length),
         hasSubfolders: hasSubfolders(workspacePath),
         source: 'dialog', // Opened via workspace manager dialog
+        isGitRepository,
+        isGitHub,
       });
     } catch (error) {
       console.error('Error tracking workspace_opened event:', error);

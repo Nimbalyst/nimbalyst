@@ -711,6 +711,7 @@ app.whenReady().then(async () => {
         try {
             const { readdirSync, statSync } = await import('fs');
             const { join } = await import('path');
+            const { GitStatusService } = await import('./services/GitStatusService');
 
             // Count files in workspace
             let fileCount = 0;
@@ -734,10 +735,27 @@ app.whenReady().then(async () => {
             else if (fileCount > 50) fileCountBucket = '51-100';
             else if (fileCount > 10) fileCountBucket = '11-50';
 
+            // Check git repository status (defaults to false if git not available)
+            let isGitRepository = false;
+            let isGitHub = false;
+
+            try {
+                const gitStatusService = new GitStatusService();
+                isGitRepository = await gitStatusService.isGitRepo(workspacePath);
+                if (isGitRepository) {
+                    isGitHub = await gitStatusService.hasGitHubRemote(workspacePath);
+                }
+            } catch (gitError) {
+                // Git checks failed - continue with defaults (false, false)
+                logger.main.error('Error checking git status:', gitError);
+            }
+
             analytics.sendEvent('workspace_opened', {
                 fileCount: fileCountBucket,
                 hasSubfolders,
                 source: 'cli',
+                isGitRepository,
+                isGitHub,
             });
         } catch (error) {
             logger.main.error('Error tracking workspace_opened event:', error);
