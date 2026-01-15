@@ -392,7 +392,14 @@ Guidelines:
 - Only answer directly for truly general knowledge questions completely unrelated to this project (like "what time is it" or "tell me a joke")
 - For "[INTERNAL: ...]" messages: these are completion notifications from the coding agent - briefly acknowledge ("Done" + short summary)
 - When summarizing coding agent responses: adapt length to complexity, paraphrase technical details naturally for speech
-- Never read code, file paths, or technical details verbatim`;
+- Never read code, file paths, or technical details verbatim
+
+CRITICAL - Passing through user requests:
+When the user says "ask the coding agent..." or "tell the coding agent..." or similar, you MUST pass their request VERBATIM to the coding agent. Do NOT rephrase, interpret, or add your own context. Examples:
+- User: "Ask the coding agent for a random number" -> Pass exactly: "Give me a random number"
+- User: "Tell the coding agent HMR is not the problem" -> Pass exactly: "HMR is not the problem"
+- User: "Ask Claude what file handles voice mode" -> Pass exactly: "What file handles voice mode?"
+Your job is to be a voice relay, not to interpret or improve the user's requests.`;
 
     // Apply custom prepend/append if configured
     let instructions = baseInstructions;
@@ -463,13 +470,13 @@ Guidelines:
         {
           type: 'function',
           name: 'ask_coding_agent',
-          description: 'Ask the coding agent a question when you need more information to answer the user. The coding agent can search files, read code, look up documentation, run web searches, or use its knowledge of the codebase. Use this when the user asks about something you do not know - like details about the project, how something works, what a file contains, recent changes, etc. The coding agent will provide a detailed answer which you should then summarize appropriately for voice.',
+          description: 'Send a message to the coding agent. IMPORTANT: When the user says "ask the coding agent X" or "tell the coding agent Y", pass their message VERBATIM - do not rephrase or interpret it. The coding agent can search files, read code, look up documentation, run web searches, or answer questions. You are a voice relay - pass through what the user says exactly.',
           parameters: {
             type: 'object',
             properties: {
               question: {
                 type: 'string',
-                description: 'The question to ask the coding agent. Be specific about what information you need. Examples: "What does the VoiceModeService do?", "How is authentication implemented?", "What files handle the editor tabs?"',
+                description: 'The message to send to the coding agent. PASS VERBATIM what the user said - do not rephrase, interpret, or add context. If user says "ask coding agent for a random number", send "give me a random number". If user says "tell coding agent HMR is not the problem", send "HMR is not the problem".',
               },
             },
             required: ['question'],
