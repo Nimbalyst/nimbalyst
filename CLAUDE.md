@@ -130,18 +130,18 @@ The "lift state up" pattern is appropriate for simple React apps but becomes an 
 #### State Ownership Principles
 
 1. **Editors own their content state**
-   - Custom editors (Monaco, RevoGrid, Lexical) own their document content
-   - Parent only knows "tab X uses editor Y for file Z" - NOT the file contents
-   - Editor content is NEVER stored in a Map/object in a parent component
+  - Custom editors (Monaco, RevoGrid, Lexical) own their document content
+  - Parent only knows "tab X uses editor Y for file Z" - NOT the file contents
+  - Editor content is NEVER stored in a Map/object in a parent component
 
 2. **Use Jotai atoms for cross-cutting state**
-   - Theme, preferences (global atoms)
-   - Tab metadata - dirty, processing (atom families by tab ID)
-   - Session state - unread, processing (atom families by session ID)
-   - File tree git status (atom per file/directory)
+  - Theme, preferences (global atoms)
+  - Tab metadata - dirty, processing (atom families by tab ID)
+  - Session state - unread, processing (atom families by session ID)
+  - File tree git status (atom per file/directory)
 
 3. **Communication via EditorHost, not props**
-   ```typescript
+```typescript
    // BAD: Controlled editor
    <Editor content={content} onChange={setContent} />
 
@@ -150,12 +150,12 @@ The "lift state up" pattern is appropriate for simple React apps but becomes an 
    // Editor calls host.loadContent() on mount
    // Editor calls host.saveContent() when saving
    // Editor calls host.setDirty() on changes
-   ```
+```
 
 4. **Stateful editors cannot be re-rendered**
-   - RevoGrid, Monaco, Lexical manage internal state
-   - Parent re-renders will break them
-   - Changes flow through callbacks, not props
+  - RevoGrid, Monaco, Lexical manage internal state
+  - Parent re-renders will break them
+  - Changes flow through callbacks, not props
 
 #### Anti-Pattern Recognition
 
@@ -203,7 +203,7 @@ Container queries respond to the actual container width, making them work correc
 
 ### AI Provider Types
 
-The application supports two categories of AI providers. See [AI_PROVIDER_TYPES.md](docs/AI_PROVIDER_TYPES.md) for detailed documentation.
+The application supports two categories of AI providers. See [AI_PROVIDER_TYPES.md](./docs/AI_PROVIDER_TYPES.md) for detailed documentation.
 
 - **Agent Providers** (Claude Agent, OpenAI Codex): Full MCP support, file system access via tools, multi-file operations, session persistence
 - **Chat Providers** (Claude Chat, OpenAI, LM Studio): Direct API calls, files attached as context, faster responses, local model support
@@ -237,7 +237,7 @@ The application supports multiple AI providers, including two distinct ways to a
   - Manages its own model selection internally (do not pass model IDs)
 - **Installation**: Requires `npm install -g @anthropic-ai/claude-agent-sdk` or local installation
 - **When to use**: For advanced code editing tasks that benefit from MCP's context protocol
-- **Internal MCP Servers**: See [INTERNAL_MCP_SERVERS.md](docs/INTERNAL_MCP_SERVERS.md) for how to implement and add new MCP servers
+- **Internal MCP Servers**: See [INTERNAL_MCP_SERVERS.md](./docs/INTERNAL_MCP_SERVERS.md) for how to implement and add new MCP servers
 
 #### Other Providers
 - **OpenAI**: GPT-4 and GPT-3.5 models via OpenAI API
@@ -270,11 +270,11 @@ The application supports multiple AI providers, including two distinct ways to a
 
 ### Custom Tool Widgets
 
-Custom widgets can replace the generic tool call display for specific MCP tools. See [CUSTOM_TOOL_WIDGETS.md](docs/CUSTOM_TOOL_WIDGETS.md) for implementation details.
+Custom widgets can replace the generic tool call display for specific MCP tools. See [CUSTOM_TOOL_WIDGETS.md](./docs/CUSTOM_TOOL_WIDGETS.md) for implementation details.
 
 ### Git Worktree Integration
 
-Nimbalyst supports creating git worktrees for isolated AI coding sessions. See [WORKTREES.md](docs/WORKTREES.md) for comprehensive documentation.
+Nimbalyst supports creating git worktrees for isolated AI coding sessions. See [WORKTREES.md](./docs/WORKTREES.md) for comprehensive documentation.
 
 **Quick overview:**
 - Create worktrees directly from the agent mode UI via "New Worktree" button
@@ -300,7 +300,11 @@ For implementation details (database schema, data locations, timestamp handling)
 
 ## Analytics
 
-See `/docs/ANALYTICS_GUIDE.md` for details on adding anonymous usage analytics.
+Nimbalyst uses PostHog for anonymous usage analytics. See the following documentation:
+
+- **ANALYTICS\_GUIDE.md**: How to do analytics in Posthog. **You must read this before calling Posthog MCP**
+- **POSTHOG\_EVENTS.md**: Canonical reference for all analytics events (must be kept in sync)
+- **POSTHOG\_MCP\_INTEGRATION.md**: PostHog MCP integration architecture and usage
 
 **IMPORTANT**: When adding, modifying, or removing PostHog events, you MUST update `/docs/POSTHOG_EVENTS.md` with the event name, file location, trigger, and properties.
 
@@ -398,6 +402,7 @@ When working on extensions in `packages/extensions/`:
 - **AGENT\_PERMISSIONS.md**: Agent tool permission system and approval flow
 - **ANALYTICS\_GUIDE.md**: How to add PostHog analytics events
 - **POSTHOG\_EVENTS.md**: Canonical reference for all analytics events
+- **POSTHOG\_MCP\_INTEGRATION.md**: PostHog MCP integration architecture
 - **PLAYWRIGHT.md**: E2E testing patterns and best practices
 - **AI\_PROVIDER\_TYPES.md**: AI provider architecture
 - **CUSTOM\_TOOL\_WIDGETS.md**: Custom MCP tool widget implementation
