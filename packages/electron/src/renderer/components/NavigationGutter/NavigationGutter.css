@@ -56,6 +56,12 @@ body[data-dev-mode="true"] .nav-quick-access::before {
   padding-top: 8px;
 }
 
+.nav-extension-modes {
+  padding-top: 8px;
+  margin-top: 4px;
+  border-top: 1px solid var(--border-primary);
+}
+
 .nav-settings {
   margin-top: auto;
   padding-top: 8px;

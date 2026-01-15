@@ -191,6 +191,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // File operations
   openFile: () => ipcRenderer.invoke('open-file'),
+  openFileDialog: (options?: {
+    title?: string;
+    buttonLabel?: string;
+    filters?: Array<{ name: string; extensions: string[] }>;
+    defaultPath?: string;
+  }) => ipcRenderer.invoke('dialog:openFile', options),
   saveFile: (content: string, filePath: string) => {
     if (!filePath) {
       throw new Error('saveFile requires a filePath parameter. Use saveFileAs for save dialogs.');
@@ -199,6 +205,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   saveFileAs: (content: string) => ipcRenderer.invoke('save-file-as', content),
   showErrorDialog: (title: string, message: string) => ipcRenderer.invoke('show-error-dialog', title, message),
+
+  // Export operations
+  showSaveDialogPdf: (options: { defaultPath?: string }) =>
+    ipcRenderer.invoke('export:showSaveDialogPdf', options) as Promise<string | null>,
+  exportHtmlToPdf: (options: {
+    html: string;
+    outputPath: string;
+    pageSize?: 'A4' | 'Letter' | 'Legal';
+    landscape?: boolean;
+    margins?: { top?: number; bottom?: number; left?: number; right?: number };
+  }) => ipcRenderer.invoke('export:htmlToPdf', options) as Promise<{ success: boolean; error?: string }>,
 
   // Window operations
   setDocumentEdited: (edited: boolean) => ipcRenderer.send('set-document-edited', edited),

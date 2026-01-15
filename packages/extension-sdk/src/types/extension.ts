@@ -75,6 +75,9 @@ export interface NewFileMenuContribution {
   defaultContent: string;
 }
 
+// Import panel types from panel.ts
+import type { PanelContribution, SettingsPanelContribution } from './panel';
+
 export interface ExtensionContributions {
   /** Custom editors for specific file types */
   customEditors?: CustomEditorContribution[];
@@ -93,6 +96,18 @@ export interface ExtensionContributions {
 
   /** Slash commands for AI chat */
   slashCommands?: SlashCommandContribution[];
+
+  /**
+   * Non-file-based panels (e.g., database browser, deployment dashboard).
+   * Panels integrate with the navigation gutter and can expose AI tools.
+   */
+  panels?: PanelContribution[];
+
+  /**
+   * Settings panel shown in the Settings screen under "Extensions" section.
+   * Use this for managing extension configuration like database connections.
+   */
+  settingsPanel?: SettingsPanelContribution;
 }
 
 export interface CustomEditorContribution {
@@ -177,6 +192,21 @@ export interface ExtensionModule {
 
   /** Slash command handlers */
   slashCommandHandlers?: Record<string, (args: string) => Promise<string>>;
+
+  /**
+   * Panel exports for non-file-based UIs.
+   * Keys are panel IDs matching the `panels` contribution in manifest.json.
+   * @see {@link ./panel.ts} for PanelExport type
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  panels?: Record<string, any>;
+
+  /**
+   * Settings panel component for the Settings screen.
+   * Keys match the `settingsPanel.component` in manifest.json.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  settingsPanel?: Record<string, any>;
 }
 
 /**

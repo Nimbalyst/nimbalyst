@@ -36,6 +36,17 @@ export type {
   LoadedExtension,
   ExtensionLoadResult,
   DiscoveredExtension,
+  // Panel types
+  PanelContribution,
+  SettingsPanelContribution,
+  LoadedPanel,
+  PanelHostProps,
+  PanelGutterButtonProps,
+  PanelHost,
+  PanelAIContext,
+  PanelExport,
+  SettingsPanelProps,
+  ExtensionStorage,
 } from './types';
 
 // Platform Service
@@ -79,3 +90,12 @@ export type {
 // Editor Host Hook
 export { useEditorHost } from './useEditorHost';
 export type { UseEditorHostOptions, UseEditorHostResult } from './useEditorHost';
+
+// Extension Storage
+export {
+  createExtensionStorage,
+  setStorageBackend,
+  getStorageBackend,
+  cleanupExtensionStorage,
+} from './ExtensionStorage';
+export type { StorageBackend } from './ExtensionStorage';

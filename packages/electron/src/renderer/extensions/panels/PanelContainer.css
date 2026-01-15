@@ -1,0 +1,59 @@
+/**
+ * Panel Container Styles
+ */
+
+.panel-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* ============================================================================
+   Error State
+   ============================================================================ */
+
+.panel-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 32px;
+  text-align: center;
+  gap: 12px;
+}
+
+.panel-error-icon {
+  font-size: 48px;
+  color: var(--error-color, #f14c4c);
+}
+
+.panel-error-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.panel-error-message {
+  font-size: 13px;
+  color: var(--text-secondary);
+  max-width: 300px;
+  word-break: break-word;
+}
+
+.panel-error-retry {
+  margin-top: 8px;
+  padding: 8px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.panel-error-retry:hover {
+  background: var(--bg-hover);
+}

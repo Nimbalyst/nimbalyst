@@ -60,6 +60,14 @@ import { ProjectTrustToast } from './components/ProjectTrustToast';
 import { PostHogSurvey } from './components/PostHogSurvey';
 import OnboardingService from './services/OnboardingService';
 import { WalkthroughProvider } from './walkthroughs';
+import {
+  initializePanelRegistry,
+  getPanelById,
+  PanelContainer,
+  electronStorageBackend,
+  initializeElectronStorageBackend,
+} from './extensions/panels';
+import { setStorageBackend } from '@nimbalyst/runtime';
 import './WorkspaceWelcome.css';
 
 logger.ui.info('App.tsx loading');
@@ -110,11 +118,19 @@ export default function App() {
   useEffect(() => {
     const registerCustomEditors = async () => {
       try {
+        // Set up storage backend for extensions BEFORE loading extensions
+        setStorageBackend(electronStorageBackend);
+        logger.ui.info('[Extensions] Storage backend initialized');
+
         // Initialize the extension system (discovers and loads extensions)
         // This MUST complete before any editors are mounted so that extension nodes
         // (like DataModelNode) are registered with the pluginRegistry
         await registerExtensionSystem();
         logger.ui.info('[Extensions] Extension system initialized');
+
+        // Initialize panel registry (syncs panels from loaded extensions)
+        initializePanelRegistry();
+        logger.ui.info('[Extensions] Panel registry initialized');
 
         // Conditionally register MockupLM based on settings
         const mockupLMEnabled = await window.electronAPI.invoke('mockupLM:is-enabled');
@@ -250,6 +266,13 @@ export default function App() {
 
   // Navigation gutter state
   const [sidebarView, setSidebarView] = useState<SidebarView>('files');
+
+  // Active extension panel (for sidebar or fullscreen panels from extensions)
+  const [activeExtensionPanel, setActiveExtensionPanel] = useState<string | null>(null);
+
+  // Check if a fullscreen extension panel is active (hides other content modes)
+  const activeFullscreenPanel = activeExtensionPanel ? getPanelById(activeExtensionPanel) : null;
+  const isFullscreenPanelActive = activeFullscreenPanel?.placement === 'fullscreen';
 
   // Content mode management - simple state, no manager needed
   const [activeMode, setActiveModeRaw] = useState<ContentMode>('files');
@@ -441,6 +464,11 @@ export default function App() {
     if (workspacePath) {
       loadCustomTrackers(workspacePath);
     }
+  }, [workspacePath]);
+
+  // Initialize storage backend for extensions when workspace path changes
+  useEffect(() => {
+    initializeElectronStorageBackend(workspacePath);
   }, [workspacePath]);
 
   // Load active mode from workspace state
@@ -1511,6 +1539,8 @@ export default function App() {
           // Show the trust toast so user can pick a new mode
           setForceShowTrustToast(true);
         }}
+        activeExtensionPanel={activeExtensionPanel}
+        onExtensionPanelChange={setActiveExtensionPanel}
       />
 
       {/* Right: Main content area + Bottom Panel */}
@@ -1524,12 +1554,43 @@ export default function App() {
               data-layout="files-mode-wrapper"
               style={{
                 flex: 1,
-                display: activeMode === 'files' ? 'flex' : 'none',
+                display: activeMode === 'files' && !isFullscreenPanelActive ? 'flex' : 'none',
                 flexDirection: 'row',
                 overflow: 'hidden',
                 minHeight: 0
               }}
             >
+              {/* Extension Sidebar Panel (when active) */}
+              {activeExtensionPanel && (() => {
+                const panel = getPanelById(activeExtensionPanel);
+                if (panel && panel.placement === 'sidebar' && workspacePath) {
+                  return (
+                    <div
+                      data-layout="extension-panel-sidebar"
+                      style={{
+                        width: 280,
+                        minWidth: 200,
+                        maxWidth: 400,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        borderRight: '1px solid var(--border-color)',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      <PanelContainer
+                        panel={panel}
+                        workspacePath={workspacePath}
+                        onOpenFile={handleWorkspaceFileSelect}
+                        onOpenPanel={(panelId) => setActiveExtensionPanel(panelId)}
+                        onClose={() => setActiveExtensionPanel(null)}
+                      />
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+
+              {/* Main content (file tree + editor or settings) */}
               {sidebarView === 'settings' ? (
                 <ProjectSettingsScreen
                   workspacePath={workspacePath || ''}
@@ -1568,7 +1629,7 @@ export default function App() {
               data-layout="agent-mode-wrapper"
               style={{
                 flex: 1,
-                display: activeMode === 'agent' ? 'flex' : 'none',
+                display: activeMode === 'agent' && !isFullscreenPanelActive ? 'flex' : 'none',
                 flexDirection: 'column',
                 overflow: 'hidden',
                 minHeight: 0
@@ -1597,9 +1658,36 @@ export default function App() {
               )}
             </div>
 
+            {/* Extension Fullscreen Panel Mode */}
+            {activeExtensionPanel && (() => {
+              const panel = getPanelById(activeExtensionPanel);
+              if (panel && panel.placement === 'fullscreen' && workspacePath) {
+                return (
+                  <div
+                    data-layout="extension-panel-fullscreen"
+                    style={{
+                      flex: 1,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      overflow: 'hidden',
+                      minHeight: 0,
+                    }}
+                  >
+                    <PanelContainer
+                      panel={panel}
+                      workspacePath={workspacePath}
+                      onOpenFile={handleWorkspaceFileSelect}
+                      onOpenPanel={(panelId) => setActiveExtensionPanel(panelId)}
+                      onClose={() => setActiveExtensionPanel(null)}
+                    />
+                  </div>
+                );
+              }
+              return null;
+            })()}
 
             {/* Settings Mode - conditionally rendered for now */}
-            {activeMode === 'settings' && (
+            {activeMode === 'settings' && !isFullscreenPanelActive && (
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
                 <SettingsView
                   key={settingsKey}

@@ -1,0 +1,180 @@
+/**
+ * Panel Host Implementation
+ *
+ * Creates PanelHost instances for extension panels.
+ * Handles communication between panels and the host application.
+ */
+
+import type { PanelHost, PanelAIContext, ExtensionStorage } from '@nimbalyst/runtime';
+
+// ============================================================================
+// Types
+// ============================================================================
+
+export interface PanelHostOptions {
+  panelId: string;
+  extensionId: string;
+  theme: 'light' | 'dark' | 'crystal-dark';
+  workspacePath: string;
+  aiSupported: boolean;
+  storage: ExtensionStorage;
+
+  // Callbacks
+  onOpenFile: (path: string) => void;
+  onOpenPanel: (panelId: string) => void;
+  onClose: () => void;
+  onThemeChange: (callback: (theme: 'light' | 'dark' | 'crystal-dark') => void) => () => void;
+}
+
+// ============================================================================
+// AI Context Implementation
+// ============================================================================
+
+class PanelAIContextImpl implements PanelAIContext {
+  private context: Record<string, unknown> = {};
+  private listeners = new Set<(context: Record<string, unknown>) => void>();
+
+  setContext(context: Record<string, unknown>): void {
+    this.context = { ...this.context, ...context };
+    this.notifyListeners();
+  }
+
+  getContext(): Record<string, unknown> {
+    return { ...this.context };
+  }
+
+  clearContext(): void {
+    this.context = {};
+    this.notifyListeners();
+  }
+
+  notifyChange(event: string, data?: unknown): void {
+    // Could be used for proactive AI suggestions in the future
+    console.log(`[PanelAIContext] Event: ${event}`, data);
+  }
+
+  onContextChanged(callback: (context: Record<string, unknown>) => void): () => void {
+    this.listeners.add(callback);
+    return () => {
+      this.listeners.delete(callback);
+    };
+  }
+
+  private notifyListeners(): void {
+    for (const listener of this.listeners) {
+      try {
+        listener(this.getContext());
+      } catch (error) {
+        console.error('[PanelAIContext] Error in listener:', error);
+      }
+    }
+  }
+}
+
+// ============================================================================
+// Panel Host Implementation
+// ============================================================================
+
+class PanelHostImpl implements PanelHost {
+  readonly panelId: string;
+  readonly extensionId: string;
+  readonly workspacePath: string;
+  readonly ai?: PanelAIContext;
+  readonly storage: ExtensionStorage;
+
+  private _theme: 'light' | 'dark' | 'crystal-dark';
+  private _isSettingsOpen = false;
+  private themeListeners = new Set<(theme: 'light' | 'dark' | 'crystal-dark') => void>();
+
+  private onOpenFile: (path: string) => void;
+  private onOpenPanel: (panelId: string) => void;
+  private onClosePanel: () => void;
+  private unsubscribeTheme: () => void;
+
+  constructor(options: PanelHostOptions) {
+    this.panelId = options.panelId;
+    this.extensionId = options.extensionId;
+    this._theme = options.theme;
+    this.workspacePath = options.workspacePath;
+    this.storage = options.storage;
+
+    this.onOpenFile = options.onOpenFile;
+    this.onOpenPanel = options.onOpenPanel;
+    this.onClosePanel = options.onClose;
+
+    // Subscribe to theme changes
+    this.unsubscribeTheme = options.onThemeChange((theme) => {
+      this._theme = theme;
+      this.notifyThemeChange(theme);
+    });
+
+    // Create AI context if supported
+    if (options.aiSupported) {
+      this.ai = new PanelAIContextImpl();
+    }
+  }
+
+  get theme(): 'light' | 'dark' | 'crystal-dark' {
+    return this._theme;
+  }
+
+  get isSettingsOpen(): boolean {
+    return this._isSettingsOpen;
+  }
+
+  onThemeChanged(callback: (theme: 'light' | 'dark' | 'crystal-dark') => void): () => void {
+    this.themeListeners.add(callback);
+    return () => {
+      this.themeListeners.delete(callback);
+    };
+  }
+
+  openFile(path: string): void {
+    this.onOpenFile(path);
+  }
+
+  openPanel(panelId: string): void {
+    this.onOpenPanel(panelId);
+  }
+
+  close(): void {
+    this.onClosePanel();
+  }
+
+  openSettings(): void {
+    this._isSettingsOpen = true;
+  }
+
+  closeSettings(): void {
+    this._isSettingsOpen = false;
+  }
+
+  /**
+   * Clean up resources.
+   */
+  dispose(): void {
+    this.unsubscribeTheme();
+    this.themeListeners.clear();
+  }
+
+  private notifyThemeChange(theme: 'light' | 'dark' | 'crystal-dark'): void {
+    for (const listener of this.themeListeners) {
+      try {
+        listener(theme);
+      } catch (error) {
+        console.error('[PanelHost] Error in theme listener:', error);
+      }
+    }
+  }
+}
+
+// ============================================================================
+// Factory Function
+// ============================================================================
+
+/**
+ * Create a PanelHost instance for a panel.
+ */
+export function createPanelHost(options: PanelHostOptions): PanelHost {
+  return new PanelHostImpl(options);
+}

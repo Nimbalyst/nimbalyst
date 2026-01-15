@@ -111,6 +111,17 @@ export interface ExtensionContributions {
    * when enabled.
    */
   claudePlugin?: ClaudePluginContribution;
+
+  /**
+   * Non-file-based panels (e.g., database browser, deployment dashboard).
+   * Panels integrate with the navigation gutter and can expose AI tools.
+   */
+  panels?: PanelContribution[];
+
+  /**
+   * Settings panel shown in the Settings screen under "Extensions" section.
+   */
+  settingsPanel?: SettingsPanelContribution;
 }
 
 // ============================================================================
@@ -329,6 +340,40 @@ export interface ExtensionModule {
 
   /** Host components to mount at app level (component name -> React component) */
   hostComponents?: Record<string, ComponentType>;
+
+  /**
+   * Panel exports for non-file-based UIs.
+   * Keys are panel IDs matching the `panels` contribution in manifest.json.
+   */
+  panels?: Record<string, PanelExport>;
+
+  /**
+   * Settings panel components for the Settings screen.
+   * Keys match the `settingsPanel.component` in manifest.json.
+   */
+  settingsPanel?: Record<string, ComponentType<SettingsPanelProps>>;
+}
+
+/**
+ * Panel export from extension module.
+ */
+export interface PanelExport {
+  /** Main panel component */
+  component: ComponentType<PanelHostProps>;
+
+  /** Optional custom gutter button component */
+  gutterButton?: ComponentType<PanelGutterButtonProps>;
+
+  /** Optional settings component for panel header */
+  settingsComponent?: ComponentType<PanelHostProps>;
+}
+
+/**
+ * Props for settings panel components.
+ */
+export interface SettingsPanelProps {
+  storage: ExtensionStorage;
+  theme: 'light' | 'dark' | 'crystal-dark';
 }
 
 // Note: CustomEditorComponentProps has been replaced by EditorHostProps from './editorHost'
@@ -617,4 +662,148 @@ export interface DiscoveredExtension {
 
   /** Parsed manifest */
   manifest: ExtensionManifest;
+}
+
+// ============================================================================
+// Panel Types
+// ============================================================================
+
+/**
+ * Panel contribution for non-file-based UIs.
+ *
+ * Panels integrate with the navigation gutter and can expose AI tools
+ * that share state with the UI.
+ */
+export interface PanelContribution {
+  /** Unique identifier within the extension */
+  id: string;
+
+  /** Display title shown in gutter tooltip and panel header */
+  title: string;
+
+  /** Icon for the gutter button (Material icon name, emoji, or path) */
+  icon: string;
+
+  /**
+   * Where the panel is displayed:
+   * - "sidebar": In sidebar area alongside/replacing file tree
+   * - "fullscreen": Takes over main content area
+   * - "floating": Renders at app level (modals/popovers)
+   */
+  placement: 'sidebar' | 'fullscreen' | 'floating';
+
+  /** Whether this panel exposes AI tools that share state with the UI */
+  aiSupported?: boolean;
+
+  /** When to activate: "onStartup", "onPanel", "onCommand:xyz" */
+  activationEvents?: string[];
+
+  /** Sort order for gutter buttons (lower = higher/earlier) */
+  order?: number;
+}
+
+/**
+ * Settings panel contribution for the Settings screen.
+ */
+export interface SettingsPanelContribution {
+  /** Name of the exported component from the extension module */
+  component: string;
+
+  /** Title shown in the Settings sidebar */
+  title: string;
+
+  /** Icon for the Settings sidebar */
+  icon?: string;
+
+  /** Sort order in the Extensions settings section */
+  order?: number;
+}
+
+/**
+ * A loaded panel instance (internal use).
+ */
+export interface LoadedPanel {
+  /** Full panel ID (extensionId.panelId) */
+  id: string;
+
+  /** Extension that provides this panel */
+  extensionId: string;
+
+  /** Panel contribution from manifest */
+  contribution: PanelContribution;
+
+  /** Panel component */
+  component: ComponentType<PanelHostProps>;
+
+  /** Optional custom gutter button component */
+  gutterButton?: ComponentType<PanelGutterButtonProps>;
+
+  /** Optional settings component */
+  settingsComponent?: ComponentType<PanelHostProps>;
+}
+
+/**
+ * Props for panel components.
+ */
+export interface PanelHostProps {
+  host: PanelHost;
+}
+
+/**
+ * Props for custom gutter button components.
+ */
+export interface PanelGutterButtonProps {
+  isActive: boolean;
+  onActivate: () => void;
+  theme: 'light' | 'dark' | 'crystal-dark';
+}
+
+/**
+ * Host service for panels.
+ */
+export interface PanelHost {
+  readonly panelId: string;
+  readonly extensionId: string;
+  readonly theme: 'light' | 'dark' | 'crystal-dark';
+  readonly workspacePath: string;
+  readonly isSettingsOpen: boolean;
+  readonly ai?: PanelAIContext;
+
+  onThemeChanged(callback: (theme: 'light' | 'dark' | 'crystal-dark') => void): () => void;
+  openFile(path: string): void;
+  openPanel(panelId: string): void;
+  close(): void;
+  openSettings(): void;
+  closeSettings(): void;
+}
+
+/**
+ * AI context for panels to coordinate with AI tools.
+ */
+export interface PanelAIContext {
+  setContext(context: Record<string, unknown>): void;
+  getContext(): Record<string, unknown>;
+  clearContext(): void;
+  notifyChange(event: string, data?: unknown): void;
+  onContextChanged(callback: (context: Record<string, unknown>) => void): () => void;
+}
+
+/**
+ * Namespaced storage service for extensions.
+ */
+export interface ExtensionStorage {
+  // Workspace storage
+  get<T>(key: string): T | undefined;
+  set<T>(key: string, value: T): Promise<void>;
+  delete(key: string): Promise<void>;
+
+  // Global storage
+  getGlobal<T>(key: string): T | undefined;
+  setGlobal<T>(key: string, value: T): Promise<void>;
+  deleteGlobal(key: string): Promise<void>;
+
+  // Secret storage (system keychain)
+  getSecret(key: string): Promise<string | undefined>;
+  setSecret(key: string, value: string): Promise<void>;
+  deleteSecret(key: string): Promise<void>;
 }

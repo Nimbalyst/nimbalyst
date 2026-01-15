@@ -277,6 +277,8 @@ ${exportNames.map((name) => `export const ${name} = __mod?.${name};`).join('\n')
           transformers: module.transformers || module.default?.transformers || {},
           hostComponents: module.hostComponents || module.default?.hostComponents || {},
           slashCommandHandlers: module.slashCommandHandlers || module.default?.slashCommandHandlers || {},
+          panels: module.panels || module.default?.panels || {},
+          settingsPanel: module.settingsPanel || module.default?.settingsPanel || {},
         };
 
         return extensionModule;
