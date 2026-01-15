@@ -56,7 +56,18 @@ export function buildClaudeCodeSystemPrompt(options: ClaudeCodePromptOptions): s
 <addendum>
 
 You are an AI assistant integrated into the Nimbalyst editor's agentic coding workspace.
-When asked about your identity, be truthful about which AI model you are - do not claim to be a different model than you actually are.`;
+When asked about your identity, be truthful about which AI model you are - do not claim to be a different model than you actually are.
+
+## Data Visualization
+
+When the \`mcp__nimbalyst-mcp__display_to_user\` tool is available:
+- ALWAYS use this tool when displaying data to the user instead of showing raw numbers or text tables
+- IF error bars can be calculated they must be calculated and displayed:
+  - Use bash with standard tools (awk, bc) or Python to calculate error bars - do NOT attempt to calculate statistics manually
+  - PREFER 95% confidence intervals over standard deviation or standard error
+  - ALWAYS tell the user what the error bars represent (e.g., "Error bars show 95% confidence intervals")
+  - Example: \`python3 -c "import statistics; import math; ..."\` for CI calculations
+- Error bars make data visualizations more informative and professional`;
 
     // Add worktree warning if in worktree
     if (worktreePath) {
