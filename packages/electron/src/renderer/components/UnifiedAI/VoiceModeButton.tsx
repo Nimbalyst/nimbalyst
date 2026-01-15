@@ -18,127 +18,154 @@ let globalAudioCapture: AudioCapture | null = null;
 let globalAudioPlayback: AudioPlayback | null = null;
 
 // Register global IPC listeners ONCE (not per button click!)
-let globalListenersRegistered = false;
+// Use a window property to survive HMR reloads and prevent duplicate listeners
+const VOICE_LISTENERS_KEY = '__voiceModeListenersCleanup';
+
+// Clean up any existing listeners from previous HMR loads
+// This runs on module load, before any components mount
+if ((window as any)[VOICE_LISTENERS_KEY]) {
+  const oldCleanups = (window as any)[VOICE_LISTENERS_KEY] as (() => void)[];
+  oldCleanups.forEach(cleanup => cleanup?.());
+  delete (window as any)[VOICE_LISTENERS_KEY];
+}
+
 // Callback for error notifications - set by component
 let globalErrorCallback: ((error: { type: string; message: string }) => void) | null = null;
 // Callback for programmatic stop notifications - set by component
 let globalStoppedCallback: (() => void) | null = null;
 
 function ensureGlobalListenersRegistered() {
-  if (globalListenersRegistered) {
+  // Check if listeners are already registered (survives HMR)
+  if ((window as any)[VOICE_LISTENERS_KEY]) {
     return;
   }
 
+  // Mark as registered immediately to prevent race conditions
+  const cleanupFunctions: (() => void)[] = [];
+  (window as any)[VOICE_LISTENERS_KEY] = cleanupFunctions;
+
   // These listeners are GLOBAL and permanent - they filter by sessionId
-  window.electronAPI.on('voice-mode:audio-received', (payload: { sessionId: string; audioBase64: string }) => {
-    // Only play audio if the event is for the active session
-    if (payload.sessionId === activeVoiceSessionId && globalAudioPlayback) {
-      globalAudioPlayback.play(payload.audioBase64);
-    }
-  });
+  cleanupFunctions.push(
+    window.electronAPI.on('voice-mode:audio-received', (payload: { sessionId: string; audioBase64: string }) => {
+      // Only play audio if the event is for the active session
+      if (payload.sessionId === activeVoiceSessionId && globalAudioPlayback) {
+        globalAudioPlayback.play(payload.audioBase64);
+      }
+    })
+  );
 
-  window.electronAPI.on('voice-mode:text-received', (payload: { sessionId: string; text: string }) => {
-    // Text transcription received (not currently displayed)
-  });
+  cleanupFunctions.push(
+    window.electronAPI.on('voice-mode:text-received', (payload: { sessionId: string; text: string }) => {
+      // Text transcription received (not currently displayed)
+    })
+  );
 
-  window.electronAPI.on('voice-mode:submit-prompt', async (payload: {
-    sessionId: string;
-    workspacePath: string | null;
-    prompt: string;
-    codingAgentPrompt?: { prepend?: string; append?: string };
-  }) => {
-    try {
-      // Queue the prompt using the existing queue system
-      // This ensures prompts are processed sequentially, not concurrently
-      // Pass isVoiceMode in documentContext so the system prompt includes voice mode instructions
-      // Also pass custom coding agent prompt settings if configured
-      await window.electronAPI.invoke(
-        'ai:createQueuedPrompt',
-        payload.sessionId,
-        payload.prompt,
-        undefined, // attachments
-        {
-          isVoiceMode: true,
-          voiceModeCodingAgentPrompt: payload.codingAgentPrompt,
-        }
-      );
-    } catch (error) {
-      console.error('[VoiceModeButton] Failed to queue prompt:', error);
-    }
-  });
+  cleanupFunctions.push(
+    window.electronAPI.on('voice-mode:submit-prompt', async (payload: {
+      sessionId: string;
+      workspacePath: string | null;
+      prompt: string;
+      codingAgentPrompt?: { prepend?: string; append?: string };
+    }) => {
+      try {
+        // Queue the prompt using the existing queue system
+        // This ensures prompts are processed sequentially, not concurrently
+        // Pass isVoiceMode in documentContext so the system prompt includes voice mode instructions
+        // Also pass custom coding agent prompt settings if configured
+        await window.electronAPI.invoke(
+          'ai:createQueuedPrompt',
+          payload.sessionId,
+          payload.prompt,
+          undefined, // attachments
+          {
+            isVoiceMode: true,
+            voiceModeCodingAgentPrompt: payload.codingAgentPrompt,
+          }
+        );
+      } catch (error) {
+        console.error('[VoiceModeButton] Failed to queue prompt:', error);
+      }
+    })
+  );
 
   // Listen for agent task completion (ai:streamResponse with isComplete=true)
   // and notify the main process so it can tell the voice assistant
-  window.electronAPI.onAIStreamResponse((data: any) => {
-    if (data.isComplete && data.sessionId === activeVoiceSessionId) {
-      // Extract summary from the agent's final response
-      const summary = data.content || 'Task completed';
+  cleanupFunctions.push(
+    window.electronAPI.onAIStreamResponse((data: any) => {
+      if (data.isComplete && data.sessionId === activeVoiceSessionId) {
+        // Extract summary from the agent's final response
+        const summary = data.content || 'Task completed';
 
-      console.log('[VoiceModeButton] Agent task complete, sending to main:', {
-        sessionId: data.sessionId,
-        contentLength: data.content?.length,
-        contentPreview: data.content?.substring(0, 500),
-      });
+        console.log('[VoiceModeButton] Agent task complete, sending to main:', {
+          sessionId: data.sessionId,
+          contentLength: data.content?.length,
+          contentPreview: data.content?.substring(0, 500),
+        });
 
-      // Notify main process that the agent finished, including the summary
-      window.electronAPI.send('voice-mode:agent-task-complete', {
-        sessionId: data.sessionId,
-        summary: summary
-      });
-    }
-  });
+        // Notify main process that the agent finished, including the summary
+        window.electronAPI.send('voice-mode:agent-task-complete', {
+          sessionId: data.sessionId,
+          summary: summary
+        });
+      }
+    })
+  );
 
   // Listen for interruption events (user started speaking while assistant was talking)
-  window.electronAPI.on('voice-mode:interrupt', (payload: { sessionId: string }) => {
-    if (payload.sessionId === activeVoiceSessionId && globalAudioPlayback) {
-      globalAudioPlayback.stop();
-    }
-  });
+  cleanupFunctions.push(
+    window.electronAPI.on('voice-mode:interrupt', (payload: { sessionId: string }) => {
+      if (payload.sessionId === activeVoiceSessionId && globalAudioPlayback) {
+        globalAudioPlayback.stop();
+      }
+    })
+  );
 
   // Listen for error events (quota exceeded, rate limits, etc.)
-  window.electronAPI.on('voice-mode:error', (payload: { sessionId: string; error: { type: string; message: string } }) => {
-    if (payload.sessionId === activeVoiceSessionId && globalErrorCallback) {
-      globalErrorCallback(payload.error);
-    }
-  });
+  cleanupFunctions.push(
+    window.electronAPI.on('voice-mode:error', (payload: { sessionId: string; error: { type: string; message: string } }) => {
+      if (payload.sessionId === activeVoiceSessionId && globalErrorCallback) {
+        globalErrorCallback(payload.error);
+      }
+    })
+  );
 
   // Listen for programmatic stop events (e.g., AI assistant stopped the session)
-  window.electronAPI.on('voice-mode:stopped', async (payload: {
-    sessionId: string;
-    tokenUsage?: { inputAudio: number; outputAudio: number; text: number; total: number };
-  }) => {
-    if (payload.sessionId === activeVoiceSessionId) {
-      // Clean up audio resources
-      if (globalAudioCapture) {
-        globalAudioCapture.stop();
-        globalAudioCapture = null;
-      }
-      if (globalAudioPlayback) {
-        globalAudioPlayback.destroy();
-        globalAudioPlayback = null;
-      }
+  cleanupFunctions.push(
+    window.electronAPI.on('voice-mode:stopped', async (payload: {
+      sessionId: string;
+      tokenUsage?: { inputAudio: number; outputAudio: number; text: number; total: number };
+    }) => {
+      if (payload.sessionId === activeVoiceSessionId) {
+        // Clean up audio resources
+        if (globalAudioCapture) {
+          globalAudioCapture.stop();
+          globalAudioCapture = null;
+        }
+        if (globalAudioPlayback) {
+          globalAudioPlayback.destroy();
+          globalAudioPlayback = null;
+        }
 
-      // Persist voice token usage to session metadata
-      if (payload.tokenUsage && payload.tokenUsage.total > 0) {
-        try {
-          await window.electronAPI.invoke('ai:updateSessionMetadata', payload.sessionId, {
-            voiceTokenUsage: payload.tokenUsage,
-          });
-          console.log('[VoiceModeButton] Persisted voice token usage:', payload.tokenUsage);
-        } catch (error) {
-          console.error('[VoiceModeButton] Failed to persist voice token usage:', error);
+        // Persist voice token usage to session metadata
+        if (payload.tokenUsage && payload.tokenUsage.total > 0) {
+          try {
+            await window.electronAPI.invoke('ai:updateSessionMetadata', payload.sessionId, {
+              voiceTokenUsage: payload.tokenUsage,
+            });
+            console.log('[VoiceModeButton] Persisted voice token usage:', payload.tokenUsage);
+          } catch (error) {
+            console.error('[VoiceModeButton] Failed to persist voice token usage:', error);
+          }
+        }
+
+        activeVoiceSessionId = null;
+        // Trigger UI update via the stopped callback if registered
+        if (globalStoppedCallback) {
+          globalStoppedCallback();
         }
       }
-
-      activeVoiceSessionId = null;
-      // Trigger UI update via the stopped callback if registered
-      if (globalStoppedCallback) {
-        globalStoppedCallback();
-      }
-    }
-  });
-
-  globalListenersRegistered = true;
+    })
+  );
 }
 
 interface VoiceModeButtonProps {
