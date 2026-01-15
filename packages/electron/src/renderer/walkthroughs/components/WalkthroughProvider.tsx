@@ -30,6 +30,8 @@ import {
   recordWalkthroughShown,
   shouldShowWalkthrough,
   resetWalkthroughState as resetWalkthroughStateIPC,
+  resolveTarget,
+  registerWalkthroughMenuEntries,
 } from '../WalkthroughService';
 import { WalkthroughCallout } from './WalkthroughCallout';
 import { walkthroughs } from '../definitions';
@@ -38,6 +40,7 @@ import {
   activeWalkthroughIdAtom,
   currentStepIndexAtom,
 } from '../atoms';
+import { errorNotificationService } from '../../services/ErrorNotificationService';
 
 const WalkthroughContext = createContext<WalkthroughContextValue | null>(null);
 
@@ -65,9 +68,14 @@ export function WalkthroughProvider({
   const lastTriggeredModeRef = useRef<string | null>(null);
   const triggerDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load state from main process on mount
+  // Load state from main process on mount and register walkthroughs for menu
   useEffect(() => {
     getWalkthroughState().then(setState);
+
+    // Register walkthrough metadata with main process for dynamic Developer menu
+    registerWalkthroughMenuEntries(
+      walkthroughs.map((w) => ({ id: w.id, name: w.name }))
+    );
   }, [setState]);
 
   // Get current walkthrough definition
@@ -343,6 +351,68 @@ export function WalkthroughProvider({
       }
     };
   }, [state, activeWalkthroughId, currentStepIndex, activeWalkthrough, startWalkthrough, dismissWalkthrough, setState]);
+
+  // Listen for IPC messages from main process (Developer menu triggers)
+  useEffect(() => {
+    const handleTriggerWalkthrough = (walkthroughId: string) => {
+      const walkthrough = walkthroughs.find((w) => w.id === walkthroughId);
+      if (!walkthrough) {
+        errorNotificationService.showInfo(
+          'Walkthrough Not Found',
+          `Unknown walkthrough: ${walkthroughId}`,
+          { duration: 3000 }
+        );
+        return;
+      }
+
+      // Check if the first step's target element exists on the page
+      const firstStep = walkthrough.steps[0];
+      const targetElement = resolveTarget(firstStep.target);
+
+      if (!targetElement) {
+        errorNotificationService.showInfo(
+          'Cannot Show Walkthrough',
+          `"${walkthrough.name}" requires UI elements that aren't visible on this screen. Try switching to ${walkthrough.trigger.screen === 'agent' ? 'Agent Mode' : 'Files Mode'} first.`,
+          { duration: 5000 }
+        );
+        return;
+      }
+
+      // Check if walkthrough's condition is met
+      if (walkthrough.trigger.condition && !walkthrough.trigger.condition()) {
+        errorNotificationService.showInfo(
+          'Cannot Show Walkthrough',
+          `"${walkthrough.name}" conditions aren't met. Try switching to ${walkthrough.trigger.screen === 'agent' ? 'Agent Mode' : 'Files Mode'} first.`,
+          { duration: 5000 }
+        );
+        return;
+      }
+
+      // Start the walkthrough
+      startWalkthrough(walkthroughId);
+    };
+
+    const handleResetWalkthroughs = async () => {
+      await resetWalkthroughStateIPC();
+      const newState = await getWalkthroughState();
+      setState(newState);
+      lastTriggeredModeRef.current = null;
+      errorNotificationService.showInfo(
+        'Walkthroughs Reset',
+        'All walkthrough guides will show again.',
+        { duration: 3000 }
+      );
+    };
+
+    // Subscribe to IPC events
+    const unsubscribeTrigger = window.electronAPI.on('trigger-walkthrough', handleTriggerWalkthrough);
+    const unsubscribeReset = window.electronAPI.on('reset-walkthroughs', handleResetWalkthroughs);
+
+    return () => {
+      unsubscribeTrigger?.();
+      unsubscribeReset?.();
+    };
+  }, [startWalkthrough, setState]);
 
   // Context value
   const contextValue = useMemo<WalkthroughContextValue>(

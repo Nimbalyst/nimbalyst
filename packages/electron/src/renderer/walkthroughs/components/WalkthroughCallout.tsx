@@ -170,11 +170,9 @@ export function WalkthroughCallout({
       <div
         className={`walkthrough-callout-arrow walkthrough-callout-arrow--${position.arrowPosition}`}
         style={
-          position.arrowOffset !== undefined
-            ? position.arrowPosition === 'left' || position.arrowPosition === 'right'
-              ? { top: position.arrowOffset, transform: 'translateY(-50%)' }
-              : { left: position.arrowOffset, transform: 'translateX(-50%)' }
-            : undefined
+          position.arrowPosition === 'left' || position.arrowPosition === 'right'
+            ? { top: position.arrowOffset, transform: 'translateY(-50%) rotate(45deg)' }
+            : { left: position.arrowOffset, transform: 'translateX(-50%) rotate(45deg)' }
         }
       />
 

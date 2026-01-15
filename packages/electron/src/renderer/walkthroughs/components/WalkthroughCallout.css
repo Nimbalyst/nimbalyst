@@ -28,75 +28,42 @@
   }
 }
 
-/* Arrow styles - larger for better visibility */
+/* Arrow styles - rotated square that creates a pointer effect */
 .walkthrough-callout-arrow {
   position: absolute;
-  width: 20px;
-  height: 20px;
-}
-
-.walkthrough-callout-arrow::before {
-  content: '';
-  position: absolute;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   background: var(--surface-primary);
   border: 1px solid var(--border-primary);
-  transform: rotate(45deg);
+  /* Note: rotate(45deg) is applied via inline style combined with translate */
 }
 
-/* Arrow pointing up (callout below target) */
+/* Arrow pointing up (callout below target) - arrow is at TOP of callout */
 .walkthrough-callout-arrow--top {
-  top: -10px;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.walkthrough-callout-arrow--top::before {
-  top: 4px;
-  left: 2px;
-  border-right: none;
+  top: -8px;
   border-bottom: none;
+  border-right: none;
 }
 
-/* Arrow pointing down (callout above target) */
+/* Arrow pointing down (callout above target) - arrow is at BOTTOM of callout */
 .walkthrough-callout-arrow--bottom {
-  bottom: -10px;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.walkthrough-callout-arrow--bottom::before {
-  bottom: 4px;
-  left: 2px;
-  border-left: none;
+  bottom: -8px;
   border-top: none;
+  border-left: none;
 }
 
-/* Arrow pointing left (callout right of target) */
+/* Arrow pointing left (callout to the RIGHT of target) - arrow is on LEFT side */
 .walkthrough-callout-arrow--left {
-  left: -10px;
-  /* top and transform set via inline style for dynamic positioning */
-}
-
-.walkthrough-callout-arrow--left::before {
-  left: 4px;
-  top: 2px;
-  border-right: none;
+  left: -8px;
   border-top: none;
+  border-right: none;
 }
 
-/* Arrow pointing right (callout left of target) */
+/* Arrow pointing right (callout to the LEFT of target) - arrow is on RIGHT side */
 .walkthrough-callout-arrow--right {
-  right: -10px;
-  /* top and transform set via inline style for dynamic positioning */
-}
-
-.walkthrough-callout-arrow--right::before {
-  right: 4px;
-  top: 2px;
-  border-left: none;
+  right: -8px;
   border-bottom: none;
+  border-left: none;
 }
 
 /* Content */

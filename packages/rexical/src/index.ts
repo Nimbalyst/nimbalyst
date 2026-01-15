@@ -34,6 +34,7 @@ export { RuntimeSettingsProvider, useRuntimeSettings } from './context/RuntimeSe
 
 // Themes
 export { default as PlaygroundEditorTheme } from './themes/PlaygroundEditorTheme';
+export { PRINT_STYLESHEET, wrapWithPrintStyles } from './themes/PrintTheme';
 
 // Node types - for advanced customization
 export { default as EditorNodes } from './nodes/EditorNodes';

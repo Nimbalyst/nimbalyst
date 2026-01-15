@@ -17,7 +17,9 @@ import {
   $convertToEnhancedMarkdownString,
   $convertFromEnhancedMarkdownString,
   getEditorTransformers,
+  wrapWithPrintStyles,
 } from 'rexical';
+import { $generateHtmlFromNodes } from '@lexical/html';
 import { revealFolderAtom } from '../../store';
 import './UnifiedEditorHeaderBar.css';
 
@@ -393,6 +395,50 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
     setShowActionsMenu(false);
   }, [lexicalEditor]);
 
+  // Handle export to PDF
+  const handleExportToPdf = useCallback(async () => {
+    if (!lexicalEditor || typeof lexicalEditor.getEditorState !== 'function') return;
+    const electronAPI = (window as any).electronAPI;
+    if (!electronAPI) return;
+
+    try {
+      // Show save dialog first
+      const defaultPath = fileName.replace(/\.(md|markdown|txt)$/i, '.pdf');
+      const outputPath = await electronAPI.showSaveDialogPdf({ defaultPath });
+
+      if (!outputPath) {
+        // User cancelled
+        return;
+      }
+
+      // Generate HTML from Lexical editor
+      let html = '';
+      lexicalEditor.getEditorState().read(() => {
+        // Cast to LexicalEditor for $generateHtmlFromNodes
+        const editorAsLexical = lexicalEditor as unknown as import('lexical').LexicalEditor;
+        const content = $generateHtmlFromNodes(editorAsLexical);
+        html = wrapWithPrintStyles(content);
+      });
+
+      // Export to PDF via main process
+      const result = await electronAPI.exportHtmlToPdf({
+        html,
+        outputPath,
+        pageSize: 'Letter',
+      });
+
+      if (result.success) {
+        console.log('[UnifiedHeaderBar] PDF exported successfully:', outputPath);
+      } else {
+        console.error('[UnifiedHeaderBar] PDF export failed:', result.error);
+        electronAPI.showErrorDialog('Export Failed', `Failed to export PDF: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('[UnifiedHeaderBar] Failed to export to PDF:', error);
+    }
+    setShowActionsMenu(false);
+  }, [lexicalEditor, fileName]);
+
   // Handle set document type
   const handleSetDocumentType = useCallback((trackerType: string) => {
     if (!lexicalEditor || typeof lexicalEditor.update !== 'function') return;
@@ -767,6 +813,22 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
                         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
                       </svg>
                       Copy as Markdown
+                    </button>
+                  )}
+
+                  {/* Export to PDF */}
+                  {lexicalEditor && (
+                    <button
+                      className="dropdown-item"
+                      onClick={handleExportToPdf}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                        <path d="M12 18v-6"/>
+                        <path d="M9 15l3 3 3-3"/>
+                      </svg>
+                      Export to PDF...
                     </button>
                   )}
 

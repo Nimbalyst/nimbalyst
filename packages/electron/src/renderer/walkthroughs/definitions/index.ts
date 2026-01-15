@@ -6,19 +6,19 @@
  */
 
 import type { WalkthroughDefinition } from '../types';
-import { agentModeIntro } from './agent-mode-intro';
 import { aiSessionsButton } from './ai-sessions-button';
 import { contextWindowIntro } from './context-window-intro';
 import { diffModeIntro } from './diff-mode-intro';
 import { fileTreeTools } from './file-tree-tools';
 import { modelPickerIntro } from './model-picker-intro';
+import { navigationIntro } from './navigation-intro';
 
 /**
  * All available walkthroughs.
  * Add new walkthroughs here as they are created.
  */
 export const walkthroughs: WalkthroughDefinition[] = [
-  agentModeIntro,
+  navigationIntro,
   aiSessionsButton,
   contextWindowIntro,
   diffModeIntro,

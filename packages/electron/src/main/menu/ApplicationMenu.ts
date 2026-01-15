@@ -46,6 +46,7 @@ import { FeatureTrackingService } from '../services/analytics/FeatureTrackingSer
 // Import shared SDK docs path function
 import { getExtensionSDKDocsPath } from '../utils/workspaceDetection';
 import { database } from '../database/PGLiteDatabaseWorker';
+import { getRegisteredWalkthroughs } from '../ipc/WalkthroughHandlers';
 
 // Create window list menu items
 function createWindowListMenu(): any[] {
@@ -1291,6 +1292,31 @@ export async function createApplicationMenu() {
                             label: 'Show Database Recovery Dialog',
                             click: async () => {
                                 database.showRecoveryDialog();
+                            }
+                        }
+                    ]
+                },
+                {
+                    label: 'Show Walkthroughs',
+                    submenu: [
+                        // Dynamically generated from registered walkthroughs
+                        ...getRegisteredWalkthroughs().map(walkthrough => ({
+                            label: walkthrough.name,
+                            click: async () => {
+                                const focused = getFocusedWindow();
+                                if (focused) {
+                                    focused.webContents.send('trigger-walkthrough', walkthrough.id);
+                                }
+                            }
+                        })),
+                        ...(getRegisteredWalkthroughs().length > 0 ? [{ type: 'separator' as const }] : []),
+                        {
+                            label: 'Reset All Walkthroughs',
+                            click: async () => {
+                                const focused = getFocusedWindow();
+                                if (focused) {
+                                    focused.webContents.send('reset-walkthroughs');
+                                }
                             }
                         }
                     ]
