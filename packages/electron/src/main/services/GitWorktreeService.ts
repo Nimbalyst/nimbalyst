@@ -1154,6 +1154,106 @@ ${newLines.map(line => '+' + line).join('\n')}`;
   }
 
   /**
+   * Check for potential rebase conflicts before attempting a rebase
+   * Uses git merge-tree to simulate the rebase without modifying the repository
+   *
+   * @param worktreePath - Path to the worktree
+   * @param baseBranch - The base branch to check conflicts against
+   * @returns Conflict information including files and commits
+   */
+  private async checkForRebaseConflicts(
+    worktreePath: string,
+    baseBranch: string
+  ): Promise<{
+    hasConflicts: boolean;
+    conflictingFiles?: string[];
+    conflictingCommits?: { ours: string[]; theirs: string[] };
+  }> {
+    const git: SimpleGit = simpleGit(worktreePath);
+
+    try {
+      // Get the current branch
+      const currentBranch = (await git.revparse(['--abbrev-ref', 'HEAD'])).trim();
+
+      // Find the merge base (common ancestor)
+      const mergeBase = (await git.raw(['merge-base', baseBranch, currentBranch])).trim();
+
+      // Use git merge-tree to simulate the merge without modifying the working tree
+      // merge-tree shows what a merge would look like
+      try {
+        const mergeTreeOutput = await git.raw(['merge-tree', mergeBase, currentBranch, baseBranch]);
+
+        // Check if there are conflict markers in the output
+        const hasConflicts = mergeTreeOutput.includes('<<<<<<<');
+
+        if (!hasConflicts) {
+          return { hasConflicts: false };
+        }
+
+        // If conflicts detected, gather more information
+        // Get files modified in both branches
+        const ourFiles = (await git.diff([`${mergeBase}...${currentBranch}`, '--name-only'])).split('\n').filter(f => f.trim());
+        const theirFiles = (await git.diff([`${mergeBase}...${baseBranch}`, '--name-only'])).split('\n').filter(f => f.trim());
+
+        // Find intersecting files (potential conflicts)
+        const conflictingFiles = ourFiles.filter(f => theirFiles.includes(f));
+
+        // Get commit history for both sides
+        const ourCommits = await git.log({ from: mergeBase, to: currentBranch });
+        const theirCommits = await git.log({ from: mergeBase, to: baseBranch });
+
+        const ourCommitMessages = ourCommits.all.map(c => c.message);
+        const theirCommitMessages = theirCommits.all.map(c => c.message);
+
+        logger.info('Rebase conflicts detected', {
+          conflictingFiles,
+          ourCommitCount: ourCommitMessages.length,
+          theirCommitCount: theirCommitMessages.length,
+        });
+
+        return {
+          hasConflicts: true,
+          conflictingFiles,
+          conflictingCommits: {
+            ours: ourCommitMessages,
+            theirs: theirCommitMessages,
+          },
+        };
+      } catch (mergeTreeError) {
+        // merge-tree might not be available on older git versions
+        // Fall back to checking for file overlap
+        logger.warn('merge-tree failed, falling back to file comparison', { mergeTreeError });
+
+        const ourFiles = (await git.diff([`${mergeBase}...${currentBranch}`, '--name-only'])).split('\n').filter(f => f.trim());
+        const theirFiles = (await git.diff([`${mergeBase}...${baseBranch}`, '--name-only'])).split('\n').filter(f => f.trim());
+
+        const conflictingFiles = ourFiles.filter(f => theirFiles.includes(f));
+
+        if (conflictingFiles.length === 0) {
+          return { hasConflicts: false };
+        }
+
+        // Get commit history for both sides
+        const ourCommits = await git.log({ from: mergeBase, to: currentBranch });
+        const theirCommits = await git.log({ from: mergeBase, to: baseBranch });
+
+        return {
+          hasConflicts: true,
+          conflictingFiles,
+          conflictingCommits: {
+            ours: ourCommits.all.map(c => c.message),
+            theirs: theirCommits.all.map(c => c.message),
+          },
+        };
+      }
+    } catch (error) {
+      logger.error('Failed to check for rebase conflicts', { error, worktreePath, baseBranch });
+      // On error, assume no conflicts to allow the rebase to proceed (it will handle conflicts itself)
+      return { hasConflicts: false };
+    }
+  }
+
+  /**
    * Rebase the worktree branch onto the latest base branch
    * This brings in any new commits from the base branch into the worktree
    *
@@ -1161,7 +1261,15 @@ ${newLines.map(line => '+' + line).join('\n')}`;
    * @param baseBranch - The base branch to rebase onto (from database)
    * @returns Rebase result
    */
-  async rebaseFromBase(worktreePath: string, baseBranch: string): Promise<{ success: boolean; message: string }> {
+  async rebaseFromBase(
+    worktreePath: string,
+    baseBranch: string
+  ): Promise<{
+    success: boolean;
+    message?: string;
+    conflictedFiles?: string[];
+    conflictingCommits?: { ours: string[]; theirs: string[] };
+  }> {
     if (!worktreePath) {
       throw new Error('worktreePath is required');
     }
@@ -1186,6 +1294,22 @@ ${newLines.map(line => '+' + line).join('\n')}`;
       const currentBranch = (await git.revparse(['--abbrev-ref', 'HEAD'])).trim();
       logger.info('Rebase details', { currentBranch, baseBranch });
 
+      // Pre-flight check for conflicts (Crystal pattern)
+      const conflictCheck = await this.checkForRebaseConflicts(worktreePath, baseBranch);
+
+      if (conflictCheck.hasConflicts) {
+        logger.warn('Rebase would result in conflicts, aborting before attempting', {
+          conflictingFiles: conflictCheck.conflictingFiles,
+        });
+
+        return {
+          success: false,
+          message: 'rebase-conflicts-detected',
+          conflictedFiles: conflictCheck.conflictingFiles,
+          conflictingCommits: conflictCheck.conflictingCommits,
+        };
+      }
+
       // Perform the rebase
       try {
         await git.rebase([baseBranch]);
@@ -1204,7 +1328,8 @@ ${newLines.map(line => '+' + line).join('\n')}`;
 
           return {
             success: false,
-            message: `Rebase conflicts detected in ${rebaseStatus.conflicted.length} file(s). Please resolve conflicts manually using git rebase.`,
+            message: 'rebase-conflicts-detected',
+            conflictedFiles: rebaseStatus.conflicted,
           };
         }
 

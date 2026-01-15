@@ -3,6 +3,7 @@ import { DiffFileTabs } from './DiffFileTabs';
 import { DiffContent } from './DiffContent';
 import { ChangesPanel } from './ChangesPanel';
 import { MergeConflictDialog } from './MergeConflictDialog';
+import { RebaseConflictDialog } from './RebaseConflictDialog';
 import { ArchiveWorktreeDialog } from './ArchiveWorktreeDialog';
 import './DiffModeView.css';
 
@@ -45,6 +46,10 @@ export function DiffModeView({ worktreePath, workspacePath, worktreeId, isActive
   const [isMerged, setIsMerged] = useState(false);
   const [isRebasing, setIsRebasing] = useState(false);
   const [mergeConflictFiles, setMergeConflictFiles] = useState<string[] | null>(null);
+  const [rebaseConflictData, setRebaseConflictData] = useState<{
+    files: string[];
+    commits?: { ours: string[]; theirs: string[] };
+  } | null>(null);
   const [worktreeName, setWorktreeName] = useState<string>('');
   const [showArchiveDialog, setShowArchiveDialog] = useState(false);
   const isResizingRef = useRef(false);
@@ -217,7 +222,16 @@ export function DiffModeView({ worktreePath, workspacePath, worktreeId, isActive
         // Reload files, commits, and status
         await Promise.all([loadChangedFiles(), loadCommits(), loadWorktreeStatus()]);
       } else {
-        setError(result?.error || result?.message || 'Failed to rebase');
+        // Check if this is a rebase conflict error (detected before rebase started)
+        if (result?.message === 'rebase-conflicts-detected' && result?.conflictedFiles) {
+          // Show rebase conflict dialog
+          setRebaseConflictData({
+            files: result.conflictedFiles,
+            commits: result.conflictingCommits,
+          });
+        } else {
+          setError(result?.error || result?.message || 'Failed to rebase');
+        }
       }
     } catch (err) {
       console.error('[DiffModeView] Failed to rebase:', err);
@@ -369,6 +383,72 @@ Please proceed with this strategy.`;
       setError('Failed to create Claude Agent session for conflict resolution');
     }
   }, [workspacePath, worktreePath, worktreeId, repoRootBranch, mergeConflictFiles]);
+
+  // Resolve rebase conflicts with Claude Agent (using Crystal's prompt pattern)
+  const handleResolveRebaseConflictsWithAgent = useCallback(async () => {
+    if (!rebaseConflictData || rebaseConflictData.files.length === 0) return;
+
+    console.log('[DiffModeView] Resolving rebase conflicts with agent', { rebaseConflictData, worktreePath });
+
+    // Close the dialog
+    setRebaseConflictData(null);
+
+    try {
+      // Get the base branch from repo root
+      const mainBranch = repoRootBranch || 'main';
+
+      // Create the prompt following Crystal's pattern
+      const draftMessage = `Please rebase the local ${mainBranch} branch (not origin/${mainBranch}) into this branch and resolve all conflicts`;
+
+      console.log('[DiffModeView] Creating AI session in main repo workspace...');
+      // Create the session in the MAIN REPO workspace (so it appears in main session list)
+      // but associate it with the worktree via worktreeId (so Claude runs in worktree directory)
+      const sessionResult = await window.electronAPI.aiCreateSession(
+        'claude-code',
+        undefined, // documentContext
+        workspacePath, // workspacePath (main repo - so session appears in main session list)
+        undefined, // modelId (use default)
+        'coding', // sessionType
+        worktreeId  // worktreeId (associate with the worktree - Claude will run in worktree directory)
+      );
+
+      console.log('[DiffModeView] Session result:', sessionResult);
+
+      if (sessionResult?.id) {
+        const sessionId = sessionResult.id;
+
+        // Load the session data first (use workspacePath since session was created in main repo workspace)
+        console.log('[DiffModeView] Loading session...', sessionId);
+        const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspacePath);
+        console.log('[DiffModeView] Session data:', sessionData);
+
+        if (sessionData) {
+          // Save the draft input so it appears in the text box but isn't sent yet
+          console.log('[DiffModeView] Saving draft input...');
+          await window.electronAPI.aiSaveDraftInput(
+            sessionId,
+            draftMessage,
+            workspacePath
+          );
+
+          // Dispatch a custom event to notify the AgenticPanel to open this session
+          // Use workspacePath since that's where the session was created
+          console.log('[DiffModeView] Dispatching event...');
+          window.dispatchEvent(new CustomEvent('open-ai-session', {
+            detail: {
+              sessionId,
+              workspacePath: workspacePath,
+              draftInput: draftMessage
+            }
+          }));
+          console.log('[DiffModeView] Event dispatched successfully');
+        }
+      }
+    } catch (err) {
+      console.error('[DiffModeView] Failed to create agent session for rebase conflict resolution:', err);
+      setError('Failed to create Claude Agent session for rebase conflict resolution');
+    }
+  }, [workspacePath, worktreePath, worktreeId, repoRootBranch, rebaseConflictData]);
 
   // Handle archive worktree
   const handleArchiveWorktree = useCallback(async () => {
@@ -524,6 +604,17 @@ Please proceed with this strategy.`;
           conflictedFiles={mergeConflictFiles}
           onResolveWithAgent={handleResolveConflictsWithAgent}
           onCancel={() => setMergeConflictFiles(null)}
+        />
+      )}
+
+      {/* Rebase conflict dialog */}
+      {rebaseConflictData && rebaseConflictData.files.length > 0 && (
+        <RebaseConflictDialog
+          worktreePath={worktreePath}
+          conflictedFiles={rebaseConflictData.files}
+          conflictingCommits={rebaseConflictData.commits}
+          onResolveWithAgent={handleResolveRebaseConflictsWithAgent}
+          onCancel={() => setRebaseConflictData(null)}
         />
       )}
 

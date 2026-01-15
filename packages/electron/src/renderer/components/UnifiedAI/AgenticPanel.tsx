@@ -2757,11 +2757,20 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
       console.log('[AgenticPanel] Received open-ai-session event', {
         sessionId,
-        eventWorkspacePath
+        eventWorkspacePath,
+        panelWorkspacePath: workspacePath
       });
 
-      // Try to load the session with the event's workspace path first
-      // This allows worktree sessions to be opened even when the panel's workspacePath is different
+      // Only process events for this panel's workspace
+      // This prevents duplicate processing when multiple panels are mounted
+      if (eventWorkspacePath !== workspacePath) {
+        console.log('[AgenticPanel] Ignoring event - workspace mismatch', {
+          eventWorkspacePath,
+          panelWorkspacePath: workspacePath
+        });
+        return;
+      }
+
       console.log(`[AgenticPanel] Attempting to open session: ${sessionId}`);
 
       try {
@@ -2829,7 +2838,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     return () => {
       window.removeEventListener('open-ai-session', handleOpenSession as EventListener);
     };
-  }, [loadSessions, handleWorktreeModeChange]);
+  }, [workspacePath, loadSessions, handleWorktreeModeChange]);
 
   // Track sessions currently being processed to prevent duplicate processing
   const processingQueueRef = useRef(new Set<string>());

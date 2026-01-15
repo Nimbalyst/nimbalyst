@@ -703,7 +703,7 @@ export function registerWorktreeHandlers(): void {
    * Brings in new commits from the base branch into the worktree
    *
    * @param worktreePath - Path to the worktree
-   * @returns Rebase result
+   * @returns Rebase result with conflict details if conflicts detected
    */
   ipcMain.handle('worktree:rebase', async (_event, worktreePath: string) => {
     try {
@@ -735,6 +735,8 @@ export function registerWorktreeHandlers(): void {
       return {
         success: result.success,
         message: result.message,
+        conflictedFiles: result.conflictedFiles,
+        conflictingCommits: result.conflictingCommits,
       };
     } catch (error) {
       logger.error('Failed to rebase worktree:', error);
