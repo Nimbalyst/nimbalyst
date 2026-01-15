@@ -7,10 +7,28 @@
 
 import type { Database } from 'sql.js';
 
+/**
+ * Query result to be displayed in the editor
+ */
+export interface DisplayQueryResult {
+  sql: string;
+  columns: string[];
+  values: any[][];
+  rowCount: number;
+  executionTime: number;
+  error?: string;
+}
+
+/**
+ * Callback for displaying query results in the UI
+ */
+export type DisplayQueryCallback = (result: DisplayQueryResult) => void;
+
 interface DatabaseEntry {
   db: Database;
   name: string;
   tables: string[];
+  displayCallback?: DisplayQueryCallback;
 }
 
 // Map of panel instance ID to database entry
@@ -67,4 +85,28 @@ export function getAllDatabases(): Array<{ panelId: string; name: string; tables
     name: entry.name,
     tables: entry.tables,
   }));
+}
+
+/**
+ * Set the display callback for a database
+ * This allows AI tools to push query results to the editor UI
+ */
+export function setDisplayCallback(panelId: string, callback: DisplayQueryCallback | undefined) {
+  const entry = databaseRegistry.get(panelId);
+  if (entry) {
+    entry.displayCallback = callback;
+  }
+}
+
+/**
+ * Dispatch a query result to be displayed in the active database's editor
+ * Returns true if the result was dispatched, false if no callback is registered
+ */
+export function dispatchDisplayQuery(result: DisplayQueryResult): boolean {
+  const entry = getActiveDatabase();
+  if (entry?.displayCallback) {
+    entry.displayCallback(result);
+    return true;
+  }
+  return false;
 }

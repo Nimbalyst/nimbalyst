@@ -4,7 +4,7 @@
  * Provides Claude with tools to query and analyze SQLite databases.
  */
 
-import { getActiveDatabase, getAllDatabases, hasActiveDatabase } from './databaseRegistry';
+import { getActiveDatabase, getAllDatabases, hasActiveDatabase, dispatchDisplayQuery } from './databaseRegistry';
 
 /**
  * AI tool definitions
@@ -487,6 +487,108 @@ export const aiTools = [
         return {
           success: false,
           error: err instanceof Error ? err.message : 'Failed to get schema',
+        };
+      }
+    },
+  },
+
+  {
+    name: 'sqlite_display_query',
+    description: 'Execute a SQL query and display the results directly in the SQLite editor UI. Use this to show query results to the user in the database browser interface rather than as text output.',
+    parameters: {
+      type: 'object' as const,
+      properties: {
+        sql: {
+          type: 'string' as const,
+          description: 'SQL query to execute (SELECT only for safety)',
+        },
+        limit: {
+          type: 'number' as const,
+          description: 'Maximum number of rows to return (default: 100)',
+        },
+      },
+      required: ['sql'],
+    },
+    handler: async (params: { sql: string; limit?: number }) => {
+      const entry = getActiveDatabase();
+      if (!entry) {
+        return {
+          success: false,
+          error: 'No database is currently open.',
+        };
+      }
+
+      // Safety check: only allow SELECT queries
+      const trimmedSql = params.sql.trim().toUpperCase();
+      if (!trimmedSql.startsWith('SELECT') && !trimmedSql.startsWith('PRAGMA') && !trimmedSql.startsWith('EXPLAIN')) {
+        return {
+          success: false,
+          error: 'Only SELECT, PRAGMA, and EXPLAIN queries are allowed for safety.',
+        };
+      }
+
+      try {
+        const limit = params.limit || 100;
+        let sql = params.sql;
+
+        // Add LIMIT if not present and not a PRAGMA
+        if (!trimmedSql.startsWith('PRAGMA') && !trimmedSql.includes('LIMIT')) {
+          sql = `${params.sql} LIMIT ${limit}`;
+        }
+
+        const startTime = performance.now();
+        const result = entry.db.exec(sql);
+        const endTime = performance.now();
+        const executionTime = endTime - startTime;
+
+        let columns: string[] = [];
+        let values: any[][] = [];
+        let rowCount = 0;
+
+        if (result.length > 0) {
+          columns = result[0].columns;
+          values = result[0].values;
+          rowCount = result[0].values.length;
+        }
+
+        // Dispatch to the editor UI
+        const dispatched = dispatchDisplayQuery({
+          sql: params.sql,
+          columns,
+          values,
+          rowCount,
+          executionTime,
+        });
+
+        if (!dispatched) {
+          return {
+            success: false,
+            error: 'No SQLite editor is currently open to display the results. Open a .db or .sqlite file first.',
+          };
+        }
+
+        return {
+          success: true,
+          data: {
+            message: `Query results displayed in SQLite editor (${rowCount} row(s) in ${executionTime.toFixed(1)}ms)`,
+            rowCount,
+            executionTime,
+          },
+        };
+      } catch (err) {
+        // Dispatch error to the UI as well
+        dispatchDisplayQuery({
+          sql: params.sql,
+          columns: [],
+          values: [],
+          rowCount: 0,
+          executionTime: 0,
+          error: err instanceof Error ? err.message : 'Query failed',
+        });
+
+        return {
+          success: false,
+          error: err instanceof Error ? err.message : 'Query failed',
         };
       }
     },

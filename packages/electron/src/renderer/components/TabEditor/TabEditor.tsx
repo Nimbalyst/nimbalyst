@@ -41,6 +41,7 @@ import { customEditorRegistry, CustomEditorWrapper } from '../CustomEditors';
 import { logger } from '../../utils/logger';
 import { createEditorHost } from './createEditorHost';
 import type { EditorHost, DiffConfig } from '@nimbalyst/runtime';
+import { createExtensionStorage } from '@nimbalyst/runtime';
 import { store, editorHasUnacceptedChangesAtom, makeEditorKey } from '@nimbalyst/runtime/store';
 import { UnifiedEditorHeaderBar } from './UnifiedEditorHeaderBar';
 
@@ -152,13 +153,13 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const isImage = fileType === 'image';
   const isCustom = fileType === 'custom';
 
-  // Check if the custom editor supports source mode (from registry)
-  const customEditorSupportsSourceMode = useMemo(() => {
-    if (!isCustom) return false;
+  // Get the custom editor registration for this file (used for source mode and storage)
+  const customEditorRegistration = useMemo(() => {
+    if (!isCustom) return null;
 
     // Try to find the editor registration for this file
     const lastDot = filePath.lastIndexOf('.');
-    if (lastDot <= 0) return false;
+    if (lastDot <= 0) return null;
 
     // Try single extension first
     const singleExt = filePath.substring(lastDot).toLowerCase();
@@ -173,8 +174,11 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       }
     }
 
-    return registration?.supportsSourceMode || false;
+    return registration;
   }, [isCustom, filePath, registryVersion]);
+
+  // Check if the custom editor supports source mode (from registry)
+  const customEditorSupportsSourceMode = customEditorRegistration?.supportsSourceMode || false;
 
   // Source mode state - unified for both markdown and custom editors
   // When true, shows Monaco with raw content; when false, shows rich editor (Lexical or custom)
@@ -1995,6 +1999,27 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     }
   }, [filePath, workspaceId]);
 
+  // Create extension storage for custom editors
+  // Uses the extension ID from the registered custom editor (if any)
+  const extensionStorage = useMemo(() => {
+    const extensionId = customEditorRegistration?.extensionId;
+    if (!extensionId) {
+      // Return a no-op storage for non-extension editors
+      return {
+        get: () => undefined,
+        set: async () => {},
+        delete: async () => {},
+        getGlobal: () => undefined,
+        setGlobal: async () => {},
+        deleteGlobal: async () => {},
+        getSecret: async () => undefined,
+        setSecret: async () => {},
+        deleteSecret: async () => {},
+      };
+    }
+    return createExtensionStorage(extensionId);
+  }, [customEditorRegistration?.extensionId]);
+
   // Create EditorHost for custom editors
   // This is memoized and uses refs for changing values to stay stable across renders
   // Only recreate when filePath or workspaceId changes (genuinely new file/workspace)
@@ -2244,9 +2269,12 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       isSourceModeActive: () => {
         return sourceModeRef.current;
       },
+
+      // ============ STORAGE ============
+      storage: extensionStorage,
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filePath, fileName, workspaceId, theme]); // Recreate when file, workspace, or theme changes
+  }, [filePath, fileName, workspaceId, theme, extensionStorage]); // Recreate when file, workspace, theme, or storage changes
 
   // Register manual save function for custom editors
   // This ensures saveTabById works when closing dirty custom editor tabs

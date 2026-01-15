@@ -12,14 +12,12 @@
     "ai": true
   },
   "contributions": {
-    "panels": [
+    "customEditors": [
       {
-        "id": "browser",
-        "title": "SQLite Browser",
-        "icon": "database",
-        "placement": "fullscreen",
-        "aiSupported": true,
-        "order": 50
+        "filePatterns": ["*.db", "*.sqlite", "*.sqlite3", "*.db3"],
+        "displayName": "SQLite Database",
+        "component": "SQLiteEditor",
+        "priority": 10
       }
     ],
     "aiTools": [
@@ -30,7 +28,8 @@
       "sqlite_count",
       "sqlite_sample",
       "sqlite_analyze",
-      "sqlite_schema"
+      "sqlite_schema",
+      "sqlite_display_query"
     ]
   }
 }

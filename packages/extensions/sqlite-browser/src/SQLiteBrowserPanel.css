@@ -56,6 +56,11 @@
   font-size: 13px;
 }
 
+.sqlite-browser-btn-small {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
 .sqlite-browser-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
@@ -151,17 +156,73 @@
   color: var(--text-secondary);
 }
 
+/* Sidebar sections */
+.sqlite-browser-sidebar-section {
+  padding: 8px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.sqlite-browser-sidebar-section:last-child {
+  border-bottom: none;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sqlite-browser-sidebar-section-header {
+  padding: 4px 12px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-tertiary);
+}
+
+.sqlite-browser-sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.sqlite-browser-sidebar-item:hover {
+  background: var(--surface-hover);
+}
+
+.sqlite-browser-sidebar-item.active {
+  background: var(--accent-primary);
+  color: white;
+}
+
+.sqlite-browser-sidebar-item svg {
+  flex-shrink: 0;
+}
+
+.sqlite-browser-query-item {
+  font-family: inherit;
+}
+
 .sqlite-browser-table-list {
   flex: 1;
   overflow-y: auto;
-  padding: 8px;
 }
 
 .sqlite-browser-table-item {
   display: block;
   width: 100%;
-  padding: 8px 12px;
-  margin: 2px 0;
+  padding: 6px 12px;
+  margin: 1px 0;
   font-size: 12px;
   font-family: monospace;
   text-align: left;
@@ -188,36 +249,6 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-}
-
-.sqlite-browser-tabs {
-  display: flex;
-  padding: 8px 16px;
-  gap: 4px;
-  border-bottom: 1px solid var(--border-primary);
-  flex-shrink: 0;
-}
-
-.sqlite-browser-tab {
-  padding: 6px 16px;
-  font-size: 12px;
-  font-weight: 500;
-  background: transparent;
-  border: none;
-  border-radius: 4px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.sqlite-browser-tab:hover {
-  color: var(--text-primary);
-  background: var(--surface-hover);
-}
-
-.sqlite-browser-tab.active {
-  color: var(--text-primary);
-  background: var(--surface-tertiary);
 }
 
 /* Browse view */
@@ -496,4 +527,123 @@
 .sqlite-browser-recent-remove:hover {
   background: var(--surface-tertiary);
   color: var(--text-primary);
+}
+
+/* AI Query display */
+.sqlite-browser-ai-query {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--surface-secondary);
+  border: 1px solid var(--accent-primary);
+  border-radius: 6px;
+}
+
+.sqlite-browser-ai-query-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sqlite-browser-ai-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: var(--accent-primary);
+  color: white;
+  border-radius: 4px;
+}
+
+.sqlite-browser-ai-query-sql {
+  padding: 8px 10px;
+  background: var(--surface-tertiary);
+  border-radius: 4px;
+  overflow-x: auto;
+}
+
+.sqlite-browser-ai-query-sql code {
+  font-size: 12px;
+  font-family: monospace;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.sqlite-browser-ai-query .sqlite-browser-query-result {
+  margin-top: 8px;
+}
+
+.sqlite-browser-ai-query .sqlite-browser-query-error {
+  margin: 8px 0 0 0;
+}
+
+/* Query history */
+.sqlite-browser-query-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.sqlite-browser-query-history-wrapper {
+  position: relative;
+}
+
+.sqlite-browser-query-history-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 100;
+  width: 400px;
+  max-height: 300px;
+  overflow-y: auto;
+  margin-top: 4px;
+  background: var(--surface-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.sqlite-browser-query-history-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border-primary);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s ease;
+}
+
+.sqlite-browser-query-history-item:last-child {
+  border-bottom: none;
+}
+
+.sqlite-browser-query-history-item:hover {
+  background: var(--surface-hover);
+}
+
+.sqlite-browser-query-history-sql {
+  font-size: 12px;
+  font-family: monospace;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
+.sqlite-browser-query-history-time {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  margin-top: 4px;
 }

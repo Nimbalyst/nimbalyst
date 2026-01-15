@@ -13,6 +13,8 @@
  * and provided by the host.
  */
 
+import type { ExtensionStorage } from './panel.js';
+
 // ============================================================================
 // EditorHost API - The primary API for custom editors
 // ============================================================================
@@ -207,6 +209,15 @@ export interface EditorHost {
    * If true, a "View Source" button will be available.
    */
   readonly supportsSourceMode?: boolean;
+
+  // ============ STORAGE ============
+
+  /**
+   * Namespaced storage for persisting editor state.
+   * Automatically scoped to this extension.
+   * Use for preferences, history, cached data, etc.
+   */
+  readonly storage: ExtensionStorage;
 }
 
 /**
