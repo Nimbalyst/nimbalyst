@@ -2,7 +2,7 @@
  * SQLite Browser Panel Component
  *
  * Main panel UI for browsing SQLite databases.
- * Uses native Electron file dialog and persists the open database path.
+ * Uses native Electron file dialog and persists recent databases.
  */
 
 import { useState, useEffect, useId, useCallback } from 'react';
@@ -11,8 +11,16 @@ import initSqlJs, { type Database } from 'sql.js';
 import { registerDatabase, unregisterDatabase } from './databaseRegistry';
 import './SQLiteBrowserPanel.css';
 
-// Storage key for persisted database path
-const STORAGE_KEY_DB_PATH = 'lastDatabasePath';
+// Storage keys
+const STORAGE_KEY_RECENT_DBS = 'recentDatabases';
+const STORAGE_KEY_CURRENT_DB = 'currentDatabasePath';
+const MAX_RECENT_DATABASES = 10;
+
+interface RecentDatabase {
+  path: string;
+  name: string;
+  lastOpened: number;
+}
 
 interface DatabaseInfo {
   name: string;
@@ -61,6 +69,7 @@ export function SQLiteBrowserPanel({ host }: PanelHostProps) {
   const [db, setDb] = useState<Database | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [recentDatabases, setRecentDatabases] = useState<RecentDatabase[]>([]);
 
   // Table browser state
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
@@ -75,6 +84,38 @@ export function SQLiteBrowserPanel({ host }: PanelHostProps) {
 
   // View mode
   const [viewMode, setViewMode] = useState<'browse' | 'query'>('browse');
+
+  // Load recent databases from storage on mount
+  useEffect(() => {
+    const stored = host.storage.get<RecentDatabase[]>(STORAGE_KEY_RECENT_DBS);
+    if (stored && Array.isArray(stored)) {
+      setRecentDatabases(stored);
+    }
+  }, [host.storage]);
+
+  // Add database to recent list
+  const addToRecentDatabases = useCallback(async (filePath: string, fileName: string) => {
+    const newEntry: RecentDatabase = {
+      path: filePath,
+      name: fileName,
+      lastOpened: Date.now(),
+    };
+
+    // Update recent list - remove existing entry if present, add to front
+    const filtered = recentDatabases.filter(db => db.path !== filePath);
+    const updated = [newEntry, ...filtered].slice(0, MAX_RECENT_DATABASES);
+
+    setRecentDatabases(updated);
+    await host.storage.set(STORAGE_KEY_RECENT_DBS, updated);
+    await host.storage.set(STORAGE_KEY_CURRENT_DB, filePath);
+  }, [recentDatabases, host.storage]);
+
+  // Remove database from recent list
+  const removeFromRecentDatabases = useCallback(async (filePath: string) => {
+    const updated = recentDatabases.filter(db => db.path !== filePath);
+    setRecentDatabases(updated);
+    await host.storage.set(STORAGE_KEY_RECENT_DBS, updated);
+  }, [recentDatabases, host.storage]);
 
   // Load database from file path
   const loadDatabaseFromPath = useCallback(async (filePath: string) => {
@@ -131,18 +172,24 @@ export function SQLiteBrowserPanel({ host }: PanelHostProps) {
       // Register database for AI tools
       registerDatabase(panelInstanceId, newDb, fileName, tables);
 
-      // Persist the database path
-      await host.storage.set(STORAGE_KEY_DB_PATH, filePath);
+      // Update AI context with database info
+      host.ai?.setContext({
+        databaseName: fileName,
+        databasePath: filePath,
+        tables,
+        tableCount: tables.length,
+      });
+
+      // Add to recent databases
+      await addToRecentDatabases(filePath, fileName);
     } catch (err) {
       console.error('Failed to load database:', err);
       setError(err instanceof Error ? err.message : 'Failed to load database');
       setDatabase(null);
-      // Clear persisted path on error
-      await host.storage.delete(STORAGE_KEY_DB_PATH);
     } finally {
       setLoading(false);
     }
-  }, [db, panelInstanceId, host.storage]);
+  }, [db, panelInstanceId, addToRecentDatabases]);
 
   // Cleanup database on unmount
   useEffect(() => {
@@ -152,11 +199,11 @@ export function SQLiteBrowserPanel({ host }: PanelHostProps) {
     };
   }, [db, panelInstanceId]);
 
-  // Load persisted database on mount
+  // Load last opened database on mount
   useEffect(() => {
-    const persistedPath = host.storage.get<string>(STORAGE_KEY_DB_PATH);
-    if (persistedPath && !database) {
-      loadDatabaseFromPath(persistedPath);
+    const currentPath = host.storage.get<string>(STORAGE_KEY_CURRENT_DB);
+    if (currentPath && !database) {
+      loadDatabaseFromPath(currentPath);
     }
   }, [host.storage, database, loadDatabaseFromPath]);
 
@@ -199,8 +246,10 @@ export function SQLiteBrowserPanel({ host }: PanelHostProps) {
     setTableData(null);
     setQueryResult(null);
     setError(null);
-    // Clear persisted path
-    await host.storage.delete(STORAGE_KEY_DB_PATH);
+    // Clear current database path but keep recent list
+    await host.storage.delete(STORAGE_KEY_CURRENT_DB);
+    // Clear AI context
+    host.ai?.clearContext();
   };
 
   const handleTableSelect = (tableName: string) => {
@@ -212,8 +261,9 @@ export function SQLiteBrowserPanel({ host }: PanelHostProps) {
     try {
       // Get table schema
       const schemaResult = db.exec(`PRAGMA table_info("${tableName}")`);
+      let schema: TableSchema[] = [];
       if (schemaResult.length > 0) {
-        const schema = schemaResult[0].values.map((row: any[]) => ({
+        schema = schemaResult[0].values.map((row: any[]) => ({
           name: row[1] as string,
           type: row[2] as string,
           notnull: row[3] === 1,
@@ -238,6 +288,21 @@ export function SQLiteBrowserPanel({ host }: PanelHostProps) {
           rowCount: 0,
         });
       }
+
+      // Update AI context with selected table info
+      host.ai?.setContext({
+        databaseName: database?.name,
+        databasePath: database?.path,
+        tables: database?.tables,
+        tableCount: database?.tables.length,
+        selectedTable: tableName,
+        selectedTableSchema: schema.map(col => ({
+          name: col.name,
+          type: col.type,
+          nullable: !col.notnull,
+          primaryKey: col.pk,
+        })),
+      });
     } catch (err) {
       console.error('Failed to load table:', err);
       setQueryError(err instanceof Error ? err.message : 'Failed to load table');
@@ -315,6 +380,20 @@ export function SQLiteBrowserPanel({ host }: PanelHostProps) {
     );
   };
 
+  // Format relative time for recent databases
+  const formatRelativeTime = (timestamp: number) => {
+    const diff = Date.now() - timestamp;
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+
+    if (minutes < 1) return 'Just now';
+    if (minutes < 60) return `${minutes}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    if (days < 7) return `${days}d ago`;
+    return new Date(timestamp).toLocaleDateString();
+  };
+
   return (
     <div className="sqlite-browser-panel">
       <div className="sqlite-browser-header">
@@ -358,6 +437,37 @@ export function SQLiteBrowserPanel({ host }: PanelHostProps) {
             <button className="sqlite-browser-btn sqlite-browser-btn-primary" onClick={handleOpenClick}>
               Open Database
             </button>
+
+            {/* Recent databases */}
+            {recentDatabases.length > 0 && (
+              <div className="sqlite-browser-recent">
+                <h4>Recent Databases</h4>
+                <div className="sqlite-browser-recent-list">
+                  {recentDatabases.map((recent) => (
+                    <div key={recent.path} className="sqlite-browser-recent-item">
+                      <button
+                        className="sqlite-browser-recent-btn"
+                        onClick={() => loadDatabaseFromPath(recent.path)}
+                        title={recent.path}
+                      >
+                        <span className="sqlite-browser-recent-name">{recent.name}</span>
+                        <span className="sqlite-browser-recent-time">{formatRelativeTime(recent.lastOpened)}</span>
+                      </button>
+                      <button
+                        className="sqlite-browser-recent-remove"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeFromRecentDatabases(recent.path);
+                        }}
+                        title="Remove from recent"
+                      >
+                        x
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="sqlite-browser-main">

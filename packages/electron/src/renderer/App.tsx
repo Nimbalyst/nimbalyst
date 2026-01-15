@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import { useAtomValue } from 'jotai';
 import { usePostHog } from 'posthog-js/react';
 import { logger } from './utils/logger';
 import type { LexicalCommand } from 'rexical';
@@ -68,6 +69,7 @@ import {
   initializeElectronStorageBackend,
 } from './extensions/panels';
 import { setStorageBackend } from '@nimbalyst/runtime';
+import { extensionPanelAIContextAtom } from './store/atoms/extensionPanels';
 import './WorkspaceWelcome.css';
 
 logger.ui.info('App.tsx loading');
@@ -269,6 +271,9 @@ export default function App() {
 
   // Active extension panel (for sidebar or fullscreen panels from extensions)
   const [activeExtensionPanel, setActiveExtensionPanel] = useState<string | null>(null);
+
+  // Extension panel AI context (synced from PanelContainer when aiSupported panels are active)
+  const extensionPanelAIContext = useAtomValue(extensionPanelAIContextAtom);
 
   // Check if a fullscreen extension panel is active (hides other content modes)
   const activeFullscreenPanel = activeExtensionPanel ? getPanelById(activeExtensionPanel) : null;
@@ -645,6 +650,24 @@ export default function App() {
     selection: undefined,
     getLatestContent: () => getContentRef.current?.() || ''
   }), []); // Empty deps - never recreates, reads from refs
+
+  // Build extension panel context for AI features (when an aiSupported panel is active)
+  // This provides extension-specific context (e.g., database name, schema) to the AI chat
+  const extensionPanelDocumentContext = useMemo(() => {
+    if (!extensionPanelAIContext) return undefined;
+    return {
+      filePath: `extension:${extensionPanelAIContext.panelId}`,
+      fileType: 'extension-panel' as const,
+      content: JSON.stringify(extensionPanelAIContext.context, null, 2),
+      cursorPosition: undefined,
+      selection: undefined,
+      getLatestContent: () => JSON.stringify(extensionPanelAIContext.context, null, 2),
+      // Extension-specific metadata
+      extensionId: extensionPanelAIContext.extensionId,
+      panelId: extensionPanelAIContext.panelId,
+      panelTitle: extensionPanelAIContext.panelTitle,
+    };
+  }, [extensionPanelAIContext]);
   const searchCommandRef = useRef<LexicalCommand<undefined> | null>(null);
   const isInitializedRef = useRef<boolean>(false);
   const agenticPanelRef = useRef<AgenticPanelRef>(null);
@@ -1668,18 +1691,54 @@ export default function App() {
                     style={{
                       flex: 1,
                       display: 'flex',
-                      flexDirection: 'column',
+                      flexDirection: 'row',
                       overflow: 'hidden',
                       minHeight: 0,
                     }}
                   >
-                    <PanelContainer
-                      panel={panel}
-                      workspacePath={workspacePath}
-                      onOpenFile={handleWorkspaceFileSelect}
-                      onOpenPanel={(panelId) => setActiveExtensionPanel(panelId)}
-                      onClose={() => setActiveExtensionPanel(null)}
-                    />
+                    {/* Extension panel content */}
+                    <div
+                      style={{
+                        flex: 1,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        overflow: 'hidden',
+                        minHeight: 0,
+                      }}
+                    >
+                      <PanelContainer
+                        panel={panel}
+                        workspacePath={workspacePath}
+                        onOpenFile={handleWorkspaceFileSelect}
+                        onOpenPanel={(panelId) => setActiveExtensionPanel(panelId)}
+                        onClose={() => setActiveExtensionPanel(null)}
+                      />
+                    </div>
+                    {/* AI Chat Panel (for aiSupported panels) */}
+                    {panel.aiSupported && (
+                      <div
+                        data-layout="extension-ai-chat"
+                        style={{
+                          width: 400,
+                          minWidth: 320,
+                          maxWidth: 600,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          borderLeft: '1px solid var(--border-primary)',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        <AgenticPanel
+                          mode="chat"
+                          workspacePath={workspacePath}
+                          workspaceName={workspaceName || ''}
+                          documentContext={extensionPanelDocumentContext}
+                          isActive={true}
+                          onContentModeChange={setActiveMode as (mode: string) => void}
+                          onFileOpen={handleWorkspaceFileSelect}
+                        />
+                      </div>
+                    )}
                   </div>
                 );
               }

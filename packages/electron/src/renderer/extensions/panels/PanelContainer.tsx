@@ -5,12 +5,13 @@
  * Handles error boundaries and loading states.
  */
 
-import React, { useMemo, useEffect, useState, useCallback } from 'react';
-import { useAtomValue } from 'jotai';
+import React, { useMemo, useEffect, useState, useCallback, useRef } from 'react';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { themeIdAtom, type ThemeId } from '@nimbalyst/runtime/store';
 import { createExtensionStorage } from '@nimbalyst/runtime';
 import { createPanelHost, type PanelHostOptions } from './PanelHostImpl';
 import type { RegisteredPanel } from './PanelRegistry';
+import { setExtensionPanelAIContextAtom } from '../../store/atoms/extensionPanels';
 import './PanelContainer.css';
 
 // ============================================================================
@@ -89,6 +90,7 @@ export function PanelContainer({
   // Map ThemeId to panel theme type
   const theme = themeId as 'light' | 'dark' | 'crystal-dark';
   const [themeListeners] = useState(() => new Set<(theme: 'light' | 'dark' | 'crystal-dark') => void>());
+  const setExtensionPanelAIContext = useSetAtom(setExtensionPanelAIContextAtom);
 
   // Notify theme listeners when theme changes
   useEffect(() => {
@@ -127,6 +129,38 @@ export function PanelContainer({
 
     return createPanelHost(options);
   }, [panel.id, panel.extensionId, panel.aiSupported, workspacePath, storage, onOpenFile, onOpenPanel, onClose, onThemeChange, theme]);
+
+  // Subscribe to AI context changes and sync to atom
+  useEffect(() => {
+    if (!panel.aiSupported || !host.ai) {
+      return;
+    }
+
+    // Set initial context
+    const initialContext = host.ai.getContext();
+    setExtensionPanelAIContext({
+      panelId: panel.id,
+      extensionId: panel.extensionId,
+      panelTitle: panel.title,
+      context: initialContext,
+    });
+
+    // Subscribe to updates
+    const unsubscribe = host.ai.onContextChanged((context) => {
+      setExtensionPanelAIContext({
+        panelId: panel.id,
+        extensionId: panel.extensionId,
+        panelTitle: panel.title,
+        context,
+      });
+    });
+
+    // Clear context when unmounting
+    return () => {
+      unsubscribe();
+      setExtensionPanelAIContext(null);
+    };
+  }, [host, panel.id, panel.extensionId, panel.title, panel.aiSupported, setExtensionPanelAIContext]);
 
   const PanelComponent = panel.component;
 
