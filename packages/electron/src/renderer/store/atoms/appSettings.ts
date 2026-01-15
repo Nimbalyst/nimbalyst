@@ -40,6 +40,7 @@ export interface VoiceModeSettings {
   turnDetection: TurnDetectionConfig;
   voiceAgentPrompt: SystemPromptConfig;
   codingAgentPrompt: SystemPromptConfig;
+  submitDelayMs: number;
 }
 
 /**
@@ -57,6 +58,7 @@ const defaultVoiceModeSettings: VoiceModeSettings = {
   },
   voiceAgentPrompt: {},
   codingAgentPrompt: {},
+  submitDelayMs: 3000,
 };
 
 /**
@@ -188,6 +190,7 @@ export async function initVoiceModeSettings(): Promise<VoiceModeSettings> {
         turnDetection: settings.turnDetection || defaultVoiceModeSettings.turnDetection,
         voiceAgentPrompt: settings.voiceAgentPrompt || {},
         codingAgentPrompt: settings.codingAgentPrompt || {},
+        submitDelayMs: settings.submitDelayMs ?? 3000,
       };
     }
   } catch (error) {

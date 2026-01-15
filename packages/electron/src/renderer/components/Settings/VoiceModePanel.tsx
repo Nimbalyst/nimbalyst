@@ -35,6 +35,8 @@ interface VoiceModePanelProps {
   codingAgentPrompt?: SystemPromptConfig;
   onCodingAgentPromptChange?: (config: SystemPromptConfig) => void;
   workspacePath?: string;
+  submitDelayMs?: number;
+  onSubmitDelayMsChange?: (delayMs: number) => void;
 }
 
 // Default turn detection config
@@ -92,6 +94,8 @@ export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
   codingAgentPrompt,
   onCodingAgentPromptChange,
   workspacePath,
+  submitDelayMs,
+  onSubmitDelayMsChange,
 }) => {
   const [showVoiceAgentPrompt, setShowVoiceAgentPrompt] = React.useState(false);
   const [showCodingAgentPrompt, setShowCodingAgentPrompt] = React.useState(false);
@@ -463,6 +467,36 @@ export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
                   </span>
                 </div>
               </label>
+            </div>
+          </div>
+
+          <div className="provider-panel-section">
+            <h4 className="provider-panel-section-title">Command Submission</h4>
+
+            {/* Submit Delay */}
+            <div className="setting-item" style={{ marginBottom: '16px' }}>
+              <div className="setting-text">
+                <span className="setting-name">Review Delay Before Submitting</span>
+                <span className="setting-description">
+                  Time to review and edit voice commands before they're sent to the coding agent. Set to 0 for immediate submission.
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '8px' }}>
+                <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Immediate</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="10000"
+                  step="500"
+                  value={submitDelayMs ?? 3000}
+                  onChange={(e) => onSubmitDelayMsChange?.(parseInt(e.target.value))}
+                  style={{ flex: 1 }}
+                />
+                <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>10 seconds</span>
+                <span style={{ fontSize: '12px', color: 'var(--text-primary)', minWidth: '50px' }}>
+                  {((submitDelayMs ?? 3000) / 1000).toFixed(1)}s
+                </span>
+              </div>
             </div>
           </div>
 

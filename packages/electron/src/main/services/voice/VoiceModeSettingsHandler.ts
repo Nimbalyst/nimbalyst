@@ -34,6 +34,8 @@ interface VoiceModeSettings {
   voiceAgentPrompt?: SystemPromptConfig;
   // System prompt customization for coding agent (Claude) during voice mode
   codingAgentPrompt?: SystemPromptConfig;
+  // Delay before auto-submitting voice commands (0-10000ms, default 3000)
+  submitDelayMs?: number;
 }
 
 export function initVoiceModeSettingsHandler() {
@@ -54,6 +56,7 @@ export function initVoiceModeSettingsHandler() {
         enabled: false,
         voice: 'alloy',
         showTranscription: true,
+        submitDelayMs: 3000,
       };
     } catch (error) {
       console.error('[VoiceModeSettings] Failed to get settings', { error });
@@ -61,6 +64,7 @@ export function initVoiceModeSettingsHandler() {
         enabled: false,
         voice: 'alloy',
         showTranscription: true,
+        submitDelayMs: 3000,
       };
     }
   });
