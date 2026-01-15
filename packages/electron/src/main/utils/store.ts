@@ -276,6 +276,8 @@ export interface WorkspaceState {
   agentPermissions?: AgentPermissions;
   // Worktree session mode preferences (per agentic session)
   agentWorktreeSessionModes?: Record<string, 'agent' | 'files'>;
+  // Diff tree view settings (file gutter grouping)
+  diffTreeGroupByDirectory?: boolean;
   lastUpdated: number;
 }
 
@@ -377,6 +379,7 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
       aiProviderOverrides: undefined,
       agentPermissions: undefined,
       agentWorktreeSessionModes: {},
+      diffTreeGroupByDirectory: undefined,
       lastUpdated: Date.now(),
     };
   }
@@ -468,6 +471,7 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
     agentWorktreeSessionModes: raw.agentWorktreeSessionModes
       ? { ...raw.agentWorktreeSessionModes }
       : undefined,
+    diffTreeGroupByDirectory: raw.diffTreeGroupByDirectory ?? undefined,
     lastUpdated: raw.lastUpdated ?? raw.updated_at ?? Date.now(),
   };
 }
@@ -542,6 +546,7 @@ function cloneWorkspaceState(state: WorkspaceState): WorkspaceState {
     agentWorktreeSessionModes: state.agentWorktreeSessionModes
       ? { ...state.agentWorktreeSessionModes }
       : undefined,
+    diffTreeGroupByDirectory: state.diffTreeGroupByDirectory,
     lastUpdated: state.lastUpdated,
   };
 }
@@ -826,6 +831,17 @@ export function saveFileTreeFilter(workspacePath: string, filter: WorkspaceFileT
   });
 }
 
+// Diff Tree View State Management
+export function getDiffTreeGroupByDirectory(workspacePath: string): boolean {
+  return getWorkspaceState(workspacePath).diffTreeGroupByDirectory ?? false;
+}
+
+export function saveDiffTreeGroupByDirectory(workspacePath: string, groupByDirectory: boolean): void {
+  updateWorkspaceState(workspacePath, workspace => {
+    workspace.diffTreeGroupByDirectory = groupByDirectory;
+  });
+}
+
 // AI Provider Override State Management
 export function getAIProviderOverrides(workspacePath: string): AIProviderOverrides | undefined {
   return getWorkspaceState(workspacePath).aiProviderOverrides;
@@ -1061,10 +1077,22 @@ export function setExtensionSettings(settings: Record<string, ExtensionSettings>
   getAppStore().set('extensionSettings', settings);
 }
 
-export function getExtensionEnabled(extensionId: string): boolean {
+/**
+ * Get whether an extension is enabled.
+ *
+ * @param extensionId - The extension ID to check
+ * @param defaultEnabled - The manifest's defaultEnabled value (undefined means true).
+ *                         Only used if the user hasn't explicitly set a preference.
+ * @returns Whether the extension should be enabled
+ */
+export function getExtensionEnabled(extensionId: string, defaultEnabled?: boolean): boolean {
   const settings = getExtensionSettings();
-  // Default to enabled if not explicitly set
-  return settings[extensionId]?.enabled ?? true;
+  // If user has explicitly set a preference, use it
+  if (settings[extensionId]?.enabled !== undefined) {
+    return settings[extensionId].enabled;
+  }
+  // Otherwise use manifest default (true if not specified)
+  return defaultEnabled !== false;
 }
 
 export function setExtensionEnabled(extensionId: string, enabled: boolean): void {
@@ -1357,5 +1385,23 @@ export function shouldShowWalkthrough(walkthroughId: string, version?: number): 
  */
 export function resetWalkthroughState(): void {
   getAppStore().set('walkthroughs', { ...DEFAULT_WALKTHROUGH_STATE });
+}
+
+// Generic App Settings (for extension storage and other dynamic keys)
+
+/**
+ * Get a generic app setting by key.
+ * Used by extension storage to persist global data.
+ */
+export function getAppSetting<T>(key: string): T | undefined {
+  return getAppStore().get(key as keyof AppStoreSchema) as T | undefined;
+}
+
+/**
+ * Set a generic app setting by key.
+ * Used by extension storage to persist global data.
+ */
+export function setAppSetting<T>(key: string, value: T): void {
+  getAppStore().set(key as keyof AppStoreSchema, value as any);
 }
 

@@ -31,8 +31,8 @@ function registerExtensionEditors(extensionId: string): string[] {
   for (const contribution of contributions) {
     const component = components[contribution.component];
     if (!component) {
-      logger.ui.warn(
-        `[ExtensionEditorBridge] Extension ${extensionId} declares component '${contribution.component}' but does not export it`
+      console.warn(
+        `[ExtensionEditorBridge] Extension ${extensionId} declares component '${contribution.component}' but does not export it. Available components: ${Object.keys(components).join(', ')}`
       );
       continue;
     }
@@ -61,7 +61,7 @@ function registerExtensionEditors(extensionId: string): string[] {
       });
 
       registeredExtensions.push(...extensions);
-      logger.ui.info(
+      console.log(
         `[ExtensionEditorBridge] Registered ${contribution.displayName} for ${extensions.join(', ')} (sourceMode=${contribution.supportsSourceMode || false})`
       );
     }
@@ -93,9 +93,9 @@ export function syncExtensionEditors(): void {
   const loader = getExtensionLoader();
   const loadedExtensions = loader.getLoadedExtensions();
 
-  logger.ui.info(`[ExtensionEditorBridge] Syncing ${loadedExtensions.length} loaded extension(s)`);
+  console.log(`[ExtensionEditorBridge] Syncing ${loadedExtensions.length} loaded extension(s)`);
   for (const ext of loadedExtensions) {
-    logger.ui.info(`[ExtensionEditorBridge] - ${ext.manifest.id}: enabled=${ext.enabled}, components=${Object.keys(ext.module.components || {}).join(', ')}`);
+    console.log(`[ExtensionEditorBridge] - ${ext.manifest.id}: enabled=${ext.enabled}, components=${Object.keys(ext.module.components || {}).join(', ')}`);
   }
 
   // Get current set of loaded extension IDs
@@ -140,5 +140,5 @@ export function initializeExtensionEditorBridge(): void {
     syncExtensionEditors();
   });
 
-  logger.ui.info('[ExtensionEditorBridge] Initialized');
+  console.log('[ExtensionEditorBridge] Initialized');
 }

@@ -258,12 +258,16 @@
   margin-bottom: 0.125rem;
 }
 
+.file-gutter__directory-node--nested {
+  margin-left: 12px;
+}
+
 .file-gutter__directory-header {
   width: 100%;
   display: flex;
   align-items: center;
   gap: 0.25rem;
-  padding: 0.25rem 0.5rem;
+  padding: 0.25rem 0.5rem 0.25rem 0.5rem;
   font-size: 0.75rem;
   font-weight: 500;
   color: var(--text-secondary);

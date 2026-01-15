@@ -300,7 +300,7 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
     setExpandedFolders(new Set());
   };
 
-  // Auto-expand all folders when groupByDirectory is enabled
+  // Auto-expand all folders when groupByDirectory is enabled or files change
   useEffect(() => {
     if (groupByDirectory) {
       const allPaths: string[] = [];
@@ -318,7 +318,7 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
       }
       setExpandedFolders(new Set(allPaths));
     }
-  }, [groupByDirectory]);
+  }, [groupByDirectory, groupedByType]);
 
   const getOperationIcon = (operation: string) => {
     switch (operation) {
@@ -396,13 +396,13 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
   const renderDirectoryNode = (
     node: DirectoryNode,
     linkType: 'edited' | 'referenced' | 'read',
-    depth: number = 0
+    isNested: boolean = false
   ): React.ReactNode => {
     const isExpanded = expandedFolders.has(node.path);
     const hasContent = node.files.length > 0 || node.subdirectories.size > 0;
 
     return (
-      <div key={node.path} className="file-edits-sidebar__directory-node" style={{ paddingLeft: `${depth * 12}px` }}>
+      <div key={node.path} className={`file-edits-sidebar__directory-node ${isNested ? 'file-edits-sidebar__directory-node--nested' : ''}`}>
         {node.displayPath && (
           <button
             onClick={() => toggleFolder(node.path)}
@@ -427,7 +427,7 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
           <div className="file-edits-sidebar__directory-children">
             {/* Render subdirectories first */}
             {Array.from(node.subdirectories.values()).map(subdir =>
-              renderDirectoryNode(subdir, linkType, node.displayPath ? depth + 1 : depth)
+              renderDirectoryNode(subdir, linkType, true)
             )}
 
             {/* Render files */}
@@ -438,7 +438,6 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
                   key={filePath}
                   onClick={() => onFileClick?.(filePath)}
                   className={`file-edits-sidebar__file ${hasPendingReview ? 'file-edits-sidebar__file--pending' : ''}`}
-                  style={{ paddingLeft: `${(node.displayPath ? depth + 1 : depth) * 12 + 24}px` }}
                 >
                   <div className="file-edits-sidebar__file-content">
                     {hasPendingReview && (

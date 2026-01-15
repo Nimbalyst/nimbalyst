@@ -143,9 +143,19 @@ const TranscriptSectionComponent: React.FC<TranscriptSectionProps> = ({
   // Track files with pending AI edits for this session
   const [pendingReviewFiles, setPendingReviewFiles] = useState<Set<string>>(new Set());
 
-  // Diff tree grouping state (persisted per project)
+  // Diff tree grouping state (persisted per project via Jotai + workspace state)
   const [groupByDirectory] = useAtom(diffTreeGroupByDirectoryAtom);
-  const setGroupByDirectory = useSetAtom(setDiffTreeGroupByDirectoryAtom);
+  const setDiffTreeGroupByDirectory = useSetAtom(setDiffTreeGroupByDirectoryAtom);
+
+  // Wrapper to pass workspacePath to the setter atom
+  const setGroupByDirectory = useCallback((value: boolean) => {
+    if (workspacePath) {
+      setDiffTreeGroupByDirectory({ groupByDirectory: value, workspacePath });
+    }
+  }, [workspacePath, setDiffTreeGroupByDirectory]);
+
+  // Note: groupByDirectory is hydrated from workspace state once at app init (in App.tsx)
+  // No need to load it here - just use the Jotai atom value
 
   // Fetch pending review files for this session
   useEffect(() => {

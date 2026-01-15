@@ -65,8 +65,8 @@ export const KeyboardShortcuts = {
     reload: 'Cmd+R',
     forceReload: 'Cmd+Shift+R',
 
-    // Full screen
-    toggleFullScreen: 'Ctrl+Cmd+F'
+    // Full screen - platform-specific (F11 is standard on Windows/Linux)
+    toggleFullScreen: process.platform === 'darwin' ? 'Ctrl+Cmd+F' : 'F11'
   },
 
   // Window Menu

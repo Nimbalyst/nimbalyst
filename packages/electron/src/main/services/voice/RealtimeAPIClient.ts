@@ -61,6 +61,9 @@ export class RealtimeAPIClient {
   private connected: boolean = false;
   private onAudioCallback: ((audioBase64: string) => void) | null = null;
   private onTextCallback: ((text: string) => void) | null = null;
+  private onUserTranscriptCallback: ((transcript: string) => void) | null = null;
+  private onUserTranscriptDeltaCallback: ((delta: string, itemId: string) => void) | null = null;
+  private onTokenUsageCallback: ((usage: { inputAudio: number; outputAudio: number; text: number; total: number }) => void) | null = null;
   private onSubmitPromptCallback: ((prompt: string) => Promise<void>) | null = null;
   private onInterruptionCallback: (() => void) | null = null;
   private onDisconnectCallback: ((reason: 'timeout' | 'error' | 'user_stopped') => void) | null = null;
@@ -123,10 +126,31 @@ export class RealtimeAPIClient {
   }
 
   /**
-   * Set callback for received text
+   * Set callback for received text (assistant responses)
    */
   setOnText(callback: (text: string) => void): void {
     this.onTextCallback = callback;
+  }
+
+  /**
+   * Set callback for user speech transcription (final/complete)
+   */
+  setOnUserTranscript(callback: (transcript: string) => void): void {
+    this.onUserTranscriptCallback = callback;
+  }
+
+  /**
+   * Set callback for user speech transcription delta (streaming/partial)
+   */
+  setOnUserTranscriptDelta(callback: (delta: string, itemId: string) => void): void {
+    this.onUserTranscriptDeltaCallback = callback;
+  }
+
+  /**
+   * Set callback for token usage updates (for live context indicator)
+   */
+  setOnTokenUsage(callback: (usage: { inputAudio: number; outputAudio: number; text: number; total: number }) => void): void {
+    this.onTokenUsageCallback = callback;
   }
 
   /**
@@ -306,6 +330,24 @@ export class RealtimeAPIClient {
         this.updateActivity();
         break;
 
+      case 'conversation.item.input_audio_transcription.delta':
+        // Streaming transcription delta - shows partial text while user is speaking
+        const delta = (event as any).delta as string;
+        const deltaItemId = (event as any).item_id as string;
+        if (delta && this.onUserTranscriptDeltaCallback) {
+          this.onUserTranscriptDeltaCallback(delta, deltaItemId);
+        }
+        break;
+
+      case 'conversation.item.input_audio_transcription.completed':
+        // User's speech has been transcribed (final result)
+        const transcript = (event as any).transcript as string;
+        console.log('[RealtimeAPIClient] User transcript received:', transcript);
+        if (transcript && this.onUserTranscriptCallback) {
+          this.onUserTranscriptCallback(transcript);
+        }
+        break;
+
       case 'error':
         const errorEvent = event as any;
         console.error('[RealtimeAPIClient] Server error:', JSON.stringify(errorEvent.error, null, 2));
@@ -350,7 +392,14 @@ Guidelines:
 - Only answer directly for truly general knowledge questions completely unrelated to this project (like "what time is it" or "tell me a joke")
 - For "[INTERNAL: ...]" messages: these are completion notifications from the coding agent - briefly acknowledge ("Done" + short summary)
 - When summarizing coding agent responses: adapt length to complexity, paraphrase technical details naturally for speech
-- Never read code, file paths, or technical details verbatim`;
+- Never read code, file paths, or technical details verbatim
+
+CRITICAL - Passing through user requests:
+When the user says "ask the coding agent..." or "tell the coding agent..." or similar, you MUST pass their request VERBATIM to the coding agent. Do NOT rephrase, interpret, or add your own context. Examples:
+- User: "Ask the coding agent for a random number" -> Pass exactly: "Give me a random number"
+- User: "Tell the coding agent HMR is not the problem" -> Pass exactly: "HMR is not the problem"
+- User: "Ask Claude what file handles voice mode" -> Pass exactly: "What file handles voice mode?"
+Your job is to be a voice relay, not to interpret or improve the user's requests.`;
 
     // Apply custom prepend/append if configured
     let instructions = baseInstructions;
@@ -421,13 +470,13 @@ Guidelines:
         {
           type: 'function',
           name: 'ask_coding_agent',
-          description: 'Ask the coding agent a question when you need more information to answer the user. The coding agent can search files, read code, look up documentation, run web searches, or use its knowledge of the codebase. Use this when the user asks about something you do not know - like details about the project, how something works, what a file contains, recent changes, etc. The coding agent will provide a detailed answer which you should then summarize appropriately for voice.',
+          description: 'Send a message to the coding agent. IMPORTANT: When the user says "ask the coding agent X" or "tell the coding agent Y", pass their message VERBATIM - do not rephrase or interpret it. The coding agent can search files, read code, look up documentation, run web searches, or answer questions. You are a voice relay - pass through what the user says exactly.',
           parameters: {
             type: 'object',
             properties: {
               question: {
                 type: 'string',
-                description: 'The question to ask the coding agent. Be specific about what information you need. Examples: "What does the VoiceModeService do?", "How is authentication implemented?", "What files handle the editor tabs?"',
+                description: 'The message to send to the coding agent. PASS VERBATIM what the user said - do not rephrase, interpret, or add context. If user says "ask coding agent for a random number", send "give me a random number". If user says "tell coding agent HMR is not the problem", send "HMR is not the problem".',
               },
             },
             required: ['question'],
@@ -765,6 +814,16 @@ Guidelines:
         total: totalTokens
       }
     });
+
+    // Notify listener of updated token usage
+    if (this.onTokenUsageCallback) {
+      this.onTokenUsageCallback({
+        inputAudio: this.inputAudioTokens,
+        outputAudio: this.outputAudioTokens,
+        text: this.textTokens,
+        total: totalTokens,
+      });
+    }
   }
 
   /**

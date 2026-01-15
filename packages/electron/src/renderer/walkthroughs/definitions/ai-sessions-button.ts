@@ -7,6 +7,7 @@
 
 import type { WalkthroughDefinition } from '../types';
 import { getHelpContent } from '../../help';
+import { isTargetValid } from '../WalkthroughService';
 
 const aiSessionsHelp = getHelpContent('ai-sessions-button')!;
 
@@ -20,7 +21,7 @@ export const aiSessionsButton: WalkthroughDefinition = {
     // Only show when the AI sessions button is visible AND not in diff mode
     condition: () => {
       const button = document.querySelector('[data-testid="ai-sessions-button"]');
-      if (!button) return false;
+      if (!button || !isTargetValid(button as HTMLElement)) return false;
 
       // Don't show if in diff mode (unified diff header or monaco diff approval bar visible)
       const unifiedDiffHeader = document.querySelector('.unified-diff-header');

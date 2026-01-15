@@ -25,6 +25,12 @@ import type {
   NewFileMenuContribution,
   SlashCommandContribution,
   ClaudePluginContribution,
+  PanelContribution,
+  SettingsPanelContribution,
+  LoadedPanel,
+  PanelHostProps,
+  PanelGutterButtonProps,
+  SettingsPanelProps,
 } from './types';
 import { getExtensionPlatformService } from './ExtensionPlatformService';
 
@@ -1009,6 +1015,94 @@ export class ExtensionLoader {
   }
 
   /**
+   * Get all panel contributions from loaded extensions.
+   * Panels are non-file-based UIs like database browsers, dashboards, etc.
+   */
+  getPanels(): LoadedPanel[] {
+    const panels: LoadedPanel[] = [];
+
+    for (const loaded of this.loadedExtensions.values()) {
+      if (!loaded.enabled) continue;
+
+      const contributions = loaded.manifest.contributions?.panels || [];
+      const panelExports = loaded.module.panels || {};
+
+      for (const contribution of contributions) {
+        const panelExport = panelExports[contribution.id];
+        if (panelExport && panelExport.component) {
+          panels.push({
+            id: `${loaded.manifest.id}.${contribution.id}`,
+            extensionId: loaded.manifest.id,
+            contribution,
+            component: panelExport.component as ComponentType<PanelHostProps>,
+            gutterButton: panelExport.gutterButton as ComponentType<PanelGutterButtonProps> | undefined,
+            settingsComponent: panelExport.settingsComponent as ComponentType<PanelHostProps> | undefined,
+          });
+        } else {
+          console.warn(
+            `[ExtensionLoader] Extension ${loaded.manifest.id} declares panel '${contribution.id}' but does not export it or missing component`
+          );
+        }
+      }
+    }
+
+    // Sort by order (lower first)
+    panels.sort((a, b) => (a.contribution.order ?? 100) - (b.contribution.order ?? 100));
+
+    return panels;
+  }
+
+  /**
+   * Get all settings panel contributions from loaded extensions.
+   * These appear in the Settings screen under the "Extensions" section.
+   */
+  getSettingsPanels(): Array<{
+    extensionId: string;
+    contribution: SettingsPanelContribution;
+    component: ComponentType<SettingsPanelProps>;
+  }> {
+    const panels: Array<{
+      extensionId: string;
+      contribution: SettingsPanelContribution;
+      component: ComponentType<SettingsPanelProps>;
+    }> = [];
+
+    for (const loaded of this.loadedExtensions.values()) {
+      if (!loaded.enabled) continue;
+
+      const contribution = loaded.manifest.contributions?.settingsPanel;
+      if (!contribution) continue;
+
+      const settingsPanelExports = loaded.module.settingsPanel || {};
+      const component = settingsPanelExports[contribution.component];
+
+      if (component) {
+        panels.push({
+          extensionId: loaded.manifest.id,
+          contribution,
+          component: component as ComponentType<SettingsPanelProps>,
+        });
+      } else {
+        console.warn(
+          `[ExtensionLoader] Extension ${loaded.manifest.id} declares settings panel '${contribution.component}' but does not export it`
+        );
+      }
+    }
+
+    // Sort by order (lower first)
+    panels.sort((a, b) => (a.contribution.order ?? 100) - (b.contribution.order ?? 100));
+
+    return panels;
+  }
+
+  /**
+   * Find a panel by its full ID (extensionId.panelId).
+   */
+  findPanelById(panelId: string): LoadedPanel | undefined {
+    return this.getPanels().find(p => p.id === panelId);
+  }
+
+  /**
    * Subscribe to extension changes
    */
   subscribe(listener: () => void): () => void {
@@ -1127,8 +1221,12 @@ let extensionLoader: ExtensionLoader | null = null;
 /**
  * Callback to query persisted enabled state for extensions.
  * Allows platform-specific persistence (Electron store, etc.)
+ *
+ * @param extensionId - The extension ID to check
+ * @param defaultEnabled - The manifest's defaultEnabled value (undefined means true)
+ * @returns Whether the extension should be enabled
  */
-let enabledStateProvider: ((extensionId: string) => Promise<boolean>) | null = null;
+let enabledStateProvider: ((extensionId: string, defaultEnabled?: boolean) => Promise<boolean>) | null = null;
 
 /**
  * Configuration service provider interface.
@@ -1146,9 +1244,11 @@ let configurationServiceProvider: ConfigurationServiceProvider | null = null;
  * Set a callback that will be called to get the persisted enabled state
  * for each extension when it's loaded. This allows the platform layer
  * (Electron, Capacitor) to provide persistence.
+ *
+ * @param provider - Function that takes extensionId and defaultEnabled, returns whether to enable
  */
 export function setEnabledStateProvider(
-  provider: (extensionId: string) => Promise<boolean>
+  provider: (extensionId: string, defaultEnabled?: boolean) => Promise<boolean>
 ): void {
   enabledStateProvider = provider;
 }
@@ -1190,17 +1290,17 @@ export async function initializeExtensions(): Promise<void> {
   // console.info(`[ExtensionLoader] Found ${discovered.length} extension(s)`);
 
   for (const ext of discovered) {
-    // Check persisted enabled state
+    // Check persisted enabled state, passing manifest's defaultEnabled
     let shouldLoad = true;
     if (enabledStateProvider) {
       try {
-        shouldLoad = await enabledStateProvider(ext.manifest.id);
+        shouldLoad = await enabledStateProvider(ext.manifest.id, ext.manifest.defaultEnabled);
       } catch (error) {
         console.warn(
           `[ExtensionLoader] Failed to check enabled state for ${ext.manifest.id}, defaulting to enabled:`,
           error
         );
-        shouldLoad = true;
+        shouldLoad = ext.manifest.defaultEnabled !== false;
       }
     }
 

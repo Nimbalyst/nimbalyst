@@ -24,8 +24,6 @@
     "analyze:top": "node scripts/bundle-size.js --top",
     "clean": "rm -rf packages/*/node_modules/.vite packages/*/dist node_modules/.cache",
     "clean:full": "rm -rf packages/*/node_modules packages/*/dist node_modules && npm install",
-    "tauri:dev": "npm run tauri dev --prefix packages/tauri",
-    "tauri:build": "npm run tauri build --prefix packages/tauri",
     "cap:dev": "npm run dev --prefix packages/capacitor",
     "cap:build": "npm run build --prefix packages/capacitor",
     "cap:ios": "npm run ios --prefix packages/capacitor",
@@ -64,7 +62,7 @@
     "packages/extensions/*"
   ],
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.2.2",
+    "@anthropic-ai/claude-agent-sdk": "0.2.7",
     "@types/node-forge": "^1.3.14",
     "ajv-formats": "^3.0.1",
     "content-type": "^1.0.5",

@@ -17,7 +17,7 @@
     "devdeploy:ios": "npm run build && npx cap sync ios"
   },
   "dependencies": {
-    "@capacitor-mlkit/barcode-scanning": "^7.0.0",
+    "@capacitor/barcode-scanner": "^2.2.4",
     "@capacitor/app": "^7.0.1",
     "@capacitor/browser": "^7.0.1",
     "@capacitor/core": "^7.4.4",

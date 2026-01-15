@@ -316,17 +316,26 @@ export const setExpandedDirsAtom = atom(null, (get, set, dirs: string[]) => {
 
 /**
  * Set diff tree group by directory.
+ * Also persists to workspace state via IPC.
  */
 export const setDiffTreeGroupByDirectoryAtom = atom(
   null,
-  (get, set, groupByDirectory: boolean) => {
+  (get, set, payload: { groupByDirectory: boolean; workspacePath: string }) => {
+    const { groupByDirectory, workspacePath } = payload;
     const state = get(projectStateAtom);
     const newState = {
       ...state,
       diffTree: { ...state.diffTree, groupByDirectory },
     };
     set(projectStateAtom, newState);
-    schedulePersist(newState);
+    // Persist to workspace state via IPC
+    if (workspacePath && typeof window !== 'undefined' && window.electronAPI) {
+      window.electronAPI.invoke('workspace:update-state', workspacePath, {
+        diffTreeGroupByDirectory: groupByDirectory,
+      }).catch((err: unknown) => {
+        console.error('[projectState] Failed to persist diffTreeGroupByDirectory:', err);
+      });
+    }
   }
 );
 

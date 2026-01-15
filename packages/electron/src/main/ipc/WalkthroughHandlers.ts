@@ -6,6 +6,7 @@
  * - Enabling/disabling walkthroughs globally
  * - Marking walkthroughs as completed or dismissed
  * - Resetting walkthrough state (for testing)
+ * - Registering walkthrough metadata for dynamic menu generation
  */
 
 import { safeHandle } from '../utils/ipcRegistry';
@@ -18,6 +19,21 @@ import {
   resetWalkthroughState,
   type WalkthroughState,
 } from '../utils/store';
+import { updateApplicationMenu } from '../menu/ApplicationMenu';
+
+/** Walkthrough metadata for menu generation */
+export interface WalkthroughMenuEntry {
+  id: string;
+  name: string;
+}
+
+/** Registered walkthroughs from renderer - used for dynamic menu */
+let registeredWalkthroughs: WalkthroughMenuEntry[] = [];
+
+/** Get the current list of registered walkthroughs */
+export function getRegisteredWalkthroughs(): WalkthroughMenuEntry[] {
+  return registeredWalkthroughs;
+}
 
 export function registerWalkthroughHandlers(): void {
   /**
@@ -70,4 +86,17 @@ export function registerWalkthroughHandlers(): void {
   safeHandle('walkthroughs:reset', async (): Promise<void> => {
     resetWalkthroughState();
   });
+
+  /**
+   * Register walkthrough metadata from renderer for dynamic menu generation.
+   * Called once when the renderer initializes with the list of available walkthroughs.
+   */
+  safeHandle(
+    'walkthroughs:register-menu-entries',
+    async (_event, entries: WalkthroughMenuEntry[]): Promise<void> => {
+      registeredWalkthroughs = entries;
+      // Rebuild menu to include the new walkthrough entries
+      await updateApplicationMenu();
+    }
+  );
 }

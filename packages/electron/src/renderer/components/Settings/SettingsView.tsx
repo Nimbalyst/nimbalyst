@@ -609,6 +609,9 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
           onVoiceAgentPromptChange={(value) => handleVoiceModeChange({ voiceAgentPrompt: value })}
           codingAgentPrompt={voiceModeSettings.codingAgentPrompt}
           onCodingAgentPromptChange={(value) => handleVoiceModeChange({ codingAgentPrompt: value })}
+          workspacePath={workspacePath ?? undefined}
+          submitDelayMs={voiceModeSettings.submitDelayMs}
+          onSubmitDelayMsChange={(value) => handleVoiceModeChange({ submitDelayMs: value })}
         />;
       case 'installed-extensions':
         return (

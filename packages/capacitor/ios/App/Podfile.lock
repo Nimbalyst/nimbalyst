@@ -3,87 +3,32 @@ PODS:
     - CapacitorCordova
   - CapacitorApp (7.1.1):
     - Capacitor
+  - CapacitorBarcodeScanner (2.2.4):
+    - Capacitor
+    - OSBarcodeLib (= 2.0.1)
   - CapacitorBrowser (7.0.3):
     - Capacitor
   - CapacitorCordova (7.4.4)
-  - CapacitorMlkitBarcodeScanning (7.5.0):
-    - Capacitor
-    - GoogleMLKit/BarcodeScanning (= 7.0.0)
   - CapacitorPreferences (7.0.3):
     - Capacitor
   - CapacitorSecureStoragePlugin (0.12.0):
     - Capacitor
     - SwiftKeychainWrapper
-  - GoogleDataTransport (10.1.0):
-    - nanopb (~> 3.30910.0)
-    - PromisesObjC (~> 2.4)
-  - GoogleMLKit/BarcodeScanning (7.0.0):
-    - GoogleMLKit/MLKitCore
-    - MLKitBarcodeScanning (~> 6.0.0)
-  - GoogleMLKit/MLKitCore (7.0.0):
-    - MLKitCommon (~> 12.0.0)
-  - GoogleToolboxForMac/Defines (4.2.1)
-  - GoogleToolboxForMac/Logger (4.2.1):
-    - GoogleToolboxForMac/Defines (= 4.2.1)
-  - "GoogleToolboxForMac/NSData+zlib (4.2.1)":
-    - GoogleToolboxForMac/Defines (= 4.2.1)
-  - GoogleUtilities/Environment (8.1.0):
-    - GoogleUtilities/Privacy
-  - GoogleUtilities/Logger (8.1.0):
-    - GoogleUtilities/Environment
-    - GoogleUtilities/Privacy
-  - GoogleUtilities/Privacy (8.1.0)
-  - GoogleUtilities/UserDefaults (8.1.0):
-    - GoogleUtilities/Logger
-    - GoogleUtilities/Privacy
-  - GTMSessionFetcher/Core (3.5.0)
-  - MLImage (1.0.0-beta6)
-  - MLKitBarcodeScanning (6.0.0):
-    - MLKitCommon (~> 12.0)
-    - MLKitVision (~> 8.0)
-  - MLKitCommon (12.0.0):
-    - GoogleDataTransport (~> 10.0)
-    - GoogleToolboxForMac/Logger (< 5.0, >= 4.2.1)
-    - "GoogleToolboxForMac/NSData+zlib (< 5.0, >= 4.2.1)"
-    - GoogleUtilities/Logger (~> 8.0)
-    - GoogleUtilities/UserDefaults (~> 8.0)
-    - GTMSessionFetcher/Core (< 4.0, >= 3.3.2)
-  - MLKitVision (8.0.0):
-    - GoogleToolboxForMac/Logger (< 5.0, >= 4.2.1)
-    - "GoogleToolboxForMac/NSData+zlib (< 5.0, >= 4.2.1)"
-    - GTMSessionFetcher/Core (< 4.0, >= 3.3.2)
-    - MLImage (= 1.0.0-beta6)
-    - MLKitCommon (~> 12.0)
-  - nanopb (3.30910.0):
-    - nanopb/decode (= 3.30910.0)
-    - nanopb/encode (= 3.30910.0)
-  - nanopb/decode (3.30910.0)
-  - nanopb/encode (3.30910.0)
-  - PromisesObjC (2.4.0)
+  - OSBarcodeLib (2.0.1)
   - SwiftKeychainWrapper (4.0.1)
 
 DEPENDENCIES:
   - "Capacitor (from `../../../../node_modules/@capacitor/ios`)"
   - "CapacitorApp (from `../../../../node_modules/@capacitor/app`)"
+  - "CapacitorBarcodeScanner (from `../../../../node_modules/@capacitor/barcode-scanner`)"
   - "CapacitorBrowser (from `../../../../node_modules/@capacitor/browser`)"
   - "CapacitorCordova (from `../../../../node_modules/@capacitor/ios`)"
-  - "CapacitorMlkitBarcodeScanning (from `../../../../node_modules/@capacitor-mlkit/barcode-scanning`)"
   - "CapacitorPreferences (from `../../../../node_modules/@capacitor/preferences`)"
   - CapacitorSecureStoragePlugin (from `../../../../node_modules/capacitor-secure-storage-plugin`)
 
 SPEC REPOS:
   trunk:
-    - GoogleDataTransport
-    - GoogleMLKit
-    - GoogleToolboxForMac
-    - GoogleUtilities
-    - GTMSessionFetcher
-    - MLImage
-    - MLKitBarcodeScanning
-    - MLKitCommon
-    - MLKitVision
-    - nanopb
-    - PromisesObjC
+    - OSBarcodeLib
     - SwiftKeychainWrapper
 
 EXTERNAL SOURCES:
@@ -91,12 +36,12 @@ EXTERNAL SOURCES:
     :path: "../../../../node_modules/@capacitor/ios"
   CapacitorApp:
     :path: "../../../../node_modules/@capacitor/app"
+  CapacitorBarcodeScanner:
+    :path: "../../../../node_modules/@capacitor/barcode-scanner"
   CapacitorBrowser:
     :path: "../../../../node_modules/@capacitor/browser"
   CapacitorCordova:
     :path: "../../../../node_modules/@capacitor/ios"
-  CapacitorMlkitBarcodeScanning:
-    :path: "../../../../node_modules/@capacitor-mlkit/barcode-scanning"
   CapacitorPreferences:
     :path: "../../../../node_modules/@capacitor/preferences"
   CapacitorSecureStoragePlugin:
@@ -105,24 +50,14 @@ EXTERNAL SOURCES:
 SPEC CHECKSUMS:
   Capacitor: 358dd1c3fdd71d969547b17e159fd8a7736cb45f
   CapacitorApp: 63b237168fc869e758481dba283315a85743ee78
+  CapacitorBarcodeScanner: 4e00db2f78415726d0c1f905adc11aaac6225b11
   CapacitorBrowser: b98aa3db018a2ce4c68242d27e596c344f3b81b3
   CapacitorCordova: bf648a636f3c153f652d312ae145fb508b6ffced
-  CapacitorMlkitBarcodeScanning: afd6fc431b550026a2c052e11ab2b71c7ae30011
   CapacitorPreferences: 913eef88272c13eb6445b21e51fe8ef6635412cc
   CapacitorSecureStoragePlugin: 50de0808ad398aa401e00f9e58adf88c77cb3c25
-  GoogleDataTransport: aae35b7ea0c09004c3797d53c8c41f66f219d6a7
-  GoogleMLKit: eff9e23ec1d90ea4157a1ee2e32a4f610c5b3318
-  GoogleToolboxForMac: d1a2cbf009c453f4d6ded37c105e2f67a32206d8
-  GoogleUtilities: 00c88b9a86066ef77f0da2fab05f65d7768ed8e1
-  GTMSessionFetcher: 5aea5ba6bd522a239e236100971f10cb71b96ab6
-  MLImage: 0ad1c5f50edd027672d8b26b0fee78a8b4a0fc56
-  MLKitBarcodeScanning: 0a3064da0a7f49ac24ceb3cb46a5bc67496facd2
-  MLKitCommon: 07c2c33ae5640e5380beaaa6e4b9c249a205542d
-  MLKitVision: 45e79d68845a2de77e2dd4d7f07947f0ed157b0e
-  nanopb: fad817b59e0457d11a5dfbde799381cd727c1275
-  PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
+  OSBarcodeLib: 57987d2eb1f916f701f4554e20e349b3cb83f023
   SwiftKeychainWrapper: 807ba1d63c33a7d0613288512399cd1eda1e470c
 
-PODFILE CHECKSUM: ab946b819f798450aeafdbf5e301e0aa04a4091a
+PODFILE CHECKSUM: ed81cae6356cfd83ea4f22caab0184017977c74f
 
 COCOAPODS: 1.16.2

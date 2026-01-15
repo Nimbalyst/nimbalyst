@@ -492,10 +492,8 @@ async function handleAuthRoutes(
       const deepLinkUrl = `nimbalyst://auth/callback?${deepLinkParams.toString()}`;
 
       // Return a page that redirects to the deep link
-      // Show tokens in dev mode or if ?showTokens=1 query param is present (for browser testing)
-      const isDev = env.ENVIRONMENT === 'development' || env.ENVIRONMENT === 'local';
-      const showTokens = isDev || url.searchParams.get('showTokens') === '1';
-      return new Response(renderSuccessPage(deepLinkUrl, sessionData, showTokens), {
+      // Always show session copy option for manual setup on devices that can't use deep links
+      return new Response(renderSuccessPage(deepLinkUrl, sessionData, true), {
         status: 200,
         headers: { 'Content-Type': 'text/html' },
       });
@@ -600,7 +598,7 @@ async function handleAuthRoutes(
 
 /**
  * Render success page that redirects to deep link
- * Shows tokens for dev mode browser testing (only in development)
+ * Shows session data for manual setup on devices that can't use deep links
  */
 function renderSuccessPage(deepLinkUrl: string, sessionData: {
   sessionToken: string;
@@ -608,8 +606,8 @@ function renderSuccessPage(deepLinkUrl: string, sessionData: {
   userId: string;
   email: string;
   expiresAt: string;
-}, isDev: boolean = false): string {
-  const devJson = isDev ? JSON.stringify({
+}, showManualSetup: boolean = false): string {
+  const sessionJson = showManualSetup ? JSON.stringify({
     sessionToken: sessionData.sessionToken,
     sessionJwt: sessionData.sessionJwt,
     userId: sessionData.userId,
@@ -617,23 +615,30 @@ function renderSuccessPage(deepLinkUrl: string, sessionData: {
     expiresAt: sessionData.expiresAt,
   }, null, 2) : '';
 
-  const devSectionHtml = isDev ? `
-    <div class="dev-section">
-      <h2>Dev Mode: Copy Session Tokens</h2>
-      <div class="token-box" id="tokenBox">${devJson}</div>
-      <button class="button copy-btn" onclick="copyTokens()">Copy Session JSON</button>
+  // Escape JSON for embedding in HTML attribute
+  const escapedJson = sessionJson.replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+
+  const manualSetupHtml = showManualSetup ? `
+    <div class="manual-setup-section">
+      <p class="manual-setup-desc">App didn't open? Copy session data for manual setup.</p>
+      <button class="button secondary-btn copy-btn" onclick="copyTokens()">Copy Session Data</button>
+      <input type="hidden" id="tokenData" value="${escapedJson}" />
     </div>
   ` : '';
 
-  const devScriptHtml = isDev ? `
+  const copyScriptHtml = showManualSetup ? `
     function copyTokens() {
-      const tokenBox = document.getElementById('tokenBox');
-      navigator.clipboard.writeText(tokenBox.textContent).then(() => {
+      const tokenData = document.getElementById('tokenData').value;
+      // Unescape HTML entities
+      const textarea = document.createElement('textarea');
+      textarea.innerHTML = tokenData;
+      const json = textarea.value;
+      navigator.clipboard.writeText(json).then(() => {
         const btn = document.querySelector('.copy-btn');
         btn.textContent = 'Copied!';
         btn.classList.add('copied');
         setTimeout(() => {
-          btn.textContent = 'Copy Session JSON';
+          btn.textContent = 'Copy Session Data';
           btn.classList.remove('copied');
         }, 2000);
       });
@@ -685,37 +690,23 @@ function renderSuccessPage(deepLinkUrl: string, sessionData: {
     }
     .button:hover { transform: scale(1.05); }
     .auto-redirect { font-size: 12px; opacity: 0.7; margin-top: 16px; }
-    .dev-section {
+    .manual-setup-section {
       margin-top: 32px;
       padding-top: 24px;
       border-top: 1px solid rgba(255,255,255,0.2);
     }
-    .dev-section h2 {
-      font-size: 14px;
-      opacity: 0.8;
-      margin-bottom: 12px;
-    }
-    .token-box {
-      background: rgba(0,0,0,0.3);
-      border-radius: 8px;
-      padding: 12px;
-      font-family: monospace;
-      font-size: 11px;
-      text-align: left;
-      white-space: pre-wrap;
-      word-break: break-all;
-      max-height: 200px;
-      overflow-y: auto;
-      margin-bottom: 12px;
-    }
-    .copy-btn {
-      background: rgba(255,255,255,0.2);
-      color: white;
-      padding: 8px 16px;
-      border-radius: 6px;
+    .manual-setup-desc {
       font-size: 12px;
+      opacity: 0.7;
+      margin-bottom: 12px;
+      margin-top: 0;
     }
-    .copy-btn:hover { background: rgba(255,255,255,0.3); }
+    .secondary-btn {
+      background: rgba(255,255,255,0.15);
+      color: white;
+      font-size: 13px;
+    }
+    .secondary-btn:hover { background: rgba(255,255,255,0.25); }
     .copied { background: #22c55e !important; }
   </style>
 </head>
@@ -725,14 +716,14 @@ function renderSuccessPage(deepLinkUrl: string, sessionData: {
     <p>Click the button below to return to Nimbalyst, or it will open automatically.</p>
     <a href="${deepLinkUrl}" class="button">Open Nimbalyst</a>
     <p class="auto-redirect">Redirecting automatically...</p>
-    ${devSectionHtml}
+    ${manualSetupHtml}
   </div>
   <script>
     // Try to open the deep link automatically
     setTimeout(() => {
       window.location.href = "${deepLinkUrl}";
     }, 1500);
-    ${devScriptHtml}
+    ${copyScriptHtml}
   </script>
 </body>
 </html>`;

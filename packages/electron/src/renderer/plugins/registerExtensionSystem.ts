@@ -416,8 +416,9 @@ export async function registerExtensionSystem(): Promise<void> {
   setExtensionPlatformService(service);
 
   // Set up the enabled state provider to query persisted enabled state from main process
-  setEnabledStateProvider(async (extensionId: string) => {
-    return window.electronAPI.extensions.getEnabled(extensionId);
+  // Pass defaultEnabled so main process can use it for first-time extensions
+  setEnabledStateProvider(async (extensionId: string, defaultEnabled?: boolean) => {
+    return window.electronAPI.extensions.getEnabled(extensionId, defaultEnabled);
   });
 
   // Set up the configuration service provider for extension settings

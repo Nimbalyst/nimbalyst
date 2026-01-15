@@ -51,17 +51,17 @@ export class ChokidarFileWatcher {
                 const pendingTags = await historyManager.getPendingTags(filePath);
                 const hasPendingTag = pendingTags && pendingTags.length > 0;
 
-                console.log('[FILE CHANGE]', {
-                    file: require('path').basename(filePath),
-                    hasPendingTag,
-                    tagId: hasPendingTag ? pendingTags[0].id : undefined,
-                });
+                // console.log('[FILE CHANGE]', {
+                //     file: require('path').basename(filePath),
+                //     hasPendingTag,
+                //     tagId: hasPendingTag ? pendingTags[0].id : undefined,
+                // });
             } catch (err) {
                 // If historyManager check fails, just log the file change
                 console.log('[FILE CHANGE]', require('path').basename(filePath));
             }
 
-            logger.fileWatcher.info(`File changed: ${filePath}`);
+            // logger.fileWatcher.info(`File changed: ${filePath}`);
             contents.send('file-changed-on-disk', { path: filePath });
         } catch (error) {
             logger.fileWatcher.error(`Error sending event:`, error);

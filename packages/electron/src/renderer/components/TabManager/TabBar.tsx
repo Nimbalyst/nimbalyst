@@ -703,6 +703,7 @@ export const TabBar: React.FC<TabBarProps> = ({
           {onToggleAIChat && (
             <button
               className="ai-chat-toggle-button"
+              data-testid="ai-sidebar-toggle"
               onClick={onToggleAIChat}
               title={isAIChatCollapsed ? "Open AI Assistant (⌘⇧A)" : "Close AI Assistant (⌘⇧A)"}
               aria-label={isAIChatCollapsed ? "Open AI Assistant" : "Close AI Assistant"}

@@ -824,12 +824,13 @@ export function registerExtensionHandlers(): void {
   });
 
   // Get enabled state for a specific extension
-  safeHandle('extensions:get-enabled', async (_event, extensionId: string) => {
+  // defaultEnabled comes from the extension's manifest and is used for first-time discovery
+  safeHandle('extensions:get-enabled', async (_event, extensionId: string, defaultEnabled?: boolean) => {
     try {
-      return getExtensionEnabled(extensionId);
+      return getExtensionEnabled(extensionId, defaultEnabled);
     } catch (error) {
       logger.main.error(`[ExtensionHandlers] Failed to get enabled state for ${extensionId}:`, error);
-      return true; // Default to enabled
+      return defaultEnabled !== false; // Respect manifest default on error
     }
   });
 

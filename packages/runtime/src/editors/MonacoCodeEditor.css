@@ -23,6 +23,8 @@
 /* Override Monaco's default background to match Nimbalyst theme */
 .monaco-code-editor .monaco-editor {
   background-color: var(--surface-primary) !important;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .monaco-code-editor .monaco-editor .margin {

@@ -58,6 +58,16 @@ export async function resetWalkthroughState(): Promise<void> {
 }
 
 /**
+ * Register walkthrough metadata with main process for dynamic menu generation.
+ * Should be called once when the renderer initializes.
+ */
+export async function registerWalkthroughMenuEntries(
+  walkthroughs: Array<{ id: string; name: string }>
+): Promise<void> {
+  return window.electronAPI.invoke('walkthroughs:register-menu-entries', walkthroughs);
+}
+
+/**
  * Check if a walkthrough should be shown based on current state
  */
 export function shouldShowWalkthrough(
@@ -86,19 +96,35 @@ export function shouldShowWalkthrough(
 /**
  * Resolve target element from a WalkthroughStep target specification.
  * Prefers data-testid, falls back to selector.
+ * Only returns elements that are actually visible (not in hidden panels).
  */
 export function resolveTarget(target: WalkthroughStep['target']): HTMLElement | null {
+  let element: HTMLElement | null = null;
+
   // Try testId first (preferred)
   if (target.testId) {
-    const el = document.querySelector(`[data-testid="${target.testId}"]`);
-    if (el) return el as HTMLElement;
+    // Find all matching elements and return the first visible one
+    const elements = document.querySelectorAll(`[data-testid="${target.testId}"]`);
+    for (const el of elements) {
+      if (isTargetValid(el as HTMLElement)) {
+        element = el as HTMLElement;
+        break;
+      }
+    }
   }
+
   // Fall back to selector
-  if (target.selector) {
-    const el = document.querySelector(target.selector);
-    if (el) return el as HTMLElement;
+  if (!element && target.selector) {
+    const elements = document.querySelectorAll(target.selector);
+    for (const el of elements) {
+      if (isTargetValid(el as HTMLElement)) {
+        element = el as HTMLElement;
+        break;
+      }
+    }
   }
-  return null;
+
+  return element;
 }
 
 /**
@@ -144,14 +170,16 @@ export interface CalloutPosition {
   top: number;
   left: number;
   arrowPosition: 'top' | 'bottom' | 'left' | 'right';
-  /** Offset for arrow positioning (percentage or px from edge) */
-  arrowOffset?: number;
+  /** Offset in pixels for arrow positioning from edge of callout */
+  arrowOffset: number;
 }
 
 const CALLOUT_WIDTH = 320;
 const CALLOUT_HEIGHT_ESTIMATE = 200; // Will vary based on content
-const ARROW_SIZE = 8;
+const ARROW_SIZE = 12;
 const VIEWPORT_MARGIN = 16;
+const ARROW_MIN_OFFSET = 24; // Minimum distance from edge for arrow
+const ARROW_MAX_OFFSET_FROM_EDGE = 24; // Maximum distance arrow can be from callout edge
 
 export function calculateCalloutPosition(
   target: HTMLElement,
@@ -165,35 +193,52 @@ export function calculateCalloutPosition(
   const targetCenterX = rect.left + rect.width / 2;
   const targetCenterY = rect.top + rect.height / 2;
 
-  // Determine best placement
+  // Calculate available space in each direction
+  const spaceAbove = rect.top;
+  const spaceBelow = viewportHeight - rect.bottom;
+  const spaceLeft = rect.left;
+  const spaceRight = viewportWidth - rect.right;
+
+  // Determine best placement - always use auto logic to ensure it fits
   let placement = preferredPlacement;
 
-  if (placement === 'auto') {
-    // Choose placement based on available space
-    const spaceAbove = rect.top;
-    const spaceBelow = viewportHeight - rect.bottom;
-    const spaceLeft = rect.left;
-    const spaceRight = viewportWidth - rect.right;
+  // Check if preferred placement actually fits, otherwise find the best alternative
+  const fitsRight = spaceRight >= CALLOUT_WIDTH + ARROW_SIZE + VIEWPORT_MARGIN;
+  const fitsLeft = spaceLeft >= CALLOUT_WIDTH + ARROW_SIZE + VIEWPORT_MARGIN;
+  const fitsBelow = spaceBelow >= CALLOUT_HEIGHT_ESTIMATE + ARROW_SIZE + VIEWPORT_MARGIN;
+  const fitsAbove = spaceAbove >= CALLOUT_HEIGHT_ESTIMATE + ARROW_SIZE + VIEWPORT_MARGIN;
 
-    // Prefer bottom, then top, then sides
-    if (spaceBelow >= CALLOUT_HEIGHT_ESTIMATE + ARROW_SIZE + VIEWPORT_MARGIN) {
+  if (placement === 'auto' ||
+      (placement === 'right' && !fitsRight) ||
+      (placement === 'left' && !fitsLeft) ||
+      (placement === 'bottom' && !fitsBelow) ||
+      (placement === 'top' && !fitsAbove)) {
+    // Find the best placement based on available space
+    // Priority: bottom > right > top > left (most natural reading flow)
+    if (fitsBelow) {
       placement = 'bottom';
-    } else if (spaceAbove >= CALLOUT_HEIGHT_ESTIMATE + ARROW_SIZE + VIEWPORT_MARGIN) {
-      placement = 'top';
-    } else if (spaceRight >= CALLOUT_WIDTH + ARROW_SIZE + VIEWPORT_MARGIN) {
+    } else if (fitsRight) {
       placement = 'right';
-    } else if (spaceLeft >= CALLOUT_WIDTH + ARROW_SIZE + VIEWPORT_MARGIN) {
+    } else if (fitsAbove) {
+      placement = 'top';
+    } else if (fitsLeft) {
       placement = 'left';
     } else {
-      // Default to bottom if nothing fits well
-      placement = 'bottom';
+      // Nothing fits perfectly - choose the side with most space
+      const spaces = [
+        { placement: 'bottom' as const, space: spaceBelow },
+        { placement: 'right' as const, space: spaceRight },
+        { placement: 'top' as const, space: spaceAbove },
+        { placement: 'left' as const, space: spaceLeft },
+      ];
+      spaces.sort((a, b) => b.space - a.space);
+      placement = spaces[0].placement;
     }
   }
 
   let top: number;
   let left: number;
   let arrowPosition: 'top' | 'bottom' | 'left' | 'right';
-  let arrowOffset: number | undefined;
 
   switch (placement) {
     case 'top':
@@ -223,22 +268,23 @@ export function calculateCalloutPosition(
       arrowPosition = 'top';
   }
 
-  // Remember unclamped position to calculate arrow offset
-  const unclampedTop = top;
-  const unclampedLeft = left;
-
   // Clamp to viewport bounds
   left = Math.max(VIEWPORT_MARGIN, Math.min(left, viewportWidth - CALLOUT_WIDTH - VIEWPORT_MARGIN));
   top = Math.max(VIEWPORT_MARGIN, Math.min(top, viewportHeight - CALLOUT_HEIGHT_ESTIMATE - VIEWPORT_MARGIN));
 
-  // Calculate arrow offset if callout was clamped
+  // Calculate arrow offset - where the arrow should point to hit the target
+  let arrowOffset: number;
+
   if (arrowPosition === 'left' || arrowPosition === 'right') {
     // Arrow should point at target center vertically
-    // Calculate offset from callout top to target center
     arrowOffset = targetCenterY - top;
-  } else if (arrowPosition === 'top' || arrowPosition === 'bottom') {
+    // Clamp arrow to stay within callout bounds with padding
+    arrowOffset = Math.max(ARROW_MIN_OFFSET, Math.min(arrowOffset, CALLOUT_HEIGHT_ESTIMATE - ARROW_MIN_OFFSET));
+  } else {
     // Arrow should point at target center horizontally
     arrowOffset = targetCenterX - left;
+    // Clamp arrow to stay within callout bounds with padding
+    arrowOffset = Math.max(ARROW_MIN_OFFSET, Math.min(arrowOffset, CALLOUT_WIDTH - ARROW_MIN_OFFSET));
   }
 
   return { top, left, arrowPosition, arrowOffset };

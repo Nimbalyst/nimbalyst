@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, KeyboardEvent, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
-import { useAtomValue } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { GenericTypeahead, TypeaheadOption } from '../Typeahead/GenericTypeahead';
 import { extractTriggerMatch, insertAtTrigger, TriggerMatch } from '../Typeahead/typeaheadUtils';
 import type { ChatAttachment } from '@nimbalyst/runtime';
@@ -7,8 +7,11 @@ import type { TokenUsageCategory } from '@nimbalyst/runtime/ai/server/types';
 import { AttachmentPreviewList } from '../AgenticCoding/AttachmentPreviewList';
 import { ModeTag, AIMode } from './ModeTag';
 import { ModelSelector } from './ModelSelector';
-import { VoiceModeButton } from './VoiceModeButton.tsx';
+import { VoiceModeButton, registerPendingVoiceCommandSetter } from './VoiceModeButton.tsx';
 import { VoiceTranscriptionDisplay } from './VoiceTranscriptionDisplay';
+import { VoiceContextIndicator } from './VoiceContextIndicator';
+import { PendingVoiceCommand } from './PendingVoiceCommand';
+import { pendingVoiceCommandAtom, type PendingVoiceCommand as PendingVoiceCommandType } from '../../store/atoms/voiceModeState';
 import { ContextUsageDisplay } from './ContextUsageDisplay';
 import { MockupAnnotationIndicator } from './MockupAnnotationIndicator';
 import { TextSelectionIndicator } from './TextSelectionIndicator';
@@ -148,6 +151,16 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
     // Voice mode state
     const [isVoiceActive, setIsVoiceActive] = useState(false);
     const showTranscription = useAtomValue(showTranscriptionAtom);
+
+    // Pending voice command atom
+    const setPendingVoiceCommand = useSetAtom(pendingVoiceCommandAtom);
+
+    // Register the pending voice command setter with VoiceModeButton's global listener
+    // Only register if we have a sessionId
+    useEffect(() => {
+      if (!sessionId) return;
+      return registerPendingVoiceCommandSetter(sessionId, setPendingVoiceCommand);
+    }, [sessionId, setPendingVoiceCommand]);
 
     // Prompt box resize state
     // userSetHeight: null means auto-size to content, number means user manually resized
@@ -835,6 +848,29 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
       }
     }, [value, saveToMemory, onChange]);
 
+    // Handle pending voice command submission
+    const handlePendingVoiceCommandSubmit = useCallback(async (
+      prompt: string,
+      cmdSessionId: string,
+      cmdWorkspacePath: string,
+      codingAgentPrompt?: { prepend?: string; append?: string }
+    ) => {
+      try {
+        await window.electronAPI.invoke(
+          'ai:createQueuedPrompt',
+          cmdSessionId,
+          prompt,
+          undefined, // attachments
+          {
+            isVoiceMode: true,
+            voiceModeCodingAgentPrompt: codingAgentPrompt,
+          }
+        );
+      } catch (error) {
+        console.error('[AIInput] Failed to submit pending voice command:', error);
+      }
+    }, []);
+
     return (
       <div className={`ai-chat-input ${isMemoryMode ? 'memory-mode' : ''}`} style={{ position: 'relative' }}>
         {/* Vertical resize handle at top of input area */}
@@ -851,6 +887,9 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
             sessionId={sessionId}
           />
         )}
+
+        {/* Pending voice command with countdown */}
+        {sessionId && <PendingVoiceCommand sessionId={sessionId} onSubmit={handlePendingVoiceCommandSubmit} />}
 
         {/* Memory mode indicator */}
         {isMemoryMode && (
@@ -892,7 +931,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
             marginBottom: '4px'
           }}>
             {/* Voice Mode Button */}
-            <HelpTooltip testId="voice-mode-toggle">
+            <HelpTooltip testId="voice-mode-toggle" disabled={isVoiceActive}>
               <span style={{ display: 'inline-flex' }}>
                 <VoiceModeButton
                   sessionId={sessionId}
@@ -901,6 +940,13 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
                 />
               </span>
             </HelpTooltip>
+            {/* Voice context indicator - shows token usage when voice mode is active */}
+            {sessionId && (
+              <VoiceContextIndicator
+                isActive={isVoiceActive}
+                sessionId={sessionId}
+              />
+            )}
             {onModeChange && provider === 'claude-code' && mode && <ModeTag mode={mode} onModeChange={onModeChange} />}
 
             {onModelChange && currentModel && (

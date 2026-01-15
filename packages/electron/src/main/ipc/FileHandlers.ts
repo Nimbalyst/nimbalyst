@@ -53,6 +53,30 @@ function hasFrontmatter(content: string): boolean {
 
 export function registerFileHandlers() {
     const analytics = AnalyticsService.getInstance();
+
+    // Generic file dialog for extensions to select files
+    // Returns the file path (not content) so extensions can load files themselves
+    safeHandle('dialog:openFile', async (event, options?: {
+        title?: string;
+        buttonLabel?: string;
+        filters?: Array<{ name: string; extensions: string[] }>;
+        defaultPath?: string;
+    }) => {
+        const window = BrowserWindow.fromWebContents(event.sender);
+        const dialogOptions: Electron.OpenDialogOptions = {
+            title: options?.title || 'Select File',
+            buttonLabel: options?.buttonLabel || 'Open',
+            properties: ['openFile'],
+            filters: options?.filters,
+            defaultPath: options?.defaultPath,
+        };
+        const result = window
+            ? await dialog.showOpenDialog(window, dialogOptions)
+            : await dialog.showOpenDialog(dialogOptions);
+
+        return result;
+    });
+
     // Open file dialog - uses unified FileOpener API
     safeHandle('open-file', async (event) => {
         const window = BrowserWindow.fromWebContents(event.sender);
@@ -89,7 +113,7 @@ export function registerFileHandlers() {
         // ALWAYS use the specificFilePath provided
         const filePath = specificFilePath;
 
-        console.log('[SAVE] save-file handler called at', new Date().toISOString(), 'for path:', filePath);
+        // console.log('[SAVE] save-file handler called at', new Date().toISOString(), 'for path:', filePath);
 
         try {
             if (!filePath) {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarcodeScanner, BarcodeFormat } from '@capacitor-mlkit/barcode-scanning';
+import { CapacitorBarcodeScanner, CapacitorBarcodeScannerTypeHint } from '@capacitor/barcode-scanner';
 import { useSync, INACTIVITY_TIMEOUT_OPTIONS } from '../contexts/CollabV3SyncContext';
 import { SyncStatusBadge } from '../components/SyncStatusBadge';
 import {
@@ -77,36 +77,17 @@ export function SettingsScreen() {
     setScanError(null);
 
     try {
-      // Check if barcode scanning is supported
-      const { supported } = await BarcodeScanner.isSupported();
-      if (!supported) {
-        setScanError('Barcode scanning is not supported on this device');
-        return;
-      }
-
-      // Request camera permission
-      const { camera } = await BarcodeScanner.requestPermissions();
-      if (camera !== 'granted' && camera !== 'limited') {
-        setScanError('Camera permission is required to scan QR codes');
-        return;
-      }
-
       setIsScanning(true);
 
-      // Start scanning
-      const result = await BarcodeScanner.scan({
-        formats: [BarcodeFormat.QrCode],
+      // Start scanning - the plugin handles permissions internally
+      const result = await CapacitorBarcodeScanner.scanBarcode({
+        hint: CapacitorBarcodeScannerTypeHint.QR_CODE,
       });
 
       setIsScanning(false);
 
-      if (result.barcodes.length > 0) {
-        const rawValue = result.barcodes[0].rawValue;
-        if (rawValue) {
-          await handleQRData(rawValue);
-        } else {
-          setScanError('Could not read QR code data');
-        }
+      if (result.ScanResult) {
+        await handleQRData(result.ScanResult);
       } else {
         setScanError('No QR code detected');
       }
@@ -516,45 +497,43 @@ export function SettingsScreen() {
           </ol>
         </div>
 
-        {/* Dev Mode Setup - Only visible in development */}
-        {import.meta.env.DEV && (
+        {/* Manual Setup - Alternative to QR scanning */}
           <div className="mt-8">
             <button
               onClick={() => setShowDevSetup(!showDevSetup)}
-              className="w-full py-3 px-4 rounded-lg font-medium text-white bg-orange-500 hover:bg-orange-600 transition-colors flex items-center justify-center gap-2"
+              className="w-full py-3 px-4 rounded-lg font-medium text-[var(--text-secondary)] bg-[var(--surface-secondary)] hover:bg-[var(--surface-tertiary)] border border-[var(--border-primary)] transition-colors flex items-center justify-center gap-2"
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
               </svg>
-              {showDevSetup ? 'Hide Dev Setup' : 'Dev Mode Setup'}
+              {showDevSetup ? 'Hide Manual Setup' : 'Manual Setup'}
             </button>
 
             {showDevSetup && (
-              <div className="mt-4 p-4 rounded-lg bg-orange-500/10 border-2 border-orange-500/50">
-                <h3 className="text-sm font-semibold text-orange-500 mb-3 flex items-center gap-2">
+              <div className="mt-4 p-4 rounded-lg bg-[var(--surface-secondary)] border border-[var(--border-primary)]">
+                <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                    <line x1="12" y1="9" x2="12" y2="13" />
-                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                    <rect x="2" y="2" width="20" height="20" rx="2" />
+                    <path d="M7 7h3v3H7zM14 7h3v3h-3zM7 14h3v3H7z" />
                   </svg>
-                  Development Only
+                  Alternative to QR Code
                 </h3>
                 <p className="text-xs text-[var(--text-secondary)] mb-4">
-                  To test sync in a desktop browser:
+                  If you can't scan the QR code, copy the pairing data from your desktop:
                 </p>
 
                 <ol className="text-xs text-[var(--text-secondary)] space-y-2 list-decimal list-inside mb-4">
-                  <li>Open Nimbalyst desktop app (in dev mode)</li>
+                  <li>Open Nimbalyst on your desktop</li>
                   <li>Go to Settings &gt; Session Sync</li>
                   <li>Click "Pair Mobile Device"</li>
-                  <li>Click the orange "Copy JSON (Dev Mode)" button</li>
+                  <li>Click "Copy Pairing Data"</li>
                   <li>Paste the JSON below</li>
                 </ol>
 
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-sm font-medium text-orange-500 mb-1">
-                      Paste QR JSON Payload
+                    <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+                      Pairing Data
                     </label>
                     <textarea
                       value={devJsonInput}
@@ -563,7 +542,7 @@ export function SettingsScreen() {
                         setDevJsonError(null);
                       }}
                       placeholder='{"version":2,"serverUrl":"wss://...","encryptionKeySeed":"...","expiresAt":...}'
-                      className="w-full px-3 py-2 rounded-lg border border-orange-500/50 bg-[var(--surface-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono text-xs"
+                      className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--surface-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)] font-mono text-xs"
                       rows={4}
                     />
                   </div>
@@ -625,20 +604,20 @@ export function SettingsScreen() {
                       }
                     }}
                     disabled={!devJsonInput.trim()}
-                    className="w-full py-2 px-4 rounded-lg font-medium text-white bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="w-full py-2 px-4 rounded-lg font-medium text-white bg-[var(--accent-primary)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
-                    Connect with JSON
+                    Connect
                   </button>
                 </div>
 
-                {/* Session Token Import - for browser testing */}
+                {/* Session Token Import - for completing OAuth on another device */}
                 {isPaired && !isAuthenticated && (
-                  <div className="mt-6 pt-6 border-t-2 border-orange-500/30">
-                    <h4 className="text-sm font-semibold text-orange-500 mb-2">
-                      Import Session Tokens (Browser Testing)
+                  <div className="mt-6 pt-6 border-t border-[var(--border-primary)]">
+                    <h4 className="text-sm font-semibold text-[var(--text-primary)] mb-2">
+                      Import Session
                     </h4>
                     <p className="text-xs text-[var(--text-secondary)] mb-3">
-                      After logging in via email in a browser, copy the session JSON from the success page and paste it here.
+                      If you completed sign-in on another device, paste the session data here.
                     </p>
 
                     {devSessionError && (
@@ -654,7 +633,7 @@ export function SettingsScreen() {
                         setDevSessionError(null);
                       }}
                       placeholder='{"sessionToken": "...", "sessionJwt": "...", ...}'
-                      className="w-full h-24 p-3 rounded-lg border-2 border-orange-500/50 bg-[var(--surface-primary)] text-[var(--text-primary)] text-xs font-mono placeholder:text-[var(--text-tertiary)] resize-none"
+                      className="w-full h-24 p-3 rounded-lg border border-[var(--border-primary)] bg-[var(--surface-primary)] text-[var(--text-primary)] text-xs font-mono placeholder:text-[var(--text-tertiary)] resize-none"
                     />
 
                     <button
@@ -689,12 +668,12 @@ export function SettingsScreen() {
                           await reconnect();
                           navigate('/');
                         } catch (error) {
-                          console.error('[SettingsScreen] Dev session import error:', error);
+                          console.error('[SettingsScreen] Session import error:', error);
                           setDevSessionError(error instanceof Error ? error.message : 'Invalid JSON');
                         }
                       }}
                       disabled={!devSessionInput.trim()}
-                      className="mt-3 w-full py-2 px-4 rounded-lg font-medium text-white bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      className="mt-3 w-full py-2 px-4 rounded-lg font-medium text-white bg-[var(--accent-primary)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
                       Import Session
                     </button>
@@ -703,7 +682,7 @@ export function SettingsScreen() {
               </div>
             )}
           </div>
-        )}
+
       </main>
     </div>
   );

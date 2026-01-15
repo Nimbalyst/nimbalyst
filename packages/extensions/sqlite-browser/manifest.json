@@ -1,0 +1,35 @@
+{
+  "id": "com.nimbalyst.sqlite-browser",
+  "name": "SQLite Browser",
+  "version": "1.0.0",
+  "description": "Browse and query SQLite databases with AI assistance",
+  "author": "Nimbalyst",
+  "main": "dist/index.js",
+  "styles": "dist/index.css",
+  "apiVersion": "1.0.0",
+  "permissions": {
+    "filesystem": true,
+    "ai": true
+  },
+  "contributions": {
+    "customEditors": [
+      {
+        "filePatterns": ["*.db", "*.sqlite", "*.sqlite3", "*.db3"],
+        "displayName": "SQLite Database",
+        "component": "SQLiteEditor",
+        "priority": 10
+      }
+    ],
+    "aiTools": [
+      "sqlite_list_databases",
+      "sqlite_list_tables",
+      "sqlite_describe_table",
+      "sqlite_query",
+      "sqlite_count",
+      "sqlite_sample",
+      "sqlite_analyze",
+      "sqlite_schema",
+      "sqlite_display_query"
+    ]
+  }
+}

@@ -275,7 +275,7 @@ Users can enable/disable walkthroughs in Settings > Advanced:
 Walkthroughs automatically track PostHog events:
 
 | Event | When | Properties |
-|-------|------|------------|
+| --- | --- | --- |
 | `walkthrough_started` | Guide begins | `walkthroughId`, `stepCount` |
 | `walkthrough_step_viewed` | User advances | `walkthroughId`, `stepId`, `stepIndex` |
 | `walkthrough_completed` | All steps done | `walkthroughId`, `stepCount` |
@@ -309,7 +309,7 @@ Walkthroughs automatically track PostHog events:
 ### Implemented Walkthroughs
 
 | ID | Name | Steps | Screen |
-|----|------|-------|--------|
+| --- | --- | --- | --- |
 | `agent-mode-intro` | Agent Mode Introduction | 1 | agent |
 | `ai-sessions-button` | AI Sessions Button | 1 | files |
 | `context-window-intro` | Context Window | 1 | agent |

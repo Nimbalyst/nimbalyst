@@ -20,6 +20,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.51.6] - 2026-01-15
+
+
+### Added
+- SQLite extension as custom editor with query history and AI tools
+- Export markdown documents as PDF
+- Extension panels system with SQLite browser demo
+- Voice commands show countdown before submitting to agent
+- Voice mode live transcription streaming and token usage tracking
+- AI-generated project summary for voice mode context
+- AI chat panel receives context from extension panels
+- Manual pairing for devices that can't scan QR codes
+- Error bar support to visual display widget
+- Support for default disabled extensions
+- Enhanced font smoothing for Monaco code editor
+
+### Changed
+- Updated Claude Agent SDK to 0.2.7 for MCP tool search
+- Diff tree grouping setting persists per project
+
+### Fixed
+- Voice agent now passes user requests verbatim to coding agent
+- Fullscreen shortcut no longer conflicts with Find on Windows
+- Voice commands no longer create duplicate queued prompts
+- iOS simulator builds without Rosetta on Apple Silicon
+- Normalized file tree row heights and simplified indentation
+- Reduced excessive indentation in grouped file-edits sidebar
+- iPad AI input safe area
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.51.5] - 2026-01-14
 
 

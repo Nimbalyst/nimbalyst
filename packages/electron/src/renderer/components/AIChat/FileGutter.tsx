@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAtom, useSetAtom } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import { getFileName } from '../../utils/pathUtils';
@@ -39,8 +39,18 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick, pendin
   const [isExpanded, setIsExpanded] = useState(true);
   const [gitStatus, setGitStatus] = useState<Record<string, FileGitStatus>>({});
   const [groupByDirectory] = useAtom(diffTreeGroupByDirectoryAtom);
-  const setGroupByDirectory = useSetAtom(setDiffTreeGroupByDirectoryAtom);
+  const setDiffTreeGroupByDirectory = useSetAtom(setDiffTreeGroupByDirectoryAtom);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+
+  // Wrapper to pass workspacePath to the setter atom
+  const setGroupByDirectory = useCallback((value: boolean) => {
+    if (workspacePath) {
+      setDiffTreeGroupByDirectory({ groupByDirectory: value, workspacePath });
+    }
+  }, [workspacePath, setDiffTreeGroupByDirectory]);
+
+  // Note: groupByDirectory is hydrated from workspace state once at app init (in App.tsx)
+  // No need to load it here - just use the Jotai atom value
 
   // Convert absolute path to relative path from workspace root
   const getRelativePath = (filePath: string): string => {
@@ -171,14 +181,14 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick, pendin
     setExpandedFolders(new Set());
   };
 
-  // Auto-expand all folders when groupByDirectory is enabled
+  // Auto-expand all folders when groupByDirectory is enabled or files change
   useEffect(() => {
     if (groupByDirectory && groupedFiles.length > 0) {
       const tree = buildDirectoryTree(groupedFiles);
       const allPaths = getAllFolderPaths(tree);
       setExpandedFolders(new Set(allPaths));
     }
-  }, [groupByDirectory]);
+  }, [groupByDirectory, groupedFiles]);
 
   useEffect(() => {
     if (!sessionId) {
@@ -351,12 +361,12 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick, pendin
     return <MaterialSymbol icon="edit_document" size={14} className="file-gutter__section-icon" />;
   };
 
-  const renderDirectoryNode = (node: DirectoryNode, depth: number = 0): React.ReactNode => {
+  const renderDirectoryNode = (node: DirectoryNode, isNested: boolean = false): React.ReactNode => {
     const isExpanded = expandedFolders.has(node.path);
     const hasContent = node.files.length > 0 || node.subdirectories.size > 0;
 
     return (
-      <div key={node.path} className="file-gutter__directory-node" style={{ marginLeft: `${depth * 12}px` }}>
+      <div key={node.path} className={`file-gutter__directory-node ${isNested ? 'file-gutter__directory-node--nested' : ''}`}>
         {node.displayPath && (
           <button
             onClick={() => toggleFolder(node.path)}
@@ -380,7 +390,7 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick, pendin
         {(isExpanded || !node.displayPath) && hasContent && (
           <div className="file-gutter__directory-children">
             {Array.from(node.subdirectories.values()).map(subdir =>
-              renderDirectoryNode(subdir, node.displayPath ? depth + 1 : depth)
+              renderDirectoryNode(subdir, true)
             )}
 
             {node.files.map((file) => {
@@ -394,7 +404,6 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick, pendin
                   onClick={() => handleFileClick(file.filePath)}
                   className={`file-gutter__file ${hasPendingReview ? 'file-gutter__file--pending' : ''}`}
                   title={getRelativePath(file.filePath)}
-                  style={{ marginLeft: `${(node.displayPath ? depth + 1 : depth) * 12 + 24}px` }}
                 >
                   <div className="file-gutter__file-content">
                     {hasPendingReview && (
