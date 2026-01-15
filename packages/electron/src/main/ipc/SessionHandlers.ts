@@ -376,6 +376,59 @@ export async function registerSessionHandlers() {
             return { error: String(error) };
         }
     });
+
+    // Get FTS index status - check if index exists and get message count
+    safeHandle('sessions:get-fts-index-status', async (event, workspaceId: string) => {
+        try {
+            const { database } = await import('../database/PGLiteDatabaseWorker');
+
+            // Check if index exists
+            const indexResult = await database.query(`
+                SELECT 1 FROM pg_indexes
+                WHERE indexname = 'idx_ai_agent_messages_content_fts'
+            `);
+            const indexExists = indexResult.rows.length > 0;
+
+            // Get message count for this workspace
+            const countResult = await database.query<{ count: string }>(`
+                SELECT COUNT(*) as count
+                FROM ai_agent_messages m
+                JOIN ai_sessions s ON m.session_id = s.id
+                WHERE s.workspace_id = $1
+            `, [workspaceId]);
+            const messageCount = parseInt(countResult.rows[0]?.count || '0');
+
+            return { indexExists, messageCount };
+        } catch (error) {
+            console.error('[SessionHandlers] Error getting FTS index status:', error);
+            return { indexExists: false, messageCount: 0, error: String(error) };
+        }
+    });
+
+    // Build FTS index on demand (for large databases where we skipped at startup)
+    safeHandle('sessions:build-fts-index', async (event) => {
+        try {
+            const { database } = await import('../database/PGLiteDatabaseWorker');
+
+            const startTime = Date.now();
+            console.log('[SessionHandlers] Starting FTS index build...');
+
+            // Build partial index excluding large messages (>500KB) to avoid tsvector 1MB limit
+            // Use 10 minute timeout since index building can take a long time for large databases
+            await database.exec(`
+                CREATE INDEX IF NOT EXISTS idx_ai_agent_messages_content_fts
+                ON ai_agent_messages USING GIN(to_tsvector('english', content))
+                WHERE LENGTH(content) < 500000
+            `, 10 * 60 * 1000);
+
+            const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+            console.log(`[SessionHandlers] FTS index built successfully in ${elapsed}s`);
+            return { success: true };
+        } catch (error) {
+            console.error('[SessionHandlers] Error building FTS index:', error);
+            return { success: false, error: String(error) };
+        }
+    });
 }
 
 export { sessionManager };

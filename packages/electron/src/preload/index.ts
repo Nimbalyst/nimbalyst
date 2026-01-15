@@ -221,6 +221,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setDocumentEdited: (edited: boolean) => ipcRenderer.send('set-document-edited', edited),
   setTitle: (title: string) => ipcRenderer.send('set-title', title),
   setCurrentFile: (filePath: string | null) => ipcRenderer.send('set-current-file', filePath),
+  /** Report user activity for sync presence awareness */
+  reportUserActivity: () => ipcRenderer.send('user-activity'),
 
   // Get initial window state
   getInitialState: () => ipcRenderer.invoke('get-initial-state'),
@@ -565,6 +567,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     openSessionInWindow: (sessionId: string, workspacePath?: string) =>
       ipcRenderer.invoke('session-manager:open-session', sessionId, workspacePath),
     exportSession: (session: any) => ipcRenderer.invoke('session-manager:export-session', session),
+
+    // Full-text search index management
+    getFtsIndexStatus: (workspaceId: string) =>
+      ipcRenderer.invoke('sessions:get-fts-index-status', workspaceId) as Promise<{ indexExists: boolean; messageCount: number; error?: string }>,
+    buildFtsIndex: () =>
+      ipcRenderer.invoke('sessions:build-fts-index') as Promise<{ success: boolean; error?: string }>,
   },
 
   // Workspace Manager

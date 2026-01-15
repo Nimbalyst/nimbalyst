@@ -474,6 +474,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           FROM ai_sessions s
           INNER JOIN ai_agent_messages m ON s.id = m.session_id
           WHERE s.workspace_id = $1
+            AND LENGTH(m.content) < 500000
             AND to_tsvector('english', m.content) @@ to_tsquery('english', $2)
             ${archiveFilter}
           GROUP BY s.id, s.provider, s.model, s.session_type, s.mode, s.title, s.workspace_id,

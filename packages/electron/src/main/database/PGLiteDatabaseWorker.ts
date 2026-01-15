@@ -302,9 +302,27 @@ export class PGLiteDatabaseWorker {
       logger.main.info('[PGLite Worker] Database schemas created');
 
       this.initialized = true;
-    } catch (error) {
+    } catch (error: any) {
       logger.main.error('[PGLite Worker] Failed to initialize:', error);
       this.initPromise = null;
+
+      // Check for database locked error (another instance running)
+      if (error?.message?.includes('DATABASE_LOCKED') || error?.message?.includes('locked by another process')) {
+        dialog.showMessageBox({
+          type: 'error',
+          title: 'Database Locked',
+          message: 'Another instance of Nimbalyst is already running.',
+          detail: 'The database is locked by another process. Please close the other instance before starting a new one.\n\nRunning multiple instances simultaneously can cause data corruption.',
+          buttons: ['Quit']
+        }).then(() => {
+          app.quit();
+        }).catch(() => {
+          app.quit();
+        });
+
+        // Don't re-throw - we're quitting
+        return;
+      }
 
       // The worker should have already provided a detailed error message
       // Just re-throw it
@@ -314,8 +332,9 @@ export class PGLiteDatabaseWorker {
 
   /**
    * Send a message to the worker and wait for response
+   * @param timeoutMs - Timeout in milliseconds (default: 30000)
    */
-  private sendMessage(type: string, payload?: any): Promise<any> {
+  private sendMessage(type: string, payload?: any, timeoutMs: number = 30000): Promise<any> {
     return new Promise((resolve, reject) => {
       if (!this.worker) {
         reject(new Error('Worker not initialized'));
@@ -331,13 +350,13 @@ export class PGLiteDatabaseWorker {
         payload
       });
 
-      // Timeout after 30 seconds
+      // Timeout (default 30 seconds, can be extended for long operations)
       setTimeout(() => {
         if (this.pendingRequests.has(id)) {
           this.pendingRequests.delete(id);
           reject(new Error(`Request ${type} timed out`));
         }
-      }, 30000);
+      }, timeoutMs);
     });
   }
 
@@ -363,13 +382,14 @@ export class PGLiteDatabaseWorker {
 
   /**
    * Execute a statement (no return value)
+   * @param timeoutMs - Timeout in milliseconds (default: 30000, use longer for index creation)
    */
-  async exec(sql: string): Promise<void> {
+  async exec(sql: string, timeoutMs: number = 30000): Promise<void> {
     if (!this.initialized) {
       throw new Error('Database not initialized. Call initialize() first.');
     }
     try {
-      await this.sendMessage('exec', { sql });
+      await this.sendMessage('exec', { sql }, timeoutMs);
     } catch (error) {
       // Track database error
       this.analytics.sendEvent('database_error', {

@@ -265,6 +265,9 @@ interface ElectronAPI {
     getAllSessions: () => Promise<any>;
     openSessionInWindow: (sessionId: string, workspacePath?: string) => Promise<void>;
     exportSession: (session: any) => Promise<any>;
+    // Full-text search index management
+    getFtsIndexStatus: (workspaceId: string) => Promise<{ indexExists: boolean; messageCount: number; error?: string }>;
+    buildFtsIndex: () => Promise<{ success: boolean; error?: string }>;
   };
 
   // Workspace Manager operations

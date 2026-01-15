@@ -4,6 +4,7 @@ import { SessionListItem } from './SessionListItem';
 import { WorktreeGroup } from './WorktreeGroup';
 import { WorktreeSingle } from './WorktreeSingle';
 import { ArchiveProgress } from './ArchiveProgress';
+import { IndexBuildDialog } from './IndexBuildDialog';
 import { getTimeGroupKey, TimeGroupKey } from '../../utils/dateFormatting';
 import { getFileName } from '../../utils/pathUtils';
 import { KeyboardShortcuts, getShortcutDisplay } from '../../../shared/KeyboardShortcuts';
@@ -202,6 +203,12 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   const [lastSelectedId, setLastSelectedId] = useState<string | null>(null); // For shift+click range selection
   const [worktreeCache, setWorktreeCache] = useState<Map<string, WorktreeWithStatus>>(new Map()); // Cache worktree data
 
+  // FTS index build dialog state
+  const [showIndexDialog, setShowIndexDialog] = useState(false);
+  const [indexMessageCount, setIndexMessageCount] = useState(0);
+  const [isIndexBuilding, setIsIndexBuilding] = useState(false);
+  const [pendingSearchQuery, setPendingSearchQuery] = useState<string | null>(null); // Query to run after index build
+
   // Track scroll position to restore after refresh
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const scrollPositionRef = useRef<number>(0);
@@ -324,8 +331,8 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     }
   }, [workspacePath, allSessions.length, showArchived]);
 
-  // Search message content in database (heavy operation)
-  const searchMessageContent = useCallback(async (query: string) => {
+  // Execute the actual search query
+  const executeSearch = useCallback(async (query: string) => {
     try {
       setIsSearching(true);
       setError(null);
@@ -362,6 +369,29 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       setIsSearching(false);
     }
   }, [workspacePath, showArchived, mode]);
+
+  // Search message content in database (heavy operation)
+  // Checks if FTS index exists and prompts user to build if needed for large databases
+  const searchMessageContent = useCallback(async (query: string) => {
+    try {
+      // Check FTS index status before searching
+      const { indexExists, messageCount } = await window.electronAPI.ai.getFtsIndexStatus(workspacePath);
+
+      // If index doesn't exist and database is large, prompt user to build
+      if (!indexExists && messageCount > 5000) {
+        setIndexMessageCount(messageCount);
+        setPendingSearchQuery(query);
+        setShowIndexDialog(true);
+        return;
+      }
+
+      // Otherwise proceed with search
+      await executeSearch(query);
+    } catch (err) {
+      console.error('[SessionHistory] Failed to search sessions:', err);
+      setError('Failed to search sessions');
+    }
+  }, [workspacePath, executeSearch]);
 
   // Load all sessions on mount and when refreshTrigger changes
   useEffect(() => {
@@ -401,6 +431,41 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     setContentSearchTriggered(true);
     searchMessageContent(searchQuery);
   }, [searchQuery, contentSearchTriggered, searchMessageContent]);
+
+  // Handle user choosing to build FTS index
+  const handleBuildIndex = useCallback(async () => {
+    setIsIndexBuilding(true);
+    try {
+      const result = await window.electronAPI.ai.buildFtsIndex();
+      if (result.success) {
+        console.log('[SessionHistory] FTS index built successfully');
+        // Run the pending search now that index is built
+        if (pendingSearchQuery) {
+          await executeSearch(pendingSearchQuery);
+        }
+      } else {
+        console.error('[SessionHistory] Failed to build FTS index:', result.error);
+        setError('Failed to build search index');
+      }
+    } catch (err) {
+      console.error('[SessionHistory] Failed to build FTS index:', err);
+      setError('Failed to build search index');
+    } finally {
+      setIsIndexBuilding(false);
+      setShowIndexDialog(false);
+      setPendingSearchQuery(null);
+    }
+  }, [pendingSearchQuery, executeSearch]);
+
+  // Handle user skipping index build
+  const handleSkipIndex = useCallback(async () => {
+    setShowIndexDialog(false);
+    // Still run the search, just slower
+    if (pendingSearchQuery) {
+      await executeSearch(pendingSearchQuery);
+    }
+    setPendingSearchQuery(null);
+  }, [pendingSearchQuery, executeSearch]);
 
   // Update visual indicators (processing state, unread badges, pending prompts) without reloading from database
   useEffect(() => {
@@ -1506,6 +1571,13 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
         )}
       </div>
       <ArchiveProgress />
+      <IndexBuildDialog
+        isOpen={showIndexDialog}
+        messageCount={indexMessageCount}
+        isBuilding={isIndexBuilding}
+        onBuild={handleBuildIndex}
+        onSkip={handleSkipIndex}
+      />
     </div>
   );
 };

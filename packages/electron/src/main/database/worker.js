@@ -113,18 +113,54 @@ class PGLiteWorker {
         initAttempt++;
 
         try {
-          // Clean up stale lock files before each initialization attempt
-          // This handles crash recovery - if the app crashed, PGlite may have left
-          // a postmaster.pid file that prevents startup
+          // Check for lock files before initialization
+          // If another process has the database open, we should NOT proceed
           try {
             const lockPath = path.join(this.dataDir, 'postmaster.pid');
             if (fs.existsSync(lockPath)) {
-              console.log('[PGLite Worker] Removing stale lock file from previous crash:', lockPath);
-              fs.unlinkSync(lockPath);
+              // Read the PID from the lock file
+              const lockContent = fs.readFileSync(lockPath, 'utf8');
+              const pid = parseInt(lockContent.split('\n')[0], 10);
+
+              if (pid && !isNaN(pid)) {
+                // Check if that process is still running
+                let isRunning = false;
+                try {
+                  // process.kill with signal 0 checks if process exists without killing it
+                  process.kill(pid, 0);
+                  isRunning = true;
+                } catch (e) {
+                  // ESRCH means process doesn't exist (stale lock)
+                  // EPERM means process exists but we can't signal it (still running)
+                  isRunning = e.code === 'EPERM';
+                }
+
+                if (isRunning) {
+                  // Another instance has the database open - abort!
+                  const error = new Error(
+                    `Database is locked by another process (PID: ${pid}).\n\n` +
+                    `Another instance of Nimbalyst appears to be running.\n` +
+                    `Please close it before starting a new instance, or data corruption may occur.`
+                  );
+                  error.code = 'DATABASE_LOCKED';
+                  throw error;
+                } else {
+                  // Process is dead - this is a stale lock from a crash
+                  console.log('[PGLite Worker] Removing stale lock file from previous crash (PID', pid, 'not running):', lockPath);
+                  fs.unlinkSync(lockPath);
+                }
+              } else {
+                // Couldn't parse PID - remove the lock file
+                console.log('[PGLite Worker] Removing unparseable lock file:', lockPath);
+                fs.unlinkSync(lockPath);
+              }
             }
           } catch (lockError) {
-            console.warn('[PGLite Worker] Failed to remove lock file:', lockError);
-            // Continue anyway - PGlite will handle it if it's a real lock
+            if (lockError.code === 'DATABASE_LOCKED') {
+              throw lockError; // Re-throw our custom error
+            }
+            console.warn('[PGLite Worker] Failed to check/remove lock file:', lockError);
+            // Continue anyway for other errors - PGlite will handle it
           }
 
           // Create PGlite instance
@@ -547,6 +583,30 @@ class PGLiteWorker {
     } catch (error) {
       console.error('[PGLite Worker] Failed to add provider_message_id column:', error);
       throw error;
+    }
+
+    // Add GIN index for full-text search on message content
+    // This dramatically speeds up FTS queries (10-100x for large tables)
+    // Only create eagerly for small databases to avoid blocking startup
+    try {
+      const countResult = await this.db.query('SELECT COUNT(*) as count FROM ai_agent_messages');
+      const messageCount = parseInt(countResult.rows[0]?.count || '0');
+
+      if (messageCount < 1000) {
+        // Safe to create index eagerly - will be fast for small/new databases
+        // Partial index excludes large messages (>500KB) to avoid tsvector 1MB limit
+        await this.db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_ai_agent_messages_content_fts
+          ON ai_agent_messages USING GIN(to_tsvector('english', content))
+          WHERE LENGTH(content) < 500000
+        `);
+        console.log('[PGLite Worker] FTS GIN index created successfully');
+      } else {
+        console.log(`[PGLite Worker] Skipping FTS index creation (${messageCount} messages), will prompt user later`);
+      }
+    } catch (error) {
+      // Non-fatal: searches will still work, just slower without the index
+      console.warn('[PGLite Worker] Failed to create FTS GIN index:', error);
     }
 
     // Queued Prompts table - stores prompts queued from any device for execution
