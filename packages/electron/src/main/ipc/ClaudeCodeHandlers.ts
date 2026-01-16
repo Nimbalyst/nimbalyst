@@ -145,7 +145,7 @@ end tell`;
         }
         // TODO: On windows only, require access to a working claude installation because the Windows console
         //  host is unable to provide a proper TTY raw mode required by Ink-based CLIs when running in Electron-NodeJS.
-        spawn('cmd', ['/c', 'start', '"Claude Code Authentication"', 'cmd', '/k', `"${claudeCodePath}" setup-token`], {
+        spawn('cmd', ['/c', 'start', '"Claude Code Authentication"', 'cmd', '/k', `"${claudeCodePath}" login`], {
           detached: true,
           stdio: 'ignore',
           shell: true
