@@ -14,6 +14,8 @@
  * - Handling diff mode (optional)
  */
 
+import type { ExtensionStorage } from './types';
+
 /**
  * Configuration for diff mode display
  */
@@ -215,6 +217,15 @@ export interface EditorHost {
    * Returns the workspace value if set, otherwise the user value, otherwise the default.
    */
   getConfig?<T>(key: string, defaultValue?: T): T;
+
+  // ============ STORAGE ============
+
+  /**
+   * Namespaced storage for persisting editor state.
+   * Automatically scoped to this extension.
+   * Use for preferences, history, cached data, etc.
+   */
+  readonly storage: ExtensionStorage;
 }
 
 /**

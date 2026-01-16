@@ -1177,12 +1177,21 @@ async function tryCreateServer(port: number): Promise<any> {
               path: string;
             };
 
+            type ErrorBarsConfig = {
+              dataKey?: string;
+              errorKey?: string;
+              errorKeyLower?: string;
+              errorKeyUpper?: string;
+              strokeWidth?: number;
+            };
+
             type ChartContent = {
               chartType: 'bar' | 'line' | 'pie' | 'area' | 'scatter';
               data: Record<string, unknown>[];
               xAxisKey: string;
               yAxisKey: string | string[];
               colors?: string[];
+              errorBars?: ErrorBarsConfig;
             };
 
             type DisplayItem = {

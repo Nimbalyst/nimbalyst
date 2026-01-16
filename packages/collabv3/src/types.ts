@@ -36,7 +36,13 @@ export type ClientMessage =
   | CreateSessionResponseMessage
   | SessionControlCommandMessage
   | RegisterPushTokenMessage
-  | RequestMobilePushMessage;
+  | RequestMobilePushMessage
+  | PingMessage;
+
+/** Keep-alive ping message */
+export interface PingMessage {
+  type: 'ping';
+}
 
 /** Request messages since a cursor */
 export interface SyncRequestMessage {

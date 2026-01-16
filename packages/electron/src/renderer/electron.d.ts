@@ -92,6 +92,7 @@ interface ElectronAPI {
   setTitle: (title: string) => void;
   setCurrentFile: (filePath: string | null) => void;
   sendToMainWindow?: (channel: string, data: unknown) => Promise<void>;
+  reportUserActivity?: () => void;
 
   // Get initial window state
   getInitialState: () => Promise<{ mode: string; workspacePath?: string; workspaceName?: string; fileTree?: FileTreeItem[] } | null>;
@@ -347,7 +348,7 @@ interface ElectronAPI {
   extensions: {
     listInstalled: () => Promise<Array<{ id: string; path: string; manifest: any; name: string; enabled: boolean }>>;
     getAllSettings: () => Promise<Record<string, { enabled: boolean; claudePluginEnabled?: boolean }>>;
-    getEnabled: (extensionId: string) => Promise<boolean>;
+    getEnabled: (extensionId: string, defaultEnabled?: boolean) => Promise<boolean>;
     setEnabled: (extensionId: string, enabled: boolean) => Promise<{ success: boolean; error?: string }>;
     setClaudePluginEnabled: (extensionId: string, enabled: boolean) => Promise<{ success: boolean; error?: string }>;
     getClaudePluginCommands: () => Promise<Array<{
