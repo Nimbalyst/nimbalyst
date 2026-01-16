@@ -215,6 +215,30 @@ Extensions receive `EditorHost` and must:
 - Handle `onFileChanged()` for external edits
 - NEVER depend on parent re-rendering them
 
+### Jotai Atom Patterns for Settings
+
+App-level settings use Jotai atoms in `packages/electron/src/renderer/store/atoms/appSettings.ts`. Each settings domain follows a "blob atom" pattern:
+
+1. **Main atom**: Single source of truth for a settings group (e.g., `notificationSettingsAtom`)
+2. **Derived atoms**: Read-only slices for individual values (e.g., `completionSoundEnabledAtom`)
+3. **Setter atom**: Partial updates with debounced IPC persistence (e.g., `setNotificationSettingsAtom`)
+4. **Init function**: Loads from IPC at app startup (e.g., `initNotificationSettings()`)
+
+Components subscribe directly to atoms - no props needed. Panels are self-contained.
+
+#### When to Use Atoms vs Props
+
+| Use Jotai Atoms | Use Props |
+| --- | --- |
+| Settings that affect multiple components | Component-specific config |
+| Cross-window state sync needed | Parent controls child behavior |
+| Avoid prop drilling (3+ levels) | Simple parent-child relationship |
+| State persisted to electron-store | Transient UI state |
+
+**Never pass settings through multiple component layers** - panels should subscribe directly to atoms internally.
+
+**Preserve abstraction boundaries**: Parent components (like SettingsView) should NOT know the internal state of child panels. If a parent has `useState` for 15 different settings domains, that's a sign of broken abstraction. Each panel owns its domain and subscribes to its own atoms.
+
 ### Shared UI Patterns
 
 These patterns apply across all packages (electron, capacitor, runtime) that contain UI code.

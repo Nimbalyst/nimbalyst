@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useAtomValue } from 'jotai';
 import { MaterialSymbol, getProviderIcon } from '@nimbalyst/runtime';
+import { releaseChannelAtom } from '../../store/atoms/appSettings';
 
 export type SettingsCategory =
   | 'tool-packages'
@@ -45,7 +47,6 @@ interface SettingsSidebarProps {
   totalPackageCount?: number;
   isProduction?: boolean;
   scope?: SettingsScope;
-  releaseChannel?: 'stable' | 'alpha';
 }
 
 export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
@@ -56,8 +57,9 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
   totalPackageCount = 0,
   isProduction = import.meta.env.PROD,
   scope = 'user',
-  releaseChannel = 'stable',
 }) => {
+  // Get release channel from Jotai atom instead of props
+  const releaseChannel = useAtomValue(releaseChannelAtom);
   const getStatusDot = (providerId: string): 'success' | 'warning' | 'error' | undefined => {
     const status = providerStatus[providerId];
     if (!status) return undefined;

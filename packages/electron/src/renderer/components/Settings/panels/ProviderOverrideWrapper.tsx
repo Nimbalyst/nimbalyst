@@ -1,18 +1,20 @@
-import React, { useState, useEffect, ReactNode } from 'react';
+/**
+ * Provider Override Wrapper
+ *
+ * Wraps provider settings panels to enable per-workspace overrides.
+ * Uses Jotai atom family for workspace-scoped state.
+ */
+
+import React, { ReactNode, useEffect, useMemo } from 'react';
+import { useAtom } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
+import {
+  workspaceAISettingsAtomFamily,
+  loadWorkspaceAISettings,
+  saveWorkspaceAISettings,
+  type AIProviderOverrides,
+} from '../../../store/atoms/appSettings';
 import './ProviderOverrideWrapper.css';
-
-interface ProviderOverride {
-  enabled?: boolean;
-  models?: string[];
-  defaultModel?: string;
-  apiKey?: string;
-}
-
-interface AIProviderOverrides {
-  defaultProvider?: string;
-  providers?: Record<string, ProviderOverride>;
-}
 
 interface ProviderOverrideWrapperProps {
   providerId: string;
@@ -34,33 +36,31 @@ export function ProviderOverrideWrapper({
   children,
   onOverrideChange,
 }: ProviderOverrideWrapperProps) {
-  const [projectOverrides, setProjectOverrides] = useState<AIProviderOverrides>({});
-  const [loading, setLoading] = useState(true);
+  // Get the atom for this workspace
+  const settingsAtom = useMemo(
+    () => workspaceAISettingsAtomFamily(workspacePath),
+    [workspacePath]
+  );
+  const [settings, setSettings] = useAtom(settingsAtom);
 
+  // Load settings on mount or workspace change
   useEffect(() => {
-    loadProjectOverrides();
-  }, [workspacePath]);
-
-  const loadProjectOverrides = async () => {
-    setLoading(true);
-    try {
-      const result = await window.electronAPI.invoke('ai:getProjectSettings', workspacePath);
-      if (result.success && result.overrides) {
-        setProjectOverrides(result.overrides);
-      } else {
-        setProjectOverrides({});
+    let mounted = true;
+    loadWorkspaceAISettings(workspacePath).then((state) => {
+      if (mounted) {
+        setSettings(state);
       }
-    } catch (error) {
-      console.error('Failed to load project overrides:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [workspacePath, setSettings]);
 
-  const isOverriding = projectOverrides.providers?.[providerId] !== undefined;
+  const { overrides, loading } = settings;
+  const isOverriding = overrides.providers?.[providerId] !== undefined;
 
   const handleOverrideToggle = async (override: boolean) => {
-    const newOverrides = { ...projectOverrides };
+    const newOverrides: AIProviderOverrides = { ...overrides };
     if (!newOverrides.providers) {
       newOverrides.providers = {};
     }
@@ -78,10 +78,12 @@ export function ProviderOverrideWrapper({
       }
     }
 
-    setProjectOverrides(newOverrides);
+    // Update atom state
+    setSettings({ ...settings, overrides: newOverrides });
 
+    // Persist to IPC
     try {
-      await window.electronAPI.invoke('ai:saveProjectSettings', workspacePath, newOverrides);
+      await saveWorkspaceAISettings(workspacePath, newOverrides);
       onOverrideChange?.();
     } catch (error) {
       console.error('Failed to save project overrides:', error);

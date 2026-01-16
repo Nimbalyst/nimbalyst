@@ -1,40 +1,38 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useAtom } from 'jotai';
+import {
+  advancedSettingsAtom,
+  setAdvancedSettingsAtom,
+  resetWalkthroughsAtom,
+  aiDebugSettingsAtom,
+  setAIDebugSettingsAtom,
+  type ReleaseChannel,
+} from '../../../store/atoms/appSettings';
 
-interface AdvancedPanelProps {
-  showToolCalls: boolean;
-  onShowToolCallsChange: (value: boolean) => void;
-  aiDebugLogging: boolean;
-  onAiDebugLoggingChange: (value: boolean) => void;
-  releaseChannel: 'stable' | 'alpha';
-  onReleaseChannelChange: (value: 'stable' | 'alpha') => void;
-  analyticsEnabled: boolean;
-  onAnalyticsEnabledChange: (value: boolean) => void;
-  extensionDevToolsEnabled: boolean;
-  onExtensionDevToolsEnabledChange: (value: boolean) => void;
-  walkthroughsEnabled: boolean;
-  onWalkthroughsEnabledChange: (value: boolean) => void;
-  walkthroughsViewedCount: number;
-  walkthroughsTotalCount: number;
-  onWalkthroughsReset: () => void;
-}
+/**
+ * AdvancedPanel - Self-contained settings panel for advanced options.
+ *
+ * All settings subscribe directly to Jotai atoms - no props needed.
+ */
+export function AdvancedPanel() {
+  // App-level advanced settings from Jotai atoms
+  const [settings] = useAtom(advancedSettingsAtom);
+  const [, updateSettings] = useAtom(setAdvancedSettingsAtom);
+  const [, resetWalkthroughs] = useAtom(resetWalkthroughsAtom);
 
-export function AdvancedPanel({
-  showToolCalls,
-  onShowToolCallsChange,
-  aiDebugLogging,
-  onAiDebugLoggingChange,
-  releaseChannel,
-  onReleaseChannelChange,
-  analyticsEnabled,
-  onAnalyticsEnabledChange,
-  extensionDevToolsEnabled,
-  onExtensionDevToolsEnabledChange,
-  walkthroughsEnabled,
-  onWalkthroughsEnabledChange,
-  walkthroughsViewedCount,
-  walkthroughsTotalCount,
-  onWalkthroughsReset,
-}: AdvancedPanelProps) {
+  // AI debug settings from Jotai atoms
+  const [aiDebugSettings] = useAtom(aiDebugSettingsAtom);
+  const [, updateAIDebugSettings] = useAtom(setAIDebugSettingsAtom);
+  const { showToolCalls, aiDebugLogging } = aiDebugSettings;
+
+  const {
+    releaseChannel,
+    analyticsEnabled,
+    extensionDevToolsEnabled,
+    walkthroughsEnabled,
+    walkthroughsViewedCount,
+    walkthroughsTotalCount,
+  } = settings;
   const isDevelopment = import.meta.env.DEV;
   const [showReleaseChannel, setShowReleaseChannel] = useState(false);
 
@@ -77,7 +75,7 @@ export function AdvancedPanel({
             </div>
             <select
               value={releaseChannel}
-              onChange={(e) => onReleaseChannelChange(e.target.value as 'stable' | 'alpha')}
+              onChange={(e) => updateSettings({ releaseChannel: e.target.value as ReleaseChannel })}
               className="setting-select"
               style={{ marginTop: '8px', width: '100%', padding: '8px', borderRadius: '4px' }}
             >
@@ -99,7 +97,7 @@ export function AdvancedPanel({
             <input
               type="checkbox"
               checked={analyticsEnabled}
-              onChange={(e) => onAnalyticsEnabledChange(e.target.checked)}
+              onChange={(e) => updateSettings({ analyticsEnabled: e.target.checked })}
               className="setting-checkbox"
             />
             <div className="setting-text">
@@ -128,7 +126,7 @@ export function AdvancedPanel({
             <input
               type="checkbox"
               checked={walkthroughsEnabled}
-              onChange={(e) => onWalkthroughsEnabledChange(e.target.checked)}
+              onChange={(e) => updateSettings({ walkthroughsEnabled: e.target.checked })}
               className="setting-checkbox"
             />
             <div className="setting-text">
@@ -143,7 +141,7 @@ export function AdvancedPanel({
         {walkthroughsViewedCount > 0 && (
           <div className="setting-item" style={{ marginTop: '12px' }}>
             <button
-              onClick={onWalkthroughsReset}
+              onClick={() => resetWalkthroughs()}
               style={{
                 padding: '6px 12px',
                 fontSize: '13px',
@@ -175,7 +173,7 @@ export function AdvancedPanel({
             <input
               type="checkbox"
               checked={extensionDevToolsEnabled}
-              onChange={(e) => onExtensionDevToolsEnabledChange(e.target.checked)}
+              onChange={(e) => updateSettings({ extensionDevToolsEnabled: e.target.checked })}
               className="setting-checkbox"
             />
             <div className="setting-text">
@@ -202,7 +200,7 @@ export function AdvancedPanel({
               <input
                 type="checkbox"
                 checked={showToolCalls}
-                onChange={(e) => onShowToolCallsChange(e.target.checked)}
+                onChange={(e) => updateAIDebugSettings({ showToolCalls: e.target.checked })}
                 className="setting-checkbox"
               />
               <div className="setting-text">
@@ -221,7 +219,7 @@ export function AdvancedPanel({
               <input
                 type="checkbox"
                 checked={aiDebugLogging}
-                onChange={(e) => onAiDebugLoggingChange(e.target.checked)}
+                onChange={(e) => updateAIDebugSettings({ aiDebugLogging: e.target.checked })}
                 className="setting-checkbox"
               />
               <div className="setting-text">

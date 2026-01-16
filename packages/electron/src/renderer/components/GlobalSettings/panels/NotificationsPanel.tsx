@@ -1,26 +1,24 @@
 import React, { useState, useEffect } from 'react';
+import { useAtom } from 'jotai';
 import { getSoundPlayer } from '../../../services/SoundPlayer';
+import {
+  notificationSettingsAtom,
+  setNotificationSettingsAtom,
+  type CompletionSoundType,
+} from '../../../store/atoms/appSettings';
 
-type CompletionSoundType = 'chime' | 'bell' | 'pop' | 'none';
-
-interface NotificationsPanelProps {
-  completionSoundEnabled: boolean;
-  onCompletionSoundEnabledChange: (value: boolean) => void;
-  completionSoundType: CompletionSoundType;
-  onCompletionSoundTypeChange: (value: CompletionSoundType) => void;
-  osNotificationsEnabled: boolean;
-  onOSNotificationsEnabledChange: (value: boolean) => void;
-}
-
-export function NotificationsPanel({
-  completionSoundEnabled,
-  onCompletionSoundEnabledChange,
-  completionSoundType,
-  onCompletionSoundTypeChange,
-  osNotificationsEnabled,
-  onOSNotificationsEnabledChange
-}: NotificationsPanelProps) {
+/**
+ * NotificationsPanel - Self-contained settings panel for notifications.
+ *
+ * This component subscribes directly to Jotai atoms instead of receiving props.
+ * Changes are automatically persisted via the setter atom.
+ */
+export function NotificationsPanel() {
+  const [settings] = useAtom(notificationSettingsAtom);
+  const [, updateSettings] = useAtom(setNotificationSettingsAtom);
   const [isTestPlaying, setIsTestPlaying] = useState(false);
+
+  const { completionSoundEnabled, completionSoundType, osNotificationsEnabled } = settings;
 
   // Set up IPC listener for sound playback
   useEffect(() => {
@@ -74,7 +72,7 @@ export function NotificationsPanel({
             <input
               type="checkbox"
               checked={completionSoundEnabled}
-              onChange={(e) => onCompletionSoundEnabledChange(e.target.checked)}
+              onChange={(e) => updateSettings({ completionSoundEnabled: e.target.checked })}
               className="setting-checkbox"
             />
             <div className="setting-text">
@@ -102,7 +100,7 @@ export function NotificationsPanel({
                     name="sound-type"
                     value={sound}
                     checked={completionSoundType === sound}
-                    onChange={(e) => onCompletionSoundTypeChange(e.target.value as CompletionSoundType)}
+                    onChange={(e) => updateSettings({ completionSoundType: e.target.value as CompletionSoundType })}
                     className="setting-radio"
                   />
                   <span style={{ textTransform: 'capitalize' }}>{sound}</span>
@@ -141,7 +139,7 @@ export function NotificationsPanel({
             <input
               type="checkbox"
               checked={osNotificationsEnabled}
-              onChange={(e) => onOSNotificationsEnabledChange(e.target.checked)}
+              onChange={(e) => updateSettings({ osNotificationsEnabled: e.target.checked })}
               className="setting-checkbox"
             />
             <div className="setting-text">

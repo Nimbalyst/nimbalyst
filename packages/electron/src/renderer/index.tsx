@@ -11,7 +11,20 @@ import {beforePostHogSendWeb} from "../main/services/analytics/analytics-utils.t
 import { initMonacoEditor } from './utils/monacoConfig';
 import { store } from '@nimbalyst/runtime/store';
 import { initializeTheme } from './hooks/useTheme';
-import { voiceModeSettingsAtom, initVoiceModeSettings } from './store/atoms/appSettings';
+import {
+  voiceModeSettingsAtom,
+  initVoiceModeSettings,
+  notificationSettingsAtom,
+  initNotificationSettings,
+  advancedSettingsAtom,
+  initAdvancedSettings,
+  syncConfigAtom,
+  initSyncConfig,
+  aiDebugSettingsAtom,
+  initAIDebugSettings,
+  aiProviderSettingsAtom,
+  initAIProviderSettings,
+} from './store/atoms/appSettings';
 
 // console.log('[RENDERER] Imports complete at', new Date().toISOString());
 
@@ -22,12 +35,29 @@ initMonacoEditor();
 // This must happen before React renders to avoid flash
 initializeTheme();
 
-// Initialize voice mode settings atom from main process
-// This loads settings and hydrates the Jotai atom before React renders
-initVoiceModeSettings().then((settings) => {
-  store.set(voiceModeSettingsAtom, settings);
-}).catch(() => {
-  // Ignore errors - voice mode is optional
+// Initialize app settings atoms from main process
+// This loads settings and hydrates the Jotai atoms before React renders
+Promise.all([
+  initVoiceModeSettings().then((settings) => {
+    store.set(voiceModeSettingsAtom, settings);
+  }),
+  initNotificationSettings().then((settings) => {
+    store.set(notificationSettingsAtom, settings);
+  }),
+  initAdvancedSettings().then((settings) => {
+    store.set(advancedSettingsAtom, settings);
+  }),
+  initSyncConfig().then((config) => {
+    store.set(syncConfigAtom, config);
+  }),
+  initAIDebugSettings().then((settings) => {
+    store.set(aiDebugSettingsAtom, settings);
+  }),
+  initAIProviderSettings().then((settings) => {
+    store.set(aiProviderSettingsAtom, settings);
+  }),
+]).catch(() => {
+  // Ignore errors - settings will use defaults
 });
 
 
