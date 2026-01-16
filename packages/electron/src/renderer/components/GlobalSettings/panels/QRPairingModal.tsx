@@ -202,22 +202,29 @@ export function QRPairingModal({ isOpen, onClose, serverUrl }: QRPairingModalPro
 
               <div className="qr-instructions">
                 <p className="qr-step">1. Open Nimbalyst on your mobile device</p>
-                <p className="qr-step">2. Sign in with Google (same account as desktop)</p>
-                <p className="qr-step">3. Go to Settings and tap "Scan QR Code"</p>
-                <p className="qr-step">4. Point your camera at this QR code</p>
+                <p className="qr-step">2. Go to Settings and tap "Scan QR Code"</p>
+                <p className="qr-step">3. Point your camera at this QR code</p>
+                <p className="qr-step">4. Sign in with the same account as desktop</p>
               </div>
 
               <div className="qr-info" style={{
                 marginTop: '12px',
                 padding: '12px',
-                backgroundColor: 'var(--surface-secondary)',
+                backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                border: '1px solid rgba(34, 197, 94, 0.2)',
                 borderRadius: '8px',
                 fontSize: '13px',
                 color: 'var(--text-secondary)',
               }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0110 0v4" />
+                  </svg>
+                  <span style={{ fontWeight: 600, color: '#22c55e' }}>End-to-End Encrypted</span>
+                </div>
                 <p style={{ margin: 0 }}>
-                  This QR code shares your encryption key for E2E encrypted sync.
-                  Your mobile device will authenticate separately with Google Sign-In.
+                  This QR code securely transfers your encryption key. Your keys never touch our servers - only your devices can decrypt your data.
                 </p>
               </div>
 

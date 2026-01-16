@@ -189,11 +189,12 @@ function AppContent() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </SplitView>
-        {showDebug ? (
+        {/* Debug button hidden for now - needs better UX for access */}
+        {false && (showDebug ? (
           <NotificationDebugOverlay debugState={debugState} onClose={() => setShowDebug(false)} onCopy={copyLogs} />
         ) : (
           <NotificationDebugButton onClick={() => setShowDebug(true)} />
-        )}
+        ))}
       </>
     );
   }
@@ -211,11 +212,12 @@ function AppContent() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </SwipeNavigation>
-      {showDebug ? (
+      {/* Debug button hidden for now - needs better UX for access */}
+      {false && (showDebug ? (
         <NotificationDebugOverlay debugState={debugState} onClose={() => setShowDebug(false)} onCopy={copyLogs} />
       ) : (
         <NotificationDebugButton onClick={() => setShowDebug(true)} />
-      )}
+      ))}
     </>
   );
 }

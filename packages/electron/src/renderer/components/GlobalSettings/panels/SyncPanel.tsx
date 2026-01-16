@@ -803,27 +803,140 @@ export function SyncPanel({
             </p>
           </div>
 
-          {/* Mobile Pairing */}
-          <div className="provider-panel-section">
-            <h4 className="provider-panel-section-title">Mobile Device</h4>
-            <button
-              className="pair-device-button"
-              onClick={() => setShowQRModal(true)}
-              disabled={!effectiveServerUrl}
-              style={{ width: '100%' }}
-            >
-              <svg style={{ width: '18px', height: '18px', marginRight: '8px' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="3" y="3" width="7" height="7" rx="1" />
-                <rect x="14" y="3" width="7" height="7" rx="1" />
-                <rect x="3" y="14" width="7" height="7" rx="1" />
-                <rect x="14" y="14" width="3" height="3" />
-                <rect x="18" y="14" width="3" height="3" />
-                <rect x="14" y="18" width="3" height="3" />
-                <rect x="18" y="18" width="3" height="3" />
-              </svg>
-              Pair Mobile Device
-            </button>
-          </div>
+          {/* Get the Mobile App - only show when authenticated */}
+          {stytchAuth.isAuthenticated && (
+            <div className="provider-panel-section">
+              <h4 className="provider-panel-section-title">Get the Mobile App</h4>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '16px',
+                padding: '16px',
+                background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(59, 130, 246, 0.05) 100%)',
+                borderRadius: '8px',
+                border: '1px solid rgba(59, 130, 246, 0.2)',
+              }}>
+                <div style={{
+                  width: '56px',
+                  height: '56px',
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}>
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                    <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+                    <line x1="12" y1="18" x2="12" y2="18"/>
+                  </svg>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                    Nimbalyst for iOS
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                    View AI sessions on your iPhone or iPad
+                  </div>
+                  <button
+                    onClick={() => window.electronAPI.openExternal('https://apps.apple.com/app/nimbalyst')}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '6px 12px',
+                      background: 'white',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      fontWeight: 500,
+                      color: '#111827',
+                      border: 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+                    </svg>
+                    Download on App Store
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Mobile Pairing - only show when authenticated */}
+          {stytchAuth.isAuthenticated ? (
+            <div className="provider-panel-section">
+              <h4 className="provider-panel-section-title">Mobile Device</h4>
+              <button
+                className="pair-device-button"
+                onClick={() => setShowQRModal(true)}
+                disabled={!effectiveServerUrl}
+                style={{ width: '100%' }}
+              >
+                <svg style={{ width: '18px', height: '18px', marginRight: '8px' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="7" height="7" rx="1" />
+                  <rect x="14" y="3" width="7" height="7" rx="1" />
+                  <rect x="3" y="14" width="7" height="7" rx="1" />
+                  <rect x="14" y="14" width="3" height="3" />
+                  <rect x="18" y="14" width="3" height="3" />
+                  <rect x="14" y="18" width="3" height="3" />
+                  <rect x="18" y="18" width="3" height="3" />
+                </svg>
+                Pair Mobile Device
+              </button>
+
+              {/* Encryption Explanation */}
+              <div style={{
+                marginTop: '12px',
+                padding: '16px',
+                background: 'rgba(34, 197, 94, 0.1)',
+                border: '1px solid rgba(34, 197, 94, 0.2)',
+                borderRadius: '8px',
+              }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  marginBottom: '10px',
+                }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0110 0v4" />
+                  </svg>
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: '#22c55e' }}>
+                    End-to-End Encryption
+                  </span>
+                </div>
+                <p style={{ margin: '0 0 10px', fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                  The QR code securely transfers your encryption key directly between devices.
+                </p>
+                <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '12px', color: 'var(--text-primary)', lineHeight: 1.7 }}>
+                  <li>Your encryption keys never touch our servers</li>
+                  <li>Only your devices can decrypt your data</li>
+                  <li>Sign in with the same account on both devices</li>
+                </ul>
+              </div>
+            </div>
+          ) : (
+            <div className="provider-panel-section">
+              <h4 className="provider-panel-section-title">Mobile Device</h4>
+              <div style={{
+                padding: '16px',
+                background: 'var(--surface-secondary)',
+                borderRadius: '8px',
+                textAlign: 'center',
+              }}>
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)" strokeWidth="1.5" style={{ margin: '0 auto 12px' }}>
+                  <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+                  <line x1="12" y1="18" x2="12" y2="18"/>
+                </svg>
+                <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-secondary)' }}>
+                  Sign in above to pair your mobile device
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Connected Devices */}
           {connectedDevices.length > 0 && (
