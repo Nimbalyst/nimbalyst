@@ -20,42 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
-## [0.51.8] - 2026-01-16
-
-
-### Added
-- Mobile push notifications for agent completion
-- Clearer mobile sync setup with encryption explanation
-- Faster AI session search with GIN index
-- Comprehensive Node.js version manager support for PATH detection (nvm, fnm, asdf, volta, n, nodenv, mise)
-
-### Changed
-<!-- Changes to existing functionality go here -->
-
-### Fixed
-- Packaged builds no longer crash with 'process is not defined'
-- Prevent database corruption when restarting from Extension Dev panel
-- Resolved TypeScript type errors across monorepo
-
-### Removed
-<!-- Removed features go here -->
-
-## [0.51.7] - 2026-01-15
-
-
-### Added
-- Analytics tracking for git repository status in workspace_opened event
-
-### Changed
-- Better instructions around charting and error bars
-
-### Fixed
-<!-- Bug fixes go here -->
-
-### Removed
-<!-- Removed features go here -->
-
-## [0.51.6] - 2026-01-15
+## [0.51.9] - 2026-01-16
 
 
 ### Added
@@ -68,7 +33,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AI chat panel receives context from extension panels
 - Manual pairing for devices that can't scan QR codes
 - Error bar support to visual display widget
-- Support for default disabled extensions
+- Mobile push notifications for agent completion
+- Clearer mobile sync setup with encryption explanation
+- Faster AI session search with GIN index
+- Comprehensive Node.js version manager support for PATH detection (nvm, fnm, asdf, volta, n, nodenv, mise)
 - Enhanced font smoothing for Monaco code editor
 
 ### Changed
@@ -76,6 +44,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Diff tree grouping setting persists per project
 
 ### Fixed
+- Packaged builds no longer crash with 'process is not defined'
+- Prevent database corruption when restarting from Extension Dev panel
 - Voice agent now passes user requests verbatim to coding agent
 - Fullscreen shortcut no longer conflicts with Find on Windows
 - Voice commands no longer create duplicate queued prompts
