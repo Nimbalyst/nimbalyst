@@ -541,6 +541,7 @@ async function handleAuthRoutes(
       };
 
       if (!stytchResponse.ok || !stytchData.session_token) {
+        console.error('[auth/refresh] Stytch error:', stytchResponse.status, stytchData.error_message);
         return new Response(JSON.stringify({
           error: stytchData.error_message || 'Session refresh failed',
           expired: stytchResponse.status === 401,
@@ -589,6 +590,8 @@ async function handleAuthRoutes(
     oauthUrl.searchParams.set('public_token', env.STYTCH_PUBLIC_TOKEN);
     oauthUrl.searchParams.set('login_redirect_url', callbackUrl);
     oauthUrl.searchParams.set('signup_redirect_url', callbackUrl);
+    // Force Google to show account picker instead of auto-selecting
+    oauthUrl.searchParams.set('provider_prompt', 'select_account');
 
     return Response.redirect(oauthUrl.toString(), 302);
   }

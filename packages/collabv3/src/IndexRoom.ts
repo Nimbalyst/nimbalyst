@@ -23,6 +23,8 @@ import type {
   CreateSessionResponseBroadcastMessage,
   SessionControlMessage,
   SessionControlBroadcastMessage,
+  RegisterPushTokenMessage,
+  RequestMobilePushMessage,
 } from './types';
 import { createLogger } from './logger';
 
@@ -44,6 +46,11 @@ export class IndexRoom implements DurableObject {
   // Note: This map is rebuilt after hibernation using getWebSockets() and tags
   private connections: Map<WebSocket, ConnectionState> = new Map();
   private initialized = false;
+
+  // APNs JWT cache - JWTs are valid for 1 hour, we refresh every 50 minutes
+  private cachedAPNsJWT: string | null = null;
+  private cachedAPNsJWTExpiry: number = 0;
+  private cachedAPNsKey: CryptoKey | null = null;
 
   constructor(state: DurableObjectState, env: Env) {
     this.state = state;
@@ -300,6 +307,19 @@ export class IndexRoom implements DurableObject {
 
         case 'session_control':
           await this.handleSessionControl(ws, connState, message.message);
+          break;
+
+        case 'register_push_token':
+          await this.handleRegisterPushToken(connState, message);
+          break;
+
+        case 'request_mobile_push':
+          await this.handleRequestMobilePush(connState, message);
+          break;
+
+        case 'ping':
+          // Keep-alive ping, respond with pong
+          ws.send(JSON.stringify({ type: 'pong' }));
           break;
 
         default:
@@ -601,6 +621,246 @@ export class IndexRoom implements DurableObject {
     this.broadcast(broadcastMessage, ws);
 
     log.debug('Broadcast session_control to', this.connections.size - 1, 'other connections');
+  }
+
+  /**
+   * Handle push token registration from mobile devices
+   */
+  private async handleRegisterPushToken(
+    connState: ConnectionState,
+    message: RegisterPushTokenMessage
+  ): Promise<void> {
+    console.log('[IndexRoom] Registering push token for device:', message.device_id, 'platform:', message.platform);
+    console.log('[IndexRoom] Token (first 20 chars):', message.token.substring(0, 20) + '...');
+
+    // Store the token in DO storage
+    const key = `push_token:${message.device_id}`;
+    const value = {
+      token: message.token,
+      platform: message.platform,
+      device_id: message.device_id,
+      registered_at: Date.now(),
+    };
+
+    await this.state.storage.put(key, value);
+    console.log('[IndexRoom] Push token stored with key:', key);
+
+    // Verify it was stored
+    const stored = await this.state.storage.get(key);
+    console.log('[IndexRoom] Verified stored token:', stored ? 'exists' : 'NOT FOUND');
+  }
+
+  /**
+   * Handle request to send push notification to mobile devices
+   * Called by desktop when an agent completes a turn
+   */
+  private async handleRequestMobilePush(
+    connState: ConnectionState,
+    message: RequestMobilePushMessage
+  ): Promise<void> {
+    console.log('[IndexRoom] Received push request for session:', message.session_id);
+
+    // TODO: Re-enable presence-aware suppression once basic push is working reliably
+    // For now, always send push notifications to debug delivery issues
+    // const devices = this.getConnectedDevices();
+    // const desktop = devices.find(d => d.type === 'desktop');
+    // if (desktop) {
+    //   const isDesktopActive = desktop.status === 'active' ||
+    //     (desktop.is_focused && Date.now() - (desktop.last_active_at || 0) < 5 * 60 * 1000);
+    //   if (isDesktopActive) {
+    //     log.debug('Suppressing push notification - desktop is active');
+    //     return;
+    //   }
+    // }
+
+    // Get all registered push tokens for mobile devices
+    const pushTokens = await this.state.storage.list<{
+      token: string;
+      platform: 'ios' | 'android';
+      device_id: string;
+      registered_at: number;
+    }>({ prefix: 'push_token:' });
+
+    console.log('[IndexRoom] Found push tokens:', pushTokens.size);
+
+    if (pushTokens.size === 0) {
+      console.log('[IndexRoom] No push tokens registered, skipping notification');
+      return;
+    }
+
+    // Send push to each registered device
+    for (const [key, tokenData] of pushTokens) {
+      console.log('[IndexRoom] Sending push to device:', tokenData.device_id, 'platform:', tokenData.platform);
+      if (tokenData.platform === 'ios') {
+        const result = await this.sendAPNsPush(tokenData.token, {
+          title: message.title,
+          body: message.body,
+          sessionId: message.session_id,
+        });
+        console.log('[IndexRoom] APNs push result:', result);
+      }
+      // TODO: Add FCM support for Android
+    }
+  }
+
+  /**
+   * Send a push notification via APNs
+   */
+  private async sendAPNsPush(
+    deviceToken: string,
+    payload: { title: string; body: string; sessionId: string }
+  ): Promise<boolean> {
+    const env = this.env as Env;
+
+    // Check if APNs is configured
+    if (!env.APNS_KEY || !env.APNS_KEY_ID || !env.APNS_TEAM_ID) {
+      console.log('[IndexRoom] APNs not configured, skipping push');
+      return false;
+    }
+
+    console.log('[IndexRoom] APNs configured, generating JWT...');
+
+    try {
+      // Generate JWT for APNs authentication
+      const jwt = await this.generateAPNsJWT(env.APNS_KEY, env.APNS_KEY_ID, env.APNS_TEAM_ID);
+      console.log('[IndexRoom] JWT generated, sending to APNs...');
+
+      // Determine APNs endpoint (production vs sandbox)
+      const apnsHost = env.APNS_SANDBOX === 'true'
+        ? 'api.sandbox.push.apple.com'
+        : 'api.push.apple.com';
+
+      console.log('[IndexRoom] Using APNs host:', apnsHost);
+
+      // APNs requires lowercase hex device token
+      const normalizedToken = deviceToken.toLowerCase();
+      console.log('[IndexRoom] Token length:', normalizedToken.length, 'first 20:', normalizedToken.substring(0, 20));
+
+      const response = await fetch(
+        `https://${apnsHost}/3/device/${normalizedToken}`,
+        {
+          method: 'POST',
+          headers: {
+            'authorization': `bearer ${jwt}`,
+            'apns-topic': env.APNS_BUNDLE_ID || 'com.nimbalyst.app',
+            'apns-push-type': 'alert',
+            'apns-priority': '10',
+          },
+          body: JSON.stringify({
+            aps: {
+              alert: {
+                title: payload.title,
+                body: payload.body,
+              },
+              sound: 'default',
+            },
+            sessionId: payload.sessionId,
+          }),
+        }
+      );
+
+      if (response.ok) {
+        console.log('[IndexRoom] APNs push sent successfully');
+        return true;
+      } else {
+        const errorBody = await response.text();
+        console.error('[IndexRoom] APNs push failed:', response.status, errorBody);
+        return false;
+      }
+    } catch (error) {
+      console.error('[IndexRoom] APNs push error:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Generate a JWT for APNs authentication (with caching)
+   * Uses ES256 algorithm as required by APNs
+   * JWTs are valid for 1 hour, we cache for 50 minutes
+   */
+  private async generateAPNsJWT(
+    privateKeyBase64: string,
+    keyId: string,
+    teamId: string
+  ): Promise<string> {
+    const now = Date.now();
+
+    // Return cached JWT if still valid (50 minute cache)
+    if (this.cachedAPNsJWT && now < this.cachedAPNsJWTExpiry) {
+      return this.cachedAPNsJWT;
+    }
+
+    // Get or create cached private key
+    if (!this.cachedAPNsKey) {
+      const privateKeyPem = atob(privateKeyBase64);
+      this.cachedAPNsKey = await crypto.subtle.importKey(
+        'pkcs8',
+        this.pemToArrayBuffer(privateKeyPem),
+        { name: 'ECDSA', namedCurve: 'P-256' },
+        false,
+        ['sign']
+      );
+    }
+
+    // Create JWT header and payload
+    const header = { alg: 'ES256', kid: keyId };
+    const payload = {
+      iss: teamId,
+      iat: Math.floor(now / 1000),
+    };
+
+    // Encode header and payload
+    const encodedHeader = this.base64UrlEncode(JSON.stringify(header));
+    const encodedPayload = this.base64UrlEncode(JSON.stringify(payload));
+    const signingInput = `${encodedHeader}.${encodedPayload}`;
+
+    // Sign with the private key
+    const signature = await crypto.subtle.sign(
+      { name: 'ECDSA', hash: 'SHA-256' },
+      this.cachedAPNsKey,
+      new TextEncoder().encode(signingInput)
+    );
+
+    // Convert signature to base64url
+    const encodedSignature = this.base64UrlEncode(
+      String.fromCharCode(...new Uint8Array(signature))
+    );
+
+    const jwt = `${signingInput}.${encodedSignature}`;
+
+    // Cache the JWT for 50 minutes (APNs allows 1 hour)
+    this.cachedAPNsJWT = jwt;
+    this.cachedAPNsJWTExpiry = now + 50 * 60 * 1000;
+
+    return jwt;
+  }
+
+  /**
+   * Convert PEM to ArrayBuffer for crypto.subtle.importKey
+   */
+  private pemToArrayBuffer(pem: string): ArrayBuffer {
+    // Remove PEM headers and newlines
+    const base64 = pem
+      .replace(/-----BEGIN PRIVATE KEY-----/, '')
+      .replace(/-----END PRIVATE KEY-----/, '')
+      .replace(/\s/g, '');
+
+    const binaryString = atob(base64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes.buffer;
+  }
+
+  /**
+   * Base64 URL encode (RFC 4648)
+   */
+  private base64UrlEncode(str: string): string {
+    return btoa(str)
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
   }
 
   /**

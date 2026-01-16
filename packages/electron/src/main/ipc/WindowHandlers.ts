@@ -1,4 +1,4 @@
-import { BrowserWindow, shell, nativeImage } from 'electron';
+import { BrowserWindow, shell, nativeImage, app, powerMonitor } from 'electron';
 import { safeHandle, safeOn } from '../utils/ipcRegistry';
 import { windowStates, windows, getWindowId } from '../window/WindowManager';
 import { updateApplicationMenu } from '../menu/ApplicationMenu';
@@ -7,6 +7,7 @@ import { basename, join } from 'path';
 import { getFolderContents } from '../utils/FileTree';
 import { writeFileSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
+import { reportDesktopActivity, setWindowFocused, setScreenLocked, setIdleThresholdMs } from '../services/SyncManager';
 
 export function registerWindowHandlers() {
     // Get initial window state
@@ -209,6 +210,41 @@ export function registerWindowHandlers() {
             console.error('[IMAGE] Failed to start drag:', error);
             return { success: false, error: error.message };
         }
+    });
+
+    // Report user activity from renderer (for sync presence awareness)
+    safeOn('user-activity', () => {
+        reportDesktopActivity();
+    });
+
+    // Track window focus for sync presence
+    // Note: These are app-level events, not window-specific
+    app.on('browser-window-focus', () => {
+        setWindowFocused(true);
+    });
+
+    app.on('browser-window-blur', () => {
+        // Check if any window is still focused
+        const anyFocused = BrowserWindow.getAllWindows().some(w => w.isFocused());
+        setWindowFocused(anyFocused);
+    });
+
+    // Track screen lock state for sync presence
+    powerMonitor.on('lock-screen', () => {
+        setScreenLocked(true);
+    });
+
+    powerMonitor.on('unlock-screen', () => {
+        setScreenLocked(false);
+    });
+
+    // IPC handler to set idle threshold for testing
+    safeHandle('sync:set-idle-threshold', (_event, ms: number) => {
+        if (typeof ms === 'number' && ms > 0) {
+            setIdleThresholdMs(ms);
+            return { success: true };
+        }
+        return { success: false, error: 'Invalid threshold value' };
     });
 }
 

@@ -11,10 +11,12 @@ install! 'cocoapods', :disable_input_output_paths => true
 def capacitor_pods
   pod 'Capacitor', :path => '../../../../node_modules/@capacitor/ios'
   pod 'CapacitorCordova', :path => '../../../../node_modules/@capacitor/ios'
-  pod 'CapacitorBarcodeScanner', :path => '../../../../node_modules/@capacitor/barcode-scanner'
   pod 'CapacitorApp', :path => '../../../../node_modules/@capacitor/app'
+  pod 'CapacitorBarcodeScanner', :path => '../../../../node_modules/@capacitor/barcode-scanner'
   pod 'CapacitorBrowser', :path => '../../../../node_modules/@capacitor/browser'
+  pod 'CapacitorLocalNotifications', :path => '../../../../node_modules/@capacitor/local-notifications'
   pod 'CapacitorPreferences', :path => '../../../../node_modules/@capacitor/preferences'
+  pod 'CapacitorPushNotifications', :path => '../../../../node_modules/@capacitor/push-notifications'
   pod 'CapacitorSecureStoragePlugin', :path => '../../../../node_modules/capacitor-secure-storage-plugin'
 end
 

@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: 'Nimbalyst',
   webDir: 'dist',
   // avoid builtin logging because it logs the sensitive encryption key like a dumbass
-  loggingBehavior: 'none',
+  // loggingBehavior: 'none',
   // Use Vite dev server for HMR during development
   // server: {
   //   url: 'http://192.168.1.253:4102',

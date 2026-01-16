@@ -1,5 +1,5 @@
 PODS:
-  - Capacitor (7.4.4):
+  - Capacitor (7.4.5):
     - CapacitorCordova
   - CapacitorApp (7.1.1):
     - Capacitor
@@ -8,8 +8,12 @@ PODS:
     - OSBarcodeLib (= 2.0.1)
   - CapacitorBrowser (7.0.3):
     - Capacitor
-  - CapacitorCordova (7.4.4)
+  - CapacitorCordova (7.4.5)
+  - CapacitorLocalNotifications (7.0.4):
+    - Capacitor
   - CapacitorPreferences (7.0.3):
+    - Capacitor
+  - CapacitorPushNotifications (7.0.4):
     - Capacitor
   - CapacitorSecureStoragePlugin (0.12.0):
     - Capacitor
@@ -23,7 +27,9 @@ DEPENDENCIES:
   - "CapacitorBarcodeScanner (from `../../../../node_modules/@capacitor/barcode-scanner`)"
   - "CapacitorBrowser (from `../../../../node_modules/@capacitor/browser`)"
   - "CapacitorCordova (from `../../../../node_modules/@capacitor/ios`)"
+  - "CapacitorLocalNotifications (from `../../../../node_modules/@capacitor/local-notifications`)"
   - "CapacitorPreferences (from `../../../../node_modules/@capacitor/preferences`)"
+  - "CapacitorPushNotifications (from `../../../../node_modules/@capacitor/push-notifications`)"
   - CapacitorSecureStoragePlugin (from `../../../../node_modules/capacitor-secure-storage-plugin`)
 
 SPEC REPOS:
@@ -42,22 +48,28 @@ EXTERNAL SOURCES:
     :path: "../../../../node_modules/@capacitor/browser"
   CapacitorCordova:
     :path: "../../../../node_modules/@capacitor/ios"
+  CapacitorLocalNotifications:
+    :path: "../../../../node_modules/@capacitor/local-notifications"
   CapacitorPreferences:
     :path: "../../../../node_modules/@capacitor/preferences"
+  CapacitorPushNotifications:
+    :path: "../../../../node_modules/@capacitor/push-notifications"
   CapacitorSecureStoragePlugin:
     :path: "../../../../node_modules/capacitor-secure-storage-plugin"
 
 SPEC CHECKSUMS:
-  Capacitor: 358dd1c3fdd71d969547b17e159fd8a7736cb45f
+  Capacitor: 12914e6f1b7835e161a74ebd19cb361efa37a7dd
   CapacitorApp: 63b237168fc869e758481dba283315a85743ee78
   CapacitorBarcodeScanner: 4e00db2f78415726d0c1f905adc11aaac6225b11
   CapacitorBrowser: b98aa3db018a2ce4c68242d27e596c344f3b81b3
-  CapacitorCordova: bf648a636f3c153f652d312ae145fb508b6ffced
+  CapacitorCordova: 31bbe4466000c6b86d9b7f1181ee286cff0205aa
+  CapacitorLocalNotifications: ba2a08bd92887b08f352e6b2db430575cef0cea3
   CapacitorPreferences: 913eef88272c13eb6445b21e51fe8ef6635412cc
+  CapacitorPushNotifications: 7604512af53bbfdf1dd8fb2256b9ef1e8a69cdc2
   CapacitorSecureStoragePlugin: 50de0808ad398aa401e00f9e58adf88c77cb3c25
   OSBarcodeLib: 57987d2eb1f916f701f4554e20e349b3cb83f023
   SwiftKeychainWrapper: 807ba1d63c33a7d0613288512399cd1eda1e470c
 
-PODFILE CHECKSUM: ed81cae6356cfd83ea4f22caab0184017977c74f
+PODFILE CHECKSUM: 6198d78894a6d2098c5d679d8d732f520a094bac
 
 COCOAPODS: 1.16.2

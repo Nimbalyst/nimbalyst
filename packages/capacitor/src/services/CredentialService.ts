@@ -18,6 +18,7 @@ export interface SyncCredentials {
   encryptionKeySeed: string; // Base64 encoded 32 bytes - the E2E encryption secret
   serverUrl: string;
   pairedAt: number; // When the QR was scanned
+  syncEmail?: string; // Email that must match mobile login (v4+)
 }
 
 const CREDENTIALS_KEY = 'nimbalyst_sync_credentials_v2';
@@ -115,17 +116,18 @@ export async function getEncryptionKeySeed(): Promise<string | null> {
 /**
  * Parse QR code payload and create credentials.
  *
- * QR payload format (v3 - with analytics):
+ * QR payload format (v4 - with syncEmail):
  * {
- *   version: 3,
+ *   version: 4,
  *   serverUrl: "wss://...",
  *   encryptionKeySeed: "base64-key-seed",
  *   expiresAt: timestamp,
- *   analyticsId: "nimbalyst_xxx..."  // Desktop's PostHog distinctId
+ *   analyticsId: "nimbalyst_xxx...",  // Desktop's PostHog distinctId
+ *   syncEmail: "user@example.com"     // Email that mobile must use to login
  * }
  *
  * Note: Auth credentials (userId, authToken) are no longer in QR.
- * Mobile authenticates via Stytch OAuth separately.
+ * Mobile authenticates via Stytch OAuth separately, but must use matching email.
  */
 export interface QRPayload {
   version: number;
@@ -134,6 +136,8 @@ export interface QRPayload {
   expiresAt: number;
   // v3: Desktop's PostHog analytics ID for identity linking
   analyticsId?: string;
+  // v4: Email that mobile must login with (must match desktop sync account)
+  syncEmail?: string;
   // Legacy fields (v1) - ignored but accepted for backwards compat
   userId?: string;
   authToken?: string;
@@ -185,8 +189,18 @@ export async function saveFromQRPayload(payload: QRPayload): Promise<SyncCredent
     encryptionKeySeed: payload.encryptionKeySeed,
     serverUrl: payload.serverUrl,
     pairedAt: Date.now(),
+    syncEmail: payload.syncEmail,
   };
 
   await saveCredentials(credentials);
   return credentials;
+}
+
+/**
+ * Get the required sync email (from QR pairing).
+ * If set, mobile must login with this email.
+ */
+export async function getSyncEmail(): Promise<string | null> {
+  const creds = await loadCredentials();
+  return creds?.syncEmail ?? null;
 }

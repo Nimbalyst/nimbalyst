@@ -163,6 +163,34 @@ export default function App() {
   // PostHog for analytics
   const posthog = usePostHog();
 
+  // Track user activity for sync presence awareness
+  useEffect(() => {
+    // Throttle activity reports to max once per second
+    let lastReportTime = 0;
+    const throttleMs = 1000;
+
+    const reportActivity = () => {
+      const now = Date.now();
+      if (now - lastReportTime > throttleMs) {
+        lastReportTime = now;
+        window.electronAPI?.reportUserActivity?.();
+      }
+    };
+
+    // Track keyboard and mouse activity
+    document.addEventListener('keydown', reportActivity);
+    document.addEventListener('mousedown', reportActivity);
+    document.addEventListener('mousemove', reportActivity);
+    document.addEventListener('scroll', reportActivity, true);
+
+    return () => {
+      document.removeEventListener('keydown', reportActivity);
+      document.removeEventListener('mousedown', reportActivity);
+      document.removeEventListener('mousemove', reportActivity);
+      document.removeEventListener('scroll', reportActivity, true);
+    };
+  }, []);
+
   // Check for special window modes
   const urlParams = new URLSearchParams(window.location.search);
   const windowMode = urlParams.get('mode');

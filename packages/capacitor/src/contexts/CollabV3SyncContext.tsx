@@ -7,6 +7,7 @@ import {
   type StytchSession,
 } from '../services/StytchAuthService';
 import { loadCredentials } from '../services/CredentialService';
+import { initializePushNotifications, onPushTokenReceived, getStoredPushToken } from '../services/PushNotificationService';
 import forge from 'node-forge';
 
 /**
@@ -191,6 +192,10 @@ interface DeviceInfo {
   app_version?: string;
   connected_at: number;
   last_active_at: number;
+  /** Whether the app window is currently focused (optional for backwards compatibility) */
+  is_focused?: boolean;
+  /** Derived status for presence display (optional for backwards compatibility) */
+  status?: 'active' | 'idle' | 'away';
 }
 
 /** Encrypted create session request for wire protocol */
@@ -220,7 +225,8 @@ type ClientMessage =
   | { type: 'index_update'; session: ServerSessionEntry }
   | { type: 'device_announce'; device: DeviceInfo }
   | { type: 'create_session_request'; request: EncryptedCreateSessionRequest }
-  | { type: 'session_control'; message: { session_id: string; message_type: string; payload?: Record<string, unknown>; timestamp: number; sent_by: 'desktop' | 'mobile' } };
+  | { type: 'session_control'; message: { session_id: string; message_type: string; payload?: Record<string, unknown>; timestamp: number; sent_by: 'desktop' | 'mobile' } }
+  | { type: 'register_push_token'; token: string; platform: 'ios' | 'android'; device_id: string };
 
 type ServerMessage =
   | {
@@ -594,6 +600,44 @@ function getDeviceName(): string {
   return 'Mobile Device';
 }
 
+// ============================================================================
+// Activity Tracking (module-level for presence awareness)
+// ============================================================================
+
+/** Timestamp of last user activity (touch, scroll, etc.) */
+let lastActivityAt = Date.now();
+
+/** Timestamp when this device first connected (set once) */
+let connectionTime = Date.now();
+
+/**
+ * Report user activity. Call this on touch/scroll events.
+ * Exported so it can be called from the global activity listener.
+ */
+export function reportMobileActivity(): void {
+  lastActivityAt = Date.now();
+}
+
+/**
+ * Derive the device status based on visibility and activity.
+ */
+function deriveDeviceStatus(): 'active' | 'idle' | 'away' {
+  const IDLE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+  const idleTime = Date.now() - lastActivityAt;
+
+  // If app is not visible, user is "away"
+  if (document.visibilityState !== 'visible') {
+    return 'away';
+  }
+
+  // If app is visible but no recent activity, user is "idle"
+  if (idleTime > IDLE_THRESHOLD_MS) {
+    return 'idle';
+  }
+
+  return 'active';
+}
+
 /**
  * Get device info for sending to the server.
  */
@@ -606,8 +650,10 @@ function getDeviceInfo(): DeviceInfo {
     type,
     platform,
     app_version: '1.0.0', // TODO: Get from Capacitor app info
-    connected_at: Date.now(),
-    last_active_at: Date.now(),
+    connected_at: connectionTime,
+    last_active_at: lastActivityAt,
+    is_focused: document.visibilityState === 'visible',
+    status: deriveDeviceStatus(),
   };
 }
 
@@ -1311,6 +1357,39 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
         clearInterval(deviceAnnounceIntervalRef.current);
       }
       deviceAnnounceIntervalRef.current = setInterval(announceDevice, 30000);
+
+      // Send push token to server (if we have one)
+      // The token is obtained via initializePushNotifications() at app startup
+      const sendPushToken = (token: string) => {
+        if (ws.readyState === WebSocket.OPEN) {
+          const deviceInfo = getDeviceInfo();
+          const registerMsg: ClientMessage = {
+            type: 'register_push_token',
+            token,
+            platform: 'ios', // TODO: detect android
+            device_id: deviceInfo.device_id,
+          };
+          console.log('[CollabV3] Sending register_push_token for device:', deviceInfo.device_id);
+          ws.send(JSON.stringify(registerMsg));
+          console.log('[CollabV3] Registered push token with server');
+        }
+      };
+
+      // Try to send stored token immediately
+      getStoredPushToken().then((token) => {
+        if (token) {
+          console.log('[CollabV3] Found stored push token, sending to server');
+          sendPushToken(token);
+        } else {
+          console.log('[CollabV3] No stored push token yet');
+        }
+      });
+
+      // Also register callback for when token is received (first time registration)
+      onPushTokenReceived((token) => {
+        console.log('[CollabV3] Received push token via callback, sending to server');
+        sendPushToken(token);
+      });
 
       // Request initial sync
       requestSync();

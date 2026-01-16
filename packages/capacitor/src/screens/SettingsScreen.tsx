@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CapacitorBarcodeScanner, CapacitorBarcodeScannerTypeHint } from '@capacitor/barcode-scanner';
+import { LocalNotifications } from '@capacitor/local-notifications';
 import { useSync, INACTIVITY_TIMEOUT_OPTIONS } from '../contexts/CollabV3SyncContext';
 import { SyncStatusBadge } from '../components/SyncStatusBadge';
 import {
@@ -41,6 +42,36 @@ export function SettingsScreen() {
   const [devSessionInput, setDevSessionInput] = useState('');
   const [devSessionError, setDevSessionError] = useState<string | null>(null);
 
+  // Notification permission state
+  const [notificationPermission, setNotificationPermission] = useState<'prompt' | 'granted' | 'denied' | 'unknown'>('unknown');
+
+  // Check notification permission
+  const checkNotificationPermission = useCallback(async () => {
+    try {
+      const result = await LocalNotifications.checkPermissions();
+      const status = result.display === 'granted' ? 'granted' :
+                     result.display === 'denied' ? 'denied' : 'prompt';
+      setNotificationPermission(status);
+    } catch (error) {
+      console.error('[SettingsScreen] Error checking notification permission:', error);
+    }
+  }, []);
+
+  // Request notification permission
+  const requestNotificationPermission = useCallback(async () => {
+    try {
+      const result = await LocalNotifications.requestPermissions();
+      const status = result.display === 'granted' ? 'granted' :
+                     result.display === 'denied' ? 'denied' : 'prompt';
+      setNotificationPermission(status);
+      return status;
+    } catch (error) {
+      console.error('[SettingsScreen] Error requesting notification permission:', error);
+      setNotificationPermission('denied');
+      return 'denied';
+    }
+  }, []);
+
   // Load credentials and session on mount
   useEffect(() => {
     async function load() {
@@ -49,9 +80,12 @@ export function SettingsScreen() {
 
       const session = await loadSession();
       setStytchSession(session);
+
+      // Also check notification permission
+      await checkNotificationPermission();
     }
     load();
-  }, []);
+  }, [checkNotificationPermission]);
 
   // Refresh stytch session after potential auth callback
   useEffect(() => {
@@ -480,6 +514,58 @@ export function SettingsScreen() {
                 </option>
               ))}
             </select>
+          </div>
+        </div>
+
+        {/* Notifications Settings */}
+        <div className="mb-6">
+          <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wide mb-3">
+            Notifications
+          </h2>
+
+          <div className="p-4 rounded-lg bg-[var(--surface-secondary)] border border-[var(--border-primary)]">
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <div className="text-sm text-[var(--text-secondary)]">Agent Completion Alerts</div>
+                <p className="text-xs text-[var(--text-tertiary)]">
+                  Get notified when an AI agent finishes processing
+                </p>
+              </div>
+              <div className="flex items-center">
+                {notificationPermission === 'granted' && (
+                  <span className="text-xs text-green-500 flex items-center gap-1">
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                      <polyline points="22 4 12 14.01 9 11.01" />
+                    </svg>
+                    Enabled
+                  </span>
+                )}
+                {notificationPermission === 'denied' && (
+                  <span className="text-xs text-red-500">Denied</span>
+                )}
+                {(notificationPermission === 'prompt' || notificationPermission === 'unknown') && (
+                  <button
+                    onClick={requestNotificationPermission}
+                    className="px-3 py-1 text-xs rounded-lg bg-[var(--primary-color)] text-white"
+                  >
+                    Enable
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {notificationPermission === 'denied' && (
+              <p className="text-xs text-[var(--text-tertiary)] mt-2">
+                Open device Settings to enable notifications for Nimbalyst.
+              </p>
+            )}
+
+            {notificationPermission === 'granted' && (
+              <p className="text-xs text-[var(--text-tertiary)] mt-2">
+                Notifications will only appear when the app is in the background and your desktop is not active.
+              </p>
+            )}
           </div>
         </div>
 

@@ -194,19 +194,22 @@ export function isUsingSecureStorage(): boolean {
 /**
  * Generate QR pairing payload for mobile device.
  *
- * The QR code contains the encryption key seed, server URL, and analytics ID.
- * Mobile devices authenticate independently via Stytch OAuth.
+ * The QR code contains the encryption key seed, server URL, analytics ID, and sync email.
+ * Mobile devices authenticate independently via Stytch OAuth, but must use the same email.
  *
  * @param serverUrl - The sync server URL
+ * @param syncEmail - The email address used for sync (mobile must login with same email)
  */
 export function generateQRPairingPayload(
-  serverUrl: string
+  serverUrl: string,
+  syncEmail?: string
 ): {
   version: number;
   serverUrl: string;
   encryptionKeySeed: string;
   expiresAt: number;
   analyticsId: string;
+  syncEmail?: string;
 } {
   const credentials = getCredentials();
 
@@ -217,10 +220,11 @@ export function generateQRPairingPayload(
   const analyticsId = AnalyticsService.getInstance().getDistinctId();
 
   return {
-    version: 3, // Version 3 = includes analyticsId for identity linking
+    version: 4, // Version 4 = includes syncEmail for email validation
     serverUrl,
     encryptionKeySeed: credentials.encryptionKeySeed,
     expiresAt,
     analyticsId,
+    syncEmail,
   };
 }

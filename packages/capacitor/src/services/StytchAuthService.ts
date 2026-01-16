@@ -19,6 +19,7 @@
 import { SecureStoragePlugin } from 'capacitor-secure-storage-plugin';
 import { Browser } from '@capacitor/browser';
 import { App as CapacitorApp } from '@capacitor/app';
+import { getSyncEmail } from './CredentialService';
 
 const STYTCH_SESSION_KEY = 'nimbalyst_stytch_session';
 
@@ -280,8 +281,9 @@ export async function sendMagicLink(
 /**
  * Handle the OAuth callback deep link.
  * Called when the app receives a nimbalyst://auth/callback URL.
+ * Returns { success: true } or { success: false, error: string } with reason.
  */
-export async function handleAuthCallback(url: string): Promise<boolean> {
+export async function handleAuthCallback(url: string): Promise<{ success: boolean; error?: string }> {
   try {
     const urlObj = new URL(url);
 
@@ -294,7 +296,27 @@ export async function handleAuthCallback(url: string): Promise<boolean> {
 
     if (!sessionToken || !sessionJwt || !userId) {
       console.error('[StytchAuth] Missing required params in callback:', url);
-      return false;
+      return { success: false, error: 'Missing authentication data' };
+    }
+
+    // Validate email matches the paired desktop account
+    const requiredEmail = await getSyncEmail();
+    if (requiredEmail && email) {
+      const normalizedRequired = requiredEmail.toLowerCase().trim();
+      const normalizedActual = email.toLowerCase().trim();
+      if (normalizedRequired !== normalizedActual) {
+        console.error('[StytchAuth] Email mismatch! Required:', requiredEmail, 'Got:', email);
+        // Close browser before returning error
+        try {
+          await Browser.close();
+        } catch {
+          // Ignore
+        }
+        return {
+          success: false,
+          error: `Please sign in with ${requiredEmail} to match your desktop account.`,
+        };
+      }
     }
 
     const session: StytchSession = {
@@ -316,10 +338,10 @@ export async function handleAuthCallback(url: string): Promise<boolean> {
     }
 
     console.log('[StytchAuth] Auth callback handled successfully for:', email);
-    return true;
+    return { success: true };
   } catch (error) {
     console.error('[StytchAuth] Failed to handle auth callback:', error);
-    return false;
+    return { success: false, error: 'Failed to process authentication' };
   }
 }
 
@@ -339,31 +361,31 @@ export function setupDeepLinkListener(
   // Set up the listener asynchronously
   (async () => {
     try {
-      const result = await CapacitorApp.addListener('appUrlOpen', async (event) => {
+      const listener = await CapacitorApp.addListener('appUrlOpen', async (event) => {
         const url = event.url;
 
         // Check if this is an auth callback
         if (url.startsWith('nimbalyst://auth/callback')) {
           console.log('[StytchAuth] Received auth callback:', url);
 
-          const success = await handleAuthCallback(url);
-          if (success) {
+          const authResult = await handleAuthCallback(url);
+          if (authResult.success) {
             const session = await loadSession();
             if (session) {
               onAuthSuccess(session);
             }
           } else {
-            onAuthError('Failed to process authentication');
+            onAuthError(authResult.error || 'Failed to process authentication');
           }
         }
       });
 
       // Store the handle for cleanup, but only if we haven't been cleaned up already
-      if (!isCleanedUp && result && typeof result.remove === 'function') {
-        listenerHandle = result;
-      } else if (isCleanedUp && result && typeof result.remove === 'function') {
+      if (!isCleanedUp && listener && typeof listener.remove === 'function') {
+        listenerHandle = listener;
+      } else if (isCleanedUp && listener && typeof listener.remove === 'function') {
         // We were cleaned up while setting up, so clean up immediately
-        result.remove();
+        listener.remove();
       }
     } catch (error) {
       console.warn('[StytchAuth] Deep link listener not available (browser mode):', error);

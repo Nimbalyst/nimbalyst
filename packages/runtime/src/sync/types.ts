@@ -22,8 +22,15 @@ export interface SyncConfig {
   /** Optional encryption key for E2E encryption */
   encryptionKey?: CryptoKey;
 
-  /** Device info for presence awareness */
+  /** Device info for presence awareness (static - set once at init) */
   deviceInfo?: DeviceInfo;
+
+  /**
+   * Function to get current device info for presence updates.
+   * Called periodically (every 30s) to get up-to-date presence info.
+   * If provided, takes precedence over static deviceInfo.
+   */
+  getDeviceInfo?: () => DeviceInfo;
 }
 
 /**
@@ -43,8 +50,12 @@ export interface DeviceInfo {
   app_version?: string;
   /** When this device connected (Unix timestamp ms) */
   connected_at: number;
-  /** Last activity timestamp (Unix timestamp ms) */
+  /** Last activity timestamp (Unix timestamp ms) - updated on user interaction */
   last_active_at: number;
+  /** Whether the app window is currently focused (optional for backwards compatibility) */
+  is_focused?: boolean;
+  /** Derived status for presence display (optional for backwards compatibility) */
+  status?: 'active' | 'idle' | 'away';
 }
 
 export interface SyncStatus {
@@ -192,6 +203,13 @@ export interface SyncProvider {
 
   /** Subscribe to session control messages from other devices */
   onSessionControlMessage?(callback: (message: SessionControlMessage) => void): () => void;
+
+  /**
+   * Request the sync server to send a push notification to mobile devices.
+   * Used when agent completes execution and user should be notified on mobile.
+   * The server will check device presence before sending (suppresses if mobile is active).
+   */
+  requestMobilePush?(sessionId: string, title: string, body: string): void;
 
   /** Get list of currently connected devices */
   getConnectedDevices?(): DeviceInfo[];

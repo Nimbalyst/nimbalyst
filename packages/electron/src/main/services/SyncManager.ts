@@ -120,6 +120,94 @@ function updateSyncStatus(update: Partial<{ connected: boolean; syncing: boolean
 // Cache the device ID so it's stable across sync reinitializations
 let cachedDeviceId: string | null = null;
 
+// ============================================================================
+// Desktop Presence Tracking
+// ============================================================================
+
+/** Timestamp of last user activity (keypress, click, etc.) */
+let lastActivityAt = Date.now();
+
+/** Whether any app window is currently focused */
+let isAnyWindowFocused = true;
+
+/** Whether the screen is locked */
+let isScreenLocked = false;
+
+/** Timestamp when the desktop first connected */
+let connectionTime = Date.now();
+
+/** Cached user ID for device info */
+let cachedUserId: string | null = null;
+
+/** Configurable idle threshold - default 5 minutes, can be set lower for testing */
+let idleThresholdMs = 5 * 60 * 1000; // 5 minutes default
+
+/**
+ * Report user activity from the renderer.
+ * Called via IPC when user interacts with the app.
+ */
+export function reportDesktopActivity(): void {
+  lastActivityAt = Date.now();
+}
+
+/**
+ * Update the window focus state.
+ * Called when any window gains/loses focus.
+ */
+export function setWindowFocused(focused: boolean): void {
+  isAnyWindowFocused = focused;
+  if (focused) {
+    // Gaining focus counts as activity
+    lastActivityAt = Date.now();
+  }
+}
+
+/**
+ * Update the screen lock state.
+ * Called when the OS screen is locked/unlocked.
+ */
+export function setScreenLocked(locked: boolean): void {
+  isScreenLocked = locked;
+  logger.main.info(`[SyncManager] Screen lock state changed: ${locked ? 'locked' : 'unlocked'}`);
+  if (!locked) {
+    // Unlocking counts as activity
+    lastActivityAt = Date.now();
+  }
+}
+
+/**
+ * Set the idle threshold in milliseconds.
+ * For testing, set to a low value like 10000 (10 seconds).
+ */
+export function setIdleThresholdMs(ms: number): void {
+  idleThresholdMs = ms;
+  logger.main.info(`[SyncManager] Idle threshold set to ${ms}ms`);
+}
+
+/**
+ * Derive the device status based on focus, activity, and screen lock.
+ */
+function deriveDeviceStatus(): 'active' | 'idle' | 'away' {
+  const idleTime = Date.now() - lastActivityAt;
+
+  // If screen is locked, user is definitely "away"
+  if (isScreenLocked) {
+    return 'away';
+  }
+
+  // If no window is focused, user is "away"
+  if (!isAnyWindowFocused) {
+    return 'away';
+  }
+
+  // If window is focused but no recent activity, user is "idle"
+  if (idleTime > idleThresholdMs) {
+    return 'idle';
+  }
+
+  return 'active';
+}
+
 /**
  * Get or generate a stable device ID.
  * Uses the user ID + a hash of machine identifiers for stability.
@@ -144,6 +232,7 @@ function getDeviceId(userId: string): string {
 
 /**
  * Get device info for sync presence awareness.
+ * Returns current presence state (focus, activity, status).
  */
 function getDeviceInfo(userId: string): DeviceInfo {
   const platform = process.platform === 'darwin' ? 'macos'
@@ -165,8 +254,10 @@ function getDeviceInfo(userId: string): DeviceInfo {
     type: 'desktop',
     platform,
     app_version: app.getVersion(),
-    connected_at: Date.now(),
-    last_active_at: Date.now(),
+    connected_at: connectionTime,
+    last_active_at: lastActivityAt,
+    is_focused: isAnyWindowFocused,
+    status: deriveDeviceStatus(),
   };
 }
 
@@ -239,9 +330,13 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
     // Note: We use stytchUserId for salt to ensure same encryption key across devices
     const encryptionKey = await deriveEncryptionKey(credentials.encryptionKeySeed, `nimbalyst:${stytchUserId}`);
 
-    // Get device info for presence awareness
-    const deviceInfo = getDeviceInfo(stytchUserId);
-    logger.main.info('[SyncManager] Generated device info:', JSON.stringify(deviceInfo));
+    // Cache user ID for dynamic device info callback
+    cachedUserId = stytchUserId;
+    connectionTime = Date.now(); // Reset connection time on init
+
+    // Get initial device info for logging
+    const initialDeviceInfo = getDeviceInfo(stytchUserId);
+    logger.main.info('[SyncManager] Initial device info:', JSON.stringify(initialDeviceInfo));
 
     // Cache JWT refresh to prevent spamming Stytch during batch sync
     // JWTs expire in ~5 minutes, so refresh at most once per minute
@@ -256,7 +351,9 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
         // Only refresh if enough time has passed since last refresh
         const now = Date.now();
         if (now - lastRefreshTime > MIN_REFRESH_INTERVAL) {
-          await doRefresh(serverUrl);
+          logger.main.info('[SyncManager] Refreshing JWT...');
+          const refreshResult = await doRefresh(serverUrl);
+          logger.main.info('[SyncManager] Refresh result:', refreshResult);
           lastRefreshTime = now;
         }
 
@@ -264,12 +361,22 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
         if (!freshJwt || freshJwt.split('.').length !== 3) {
           throw new Error('Failed to get valid JWT after refresh');
         }
+
+        // Log JWT expiry for debugging
+        try {
+          const payload = JSON.parse(atob(freshJwt.split('.')[1]));
+          logger.main.info('[SyncManager] JWT exp:', payload.exp, 'now:', Math.floor(Date.now() / 1000));
+        } catch {
+          // ignore
+        }
+
         return freshJwt;
       },
       encryptionKey,
-      deviceInfo,
+      // Use callback for dynamic presence updates (called every 30s)
+      getDeviceInfo: () => getDeviceInfo(stytchUserId),
     });
-    logger.main.info('[SyncManager] Created CollabV3 sync provider with device:', deviceInfo.name);
+    logger.main.info('[SyncManager] Created CollabV3 sync provider with device:', initialDeviceInfo.name);
 
     // Create message sync handler
     const messageSyncHandler = createMessageSyncHandler(provider);

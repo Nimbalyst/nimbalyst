@@ -178,7 +178,8 @@ type ClientMessage =
   | { type: 'device_announce'; device: DeviceInfo }
   | { type: 'create_session_request'; request: EncryptedCreateSessionRequest }
   | { type: 'create_session_response'; response: EncryptedCreateSessionResponse }
-  | { type: 'session_control'; message: { session_id: string; message_type: string; payload?: Record<string, unknown>; timestamp: number; sent_by: 'desktop' | 'mobile' } };
+  | { type: 'session_control'; message: { session_id: string; message_type: string; payload?: Record<string, unknown>; timestamp: number; sent_by: 'desktop' | 'mobile' } }
+  | { type: 'request_mobile_push'; session_id: string; title: string; body: string };
 
 /** Encrypted project index entry from server */
 interface ServerProjectEntry {
@@ -567,6 +568,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
   let indexWs: WebSocket | null = null;
   let indexConnected = false;
   let deviceAnnounceInterval: ReturnType<typeof setInterval> | null = null;
+  let pingInterval: ReturnType<typeof setInterval> | null = null;
 
   // Listeners for index changes (session updates broadcast to all connected clients)
   // Listeners receive decrypted data (CachedSessionIndex format)
@@ -685,24 +687,27 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
   // Helper to announce device to the index server
   function announceDevice(): void {
-    if (config.deviceInfo && indexWs && indexConnected) {
+    // Get current device info (prefer callback for dynamic presence, fallback to static)
+    const deviceInfo = config.getDeviceInfo?.() ?? config.deviceInfo;
+    if (deviceInfo && indexWs && indexConnected) {
       const announceMsg: ClientMessage = {
         type: 'device_announce',
         device: {
-          ...config.deviceInfo,
-          last_active_at: Date.now(), // Update last active time
+          ...deviceInfo,
+          // Ensure last_active_at is current (callback may provide its own)
+          last_active_at: deviceInfo.last_active_at ?? Date.now(),
         },
       };
       indexWs.send(JSON.stringify(announceMsg));
-      // console.log('[CollabV3] Announced device:', config.deviceInfo.name);
+      // console.log('[CollabV3] Announced device:', deviceInfo.name);
     }
   }
 
   // Start periodic device re-announcement to handle server hibernation
   function startDeviceAnnounceInterval(): void {
     stopDeviceAnnounceInterval();
-    if (config.deviceInfo) {
-      // Re-announce every 30 seconds to handle server hibernation
+    if (config.deviceInfo || config.getDeviceInfo) {
+      // Re-announce every 30 seconds to handle server hibernation and presence updates
       deviceAnnounceInterval = setInterval(() => {
         announceDevice();
       }, 30000);
@@ -714,6 +719,27 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
     if (deviceAnnounceInterval) {
       clearInterval(deviceAnnounceInterval);
       deviceAnnounceInterval = null;
+    }
+  }
+
+  // Start ping interval to keep WebSocket alive
+  function startPingInterval(): void {
+    stopPingInterval();
+    pingInterval = setInterval(() => {
+      if (indexWs && indexWs.readyState === WebSocket.OPEN) {
+        try {
+          indexWs.send(JSON.stringify({ type: 'ping' }));
+        } catch {
+          // Connection is dead, will be handled by onclose
+        }
+      }
+    }, 15000); // Every 15 seconds
+  }
+
+  function stopPingInterval(): void {
+    if (pingInterval) {
+      clearInterval(pingInterval);
+      pingInterval = null;
     }
   }
 
@@ -1040,9 +1066,13 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       // Set up periodic re-announcement to handle server hibernation
       // The server may hibernate and lose device state, so we re-announce every 30 seconds
       startDeviceAnnounceInterval();
+
+      // Keep connection alive with pings
+      startPingInterval();
     };
 
     indexWs.onclose = () => {
+      stopPingInterval();
       indexConnected = false;
       indexWs = null;
       stopDeviceAnnounceInterval();
@@ -2217,6 +2247,34 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       return () => {
         sessionControlMessageListeners.delete(callback);
       };
+    },
+
+    /** Request the sync server to send a push notification to mobile devices */
+    requestMobilePush(sessionId: string, title: string, body: string): void {
+      if (!indexWs || !indexConnected) {
+        console.error('[CollabV3] Cannot request mobile push - not connected');
+        return;
+      }
+
+      // Check actual WebSocket state
+      if (indexWs.readyState !== WebSocket.OPEN) {
+        console.error('[CollabV3] Cannot request mobile push - WebSocket not open, state:', indexWs.readyState);
+        return;
+      }
+
+      const msg: ClientMessage = {
+        type: 'request_mobile_push',
+        session_id: sessionId,
+        title,
+        body,
+      };
+      console.log('[CollabV3] Requesting mobile push for session:', sessionId, 'readyState:', indexWs.readyState, 'bufferedAmount:', indexWs.bufferedAmount);
+      try {
+        indexWs.send(JSON.stringify(msg));
+        console.log('[CollabV3] Mobile push message sent successfully');
+      } catch (error) {
+        console.error('[CollabV3] Failed to send mobile push message:', error);
+      }
     },
   };
 

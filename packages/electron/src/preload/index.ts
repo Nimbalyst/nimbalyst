@@ -223,6 +223,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setCurrentFile: (filePath: string | null) => ipcRenderer.send('set-current-file', filePath),
   /** Report user activity for sync presence awareness */
   reportUserActivity: () => ipcRenderer.send('user-activity'),
+  /** Set the idle threshold for sync presence (in milliseconds). For testing, use 10000 (10 seconds). */
+  setSyncIdleThreshold: (ms: number) => ipcRenderer.invoke('sync:set-idle-threshold', ms),
 
   // Get initial window state
   getInitialState: () => ipcRenderer.invoke('get-initial-state'),

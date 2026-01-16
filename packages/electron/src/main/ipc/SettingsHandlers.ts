@@ -608,7 +608,10 @@ export function registerSettingsHandlers() {
         if (!serverUrl) {
             throw new Error('serverUrl is required for QR pairing');
         }
-        return generateQRPairingPayload(serverUrl);
+        // Include the sync email so mobile can validate it matches their login
+        const authState = StytchAuth.getAuthState();
+        const syncEmail = authState.user?.emails?.[0]?.email;
+        return generateQRPairingPayload(serverUrl, syncEmail);
     });
 
     // Check if secure storage (keychain) is available

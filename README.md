@@ -442,10 +442,7 @@ import { Nimbalyst, type EditorConfig } from 'nimbalyst';
 
 See [RELEASING.md](./RELEASING.md) for complete release process documentation.
 
-## License
-
-This project is based on Meta's Lexical playground and maintains the same MIT license. See the LICENSE file in the root directory for details.
-
+## 
 ## Acknowledgments
 
 - Built on [Meta's Lexical framework](https://lexical.dev/)

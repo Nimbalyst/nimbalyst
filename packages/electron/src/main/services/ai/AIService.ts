@@ -2218,6 +2218,16 @@ export class AIService {
                 provider: session.provider
               });
 
+              // Request mobile push notification for agent completion
+              // Server will check presence and only push if user is away from desktop
+              if (syncProvider) {
+                syncProvider.requestMobilePush?.(
+                  session.id,
+                  'AI Response Ready',
+                  `${session.provider}: ${notificationBody}`
+                );
+              }
+
               // AUTO-FETCH CONTEXT USAGE: For claude-code provider, automatically send /context to get accurate token usage.
               // We defer awaiting the promise until after streaming completes so that queued prompts don't start early.
               // Skip if the response ended with an error (e.g., context overflow) to avoid showing the /context request to the user.
@@ -2307,6 +2317,14 @@ export class AIService {
               type: 'metadata_updated',
               metadata: { isExecuting: false } as any,
             });
+
+            // Request mobile push notification for agent error
+            const errorPushTitle = session.title || 'Agent error';
+            syncProvider.requestMobilePush?.(
+              session.id,
+              'AI Error',
+              `${session.provider}: ${errorPushTitle}`
+            );
           }
         }
 

@@ -17,18 +17,20 @@
     "devdeploy:ios": "npm run build && npx cap sync ios"
   },
   "dependencies": {
-    "@capacitor/barcode-scanner": "^2.2.4",
     "@capacitor/app": "^7.0.1",
+    "@capacitor/barcode-scanner": "^2.2.4",
     "@capacitor/browser": "^7.0.1",
     "@capacitor/core": "^7.4.4",
+    "@capacitor/local-notifications": "^7.0.2",
     "@capacitor/preferences": "^7.0.2",
+    "@capacitor/push-notifications": "^7.0.4",
     "@nimbalyst/runtime": "file:../runtime",
     "capacitor-secure-storage-plugin": "^0.12.0",
     "node-forge": "^1.3.1",
+    "posthog-js": "^1.244.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.30.3",
-    "posthog-js": "^1.244.3",
     "ulid": "^2.3.0"
   },
   "devDependencies": {

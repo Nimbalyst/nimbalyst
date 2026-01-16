@@ -34,7 +34,9 @@ export type ClientMessage =
   | DeviceAnnounceMessage
   | CreateSessionRequestMessage
   | CreateSessionResponseMessage
-  | SessionControlCommandMessage;
+  | SessionControlCommandMessage
+  | RegisterPushTokenMessage
+  | RequestMobilePushMessage;
 
 /** Request messages since a cursor */
 export interface SyncRequestMessage {
@@ -139,6 +141,22 @@ export interface SessionControlMessage {
   payload?: Record<string, unknown>;
   timestamp: number;
   sent_by: 'desktop' | 'mobile';
+}
+
+/** Register a push notification token for this device */
+export interface RegisterPushTokenMessage {
+  type: 'register_push_token';
+  token: string;
+  platform: 'ios' | 'android';
+  device_id: string;
+}
+
+/** Request to send a push notification to mobile devices */
+export interface RequestMobilePushMessage {
+  type: 'request_mobile_push';
+  session_id: string;
+  title: string;
+  body: string;
 }
 
 // ============================================================================
@@ -279,8 +297,12 @@ export interface DeviceInfo {
   app_version?: string;
   /** When this device connected (Unix timestamp ms) */
   connected_at: number;
-  /** Last activity timestamp (Unix timestamp ms) */
+  /** Last activity timestamp (Unix timestamp ms) - updated on user interaction */
   last_active_at: number;
+  /** Whether the app window is currently focused (optional for backwards compatibility) */
+  is_focused?: boolean;
+  /** Derived status for presence display (optional for backwards compatibility) */
+  status?: 'active' | 'idle' | 'away';
 }
 
 /**
@@ -387,4 +409,10 @@ export interface Env {
   // Comma-separated list of allowed origins (e.g., "https://app.nimbalyst.com,capacitor://localhost")
   // If not set in production, defaults to secure origins
   ALLOWED_ORIGINS?: string;
+  // APNs Push Notifications
+  APNS_KEY?: string;        // Base64-encoded .p8 private key
+  APNS_KEY_ID?: string;     // Key ID from Apple Developer Portal
+  APNS_TEAM_ID?: string;    // Team ID from Apple Developer Portal
+  APNS_BUNDLE_ID?: string;  // App bundle ID (e.g., com.nimbalyst.app)
+  APNS_SANDBOX?: string;    // 'true' for sandbox, otherwise production
 }
