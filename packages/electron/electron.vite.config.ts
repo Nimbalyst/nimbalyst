@@ -3,6 +3,7 @@ import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import viteStravuPlugin from '../shared/viteStravuPlugin.ts'
 import { viteStaticCopy } from 'vite-plugin-static-copy'
+import { nodePolyfills } from 'vite-plugin-node-polyfills'
 import fs from 'fs'
 
 // Custom plugin to exclude Excalidraw locales and optimize imports (copied from rexical)
@@ -181,9 +182,20 @@ export default defineConfig({
       'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
       'process.env.OFFICIAL_BUILD': JSON.stringify(isOfficialBuild ? 'true' : 'false'),
       'process.env.IS_DEV_MODE': JSON.stringify(isDevMode ? 'true' : 'false'),
-      'process.env': '{}'
     },
     plugins: [
+      // Process polyfill for packaged builds - handles dependencies that access process globals.
+      // Must be first so transforms run before other plugins.
+      // Only polyfills in production builds; dev mode works fine with Vite's built-in handling.
+      nodePolyfills({
+        globals: {
+          Buffer: false,
+          global: false,
+          process: 'build',
+        },
+        include: [],
+        protocolImports: false,
+      }),
       viteStravuPlugin(),
       react(),
       optimizeExcalidrawPlugin(),
