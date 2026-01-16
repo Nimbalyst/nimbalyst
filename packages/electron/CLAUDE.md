@@ -147,6 +147,24 @@ The app uses **PGLite** (PostgreSQL in WebAssembly) for all data storage.
 - **Indexing**: Optimized indexes for fast queries on projects, timestamps, and file paths
 - **Protocol server**: Optional PostgreSQL protocol server for external database access
 
+### CRITICAL: App Shutdown and Database Integrity
+
+**NEVER use `app.exit()` to terminate the app.** It bypasses the `before-quit` handler in `index.ts`, skipping database backup and PGLite worker shutdown, which causes database corruption.
+
+Always use `app.quit()` to trigger proper cleanup. For programmatic restarts:
+
+```typescript
+// Dev mode: write signal file, let dev-loop.sh handle restart
+fs.writeFileSync(path.join(app.getAppPath(), '.restart-requested'), Date.now().toString());
+app.quit();
+
+// Production: use relaunch + quit
+app.relaunch();
+app.quit();
+```
+
+Dev mode requires the signal file because `app.relaunch()` doesn't work when electron-vite spawns both Vite and Electron processes.
+
 ### CRITICAL: Date/Timestamp Handling
 
 PostgreSQL TIMESTAMP columns store UTC time, but PGlite returns Date objects that JavaScript interprets as LOCAL time, creating a timezone mismatch.

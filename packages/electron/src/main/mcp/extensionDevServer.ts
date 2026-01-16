@@ -1012,8 +1012,10 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
                 };
               } else {
                 // In production, use the standard relaunch mechanism
+                // CRITICAL: Use app.quit() NOT app.exit(0) to trigger the before-quit handler
+                // which performs proper database backup and cleanup to prevent corruption
                 app.relaunch();
-                app.exit(0);
+                app.quit();
 
                 return {
                   content: [{ type: 'text', text: 'Restarting Nimbalyst...' }],
