@@ -20,6 +20,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.51.8] - 2026-01-16
+
+
+### Added
+- Mobile push notifications for agent completion
+- Clearer mobile sync setup with encryption explanation
+- Faster AI session search with GIN index
+- Comprehensive Node.js version manager support for PATH detection (nvm, fnm, asdf, volta, n, nodenv, mise)
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Packaged builds no longer crash with 'process is not defined'
+- Prevent database corruption when restarting from Extension Dev panel
+- Resolved TypeScript type errors across monorepo
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.51.7] - 2026-01-15
 
 
