@@ -660,19 +660,6 @@ export class IndexRoom implements DurableObject {
   ): Promise<void> {
     console.log('[IndexRoom] Received push request for session:', message.session_id);
 
-    // TODO: Re-enable presence-aware suppression once basic push is working reliably
-    // For now, always send push notifications to debug delivery issues
-    // const devices = this.getConnectedDevices();
-    // const desktop = devices.find(d => d.type === 'desktop');
-    // if (desktop) {
-    //   const isDesktopActive = desktop.status === 'active' ||
-    //     (desktop.is_focused && Date.now() - (desktop.last_active_at || 0) < 5 * 60 * 1000);
-    //   if (isDesktopActive) {
-    //     log.debug('Suppressing push notification - desktop is active');
-    //     return;
-    //   }
-    // }
-
     // Get all registered push tokens for mobile devices
     const pushTokens = await this.state.storage.list<{
       token: string;
@@ -688,7 +675,8 @@ export class IndexRoom implements DurableObject {
       return;
     }
 
-    // Send push to each registered device
+    // Send push to all registered devices - iOS automatically suppresses
+    // notification banners when the app is in the foreground
     for (const [key, tokenData] of pushTokens) {
       console.log('[IndexRoom] Sending push to device:', tokenData.device_id, 'platform:', tokenData.platform);
       if (tokenData.platform === 'ios') {

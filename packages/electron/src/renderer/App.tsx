@@ -59,6 +59,7 @@ import { ClaudeCommandsToast } from './components/ClaudeCommandsToast';
 import { UpdateToast } from './components/UpdateToast';
 import { ProjectTrustToast } from './components/ProjectTrustToast';
 import { PostHogSurvey } from './components/PostHogSurvey';
+import { NotificationSessionChecker } from './components/NotificationSessionChecker';
 import OnboardingService from './services/OnboardingService';
 import { WalkthroughProvider } from './walkthroughs';
 import {
@@ -1960,6 +1961,7 @@ export default function App() {
       <MockupPickerMenuHost />
       <ExtensionHostComponents />
       <UpdateToast />
+      <NotificationSessionChecker />
       <ProjectTrustToast
         workspacePath={workspacePath}
         onOpenSettings={() => {

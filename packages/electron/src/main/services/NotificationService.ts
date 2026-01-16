@@ -5,11 +5,11 @@
  * Respects user preferences and system Do Not Disturb settings.
  */
 
-import { Notification, BrowserWindow, app, systemPreferences } from 'electron';
+import { Notification, BrowserWindow, app, systemPreferences, ipcMain } from 'electron';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { logger } from '../utils/logger';
-import { isOSNotificationsEnabled } from '../utils/store';
+import { isOSNotificationsEnabled, isNotifyWhenFocusedEnabled } from '../utils/store';
 import { findWindowByWorkspace } from '../window/WindowManager';
 
 const execAsync = promisify(exec);
@@ -81,6 +81,32 @@ class NotificationService {
   }
 
   /**
+   * Check if a window is currently viewing a specific session.
+   * Uses IPC to query the renderer process.
+   */
+  private async isWindowViewingSession(window: BrowserWindow, sessionId: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      // Generate unique request ID
+      const requestId = `check-session-${Date.now()}-${Math.random()}`;
+
+      // Set timeout in case renderer doesn't respond
+      const timeout = setTimeout(() => {
+        ipcMain.removeHandler(`notifications:session-check-response:${requestId}`);
+        resolve(false); // Assume not viewing on timeout
+      }, 500);
+
+      // Register one-time handler for response
+      ipcMain.handleOnce(`notifications:session-check-response:${requestId}`, (_event, isViewing: boolean) => {
+        clearTimeout(timeout);
+        resolve(isViewing);
+      });
+
+      // Send request to renderer
+      window.webContents.send('notifications:check-active-session', { requestId, sessionId });
+    });
+  }
+
+  /**
    * Show an OS notification if:
    * 1. User has enabled OS notifications in settings
    * 2. The app window is not focused
@@ -108,11 +134,28 @@ class NotificationService {
 
     // Check if any window is visible and focused
     const allWindows = BrowserWindow.getAllWindows();
-    const hasVisibleFocusedWindow = allWindows.some(win => win.isVisible() && win.isFocused());
-    // logger.main.info('[NotificationService] Has visible focused window:', hasVisibleFocusedWindow);
-    if (hasVisibleFocusedWindow) {
-      // logger.main.info('[NotificationService] SKIPPED: App window is focused (notifications only show when app is in background)');
-      return;
+    const focusedWindow = allWindows.find(win => win.isVisible() && win.isFocused());
+    // logger.main.info('[NotificationService] Has visible focused window:', !!focusedWindow);
+
+    if (focusedWindow) {
+      // Window is focused - check if we should still notify
+      const notifyWhenFocused = isNotifyWhenFocusedEnabled();
+
+      if (!notifyWhenFocused) {
+        // Traditional behavior: skip all notifications when app is focused
+        // logger.main.info('[NotificationService] SKIPPED: App window is focused (notifications only show when app is in background)');
+        return;
+      }
+
+      // notifyWhenFocused is enabled - check if viewing this specific session
+      if (options.sessionId) {
+        const isViewingSession = await this.isWindowViewingSession(focusedWindow, options.sessionId);
+        if (isViewingSession) {
+          // logger.main.info('[NotificationService] SKIPPED: User is already viewing this session');
+          return;
+        }
+        // logger.main.info('[NotificationService] User not viewing this session, showing notification');
+      }
     }
 
     // In development mode, use AppleScript for more reliable notifications on macOS

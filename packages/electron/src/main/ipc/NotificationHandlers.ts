@@ -8,6 +8,8 @@ import { logger } from '../utils/logger';
 import {
   isOSNotificationsEnabled,
   setOSNotificationsEnabled,
+  isNotifyWhenFocusedEnabled,
+  setNotifyWhenFocusedEnabled,
 } from '../utils/store';
 import { safeHandle } from '../utils/ipcRegistry';
 
@@ -70,6 +72,27 @@ export function registerNotificationHandlers(): void {
       return { success: true };
     } catch (error) {
       logger.main.error('[NotificationHandlers] Error setting notification status:', error);
+      return { success: false, error: String(error) };
+    }
+  });
+
+  // Get notify when focused status
+  safeHandle('notifications:get-notify-when-focused', async () => {
+    try {
+      return isNotifyWhenFocusedEnabled();
+    } catch (error) {
+      logger.main.error('[NotificationHandlers] Error getting notify-when-focused status:', error);
+      return false;
+    }
+  });
+
+  // Set notify when focused status
+  safeHandle('notifications:set-notify-when-focused', async (_event, enabled: boolean) => {
+    try {
+      setNotifyWhenFocusedEnabled(enabled);
+      return { success: true };
+    } catch (error) {
+      logger.main.error('[NotificationHandlers] Error setting notify-when-focused status:', error);
       return { success: false, error: String(error) };
     }
   });

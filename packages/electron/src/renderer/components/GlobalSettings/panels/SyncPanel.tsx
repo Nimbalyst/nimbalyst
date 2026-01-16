@@ -344,7 +344,7 @@ export function SyncPanel() {
     }
   }, [config.enabled, effectiveServerUrl]);
 
-  const handleFieldChange = (field: keyof SyncConfig, value: string | boolean) => {
+  const handleFieldChange = (field: keyof SyncConfig, value: string | boolean | number) => {
     updateConfig({ [field]: value });
   };
 
@@ -772,6 +772,38 @@ export function SyncPanel() {
             </div>
           </label>
         </div>
+
+        {config.enabled && (
+          <div className="setting-item" style={{ marginTop: '12px' }}>
+            <div className="setting-text" style={{ marginBottom: '8px' }}>
+              <span className="setting-name">Idle Timeout</span>
+              <span className="setting-description">
+                Minutes of inactivity before mobile push notifications are sent.
+              </span>
+            </div>
+            <select
+              value={config.idleTimeoutMinutes ?? 5}
+              onChange={(e) => handleFieldChange('idleTimeoutMinutes', Number(e.target.value))}
+              style={{
+                padding: '8px 12px',
+                fontSize: '13px',
+                background: 'var(--surface-secondary)',
+                border: '1px solid var(--border-primary)',
+                borderRadius: '6px',
+                color: 'var(--text-primary)',
+                cursor: 'pointer',
+                width: '100%',
+              }}
+            >
+              <option value={1}>1 minute (for testing)</option>
+              <option value={2}>2 minutes</option>
+              <option value={5}>5 minutes (default)</option>
+              <option value={10}>10 minutes</option>
+              <option value={15}>15 minutes</option>
+              <option value={30}>30 minutes</option>
+            </select>
+          </div>
+        )}
       </div>
 
       {config.enabled && (

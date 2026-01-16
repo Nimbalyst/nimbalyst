@@ -334,6 +334,11 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
     cachedUserId = stytchUserId;
     connectionTime = Date.now(); // Reset connection time on init
 
+    // Apply idle timeout from config (default 5 minutes)
+    if (config.idleTimeoutMinutes !== undefined) {
+      setIdleThresholdMs(config.idleTimeoutMinutes * 60 * 1000);
+    }
+
     // Get initial device info for logging
     const initialDeviceInfo = getDeviceInfo(stytchUserId);
     logger.main.info('[SyncManager] Initial device info:', JSON.stringify(initialDeviceInfo));

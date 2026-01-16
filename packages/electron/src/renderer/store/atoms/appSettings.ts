@@ -210,6 +210,8 @@ export interface NotificationSettings {
   completionSoundEnabled: boolean;
   completionSoundType: CompletionSoundType;
   osNotificationsEnabled: boolean;
+  /** Show OS notifications even when app is focused, unless viewing that session */
+  notifyWhenFocused: boolean;
 }
 
 /**
@@ -219,6 +221,7 @@ const defaultNotificationSettings: NotificationSettings = {
   completionSoundEnabled: false,
   completionSoundType: 'chime',
   osNotificationsEnabled: false,
+  notifyWhenFocused: false,
 };
 
 /**
@@ -247,6 +250,7 @@ function scheduleNotificationPersist(settings: NotificationSettings): void {
       await window.electronAPI.invoke('completion-sound:set-enabled', settings.completionSoundEnabled);
       await window.electronAPI.invoke('completion-sound:set-type', settings.completionSoundType);
       await window.electronAPI.invoke('notifications:set-enabled', settings.osNotificationsEnabled);
+      await window.electronAPI.invoke('notifications:set-notify-when-focused', settings.notifyWhenFocused);
     }
   }, NOTIFICATION_PERSIST_DEBOUNCE_MS);
 }
@@ -272,6 +276,13 @@ export const completionSoundTypeAtom = atom(
  */
 export const osNotificationsEnabledAtom = atom(
   (get) => get(notificationSettingsAtom).osNotificationsEnabled
+);
+
+/**
+ * Notify when focused (unless viewing that session).
+ */
+export const notifyWhenFocusedAtom = atom(
+  (get) => get(notificationSettingsAtom).notifyWhenFocused
 );
 
 // === Setter atoms ===
@@ -300,16 +311,18 @@ export async function initNotificationSettings(): Promise<NotificationSettings> 
   }
 
   try {
-    const [soundEnabled, soundType, osNotifEnabled] = await Promise.all([
+    const [soundEnabled, soundType, osNotifEnabled, notifyFocused] = await Promise.all([
       window.electronAPI.invoke('completion-sound:is-enabled'),
       window.electronAPI.invoke('completion-sound:get-type'),
       window.electronAPI.invoke('notifications:get-enabled'),
+      window.electronAPI.invoke('notifications:get-notify-when-focused'),
     ]);
 
     return {
       completionSoundEnabled: soundEnabled ?? false,
       completionSoundType: soundType ?? 'chime',
       osNotificationsEnabled: osNotifEnabled ?? false,
+      notifyWhenFocused: notifyFocused ?? false,
     };
   } catch (error) {
     console.error('[appSettings] Failed to load notification settings:', error);
@@ -519,6 +532,7 @@ export interface SyncConfig {
   serverUrl: string;
   enabledProjects?: string[]; // workspace paths that are enabled for sync
   environment?: 'development' | 'production'; // dev only: override environment
+  idleTimeoutMinutes?: number; // minutes before user is considered idle (default: 5)
 }
 
 /**
@@ -575,6 +589,11 @@ export const syncServerUrlAtom = atom((get) => get(syncConfigAtom).serverUrl);
  */
 export const syncEnabledProjectsAtom = atom((get) => get(syncConfigAtom).enabledProjects ?? []);
 
+/**
+ * Idle timeout in minutes (default 5).
+ */
+export const syncIdleTimeoutMinutesAtom = atom((get) => get(syncConfigAtom).idleTimeoutMinutes ?? 5);
+
 // === Setter atoms ===
 
 /**
@@ -608,6 +627,7 @@ export async function initSyncConfig(): Promise<SyncConfig> {
         serverUrl: config.serverUrl ?? '',
         enabledProjects: config.enabledProjects,
         environment: config.environment,
+        idleTimeoutMinutes: config.idleTimeoutMinutes,
       };
     }
   } catch (error) {

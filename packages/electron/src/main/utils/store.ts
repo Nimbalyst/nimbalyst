@@ -925,6 +925,14 @@ export function setOSNotificationsEnabled(enabled: boolean): void {
   getAppStore().set('osNotificationsEnabled', enabled);
 }
 
+export function isNotifyWhenFocusedEnabled(): boolean {
+  return getAppStore().get('notifyWhenFocused', false);
+}
+
+export function setNotifyWhenFocusedEnabled(enabled: boolean): void {
+  getAppStore().set('notifyWhenFocused', enabled);
+}
+
 // Release Channel Settings
 export function getReleaseChannel(): ReleaseChannel {
   // Allow env override for testing (set via NIMBALYST_RELEASE_CHANNEL=alpha)
@@ -1016,6 +1024,8 @@ export interface SessionSyncConfig {
   enabledProjects?: string[];
   // Dev-only: override environment (defaults to 'production' even in dev builds)
   environment?: 'development' | 'production';
+  // Minutes before user is considered idle (for mobile push suppression). Default: 5
+  idleTimeoutMinutes?: number;
 }
 
 // Stytch Auth Configuration (stored separately from session sync)

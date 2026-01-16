@@ -18,7 +18,7 @@ export function NotificationsPanel() {
   const [, updateSettings] = useAtom(setNotificationSettingsAtom);
   const [isTestPlaying, setIsTestPlaying] = useState(false);
 
-  const { completionSoundEnabled, completionSoundType, osNotificationsEnabled } = settings;
+  const { completionSoundEnabled, completionSoundType, osNotificationsEnabled, notifyWhenFocused } = settings;
 
   // Set up IPC listener for sound playback
   useEffect(() => {
@@ -151,6 +151,26 @@ export function NotificationsPanel() {
             </div>
           </label>
         </div>
+
+        {osNotificationsEnabled && (
+          <div className="setting-item" style={{ marginTop: '12px' }}>
+            <label className="setting-label">
+              <input
+                type="checkbox"
+                checked={notifyWhenFocused}
+                onChange={(e) => updateSettings({ notifyWhenFocused: e.target.checked })}
+                className="setting-checkbox"
+              />
+              <div className="setting-text">
+                <span className="setting-name">Notify Even When Focused</span>
+                <span className="setting-description">
+                  Show notifications even when the app is focused, unless you are already viewing that session.
+                  Useful when working in one session and waiting for another to complete.
+                </span>
+              </div>
+            </label>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -9,7 +9,8 @@ import { SplitView, useIsSplitView } from './components/SplitView';
 import { SwipeNavigation } from './components/SwipeNavigation';
 import { setupDeepLinkListener, type StytchSession } from './services/StytchAuthService';
 import { useAgentNotifications } from './hooks/useAgentNotifications';
-import { setupPushNotificationListeners, initializePushNotifications } from './services/PushNotificationService';
+import { setupPushNotificationListeners, initializePushNotifications, type PushNotificationPayload } from './services/PushNotificationService';
+import { LocalNotifications } from '@capacitor/local-notifications';
 
 // Minimized debug button
 function NotificationDebugButton({ onClick }: { onClick: () => void }) {
@@ -153,15 +154,38 @@ function AppContent() {
     initializePushNotifications();
   }, []);
 
+  // Get current session ID from route
+  const getCurrentSessionId = useCallback((): string | null => {
+    const match = location.pathname.match(/\/session\/([^/]+)/);
+    return match ? match[1] : null;
+  }, [location.pathname]);
+
   // Set up push notification listeners for navigation on tap
   useEffect(() => {
-    const handleNotificationReceived = (payload: { sessionId?: string }) => {
+    const handleNotificationReceived = async (payload: PushNotificationPayload) => {
       console.log('[App] Push notification received in foreground:', payload.sessionId);
-      // When notification received in foreground, we don't auto-navigate
-      // The user is already in the app and can see the session update
+
+      // If viewing a different session (or no session), show a local notification
+      const currentSessionId = getCurrentSessionId();
+      if (payload.sessionId && payload.sessionId !== currentSessionId) {
+        console.log('[App] Different session, showing local notification');
+        try {
+          await LocalNotifications.schedule({
+            notifications: [{
+              id: Date.now(), // Unique ID
+              title: payload.title || 'Agent completed',
+              body: payload.body || 'Tap to view',
+              schedule: { at: new Date(Date.now() + 100) }, // Near-immediate
+              extra: { sessionId: payload.sessionId },
+            }],
+          });
+        } catch (err) {
+          console.error('[App] Failed to show local notification:', err);
+        }
+      }
     };
 
-    const handleNotificationTapped = (payload: { sessionId?: string }) => {
+    const handleNotificationTapped = (payload: PushNotificationPayload) => {
       console.log('[App] Push notification tapped:', payload.sessionId);
       if (payload.sessionId) {
         // Navigate to the session that completed
@@ -174,7 +198,7 @@ function AppContent() {
       handleNotificationTapped
     );
     return cleanup;
-  }, [navigate]);
+  }, [navigate, getCurrentSessionId]);
 
   // On iPad, the session list is in the sidebar
   // So the main area shows either session detail, settings, or an empty state
