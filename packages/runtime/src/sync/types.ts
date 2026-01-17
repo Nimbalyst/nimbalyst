@@ -190,16 +190,16 @@ export interface SyncProvider {
   onCreateSessionRequest?(callback: (request: CreateSessionRequest) => void): () => void;
 
   /** Send a response to a session creation request */
-  sendCreateSessionResponse?(response: CreateSessionResponse): void;
+  sendCreateSessionResponse?(response: CreateSessionResponse): Promise<void>;
 
   /** Send a session creation request (for mobile to request desktop to create a session) */
-  sendCreateSessionRequest?(request: CreateSessionRequest): void;
+  sendCreateSessionRequest?(request: CreateSessionRequest): Promise<void>;
 
   /** Subscribe to session creation responses (for mobile to receive response from desktop) */
   onCreateSessionResponse?(callback: (response: CreateSessionResponse) => void): () => void;
 
   /** Send a generic session control message (cross-device via IndexRoom) */
-  sendSessionControlMessage?(message: SessionControlMessage): void;
+  sendSessionControlMessage?(message: SessionControlMessage): Promise<void>;
 
   /** Subscribe to session control messages from other devices */
   onSessionControlMessage?(callback: (message: SessionControlMessage) => void): () => void;
@@ -209,7 +209,7 @@ export interface SyncProvider {
    * Used when agent completes execution and user should be notified on mobile.
    * The server will check device presence before sending (suppresses if mobile is active).
    */
-  requestMobilePush?(sessionId: string, title: string, body: string): void;
+  requestMobilePush?(sessionId: string, title: string, body: string): Promise<void>;
 
   /** Get list of currently connected devices */
   getConnectedDevices?(): DeviceInfo[];

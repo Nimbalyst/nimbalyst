@@ -1133,8 +1133,10 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
   // Create a new session on the desktop
   const createSession = useCallback(
     async (projectId: string, initialPrompt?: string): Promise<{ success: boolean; sessionId?: string; error?: string }> => {
-      if (wsRef.current?.readyState !== WebSocket.OPEN) {
-        return { success: false, error: 'Not connected to sync server' };
+      // Ensure we're connected before attempting to create session
+      const connected = await ensureConnected();
+      if (!connected) {
+        return { success: false, error: 'Unable to connect to sync server' };
       }
 
       // Encryption is required
@@ -1200,7 +1202,7 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
         sendRequest();
       });
     },
-    []
+    [ensureConnected]
   );
 
   // Send a generic session control message to other devices
@@ -1431,6 +1433,38 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
       handleMessage(event.data);
     };
   }, [authenticated, serverUrl, handleMessage, requestSync]);
+
+  // Helper to ensure connection before sending critical messages
+  const ensureConnected = useCallback(async (): Promise<boolean> => {
+    // Already connected
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      return true;
+    }
+
+    // Need auth and pairing to reconnect
+    if (!authenticated || !serverUrl) {
+      console.log('[CollabV3] Cannot ensure connection - not authenticated or not paired');
+      return false;
+    }
+
+    console.log('[CollabV3] Not connected, attempting to establish connection...');
+
+    // Trigger reconnection
+    await connect();
+
+    // Wait for connection to establish (up to 5 seconds)
+    const startTime = Date.now();
+    while (Date.now() - startTime < 5000) {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        console.log('[CollabV3] Connection established successfully');
+        return true;
+      }
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    console.error('[CollabV3] Failed to establish connection within timeout');
+    return false;
+  }, [authenticated, serverUrl, connect]);
 
   // Disconnect
   const disconnect = useCallback(() => {

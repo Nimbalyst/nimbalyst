@@ -2139,9 +2139,21 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
     },
 
     /** Send a response to a session creation request */
-    sendCreateSessionResponse(response: CreateSessionResponse): void {
+    async sendCreateSessionResponse(response: CreateSessionResponse): Promise<void> {
+      // Ensure we're connected before sending the response
       if (!indexWs || !indexConnected) {
-        console.error('[CollabV3] Cannot send create session response - not connected');
+        console.log('[CollabV3] Not connected to index, attempting to reconnect before sending create session response...');
+        try {
+          await connectToIndex();
+        } catch (err) {
+          console.error('[CollabV3] Failed to connect to index before sending create session response:', err);
+          return;
+        }
+      }
+
+      // Double-check connection after await
+      if (!indexWs || !indexConnected) {
+        console.error('[CollabV3] Cannot send create session response - failed to establish connection');
         return;
       }
 
@@ -2159,8 +2171,20 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
     /** Send a session creation request (for mobile to request desktop to create a session) */
     async sendCreateSessionRequest(request: CreateSessionRequest): Promise<void> {
+      // Ensure we're connected before sending the request
       if (!indexWs || !indexConnected) {
-        console.error('[CollabV3] Cannot send create session request - not connected');
+        console.log('[CollabV3] Not connected to index, attempting to reconnect before sending create session request...');
+        try {
+          await connectToIndex();
+        } catch (err) {
+          console.error('[CollabV3] Failed to connect to index before sending create session request:', err);
+          return;
+        }
+      }
+
+      // Double-check connection after await
+      if (!indexWs || !indexConnected) {
+        console.error('[CollabV3] Cannot send create session request - failed to establish connection');
         return;
       }
 
@@ -2221,9 +2245,21 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
     },
 
     /** Send a generic session control message (cross-device via IndexRoom) */
-    sendSessionControlMessage(message: SessionControlMessage): void {
+    async sendSessionControlMessage(message: SessionControlMessage): Promise<void> {
+      // Ensure we're connected before sending the message
       if (!indexWs || !indexConnected) {
-        console.error('[CollabV3] Cannot send session control message - not connected');
+        console.log('[CollabV3] Not connected to index, attempting to reconnect before sending session control message...');
+        try {
+          await connectToIndex();
+        } catch (err) {
+          console.error('[CollabV3] Failed to connect to index before sending session control message:', err);
+          return;
+        }
+      }
+
+      // Double-check connection after await
+      if (!indexWs || !indexConnected) {
+        console.error('[CollabV3] Cannot send session control message - failed to establish connection');
         return;
       }
 
@@ -2250,9 +2286,21 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
     },
 
     /** Request the sync server to send a push notification to mobile devices */
-    requestMobilePush(sessionId: string, title: string, body: string): void {
+    async requestMobilePush(sessionId: string, title: string, body: string): Promise<void> {
+      // Ensure we're connected before sending the request
       if (!indexWs || !indexConnected) {
-        console.error('[CollabV3] Cannot request mobile push - not connected');
+        console.log('[CollabV3] Not connected to index, attempting to reconnect before requesting mobile push...');
+        try {
+          await connectToIndex();
+        } catch (err) {
+          console.error('[CollabV3] Failed to connect to index before requesting mobile push:', err);
+          return;
+        }
+      }
+
+      // Double-check connection and WebSocket state after await
+      if (!indexWs || !indexConnected) {
+        console.error('[CollabV3] Cannot request mobile push - failed to establish connection');
         return;
       }
 
