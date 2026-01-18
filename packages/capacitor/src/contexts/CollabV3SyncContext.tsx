@@ -29,6 +29,12 @@ import forge from 'node-forge';
 // Re-export the shared type from runtime
 export type SessionIndexEntry = RuntimeSessionIndexEntry;
 
+/** Voice metadata for prompts created via voice control */
+export interface VoiceMetadata {
+  duration: number; // Recording duration in seconds
+  originalTranscript: string; // Before user edits
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -78,7 +84,13 @@ interface SyncContextValue {
    */
   sendIndexUpdate: (sessionId: string, update: {
     pendingExecution?: { messageId: string; sentAt: number; sentBy: 'mobile' | 'desktop' };
-    queuedPrompts?: Array<{ id: string; prompt: string; timestamp: number }>;
+    queuedPrompts?: Array<{
+      id: string;
+      prompt: string;
+      timestamp: number;
+      source?: 'keyboard' | 'voice';
+      voiceMetadata?: VoiceMetadata;
+    }>;
   }) => void;
   /** Trigger a reconnection (e.g., after login) */
   reconnect: () => void;
@@ -107,6 +119,11 @@ interface SyncContextValue {
     type: string,
     payload?: Record<string, unknown>
   ) => void;
+  /**
+   * OpenAI API key synced from desktop for voice mode.
+   * This is received encrypted and decrypted locally.
+   */
+  syncedOpenAIApiKey: string | null;
 }
 
 // ============================================================================
@@ -121,6 +138,12 @@ interface EncryptedQueuedPrompt {
   /** IV for prompt decryption (base64) */
   iv: string;
   timestamp: number;
+  /** Source of the prompt (keyboard or voice) */
+  source?: 'keyboard' | 'voice';
+  /** Encrypted voice metadata (base64) - only present for voice prompts */
+  encrypted_voice_metadata?: string;
+  /** IV for voice metadata decryption (base64) */
+  voice_metadata_iv?: string;
 }
 
 /** Plaintext queued prompt (after decryption) */
@@ -128,6 +151,8 @@ interface PlaintextQueuedPrompt {
   id: string;
   prompt: string;
   timestamp: number;
+  source?: 'keyboard' | 'voice';
+  voiceMetadata?: VoiceMetadata;
 }
 
 interface ServerSessionEntry {
@@ -257,7 +282,23 @@ type ServerMessage =
   | { type: 'error'; code: string; message: string }
   | { type: 'devices_list'; devices: DeviceInfo[] }
   | { type: 'device_joined'; device: DeviceInfo }
-  | { type: 'device_left'; device_id: string };
+  | { type: 'device_left'; device_id: string }
+  | { type: 'settings_sync_broadcast'; settings: EncryptedSettingsPayload; from_connection_id?: string };
+
+/** Encrypted settings payload from desktop */
+interface EncryptedSettingsPayload {
+  encrypted_settings: string;
+  settings_iv: string;
+  device_id: string;
+  timestamp: number;
+  version: number;
+}
+
+/** Decrypted synced settings */
+interface SyncedSettings {
+  openaiApiKey?: string;
+  version: number;
+}
 
 // ============================================================================
 // Encryption Utilities (using node-forge for mobile compatibility)
@@ -345,12 +386,23 @@ async function encryptQueuedPrompts(
   return Promise.all(
     prompts.map(async (prompt) => {
       const { encrypted, iv } = await encrypt(prompt.prompt, key);
-      return {
+      const result: EncryptedQueuedPrompt = {
         id: prompt.id,
         encrypted_prompt: encrypted,
         iv,
         timestamp: prompt.timestamp,
+        source: prompt.source,
       };
+
+      // Encrypt voice metadata if present
+      if (prompt.voiceMetadata) {
+        const voiceMetadataJson = JSON.stringify(prompt.voiceMetadata);
+        const { encrypted: encryptedMetadata, iv: metadataIv } = await encrypt(voiceMetadataJson, key);
+        result.encrypted_voice_metadata = encryptedMetadata;
+        result.voice_metadata_iv = metadataIv;
+      }
+
+      return result;
     })
   );
 }
@@ -365,11 +417,28 @@ async function decryptQueuedPrompts(
   return Promise.all(
     prompts.map(async (prompt) => {
       const decryptedPrompt = await decrypt(prompt.encrypted_prompt, prompt.iv, key);
-      return {
+      const result: PlaintextQueuedPrompt = {
         id: prompt.id,
         prompt: decryptedPrompt,
         timestamp: prompt.timestamp,
+        source: prompt.source,
       };
+
+      // Decrypt voice metadata if present
+      if (prompt.encrypted_voice_metadata && prompt.voice_metadata_iv) {
+        try {
+          const decryptedMetadataJson = await decrypt(
+            prompt.encrypted_voice_metadata,
+            prompt.voice_metadata_iv,
+            key
+          );
+          result.voiceMetadata = JSON.parse(decryptedMetadataJson);
+        } catch (err) {
+          console.error('[CollabV3] Failed to decrypt voice metadata:', err);
+        }
+      }
+
+      return result;
     })
   );
 }
@@ -704,6 +773,8 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   // Connected devices tracking
   const [connectedDevices, setConnectedDevices] = useState<DeviceInfo[]>([]);
+  // OpenAI API key synced from desktop for voice mode
+  const [syncedOpenAIApiKey, setSyncedOpenAIApiKey] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -1035,6 +1106,37 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
             );
             break;
           }
+
+          case 'settings_sync_broadcast': {
+            // Desktop synced settings (e.g., OpenAI API key for voice mode)
+            console.log('[CollabV3] Received settings sync from device:', message.settings.device_id);
+
+            if (!encryptionKeyRef.current) {
+              console.error('[CollabV3] Cannot decrypt settings - no encryption key');
+              break;
+            }
+
+            try {
+              // Decrypt the settings JSON
+              const settingsJson = await decrypt(
+                message.settings.encrypted_settings,
+                message.settings.settings_iv,
+                encryptionKeyRef.current
+              );
+              const settings: SyncedSettings = JSON.parse(settingsJson);
+
+              console.log('[CollabV3] Decrypted settings, version:', settings.version);
+
+              // Update the synced API key
+              if (settings.openaiApiKey) {
+                console.log('[CollabV3] Received OpenAI API key from desktop');
+                setSyncedOpenAIApiKey(settings.openaiApiKey);
+              }
+            } catch (err) {
+              console.error('[CollabV3] Failed to decrypt settings:', err);
+            }
+            break;
+          }
         }
       } catch (err) {
         console.error('[CollabV3] Failed to parse message:', err);
@@ -1056,7 +1158,13 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
   const sendIndexUpdate = useCallback(
     async (sessionId: string, update: {
       pendingExecution?: { messageId: string; sentAt: number; sentBy: 'mobile' | 'desktop' };
-      queuedPrompts?: Array<{ id: string; prompt: string; timestamp: number }>;
+      queuedPrompts?: Array<{
+        id: string;
+        prompt: string;
+        timestamp: number;
+        source?: 'keyboard' | 'voice';
+        voiceMetadata?: VoiceMetadata;
+      }>;
     }) => {
       if (wsRef.current?.readyState !== WebSocket.OPEN) {
         console.warn('[CollabV3] Cannot send index update - not connected');
@@ -1642,6 +1750,7 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
     connectedDevices,
     isDesktopConnected,
     sendSessionControlMessage,
+    syncedOpenAIApiKey,
   };
 
   return <SyncContext.Provider value={value}>{children}</SyncContext.Provider>;

@@ -443,7 +443,8 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
           ? new Set(enabledProjects)
           : null; // null means all projects enabled
 
-        // Step 4: Find sessions that need syncing
+        // Step 4: Find sessions that need syncing using timestamp comparison
+        // Compare local updated_at vs server updated_at - if local is newer, we have changes to sync
         const sessionsNeedingIndexUpdate: typeof allLocalSessions = [];
         const sessionsNeedingMessageSync: string[] = [];
 
@@ -466,19 +467,17 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
             sessionsNeedingIndexUpdate.push(localSession);
             sessionsNeedingMessageSync.push(localSession.id);
           } else {
-            // Check if we have more messages than the server
-            // This is the reliable way to know if messages need syncing
-            // (timestamps can drift between devices)
-            const serverMessageCount = serverSession.message_count || 0;
-            const localMessageCount = localSession.messageCount || 0;
+            // Compare timestamps - if local is newer than server's last sync, we have new messages
+            const serverUpdatedAt = serverSession.updated_at || 0;
+            const localUpdatedAt = localSession.updatedAt || 0;
 
-            if (localMessageCount > serverMessageCount) {
-              // We have messages the server doesn't have
+            if (localUpdatedAt > serverUpdatedAt) {
+              // We have changes the server doesn't have
               sessionsNeedingIndexUpdate.push(localSession);
               sessionsNeedingMessageSync.push(localSession.id);
-              logger.main.info(`[SyncManager] Session ${localSession.id} needs message sync: local=${localMessageCount} server=${serverMessageCount}`);
+              logger.main.info(`[SyncManager] Session ${localSession.id} needs sync: local=${localUpdatedAt} server=${serverUpdatedAt}`);
             }
-            // If server has same or more messages, we're in sync (or server has messages from other devices)
+            // If server has same or newer timestamp, we're in sync
           }
         }
 
@@ -499,15 +498,15 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
 
             for (const session of sessionsNeedingIndexUpdate) {
               if (sessionsNeedingMessageSync.includes(session.id)) {
-                // Get the server's message count as offset - only fetch messages after that
+                // Get the server's last_message_at timestamp - only fetch messages after that
                 const serverSession = serverSessionMap.get(session.id);
-                const serverMessageCount = serverSession?.message_count || 0;
+                const sinceTimestamp = serverSession?.last_message_at || 0;
 
-                // Only load messages the server doesn't have
-                const newMessages = await getSessionMessagesForSync(session.id, serverMessageCount);
+                // Only load messages newer than server's last message
+                const newMessages = await getSessionMessagesForSync(session.id, sinceTimestamp);
                 session.messages = newMessages;
 
-                logger.main.info(`[SyncManager] Session ${session.id}: syncing ${newMessages.length} new messages (server has ${serverMessageCount})`);
+                logger.main.info(`[SyncManager] Session ${session.id}: syncing ${newMessages.length} new messages (since ${new Date(sinceTimestamp).toISOString()})`);
               }
             }
           }
@@ -523,6 +522,22 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
         logger.main.warn('[SyncManager] Failed to sync sessions:', error);
       }
     }, 2000); // Wait for index connection
+
+    // Sync current OpenAI API key to mobile (in case mobile connects after key was set)
+    setTimeout(async () => {
+      try {
+        const Store = (await import('electron-store')).default;
+        const aiStore = new Store({ name: 'ai-settings' });
+        const apiKeys = aiStore.get('apiKeys', {}) as Record<string, string>;
+        const openaiKey = apiKeys['openai'];
+        if (openaiKey) {
+          logger.main.info('[SyncManager] Syncing existing OpenAI API key to mobile devices');
+          syncSettingsToMobile(openaiKey);
+        }
+      } catch (error) {
+        logger.main.warn('[SyncManager] Failed to sync initial settings:', error);
+      }
+    }, 3000); // Wait a bit for index connection to be established
 
     // Mark as connected
     updateSyncStatus({ connected: true, syncing: false, error: null });
@@ -635,7 +650,7 @@ export async function triggerIncrementalSync(): Promise<void> {
       ? new Set(enabledProjects)
       : null;
 
-    // Find sessions that need syncing
+    // Find sessions that need syncing using timestamp comparison
     const sessionsNeedingIndexUpdate: typeof allLocalSessions = [];
     const sessionsNeedingMessageSync: string[] = [];
 
@@ -655,13 +670,14 @@ export async function triggerIncrementalSync(): Promise<void> {
         sessionsNeedingIndexUpdate.push(localSession);
         sessionsNeedingMessageSync.push(localSession.id);
       } else {
-        const serverMessageCount = serverSession.message_count || 0;
-        const localMessageCount = localSession.messageCount || 0;
+        // Compare timestamps - if local is newer than server's last sync, we have new messages
+        const serverUpdatedAt = serverSession.updated_at || 0;
+        const localUpdatedAt = localSession.updatedAt || 0;
 
-        if (localMessageCount > serverMessageCount) {
+        if (localUpdatedAt > serverUpdatedAt) {
           sessionsNeedingIndexUpdate.push(localSession);
           sessionsNeedingMessageSync.push(localSession.id);
-          logger.main.info(`[SyncManager] Session ${localSession.id} needs message sync: local=${localMessageCount} server=${serverMessageCount}`);
+          logger.main.info(`[SyncManager] Session ${localSession.id} needs sync: local=${localUpdatedAt} server=${serverUpdatedAt}`);
         }
       }
     }
@@ -682,10 +698,10 @@ export async function triggerIncrementalSync(): Promise<void> {
         for (const session of sessionsNeedingIndexUpdate) {
           if (sessionsNeedingMessageSync.includes(session.id)) {
             const serverSession = serverSessionMap.get(session.id);
-            const serverMessageCount = serverSession?.message_count || 0;
-            const newMessages = await getSessionMessagesForSync(session.id, serverMessageCount);
+            const sinceTimestamp = serverSession?.last_message_at || 0;
+            const newMessages = await getSessionMessagesForSync(session.id, sinceTimestamp);
             session.messages = newMessages;
-            logger.main.info(`[SyncManager] Session ${session.id}: syncing ${newMessages.length} new messages`);
+            logger.main.info(`[SyncManager] Session ${session.id}: syncing ${newMessages.length} new messages (since ${new Date(sinceTimestamp).toISOString()})`);
           }
         }
       }
@@ -700,5 +716,46 @@ export async function triggerIncrementalSync(): Promise<void> {
     logger.main.info(`[SyncManager] Triggered sync completed in ${totalSyncTime.toFixed(1)}ms`);
   } catch (error) {
     logger.main.error('[SyncManager] Triggered sync failed:', error);
+  }
+}
+
+// ============================================================================
+// Settings Sync (Desktop -> Mobile)
+// ============================================================================
+
+// Track settings version to avoid re-syncing unchanged settings
+let settingsVersion = 0;
+
+/**
+ * Sync sensitive settings to mobile devices.
+ * Currently syncs the OpenAI API key for voice mode.
+ *
+ * @param openaiApiKey The OpenAI API key to sync
+ */
+export async function syncSettingsToMobile(openaiApiKey?: string): Promise<void> {
+  const provider = state.provider;
+  if (!provider) {
+    logger.main.debug('[SyncManager] Cannot sync settings - provider not initialized');
+    return;
+  }
+
+  if (!provider.syncSettings) {
+    logger.main.debug('[SyncManager] Provider does not support syncSettings');
+    return;
+  }
+
+  // Increment version to ensure mobile gets the latest
+  settingsVersion++;
+
+  logger.main.info(`[SyncManager] Syncing settings to mobile devices (version ${settingsVersion})`);
+
+  try {
+    await provider.syncSettings({
+      openaiApiKey,
+      version: settingsVersion,
+    });
+    logger.main.info('[SyncManager] Settings synced successfully');
+  } catch (error) {
+    logger.main.error('[SyncManager] Failed to sync settings:', error);
   }
 }

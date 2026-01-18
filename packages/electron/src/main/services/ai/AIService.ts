@@ -2895,6 +2895,12 @@ export class AIService {
           const key = settings.apiKeys.openai;
           if (key && key !== this.maskApiKey(currentKeys['openai'] || '')) {
             currentKeys['openai'] = key as string;
+            // Sync to mobile devices for voice mode
+            import('../SyncManager').then(({ syncSettingsToMobile }) => {
+              syncSettingsToMobile(key as string);
+            }).catch(() => {
+              // Sync manager may not be available
+            });
           }
         }
 

@@ -216,6 +216,18 @@ export interface SyncProvider {
 
   /** Subscribe to device status changes (devices joining/leaving) */
   onDeviceStatusChange?(callback: (devices: DeviceInfo[]) => void): () => void;
+
+  /**
+   * Send encrypted settings to all connected mobile devices.
+   * Used by desktop to share sensitive settings like API keys.
+   */
+  syncSettings?(settings: SyncedSettings): Promise<void>;
+
+  /**
+   * Subscribe to settings sync messages from other devices.
+   * Used by mobile to receive settings from desktop.
+   */
+  onSettingsSync?(callback: (settings: SyncedSettings) => void): () => void;
 }
 
 /** Session data for bulk index sync */
@@ -376,4 +388,31 @@ export interface SessionControlMessage {
   timestamp: number;
   /** Device that sent the message */
   sentBy: 'desktop' | 'mobile';
+}
+
+/**
+ * Settings that can be synced from desktop to mobile.
+ * These are sensitive settings that should be encrypted in transit.
+ */
+export interface SyncedSettings {
+  /** OpenAI API key for voice transcription */
+  openaiApiKey?: string;
+  /** Version for handling future upgrades */
+  version: number;
+}
+
+/**
+ * Encrypted settings payload for wire transmission.
+ */
+export interface EncryptedSettingsPayload {
+  /** Encrypted JSON blob containing SyncedSettings (base64) */
+  encrypted_settings: string;
+  /** IV for settings decryption (base64) */
+  settings_iv: string;
+  /** Device ID of sender */
+  device_id: string;
+  /** Timestamp of settings change */
+  timestamp: number;
+  /** Version to handle upgrades */
+  version: number;
 }

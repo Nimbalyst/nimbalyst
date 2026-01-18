@@ -25,6 +25,8 @@ import type {
   SessionControlBroadcastMessage,
   RegisterPushTokenMessage,
   RequestMobilePushMessage,
+  EncryptedSettingsPayload,
+  SettingsSyncBroadcastMessage,
 } from './types';
 import { createLogger } from './logger';
 
@@ -307,6 +309,10 @@ export class IndexRoom implements DurableObject {
 
         case 'session_control':
           await this.handleSessionControl(ws, connState, message.message);
+          break;
+
+        case 'settings_sync':
+          await this.handleSettingsSync(ws, connState, message.settings);
           break;
 
         case 'register_push_token':
@@ -621,6 +627,27 @@ export class IndexRoom implements DurableObject {
     this.broadcast(broadcastMessage, ws);
 
     log.debug('Broadcast session_control to', this.connections.size - 1, 'other connections');
+  }
+
+  /**
+   * Handle settings sync from desktop to broadcast to other devices (mobile)
+   */
+  private async handleSettingsSync(
+    ws: WebSocket,
+    connState: ConnectionState,
+    settings: EncryptedSettingsPayload
+  ): Promise<void> {
+    log.debug('Received settings_sync from device:', settings.device_id, 'version:', settings.version);
+
+    // Broadcast encrypted settings to all other connections
+    const broadcastMessage: SettingsSyncBroadcastMessage = {
+      type: 'settings_sync_broadcast',
+      settings,
+      from_connection_id: this.getConnectionId(ws),
+    };
+    this.broadcast(broadcastMessage, ws);
+
+    log.debug('Broadcast settings_sync to', this.connections.size - 1, 'other connections');
   }
 
   /**
