@@ -98,6 +98,9 @@ interface AppStoreSchema {
   };
   // Walkthrough guide system state
   walkthroughs?: WalkthroughState;
+  // Advanced: V8 heap memory limit in MB (default: 4096 = 4GB)
+  // Increase if you experience OOM crashes with large sessions
+  maxHeapSizeMB?: number;
 }
 
 /**
@@ -1413,5 +1416,29 @@ export function getAppSetting<T>(key: string): T | undefined {
  */
 export function setAppSetting<T>(key: string, value: T): void {
   getAppStore().set(key as keyof AppStoreSchema, value as any);
+}
+
+// V8 Heap Memory Limit
+// Default is 4096MB (4GB). Increase if experiencing OOM crashes with large sessions.
+
+/**
+ * Get the configured V8 heap memory limit in MB.
+ * Returns undefined if not explicitly set (uses V8 default).
+ */
+export function getMaxHeapSizeMB(): number | undefined {
+  return getAppStore().get('maxHeapSizeMB');
+}
+
+/**
+ * Set the V8 heap memory limit in MB.
+ * Changes take effect on next app restart.
+ * @param sizeMB Memory limit in megabytes (e.g., 4096 for 4GB, 8192 for 8GB)
+ */
+export function setMaxHeapSizeMB(sizeMB: number | undefined): void {
+  if (sizeMB !== undefined && sizeMB > 0) {
+    getAppStore().set('maxHeapSizeMB', sizeMB);
+  } else {
+    getAppStore().delete('maxHeapSizeMB');
+  }
 }
 

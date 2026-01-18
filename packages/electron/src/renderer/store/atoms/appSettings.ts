@@ -344,6 +344,8 @@ export interface AdvancedSettings {
   walkthroughsEnabled: boolean;
   walkthroughsViewedCount: number;
   walkthroughsTotalCount: number;
+  // V8 heap memory limit in MB (default: 4096). Requires restart to take effect.
+  maxHeapSizeMB: number;
 }
 
 /**
@@ -356,6 +358,7 @@ const defaultAdvancedSettings: AdvancedSettings = {
   walkthroughsEnabled: true,
   walkthroughsViewedCount: 0,
   walkthroughsTotalCount: 0,
+  maxHeapSizeMB: 4096,
 };
 
 /**
@@ -400,6 +403,9 @@ function scheduleAdvancedPersist(
           break;
         case 'walkthroughsEnabled':
           await window.electronAPI.invoke('walkthroughs:set-enabled', settings.walkthroughsEnabled);
+          break;
+        case 'maxHeapSizeMB':
+          await window.electronAPI.invoke('app-settings:set', 'maxHeapSizeMB', settings.maxHeapSizeMB);
           break;
         // walkthroughsViewedCount and walkthroughsTotalCount are read-only from main process
       }
@@ -451,6 +457,13 @@ export const walkthroughsTotalCountAtom = atom(
   (get) => get(advancedSettingsAtom).walkthroughsTotalCount
 );
 
+/**
+ * V8 heap memory limit in MB.
+ */
+export const maxHeapSizeMBAtom = atom(
+  (get) => get(advancedSettingsAtom).maxHeapSizeMB
+);
+
 // === Setter atoms ===
 
 /**
@@ -495,12 +508,13 @@ export async function initAdvancedSettings(): Promise<AdvancedSettings> {
   }
 
   try {
-    const [channel, analyticsEnabled, extensionDevToolsEnabled, walkthroughState] =
+    const [channel, analyticsEnabled, extensionDevToolsEnabled, walkthroughState, maxHeapSizeMB] =
       await Promise.all([
         window.electronAPI.invoke('release-channel:get'),
         window.electronAPI.invoke('analytics:is-enabled'),
         window.electronAPI.extensionDevTools.isEnabled(),
         window.electronAPI.invoke('walkthroughs:get-state'),
+        window.electronAPI.invoke('app-settings:get', 'maxHeapSizeMB'),
       ]);
 
     // Calculate viewed count (completed + dismissed)
@@ -515,6 +529,7 @@ export async function initAdvancedSettings(): Promise<AdvancedSettings> {
       walkthroughsEnabled: walkthroughState?.enabled ?? true,
       walkthroughsViewedCount,
       walkthroughsTotalCount,
+      maxHeapSizeMB: maxHeapSizeMB ?? 4096,
     };
   } catch (error) {
     console.error('[appSettings] Failed to load advanced settings:', error);

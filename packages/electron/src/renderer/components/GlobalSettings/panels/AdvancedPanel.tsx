@@ -32,6 +32,7 @@ export function AdvancedPanel() {
     walkthroughsEnabled,
     walkthroughsViewedCount,
     walkthroughsTotalCount,
+    maxHeapSizeMB,
   } = settings;
   const isDevelopment = import.meta.env.DEV;
   const [showReleaseChannel, setShowReleaseChannel] = useState(false);
@@ -185,6 +186,36 @@ export function AdvancedPanel() {
               </span>
             </div>
           </label>
+        </div>
+      </div>
+
+      <div className="provider-panel-section">
+        <h4 className="provider-panel-section-title">Memory</h4>
+        <p className="provider-panel-hint">
+          Configure memory limits for the application.
+        </p>
+
+        <div className="setting-item">
+          <div className="setting-text">
+            <span className="setting-name">Maximum Heap Size (MB)</span>
+            <span className="setting-description">
+              V8 JavaScript heap memory limit. Increase if you experience out-of-memory crashes
+              with large AI sessions. Default is 4096 MB (4 GB). Requires restart to take effect.
+            </span>
+          </div>
+          <select
+            value={maxHeapSizeMB}
+            onChange={(e) => updateSettings({ maxHeapSizeMB: parseInt(e.target.value, 10) })}
+            className="setting-select"
+            style={{ marginTop: '8px', width: '100%', padding: '8px', borderRadius: '4px' }}
+          >
+            <option value={2048}>2 GB</option>
+            <option value={4096}>4 GB (Default)</option>
+            <option value={6144}>6 GB</option>
+            <option value={8192}>8 GB</option>
+            <option value={12288}>12 GB</option>
+            <option value={16384}>16 GB</option>
+          </select>
         </div>
       </div>
 
