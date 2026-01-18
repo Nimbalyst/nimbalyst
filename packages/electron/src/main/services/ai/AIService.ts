@@ -2219,12 +2219,11 @@ export class AIService {
               });
 
               // Request mobile push notification for agent completion
-              // Server will check presence and only push if user is away from desktop
               if (syncProvider) {
                 syncProvider.requestMobilePush?.(
                   session.id,
-                  'AI Response Ready',
-                  `${session.provider}: ${notificationBody}`
+                  session.title || 'AI Session',
+                  notificationBody
                 );
               }
 
@@ -2319,11 +2318,10 @@ export class AIService {
             });
 
             // Request mobile push notification for agent error
-            const errorPushTitle = session.title || 'Agent error';
             syncProvider.requestMobilePush?.(
               session.id,
-              'AI Error',
-              `${session.provider}: ${errorPushTitle}`
+              session.title || 'AI Session',
+              'Error occurred'
             );
           }
         }
