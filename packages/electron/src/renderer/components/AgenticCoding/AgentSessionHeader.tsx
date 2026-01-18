@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { useAtomValue } from 'jotai';
 import { ProviderIcon } from '@nimbalyst/runtime';
 import type { SessionData } from '@nimbalyst/runtime/ai/server/types';
+import { sessionProcessingAtom } from '../../store';
 import './AgentSessionHeader.css';
 
 interface WorktreeWithStatus {
@@ -22,13 +24,15 @@ const worktreeCache = new Map<string, WorktreeWithStatus>();
 
 interface AgentSessionHeaderProps {
   sessionData: SessionData | null;
+  /** @deprecated - Now uses Jotai atom subscription. This prop is ignored. */
   isProcessing?: boolean;
 }
 
 export const AgentSessionHeader: React.FC<AgentSessionHeaderProps> = ({
   sessionData,
-  isProcessing = false
 }) => {
+  // Subscribe to processing atom for this session
+  const isProcessing = useAtomValue(sessionProcessingAtom(sessionData?.id ?? ''));
   // Use cached data immediately if available
   const cachedData = sessionData?.worktreeId ? worktreeCache.get(sessionData.worktreeId) ?? null : null;
   const [worktreeData, setWorktreeData] = useState<WorktreeWithStatus | null>(cachedData);

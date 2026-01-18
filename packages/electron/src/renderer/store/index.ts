@@ -82,7 +82,18 @@ export {
   removeSessionAtom,
   addSessionAtom,
   updateSessionAtom,
+  // Session list loading
+  sessionListFullAtom,
+  sessionListLoadingAtom,
+  sessionListWorkspaceAtom,
+  showArchivedSessionsAtom,
+  refreshSessionListAtom,
+  initSessionList,
+  addSessionFullAtom,
+  updateSessionFullAtom,
+  removeSessionFullAtom,
   type SessionInfo,
+  type SessionListItem,
 } from './atoms/sessions';
 
 // File tree atoms (Electron file watcher)
@@ -127,6 +138,22 @@ export {
   type TrackerItem,
   type TrackerFilter,
 } from './atoms/trackers';
+
+// Agent mode atoms (session history layout)
+export {
+  agentModeLayoutAtom,
+  sessionHistoryWidthAtom,
+  sessionHistoryCollapsedAtom,
+  collapsedGroupsAtom,
+  sortOrderAtom,
+  setAgentModeLayoutAtom,
+  setSessionHistoryWidthAtom,
+  toggleCollapsedGroupAtom,
+  setCollapsedGroupsAtom,
+  setSortOrderAtom,
+  initAgentModeLayout,
+  type AgentModeLayout,
+} from './atoms/agentMode';
 
 // Project state atoms (Electron persistence)
 export {
