@@ -14,6 +14,14 @@ import type {
   InteractivePromptContent,
 } from '@nimbalyst/runtime';
 import forge from 'node-forge';
+import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
+import { Capacitor } from '@capacitor/core';
+import {
+  InteractiveVoiceService,
+  VoiceServiceState,
+  TranscriptEntry,
+  PendingPrompt as VoicePendingPrompt,
+} from '../services/InteractiveVoiceService';
 
 /**
  * CollabV3 Message Types
@@ -207,12 +215,13 @@ async function decrypt(encrypted: string, iv: string, key: ForgeKey): Promise<st
 
 interface SessionDetailScreenProps {
   hiddenBackButton?: boolean;
+  voiceModeActive?: boolean;
 }
 
-export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenProps) {
+export function SessionDetailScreen({ hiddenBackButton, voiceModeActive }: SessionDetailScreenProps) {
   const navigate = useNavigate();
   const { sessionId } = useParams<{ sessionId: string }>();
-  const { config, sendIndexUpdate, allSessions, sendSessionControlMessage } = useSync();
+  const { config, sendIndexUpdate, allSessions, sendSessionControlMessage, syncedOpenAIApiKey, syncedVoiceModeSettings, projects } = useSync();
 
   const [messages, setMessages] = useState<SyncedMessage[]>([]);
   const [metadata, setMetadata] = useState<Partial<WireSessionMetadata>>({});
@@ -226,6 +235,17 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
 
   // Interactive prompt state
   const [isSubmittingPrompt, setIsSubmittingPrompt] = useState(false);
+
+  // Voice mode state
+  const [voiceState, setVoiceState] = useState<VoiceServiceState>('idle');
+  const [voiceTranscript, setVoiceTranscript] = useState<TranscriptEntry[]>([]);
+  const [voicePendingPrompt, setVoicePendingPrompt] = useState<VoicePendingPrompt | null>(null);
+  const [voiceCountdown, setVoiceCountdown] = useState(5);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [isEditingVoicePrompt, setIsEditingVoicePrompt] = useState(false);
+  const [editedVoicePrompt, setEditedVoicePrompt] = useState('');
+  const voiceServiceRef = useRef<InteractiveVoiceService | null>(null);
+  const voiceCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const encryptionKeyRef = useRef<ForgeKey | null>(null);
@@ -695,44 +715,347 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
     setAttachments((prev) => prev.filter((a) => a.id !== attachmentId));
   };
 
+  // ============================================================================
+  // Voice Mode Functions
+  // ============================================================================
+
+  // Cleanup voice on unmount or session change
+  useEffect(() => {
+    return () => {
+      voiceServiceRef.current?.stop('user_stopped');
+      if (voiceCountdownRef.current) {
+        clearInterval(voiceCountdownRef.current);
+      }
+    };
+  }, [sessionId]);
+
+  // Handle voice pending prompt
+  const handleVoicePendingPrompt = useCallback((prompt: VoicePendingPrompt) => {
+    setVoicePendingPrompt(prompt);
+    setEditedVoicePrompt(prompt.prompt);
+    setVoiceCountdown(5);
+
+    voiceCountdownRef.current = setInterval(() => {
+      setVoiceCountdown((prev) => {
+        if (prev <= 1) {
+          if (voiceCountdownRef.current) {
+            clearInterval(voiceCountdownRef.current);
+            voiceCountdownRef.current = null;
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    if (Capacitor.isNativePlatform()) {
+      Haptics.notification({ type: NotificationType.Warning });
+    }
+  }, []);
+
+  // Send voice pending prompt to desktop
+  const sendVoicePendingPrompt = useCallback(async () => {
+    if (!sessionId || !voicePendingPrompt) return;
+
+    if (voiceCountdownRef.current) {
+      clearInterval(voiceCountdownRef.current);
+      voiceCountdownRef.current = null;
+    }
+
+    const finalPrompt = isEditingVoicePrompt ? editedVoicePrompt : voicePendingPrompt.prompt;
+    if (!finalPrompt.trim()) return;
+
+    try {
+      const queuedPrompt = {
+        id: crypto.randomUUID(),
+        prompt: finalPrompt.trim(),
+        timestamp: Date.now(),
+        source: 'voice' as const,
+      };
+
+      await sendIndexUpdate(sessionId, { queuedPrompts: [queuedPrompt] });
+
+      if (Capacitor.isNativePlatform()) {
+        Haptics.notification({ type: NotificationType.Success });
+      }
+
+      setVoicePendingPrompt(null);
+      setIsEditingVoicePrompt(false);
+      setEditedVoicePrompt('');
+    } catch (err) {
+      setVoiceError(err instanceof Error ? err.message : 'Failed to send');
+    }
+  }, [sessionId, voicePendingPrompt, isEditingVoicePrompt, editedVoicePrompt, sendIndexUpdate]);
+
+  // Auto-send when countdown reaches 0
+  useEffect(() => {
+    if (voiceCountdown === 0 && voicePendingPrompt && !isEditingVoicePrompt) {
+      sendVoicePendingPrompt();
+    }
+  }, [voiceCountdown, voicePendingPrompt, isEditingVoicePrompt, sendVoicePendingPrompt]);
+
+  // Cancel voice pending prompt
+  const cancelVoicePendingPrompt = useCallback(() => {
+    if (voiceCountdownRef.current) {
+      clearInterval(voiceCountdownRef.current);
+      voiceCountdownRef.current = null;
+    }
+    setVoicePendingPrompt(null);
+    setIsEditingVoicePrompt(false);
+    setEditedVoicePrompt('');
+
+    if (Capacitor.isNativePlatform()) {
+      Haptics.impact({ style: ImpactStyle.Light });
+    }
+  }, []);
+
+  // Toggle voice mode
+  const toggleVoiceMode = useCallback(async () => {
+    // If active, stop
+    if (voiceState !== 'idle' && voiceState !== 'error') {
+      voiceServiceRef.current?.stop('user_stopped');
+      if (Capacitor.isNativePlatform()) {
+        Haptics.impact({ style: ImpactStyle.Light });
+      }
+      return;
+    }
+
+    // Start voice session
+    setVoiceError(null);
+
+    if (!syncedOpenAIApiKey) {
+      setVoiceError('OpenAI API key not synced from desktop');
+      setVoiceState('error');
+      return;
+    }
+
+    // Build session context
+    const indexEntry = allSessions.find((s) => s.id === sessionId);
+    const project = projects.find((p) => p.id === indexEntry?.workspaceId);
+    let sessionContext = 'Mobile voice session';
+    if (indexEntry) {
+      sessionContext = `Session "${indexEntry.title || 'Unnamed'}" in project "${project?.name || 'Unknown'}"`;
+      if (indexEntry.messageCount > 0) {
+        sessionContext += `. Session has ${indexEntry.messageCount} messages.`;
+      }
+    }
+
+    voiceServiceRef.current = new InteractiveVoiceService(
+      syncedOpenAIApiKey,
+      {
+        onTranscriptUpdate: setVoiceTranscript,
+        onPendingPrompt: handleVoicePendingPrompt,
+        onStateChange: setVoiceState,
+        onError: (err) => {
+          setVoiceError(err.message);
+          if (Capacitor.isNativePlatform()) {
+            Haptics.notification({ type: NotificationType.Error });
+          }
+        },
+        onSessionEnd: (reason) => {
+          if (reason === 'timeout') {
+            setVoiceError('Voice timed out');
+          }
+        },
+      },
+      {
+        sessionContext,
+        // Use synced voice settings from desktop
+        voice: syncedVoiceModeSettings?.voice,
+      }
+    );
+
+    try {
+      await voiceServiceRef.current.start();
+      if (Capacitor.isNativePlatform()) {
+        Haptics.impact({ style: ImpactStyle.Medium });
+      }
+    } catch (err) {
+      setVoiceError(err instanceof Error ? err.message : 'Failed to start voice');
+      setVoiceState('error');
+    }
+  }, [voiceState, syncedOpenAIApiKey, syncedVoiceModeSettings, sessionId, allSessions, projects, handleVoicePendingPrompt]);
+
+  // Voice mode helpers
+  const isVoiceActive = voiceState !== 'idle' && voiceState !== 'error';
+  const latestVoiceEntry = voiceTranscript[voiceTranscript.length - 1];
+
   return (
-    <div className="flex flex-col w-full bg-[var(--surface-primary)]" style={{ height: hiddenBackButton ? '100%' : '100dvh' }}>
-      {/* Header - Fixed with safe area for notch */}
-      <header className="flex-shrink-0 flex items-center px-3 py-2 border-b border-[var(--border-primary)] bg-[var(--surface-secondary)] safe-area-top">
-        {!hiddenBackButton && (
-          <button
-            onClick={() => {
-              // Navigate back to the session list for this project
-              const projectId = metadata.project_id || indexEntry?.workspaceId || 'default';
-              navigate(`/project/${encodeURIComponent(projectId)}/sessions`);
-            }}
-            className="mr-2 p-1 text-[var(--text-primary)] active:opacity-70"
-            aria-label="Go back"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+    <div className="flex flex-col w-full bg-[var(--surface-primary)]" style={{ height: hiddenBackButton || voiceModeActive ? '100%' : '100dvh' }}>
+      {/* Header - Hidden in voice mode since VoiceControlScreen provides its own */}
+      {!voiceModeActive && (
+        <header className="flex-shrink-0 flex items-center px-3 py-2 border-b border-[var(--border-primary)] bg-[var(--surface-secondary)] safe-area-top">
+          {!hiddenBackButton && (
+            <button
+              onClick={() => {
+                // Navigate back to the session list for this project
+                const projectId = metadata.project_id || indexEntry?.workspaceId || 'default';
+                navigate(`/project/${encodeURIComponent(projectId)}/sessions`);
+              }}
+              className="mr-2 p-1 text-[var(--text-primary)] active:opacity-70"
+              aria-label="Go back"
             >
-              <path d="m15 18-6-6 6-6" />
-            </svg>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="m15 18-6-6 6-6" />
+              </svg>
+            </button>
+          )}
+          <div className="flex-1 min-w-0">
+            <h1 className="text-base font-semibold truncate text-[var(--text-primary)]">{title}</h1>
+            <div className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
+              {metadata.provider && <span>{metadata.provider}</span>}
+              {metadata.model && <span>/ {metadata.model}</span>}
+              <span className={`status-dot ${connected ? 'connected' : 'disconnected'}`} />
+            </div>
+          </div>
+          {/* Voice Control Button */}
+          <button
+            onClick={toggleVoiceMode}
+            disabled={voiceState === 'connecting'}
+            className={`ml-2 p-1.5 rounded-lg transition-all ${
+              voiceState === 'connecting'
+                ? 'bg-[var(--surface-tertiary)] text-[var(--text-tertiary)]'
+                : isVoiceActive
+                  ? 'bg-red-500 text-white'
+                  : 'hover:bg-[var(--surface-tertiary)] text-[var(--primary-color)]'
+            }`}
+            title={isVoiceActive ? 'Stop Voice' : 'Start Voice'}
+          >
+            {voiceState === 'connecting' ? (
+              // Spinner when connecting
+              <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+            ) : isVoiceActive ? (
+              // Stop icon when active
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="6" y="6" width="12" height="12" rx="2" />
+              </svg>
+            ) : (
+              // Mic icon when idle
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                <line x1="12" x2="12" y1="19" y2="22" />
+              </svg>
+            )}
           </button>
-        )}
-        <div className="flex-1 min-w-0">
-          <h1 className="text-base font-semibold truncate text-[var(--text-primary)]">{title}</h1>
-          <div className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
-            {metadata.provider && <span>{metadata.provider}</span>}
-            {metadata.model && <span>/ {metadata.model}</span>}
-            <span className={`status-dot ${connected ? 'connected' : 'disconnected'}`} />
+        </header>
+      )}
+
+      {/* Voice Status Bar - Shows when voice is active */}
+      {isVoiceActive && !voiceModeActive && (
+        <div className="flex-shrink-0 px-3 py-1.5 bg-[var(--surface-tertiary)] border-b border-[var(--border-primary)]">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+            <span className="text-xs text-[var(--text-secondary)]">
+              {voiceState === 'listening' ? 'Listening...' : voiceState === 'agent_speaking' ? 'Speaking...' : 'Voice active'}
+            </span>
+            {latestVoiceEntry && (
+              <span className="flex-1 text-xs text-[var(--text-primary)] truncate">
+                {latestVoiceEntry.role === 'user' ? 'You: ' : 'Agent: '}
+                {latestVoiceEntry.text || '...'}
+              </span>
+            )}
           </div>
         </div>
-      </header>
+      )}
+
+      {/* Voice Pending Prompt - Shows when agent queues a task */}
+      {voicePendingPrompt && !voiceModeActive && (
+        <div className="flex-shrink-0 px-3 py-2 bg-[var(--surface-secondary)] border-b border-[var(--border-primary)]">
+          <div className="p-2 rounded-lg bg-[var(--surface-tertiary)] border border-[var(--primary-color)]/50">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs text-[var(--primary-color)] font-medium">Pending Task</span>
+              {!isEditingVoicePrompt && (
+                <span className="text-xs text-[var(--text-tertiary)]">Auto-send in {voiceCountdown}s</span>
+              )}
+            </div>
+            {isEditingVoicePrompt ? (
+              <textarea
+                value={editedVoicePrompt}
+                onChange={(e) => setEditedVoicePrompt(e.target.value)}
+                className="w-full p-2 rounded border border-[var(--border-primary)] bg-[var(--surface-primary)] text-[var(--text-primary)] text-sm resize-none"
+                rows={2}
+                autoFocus
+              />
+            ) : (
+              <p className="text-sm text-[var(--text-primary)] line-clamp-2">{voicePendingPrompt.prompt}</p>
+            )}
+            <div className="flex items-center justify-between mt-2">
+              <button
+                onClick={() => {
+                  if (isEditingVoicePrompt) {
+                    setIsEditingVoicePrompt(false);
+                    setVoiceCountdown(5);
+                    voiceCountdownRef.current = setInterval(() => {
+                      setVoiceCountdown((prev) => {
+                        if (prev <= 1) {
+                          if (voiceCountdownRef.current) {
+                            clearInterval(voiceCountdownRef.current);
+                            voiceCountdownRef.current = null;
+                          }
+                          return 0;
+                        }
+                        return prev - 1;
+                      });
+                    }, 1000);
+                  } else {
+                    if (voiceCountdownRef.current) {
+                      clearInterval(voiceCountdownRef.current);
+                      voiceCountdownRef.current = null;
+                    }
+                    setIsEditingVoicePrompt(true);
+                  }
+                }}
+                className="text-xs text-[var(--primary-color)] font-medium"
+              >
+                {isEditingVoicePrompt ? 'Done' : 'Edit'}
+              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={cancelVoicePendingPrompt}
+                  className="px-2 py-1 text-xs rounded bg-[var(--surface-primary)] text-[var(--text-secondary)] border border-[var(--border-primary)]"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={sendVoicePendingPrompt}
+                  className="px-2 py-1 text-xs rounded bg-[var(--primary-color)] text-white font-medium"
+                >
+                  Send
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Voice Error */}
+      {voiceError && voiceState === 'error' && !voiceModeActive && (
+        <div className="flex-shrink-0 px-3 py-2 bg-red-500/10 border-b border-red-500/30">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-red-500">{voiceError}</span>
+            <button
+              onClick={() => { setVoiceError(null); setVoiceState('idle'); }}
+              className="text-xs text-red-500 font-medium"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Transcript - Scrollable */}
       <main className="flex-1 overflow-auto min-h-0">

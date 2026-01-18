@@ -543,6 +543,7 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
     // Sync settings whenever a mobile device connects (joins or reconnects)
     // Track which mobile devices are currently connected so we can detect when one joins
     let previousMobileDeviceIds = new Set<string>();
+    let isFirstCallback = true;
     if (provider.onDeviceStatusChange) {
       provider.onDeviceStatusChange((devices) => {
         const mobileDevices = devices.filter(d => d.type === 'mobile');
@@ -552,21 +553,29 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
         for (const device of mobileDevices) {
           if (!previousMobileDeviceIds.has(device.device_id)) {
             logger.main.info(`[SyncManager] Mobile device connected: ${device.name}, syncing settings...`);
-            // Sync settings to the mobile device
-            import('electron-store').then(({ default: Store }) => {
-              const aiStore = new Store({ name: 'ai-settings' });
-              const apiKeys = aiStore.get('apiKeys', {}) as Record<string, string>;
-              const openaiKey = apiKeys['openai'];
-              if (openaiKey) {
-                syncSettingsToMobile(openaiKey);
-              }
-            }).catch((err) => {
-              logger.main.warn('[SyncManager] Failed to sync settings to device:', err);
-            });
+            // On first callback, add a small delay to ensure WebSocket is fully ready
+            // This handles the case where mobile connected before desktop registered the listener
+            const delay = isFirstCallback ? 1000 : 0;
+            setTimeout(() => {
+              // Sync settings to the mobile device
+              import('electron-store').then(({ default: Store }) => {
+                const aiStore = new Store({ name: 'ai-settings' });
+                const apiKeys = aiStore.get('apiKeys', {}) as Record<string, string>;
+                const openaiKey = apiKeys['openai'];
+                if (openaiKey) {
+                  syncSettingsToMobile(openaiKey);
+                } else {
+                  logger.main.debug('[SyncManager] No OpenAI API key to sync');
+                }
+              }).catch((err) => {
+                logger.main.warn('[SyncManager] Failed to sync settings to device:', err);
+              });
+            }, delay);
           }
         }
 
         previousMobileDeviceIds = currentMobileIds;
+        isFirstCallback = false;
       });
     }
 
@@ -760,8 +769,22 @@ export async function triggerIncrementalSync(): Promise<void> {
 let settingsVersion = 0;
 
 /**
+ * Get voice mode settings from the settings store.
+ */
+async function getVoiceModeSettings(): Promise<{ voice?: string; submitDelayMs?: number } | undefined> {
+  try {
+    const Store = (await import('electron-store')).default;
+    const settingsStore = new Store<Record<string, unknown>>({ name: 'nimbalyst-settings' });
+    const voiceMode = settingsStore.get('voiceMode') as { voice?: string; submitDelayMs?: number } | undefined;
+    return voiceMode;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Sync sensitive settings to mobile devices.
- * Currently syncs the OpenAI API key for voice mode.
+ * Syncs the OpenAI API key and voice mode settings.
  *
  * @param openaiApiKey The OpenAI API key to sync
  */
@@ -780,11 +803,18 @@ export async function syncSettingsToMobile(openaiApiKey?: string): Promise<void>
   // Increment version to ensure mobile gets the latest
   settingsVersion++;
 
+  // Get voice mode settings
+  const voiceModeSettings = await getVoiceModeSettings();
+
   logger.main.info(`[SyncManager] Syncing settings to mobile devices (version ${settingsVersion})`);
 
   try {
     await provider.syncSettings({
       openaiApiKey,
+      voiceMode: voiceModeSettings ? {
+        voice: voiceModeSettings.voice as 'alloy' | 'ash' | 'ballad' | 'coral' | 'echo' | 'sage' | 'shimmer' | 'verse' | 'marin' | 'cedar' | undefined,
+        submitDelayMs: voiceModeSettings.submitDelayMs,
+      } : undefined,
       version: settingsVersion,
     });
     logger.main.info('[SyncManager] Settings synced successfully');

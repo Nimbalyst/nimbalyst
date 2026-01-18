@@ -597,6 +597,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
   // Notify all device status listeners
   function notifyDeviceStatusChange(): void {
     const devices = Array.from(connectedDevices.values());
+    console.log('[CollabV3] notifyDeviceStatusChange:', devices.length, 'devices,', deviceStatusListeners.size, 'listeners');
     for (const listener of deviceStatusListeners) {
       try {
         listener(devices);
@@ -1353,7 +1354,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
             break;
 
           case 'device_joined':
-            // console.log('[CollabV3] Device joined:', message.device.name);
+            console.log('[CollabV3] Device joined:', message.device.name, message.device.type);
             connectedDevices.set(message.device.device_id, message.device);
             notifyDeviceStatusChange();
             break;
@@ -2284,10 +2285,14 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
     /** Subscribe to device status changes (devices joining/leaving) */
     onDeviceStatusChange(callback: (devices: DeviceInfo[]) => void): () => void {
       deviceStatusListeners.add(callback);
+      console.log('[CollabV3] Device status listener registered, total:', deviceStatusListeners.size);
       // Immediately notify with current state
-      callback(Array.from(connectedDevices.values()));
+      const currentDevices = Array.from(connectedDevices.values());
+      console.log('[CollabV3] Immediately notifying with', currentDevices.length, 'devices');
+      callback(currentDevices);
       return () => {
         deviceStatusListeners.delete(callback);
+        console.log('[CollabV3] Device status listener unregistered, total:', deviceStatusListeners.size);
       };
     },
 
@@ -2374,8 +2379,13 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         };
 
         const msg: ClientMessage = { type: 'settings_sync', settings: payload };
-        console.log('[CollabV3] Syncing settings, version:', settings.version);
+        console.log('[CollabV3] Syncing settings, version:', settings.version, 'ws state:', indexWs.readyState);
+        if (indexWs.readyState !== WebSocket.OPEN) {
+          console.error('[CollabV3] Cannot sync settings - websocket not open, state:', indexWs.readyState);
+          return;
+        }
         indexWs.send(JSON.stringify(msg));
+        console.log('[CollabV3] Settings sync message sent successfully');
       } catch (err) {
         console.error('[CollabV3] Failed to encrypt/send settings:', err);
       }

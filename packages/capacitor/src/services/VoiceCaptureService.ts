@@ -127,7 +127,7 @@ export class VoiceCaptureService {
 
         const inputData = event.inputBuffer.getChannelData(0);
         const pcm16 = this.floatToPCM16(inputData);
-        const base64 = this.arrayBufferToBase64(pcm16.buffer);
+        const base64 = this.arrayBufferToBase64(pcm16.buffer as ArrayBuffer);
         this.realtimeClient.sendAudio(base64);
       };
 

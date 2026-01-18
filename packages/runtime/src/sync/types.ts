@@ -391,12 +391,24 @@ export interface SessionControlMessage {
 }
 
 /**
+ * Voice mode settings synced from desktop.
+ */
+export interface SyncedVoiceModeSettings {
+  /** Which voice to use (OpenAI Realtime API voices) */
+  voice?: 'alloy' | 'ash' | 'ballad' | 'coral' | 'echo' | 'sage' | 'shimmer' | 'verse' | 'marin' | 'cedar';
+  /** Delay before auto-submitting voice commands (ms) */
+  submitDelayMs?: number;
+}
+
+/**
  * Settings that can be synced from desktop to mobile.
  * These are sensitive settings that should be encrypted in transit.
  */
 export interface SyncedSettings {
   /** OpenAI API key for voice transcription */
   openaiApiKey?: string;
+  /** Voice mode settings */
+  voiceMode?: SyncedVoiceModeSettings;
   /** Version for handling future upgrades */
   version: number;
 }

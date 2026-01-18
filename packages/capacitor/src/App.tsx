@@ -5,7 +5,6 @@ import { ProjectListScreen } from './screens/ProjectListScreen';
 import { SessionListScreen } from './screens/SessionListScreen';
 import { SessionDetailScreen } from './screens/SessionDetailScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
-import { VoiceSessionSelector } from './screens/VoiceSessionSelector';
 import { VoiceControlScreen } from './screens/VoiceControlScreen';
 import { SplitView, useIsSplitView } from './components/SplitView';
 import { SwipeNavigation } from './components/SwipeNavigation';
@@ -212,7 +211,6 @@ function AppContent() {
             <Route path="/" element={<SplitViewPlaceholder />} />
             <Route path="/session/:sessionId" element={<SessionDetailScreen hiddenBackButton />} />
             <Route path="/settings" element={<SettingsScreen />} />
-            <Route path="/voice" element={<VoiceSessionSelector />} />
             <Route path="/voice/:sessionId" element={<VoiceControlScreen />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
@@ -237,7 +235,6 @@ function AppContent() {
           <Route path="/project/:projectId/sessions" element={<SessionListScreen />} />
           <Route path="/session/:sessionId" element={<SessionDetailScreen />} />
           <Route path="/settings" element={<SettingsScreen />} />
-          <Route path="/voice" element={<VoiceSessionSelector />} />
           <Route path="/voice/:sessionId" element={<VoiceControlScreen />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
