@@ -416,9 +416,10 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
           const fetchTime = performance.now() - fetchStart;
           logger.main.info(`[SyncManager] Server has ${serverIndex.sessions.length} sessions (fetch took ${fetchTime.toFixed(1)}ms)`);
         } catch (fetchError) {
-          logger.main.warn('[SyncManager] Failed to fetch server index, falling back to full sync:', fetchError);
-          // Fall back to full sync if we can't fetch the index
-          serverIndex = { sessions: [], projects: [] };
+          // Don't fall back to full sync - that would load ALL messages for ALL sessions into memory
+          // and cause OOM crashes. Instead, skip sync and wait for connection to be restored.
+          logger.main.warn('[SyncManager] Failed to fetch server index, skipping sync until connection restored:', fetchError);
+          return;
         }
 
         // Build a map of server sessions for quick lookup
@@ -539,6 +540,36 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
       }
     }, 3000); // Wait a bit for index connection to be established
 
+    // Sync settings whenever a mobile device connects (joins or reconnects)
+    // Track which mobile devices are currently connected so we can detect when one joins
+    let previousMobileDeviceIds = new Set<string>();
+    if (provider.onDeviceStatusChange) {
+      provider.onDeviceStatusChange((devices) => {
+        const mobileDevices = devices.filter(d => d.type === 'mobile');
+        const currentMobileIds = new Set(mobileDevices.map(d => d.device_id));
+
+        // Check for mobile devices that just connected (weren't in the previous set)
+        for (const device of mobileDevices) {
+          if (!previousMobileDeviceIds.has(device.device_id)) {
+            logger.main.info(`[SyncManager] Mobile device connected: ${device.name}, syncing settings...`);
+            // Sync settings to the mobile device
+            import('electron-store').then(({ default: Store }) => {
+              const aiStore = new Store({ name: 'ai-settings' });
+              const apiKeys = aiStore.get('apiKeys', {}) as Record<string, string>;
+              const openaiKey = apiKeys['openai'];
+              if (openaiKey) {
+                syncSettingsToMobile(openaiKey);
+              }
+            }).catch((err) => {
+              logger.main.warn('[SyncManager] Failed to sync settings to device:', err);
+            });
+          }
+        }
+
+        previousMobileDeviceIds = currentMobileIds;
+      });
+    }
+
     // Mark as connected
     updateSyncStatus({ connected: true, syncing: false, error: null });
 
@@ -625,8 +656,10 @@ export async function triggerIncrementalSync(): Promise<void> {
       const fetchTime = performance.now() - fetchStart;
       logger.main.info(`[SyncManager] Server has ${serverIndex.sessions.length} sessions (fetch took ${fetchTime.toFixed(1)}ms)`);
     } catch (fetchError) {
-      logger.main.warn('[SyncManager] Failed to fetch server index:', fetchError);
-      serverIndex = { sessions: [], projects: [] };
+      // Don't fall back to full sync - that would load ALL messages for ALL sessions into memory
+      // and cause OOM crashes. Instead, skip sync and wait for connection to be restored.
+      logger.main.warn('[SyncManager] Failed to fetch server index, skipping incremental sync:', fetchError);
+      return;
     }
 
     // Build a map of server sessions for quick lookup
