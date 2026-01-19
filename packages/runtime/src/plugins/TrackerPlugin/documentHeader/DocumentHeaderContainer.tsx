@@ -15,7 +15,8 @@ import './DocumentHeader.css';
 interface DocumentHeaderContainerProps {
   filePath: string;
   fileName: string;
-  content: string;
+  /** Callback to get current content from the editor. Called on mount and when providers need fresh content. */
+  getContent: () => string;
   onContentChange?: (newContent: string) => void;
   editor?: any;
 }
@@ -23,10 +24,21 @@ interface DocumentHeaderContainerProps {
 export const DocumentHeaderContainer: React.FC<DocumentHeaderContainerProps> = ({
   filePath,
   fileName,
-  content,
+  getContent,
   onContentChange,
   editor,
 }) => {
+  // Get current content from the editor
+  // We get fresh content on mount and when providers need it
+  const [content, setLocalContent] = React.useState(() => getContent());
+
+  // Update content when getContent reference changes (editor content changed externally)
+  // This is primarily for initial render - the content prop changes rarely
+  React.useEffect(() => {
+    const newContent = getContent();
+    setLocalContent(newContent);
+  }, [getContent]);
+
   // Get matching providers
   const providers = useMemo(() => {
     return DocumentHeaderRegistry.getProviders(content);
