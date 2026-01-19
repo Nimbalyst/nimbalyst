@@ -9,6 +9,7 @@ interface MCPServerConfig {
   args?: string[];
   url?: string;
   type?: 'stdio' | 'sse' | 'http';
+  headers?: Record<string, string>;
   env?: Record<string, string>;
   disabled?: boolean;
 }
@@ -60,6 +61,7 @@ const TEMPLATE_ICON_CONFIG: Record<string, IconConfig> = {
   playwright: { type: 'simple-icons', slug: 'playwright' },
   context7: { type: 'simple-icons', slug: 'upstash' },
   sentry: { type: 'simple-icons', slug: 'sentry' },
+  corridor: { type: 'material-symbol', icon: 'vpn_key' },
 
   // Generic tools using Material Symbols
   filesystem: { type: 'material-symbol', icon: 'folder' },
@@ -143,6 +145,7 @@ const TEMPLATE_CATEGORIES: Record<string, TemplateCategory> = {
   atlassian: 'productivity',
   notion: 'productivity',
   zapier: 'automation',
+  corridor: 'automation',
   'sequential-thinking': 'ai',
   'knowledge-graph-memory': 'ai',
   stripe: 'commerce',
@@ -223,6 +226,11 @@ const ENV_VAR_HELP: Record<string, { label: string; help: string; link?: string 
     label: 'Zapier MCP URL',
     help: 'Get your personal MCP URL from Zapier MCP dashboard',
     link: 'https://zapier.com/mcp'
+  },
+  CORRIDOR_API_KEY: {
+    label: 'Corridor API Key',
+    help: 'Get your API key from Corridor dashboard',
+    link: 'https://corridor.dev'
   },
   FILESYSTEM_ALLOWED_DIR: {
     label: 'Allowed Directory',
@@ -358,6 +366,23 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     config: {
       type: 'http',
       url: 'https://mcp.sentry.dev/mcp'
+    }
+  },
+  {
+    id: 'corridor',
+    name: 'Corridor',
+    description: 'Infrastructure access and management',
+    docsUrl: 'https://corridor.dev',
+    authType: 'api-key',
+    config: {
+      type: 'http',
+      url: 'https://app.corridor.dev/api/mcp',
+      headers: {
+        Authorization: 'Bearer ${CORRIDOR_API_KEY}'
+      },
+      env: {
+        CORRIDOR_API_KEY: ''
+      }
     }
   },
   {
@@ -535,6 +560,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
   const [formUrl, setFormUrl] = useState('');
   const [formArgs, setFormArgs] = useState<string[]>([]);
   const [formEnv, setFormEnv] = useState<Array<{ key: string; value: string }>>([]);
+  const [formHeaders, setFormHeaders] = useState<Array<{ key: string; value: string }>>([]);
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [testMessage, setTestMessage] = useState<string>('');
   const [testHelpUrl, setTestHelpUrl] = useState<string | null>(null);
@@ -595,6 +621,9 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
     setFormEnv(
       Object.entries(server.env || {}).map(([key, value]) => ({ key, value }))
     );
+    setFormHeaders(
+      Object.entries(server.headers || {}).map(([key, value]) => ({ key, value }))
+    );
 
     // Check OAuth status for mcp-remote servers and HTTP transport
     if (isOAuthServer(server)) {
@@ -634,6 +663,13 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
           value: value.startsWith('${') ? '' : value
         }))
       );
+      // For headers, extract and expand env vars in values
+      setFormHeaders(
+        Object.entries(template.config.headers || {}).map(([key, value]) => ({
+          key,
+          value: value.startsWith('${') ? '' : value
+        }))
+      );
 
       if (template.authType === 'oauth') {
         checkOAuthStatus(template.config.args || []);
@@ -648,6 +684,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
       setFormUrl('');
       setFormArgs([]);
       setFormEnv([]);
+      setFormHeaders([]);
       setOauthStatus('unknown');
     }
   };
@@ -897,6 +934,15 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
         serverConfig.url = formUrl.trim();
       }
 
+      if (formType === 'http') {
+        serverConfig.headers = Object.fromEntries(
+          formHeaders.filter(({ key }) => key.trim()).map(({ key, value }) => [key.trim(), value])
+        );
+        if (Object.keys(serverConfig.headers || {}).length === 0) {
+          delete serverConfig.headers;
+        }
+      }
+
       if (Object.keys(serverConfig.env || {}).length === 0) {
         delete serverConfig.env;
       }
@@ -1045,6 +1091,20 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
     setFormEnv(formEnv.filter((_, i) => i !== index));
   };
 
+  const addHeader = () => {
+    setFormHeaders([...formHeaders, { key: '', value: '' }]);
+  };
+
+  const updateHeader = (index: number, field: 'key' | 'value', value: string) => {
+    const newHeaders = [...formHeaders];
+    newHeaders[index][field] = value;
+    setFormHeaders(newHeaders);
+  };
+
+  const removeHeader = (index: number) => {
+    setFormHeaders(formHeaders.filter((_, i) => i !== index));
+  };
+
   /**
    * Categorize test connection errors for analytics
    */
@@ -1095,6 +1155,12 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
         testConfig.args = formArgs.filter(arg => arg.trim()).map(arg => arg.trim());
       } else if (formType === 'sse' || formType === 'http') {
         testConfig.url = formUrl.trim();
+      }
+
+      if (formType === 'http') {
+        testConfig.headers = Object.fromEntries(
+          formHeaders.filter(({ key }) => key.trim()).map(({ key, value }) => [key.trim(), value])
+        );
       }
 
       const startTime = Date.now();
@@ -1740,6 +1806,35 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
                 )}
               </div>
             )}
+          </div>
+        )}
+
+        {/* HTTP Headers (HTTP only) */}
+        {formType === 'http' && !readonly && (
+          <div className="mcp-form-group">
+            <label>HTTP Headers</label>
+            {formHeaders.map((header, index) => (
+              <div key={index} className="mcp-env-item">
+                <input
+                  type="text"
+                  value={header.key}
+                  onChange={(e) => updateHeader(index, 'key', e.target.value)}
+                  onBlur={isExistingServer ? autoSave : undefined}
+                  placeholder="Header-Name"
+                  className="mcp-env-key"
+                />
+                <input
+                  type="text"
+                  value={header.value}
+                  onChange={(e) => updateHeader(index, 'value', e.target.value)}
+                  onBlur={isExistingServer ? autoSave : undefined}
+                  placeholder="value"
+                  className="mcp-env-value"
+                />
+                <button onClick={() => { removeHeader(index); if (isExistingServer) setTimeout(autoSave, 0); }} className="mcp-remove-button">x</button>
+              </div>
+            ))}
+            <button onClick={addHeader} className="mcp-add-button">+ Add HTTP Header</button>
           </div>
         )}
 

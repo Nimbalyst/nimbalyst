@@ -221,17 +221,29 @@ export class MCPConfigService {
    * Convert HTTP transport to stdio with mcp-remote wrapper.
    * This allows users to configure HTTP servers in the UI while we transparently
    * use mcp-remote for OAuth and connection management.
+   *
+   * Headers are passed as --header arguments to mcp-remote.
    */
   private convertHttpToStdio(serverConfig: MCPServerConfig): MCPServerConfig {
     if (serverConfig.type !== 'http' || !serverConfig.url) {
       return serverConfig;
     }
 
+    // Build args: start with mcp-remote and URL
+    const args: string[] = ['-y', 'mcp-remote', serverConfig.url];
+
+    // Add headers as --header arguments
+    if (serverConfig.headers) {
+      for (const [key, value] of Object.entries(serverConfig.headers)) {
+        args.push('--header', `${key}: ${value}`);
+      }
+    }
+
     // Convert HTTP config to stdio with mcp-remote
     return {
       type: 'stdio',
       command: 'npx',
-      args: ['-y', 'mcp-remote', serverConfig.url],
+      args,
       env: serverConfig.env,
       disabled: serverConfig.disabled
     };
@@ -308,6 +320,22 @@ export class MCPConfigService {
           new URL(serverConfig.url);
         } catch {
           throw new Error(`Invalid MCP config for server "${serverName}": url must be a valid URL`);
+        }
+
+        // Validate headers (HTTP only)
+        if (serverConfig.headers) {
+          if (transportType !== 'http') {
+            throw new Error(`Invalid MCP config for server "${serverName}": headers are only supported for HTTP transport`);
+          }
+          if (typeof serverConfig.headers !== 'object') {
+            throw new Error(`Invalid MCP config for server "${serverName}": headers must be an object`);
+          }
+          // Validate header values are strings
+          for (const [headerName, headerValue] of Object.entries(serverConfig.headers)) {
+            if (typeof headerValue !== 'string') {
+              throw new Error(`Invalid MCP config for server "${serverName}": header "${headerName}" value must be a string`);
+            }
+          }
         }
       } else {
         throw new Error(`Invalid MCP config for server "${serverName}": unsupported transport type "${transportType}"`);
