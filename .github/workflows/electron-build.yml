@@ -48,11 +48,14 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
+        os: [macos-latest, macos-13, ubuntu-latest, windows-latest]
         include:
           - os: macos-latest
             platform: mac
             arch: arm64
+          - os: macos-13
+            platform: mac
+            arch: x64
           - os: ubuntu-latest
             platform: linux
             arch: x64
@@ -180,7 +183,7 @@ jobs:
           OFFICIAL_BUILD: 'true'
         working-directory: packages/electron
         run: |
-          if [ "${{ matrix.os }}" == "macos-latest" ]; then
+          if [ "${{ matrix.os }}" == "macos-latest" ] || [ "${{ matrix.os }}" == "macos-13" ]; then
             if [ "${{ github.ref_type }}" == "tag" ] || [ "${{ inputs.release }}" == "true" ]; then
               npm run build:mac:notarized
             else
