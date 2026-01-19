@@ -8,7 +8,7 @@ interface MCPServerConfig {
   command?: string;
   args?: string[];
   url?: string;
-  type?: 'stdio' | 'sse';
+  type?: 'stdio' | 'sse' | 'http';
   env?: Record<string, string>;
   disabled?: boolean;
 }
@@ -59,6 +59,7 @@ const TEMPLATE_ICON_CONFIG: Record<string, IconConfig> = {
   'chrome-devtools': { type: 'simple-icons', slug: 'googlechrome' },
   playwright: { type: 'simple-icons', slug: 'playwright' },
   context7: { type: 'simple-icons', slug: 'upstash' },
+  sentry: { type: 'simple-icons', slug: 'sentry' },
 
   // Generic tools using Material Symbols
   filesystem: { type: 'material-symbol', icon: 'folder' },
@@ -136,6 +137,7 @@ const TEMPLATE_CATEGORIES: Record<string, TemplateCategory> = {
   context7: 'development',
   'chrome-devtools': 'development',
   serena: 'development',
+  sentry: 'development',
   linear: 'productivity',
   asana: 'productivity',
   atlassian: 'productivity',
@@ -348,6 +350,17 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     }
   },
   {
+    id: 'sentry',
+    name: 'Sentry',
+    description: 'Error tracking and performance monitoring',
+    docsUrl: 'https://docs.sentry.io/product/sentry-mcp/',
+    authType: 'oauth',
+    config: {
+      type: 'http',
+      url: 'https://mcp.sentry.dev/mcp'
+    }
+  },
+  {
     id: 'context7',
     name: 'Context7',
     description: 'Up-to-date documentation context for LLMs',
@@ -517,7 +530,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
 
   // Form state
   const [formName, setFormName] = useState('');
-  const [formType, setFormType] = useState<'stdio' | 'sse'>('stdio');
+  const [formType, setFormType] = useState<'stdio' | 'sse' | 'http'>('stdio');
   const [formCommand, setFormCommand] = useState('');
   const [formUrl, setFormUrl] = useState('');
   const [formArgs, setFormArgs] = useState<string[]>([]);
@@ -583,9 +596,9 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
       Object.entries(server.env || {}).map(([key, value]) => ({ key, value }))
     );
 
-    // Check OAuth status for mcp-remote servers
+    // Check OAuth status for mcp-remote servers and HTTP transport
     if (isOAuthServer(server)) {
-      checkOAuthStatus(server.args || []);
+      checkOAuthStatus(server);
     } else {
       setOauthStatus('unknown');
     }
@@ -650,9 +663,16 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
   };
 
   /**
-   * Extract the server URL from mcp-remote args
+   * Extract the server URL from mcp-remote args or http config
    */
-  const getOAuthServerUrl = (args: string[]): string | null => {
+  const getOAuthServerUrl = (config: MCPServerConfig): string | null => {
+    // HTTP transport - use the URL directly
+    if (config.type === 'http' && config.url) {
+      return config.url;
+    }
+
+    // stdio with mcp-remote - extract URL from args
+    const args = config.args || [];
     for (const arg of args) {
       if (arg.startsWith('http://') || arg.startsWith('https://')) {
         return arg;
@@ -662,9 +682,15 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
   };
 
   /**
-   * Check if this is an OAuth server (uses mcp-remote)
+   * Check if this is an OAuth server (uses mcp-remote or http transport)
    */
   const isOAuthServer = (config: MCPServerConfig): boolean => {
+    // HTTP transport always uses OAuth via mcp-remote wrapper
+    if (config.type === 'http') {
+      return true;
+    }
+
+    // stdio with mcp-remote explicitly
     return config.command === 'npx' &&
            Boolean(config.args?.some(arg => arg === 'mcp-remote' || arg.includes('mcp-remote')));
   };
@@ -672,8 +698,8 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
   /**
    * Check OAuth authorization status
    */
-  const checkOAuthStatus = async (args: string[]) => {
-    const serverUrl = getOAuthServerUrl(args);
+  const checkOAuthStatus = async (config: MCPServerConfig) => {
+    const serverUrl = getOAuthServerUrl(config);
     if (!serverUrl) {
       setOauthStatus('unknown');
       return;
@@ -693,7 +719,15 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
    * Trigger OAuth authorization flow
    */
   const handleAuthorize = async () => {
-    const serverUrl = getOAuthServerUrl(formArgs);
+    // Build config from current form state
+    const config: MCPServerConfig = {
+      type: formType,
+      url: formUrl,
+      command: formCommand,
+      args: formArgs
+    };
+
+    const serverUrl = getOAuthServerUrl(config);
     if (!serverUrl) return;
 
     setOauthAction('authorizing');
@@ -715,7 +749,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
         setTestStatus('error');
         setTestMessage(`Authorization failed: ${errorMsg}`);
         setIsStalePortError(result.isStalePortError === true);
-        await checkOAuthStatus(formArgs);
+        await checkOAuthStatus(config);
         // Track failed OAuth
         posthog?.capture('mcp_oauth_result', {
           templateId: selectedTemplate?.id || null,
@@ -744,7 +778,15 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
    * Revoke OAuth authorization
    */
   const handleRevoke = async () => {
-    const serverUrl = getOAuthServerUrl(formArgs);
+    // Build config from current form state
+    const config: MCPServerConfig = {
+      type: formType,
+      url: formUrl,
+      command: formCommand,
+      args: formArgs
+    };
+
+    const serverUrl = getOAuthServerUrl(config);
     if (!serverUrl) return;
 
     if (!confirm('Revoke authorization? You will need to re-authorize to use this server.')) {
@@ -778,7 +820,15 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
    * Used when EADDRINUSE error occurs due to stale lock files
    */
   const handleClearAuthCacheAndRetry = async () => {
-    const serverUrl = getOAuthServerUrl(formArgs);
+    // Build config from current form state
+    const config: MCPServerConfig = {
+      type: formType,
+      url: formUrl,
+      command: formCommand,
+      args: formArgs
+    };
+
+    const serverUrl = getOAuthServerUrl(config);
     if (!serverUrl) return;
 
     setOauthAction('clearing-cache');
@@ -825,7 +875,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
   const autoSave = async () => {
     if (!formName.trim()) return;
     if (formType === 'stdio' && !formCommand.trim()) return;
-    if (formType === 'sse' && !formUrl.trim()) return;
+    if ((formType === 'sse' || formType === 'http') && !formUrl.trim()) return;
 
     try {
       setSaveStatus('saving');
@@ -843,7 +893,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
         if (serverConfig.args?.length === 0) {
           delete serverConfig.args;
         }
-      } else if (formType === 'sse') {
+      } else if (formType === 'sse' || formType === 'http') {
         serverConfig.url = formUrl.trim();
       }
 
@@ -1014,7 +1064,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
       setTestMessage('Command is required');
       return;
     }
-    if (formType === 'sse' && !formUrl.trim()) {
+    if ((formType === 'sse' || formType === 'http') && !formUrl.trim()) {
       setTestStatus('error');
       setTestMessage('URL is required');
       return;
@@ -1043,7 +1093,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
       if (formType === 'stdio') {
         testConfig.command = formCommand.trim();
         testConfig.args = formArgs.filter(arg => arg.trim()).map(arg => arg.trim());
-      } else if (formType === 'sse') {
+      } else if (formType === 'sse' || formType === 'http') {
         testConfig.url = formUrl.trim();
       }
 
@@ -1558,19 +1608,22 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
           <select
             value={formType}
             onChange={(e) => {
-              setFormType(e.target.value as 'stdio' | 'sse');
+              setFormType(e.target.value as 'stdio' | 'sse' | 'http');
               if (isExistingServer) setTimeout(autoSave, 0);
             }}
             className="mcp-type-select"
             disabled={readonly}
           >
             <option value="stdio">stdio (Local executable)</option>
-            <option value="sse">SSE (Remote server)</option>
+            <option value="http">HTTP (Remote server - Streamable HTTP)</option>
+            <option value="sse">SSE (Remote server - Legacy)</option>
           </select>
           <div className="mcp-form-hint">
             {formType === 'stdio'
               ? 'Runs a local executable that communicates via stdin/stdout'
-              : 'Connects to a remote server via Server-Sent Events'}
+              : formType === 'http'
+              ? 'Connects to a remote server using Streamable HTTP (recommended for remote servers)'
+              : 'Connects to a remote server via Server-Sent Events (legacy)'}
           </div>
         </div>
 
@@ -1652,7 +1705,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
                 value={formUrl}
                 onChange={(e) => setFormUrl(e.target.value)}
                 onBlur={isExistingServer ? autoSave : undefined}
-                placeholder="https://example.com/mcp/sse"
+                placeholder={formType === 'http' ? 'https://mcp.example.com/mcp' : 'https://example.com/mcp/sse'}
                 className="mcp-command-input"
                 disabled={readonly}
               />
@@ -1719,8 +1772,8 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
           </div>
         )}
 
-        {/* OAuth section for existing mcp-remote servers */}
-        {isExistingServer && formCommand === 'npx' && formArgs.some(arg => arg === 'mcp-remote' || arg.includes('mcp-remote')) && (
+        {/* OAuth section for existing mcp-remote servers and HTTP transport */}
+        {isExistingServer && (formType === 'http' || (formCommand === 'npx' && formArgs.some(arg => arg === 'mcp-remote' || arg.includes('mcp-remote')))) && (
           <div className="mcp-form-group">
             <label>OAuth Authorization</label>
             <div className="mcp-oauth-section">

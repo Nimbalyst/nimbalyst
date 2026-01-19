@@ -218,21 +218,45 @@ export class MCPConfigService {
   }
 
   /**
-   * Process a server config for runtime use.
-   * On Windows, converts npm/npx/etc commands to their .cmd equivalents.
+   * Convert HTTP transport to stdio with mcp-remote wrapper.
+   * This allows users to configure HTTP servers in the UI while we transparently
+   * use mcp-remote for OAuth and connection management.
    */
-  processServerConfigForRuntime(serverConfig: MCPServerConfig): MCPServerConfig {
-    // Only process stdio servers with a command
-    if (serverConfig.type === 'sse' || !serverConfig.command) {
+  private convertHttpToStdio(serverConfig: MCPServerConfig): MCPServerConfig {
+    if (serverConfig.type !== 'http' || !serverConfig.url) {
       return serverConfig;
     }
 
+    // Convert HTTP config to stdio with mcp-remote
+    return {
+      type: 'stdio',
+      command: 'npx',
+      args: ['-y', 'mcp-remote', serverConfig.url],
+      env: serverConfig.env,
+      disabled: serverConfig.disabled
+    };
+  }
+
+  /**
+   * Process a server config for runtime use.
+   * On Windows, converts npm/npx/etc commands to their .cmd equivalents.
+   * Transparently wraps HTTP transport with mcp-remote.
+   */
+  processServerConfigForRuntime(serverConfig: MCPServerConfig): MCPServerConfig {
+    // First, convert HTTP to stdio with mcp-remote wrapper
+    let config = this.convertHttpToStdio(serverConfig);
+
+    // Only process stdio servers with a command
+    if (config.type === 'sse' || !config.command) {
+      return config;
+    }
+
     // Resolve command for current platform
-    const resolvedCommand = this.resolveCommandForPlatform(serverConfig.command);
+    const resolvedCommand = this.resolveCommandForPlatform(config.command);
 
     // Return a new config with the resolved command
     return {
-      ...serverConfig,
+      ...config,
       command: resolvedCommand
     };
   }
@@ -272,10 +296,11 @@ export class MCPConfigService {
         if (serverConfig.args && !Array.isArray(serverConfig.args)) {
           throw new Error(`Invalid MCP config for server "${serverName}": args must be an array`);
         }
-      } else if (transportType === 'sse') {
-        // SSE transport requires url
+      } else if (transportType === 'sse' || transportType === 'http') {
+        // SSE/HTTP transports require url
+        const transportLabel = transportType === 'sse' ? 'SSE' : 'HTTP';
         if (!serverConfig.url || typeof serverConfig.url !== 'string') {
-          throw new Error(`Invalid MCP config for server "${serverName}": url is required for SSE transport`);
+          throw new Error(`Invalid MCP config for server "${serverName}": url is required for ${transportLabel} transport`);
         }
 
         // Validate URL format
@@ -315,6 +340,7 @@ export class MCPConfigService {
    * Test an MCP server connection.
    * For stdio: attempts to spawn and communicate with the process.
    * For SSE: attempts to connect to the URL endpoint.
+   * For HTTP: converts to mcp-remote wrapper and tests stdio (since HTTP uses OAuth via mcp-remote).
    */
   async testServerConnection(
     config: MCPServerConfig,
@@ -329,8 +355,13 @@ export class MCPConfigService {
 
       const transportType = config.type || 'stdio';
 
-      if (transportType === 'sse') {
-        return await this.testSSEConnection(config);
+      // For HTTP transport, convert to mcp-remote wrapper and test as stdio
+      // This ensures we test with OAuth tokens managed by mcp-remote
+      if (transportType === 'http') {
+        const wrappedConfig = this.convertHttpToStdio(config);
+        return await this.testStdioConnection(wrappedConfig, onProgress);
+      } else if (transportType === 'sse') {
+        return await this.testHTTPConnection(config, transportType);
       } else {
         return await this.testStdioConnection(config, onProgress);
       }
@@ -341,25 +372,34 @@ export class MCPConfigService {
   }
 
   /**
-   * Test SSE server connection by attempting to fetch from the endpoint.
+   * Test HTTP/SSE server connection by attempting to fetch from the endpoint.
+   * For HTTP transport: Uses Streamable HTTP protocol (recommended)
+   * For SSE transport: Uses legacy Server-Sent Events protocol
    * Note: This is a basic connectivity test. Full MCP protocol validation
    * happens when the server is actually used by Claude Code.
    */
-  private async testSSEConnection(config: MCPServerConfig): Promise<{ success: boolean; error?: string }> {
+  private async testHTTPConnection(
+    config: MCPServerConfig,
+    transportType: 'http' | 'sse'
+  ): Promise<{ success: boolean; error?: string }> {
     if (!config.url) {
-      return { success: false, error: 'URL is required for SSE transport' };
+      const transportLabel = transportType === 'sse' ? 'SSE' : 'HTTP';
+      return { success: false, error: `URL is required for ${transportLabel} transport` };
     }
 
     try {
       const headers = this.getHeadersFromEnv(config.env);
+      const transportLabel = transportType === 'sse' ? 'SSE' : 'HTTP';
 
-      logger.mcp.debug('Testing SSE connection to:', config.url);
+      logger.mcp.debug(`Testing ${transportLabel} connection to:`, config.url);
       logger.mcp.debug('Headers:', Object.keys(headers));
 
+      // For HTTP transport, use GET to establish connection (Streamable HTTP spec)
+      // For SSE transport, also use GET with Accept: text/event-stream (legacy)
       const response = await fetch(config.url, {
         method: 'GET',
         headers: {
-          'Accept': 'text/event-stream',
+          'Accept': transportType === 'sse' ? 'text/event-stream' : 'application/json, text/event-stream',
           'Cache-Control': 'no-cache',
           ...headers
         },
@@ -369,7 +409,7 @@ export class MCPConfigService {
       // Check for authentication errors (401/403) - these indicate auth issues
       if (response.status === 401 || response.status === 403) {
         const errorText = await response.text().catch(() => response.statusText);
-        logger.mcp.error(`SSE authentication failed: ${response.status} ${errorText}`);
+        logger.mcp.error(`${transportLabel} authentication failed: ${response.status} ${errorText}`);
         return {
           success: false,
           error: `Authentication failed (${response.status}). Check your API key.`
@@ -378,22 +418,23 @@ export class MCPConfigService {
 
       // Only consider 2xx responses as success
       if (response.ok) {
-        logger.mcp.info('SSE endpoint reachable and responding successfully.');
+        logger.mcp.info(`${transportLabel} endpoint reachable and responding successfully.`);
         return { success: true };
       }
 
       // Any non-2xx response (that wasn't already caught as 401/403) is a failure
       const errorText = await response.text().catch(() => response.statusText);
-      logger.mcp.error(`SSE endpoint returned error: ${response.status} ${errorText}`);
+      logger.mcp.error(`${transportLabel} endpoint returned error: ${response.status} ${errorText}`);
       return {
         success: false,
         error: `Server returned HTTP ${response.status}. Check your configuration and API key.`
       };
     } catch (error: any) {
       if (error.name === 'TimeoutError' || error.name === 'AbortError') {
-        return { success: false, error: 'Connection timeout (5s)' };
+        return { success: false, error: 'Connection timeout (30s)' };
       }
-      logger.mcp.error('SSE connection error:', error);
+      const transportLabel = transportType === 'sse' ? 'SSE' : 'HTTP';
+      logger.mcp.error(`${transportLabel} connection error:`, error);
       return { success: false, error: error.message };
     }
   }

@@ -15,11 +15,16 @@ export interface MCPServerEnv {
 
 /**
  * Configuration for a single MCP server.
- * Supports both stdio (local executable) and SSE (remote server) transports.
+ * Supports stdio (local executable), SSE (legacy remote), and HTTP (modern remote) transports.
  */
 export interface MCPServerConfig {
-  /** Transport type: stdio for local executables, sse for remote servers */
-  type?: 'stdio' | 'sse';
+  /**
+   * Transport type:
+   * - stdio: local executables communicating via stdin/stdout
+   * - sse: legacy remote servers using Server-Sent Events (deprecated)
+   * - http: modern remote servers using Streamable HTTP (recommended)
+   */
+  type?: 'stdio' | 'sse' | 'http';
 
   /** Command to execute the MCP server (stdio only, supports env var expansion) */
   command?: string;
@@ -27,7 +32,7 @@ export interface MCPServerConfig {
   /** Arguments to pass to the command (stdio only, supports env var expansion) */
   args?: string[];
 
-  /** Server URL for SSE transport (sse only) */
+  /** Server URL for remote transport (sse or http only) */
   url?: string;
 
   /** Environment variables to set (supports ${VAR} and ${VAR:-default} syntax) */
