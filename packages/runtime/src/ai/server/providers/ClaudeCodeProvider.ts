@@ -2846,7 +2846,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               hookSpecificOutput: {
                 hookEventName: 'PreToolUse' as const,
                 permissionDecision: 'deny' as const,
-                errorMessage: `The user chose to continue planning. Please refine the plan further before attempting to exit plan mode.`
+                permissionDecisionReason: `The user chose to continue planning. Please refine the plan further before attempting to exit plan mode.`
               }
             };
           }
@@ -2857,7 +2857,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             hookSpecificOutput: {
               hookEventName: 'PreToolUse' as const,
               permissionDecision: 'deny' as const,
-              errorMessage: `ExitPlanMode was cancelled or interrupted.`
+              permissionDecisionReason: `ExitPlanMode was cancelled or interrupted.`
             }
           };
         }
@@ -2967,7 +2967,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                   hookSpecificOutput: {
                     hookEventName: 'PreToolUse' as const,
                     permissionDecision: 'deny' as const,
-                    errorMessage: `Command denied: ${subCommand.slice(0, 50)}`
+                    permissionDecisionReason: `Command denied: ${subCommand.slice(0, 50)}`
                   }
                 };
               }
@@ -2992,7 +2992,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                 hookSpecificOutput: {
                   hookEventName: 'PreToolUse' as const,
                   permissionDecision: 'deny' as const,
-                  errorMessage: `Permission check failed for: ${subCommand.slice(0, 50)}`
+                  permissionDecisionReason: `Permission check failed for: ${subCommand.slice(0, 50)}`
                 }
               };
             }
@@ -3050,7 +3050,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                 hookSpecificOutput: {
                   hookEventName: 'PreToolUse' as const,
                   permissionDecision: 'deny' as const,
-                  errorMessage: `Planning mode restricts file operations to markdown files only. ` +
+                  permissionDecisionReason: `Planning mode restricts file operations to markdown files only. ` +
                     `Cannot use ${toolName} on '${filePath}'. ` +
                     `Please only edit .md files in the nimbalyst-local/plans/ directory.`
                 }
