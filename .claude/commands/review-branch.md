@@ -14,10 +14,11 @@ Perform a comprehensive read-only review of the current git branch changes.
 
 1. Run this command to determine the base branch and gather all git info at once:
 ```bash
-MAIN_WORKTREE=$(git worktree list | head -1 | awk '{print $1}'); CURRENT_DIR=$(git rev-parse --show-toplevel); if [ "$MAIN_WORKTREE" != "$CURRENT_DIR" ]; then BASE=$(git -C "$MAIN_WORKTREE" branch --show-current); else BASE="main"; fi; echo "=== Base branch: $BASE ===" && echo "" && echo "=== STATUS ===" && git status && echo "" && echo "=== COMMIT LOG ===" && git log $BASE..HEAD --oneline && echo "" && echo "=== DIFF ===" && git diff $BASE...HEAD
+MAIN_WORKTREE=$(git worktree list | head -1 | awk '{print $1}'); CURRENT_DIR=$(git rev-parse --show-toplevel); if [ "$MAIN_WORKTREE" != "$CURRENT_DIR" ]; then BASE=$(git -C "$MAIN_WORKTREE" branch --show-current); else BASE="main"; fi; echo "=== Base branch: $BASE ===" && echo "" && echo "=== STATUS ===" && git status && echo "" && echo "=== COMMIT LOG ===" && git log $BASE..HEAD --oneline && echo "" && echo "=== COMMITTED CHANGES ===" && git diff $BASE...HEAD && echo "" && echo "=== UNCOMMITTED CHANGES ===" && git diff HEAD
 ```
    - If in a worktree, this uses the repo root's current branch as the base (not main)
    - If not in a worktree, uses `main` as the base branch (unless the user specifies otherwise)
+   - **IMPORTANT**: This includes BOTH committed changes (vs base branch) AND uncommitted/unstaged changes
 
 **Analysis Required:**
 
@@ -168,6 +169,8 @@ If analytics should be added, suggest specific events following the naming conve
 [Provide a well-formatted commit message for the entire branch following the project's commit style, but DO NOT create the commit]
 
 ## File-by-File Analysis
+
+**Note:** Include ALL files with changes - both committed and uncommitted/unstaged changes.
 
 | File | Changes Summary |
 | --- | --- |
