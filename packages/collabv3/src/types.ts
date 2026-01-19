@@ -37,6 +37,7 @@ export type ClientMessage =
   | SessionControlCommandMessage
   | RegisterPushTokenMessage
   | RequestMobilePushMessage
+  | SettingsSyncMessage
   | PingMessage;
 
 /** Keep-alive ping message */
@@ -165,6 +166,26 @@ export interface RequestMobilePushMessage {
   body: string;
 }
 
+/** Sync encrypted settings to other devices */
+export interface SettingsSyncMessage {
+  type: 'settings_sync';
+  settings: EncryptedSettingsPayload;
+}
+
+/** Encrypted settings payload for wire transmission */
+export interface EncryptedSettingsPayload {
+  /** Encrypted JSON blob containing settings (base64) */
+  encrypted_settings: string;
+  /** IV for settings decryption (base64) */
+  settings_iv: string;
+  /** Device ID of sender */
+  device_id: string;
+  /** Timestamp of settings sync */
+  timestamp: number;
+  /** Version for handling upgrades */
+  version: number;
+}
+
 // ============================================================================
 // Server → Client Messages
 // ============================================================================
@@ -183,6 +204,7 @@ export type ServerMessage =
   | CreateSessionRequestBroadcastMessage
   | CreateSessionResponseBroadcastMessage
   | SessionControlBroadcastMessage
+  | SettingsSyncBroadcastMessage
   | ErrorMessage;
 
 /** Response to sync_request */
@@ -272,6 +294,13 @@ export interface CreateSessionResponseBroadcastMessage {
 export interface SessionControlBroadcastMessage {
   type: 'session_control_broadcast';
   message: SessionControlMessage;
+  from_connection_id?: string;
+}
+
+/** Broadcast encrypted settings to other devices (mobile receives this) */
+export interface SettingsSyncBroadcastMessage {
+  type: 'settings_sync_broadcast';
+  settings: EncryptedSettingsPayload;
   from_connection_id?: string;
 }
 

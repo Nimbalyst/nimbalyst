@@ -14,6 +14,13 @@ const config: CapacitorConfig = {
   ios: {
     // contentInset removed - causes issues with safe area handling
   },
+  plugins: {
+    PushNotifications: {
+      // Suppress push notification banners when app is in foreground by default.
+      // We'll show a local notification instead if viewing a different session.
+      presentationOptions: [],
+    },
+  },
 };
 
 export default config;

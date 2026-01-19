@@ -160,12 +160,15 @@ export async function getAllSessionsForSync(includeMessages = false): Promise<Ar
 }
 
 /**
- * Get messages for a session, optionally starting from an offset.
- * Used for delta sync - only fetch messages the server doesn't have.
+ * Get messages for a session created after a given timestamp.
+ * Used for delta sync - only fetch messages newer than the server's last sync.
+ *
+ * @param sessionId The session ID
+ * @param sinceTimestamp Epoch milliseconds - only return messages created AFTER this time (0 = all)
  */
 export async function getSessionMessagesForSync(
   sessionId: string,
-  offset: number = 0
+  sinceTimestamp: number = 0
 ): Promise<SyncedMessage[]> {
   if (!moduleDb) {
     throw new Error('Session store not initialized');
@@ -174,13 +177,15 @@ export async function getSessionMessagesForSync(
     await moduleEnsureReady();
   }
 
+  // Convert milliseconds to Date for PostgreSQL comparison
+  const sinceDate = new Date(sinceTimestamp);
+
   const { rows: msgRows } = await moduleDb.query<any>(
     `SELECT id, session_id, created_at, source, direction, content, metadata, hidden
      FROM ai_agent_messages
-     WHERE session_id = $1
-     ORDER BY created_at ASC
-     OFFSET $2`,
-    [sessionId, offset]
+     WHERE session_id = $1 AND created_at > $2
+     ORDER BY created_at ASC`,
+    [sessionId, sinceDate]
   );
 
   return msgRows.map((m: any): AgentMessage => ({

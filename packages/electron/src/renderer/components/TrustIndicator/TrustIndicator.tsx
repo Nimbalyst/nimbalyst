@@ -1,5 +1,18 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+/**
+ * Trust Indicator
+ *
+ * Shows workspace trust status in the navigation gutter.
+ * Uses Jotai atom family for workspace-scoped state that stays in sync
+ * with ProjectPermissionsPanel.
+ */
+
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useAtom } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
+import {
+  workspacePermissionsAtomFamily,
+  loadWorkspacePermissions,
+} from '../../store/atoms/appSettings';
 import './TrustIndicator.css';
 
 export interface TrustStatus {
@@ -18,33 +31,46 @@ export const TrustIndicator: React.FC<TrustIndicatorProps> = ({
   onOpenSettings,
   onChangeMode,
 }) => {
-  const [status, setStatus] = useState<TrustStatus | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Get the atom for this workspace (or a placeholder if no workspace)
+  const permissionsAtom = useMemo(
+    () => workspacePath ? workspacePermissionsAtomFamily(workspacePath) : null,
+    [workspacePath]
+  );
+  const [permissionsState, setPermissionsState] = useAtom(
+    permissionsAtom ?? workspacePermissionsAtomFamily('')
+  );
+
+  // Extract trust status from permissions state
+  const status: TrustStatus | null = workspacePath
+    ? {
+        trustedAt: permissionsState.trustedAt,
+        permissionMode: permissionsState.permissionMode,
+      }
+    : null;
+
+  const loading = workspacePath ? permissionsState.loading : false;
 
   // Fetch trust status
   const fetchStatus = useCallback(async () => {
     if (!workspacePath) return;
 
     try {
-      const result = await window.electronAPI.invoke('permissions:getWorkspacePermissions', workspacePath);
-      if (result) {
-        setStatus({
-          trustedAt: result.trustedAt,
-          permissionMode: result.permissionMode,
-        });
-      }
+      const state = await loadWorkspacePermissions(workspacePath);
+      setPermissionsState(state);
     } catch (error) {
       console.error('[TrustIndicator] Failed to fetch trust status:', error);
     }
-  }, [workspacePath]);
+  }, [workspacePath, setPermissionsState]);
 
   // Initial fetch and listen for changes
   useEffect(() => {
     fetchStatus();
 
-    // Listen for permission changes
+    // Listen for permission changes from main process
     const handlePermissionChange = () => {
       fetchStatus();
     };
@@ -115,7 +141,7 @@ export const TrustIndicator: React.FC<TrustIndicatorProps> = ({
   const isTrusted = status?.permissionMode !== null && status?.permissionMode !== undefined;
 
   const getStatusIcon = (): string => {
-    if (!status) {
+    if (!status || loading) {
       return 'shield';
     }
     if (isTrusted) {
@@ -127,7 +153,7 @@ export const TrustIndicator: React.FC<TrustIndicatorProps> = ({
   };
 
   const getStatusClass = (): string => {
-    if (!status) {
+    if (!status || loading) {
       return 'loading';
     }
     if (isTrusted) {
@@ -139,7 +165,7 @@ export const TrustIndicator: React.FC<TrustIndicatorProps> = ({
   };
 
   const getStatusLabel = (): string => {
-    if (!status) {
+    if (!status || loading) {
       return 'Loading trust status...';
     }
     if (isTrusted) {
@@ -155,7 +181,7 @@ export const TrustIndicator: React.FC<TrustIndicatorProps> = ({
   };
 
   const getStatusDescription = (): string => {
-    if (!status) {
+    if (!status || loading) {
       return '';
     }
     if (isTrusted) {

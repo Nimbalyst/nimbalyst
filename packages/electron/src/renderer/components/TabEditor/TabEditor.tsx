@@ -184,11 +184,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   // When true, shows Monaco with raw content; when false, shows rich editor (Lexical or custom)
   const [sourceMode, setSourceMode] = useState(false);
 
-  // Internal state - fully owned by this component
-  // NOTE: content state is only updated for major content changes (file reload, diff apply/reject, etc.),
-  // NOT on every keystroke. contentRef tracks the current content for saving and comparisons.
-  // This prevents re-renders on every keystroke while still allowing content reload when needed.
-  const [content, setContent] = useState(initialContent);
+  // NOTE: content state has been removed. Editors own their content.
+  // TabEditor extracts content via getContentFnRef.current() when needed for saves, diffs, etc.
+  // contentRef tracks the working copy, lastSavedContentRef tracks what was saved to disk.
   // NOTE: isDirty is tracked via ref only, not state, to avoid re-renders when dirty state changes.
   // The parent is notified via onDirtyChange callback.
   // NOTE: lastSaveTime and lastSavedContent are refs, not state, to avoid re-renders on save
@@ -579,7 +577,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               tagId: pendingTag.id,
               sessionId: pendingTag.sessionId,
             });
-            setContent(oldContent);
             contentRef.current = oldContent;
             initialContentRef.current = oldContent;
             isDirtyRef.current = false;
@@ -625,7 +622,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             $convertFromEnhancedMarkdownString(oldContent, transformers);
           }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
 
-          setContent(oldContent);
           contentRef.current = oldContent;
 
           // Wait a tick before applying diff
@@ -748,7 +744,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               }
             }
 
-            setContent(diskContent);
+            contentRef.current = diskContent;
             initialContentRef.current = diskContent;
             lastSavedContentRef.current = diskContent;
             isDirtyRef.current = false;
@@ -1064,7 +1060,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                   tagId: pendingTags[0].id,
                   sessionId: pendingTags[0].sessionId,
                 });
-                setContent(oldContent);
                 contentRef.current = oldContent;
                 initialContentRef.current = oldContent;
                 isDirtyRef.current = false;
@@ -1086,7 +1081,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             // Already showing diff - reset editor and update with new content
             console.log(`[TabEditor] Updating existing diff with new content - tagged: ${oldContent.length}, new: ${newContent.length}`);
 
-            setContent(oldContent);
             contentRef.current = oldContent;
 
             // Set isApplyingDiffRef before async work for consistency
@@ -1157,7 +1151,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             logger.ui.info(`[TabEditor] AI edit pending for ${fileName}, applying diff mode (skipping conflict dialog)`);
             console.log(`[TabEditor] AI edit pending - tagged content length: ${oldContent.length}, new content length: ${newContent.length}`);
 
-            setContent(oldContent);
             contentRef.current = oldContent;
 
             // CRITICAL: Set isApplyingDiffRef BEFORE starting async work
@@ -1296,10 +1289,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           }
 
           // Update state
-          setContent(newContent);
+          contentRef.current = newContent;
           initialContentRef.current = newContent;
           lastSavedContentRef.current = newContent;
-          contentRef.current = newContent;
           isDirtyRef.current = false;
           onDirtyChange?.(false);
 
@@ -1407,10 +1399,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         window.electronAPI.readFileContent(filePath).then((result) => {
           if (result?.success && result.content !== undefined) {
             const newContent = result.content;
-            setContent(newContent);
+            contentRef.current = newContent;
             initialContentRef.current = newContent;
             lastSavedContentRef.current = newContent;
-            contentRef.current = newContent;
             isDirtyRef.current = false;
             onDirtyChange?.(false);
 
@@ -1449,10 +1440,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     setConflictDialogContent('');
 
     // Apply the reload
-    setContent(newContent);
+    contentRef.current = newContent;
     initialContentRef.current = newContent;
     lastSavedContentRef.current = newContent;
-    contentRef.current = newContent;
     isDirtyRef.current = false;
     onDirtyChange?.(false);
 
@@ -1484,6 +1474,12 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     setConflictDialogContent('');
   }, []);
 
+  // Stable callback to get content for DocumentHeaderContainer
+  // Uses refs to avoid recreating the callback and causing unnecessary re-renders
+  const getDocumentHeaderContent = useCallback((): string => {
+    return getContentFnRef.current?.() ?? '';
+  }, []);
+
   // Handle content change from document header
   const handleDocumentHeaderContentChange = useCallback((newContent: string) => {
     // console.log(`[TabEditor] handleDocumentHeaderContentChange called for ${fileName}, newContentLength=${newContent.length}`);
@@ -1508,8 +1504,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             }
           }
 
-          // Update React state and mark as dirty so autosave will persist
-          setContent(newContent);
+          // Update working copy ref and mark as dirty so autosave will persist
           contentRef.current = newContent;
           isDirtyRef.current = true;
 
@@ -1579,7 +1574,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           });
 
           // Update our state
-          setContent(approvedContent);
           contentRef.current = approvedContent;
           lastSavedContentRef.current = approvedContent;
         }
@@ -1625,7 +1619,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             await window.electronAPI.invoke('history:create-snapshot', filePath, currentContent, 'manual', 'Incremental diff acceptance');
 
             // Update our state
-            setContent(currentContent);
             contentRef.current = currentContent;
             initialContentRef.current = currentContent;
             lastSavedContentRef.current = currentContent;
@@ -1660,57 +1653,26 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
     // Register command listeners
     // NOTE: APPROVE_DIFF_COMMAND and REJECT_DIFF_COMMAND are handled by DiffPlugin in rexical.
-    // TabEditor ALSO listens to clear the tag BEFORE the save happens to prevent file watcher race.
+    // DiffPlugin dispatches CLEAR_DIFF_TAG_COMMAND when all diffs are processed.
+    // handleClearDiffTag then saves the content to disk and clears the pending tag.
+    // DO NOT clear pendingAIEditTagRef in these handlers - handleClearDiffTag needs it.
 
-      // Handle APPROVE_DIFF_COMMAND - clear tag status immediately to prevent file watcher race
+      // Handle APPROVE_DIFF_COMMAND - let DiffPlugin handle it
       const unregisterApprove = editor.registerCommand(
         APPROVE_DIFF_COMMAND,
         () => {
-          // Clear the pending tag reference and update tag status IMMEDIATELY
-          // This prevents the file watcher from re-entering diff mode when it detects the save
-          if (pendingAIEditTagRef.current) {
-            const { tagId, filePath: tagFilePath } = pendingAIEditTagRef.current;
-            logger.ui.info('[TabEditor] APPROVE_DIFF_COMMAND - clearing tag before DiffPlugin handles it');
-
-            // Clear ref immediately so file watcher won't re-enter diff mode
-            setPendingAIEditTag(null);
-
-            // Update tag status in database (async, but tag ref is already cleared)
-            window.electronAPI.history.updateTagStatus(tagFilePath, tagId, 'reviewed', workspaceId)
-              .then(() => {
-                logger.ui.info(`[TabEditor] Successfully marked AI edit tag as reviewed: ${tagId}`);
-              })
-              .catch((error: Error) => {
-                logger.ui.error('[TabEditor] Failed to update tag status:', error);
-              });
-          }
-          return false; // Let DiffPlugin handle the actual diff approval
+          // Let DiffPlugin handle the approval, then CLEAR_DIFF_TAG_COMMAND will save
+          return false;
         },
         COMMAND_PRIORITY_LOW
       );
 
-      // Handle REJECT_DIFF_COMMAND - clear tag status immediately to prevent file watcher race
+      // Handle REJECT_DIFF_COMMAND - let DiffPlugin handle it
       const unregisterReject = editor.registerCommand(
         REJECT_DIFF_COMMAND,
         () => {
-          // Clear the pending tag reference and update tag status IMMEDIATELY
-          if (pendingAIEditTagRef.current) {
-            const { tagId, filePath: tagFilePath } = pendingAIEditTagRef.current;
-            logger.ui.info('[TabEditor] REJECT_DIFF_COMMAND - clearing tag before DiffPlugin handles it');
-
-            // Clear ref immediately so file watcher won't re-enter diff mode
-            setPendingAIEditTag(null);
-
-            // Update tag status in database (async, but tag ref is already cleared)
-            window.electronAPI.history.updateTagStatus(tagFilePath, tagId, 'reviewed', workspaceId)
-              .then(() => {
-                logger.ui.info(`[TabEditor] Successfully marked AI edit tag as reviewed: ${tagId}`);
-              })
-              .catch((error: Error) => {
-                logger.ui.error('[TabEditor] Failed to update tag status:', error);
-              });
-          }
-          return false; // Let DiffPlugin handle the actual diff rejection
+          // Let DiffPlugin handle the rejection, then CLEAR_DIFF_TAG_COMMAND will save
+          return false;
         },
         COMMAND_PRIORITY_LOW
       );
@@ -1841,9 +1803,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       setMonacoDiffChangeCount(0);
 
       // Update content and saved state
-      setContent(newContent);
-      lastSavedContentRef.current = newContent;
       contentRef.current = newContent;
+      lastSavedContentRef.current = newContent;
       isDirtyRef.current = false;
 
       // CRITICAL: Update Monaco editor's content after exiting diff mode
@@ -1897,11 +1858,16 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       setMonacoDiffChangeCount(0);
 
       // Update content and saved state
-      setContent(oldContent);
-      lastSavedContentRef.current = oldContent;
-      lastSavedContentRef.current = oldContent;
       contentRef.current = oldContent;
+      lastSavedContentRef.current = oldContent;
       isDirtyRef.current = false;
+
+      // CRITICAL: Update Monaco editor's content after exiting diff mode
+      // Without this, Monaco will show the modified content when it switches back to normal mode
+      // Use force: true because Monaco's disk tracker already has this content from rejectDiff()
+      if (editorRef.current.setContent) {
+        editorRef.current.setContent(oldContent, { force: true });
+      }
 
       logger.ui.info('[TabEditor] Monaco diff rejected successfully');
     } catch (error) {
@@ -2158,9 +2124,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         setPendingAIEditTag(null);
 
         // Update state
-        setContent(result.content);
         contentRef.current = result.content;
-        lastSavedContentRef.current = result.content;
         lastSavedContentRef.current = result.content;
         isDirtyRef.current = false;
         onDirtyChange?.(false);
@@ -2207,7 +2171,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           try {
             const result = await window.electronAPI.readFileContent(filePath);
             if (result && result.success) {
-              setContent(result.content);
               contentRef.current = result.content;
               lastSavedContentRef.current = result.content;
             }
@@ -2239,7 +2202,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           try {
             const result = await window.electronAPI.readFileContent(filePath);
             if (result && result.success) {
-              setContent(result.content);
               contentRef.current = result.content;
               lastSavedContentRef.current = result.content;
             }
@@ -2514,7 +2476,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                       <DocumentHeaderContainer
                         filePath={filePath}
                         fileName={fileName}
-                        content={content}
+                        getContent={getDocumentHeaderContent}
                         onContentChange={handleDocumentHeaderContentChange}
                         editor={editorRef.current}
                       />

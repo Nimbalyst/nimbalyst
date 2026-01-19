@@ -82,7 +82,18 @@ export {
   removeSessionAtom,
   addSessionAtom,
   updateSessionAtom,
+  // Session list loading
+  sessionListFullAtom,
+  sessionListLoadingAtom,
+  sessionListWorkspaceAtom,
+  showArchivedSessionsAtom,
+  refreshSessionListAtom,
+  initSessionList,
+  addSessionFullAtom,
+  updateSessionFullAtom,
+  removeSessionFullAtom,
   type SessionInfo,
+  type SessionListItem,
 } from './atoms/sessions';
 
 // File tree atoms (Electron file watcher)
@@ -128,6 +139,22 @@ export {
   type TrackerFilter,
 } from './atoms/trackers';
 
+// Agent mode atoms (session history layout)
+export {
+  agentModeLayoutAtom,
+  sessionHistoryWidthAtom,
+  sessionHistoryCollapsedAtom,
+  collapsedGroupsAtom,
+  sortOrderAtom,
+  setAgentModeLayoutAtom,
+  setSessionHistoryWidthAtom,
+  toggleCollapsedGroupAtom,
+  setCollapsedGroupsAtom,
+  setSortOrderAtom,
+  initAgentModeLayout,
+  type AgentModeLayout,
+} from './atoms/agentMode';
+
 // Project state atoms (Electron persistence)
 export {
   projectStateAtom,
@@ -157,3 +184,26 @@ export {
   type ContextTabState,
   type PersistedTabInfo,
 } from './atoms/projectState';
+
+// Window mode atoms (files, agent, settings)
+export {
+  windowModeAtom,
+  setWindowModeAtom,
+  initWindowMode,
+  resetWindowMode,
+} from './atoms/windowMode';
+
+// Settings navigation atoms (deep linking to settings panels)
+export {
+  settingsNavigationAtom,
+  settingsInitialCategoryAtom,
+  settingsInitialScopeAtom,
+  settingsKeyAtom,
+  navigateToSettingsAtom,
+  clearSettingsNavigationAtom,
+  setSettingsInitialCategoryAtom,
+  setSettingsInitialScopeAtom,
+  incrementSettingsKeyAtom,
+  type SettingsScope,
+  type SettingsNavigationState,
+} from './atoms/settingsNavigation';

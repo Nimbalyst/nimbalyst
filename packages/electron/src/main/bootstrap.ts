@@ -12,6 +12,10 @@
  * TerminalSessionManager.ts using createRequire, which eliminates the need
  * for NODE_PATH manipulation and dynamic imports.
  *
+ * V8 Memory Configuration:
+ *   The heap memory limit can be configured via app-settings.json (maxHeapSizeMB).
+ *   This must be applied before app.whenReady() via app.commandLine.appendSwitch().
+ *
  * Usage:
  *   NIMBALYST_USER_DATA_DIR=/path/to/dir npm run dev
  *   or
@@ -20,6 +24,7 @@
 
 import { app, dialog } from 'electron';
 import * as path from 'path';
+import Store from 'electron-store';
 
 // Global uncaught exception handler - must be registered early
 // This catches errors that bubble up from async SDK operations
@@ -64,6 +69,22 @@ if (customUserDataDir) {
   // Also set appData to parent directory for consistency
   app.setPath('appData', path.dirname(customUserDataDir));
   console.log(`[Bootstrap] Using custom userData directory: ${customUserDataDir}`);
+}
+
+// Configure V8 heap memory limit from app settings
+// This must happen before app.whenReady() for the flag to take effect
+// Default to 4096MB (4GB) if not configured
+try {
+  const appSettings = new Store<{ maxHeapSizeMB?: number }>({ name: 'app-settings' });
+  const maxHeapSizeMB = appSettings.get('maxHeapSizeMB', 4096);
+  if (maxHeapSizeMB && maxHeapSizeMB > 0) {
+    app.commandLine.appendSwitch('js-flags', `--max-old-space-size=${maxHeapSizeMB}`);
+    console.log(`[Bootstrap] V8 heap limit set to ${maxHeapSizeMB}MB`);
+  }
+} catch (error) {
+  // If we can't read settings, use default
+  app.commandLine.appendSwitch('js-flags', '--max-old-space-size=4096');
+  console.log('[Bootstrap] V8 heap limit set to 4096MB (default)');
 }
 
 // Static import - no chunk boundary, no module duplication issues.

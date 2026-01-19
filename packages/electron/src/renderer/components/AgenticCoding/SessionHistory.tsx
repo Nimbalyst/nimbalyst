@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { CollapsibleGroup } from './CollapsibleGroup';
 import { SessionListItem } from './SessionListItem';
 import { WorktreeGroup } from './WorktreeGroup';
@@ -8,6 +9,15 @@ import { IndexBuildDialog } from './IndexBuildDialog';
 import { getTimeGroupKey, TimeGroupKey } from '../../utils/dateFormatting';
 import { getFileName } from '../../utils/pathUtils';
 import { KeyboardShortcuts, getShortcutDisplay } from '../../../shared/KeyboardShortcuts';
+import {
+  sessionListFullAtom,
+  sessionListLoadingAtom,
+  showArchivedSessionsAtom,
+  refreshSessionListAtom,
+  updateSessionFullAtom,
+  removeSessionFullAtom,
+  type SessionListItem as SessionListItemType,
+} from '../../store';
 import './SessionHistory.css';
 
 interface SessionItem {
@@ -51,9 +61,8 @@ interface SessionHistoryProps {
   workspacePath: string;
   activeSessionId: string | null;
   loadedSessionIds?: string[]; // IDs of sessions loaded in tabs
-  processingSessions?: Set<string>; // IDs of sessions currently processing
-  unreadSessions?: Set<string>; // IDs of sessions with unread messages
-  pendingPromptSessions?: Set<string>; // IDs of sessions with pending permission/question prompts
+  // Note: processingSessions, unreadSessions, pendingPromptSessions are now deprecated
+  // SessionListItem subscribes directly to Jotai atoms for these states
   renamedSession?: { id: string; title: string } | null; // Session that was just renamed
   renamedWorktree?: { worktreeId: string; displayName: string } | null; // Worktree that just got a display name
   updatedSession?: { id: string; timestamp: number } | null; // Session that was just updated
@@ -159,9 +168,6 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   workspacePath,
   activeSessionId,
   loadedSessionIds = [],
-  processingSessions = new Set(),
-  unreadSessions = new Set(),
-  pendingPromptSessions = new Set(),
   renamedSession = null,
   renamedWorktree = null,
   updatedSession = null,
@@ -185,9 +191,36 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   refreshTrigger,
   mode = 'agent'
 }) => {
-  const [allSessions, setAllSessions] = useState<SessionItem[]>([]); // All sessions from DB
+  // === Atom subscriptions for session list ===
+  const allSessionsFromAtom = useAtomValue(sessionListFullAtom);
+  const atomLoading = useAtomValue(sessionListLoadingAtom);
+  const showArchivedAtom = useAtomValue(showArchivedSessionsAtom);
+  const setShowArchivedAtom = useSetAtom(showArchivedSessionsAtom);
+  const refreshSessions = useSetAtom(refreshSessionListAtom);
+  const updateSessionInAtom = useSetAtom(updateSessionFullAtom);
+  const removeSessionFromAtom = useSetAtom(removeSessionFullAtom);
+
+  // Convert atom sessions to local SessionItem format
+  // Note: isProcessing, hasUnread, hasPendingPrompt are no longer set here
+  // SessionListItem subscribes directly to Jotai atoms for these states
+  const allSessions = useMemo<SessionItem[]>(() => {
+    return allSessionsFromAtom.map((s) => ({
+      id: s.id,
+      title: s.title || s.name || 'Untitled Session',
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
+      provider: s.provider || 'claude',
+      model: s.model,
+      sessionType: s.sessionType || 'chat',
+      messageCount: s.messageCount || 0,
+      isArchived: s.isArchived || false,
+      isPinned: s.isPinned || false,
+      worktree_id: s.worktreeId || null,
+    }));
+  }, [allSessionsFromAtom]);
+
   const [sessions, setSessions] = useState<SessionItem[]>([]); // Filtered sessions to display
-  const [loading, setLoading] = useState(true);
+  const loading = atomLoading && allSessions.length === 0; // Only show loading on initial load
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   // Use controlled sort order from props if provided, otherwise use internal state
@@ -198,7 +231,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   const [newDropdownOpen, setNewDropdownOpen] = useState(false);
   const [contentSearchTriggered, setContentSearchTriggered] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
-  const [showArchived, setShowArchived] = useState(false);
+  // Use atom for showArchived state
+  const showArchived = showArchivedAtom;
+  const setShowArchived = setShowArchivedAtom;
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
   const [lastSelectedId, setLastSelectedId] = useState<string | null>(null); // For shift+click range selection
   const [worktreeCache, setWorktreeCache] = useState<Map<string, WorktreeWithStatus>>(new Map()); // Cache worktree data
@@ -230,106 +265,23 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   const workspaceName = getFileName(workspacePath) || 'Workspace';
   const workspaceColor = generateWorkspaceColor(workspacePath);
 
-  // Load all sessions from database (no search query)
+  // Load all sessions - now just triggers atom refresh
+  // The atom handles IPC calls and state updates
   const loadAllSessions = useCallback(async () => {
+    setError(null);
     try {
-      // Don't show loading spinner if we already have sessions (just refreshing)
-      const hasExistingSessions = allSessions.length > 0;
-      if (!hasExistingSessions) {
-        setLoading(true);
-      }
-      setError(null);
-
-      const result = await window.electronAPI.invoke('sessions:list', workspacePath, { includeArchived: showArchived });
-
-      if (result.success && Array.isArray(result.sessions)) {
-        // Map sessions with base data only. Visual indicators (isProcessing, hasUnread)
-        // are applied separately by the useEffect below to avoid stale closure issues.
-        const incomingSessions = result.sessions.map((s: any) => ({
-          id: s.id,
-          title: s.title || s.name || 'Untitled Session',
-          createdAt: s.createdAt,
-          updatedAt: s.updatedAt,
-          provider: s.provider || 'claude',
-          model: s.model,
-          sessionType: s.sessionType || 'chat',
-          messageCount: s.messageCount || 0,
-          isProcessing: false,  // Will be updated by visual indicator effect
-          hasUnread: false,     // Will be updated by visual indicator effect
-          isArchived: s.isArchived || false,
-          isPinned: s.isPinned || false,
-          worktree_id: s.worktreeId || null
-        }));
-
-        // Merge incoming sessions with existing ones to preserve React keys and reduce flicker
-        setAllSessions(prev => {
-          // If first load, just set the new sessions
-          if (prev.length === 0) {
-            return incomingSessions;
-          }
-
-          // Create a map of incoming sessions by ID
-          const incomingMap = new Map(incomingSessions.map((s: SessionItem) => [s.id, s]));
-
-          // Update existing sessions and add new ones
-          const merged = prev.map(existing => {
-            const incoming = incomingMap.get(existing.id);
-            if (incoming) {
-              // Session still exists, update it while preserving visual state
-              incomingMap.delete(existing.id); // Mark as processed
-              return {
-                ...incoming,
-                isProcessing: existing.isProcessing, // Preserve these from current state
-                hasUnread: existing.hasUnread
-              };
-            }
-            return null; // Session was deleted
-          }).filter((s): s is NonNullable<typeof s> => s !== null);
-
-          // Add any new sessions that weren't in the previous list
-          const newSessions = Array.from(incomingMap.values());
-
-          return [...merged, ...newSessions];
-        });
-
-        // Apply the same merge logic to filtered sessions
-        setSessions(prev => {
-          if (prev.length === 0) {
-            return incomingSessions;
-          }
-
-          const incomingMap = new Map(incomingSessions.map((s: SessionItem) => [s.id, s]));
-          const merged = prev.map(existing => {
-            const incoming = incomingMap.get(existing.id);
-            if (incoming) {
-              incomingMap.delete(existing.id);
-              return {
-                ...incoming,
-                isProcessing: existing.isProcessing,
-                hasUnread: existing.hasUnread
-              };
-            }
-            return null;
-          }).filter((s): s is NonNullable<typeof s> => s !== null);
-
-          const newSessions = Array.from(incomingMap.values());
-          return [...merged, ...newSessions];
-        });
-
-        // Restore scroll position after update
-        requestAnimationFrame(() => {
-          if (scrollContainerRef.current && scrollPositionRef.current > 0) {
-            scrollContainerRef.current.scrollTop = scrollPositionRef.current;
-          }
-        });
-      }
+      await refreshSessions();
+      // Restore scroll position after update
+      requestAnimationFrame(() => {
+        if (scrollContainerRef.current && scrollPositionRef.current > 0) {
+          scrollContainerRef.current.scrollTop = scrollPositionRef.current;
+        }
+      });
     } catch (err) {
       console.error('[SessionHistory] Failed to load sessions:', err);
       setError('Failed to load sessions');
-    } finally {
-      setLoading(false);
     }
-  }, [workspacePath, allSessions.length, showArchived]);
+  }, [refreshSessions]);
 
   // Execute the actual search query
   const executeSearch = useCallback(async (query: string) => {
@@ -393,10 +345,10 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     }
   }, [workspacePath, executeSearch]);
 
-  // Load all sessions on mount and when refreshTrigger changes
+  // Load all sessions on mount and when refreshTrigger or showArchived changes
   useEffect(() => {
     loadAllSessions();
-  }, [loadAllSessions, refreshTrigger]);
+  }, [loadAllSessions, refreshTrigger, showArchived]);
 
   // Client-side title filtering (instant, no database query)
   useEffect(() => {
@@ -467,15 +419,10 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     setPendingSearchQuery(null);
   }, [pendingSearchQuery, executeSearch]);
 
-  // Update visual indicators (processing state, unread badges, pending prompts) without reloading from database
-  useEffect(() => {
-    setSessions(prevSessions => prevSessions.map(session => ({
-      ...session,
-      isProcessing: processingSessions.has(session.id),
-      hasUnread: unreadSessions.has(session.id),
-      hasPendingPrompt: pendingPromptSessions.has(session.id)
-    })));
-  }, [processingSessions, unreadSessions, pendingPromptSessions]);
+  // Note: Visual indicators (processing, unread, pending) are now applied in the
+  // allSessions useMemo above, which depends on the status props. The filtering
+  // effect updates `sessions` whenever `allSessions` changes, so no separate
+  // effect is needed.
 
   // Update session title when renamed (efficient update without database reload)
   useEffect(() => {
@@ -538,8 +485,10 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   const handleArchiveSession = async (sessionId: string) => {
     try {
       await window.electronAPI.invoke('sessions:update-metadata', sessionId, { isArchived: true });
-      // Remove from local state immediately for instant feedback
-      setAllSessions(prev => prev.filter(s => s.id !== sessionId));
+      // Update atom state immediately for instant feedback (optimistic update)
+      // If not showing archived, this effectively removes it from view
+      updateSessionInAtom({ id: sessionId, isArchived: true });
+      // Also remove from filtered list for immediate feedback
       setSessions(prev => prev.filter(s => s.id !== sessionId));
       // Notify parent to close the tab if open
       if (onSessionArchive) {
@@ -559,8 +508,11 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       const result = await window.electronAPI.worktreeArchive(worktreeId, workspacePath);
 
       if (result.success) {
-        // Remove worktree sessions from local state immediately
-        setAllSessions(prev => prev.filter(s => s.worktree_id !== worktreeId));
+        // Remove worktree sessions from atom state immediately (optimistic update)
+        worktreeSessions.forEach(session => {
+          removeSessionFromAtom(session.id);
+        });
+        // Also remove from filtered list for immediate feedback
         setSessions(prev => prev.filter(s => s.worktree_id !== worktreeId));
 
         // Notify parent to close tabs for archived sessions
@@ -587,8 +539,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   const handleUnarchiveSession = async (sessionId: string) => {
     try {
       await window.electronAPI.invoke('sessions:update-metadata', sessionId, { isArchived: false });
-      // Update local state immediately for instant feedback
-      setAllSessions(prev => prev.map(s => s.id === sessionId ? { ...s, isArchived: false } : s));
+      // Update atom state immediately for instant feedback (optimistic update)
+      updateSessionInAtom({ id: sessionId, isArchived: false });
+      // Also update filtered list for immediate feedback
       setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, isArchived: false } : s));
     } catch (err) {
       console.error('[SessionHistory] Failed to unarchive session:', err);
@@ -596,7 +549,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   };
 
   const toggleShowArchived = () => {
-    setShowArchived(prev => !prev);
+    setShowArchived(!showArchived);
   };
 
   // Clear selection when clicking elsewhere
@@ -663,7 +616,10 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       window.electronAPI.invoke('sessions:update-metadata', sessionId, { isArchived: true })
     );
     await Promise.all(promises);
-    setAllSessions(prev => prev.filter(s => !selectedSessionIds.has(s.id)));
+    // Update atom state for each archived session
+    selectedSessionIds.forEach(sessionId => {
+      updateSessionInAtom({ id: sessionId, isArchived: true });
+    });
     setSessions(prev => prev.filter(s => !selectedSessionIds.has(s.id)));
     // Notify parent to close tabs for all archived sessions
     if (onSessionArchive) {
@@ -678,7 +634,10 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       window.electronAPI.invoke('sessions:update-metadata', sessionId, { isArchived: false })
     );
     await Promise.all(promises);
-    setAllSessions(prev => prev.map(s => selectedSessionIds.has(s.id) ? { ...s, isArchived: false } : s));
+    // Update atom state for each unarchived session
+    selectedSessionIds.forEach(sessionId => {
+      updateSessionInAtom({ id: sessionId, isArchived: false });
+    });
     setSessions(prev => prev.map(s => selectedSessionIds.has(s.id) ? { ...s, isArchived: false } : s));
     clearSelection();
   };
@@ -702,13 +661,14 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   const handleSessionPinToggle = useCallback(async (sessionId: string, isPinned: boolean) => {
     try {
       await window.electronAPI.invoke('sessions:update-pinned', sessionId, isPinned);
-      // Update local state
-      setAllSessions(prev => prev.map(s => s.id === sessionId ? { ...s, isPinned } : s));
+      // Update atom state (optimistic update)
+      updateSessionInAtom({ id: sessionId, isPinned });
+      // Also update filtered list for immediate feedback
       setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, isPinned } : s));
     } catch (error) {
       console.error('[SessionHistory] Failed to toggle session pin:', error);
     }
-  }, []);
+  }, [updateSessionInAtom]);
 
   // Toggle pin status for a worktree
   const handleWorktreePinToggle = useCallback(async (worktreeId: string, isPinned: boolean) => {
@@ -1591,17 +1551,10 @@ function arraysEqual(a: string[], b: string[]): boolean {
   return true;
 }
 
-// Helper to compare Sets by value
-function setsEqual(a: Set<string>, b: Set<string>): boolean {
-  if (a.size !== b.size) return false;
-  for (const item of a) {
-    if (!b.has(item)) return false;
-  }
-  return true;
-}
-
 // Memoize SessionHistory to prevent re-renders when props haven't meaningfully changed
 // This is critical for performance during typing in AIInput
+// Note: processingSessions, unreadSessions, pendingPromptSessions are no longer compared here
+// SessionListItem subscribes directly to Jotai atoms for these states
 export const SessionHistory = React.memo(SessionHistoryComponent, (prevProps, nextProps) => {
   // Only re-render if meaningful props changed
   if (prevProps.workspacePath !== nextProps.workspacePath) return false;
@@ -1613,11 +1566,6 @@ export const SessionHistory = React.memo(SessionHistoryComponent, (prevProps, ne
   // Compare arrays by value
   if (!arraysEqual(prevProps.loadedSessionIds ?? [], nextProps.loadedSessionIds ?? [])) return false;
   if (!arraysEqual(prevProps.collapsedGroups, nextProps.collapsedGroups)) return false;
-
-  // Compare Sets by value
-  if (!setsEqual(prevProps.processingSessions ?? new Set(), nextProps.processingSessions ?? new Set())) return false;
-  if (!setsEqual(prevProps.unreadSessions ?? new Set(), nextProps.unreadSessions ?? new Set())) return false;
-  if (!setsEqual(prevProps.pendingPromptSessions ?? new Set(), nextProps.pendingPromptSessions ?? new Set())) return false;
 
   // Compare renamed/updated session objects
   const prevRenamed = prevProps.renamedSession;

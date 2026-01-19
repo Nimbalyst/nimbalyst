@@ -190,16 +190,16 @@ export interface SyncProvider {
   onCreateSessionRequest?(callback: (request: CreateSessionRequest) => void): () => void;
 
   /** Send a response to a session creation request */
-  sendCreateSessionResponse?(response: CreateSessionResponse): void;
+  sendCreateSessionResponse?(response: CreateSessionResponse): Promise<void>;
 
   /** Send a session creation request (for mobile to request desktop to create a session) */
-  sendCreateSessionRequest?(request: CreateSessionRequest): void;
+  sendCreateSessionRequest?(request: CreateSessionRequest): Promise<void>;
 
   /** Subscribe to session creation responses (for mobile to receive response from desktop) */
   onCreateSessionResponse?(callback: (response: CreateSessionResponse) => void): () => void;
 
   /** Send a generic session control message (cross-device via IndexRoom) */
-  sendSessionControlMessage?(message: SessionControlMessage): void;
+  sendSessionControlMessage?(message: SessionControlMessage): Promise<void>;
 
   /** Subscribe to session control messages from other devices */
   onSessionControlMessage?(callback: (message: SessionControlMessage) => void): () => void;
@@ -209,13 +209,25 @@ export interface SyncProvider {
    * Used when agent completes execution and user should be notified on mobile.
    * The server will check device presence before sending (suppresses if mobile is active).
    */
-  requestMobilePush?(sessionId: string, title: string, body: string): void;
+  requestMobilePush?(sessionId: string, title: string, body: string): Promise<void>;
 
   /** Get list of currently connected devices */
   getConnectedDevices?(): DeviceInfo[];
 
   /** Subscribe to device status changes (devices joining/leaving) */
   onDeviceStatusChange?(callback: (devices: DeviceInfo[]) => void): () => void;
+
+  /**
+   * Send encrypted settings to all connected mobile devices.
+   * Used by desktop to share sensitive settings like API keys.
+   */
+  syncSettings?(settings: SyncedSettings): Promise<void>;
+
+  /**
+   * Subscribe to settings sync messages from other devices.
+   * Used by mobile to receive settings from desktop.
+   */
+  onSettingsSync?(callback: (settings: SyncedSettings) => void): () => void;
 }
 
 /** Session data for bulk index sync */
@@ -376,4 +388,43 @@ export interface SessionControlMessage {
   timestamp: number;
   /** Device that sent the message */
   sentBy: 'desktop' | 'mobile';
+}
+
+/**
+ * Voice mode settings synced from desktop.
+ */
+export interface SyncedVoiceModeSettings {
+  /** Which voice to use (OpenAI Realtime API voices) */
+  voice?: 'alloy' | 'ash' | 'ballad' | 'coral' | 'echo' | 'sage' | 'shimmer' | 'verse' | 'marin' | 'cedar';
+  /** Delay before auto-submitting voice commands (ms) */
+  submitDelayMs?: number;
+}
+
+/**
+ * Settings that can be synced from desktop to mobile.
+ * These are sensitive settings that should be encrypted in transit.
+ */
+export interface SyncedSettings {
+  /** OpenAI API key for voice transcription */
+  openaiApiKey?: string;
+  /** Voice mode settings */
+  voiceMode?: SyncedVoiceModeSettings;
+  /** Version for handling future upgrades */
+  version: number;
+}
+
+/**
+ * Encrypted settings payload for wire transmission.
+ */
+export interface EncryptedSettingsPayload {
+  /** Encrypted JSON blob containing SyncedSettings (base64) */
+  encrypted_settings: string;
+  /** IV for settings decryption (base64) */
+  settings_iv: string;
+  /** Device ID of sender */
+  device_id: string;
+  /** Timestamp of settings change */
+  timestamp: number;
+  /** Version to handle upgrades */
+  version: number;
 }

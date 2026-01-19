@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useAtom } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import { usePostHog } from 'posthog-js/react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import { SettingsSidebar, type SettingsCategory } from './SettingsSidebar';
@@ -16,39 +16,34 @@ import { NotificationsPanel } from '../GlobalSettings/panels/NotificationsPanel'
 import { VoiceModePanel } from './VoiceModePanel';
 import { MCPServersPanel } from '../GlobalSettings/panels/MCPServersPanel';
 import { ClaudeCodePluginsPanel } from '../GlobalSettings/panels/ClaudeCodePluginsPanel';
-import { SyncPanel, type SyncConfig } from '../GlobalSettings/panels/SyncPanel';
+import { SyncPanel } from '../GlobalSettings/panels/SyncPanel';
 import { ToolPackagesPanel } from './panels/ToolPackagesPanel';
 import { ProjectPermissionsPanel } from './panels/ProjectPermissionsPanel';
 import { ProviderOverrideWrapper } from './panels/ProviderOverrideWrapper';
 import { InstalledExtensionsPanel } from './panels/InstalledExtensionsPanel';
 import { walkthroughs } from '../../walkthroughs';
 import {
-  voiceModeSettingsAtom,
-  setVoiceModeSettingsAtom,
-  type VoiceModeSettings,
-  type VoiceId,
-  type TurnDetectionConfig,
+  aiProviderSettingsAtom,
+  setAIProviderSettingsAtom,
+  setProviderConfigAtom,
+  setApiKeyAtom,
+  setAvailableModelsAtom,
+  releaseChannelAtom,
+  type ProviderConfig,
+  type AIModel,
 } from '../../store/atoms/appSettings';
 
-export interface ProviderConfig {
-  enabled: boolean;
-  apiKey?: string;
-  baseUrl?: string;
-  models?: string[];
-  testStatus?: 'idle' | 'testing' | 'success' | 'error';
-  testMessage?: string;
-  installed?: boolean;
-  version?: string;
-  updateAvailable?: boolean;
-  installStatus?: 'not-installed' | 'installing' | 'installed' | 'error';
-  authMethod?: string;
-}
+// Re-export ProviderConfig for backward compatibility
+export type { ProviderConfig } from '../../store/atoms/appSettings';
 
+// Keep Model interface here since it may differ slightly from AIModel
 export interface Model {
   id: string;
   name: string;
   provider: string;
 }
+
+// Note: The ProviderConfig interface has been moved to appSettings.ts
 
 export type SettingsScope = 'user' | 'project';
 
@@ -65,55 +60,59 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
 
   const [selectedCategory, setSelectedCategory] = useState<SettingsCategory>(initialCategory || 'claude-code');
   const [scope, setScope] = useState<SettingsScope>(initialScope || 'user');
-  const [providers, setProviders] = useState<Record<string, ProviderConfig>>({
-    claude: { enabled: false, testStatus: 'idle' },
-    'claude-code': { enabled: true, testStatus: 'idle', installStatus: 'not-installed' },
-    openai: { enabled: false, testStatus: 'idle' },
-    'openai-codex': { enabled: false, testStatus: 'idle', installStatus: 'not-installed' },
-    lmstudio: { enabled: false, baseUrl: 'http://127.0.0.1:8234', testStatus: 'idle' }
-  });
 
-  const [apiKeys, setApiKeys] = useState<Record<string, string>>({
-    anthropic: '',
-    openai: '',
-    lmstudio_url: 'http://127.0.0.1:8234'
-  });
+  // AI Provider settings - using Jotai atoms (Phase 5b)
+  const [aiProviderSettings] = useAtom(aiProviderSettingsAtom);
+  const [, updateAIProviderSettings] = useAtom(setAIProviderSettingsAtom);
+  const [, updateProviderConfig] = useAtom(setProviderConfigAtom);
+  const [, updateApiKey] = useAtom(setApiKeyAtom);
+  const [, updateAvailableModels] = useAtom(setAvailableModelsAtom);
 
-  const [availableModels, setAvailableModels] = useState<Record<string, Model[]>>({});
+  // Release channel from atom (Phase 3)
+  const releaseChannel = useAtomValue(releaseChannelAtom);
+
+  // Destructure for easier access (these update when atom updates)
+  const { providers, apiKeys, availableModels } = aiProviderSettings;
+
+  // Local setters that wrap atom updates for backward compatibility
+  const setProviders = useCallback((updater: Record<string, ProviderConfig> | ((prev: Record<string, ProviderConfig>) => Record<string, ProviderConfig>)) => {
+    if (typeof updater === 'function') {
+      const newProviders = updater(providers);
+      updateAIProviderSettings({ providers: newProviders });
+    } else {
+      updateAIProviderSettings({ providers: updater });
+    }
+  }, [providers, updateAIProviderSettings]);
+
+  const setApiKeys = useCallback((updater: Record<string, string> | ((prev: Record<string, string>) => Record<string, string>)) => {
+    if (typeof updater === 'function') {
+      const newApiKeys = updater(apiKeys);
+      updateAIProviderSettings({ apiKeys: newApiKeys });
+    } else {
+      updateAIProviderSettings({ apiKeys: updater });
+    }
+  }, [apiKeys, updateAIProviderSettings]);
+
+  const setAvailableModels = useCallback((updater: Record<string, Model[]> | ((prev: Record<string, Model[]>) => Record<string, Model[]>)) => {
+    if (typeof updater === 'function') {
+      const newModels = updater(availableModels);
+      updateAIProviderSettings({ availableModels: newModels });
+    } else {
+      updateAIProviderSettings({ availableModels: updater });
+    }
+  }, [availableModels, updateAIProviderSettings]);
+
   const [loading, setLoading] = useState<Record<string, boolean>>({});
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  const [showToolCalls, setShowToolCalls] = useState(false);
 
   // Ref to track if we need to save (for debounce)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pendingSaveRef = useRef(false);
   const performSaveRef = useRef<() => Promise<void>>();
-  const [aiDebugLogging, setAiDebugLogging] = useState(false);
-  const [completionSoundEnabled, setCompletionSoundEnabled] = useState(false);
-  const [completionSoundType, setCompletionSoundType] = useState<'chime' | 'bell' | 'pop' | 'none'>('chime');
-  const [osNotificationsEnabled, setOSNotificationsEnabled] = useState(false);
-  const [releaseChannel, setReleaseChannel] = useState<'stable' | 'alpha'>('stable');
-  const [analyticsEnabled, setAnalyticsEnabled] = useState(true);
-  const [extensionDevToolsEnabled, setExtensionDevToolsEnabled] = useState(false);
-  const [walkthroughsEnabled, setWalkthroughsEnabled] = useState(true);
-  const [walkthroughsViewedCount, setWalkthroughsViewedCount] = useState(0);
-  const [walkthroughsTotalCount, setWalkthroughsTotalCount] = useState(0);
-  const [syncConfig, setSyncConfig] = useState<SyncConfig>({
-    enabled: false,
-    serverUrl: '',
-  });
-  const [syncTestStatus, setSyncTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
-  const [syncTestMessage, setSyncTestMessage] = useState<string | undefined>();
-
-  // Voice Mode settings - using Jotai atoms for cross-component reactivity
-  // When settings change here, VoiceModeButton updates automatically
-  const [voiceModeSettings, setVoiceModeSettings] = useAtom(voiceModeSettingsAtom);
-  const [, updateVoiceModeSettings] = useAtom(setVoiceModeSettingsAtom);
-
-  // Helper to update specific voice mode settings
-  const handleVoiceModeChange = useCallback((updates: Partial<VoiceModeSettings>) => {
-    updateVoiceModeSettings(updates);
-  }, [updateVoiceModeSettings]);
+  // NOTE: Notification settings (Phase 2), Advanced settings (Phase 3), Sync settings (Phase 4),
+  // AI debug settings (Phase 5), AI provider settings (Phase 5b), and Voice mode settings (Phase 7)
+  // have been moved to Jotai atoms in appSettings.ts
+  // Panels now subscribe directly to atoms - settings are auto-persisted via atom setters
 
   // Package counts for sidebar badge
   const [installedPackageCount, setInstalledPackageCount] = useState(0);
@@ -148,89 +147,27 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
   }, []);
 
   const loadSettings = async () => {
+    // NOTE: Most settings are now loaded via Jotai atoms initialized in index.tsx:
+    // - AI provider settings (providers, apiKeys) - Phase 5b
+    // - AI debug settings (showToolCalls, aiDebugLogging) - Phase 5
+    // - Notification settings - Phase 2
+    // - Advanced settings (including release channel) - Phase 3
+    // - Sync config - Phase 4
+    // - Voice mode settings - Phase 7
+
+    // Set default category for alpha users (using atom value)
+    if (releaseChannel === 'alpha' && !initialCategory) {
+      setSelectedCategory('sync');
+    }
+
+    // Fetch available models - cached in atom but not persisted
     try {
-      const settings = await window.electronAPI.aiGetSettings();
-      if (settings.apiKeys) {
-        setApiKeys(settings.apiKeys);
-      }
-      if (settings.providerSettings) {
-        setProviders(prev => {
-          const updated = { ...prev };
-          Object.entries(settings.providerSettings).forEach(([key, value]: [string, any]) => {
-            if (updated[key]) {
-              updated[key] = { ...updated[key], ...value };
-            }
-          });
-          return updated;
-        });
-      }
-      if (settings.showToolCalls !== undefined) {
-        setShowToolCalls(settings.showToolCalls);
-      }
-      if (settings.aiDebugLogging !== undefined) {
-        setAiDebugLogging(settings.aiDebugLogging);
-      }
-
-      // Load completion sound settings
-      const soundEnabled = await window.electronAPI.invoke('completion-sound:is-enabled');
-      const soundType = await window.electronAPI.invoke('completion-sound:get-type');
-      setCompletionSoundEnabled(soundEnabled);
-      setCompletionSoundType(soundType);
-
-      // Load OS notifications settings
-      const osNotifEnabled = await window.electronAPI.invoke('notifications:get-enabled');
-      setOSNotificationsEnabled(osNotifEnabled);
-
-      // Load release channel setting
-      const channel = await window.electronAPI.invoke('release-channel:get');
-      setReleaseChannel(channel);
-      // Set default category based on release channel (only if no initial category was provided)
-      if (channel === 'alpha' && !initialCategory) {
-        setSelectedCategory('sync');
-      }
-
-      // Load analytics setting
-      const analyticsEnabledSetting = await window.electronAPI.invoke('analytics:is-enabled');
-      setAnalyticsEnabled(analyticsEnabledSetting);
-
-      // Load extension dev tools setting
-      const extensionDevToolsEnabledSetting = await window.electronAPI.extensionDevTools.isEnabled();
-      setExtensionDevToolsEnabled(extensionDevToolsEnabledSetting);
-
-      // Load walkthroughs enabled setting and counts
-      const walkthroughState = await window.electronAPI.invoke('walkthroughs:get-state');
-      setWalkthroughsEnabled(walkthroughState?.enabled ?? true);
-      // Calculate viewed count (completed + dismissed)
-      const completedCount = walkthroughState?.completed?.length ?? 0;
-      const dismissedCount = walkthroughState?.dismissed?.length ?? 0;
-      // Unique viewed = union of completed and dismissed (avoid double counting)
-      const viewedIds = new Set([
-        ...(walkthroughState?.completed ?? []),
-        ...(walkthroughState?.dismissed ?? []),
-      ]);
-      setWalkthroughsViewedCount(viewedIds.size);
-      setWalkthroughsTotalCount(walkthroughs.length);
-
-      // Load sync config
-      const syncConfigSetting = await window.electronAPI.invoke('sync:get-config');
-      if (syncConfigSetting) {
-        setSyncConfig(syncConfigSetting);
-      }
-
-      // Voice mode settings are loaded from Jotai atom (initialized in index.tsx)
-      // No need to load here - the atom is already hydrated
-
-      // Fetch ALL models once
-      try {
-        const response = await window.electronAPI.aiGetAllModels();
-        if (response.success && response.grouped) {
-          setAvailableModels(response.grouped);
-        }
-      } catch (error) {
-        console.error('Failed to fetch initial models:', error);
+      const response = await window.electronAPI.aiGetAllModels();
+      if (response.success && response.grouped) {
+        setAvailableModels(response.grouped);
       }
     } catch (error) {
-      console.error('Failed to load settings:', error);
+      console.error('Failed to fetch initial models:', error);
     }
   };
 
@@ -292,6 +229,8 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
   };
 
   // Perform the actual save
+  // NOTE: Most settings are now auto-saved via Jotai atom setters.
+  // This function now primarily handles model cache clearing and feedback.
   const performSave = useCallback(async () => {
     if (!pendingSaveRef.current) return;
     pendingSaveRef.current = false;
@@ -299,30 +238,9 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
     try {
       setSaveStatus('saving');
 
-      const settings = {
-        apiKeys,
-        providerSettings: providers,
-        showToolCalls,
-        aiDebugLogging
-      };
-
-      await window.electronAPI.aiSaveSettings(settings);
-
-      // Save completion sound settings
-      await window.electronAPI.invoke('completion-sound:set-enabled', completionSoundEnabled);
-      await window.electronAPI.invoke('completion-sound:set-type', completionSoundType);
-
-      // Save OS notifications settings
-      await window.electronAPI.invoke('notifications:set-enabled', osNotificationsEnabled);
-
-      // Save release channel setting
-      await window.electronAPI.invoke('release-channel:set', releaseChannel);
-
-      // Save sync config
-      await window.electronAPI.invoke('sync:set-config', syncConfig.enabled ? syncConfig : null);
-
-      // Voice mode settings are saved automatically via Jotai setter atom (debounced)
-      // No need to save here
+      // NOTE: AI provider settings (providers, apiKeys) are saved automatically via Jotai atoms (Phase 5b)
+      // Notification settings (Phase 2), Advanced settings (Phase 3), Sync settings (Phase 4),
+      // AI debug settings (Phase 5), and Voice mode settings are all saved via atom setters
 
       // Clear the model cache to force refresh with new API keys
       await window.electronAPI.aiClearModelCache?.();
@@ -345,7 +263,7 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
       setSaveStatus('error');
       setTimeout(() => setSaveStatus('idle'), 3000);
     }
-  }, [apiKeys, providers, showToolCalls, aiDebugLogging, completionSoundEnabled, completionSoundType, osNotificationsEnabled, releaseChannel, syncConfig]);
+  }, [providers]);
 
   // Keep the ref in sync with performSave so debounced calls use the latest version
   performSaveRef.current = performSave;
@@ -536,83 +454,14 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
       case 'lmstudio':
         return wrapWithOverride('lmstudio', 'LM Studio', <LMStudioPanel {...commonProps} />);
       case 'advanced':
-        return <AdvancedPanel
-          showToolCalls={showToolCalls}
-          onShowToolCallsChange={(value) => {
-            setShowToolCalls(value);
-            debouncedSave();
-          }}
-          aiDebugLogging={aiDebugLogging}
-          onAiDebugLoggingChange={(value) => {
-            setAiDebugLogging(value);
-            debouncedSave();
-          }}
-          releaseChannel={releaseChannel}
-          onReleaseChannelChange={(value) => {
-            setReleaseChannel(value);
-            debouncedSave();
-          }}
-          analyticsEnabled={analyticsEnabled}
-          onAnalyticsEnabledChange={async (value) => {
-            setAnalyticsEnabled(value);
-            await window.electronAPI.invoke('analytics:set-enabled', value);
-            debouncedSave();
-          }}
-          extensionDevToolsEnabled={extensionDevToolsEnabled}
-          onExtensionDevToolsEnabledChange={async (value) => {
-            setExtensionDevToolsEnabled(value);
-            await window.electronAPI.extensionDevTools.setEnabled(value);
-            debouncedSave();
-          }}
-          walkthroughsEnabled={walkthroughsEnabled}
-          onWalkthroughsEnabledChange={async (value) => {
-            setWalkthroughsEnabled(value);
-            await window.electronAPI.invoke('walkthroughs:set-enabled', value);
-          }}
-          walkthroughsViewedCount={walkthroughsViewedCount}
-          walkthroughsTotalCount={walkthroughsTotalCount}
-          onWalkthroughsReset={async () => {
-            await window.electronAPI.invoke('walkthroughs:reset');
-            setWalkthroughsViewedCount(0);
-          }}
-        />;
+        // AdvancedPanel is now self-contained - uses Jotai atoms directly
+        return <AdvancedPanel />;
       case 'notifications':
-        return <NotificationsPanel
-          completionSoundEnabled={completionSoundEnabled}
-          onCompletionSoundEnabledChange={(value) => {
-            setCompletionSoundEnabled(value);
-            debouncedSave();
-          }}
-          completionSoundType={completionSoundType}
-          onCompletionSoundTypeChange={(value) => {
-            setCompletionSoundType(value);
-            debouncedSave();
-          }}
-          osNotificationsEnabled={osNotificationsEnabled}
-          onOSNotificationsEnabledChange={(value) => {
-            setOSNotificationsEnabled(value);
-            debouncedSave();
-          }}
-        />;
+        // NotificationsPanel is now self-contained - uses Jotai atoms directly
+        return <NotificationsPanel />;
       case 'voice-mode':
-        return <VoiceModePanel
-          enabled={voiceModeSettings.enabled}
-          onEnabledChange={(value) => handleVoiceModeChange({ enabled: value })}
-          voice={voiceModeSettings.voice}
-          onVoiceChange={(value) => handleVoiceModeChange({ voice: value })}
-          showTranscription={voiceModeSettings.showTranscription}
-          onShowTranscriptionChange={(value) => handleVoiceModeChange({ showTranscription: value })}
-          turnDetection={voiceModeSettings.turnDetection}
-          onTurnDetectionChange={(value) => handleVoiceModeChange({ turnDetection: value })}
-          hasOpenAIKey={!!apiKeys.openai}
-          voiceAgentPrompt={voiceModeSettings.voiceAgentPrompt}
-          onVoiceAgentPromptChange={(value) => handleVoiceModeChange({ voiceAgentPrompt: value })}
-          codingAgentPrompt={voiceModeSettings.codingAgentPrompt}
-          onCodingAgentPromptChange={(value) => handleVoiceModeChange({ codingAgentPrompt: value })}
-          workspacePath={workspacePath ?? undefined}
-          submitDelayMs={voiceModeSettings.submitDelayMs}
-          onSubmitDelayMsChange={(value) => handleVoiceModeChange({ submitDelayMs: value })}
-        />;
+        // VoiceModePanel is now self-contained - uses Jotai atoms directly
+        return <VoiceModePanel workspacePath={workspacePath ?? undefined} />;
       case 'installed-extensions':
         return (
           <InstalledExtensionsPanel
@@ -635,33 +484,7 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
           />
         );
       case 'sync':
-        return (
-          <SyncPanel
-            config={syncConfig}
-            onConfigChange={(config) => {
-              setSyncConfig(config);
-              debouncedSave();
-            }}
-            onTestConnection={async () => {
-              setSyncTestStatus('testing');
-              setSyncTestMessage(undefined);
-              try {
-                const result = await window.electronAPI.invoke('sync:test-connection', syncConfig);
-                if (result.success) {
-                  setSyncTestStatus('success');
-                } else {
-                  setSyncTestStatus('error');
-                  setSyncTestMessage(result.error || 'Connection failed');
-                }
-              } catch (error) {
-                setSyncTestStatus('error');
-                setSyncTestMessage(error instanceof Error ? error.message : 'Connection failed');
-              }
-            }}
-            testStatus={syncTestStatus}
-            testMessage={syncTestMessage}
-          />
-        );
+        return <SyncPanel />;
       default:
         return null;
     }
@@ -729,7 +552,7 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
           installedPackageCount={installedPackageCount}
           totalPackageCount={totalPackageCount}
           scope={scope}
-          releaseChannel={releaseChannel}
+          // releaseChannel now comes from Jotai atom in SettingsSidebar
         />
 
         <main className="settings-view-main">

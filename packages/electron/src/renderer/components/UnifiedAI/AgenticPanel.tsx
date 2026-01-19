@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback, useImperativeHandle, forwardRef, createRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useImperativeHandle, forwardRef, createRef, useMemo } from 'react';
+import { useAtomValue, useSetAtom } from 'jotai';
 import type { SessionData, ChatAttachment, Message, TokenUsageCategory } from '@nimbalyst/runtime/ai/server/types';
 import { AISessionView, AISessionViewRef } from './AISessionView';
 import { SessionDropdown } from '../AIChat/SessionDropdown';
@@ -15,7 +16,25 @@ import WorktreeFilesMode, { WorktreeFilesModeRef } from '../WorktreeMode/Worktre
 import { getFileName } from '../../utils/pathUtils';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
 import { TerminalPanel } from '../Terminal/TerminalPanel';
-import { store, sessionProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom } from '../../store';
+import {
+  store,
+  sessionProcessingAtom,
+  sessionUnreadAtom,
+  sessionPendingPromptAtom,
+  initSessionList,
+  sessionListFullAtom,
+  refreshSessionListAtom,
+  updateSessionFullAtom,
+  // Agent mode layout atoms
+  sessionHistoryWidthAtom,
+  sessionHistoryCollapsedAtom,
+  collapsedGroupsAtom,
+  sortOrderAtom,
+  setSessionHistoryWidthAtom,
+  setCollapsedGroupsAtom,
+  setSortOrderAtom,
+  initAgentModeLayout,
+} from '../../store';
 import { WorktreeOnboardingModal } from '../WorktreeOnboardingModal';
 
 export interface AgenticPanelRef {
@@ -126,10 +145,28 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   onFileOpen,
   onOpenQuickSearch
 }: AgenticPanelProps, ref) {
+  // === Atom subscriptions for session list ===
+  const sessionListFromAtom = useAtomValue(sessionListFullAtom);
+  const refreshSessions = useSetAtom(refreshSessionListAtom);
+  const updateSessionInAtom = useSetAtom(updateSessionFullAtom);
+
+  // Convert atom sessions to the format expected by SessionDropdown
+  const availableSessions = useMemo(() => {
+    return sessionListFromAtom.map((s) => ({
+      id: s.id,
+      createdAt: s.createdAt,
+      name: s.name,
+      title: s.title,
+      provider: s.provider,
+      model: s.model,
+      messageCount: s.messageCount || 0,
+      sessionType: s.sessionType,
+    }));
+  }, [sessionListFromAtom]);
+
   // Session state
   const [sessionTabs, setSessionTabs] = useState<SessionTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
-  const [availableSessions, setAvailableSessions] = useState<SessionListItem[]>([]);
   const [closedSessions, setClosedSessions] = useState<SessionTab[]>([]);
 
   // NOTE: Window title and find handlers are managed internally in agent mode.
@@ -138,12 +175,12 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // UI state
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [sendingSessions, setSendingSessions] = useState<Set<string>>(new Set());
+  // Ref for synchronous checks only - atoms are source of truth for UI
   const sendingSessionsRef = useRef<Set<string>>(new Set());
   const [releaseChannel, setReleaseChannel] = useState<'stable' | 'alpha'>('stable');
 
-  // Track sessions that are actively running (from session state manager)
-  const [runningSessions, setRunningSessions] = useState<Set<string>>(new Set());
+  // Note: Running sessions state is now managed via sessionProcessingAtom (Jotai atoms)
+  // SessionListItem subscribes directly to the atom for processing state
 
   // Track sessions with pending prompts (permission or question requests waiting for response)
   const [pendingPromptSessions, setPendingPromptSessions] = useState<Set<string>>(new Set());
@@ -152,13 +189,15 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   const [historyPosition, setHistoryPosition] = useState<Map<string, number>>(new Map());
   const [savedDraft, setSavedDraft] = useState<Map<string, string>>(new Map());
 
-  // Session history layout state (agent mode only)
-  const [sessionHistoryWidth, setSessionHistoryWidth] = useState(240);
+  // Session history layout state - now managed via Jotai atoms
+  const sessionHistoryWidth = useAtomValue(sessionHistoryWidthAtom);
+  const setSessionHistoryWidth = useSetAtom(setSessionHistoryWidthAtom);
   // IMPORTANT: SessionHistory must ALWAYS be visible in agent mode (never collapsed)
-  // Only collapse in chat mode
-  const [sessionHistoryCollapsed, setSessionHistoryCollapsed] = useState(mode === 'chat');
-  const [collapsedGroups, setCollapsedGroups] = useState<string[]>([]);
-  const [sortOrder, setSortOrder] = useState<'updated' | 'created'>('updated');
+  const sessionHistoryCollapsed = useAtomValue(sessionHistoryCollapsedAtom);
+  const collapsedGroups = useAtomValue(collapsedGroupsAtom);
+  const setCollapsedGroups = useSetAtom(setCollapsedGroupsAtom);
+  const sortOrder = useAtomValue(sortOrderAtom);
+  const setSortOrder = useSetAtom(setSortOrderAtom);
   const [sessionHistoryRefreshTrigger, setSessionHistoryRefreshTrigger] = useState(0);
   const [renamedSession, setRenamedSession] = useState<{ id: string; title: string } | null>(null);
   const [updatedSession, setUpdatedSession] = useState<{ id: string; timestamp: number } | null>(null);
@@ -208,6 +247,13 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
   useEffect(() => {
     workspacePathRef.current = workspacePath;
+  }, [workspacePath]);
+
+  // Initialize session list atom when workspace changes
+  useEffect(() => {
+    if (workspacePath) {
+      initSessionList(workspacePath);
+    }
   }, [workspacePath]);
 
   useEffect(() => {
@@ -394,28 +440,12 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     }
   });
 
-  // Load session history layout from workspace state
+  // Initialize session history layout from workspace state via Jotai atoms
   useEffect(() => {
     if (mode !== 'agent') return; // Only for agent mode
-
-    const loadLayout = async () => {
-      try {
-        const workspaceState = await window.electronAPI.invoke('workspace:get-state', workspacePath);
-        const result = workspaceState?.agenticCodingWindowState;
-        if (result?.sessionHistoryLayout) {
-          const layout = result.sessionHistoryLayout;
-          setSessionHistoryWidth(layout.width ?? 240);
-          // CRITICAL: Never collapse SessionHistory in agent mode
-          // The panel must always be visible to show the "New Worktree" button
-          setSessionHistoryCollapsed(false);
-          setCollapsedGroups(layout.collapsedGroups ?? []);
-          setSortOrder(layout.sortOrder ?? 'updated');
-        }
-      } catch (err) {
-        console.error('[AgenticPanel] Failed to load session history layout:', err);
-      }
-    };
-    loadLayout();
+    if (workspacePath) {
+      initAgentModeLayout(workspacePath);
+    }
   }, [workspacePath, mode]);
 
   useEffect(() => {
@@ -453,42 +483,16 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     };
   }, [workspacePath]);
 
-  // Save session history layout to workspace state when it changes (agent mode only)
-  useEffect(() => {
-    if (mode !== 'agent') return;
-
-    const saveLayout = async () => {
-      try {
-        await window.electronAPI.invoke('workspace:update-state', workspacePath, {
-          agenticCodingWindowState: {
-            sessionHistoryLayout: {
-              width: sessionHistoryWidth,
-              // Never save collapsed=true for agent mode - panel must always be visible
-              collapsed: false,
-              collapsedGroups,
-              sortOrder
-            }
-          }
-        });
-      } catch (err) {
-        console.error('[AgenticPanel] Failed to save session history layout:', err);
-      }
-    };
-
-    const timer = setTimeout(saveLayout, 500);
-    return () => clearTimeout(timer);
-  }, [workspacePath, sessionHistoryWidth, sessionHistoryCollapsed, collapsedGroups, sortOrder, mode]);
+  // Layout persistence is now handled by Jotai atom setter (setAgentModeLayoutAtom)
 
   // Subscribe to session state changes to track running sessions
   // Writes to Jotai atoms so SessionListItem indicators subscribe directly
   useEffect(() => {
     const initSessionState = async () => {
       try {
-        // Get initial active sessions
+        // Get initial active sessions and set atoms
         const result = await window.electronAPI.sessionState.getActiveSessionIds();
         if (result.success && result.sessionIds) {
-          setRunningSessions(new Set(result.sessionIds));
-          // Write initial state to Jotai atoms
           for (const sessionId of result.sessionIds) {
             store.set(sessionProcessingAtom(sessionId), true);
           }
@@ -497,29 +501,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         // Subscribe to state changes
         await window.electronAPI.sessionState.subscribe();
 
-        // Listen for state change events
+        // Listen for state change events - write directly to Jotai atoms
+        // SessionStatusIndicator subscribes to these atoms for processing state
         const handleStateChange = (event: any) => {
-          // Update local state (for backwards compat)
-          setRunningSessions(prev => {
-            const next = new Set(prev);
-
-            switch (event.type) {
-              case 'session:started':
-              case 'session:streaming':
-              case 'session:waiting':
-                next.add(event.sessionId);
-                break;
-              case 'session:completed':
-              case 'session:error':
-              case 'session:interrupted':
-                next.delete(event.sessionId);
-                break;
-            }
-
-            return next;
-          });
-
-          // Write to Jotai atoms - SessionStatusIndicator subscribes to these
           switch (event.type) {
             case 'session:started':
             case 'session:streaming':
@@ -552,36 +536,15 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     };
   }, []);
 
-  // Load all sessions for the workspace
+  // Load all sessions for the workspace - now just triggers atom refresh
+  // The atom handles IPC calls and state updates
   const loadSessions = useCallback(async () => {
     try {
-      // TODO: Debug logging - uncomment if needed
-      // console.log('[AgenticPanel] loadSessions called, mode:', mode, 'workspace:', workspacePath);
-      // Don't filter by session type - show all sessions in agent mode
-      const result = await window.electronAPI.invoke('sessions:list', workspacePath);
-      // TODO: Debug logging - uncomment if needed
-      // console.log('[AgenticPanel] sessions:list result:', result);
-      if (result.success && Array.isArray(result.sessions)) {
-        const sessions = result.sessions
-          .map((s: any) => ({
-            id: s.id,
-            createdAt: s.createdAt,
-            name: s.name,
-            title: s.title,
-            provider: s.provider,
-            model: s.model,
-            messageCount: s.messageCount || 0,
-            sessionType: s.sessionType
-          }));
-        // TODO: Debug logging - uncomment if needed
-        // console.log('[AgenticPanel] Setting availableSessions:', sessions.length, 'sessions');
-        // console.log('[AgenticPanel] Session details:', sessions.map(s => ({ id: s.id, type: s.sessionType })));
-        setAvailableSessions(sessions);
-      }
+      await refreshSessions();
     } catch (err) {
       console.error('[AgenticPanel] Failed to load sessions:', err);
     }
-  }, [workspacePath, mode]);
+  }, [refreshSessions]);
 
   const triggerSessionHistoryRefresh = useCallback((reason?: string) => {
     setSessionHistoryRefreshTrigger(prev => prev + 1);
@@ -1853,13 +1816,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         return tab;
       }));
 
-      // Update available sessions list
-      setAvailableSessions(prev => prev.map(session => {
-        if (session.id === data.sessionId) {
-          return { ...session, title: data.title, name: data.title };
-        }
-        return session;
-      }));
+      // Update session list atom (this also updates availableSessions via useMemo)
+      updateSessionInAtom({ id: data.sessionId, title: data.title, name: data.title });
 
       // Update session history efficiently without database reload
       setRenamedSession({ id: data.sessionId, title: data.title });
@@ -2036,11 +1994,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         // This allows the user to start typing/submitting the next message right away
         sendingSessionsRef.current.delete(data.sessionId);
         globalSendingSessions.delete(data.sessionId);
-        setSendingSessions(prev => {
-          const next = new Set(prev);
-          next.delete(data.sessionId);
-          return next;
-        });
+        // Clear atom for UI indicators (SessionListItem subscribes to this)
+        store.set(sessionProcessingAtom(data.sessionId), false);
 
         if (holdForAutoContext) {
           // Track that auto-context is running so we can defer queued prompt processing
@@ -2146,11 +2101,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         // Clear sending state immediately (both local and global)
         sendingSessionsRef.current.delete(sessionId);
         globalSendingSessions.delete(sessionId);
-        setSendingSessions(prev => {
-          const next = new Set(prev);
-          next.delete(sessionId);
-          return next;
-        });
+        // Clear atom for UI indicators
+        store.set(sessionProcessingAtom(sessionId), false);
 
         // Also clear autoContext state if session was waiting for it
         // This ensures the UI is fully cleaned up even if completion signal is missing
@@ -2559,7 +2511,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     // Global is used for cross-panel coordination (agent mode + files mode)
     sendingSessionsRef.current.add(sessionId);
     globalSendingSessions.add(sessionId);
-    setSendingSessions(prev => new Set(prev).add(sessionId));
+    // Set atom for UI indicators (SessionListItem subscribes to this)
+    store.set(sessionProcessingAtom(sessionId), true);
 
     // Get the session to determine sessionType and workspace path
     const currentTab = sessionTabs.filter(tab => tab != null).find(tab => tab.id === sessionId);
@@ -2690,11 +2643,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       setError(String(err));
       sendingSessionsRef.current.delete(sessionId);
       globalSendingSessions.delete(sessionId);
-      setSendingSessions(prev => {
-        const next = new Set(prev);
-        next.delete(sessionId);
-        return next;
-      });
+      // Clear atom for UI indicators
+      store.set(sessionProcessingAtom(sessionId), false);
       // Re-throw ONLY if this is a queued prompt send
       // For normal sends, we show the error but don't propagate it
       if (queuedPromptId) {
@@ -2712,11 +2662,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       if (result.success) {
         sendingSessionsRef.current.delete(sessionId);
         globalSendingSessions.delete(sessionId);
-        setSendingSessions(prev => {
-          const next = new Set(prev);
-          next.delete(sessionId);
-          return next;
-        });
+        // Clear atom for UI indicators
+        store.set(sessionProcessingAtom(sessionId), false);
       } else {
         console.warn('[AgenticPanel] Cancel request failed:', result.error);
       }
@@ -3178,20 +3125,15 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       // Save to database
       await window.electronAPI.invoke('sessions:update-title', tabId, newName);
 
-      // Update availableSessions so SessionDropdown (chat mode) shows the new name
-      setAvailableSessions(prev => prev.map(session => {
-        if (session.id === tabId) {
-          return { ...session, title: newName, name: newName };
-        }
-        return session;
-      }));
+      // Update session list atom (this also updates availableSessions via useMemo)
+      updateSessionInAtom({ id: tabId, title: newName, name: newName });
 
       // Update SessionHistory efficiently without database reload
       setRenamedSession({ id: tabId, title: newName });
     } catch (err) {
       console.error('[AgenticPanel] Failed to update session title:', err);
     }
-  }, [activeTabId, updateWindowTitle]);
+  }, [activeTabId, updateWindowTitle, updateSessionInAtom]);
 
   const reopenLastClosedSession = useCallback(async () => {
     if (closedSessions.length === 0) return;
@@ -3269,38 +3211,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     return isUnread;
   }, []);
 
-  // Get sets of processing and unread session IDs
-  // Memoize these Sets to prevent unnecessary re-renders of SessionHistory
-  // Combines both local sending state and global running state from session state manager
-  const processingSessions = React.useMemo(() => {
-    const combined = new Set<string>();
-    sendingSessions.forEach(id => combined.add(id));
-    runningSessions.forEach(id => combined.add(id));
-    return combined;
-  }, [sendingSessions, runningSessions]);
-
-  // Create a stable key for unread sessions based only on message state, not draft input
-  // This prevents re-computation when only draft input changes (typing in the input field)
-  const unreadSessionsKey = React.useMemo(() => {
-    return sessionTabs.filter(tab => tab != null).map(tab => {
-      const messages = tab.sessionData.messages || [];
-      const lastMessage = messages[messages.length - 1];
-      const refReadState = readStateRef.current.get(tab.id);
-      const lastReadTimestamp = refReadState?.lastReadMessageTimestamp ?? tab.sessionData.lastReadMessageTimestamp;
-      return `${tab.id}:${lastMessage?.timestamp ?? 0}:${lastReadTimestamp ?? 0}:${sendingSessions.has(tab.id)}`;
-    }).join('|');
-  }, [sessionTabs, sendingSessions]);
-
-  const unreadSessions = React.useMemo(() => {
-    const unreadIds = new Set<string>();
-    sessionTabs.filter(tab => tab != null).forEach(tab => {
-      if (hasUnreadMessages(tab) && !sendingSessions.has(tab.id)) {
-        unreadIds.add(tab.id);
-      }
-    });
-    return unreadIds;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unreadSessionsKey]);
+  // Note: Processing and unread state is now managed via Jotai atoms
+  // SessionListItem subscribes to sessionProcessingAtom and sessionUnreadAtom directly
+  // No more useMemo here - this removes the re-render cascade when status changes
 
   // Memoize loadedSessionIds to prevent creating new array on every render
   // Create a stable key based only on session IDs (not draftInput or other transient state)
@@ -3345,8 +3258,6 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           <SessionDropdown
             currentSessionId={activeTabId}
             sessions={availableSessions}
-            processingSessions={processingSessions}
-            unreadSessions={unreadSessions}
             onSessionSelect={openSessionInTab}
             onNewSession={() => createNewSession()}
             onDeleteSession={deleteSession}
@@ -3406,7 +3317,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             onFileMentionSearch={handleFileMentionSearch}
             onFileMentionSelect={handleFileMentionSelect}
             onFileClick={(filePath) => handleFileClick(activeTab.id, filePath)}
-            isLoading={processingSessions.has(activeTab.id)}
+            isLoading={sendingSessionsRef.current.has(activeTab.id)}
             aiMode={activeTab.mode || 'agent'}
             onAIModeChange={(newMode) => handleModeChange(activeTab.id, newMode)}
             currentModel={activeTab.model || activeTab.sessionData.model || 'claude-code'}
@@ -3470,9 +3381,6 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             workspacePath={workspacePath}
             activeSessionId={activeTabId}
             loadedSessionIds={loadedSessionIds}
-            processingSessions={processingSessions}
-            unreadSessions={unreadSessions}
-            pendingPromptSessions={pendingPromptSessions}
             renamedSession={renamedSession}
             renamedWorktree={renamedWorktree}
             updatedSession={updatedSession}
@@ -3501,10 +3409,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
             {/* Session Header */}
             {activeAgentTab && (
-              <AgentSessionHeader
-                sessionData={activeAgentTab.sessionData}
-                isProcessing={processingSessions.has(activeAgentTab.id)}
-              />
+              <AgentSessionHeader sessionData={activeAgentTab.sessionData} />
             )}
 
             {/* Session views */}
@@ -3578,7 +3483,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                         onFileMentionSearch={handleFileMentionSearch}
                         onFileMentionSelect={handleFileMentionSelect}
                         onFileClick={(filePath) => handleFileClick(tab.id, filePath)}
-                        isLoading={processingSessions.has(tab.id)}
+                        isLoading={sendingSessionsRef.current.has(tab.id)}
                         aiMode={tab.mode || 'agent'}
                         onAIModeChange={(newMode) => handleModeChange(tab.id, newMode)}
                         currentModel={tab.model || tab.sessionData.model || 'claude-code'}
@@ -3623,7 +3528,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                   onFileMentionSearch={handleFileMentionSearch}
                   onFileMentionSelect={handleFileMentionSelect}
                   onFileClick={(filePath) => handleFileClick(tab.id, filePath)}
-                  isLoading={processingSessions.has(tab.id)}
+                  isLoading={sendingSessionsRef.current.has(tab.id)}
                   aiMode={tab.mode || 'agent'}
                   onAIModeChange={(newMode) => handleModeChange(tab.id, newMode)}
                   currentModel={tab.model || tab.sessionData.model || 'claude-code'}

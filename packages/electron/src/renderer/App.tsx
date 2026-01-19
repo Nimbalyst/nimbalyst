@@ -36,9 +36,21 @@ import { DatabaseBrowser } from './components/DatabaseBrowser/DatabaseBrowser';
 import { AgenticPanel, type AgenticPanelRef } from './components/UnifiedAI';
 import EditorMode, { type EditorModeRef } from './components/EditorMode/EditorMode';
 import { TabsProvider } from './contexts/TabsContext';
-import { NavigationGutter, type SidebarView } from './components/NavigationGutter';
+import { NavigationGutter } from './components/NavigationGutter';
 // NOTE: useTabs and useTabNavigation removed - EditorMode manages tabs now
 import type { ContentMode } from './types/WindowModeTypes';
+import {
+  windowModeAtom,
+  setWindowModeAtom,
+  initWindowMode,
+  settingsInitialCategoryAtom,
+  settingsInitialScopeAtom,
+  settingsKeyAtom,
+  setSettingsInitialCategoryAtom,
+  setSettingsInitialScopeAtom,
+  incrementSettingsKeyAtom,
+  clearSettingsNavigationAtom,
+} from './store';
 import { TrackerBottomPanel, TrackerBottomPanelType } from './components/TrackerBottomPanel/TrackerBottomPanel.tsx';
 import { registerDocumentLinkPlugin } from './plugins/registerDocumentLinkPlugin';
 import { registerAIChatPlugin } from './plugins/registerAIChatPlugin';
@@ -47,8 +59,7 @@ import { registerDiffApprovalBarPlugin } from './plugins/registerDiffApprovalBar
 import { registerSearchReplacePlugin } from './plugins/registerSearchReplacePlugin';
 import { registerMockupPlugin } from './plugins/registerMockupPlugin';
 import { registerExtensionSystem, setExtensionWorkspacePath } from './plugins/registerExtensionSystem';
-import ProjectSettingsScreen from './components/ProjectSettingsScreen/ProjectSettingsScreen.tsx';
-import { SettingsView, type SettingsScope } from './components/Settings/SettingsView';
+import { SettingsView } from './components/Settings/SettingsView';
 import type { SettingsCategory } from './components/Settings/SettingsSidebar';
 import { loadCustomTrackers } from './services/CustomTrackerLoader';
 import { customEditorRegistry } from './components/CustomEditors';
@@ -59,6 +70,7 @@ import { ClaudeCommandsToast } from './components/ClaudeCommandsToast';
 import { UpdateToast } from './components/UpdateToast';
 import { ProjectTrustToast } from './components/ProjectTrustToast';
 import { PostHogSurvey } from './components/PostHogSurvey';
+import { NotificationSessionChecker } from './components/NotificationSessionChecker';
 import OnboardingService from './services/OnboardingService';
 import { WalkthroughProvider } from './walkthroughs';
 import {
@@ -290,13 +302,14 @@ export default function App() {
   const [showCommandsToast, setShowCommandsToast] = useState(false);
   const hasCheckedCommandsRef = useRef(false);
 
-  // Settings deep link state (for navigating directly to a specific settings section)
-  const [settingsInitialCategory, setSettingsInitialCategory] = useState<SettingsCategory | undefined>(undefined);
-  const [settingsInitialScope, setSettingsInitialScope] = useState<SettingsScope | undefined>(undefined);
-  const [settingsKey, setSettingsKey] = useState(0); // Force remount when deep linking
-
-  // Navigation gutter state
-  const [sidebarView, setSidebarView] = useState<SidebarView>('files');
+  // Settings deep link state - now using atoms
+  const settingsInitialCategory = useAtomValue(settingsInitialCategoryAtom);
+  const settingsInitialScope = useAtomValue(settingsInitialScopeAtom);
+  const settingsKey = useAtomValue(settingsKeyAtom);
+  const setSettingsInitialCategory = useSetAtom(setSettingsInitialCategoryAtom);
+  const setSettingsInitialScope = useSetAtom(setSettingsInitialScopeAtom);
+  const incrementSettingsKey = useSetAtom(incrementSettingsKeyAtom);
+  const clearSettingsNavigation = useSetAtom(clearSettingsNavigationAtom);
 
   // Active extension panel (for sidebar or fullscreen panels from extensions)
   const [activeExtensionPanel, setActiveExtensionPanel] = useState<string | null>(null);
@@ -311,18 +324,14 @@ export default function App() {
   const activeFullscreenPanel = activeExtensionPanel ? getPanelById(activeExtensionPanel) : null;
   const isFullscreenPanelActive = activeFullscreenPanel?.placement === 'fullscreen';
 
-  // Content mode management - simple state, no manager needed
-  const [activeMode, setActiveModeRaw] = useState<ContentMode>('files');
-  // Keep a ref to activeMode for use in callbacks that might have stale closures
+  // Window mode - which view is active (files, agent, settings)
+  const activeMode = useAtomValue(windowModeAtom);
+  const setActiveMode = useSetAtom(setWindowModeAtom);
+  // Keep a ref for use in callbacks that might have stale closures
   const activeModeStateRef = useRef<ContentMode>(activeMode);
   useEffect(() => {
     activeModeStateRef.current = activeMode;
   }, [activeMode]);
-
-  const setActiveMode = (mode: ContentMode) => {
-    // console.log('[App] setActiveMode called with:', mode, 'current:', activeMode);
-    setActiveModeRaw(mode);
-  };
 
   // Expose test helpers for testing
   useEffect(() => {
@@ -330,21 +339,19 @@ export default function App() {
     if (import.meta.env.DEV) {
       (window as any).__testHelpers = {
         ...(window as any).__testHelpers,
-        setSidebarView: (view: any) => setSidebarView(view),
         setActiveMode: (mode: any) => setActiveMode(mode),
         getActiveMode: () => activeMode,
-        getSidebarView: () => sidebarView,
         // Settings deep link helpers
         openAgentPermissions: () => {
           setSettingsInitialCategory('agent-permissions');
           setSettingsInitialScope('project');
-          setSettingsKey(k => k + 1);
+          incrementSettingsKey();
           setTimeout(() => setActiveMode('settings'), 0);
         },
       };
       console.log('[App] Test helpers exposed, DEV mode:', import.meta.env.DEV);
     }
-  }, [activeMode, sidebarView]);
+  }, [activeMode]);
 
   // Bottom panel state (shared across all modes)
   const [bottomPanel, setBottomPanel] = useState<TrackerBottomPanelType | null>(null);
@@ -1272,6 +1279,11 @@ export default function App() {
             setWorkspacePath(initialState.workspacePath ?? null);
             setWorkspaceName(initialState.workspaceName ?? null);
             // NOTE: fileTree loading moved to EditorMode
+
+            // Initialize window mode from workspace state
+            if (initialState.workspacePath) {
+              initWindowMode(initialState.workspacePath);
+            }
           }
         }
       } catch (error) {
@@ -1589,7 +1601,7 @@ export default function App() {
           // Deep link to agent permissions settings
           setSettingsInitialCategory('agent-permissions');
           setSettingsInitialScope('project');
-          setSettingsKey(k => k + 1); // Force SettingsView remount
+          incrementSettingsKey(); // Force SettingsView remount
           setTimeout(() => setActiveMode('settings'), 0);
         }}
         onOpenFeedback={() => {
@@ -1650,17 +1662,8 @@ export default function App() {
                 return null;
               })()}
 
-              {/* Main content (file tree + editor or settings) */}
-              {sidebarView === 'settings' ? (
-                <ProjectSettingsScreen
-                  workspacePath={workspacePath || ''}
-                  workspaceName={workspaceName || ''}
-                  onClose={() => {
-                    setSidebarView('files');
-                  }}
-                  isFirstTime={false}
-                />
-              ) : workspacePath ? (
+              {/* Main content (file tree + editor) */}
+              {workspacePath ? (
                 <TabsProvider
                   workspacePath={workspacePath}
                 >
@@ -1794,8 +1797,7 @@ export default function App() {
                   onClose={() => {
                     setActiveMode('files');
                     // Clear initial settings state so next open uses defaults
-                    setSettingsInitialCategory(undefined);
-                    setSettingsInitialScope(undefined);
+                    clearSettingsNavigation();
                   }}
                 />
               </div>
@@ -1941,7 +1943,7 @@ export default function App() {
             // Use setTimeout to ensure state updates are flushed before switching modes
             setSettingsInitialCategory('tool-packages');
             setSettingsInitialScope('project');
-            setSettingsKey(k => k + 1); // Force SettingsView remount
+            incrementSettingsKey(); // Force SettingsView remount
             // Defer mode change to next tick so initial values are set first
             setTimeout(() => setActiveMode('settings'), 0);
           }}
@@ -1960,12 +1962,13 @@ export default function App() {
       <MockupPickerMenuHost />
       <ExtensionHostComponents />
       <UpdateToast />
+      <NotificationSessionChecker />
       <ProjectTrustToast
         workspacePath={workspacePath}
         onOpenSettings={() => {
           setSettingsInitialCategory('agent-permissions');
           setSettingsInitialScope('project');
-          setSettingsKey(k => k + 1);
+          incrementSettingsKey();
           setTimeout(() => setActiveMode('settings'), 0);
         }}
         forceShow={forceShowTrustToast}

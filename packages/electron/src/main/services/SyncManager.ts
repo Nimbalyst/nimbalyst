@@ -334,6 +334,11 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
     cachedUserId = stytchUserId;
     connectionTime = Date.now(); // Reset connection time on init
 
+    // Apply idle timeout from config (default 5 minutes)
+    if (config.idleTimeoutMinutes !== undefined) {
+      setIdleThresholdMs(config.idleTimeoutMinutes * 60 * 1000);
+    }
+
     // Get initial device info for logging
     const initialDeviceInfo = getDeviceInfo(stytchUserId);
     logger.main.info('[SyncManager] Initial device info:', JSON.stringify(initialDeviceInfo));
@@ -411,9 +416,10 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
           const fetchTime = performance.now() - fetchStart;
           logger.main.info(`[SyncManager] Server has ${serverIndex.sessions.length} sessions (fetch took ${fetchTime.toFixed(1)}ms)`);
         } catch (fetchError) {
-          logger.main.warn('[SyncManager] Failed to fetch server index, falling back to full sync:', fetchError);
-          // Fall back to full sync if we can't fetch the index
-          serverIndex = { sessions: [], projects: [] };
+          // Don't fall back to full sync - that would load ALL messages for ALL sessions into memory
+          // and cause OOM crashes. Instead, skip sync and wait for connection to be restored.
+          logger.main.warn('[SyncManager] Failed to fetch server index, skipping sync until connection restored:', fetchError);
+          return;
         }
 
         // Build a map of server sessions for quick lookup
@@ -438,7 +444,8 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
           ? new Set(enabledProjects)
           : null; // null means all projects enabled
 
-        // Step 4: Find sessions that need syncing
+        // Step 4: Find sessions that need syncing using timestamp comparison
+        // Compare local updated_at vs server updated_at - if local is newer, we have changes to sync
         const sessionsNeedingIndexUpdate: typeof allLocalSessions = [];
         const sessionsNeedingMessageSync: string[] = [];
 
@@ -461,19 +468,17 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
             sessionsNeedingIndexUpdate.push(localSession);
             sessionsNeedingMessageSync.push(localSession.id);
           } else {
-            // Check if we have more messages than the server
-            // This is the reliable way to know if messages need syncing
-            // (timestamps can drift between devices)
-            const serverMessageCount = serverSession.message_count || 0;
-            const localMessageCount = localSession.messageCount || 0;
+            // Compare timestamps - if local is newer than server's last sync, we have new messages
+            const serverUpdatedAt = serverSession.updated_at || 0;
+            const localUpdatedAt = localSession.updatedAt || 0;
 
-            if (localMessageCount > serverMessageCount) {
-              // We have messages the server doesn't have
+            if (localUpdatedAt > serverUpdatedAt) {
+              // We have changes the server doesn't have
               sessionsNeedingIndexUpdate.push(localSession);
               sessionsNeedingMessageSync.push(localSession.id);
-              logger.main.info(`[SyncManager] Session ${localSession.id} needs message sync: local=${localMessageCount} server=${serverMessageCount}`);
+              logger.main.info(`[SyncManager] Session ${localSession.id} needs sync: local=${localUpdatedAt} server=${serverUpdatedAt}`);
             }
-            // If server has same or more messages, we're in sync (or server has messages from other devices)
+            // If server has same or newer timestamp, we're in sync
           }
         }
 
@@ -494,15 +499,15 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
 
             for (const session of sessionsNeedingIndexUpdate) {
               if (sessionsNeedingMessageSync.includes(session.id)) {
-                // Get the server's message count as offset - only fetch messages after that
+                // Get the server's last_message_at timestamp - only fetch messages after that
                 const serverSession = serverSessionMap.get(session.id);
-                const serverMessageCount = serverSession?.message_count || 0;
+                const sinceTimestamp = serverSession?.last_message_at || 0;
 
-                // Only load messages the server doesn't have
-                const newMessages = await getSessionMessagesForSync(session.id, serverMessageCount);
+                // Only load messages newer than server's last message
+                const newMessages = await getSessionMessagesForSync(session.id, sinceTimestamp);
                 session.messages = newMessages;
 
-                logger.main.info(`[SyncManager] Session ${session.id}: syncing ${newMessages.length} new messages (server has ${serverMessageCount})`);
+                logger.main.info(`[SyncManager] Session ${session.id}: syncing ${newMessages.length} new messages (since ${new Date(sinceTimestamp).toISOString()})`);
               }
             }
           }
@@ -518,6 +523,61 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
         logger.main.warn('[SyncManager] Failed to sync sessions:', error);
       }
     }, 2000); // Wait for index connection
+
+    // Sync current OpenAI API key to mobile (in case mobile connects after key was set)
+    setTimeout(async () => {
+      try {
+        const Store = (await import('electron-store')).default;
+        const aiStore = new Store({ name: 'ai-settings' });
+        const apiKeys = aiStore.get('apiKeys', {}) as Record<string, string>;
+        const openaiKey = apiKeys['openai'];
+        if (openaiKey) {
+          logger.main.info('[SyncManager] Syncing existing OpenAI API key to mobile devices');
+          syncSettingsToMobile(openaiKey);
+        }
+      } catch (error) {
+        logger.main.warn('[SyncManager] Failed to sync initial settings:', error);
+      }
+    }, 3000); // Wait a bit for index connection to be established
+
+    // Sync settings whenever a mobile device connects (joins or reconnects)
+    // Track which mobile devices are currently connected so we can detect when one joins
+    let previousMobileDeviceIds = new Set<string>();
+    let isFirstCallback = true;
+    if (provider.onDeviceStatusChange) {
+      provider.onDeviceStatusChange((devices) => {
+        const mobileDevices = devices.filter(d => d.type === 'mobile');
+        const currentMobileIds = new Set(mobileDevices.map(d => d.device_id));
+
+        // Check for mobile devices that just connected (weren't in the previous set)
+        for (const device of mobileDevices) {
+          if (!previousMobileDeviceIds.has(device.device_id)) {
+            logger.main.info(`[SyncManager] Mobile device connected: ${device.name}, syncing settings...`);
+            // On first callback, add a small delay to ensure WebSocket is fully ready
+            // This handles the case where mobile connected before desktop registered the listener
+            const delay = isFirstCallback ? 1000 : 0;
+            setTimeout(() => {
+              // Sync settings to the mobile device
+              import('electron-store').then(({ default: Store }) => {
+                const aiStore = new Store({ name: 'ai-settings' });
+                const apiKeys = aiStore.get('apiKeys', {}) as Record<string, string>;
+                const openaiKey = apiKeys['openai'];
+                if (openaiKey) {
+                  syncSettingsToMobile(openaiKey);
+                } else {
+                  logger.main.debug('[SyncManager] No OpenAI API key to sync');
+                }
+              }).catch((err) => {
+                logger.main.warn('[SyncManager] Failed to sync settings to device:', err);
+              });
+            }, delay);
+          }
+        }
+
+        previousMobileDeviceIds = currentMobileIds;
+        isFirstCallback = false;
+      });
+    }
 
     // Mark as connected
     updateSyncStatus({ connected: true, syncing: false, error: null });
@@ -605,8 +665,10 @@ export async function triggerIncrementalSync(): Promise<void> {
       const fetchTime = performance.now() - fetchStart;
       logger.main.info(`[SyncManager] Server has ${serverIndex.sessions.length} sessions (fetch took ${fetchTime.toFixed(1)}ms)`);
     } catch (fetchError) {
-      logger.main.warn('[SyncManager] Failed to fetch server index:', fetchError);
-      serverIndex = { sessions: [], projects: [] };
+      // Don't fall back to full sync - that would load ALL messages for ALL sessions into memory
+      // and cause OOM crashes. Instead, skip sync and wait for connection to be restored.
+      logger.main.warn('[SyncManager] Failed to fetch server index, skipping incremental sync:', fetchError);
+      return;
     }
 
     // Build a map of server sessions for quick lookup
@@ -630,7 +692,7 @@ export async function triggerIncrementalSync(): Promise<void> {
       ? new Set(enabledProjects)
       : null;
 
-    // Find sessions that need syncing
+    // Find sessions that need syncing using timestamp comparison
     const sessionsNeedingIndexUpdate: typeof allLocalSessions = [];
     const sessionsNeedingMessageSync: string[] = [];
 
@@ -650,13 +712,14 @@ export async function triggerIncrementalSync(): Promise<void> {
         sessionsNeedingIndexUpdate.push(localSession);
         sessionsNeedingMessageSync.push(localSession.id);
       } else {
-        const serverMessageCount = serverSession.message_count || 0;
-        const localMessageCount = localSession.messageCount || 0;
+        // Compare timestamps - if local is newer than server's last sync, we have new messages
+        const serverUpdatedAt = serverSession.updated_at || 0;
+        const localUpdatedAt = localSession.updatedAt || 0;
 
-        if (localMessageCount > serverMessageCount) {
+        if (localUpdatedAt > serverUpdatedAt) {
           sessionsNeedingIndexUpdate.push(localSession);
           sessionsNeedingMessageSync.push(localSession.id);
-          logger.main.info(`[SyncManager] Session ${localSession.id} needs message sync: local=${localMessageCount} server=${serverMessageCount}`);
+          logger.main.info(`[SyncManager] Session ${localSession.id} needs sync: local=${localUpdatedAt} server=${serverUpdatedAt}`);
         }
       }
     }
@@ -677,10 +740,10 @@ export async function triggerIncrementalSync(): Promise<void> {
         for (const session of sessionsNeedingIndexUpdate) {
           if (sessionsNeedingMessageSync.includes(session.id)) {
             const serverSession = serverSessionMap.get(session.id);
-            const serverMessageCount = serverSession?.message_count || 0;
-            const newMessages = await getSessionMessagesForSync(session.id, serverMessageCount);
+            const sinceTimestamp = serverSession?.last_message_at || 0;
+            const newMessages = await getSessionMessagesForSync(session.id, sinceTimestamp);
             session.messages = newMessages;
-            logger.main.info(`[SyncManager] Session ${session.id}: syncing ${newMessages.length} new messages`);
+            logger.main.info(`[SyncManager] Session ${session.id}: syncing ${newMessages.length} new messages (since ${new Date(sinceTimestamp).toISOString()})`);
           }
         }
       }
@@ -695,5 +758,67 @@ export async function triggerIncrementalSync(): Promise<void> {
     logger.main.info(`[SyncManager] Triggered sync completed in ${totalSyncTime.toFixed(1)}ms`);
   } catch (error) {
     logger.main.error('[SyncManager] Triggered sync failed:', error);
+  }
+}
+
+// ============================================================================
+// Settings Sync (Desktop -> Mobile)
+// ============================================================================
+
+// Track settings version to avoid re-syncing unchanged settings
+let settingsVersion = 0;
+
+/**
+ * Get voice mode settings from the settings store.
+ */
+async function getVoiceModeSettings(): Promise<{ voice?: string; submitDelayMs?: number } | undefined> {
+  try {
+    const Store = (await import('electron-store')).default;
+    const settingsStore = new Store<Record<string, unknown>>({ name: 'nimbalyst-settings' });
+    const voiceMode = settingsStore.get('voiceMode') as { voice?: string; submitDelayMs?: number } | undefined;
+    return voiceMode;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Sync sensitive settings to mobile devices.
+ * Syncs the OpenAI API key and voice mode settings.
+ *
+ * @param openaiApiKey The OpenAI API key to sync
+ */
+export async function syncSettingsToMobile(openaiApiKey?: string): Promise<void> {
+  const provider = state.provider;
+  if (!provider) {
+    logger.main.debug('[SyncManager] Cannot sync settings - provider not initialized');
+    return;
+  }
+
+  if (!provider.syncSettings) {
+    logger.main.debug('[SyncManager] Provider does not support syncSettings');
+    return;
+  }
+
+  // Increment version to ensure mobile gets the latest
+  settingsVersion++;
+
+  // Get voice mode settings
+  const voiceModeSettings = await getVoiceModeSettings();
+
+  logger.main.info(`[SyncManager] Syncing settings to mobile devices (version ${settingsVersion})`);
+
+  try {
+    await provider.syncSettings({
+      openaiApiKey,
+      voiceMode: voiceModeSettings ? {
+        voice: voiceModeSettings.voice as 'alloy' | 'ash' | 'ballad' | 'coral' | 'echo' | 'sage' | 'shimmer' | 'verse' | 'marin' | 'cedar' | undefined,
+        submitDelayMs: voiceModeSettings.submitDelayMs,
+      } : undefined,
+      version: settingsVersion,
+    });
+    logger.main.info('[SyncManager] Settings synced successfully');
+  } catch (error) {
+    logger.main.error('[SyncManager] Failed to sync settings:', error);
   }
 }

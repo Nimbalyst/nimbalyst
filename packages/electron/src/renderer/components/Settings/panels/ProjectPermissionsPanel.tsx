@@ -1,32 +1,21 @@
-import React, { useState, useEffect, useCallback } from 'react';
+/**
+ * Project Permissions Panel
+ *
+ * Manages agent permissions for a workspace including trust status,
+ * permission mode, allowed patterns, directories, and URL patterns.
+ *
+ * Uses Jotai atom family for workspace-scoped state that stays in sync
+ * with TrustIndicator and other consumers.
+ */
+
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import { useAtom } from 'jotai';
 import { usePostHog } from 'posthog-js/react';
-
-interface PatternRule {
-  pattern: string;
-  displayName: string;
-  addedAt: number;
-}
-
-interface AdditionalDirectory {
-  path: string;
-  addedAt: number;
-}
-
-interface AllowedUrlPattern {
-  pattern: string;
-  description: string;
-  addedAt: number;
-}
-
-type PermissionMode = 'ask' | 'allow-all' | 'bypass-all';
-
-interface PermissionsState {
-  trustedAt?: number;
-  permissionMode: PermissionMode | null;
-  allowedPatterns: PatternRule[];
-  additionalDirectories: AdditionalDirectory[];
-  allowedUrlPatterns: AllowedUrlPattern[];
-}
+import {
+  workspacePermissionsAtomFamily,
+  loadWorkspacePermissions,
+  type PermissionMode,
+} from '../../../store/atoms/appSettings';
 
 interface ProjectPermissionsPanelProps {
   workspacePath: string;
@@ -38,8 +27,15 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
   workspaceName,
 }) => {
   const posthog = usePostHog();
-  const [permissions, setPermissions] = useState<PermissionsState | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+
+  // Get the atom for this workspace
+  const permissionsAtom = useMemo(
+    () => workspacePermissionsAtomFamily(workspacePath),
+    [workspacePath]
+  );
+  const [permissionsState, setPermissionsState] = useAtom(permissionsAtom);
+
+  // Local UI state
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isAddingDirectory, setIsAddingDirectory] = useState(false);
@@ -47,23 +43,20 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
   const [newUrlPattern, setNewUrlPattern] = useState('');
   const [newUrlDescription, setNewUrlDescription] = useState('');
 
-  // Load permissions on mount
+  // Extract permissions from state
+  const { loading, error: loadError } = permissionsState;
+  const permissions = permissionsState;
+
+  // Load permissions on mount or workspace change
   const loadPermissions = useCallback(async () => {
     if (!workspacePath) return;
-
-    setIsLoading(true);
     setError(null);
-
-    try {
-      const result = await window.electronAPI.invoke('permissions:getWorkspacePermissions', workspacePath);
-      setPermissions(result);
-    } catch (err) {
-      console.error('Failed to load permissions:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load permissions');
-    } finally {
-      setIsLoading(false);
+    const state = await loadWorkspacePermissions(workspacePath);
+    setPermissionsState(state);
+    if (state.error) {
+      setError(state.error);
     }
-  }, [workspacePath]);
+  }, [workspacePath, setPermissionsState]);
 
   useEffect(() => {
     loadPermissions();
@@ -71,7 +64,7 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
 
   // Track screen open
   useEffect(() => {
-    if (permissions) {
+    if (!loading && permissions.permissionMode !== undefined) {
       posthog?.capture('agent_permissions_opened', {
         isTrusted: permissions.permissionMode !== null,
         permissionMode: permissions.permissionMode,
@@ -79,7 +72,7 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
         additionalDirectoriesCount: permissions.additionalDirectories.length,
       });
     }
-  }, [permissions, posthog]);
+  }, [permissions, loading, posthog]);
 
   const handleTrustWorkspace = async () => {
     try {
@@ -257,7 +250,7 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
     );
   }
 
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="settings-panel-content">
         <div className="settings-panel-loading">Loading permissions...</div>
@@ -275,10 +268,10 @@ export const ProjectPermissionsPanel: React.FC<ProjectPermissionsPanelProps> = (
         </p>
       </div>
 
-      {error && (
+      {(error || loadError) && (
         <div className="settings-message error">
           <span className="material-symbols-outlined">error</span>
-          <span>{error}</span>
+          <span>{error || loadError}</span>
         </div>
       )}
 
