@@ -7,10 +7,8 @@
 
 /**
  * Content modes available in workspace windows
+ * - files: File tree and editor tabs
+ * - agent: Agentic coding panel
+ * - settings: Settings view
  */
-export type ContentMode = 'files' | 'agent' | 'tracker' | 'settings';
-
-/**
- * Sidebar views (orthogonal to content modes)
- */
-export type SidebarView = 'files' | 'settings';
+export type ContentMode = 'files' | 'agent' | 'settings';

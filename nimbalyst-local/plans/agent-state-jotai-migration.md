@@ -17,12 +17,30 @@ planStatus:
     - performance
     - architecture
   created: "2026-01-16"
-  updated: "2026-01-17T02:30:00.000Z"
-  progress: 27
+  updated: "2026-01-19T00:00:00.000Z"
+  progress: 45
   startDate: "2026-01-16"
 ---
-
 # Agent Mode State Migration to Jotai
+
+## Priority: App.tsx State Extraction
+
+**The immediate focus is removing state from App.tsx that belongs in child views.**
+
+App.tsx currently has 30+ useState variables, many of which are passed as props to child components. This causes:
+1. **Full App.tsx re-renders** when any of these states change
+2. **Prop drilling** - state that belongs in child views leaks into App.tsx
+3. **Tight coupling** - child components depend on App.tsx rather than managing their own state
+
+**Next Steps (Phases 4-7):**
+- Phase 4: Content Mode (`activeMode`, `sidebarView`) - mode switching state
+- Phase 5: Agent Mode state (`aiChatWidth`, `planningMode`, `sessionToLoad`, etc.)
+- Phase 6: Settings Navigation (`settingsInitialCategory`, `settingsInitialScope`)
+- Phase 7: Extension Panels (`activeExtensionPanel`)
+
+Note: Bottom panel state (`bottomPanel`, `bottomPanelHeight`) is intentionally kept in App.tsx as it's truly global state shared across all modes.
+
+---
 
 ## Implementation Progress
 
@@ -49,12 +67,41 @@ planStatus:
 - [x] SessionDropdown updated to use SessionStatusIndicator with atoms
 - [x] AgentSessionHeader updated to subscribe to sessionProcessingAtom
 
-### Phase 4: Worktree State Atoms
+### Phase 4: App.tsx State Extraction - Content Mode (COMPLETED)
+**Goal:** Remove cross-cutting state from App.tsx. Child views should own their state.
+
+- [x] Create `contentMode.ts` with `activeModeAtom`, `sidebarViewAtom`
+- [x] App.tsx uses atoms instead of useState for activeMode, sidebarView
+- [x] Init function loads mode from workspace state
+- [ ] NavigationGutter subscribes to atoms instead of receiving props (optional optimization)
+
+### Phase 5: App.tsx State Extraction - Bottom Panel (SKIPPED - global state)
+Bottom panel is intentionally kept in App.tsx as it's truly global state shared across all modes.
+
+### Phase 6: App.tsx State Extraction - Agent Mode State
+- [ ] Move `isAIChatCollapsed`, `aiChatWidth` to `agentMode.ts`
+- [ ] Move `aiPlanningModeEnabled` to `agentMode.ts`
+- [ ] Move `sessionToLoad`, `currentAISessionId` to `sessions.ts`
+- [ ] Move `agentPlanReference` to `agentMode.ts`
+- [ ] EditorMode and AgenticPanel subscribe to atoms directly
+
+### Phase 7: App.tsx State Extraction - Settings Navigation (COMPLETED)
+- [x] Create `settingsNavigation.ts` with settings deep-link atoms
+- [x] App.tsx uses atoms instead of useState for settings navigation
+- [x] All setSettingsKey usages updated to incrementSettingsKey()
+- [x] clearSettingsNavigation() used on settings close
+
+### Phase 8: App.tsx State Extraction - Extension Panels
+- [ ] Move `activeExtensionPanel` to atoms
+- [ ] NavigationGutter and PanelContainer subscribe directly
+- [ ] Remove prop drilling for extension panel state
+
+### Phase 9: Worktree State Atoms (DEFERRED)
 - [ ] Create `worktrees.ts` with worktree atoms
 - [ ] Remove `worktreeCache` useState from SessionHistory
 - [ ] Worktree data loads on demand via atoms
 
-### Phase 5: Session Tabs State (Per-Session Editor Tabs)
+### Phase 10: Session Tabs State (DEFERRED - Per-Session Editor Tabs)
 - [ ] Add `sessionTabsAtomFamily` to sessions.ts
 - [ ] Create `session_tabs` database table with migration
 - [ ] Create IPC handlers for session tabs
@@ -62,36 +109,12 @@ planStatus:
 - [ ] Open file in session creates tab
 - [ ] Tab persists across app restart
 
-### Phase 6: Active Mode Atom
-- [ ] Create `contentMode.ts` with `activeModeAtom`
-- [ ] Remove `activeMode` useState from App.tsx
-- [ ] NavigationGutter uses atom for active mode indicator
-- [ ] Mode persists across restart
-
-### Phase 7: Session Tabs in AgenticPanel
+### Phase 11: AgenticPanel Session Tabs Cleanup
 - [ ] Add `openSessionTabsAtom` and `activeSessionTabIdAtom`
 - [ ] Remove `sessionTabs`, `activeTabId`, `closedSessions` useState
 - [ ] Session tabs persist across refresh
 
-### Phase 8: AgenticPanel Cleanup
-- [ ] Audit all remaining useState in AgenticPanel
-- [ ] Move any cross-cutting state to atoms
-- [ ] Target: < 5 useState variables
-
-### Phase 9: App.tsx State Extraction
-- [ ] Create `contentMode.ts` atoms (activeMode, sidebarView)
-- [ ] Create `bottomPanel.ts` atoms
-- [ ] Create `settingsNavigation.ts` atoms
-- [ ] Update `agentMode.ts` with isAIChatCollapsed, aiChatWidth, aiPlanningModeEnabled
-- [ ] Move sessionToLoad, currentAISessionId to sessions.ts
-- [ ] Update NavigationGutter to use atoms
-- [ ] Update EditorMode to use atoms
-- [ ] Update AgenticPanel to use atoms
-- [ ] Update TrackerBottomPanel to use atoms
-- [ ] Remove all migrated useState from App.tsx
-- [ ] App.tsx doesn't re-render when activeMode changes
-
-### Phase 10: Documentation
+### Phase 12: Documentation
 - [ ] Update CLAUDE.md with agent state atom patterns
 - [ ] Document session atom family usage
 - [ ] Document scale considerations for atom families
@@ -341,7 +364,7 @@ export const sessionTabsAtomFamily = atomFamily(
 ### Persistence Strategy
 
 | Data Type | Storage | Load Strategy |
-|-----------|---------|---------------|
+| --- | --- | --- |
 | Session list | PGLite | Load on workspace open, hydrate `sessionListAtom` |
 | Per-session tabs | PGLite (`session_tabs` table) | Load on session open, hydrate atom family instance |
 | Agent layout (widths, collapsed) | workspace-settings | Load once, persist debounced |
@@ -374,20 +397,20 @@ The phases are ordered to build incrementally, but **Phase 9 (App.tsx cleanup) i
 
 **Files to Modify:**
 1. `packages/electron/src/renderer/store/atoms/sessions.ts`
-   - Add `initSessionList(workspacePath)` function
-   - Add `refreshSessionListAtom` action for explicit refresh
+  - Add `initSessionList(workspacePath)` function
+  - Add `refreshSessionListAtom` action for explicit refresh
 
 2. `packages/electron/src/renderer/index.tsx` (or app init)
-   - Call `initSessionList()` after workspace path known
+  - Call `initSessionList()` after workspace path known
 
 3. `packages/electron/src/renderer/components/AgenticCoding/SessionHistory.tsx`
-   - Replace `useState` session list with `useAtomValue(sessionListAtom)`
-   - Remove IPC `sessions:list` calls
-   - Receive updates via atom subscription
+  - Replace `useState` session list with `useAtomValue(sessionListAtom)`
+  - Remove IPC `sessions:list` calls
+  - Receive updates via atom subscription
 
 4. `packages/electron/src/renderer/components/UnifiedAI/AgenticPanel.tsx`
-   - Remove `availableSessions` useState
-   - Use atom for session operations
+  - Remove `availableSessions` useState
+  - Use atom for session operations
 
 **Validation:**
 - [ ] Session list loads from atom, not IPC
@@ -401,7 +424,7 @@ The phases are ordered to build incrementally, but **Phase 9 (App.tsx cleanup) i
 
 **Files to Create/Modify:**
 1. `packages/electron/src/renderer/store/atoms/agentMode.ts` (new)
-   ```typescript
+```typescript
    export interface AgentModeLayout {
      sessionHistoryWidth: number;
      sessionHistoryCollapsed: boolean;
@@ -432,14 +455,14 @@ The phases are ordered to build incrementally, but **Phase 9 (App.tsx cleanup) i
        store.set(agentModeLayoutAtom, saved.agentLayout);
      }
    }
-   ```
+```
 
 2. `packages/electron/src/renderer/components/UnifiedAI/AgenticPanel.tsx`
-   - Remove: `sessionHistoryWidth`, `sessionHistoryCollapsed`, `collapsedGroups`, `sortOrder` useState
-   - Use: `useAtom(agentModeLayoutAtom)` or derived atoms
+  - Remove: `sessionHistoryWidth`, `sessionHistoryCollapsed`, `collapsedGroups`, `sortOrder` useState
+  - Use: `useAtom(agentModeLayoutAtom)` or derived atoms
 
 3. `packages/electron/src/renderer/components/AgenticCoding/SessionHistory.tsx`
-   - Use atoms for collapsed groups, sort order
+  - Use atoms for collapsed groups, sort order
 
 **Validation:**
 - [ ] Layout persists across app restart
@@ -454,18 +477,18 @@ The phases are ordered to build incrementally, but **Phase 9 (App.tsx cleanup) i
 
 **Files to Modify:**
 1. `packages/electron/src/renderer/store/atoms/sessions.ts`
-   - Add `sessionSendingAtom(sessionId)` atom family
-   - Add derived `anySendingAtom`
-   - Ensure all status atoms are properly typed and documented
+  - Add `sessionSendingAtom(sessionId)` atom family
+  - Add derived `anySendingAtom`
+  - Ensure all status atoms are properly typed and documented
 
 2. `packages/electron/src/renderer/components/UnifiedAI/AgenticPanel.tsx`
-   - Remove: `sendingSessions`, `runningSessions`, `pendingPromptSessions` useState
-   - Use atom families directly where needed
-   - Update message handlers to set atoms instead of useState
+  - Remove: `sendingSessions`, `runningSessions`, `pendingPromptSessions` useState
+  - Use atom families directly where needed
+  - Update message handlers to set atoms instead of useState
 
 3. `packages/electron/src/renderer/components/AgenticCoding/SessionHistory.tsx`
-   - Remove status Set props
-   - Use atoms directly (already partially done via SessionStatusIndicator)
+  - Remove status Set props
+  - Use atoms directly (already partially done via SessionStatusIndicator)
 
 **Validation:**
 - [ ] SessionHistory doesn't re-render when session status changes
@@ -478,7 +501,7 @@ The phases are ordered to build incrementally, but **Phase 9 (App.tsx cleanup) i
 
 **Files to Create:**
 1. `packages/electron/src/renderer/store/atoms/worktrees.ts`
-   ```typescript
+```typescript
    export interface WorktreeInfo {
      id: string;
      workspacePath: string;
@@ -509,12 +532,12 @@ The phases are ordered to build incrementally, but **Phase 9 (App.tsx cleanup) i
        set(worktreeMapAtom, newMap);
      }
    );
-   ```
+```
 
 2. `packages/electron/src/renderer/components/AgenticCoding/SessionHistory.tsx`
-   - Remove: `worktreeCache` useState
-   - Use: `useSetAtom(loadWorktreeBatchAtom)` for loading
-   - Use: `useAtomValue(worktreeAtomFamily(id))` for reading
+  - Remove: `worktreeCache` useState
+  - Use: `useSetAtom(loadWorktreeBatchAtom)` for loading
+  - Use: `useAtomValue(worktreeAtomFamily(id))` for reading
 
 **Validation:**
 - [ ] Worktree data loads on demand
@@ -527,7 +550,7 @@ The phases are ordered to build incrementally, but **Phase 9 (App.tsx cleanup) i
 
 **Files to Create/Modify:**
 1. `packages/electron/src/renderer/store/atoms/sessions.ts`
-   ```typescript
+```typescript
    export interface SessionTabData {
      id: string;
      filePath: string;
@@ -559,10 +582,10 @@ The phases are ordered to build incrementally, but **Phase 9 (App.tsx cleanup) i
        }
      )
    );
-   ```
+```
 
 2. **Database Schema Update** (new table)
-   ```sql
+```sql
    CREATE TABLE session_tabs (
      id TEXT PRIMARY KEY,
      session_id TEXT NOT NULL REFERENCES ai_sessions(id) ON DELETE CASCADE,
@@ -574,24 +597,24 @@ The phases are ordered to build incrementally, but **Phase 9 (App.tsx cleanup) i
      created_at INTEGER DEFAULT (unixepoch() * 1000)
    );
    CREATE INDEX idx_session_tabs_session ON session_tabs(session_id);
-   ```
+```
 
 3. `packages/electron/src/renderer/components/UnifiedAI/AISessionView.tsx`
-   - Add embedded tab bar component
-   - Use `useAtom(sessionTabsAtomFamily(sessionId))`
-   - EditorHost pattern for tab content
+  - Add embedded tab bar component
+  - Use `useAtom(sessionTabsAtomFamily(sessionId))`
+  - EditorHost pattern for tab content
 
 4. New component: `SessionTabBar.tsx`
-   - Renders tabs within session context
-   - Tab actions: add, remove, switch, pin
-   - Integrates with session-specific EditorHost
+  - Renders tabs within session context
+  - Tab actions: add, remove, switch, pin
+  - Integrates with session-specific EditorHost
 
 5. **IPC Handlers** (main process)
-   - `session-tabs:list` - Load tabs for session
-   - `session-tabs:add` - Add tab
-   - `session-tabs:remove` - Remove tab
-   - `session-tabs:update` - Update tab (dirty, pin)
-   - `session-tabs:reorder` - Reorder tabs
+  - `session-tabs:list` - Load tabs for session
+  - `session-tabs:add` - Add tab
+  - `session-tabs:remove` - Remove tab
+  - `session-tabs:update` - Update tab (dirty, pin)
+  - `session-tabs:reorder` - Reorder tabs
 
 **Persistence Strategy:**
 - Tabs persist to database on change (debounced)
@@ -619,7 +642,7 @@ The phases are ordered to build incrementally, but **Phase 9 (App.tsx cleanup) i
 
 **Files to Modify:**
 1. `packages/electron/src/renderer/store/atoms/projectState.ts` (or new contentMode.ts)
-   ```typescript
+```typescript
    export type ContentMode = 'files' | 'agent' | 'settings';
 
    export const activeModeAtom = atom<ContentMode>('files');
@@ -637,16 +660,16 @@ The phases are ordered to build incrementally, but **Phase 9 (App.tsx cleanup) i
        }
      }
    );
-   ```
+```
 
 2. `packages/electron/src/renderer/App.tsx`
-   - Remove: `activeMode` useState
-   - Use: `useAtomValue(activeModeAtom)` for reading
-   - Use: `useSetAtom(setActiveModeAtom)` for writing
-   - Mode panels subscribe independently
+  - Remove: `activeMode` useState
+  - Use: `useAtomValue(activeModeAtom)` for reading
+  - Use: `useSetAtom(setActiveModeAtom)` for writing
+  - Mode panels subscribe independently
 
 3. `packages/electron/src/renderer/components/NavigationGutter.tsx`
-   - Use atom for active mode indicator
+  - Use atom for active mode indicator
 
 **Validation:**
 - [ ] Mode switch doesn't re-render App.tsx
@@ -661,7 +684,7 @@ This is the largest change - moving the open session tabs from component state t
 
 **Files to Modify:**
 1. `packages/electron/src/renderer/store/atoms/sessions.ts`
-   ```typescript
+```typescript
    export interface OpenSessionTab {
      sessionId: string;
      name: string;
@@ -678,15 +701,15 @@ This is the largest change - moving the open session tabs from component state t
    export const addSessionTabAtom = atom(null, (get, set, sessionId: string) => { ... });
    export const removeSessionTabAtom = atom(null, (get, set, sessionId: string) => { ... });
    export const switchSessionTabAtom = atom(null, (get, set, sessionId: string) => { ... });
-   ```
+```
 
 2. `packages/electron/src/renderer/components/UnifiedAI/AgenticPanel.tsx`
-   - Remove: `sessionTabs`, `activeTabId`, `closedSessions` useState
-   - Use: atoms for session tabs
-   - Significantly reduce component state
+  - Remove: `sessionTabs`, `activeTabId`, `closedSessions` useState
+  - Use: atoms for session tabs
+  - Significantly reduce component state
 
 3. `packages/electron/src/renderer/components/UnifiedAI/SessionTabBar.tsx` (if exists)
-   - Use atoms directly
+  - Use atoms directly
 
 **Validation:**
 - [ ] Session tabs persist across refresh
@@ -710,9 +733,9 @@ After phases 1-7, AgenticPanel should have minimal useState:
 
 **Files to Modify:**
 1. `packages/electron/src/renderer/components/UnifiedAI/AgenticPanel.tsx`
-   - Audit all remaining useState
-   - Move any cross-cutting state to atoms
-   - Ensure no prop drilling to children
+  - Audit all remaining useState
+  - Move any cross-cutting state to atoms
+  - Ensure no prop drilling to children
 
 ### Phase 9: App.tsx State Extraction (MAJOR)
 
@@ -723,7 +746,7 @@ This is a critical phase that addresses the core architectural problem. **Every 
 **State to Move to Atoms:**
 
 | State Variable | Current | Target Atom File | Rationale |
-|---------------|---------|------------------|-----------|
+| --- | --- | --- | --- |
 | `activeMode` | useState | `contentMode.ts` | Cross-cutting, causes full re-render |
 | `sidebarView` | useState | `contentMode.ts` | Sidebar needs to read without App.tsx re-render |
 | `bottomPanel` | useState | `bottomPanel.ts` | TrackerBottomPanel reads it |
@@ -742,7 +765,7 @@ This is a critical phase that addresses the core architectural problem. **Every 
 **Files to Create/Modify:**
 
 1. **`packages/electron/src/renderer/store/atoms/contentMode.ts`** (new)
-   ```typescript
+```typescript
    import { atom } from 'jotai';
    import { atomWithStorage } from 'jotai/utils';
 
@@ -763,10 +786,10 @@ This is a critical phase that addresses the core architectural problem. **Every 
        // Persist handled separately by workspace state effect
      }
    );
-   ```
+```
 
 2. **`packages/electron/src/renderer/store/atoms/bottomPanel.ts`** (new)
-   ```typescript
+```typescript
    import { atom } from 'jotai';
 
    export type BottomPanelType = 'plan' | 'bug' | 'task' | 'idea' | null;
@@ -781,10 +804,10 @@ This is a critical phase that addresses the core architectural problem. **Every 
        set(bottomPanelAtom, current === panelType ? null : panelType);
      }
    );
-   ```
+```
 
 3. **`packages/electron/src/renderer/store/atoms/settingsNavigation.ts`** (new)
-   ```typescript
+```typescript
    import { atom } from 'jotai';
    import type { SettingsCategory } from '../components/Settings/SettingsSidebar';
    import type { SettingsScope } from '../components/Settings/SettingsView';
@@ -803,20 +826,20 @@ This is a critical phase that addresses the core architectural problem. **Every 
        set(activeModeAtom, 'settings');
      }
    );
-   ```
+```
 
-4. **Update `packages/electron/src/renderer/App.tsx`**
-   - Remove all migrated useState variables
-   - Replace with `useAtomValue` for reading, `useSetAtom` for writing
-   - Remove props that drill atoms down - children use atoms directly
-   - Dramatically reduce component complexity
+4. **Update ****`packages/electron/src/renderer/App.tsx`**
+  - Remove all migrated useState variables
+  - Replace with `useAtomValue` for reading, `useSetAtom` for writing
+  - Remove props that drill atoms down - children use atoms directly
+  - Dramatically reduce component complexity
 
 5. **Update all consumers:**
-   - `NavigationGutter.tsx` - Use `useAtomValue(activeModeAtom)` instead of props
-   - `EditorMode.tsx` - Use atoms for mode, chat collapsed state
-   - `AgenticPanel.tsx` - Use atoms for mode, planning enabled
-   - `TrackerBottomPanel.tsx` - Use atoms for panel state
-   - `SettingsView.tsx` - Use atoms for navigation state
+  - `NavigationGutter.tsx` - Use `useAtomValue(activeModeAtom)` instead of props
+  - `EditorMode.tsx` - Use atoms for mode, chat collapsed state
+  - `AgenticPanel.tsx` - Use atoms for mode, planning enabled
+  - `TrackerBottomPanel.tsx` - Use atoms for panel state
+  - `SettingsView.tsx` - Use atoms for navigation state
 
 **Before/After App.tsx:**
 
@@ -865,7 +888,7 @@ function NavigationGutter({ workspacePath }) {
 **Target State Count:**
 
 | Category | Current Count | Target Count |
-|----------|---------------|--------------|
+| --- | --- | --- |
 | Cross-cutting state | 15 | 0 |
 | Dialog open/close | 12 | 12 (acceptable) |
 | Initialization | 5 | 5 (acceptable) |
@@ -891,7 +914,7 @@ Add to CLAUDE.md:
 ## Risks and Mitigations
 
 | Risk | Mitigation |
-|------|------------|
+| --- | --- |
 | Breaking session persistence | Incremental migration with extensive testing |
 | Performance regression from atom overhead | Benchmark before/after; atom families are lazy |
 | Memory leaks from atom families | Implement cleanup when sessions deleted |
@@ -919,19 +942,19 @@ Add to CLAUDE.md:
 ## Success Metrics
 
 1. **Performance:**
-   - AgenticPanel renders < 5x per minute during idle
-   - Mode switch completes in < 100ms
-   - Session list updates without full re-render
+  - AgenticPanel renders < 5x per minute during idle
+  - Mode switch completes in < 100ms
+  - Session list updates without full re-render
 
 2. **Developer Experience:**
-   - useState count in AgenticPanel < 5
-   - No prop drilling for session state
-   - Clear atom patterns for new features
+  - useState count in AgenticPanel < 5
+  - No prop drilling for session state
+  - Clear atom patterns for new features
 
 3. **User Experience:**
-   - Session tabs persist across restart
-   - Instant feedback on session status
-   - Files can be opened within sessions
+  - Session tabs persist across restart
+  - Instant feedback on session status
+  - Files can be opened within sessions
 
 ## Dependencies
 
