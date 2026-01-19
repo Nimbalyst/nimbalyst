@@ -688,6 +688,24 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     }
   }, []);
 
+  // Rename a worktree
+  const handleWorktreeRename = useCallback(async (worktreeId: string, newName: string) => {
+    try {
+      await window.electronAPI.invoke('worktree:update-display-name', worktreeId, newName);
+      // Update worktree cache
+      setWorktreeCache(prev => {
+        const updated = new Map(prev);
+        const worktree = updated.get(worktreeId);
+        if (worktree) {
+          updated.set(worktreeId, { ...worktree, displayName: newName });
+        }
+        return updated;
+      });
+    } catch (error) {
+      console.error('[SessionHistory] Failed to rename worktree:', error);
+    }
+  }, []);
+
   const toggleSortDropdown = () => {
     setSortDropdownOpen(!sortDropdownOpen);
   };
@@ -1486,6 +1504,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                           onSessionArchive={handleArchiveSession}
                           onWorktreePinToggle={handleWorktreePinToggle}
                           onWorktreeArchive={handleArchiveWorktree}
+                          onWorktreeRename={handleWorktreeRename}
                           onSessionPinToggle={handleSessionPinToggle}
                           onSessionRename={onSessionRename}
                           onFilesMode={onWorktreeFilesMode}

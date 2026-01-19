@@ -48,6 +48,7 @@ interface WorktreeGroupProps {
   onSessionArchive?: (sessionId: string) => void;
   onWorktreePinToggle?: (worktreeId: string, isPinned: boolean) => void;
   onWorktreeArchive?: (worktreeId: string) => void;
+  onWorktreeRename?: (worktreeId: string, newName: string) => void;
   onSessionPinToggle?: (sessionId: string, isPinned: boolean) => void;
   onSessionRename?: (sessionId: string, newName: string) => void;
   onFilesMode?: (worktreeId: string) => void;
@@ -68,6 +69,7 @@ export const WorktreeGroup: React.FC<WorktreeGroupProps> = ({
   onSessionArchive,
   onWorktreePinToggle,
   onWorktreeArchive,
+  onWorktreeRename,
   onSessionPinToggle,
   onSessionRename,
   onFilesMode,
@@ -76,7 +78,10 @@ export const WorktreeGroup: React.FC<WorktreeGroupProps> = ({
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
   const [adjustedContextMenuPosition, setAdjustedContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
   const contextMenuRef = useRef<HTMLDivElement>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   // Sort sessions: pinned first, then by updatedAt
   const sortedSessions = React.useMemo(() => {
@@ -134,6 +139,40 @@ export const WorktreeGroup: React.FC<WorktreeGroupProps> = ({
     e.stopPropagation();
     onChangesMode?.(worktree.id);
   }, [onChangesMode, worktree.id]);
+
+  const handleRenameClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    setRenameValue(worktree.displayName || worktree.name);
+    setIsRenaming(true);
+  }, [worktree.displayName, worktree.name]);
+
+  const handleRenameSubmit = useCallback(() => {
+    const trimmedValue = renameValue.trim();
+    if (trimmedValue && trimmedValue !== (worktree.displayName || worktree.name) && onWorktreeRename) {
+      onWorktreeRename(worktree.id, trimmedValue);
+    }
+    setIsRenaming(false);
+  }, [renameValue, worktree.displayName, worktree.name, worktree.id, onWorktreeRename]);
+
+  const handleRenameKeyDown = useCallback((e: React.KeyboardEvent) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleRenameSubmit();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setIsRenaming(false);
+    }
+  }, [handleRenameSubmit]);
+
+  // Auto-focus and select text when rename input appears
+  useEffect(() => {
+    if (isRenaming && renameInputRef.current) {
+      renameInputRef.current.focus();
+      renameInputRef.current.select();
+    }
+  }, [isRenaming]);
 
   // Adjust context menu position to keep it within viewport
   useEffect(() => {
@@ -193,11 +232,24 @@ export const WorktreeGroup: React.FC<WorktreeGroupProps> = ({
           </div>
           <div className="worktree-group-content-wrapper">
             <div className="worktree-group-row-primary">
-              <span className="worktree-group-name">{worktree.displayName || worktree.name}</span>
-              {worktree.isPinned && (
+              {isRenaming ? (
+                <input
+                  ref={renameInputRef}
+                  type="text"
+                  className="worktree-group-rename-input"
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onKeyDown={handleRenameKeyDown}
+                  onBlur={handleRenameSubmit}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              ) : (
+                <span className="worktree-group-name">{worktree.displayName || worktree.name}</span>
+              )}
+              {!isRenaming && worktree.isPinned && (
                 <MaterialSymbol icon="push_pin" size={12} className="worktree-group-pin-icon" />
               )}
-              {worktree.isArchived && (
+              {!isRenaming && worktree.isArchived && (
                 <span className="worktree-group-badge archived">archived</span>
               )}
             </div>
@@ -283,6 +335,15 @@ export const WorktreeGroup: React.FC<WorktreeGroupProps> = ({
             >
               <MaterialSymbol icon={worktree.isPinned ? 'push_pin' : 'push_pin'} size={14} />
               {worktree.isPinned ? 'Unpin' : 'Pin'}
+            </button>
+          )}
+          {onWorktreeRename && (
+            <button
+              className="worktree-group-context-menu-item"
+              onClick={handleRenameClick}
+            >
+              <MaterialSymbol icon="edit" size={14} />
+              Rename
             </button>
           )}
           <button
