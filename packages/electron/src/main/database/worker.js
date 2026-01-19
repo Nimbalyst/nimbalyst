@@ -767,6 +767,48 @@ class PGLiteWorker {
       console.error('[PGLite Worker] Failed to add is_archived column to worktrees:', error);
       throw error;
     }
+
+    // Add branch tracking columns to ai_sessions (migration)
+    try {
+      await this.db.exec(`
+        DO $$
+        BEGIN
+          -- Add parent_session_id to track which session this was branched from
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'ai_sessions' AND column_name = 'parent_session_id'
+          ) THEN
+            ALTER TABLE ai_sessions ADD COLUMN parent_session_id TEXT REFERENCES ai_sessions(id) ON DELETE SET NULL;
+          END IF;
+
+          -- Add branch_point_message_id to track at which message the branch occurred
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'ai_sessions' AND column_name = 'branch_point_message_id'
+          ) THEN
+            ALTER TABLE ai_sessions ADD COLUMN branch_point_message_id BIGINT;
+          END IF;
+
+          -- Add branched_at timestamp to track when the branch was created
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'ai_sessions' AND column_name = 'branched_at'
+          ) THEN
+            ALTER TABLE ai_sessions ADD COLUMN branched_at TIMESTAMP;
+          END IF;
+        END $$;
+      `);
+
+      // Create index for branch queries
+      await this.db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_ai_sessions_parent ON ai_sessions(parent_session_id);
+      `);
+
+      console.log('[PGLite Worker] Branch tracking columns added to ai_sessions');
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to add branch tracking columns:', error);
+      throw error;
+    }
   }
 
   async query(message) {

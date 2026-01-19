@@ -292,3 +292,16 @@
   color: var(--primary-color);
   opacity: 0.8;
 }
+
+/* Branch icon */
+.session-list-item-branch-icon {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  margin-left: -0.25rem;
+  opacity: 0.6;
+}
+
+.session-list-item.active .session-list-item-branch-icon {
+  color: var(--primary-color);
+  opacity: 0.7;
+}

@@ -74,6 +74,11 @@ function sessionDataFromChatSession(session: ChatSession, fallbackWorkspace: str
     // Worktree fields - passed through from database query
     worktreeId: (session as any).worktreeId ?? undefined,
     worktreePath: (session as any).worktreePath ?? undefined,
+    // Branch tracking fields - passed through from database query
+    parentSessionId: (session as any).parentSessionId ?? undefined,
+    branchPointMessageId: (session as any).branchPointMessageId ?? undefined,
+    branchedAt: (session as any).branchedAt ?? undefined,
+    parentProviderSessionId: (session as any).parentProviderSessionId ?? undefined,
   } satisfies SessionData;
 }
 
@@ -576,6 +581,100 @@ export class SessionManager {
     return session;
   }
 
+  async branchSession(
+    parentSessionId: string,
+    branchPointMessageId?: number,
+    workspacePath?: string
+  ): Promise<SessionData> {
+    // Load the parent session to get its configuration
+    const parentSession = await this.loadSession(parentSessionId, workspacePath);
+    if (!parentSession) {
+      throw new Error(`Parent session ${parentSessionId} not found`);
+    }
+
+    // Create a new session ID for the branch
+    const branchSessionId = uuidv4();
+    const workspace = parentSession.workspacePath;
+    if (!workspace) {
+      throw new Error(`Parent session ${parentSessionId} has no workspacePath`);
+    }
+    const now = Date.now();
+
+    // Determine branch title with counter for duplicates
+    // Get existing branches to determine the next counter
+    const existingBranches = await AISessionsRepository.getBranches(parentSessionId);
+
+    // Strip "(branch)" or "(branch N)" prefix from parent title if present
+    const baseTitle = parentSession.title?.replace(/^\(branch(?: \d+)?\)\s+/, '') || 'Untitled';
+
+    let branchTitle: string;
+    if (existingBranches.length === 0) {
+      // First branch - no counter
+      branchTitle = `(branch) ${baseTitle}`;
+    } else {
+      // Find the highest existing counter
+      let maxCounter = 1; // Start at 1 since first branch has no counter
+      for (const branch of existingBranches) {
+        const match = branch.title?.match(/^\(branch (\d+)\)/);
+        if (match) {
+          maxCounter = Math.max(maxCounter, parseInt(match[1], 10));
+        }
+      }
+      branchTitle = `(branch ${maxCounter + 1}) ${baseTitle}`;
+    }
+
+    // Store parent's providerSessionId so we can fork from it
+    // This is the Claude SDK's session ID that we need to resume from
+    const parentProviderSessionId = parentSession.providerSessionId;
+
+    // Create the branch session with parent tracking
+    await AISessionsRepository.create({
+      id: branchSessionId,
+      provider: parentSession.provider,
+      model: parentSession.model,
+      sessionType: parentSession.sessionType,
+      mode: parentSession.mode,
+      workspaceId: workspace,
+      filePath: parentSession.documentContext?.filePath,
+      title: branchTitle,
+      providerConfig: parentSession.providerConfig as Record<string, unknown> | undefined,
+      documentContext: parentSession.documentContext as Record<string, unknown> | undefined,
+      worktreeId: parentSession.worktreeId,
+      worktreePath: parentSession.worktreePath,
+      worktreeProjectPath: parentSession.worktreeProjectPath,
+      parentSessionId,
+      branchPointMessageId,
+      branchedAt: now,
+    });
+
+    const session: SessionData = {
+      id: branchSessionId,
+      provider: parentSession.provider,
+      model: parentSession.model,
+      sessionType: parentSession.sessionType,
+      mode: parentSession.mode,
+      createdAt: now,
+      updatedAt: now,
+      messages: [],
+      documentContext: parentSession.documentContext,
+      workspacePath: workspace,
+      title: branchTitle,
+      providerConfig: parentSession.providerConfig,
+      worktreeId: parentSession.worktreeId,
+      worktreePath: parentSession.worktreePath,
+      worktreeProjectPath: parentSession.worktreeProjectPath,
+      parentSessionId,
+      branchPointMessageId,
+      branchedAt: now,
+      // Store parent's provider session ID for forking
+      parentProviderSessionId,
+    };
+
+    this.currentSession = session;
+    this.currentWorkspacePath = workspace;
+    return session;
+  }
+
   async loadSession(sessionId: string, workspacePath?: string): Promise<SessionData | null> {
     // workspacePath is REQUIRED for proper session routing
     if (!workspacePath && !this.currentWorkspacePath) {
@@ -613,7 +712,39 @@ export class SessionManager {
     }
 
     // Fetch raw agent messages from the database (already filtered to exclude hidden messages)
-    const agentMessages = await AgentMessagesRepository.list(sessionId);
+    let agentMessages = await AgentMessagesRepository.list(sessionId);
+    const branchMessageCount = agentMessages.length; // Store original count before prepending parent messages
+
+    // For branched sessions, prepend parent's messages (up to branch point)
+    // This allows viewing the conversation history that led to the branch
+    if (session.parentSessionId) {
+      const parentMessages = await AgentMessagesRepository.list(session.parentSessionId);
+
+      // If we have a branch point, only include parent messages up to that point
+      // The branchPointMessageId is the database message ID (auto-incrementing)
+      if (session.branchPointMessageId && parentMessages.length > 0) {
+        const branchPointIndex = parentMessages.findIndex(
+          (msg) => msg.id === session.branchPointMessageId
+        );
+        if (branchPointIndex >= 0) {
+          // Include messages up to and including the branch point
+          agentMessages = [...parentMessages.slice(0, branchPointIndex + 1), ...agentMessages];
+        } else {
+          // Branch point not found, include all parent messages
+          agentMessages = [...parentMessages, ...agentMessages];
+        }
+      } else {
+        // No branch point specified, include all parent messages
+        agentMessages = [...parentMessages, ...agentMessages];
+      }
+
+      console.log('[SessionManager] Loaded branch session with parent messages:', {
+        parentSessionId: session.parentSessionId,
+        parentMessageCount: parentMessages.length,
+        branchMessageCount,
+        totalMessageCount: agentMessages.length,
+      });
+    }
 
     // Transform raw messages into UI format
     // Hidden messages are already filtered out in transformAgentMessagesToUI

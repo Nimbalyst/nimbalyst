@@ -144,6 +144,12 @@ export interface SessionData {
   // Pin state
   isPinned?: boolean;  // Whether the session is pinned to the top of the list
 
+  // Branch tracking
+  parentSessionId?: string;  // ID of the session this was branched from
+  branchPointMessageId?: number;  // Message ID where this branch diverged
+  branchedAt?: number;  // Timestamp when the branch was created
+  parentProviderSessionId?: string;  // Parent's providerSessionId for forking (Claude Code SDK)
+
   // Token usage tracking (for providers that support it)
   tokenUsage?: {
     inputTokens: number;      // Cumulative input tokens across session lifetime

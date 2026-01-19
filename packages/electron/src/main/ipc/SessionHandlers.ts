@@ -140,6 +140,46 @@ export async function registerSessionHandlers() {
         }
     });
 
+    // Branch a session
+    safeHandle('sessions:branch', async (event, payload: {
+        parentSessionId: string;
+        branchPointMessageId?: number;
+        workspacePath?: string;
+    }) => {
+        try {
+            const { parentSessionId, branchPointMessageId, workspacePath } = payload;
+            const branchedSession = await sessionManager.branchSession(
+                parentSessionId,
+                branchPointMessageId,
+                workspacePath
+            );
+
+            // Notify all windows about the new branch
+            const { BrowserWindow } = await import('electron');
+            BrowserWindow.getAllWindows().forEach(window => {
+                if (!window.isDestroyed()) {
+                    window.webContents.send('sessions:session-created', branchedSession);
+                }
+            });
+
+            return { success: true, session: branchedSession };
+        } catch (error) {
+            console.error('[SessionHandlers] Failed to branch session:', error);
+            return { success: false, error: String(error) };
+        }
+    });
+
+    // Get branches for a session
+    safeHandle('sessions:get-branches', async (event, sessionId: string) => {
+        try {
+            const branches = await AISessionsRepository.getBranches(sessionId);
+            return { success: true, branches };
+        } catch (error) {
+            console.error('[SessionHandlers] Failed to get session branches:', error);
+            return { success: false, error: String(error) };
+        }
+    });
+
     // List sessions for workspace
     safeHandle('sessions:list', async (event, workspacePath: string, options?: { includeArchived?: boolean }) => {
         try {
@@ -161,6 +201,9 @@ export async function registerSessionHandlers() {
                 isArchived: entry.isArchived || false,
                 isPinned: (entry as any).isPinned || false,  // Include isPinned from repository
                 worktreeId: entry.worktreeId,  // Include worktreeId from repository
+                parentSessionId: entry.parentSessionId,  // Include branch tracking
+                branchPointMessageId: entry.branchPointMessageId,
+                branchedAt: entry.branchedAt,
                 metadata: {}
             }));
 

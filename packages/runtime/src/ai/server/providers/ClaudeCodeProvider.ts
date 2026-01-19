@@ -611,12 +611,40 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
       options.env = env;
 
-      // If we have a session ID and a claude session ID, resume
+      // Handle session resumption and branching
       if (sessionId) {
         const claudeSessionId = this.claudeSessionIds.get(sessionId);
+        console.log('[CLAUDE-CODE] Session resumption check:', {
+          sessionId,
+          existingClaudeSessionId: claudeSessionId,
+          parentSessionId: (documentContext as any)?.parentSessionId,
+          parentProviderSessionId: (documentContext as any)?.parentProviderSessionId,
+        });
         if (claudeSessionId) {
           options.resume = claudeSessionId;
+          console.log('[CLAUDE-CODE] Resuming existing session:', claudeSessionId);
         } else {
+          // Check if this is a branched session
+          const parentSessionId = (documentContext as any)?.parentSessionId;
+          const parentProviderSessionId = (documentContext as any)?.parentProviderSessionId;
+          if (parentSessionId && parentProviderSessionId) {
+            // Resume from parent's provider session ID and fork it
+            options.resume = parentProviderSessionId;
+            options.forkSession = true;
+            console.log('[CLAUDE-CODE] Branching from parent session:', parentSessionId, 'with provider session:', parentProviderSessionId);
+          } else if (parentSessionId) {
+            // Fallback: try the in-memory map (if parent was used in this app session)
+            const parentClaudeSessionId = this.claudeSessionIds.get(parentSessionId);
+            if (parentClaudeSessionId) {
+              options.resume = parentClaudeSessionId;
+              options.forkSession = true;
+              console.log('[CLAUDE-CODE] Branching from parent session (in-memory):', parentSessionId);
+            } else {
+              console.warn('[CLAUDE-CODE] Cannot branch: parent provider session ID not available. parentSessionId:', parentSessionId);
+            }
+          } else {
+            console.log('[CLAUDE-CODE] Starting new session (no parent or existing session ID)');
+          }
         }
       }
 

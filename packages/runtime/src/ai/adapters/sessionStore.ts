@@ -18,6 +18,9 @@ export interface SessionListItem {
   messageCount?: number;
   isArchived?: boolean;
   isPinned?: boolean;  // Whether this session is pinned to the top of the list
+  parentSessionId?: string;  // ID of the session this was branched from
+  branchPointMessageId?: number;  // Message ID where this branch diverged
+  branchedAt?: number;  // Timestamp when the branch was created
 }
 
 export interface CreateSessionPayload {
@@ -37,6 +40,9 @@ export interface CreateSessionPayload {
   documentContext?: Record<string, unknown> | undefined;
   createdAt?: number; // Optional override for imported sessions
   updatedAt?: number; // Optional override for imported sessions
+  parentSessionId?: string;  // ID of the session this was branched from
+  branchPointMessageId?: number;  // Message ID where this branch diverged
+  branchedAt?: number;  // Timestamp when the branch was created
 }
 
 export interface UpdateSessionMetadataPayload extends Partial<CreateSessionPayload> {
@@ -62,6 +68,11 @@ export interface SessionStore {
    * Returns true if the update succeeded, false if the session was already named.
    */
   updateTitleIfNotNamed?(sessionId: string, title: string): Promise<boolean>;
+  /**
+   * Get all branches for a given session.
+   * Returns sessions that have this session as their parent.
+   */
+  getBranches?(sessionId: string): Promise<SessionListItem[]>;
 }
 
 let activeSessionStore: SessionStore | null = null;

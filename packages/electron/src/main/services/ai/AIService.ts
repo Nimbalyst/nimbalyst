@@ -1681,7 +1681,10 @@ export class AIService {
           // Include worktree context so provider can warn Claude Code about the isolated environment
           worktreeId: session.worktreeId,
           worktreePath: session.worktreePath,
-          worktreeProjectPath: session.worktreeProjectPath
+          worktreeProjectPath: session.worktreeProjectPath,
+          // Include branch tracking for session forking (Claude Code SDK forkSession)
+          parentSessionId: session.parentSessionId,
+          parentProviderSessionId: session.parentProviderSessionId,
         } as any : {
           sessionType: session.sessionType,
           mode: session.mode,
@@ -1689,7 +1692,10 @@ export class AIService {
           attachments,
           worktreeId: session.worktreeId,
           worktreePath: session.worktreePath,
-          worktreeProjectPath: session.worktreeProjectPath
+          worktreeProjectPath: session.worktreeProjectPath,
+          // Include branch tracking for session forking (Claude Code SDK forkSession)
+          parentSessionId: session.parentSessionId,
+          parentProviderSessionId: session.parentProviderSessionId,
         } as any;
 
         // Update MCP document state for Claude Code provider so it knows which file-scoped tools to show

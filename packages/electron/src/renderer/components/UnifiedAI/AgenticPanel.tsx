@@ -3144,6 +3144,35 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     await openSessionInTab(lastClosed.id);
   }, [closedSessions, openSessionInTab]);
 
+  const handleSessionBranch = useCallback(async (sessionId: string) => {
+    try {
+      console.log('[AgenticPanel] Branching session:', sessionId);
+
+      // Call IPC to create a branch
+      const result = await window.electronAPI.invoke('sessions:branch', {
+        parentSessionId: sessionId,
+        workspacePath
+      });
+
+      if (result.success && result.session) {
+        console.log('[AgenticPanel] Branch created:', result.session.id);
+
+        // Refresh session list to show the new branch
+        await loadSessions();
+        triggerSessionHistoryRefresh('branch');
+
+        // Open the new branch in a tab
+        await openSessionInTab(result.session.id);
+      } else {
+        console.error('[AgenticPanel] Failed to branch session:', result.error);
+        errorNotificationService.showError('Failed to branch conversation', result.error || 'Unknown error');
+      }
+    } catch (err) {
+      console.error('[AgenticPanel] Error branching session:', err);
+      errorNotificationService.showError('Failed to branch conversation', String(err));
+    }
+  }, [workspacePath, loadSessions, triggerSessionHistoryRefresh, openSessionInTab]);
+
   const handleOpenImportDialog = useCallback(() => {
     setImportDialogOpen(true);
   }, []);
@@ -3388,6 +3417,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             onSessionDelete={deleteSession}
             onSessionArchive={closeArchivedSession}
             onSessionRename={handleTabRename}
+            onSessionBranch={handleSessionBranch}
             onNewSession={() => createNewSession()}
             onNewTerminal={releaseChannel === 'alpha' ? () => createNewTerminal() : undefined}
             onNewWorktreeSession={releaseChannel === 'alpha' ? createNewWorktreeSession : undefined}

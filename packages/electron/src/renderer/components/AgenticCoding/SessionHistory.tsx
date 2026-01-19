@@ -35,6 +35,9 @@ interface SessionItem {
   isArchived?: boolean;
   isPinned?: boolean; // Whether this session is pinned to the top
   worktree_id?: string | null; // Associated worktree ID if this is a worktree session
+  parentSessionId?: string; // ID of parent session if this is a branch
+  branchPointMessageId?: number; // Message ID where this branch diverged
+  branchedAt?: number; // Timestamp when this session was branched
 }
 
 interface WorktreeData {
@@ -70,6 +73,7 @@ interface SessionHistoryProps {
   onSessionDelete?: (sessionId: string) => void;
   onSessionArchive?: (sessionId: string) => void; // Callback when session is archived (to close tab)
   onSessionRename?: (sessionId: string, newName: string) => void; // Callback when session is renamed
+  onSessionBranch?: (sessionId: string) => void; // Callback when user wants to branch a session
   onNewSession?: () => void;
   onNewTerminal?: () => void; // Callback for creating a new terminal session
   onNewWorktreeSession?: () => void; // Callback for creating new worktree session
@@ -175,6 +179,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   onSessionDelete,
   onSessionArchive,
   onSessionRename,
+  onSessionBranch,
   onNewSession,
   onNewTerminal,
   onNewWorktreeSession,
@@ -1532,6 +1537,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                           onUnarchive={() => handleUnarchiveSession(session.id)}
                           onRename={onSessionRename ? (newName: string) => onSessionRename(session.id, newName) : undefined}
                           onPinToggle={(isPinned) => handleSessionPinToggle(session.id, isPinned)}
+                          onBranch={onSessionBranch ? () => onSessionBranch(session.id) : undefined}
                           provider={session.provider}
                           model={session.model}
                           messageCount={session.messageCount}
@@ -1539,6 +1545,8 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                           hasUnread={session.hasUnread}
                           hasPendingPrompt={session.hasPendingPrompt}
                           sessionType={session.sessionType}
+                          parentSessionId={session.parentSessionId}
+                          branchedAt={session.branchedAt}
                         />
                       );
                     }
