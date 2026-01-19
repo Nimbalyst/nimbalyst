@@ -83,6 +83,7 @@ export type { MCPToolDefinition } from './ExtensionAIToolsBridge';
 export type {
   EditorHost,
   EditorHostProps,
+  EditorMenuItem,
   DiffConfig,
   DiffResult,
 } from './editorHost';

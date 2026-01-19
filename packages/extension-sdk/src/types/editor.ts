@@ -20,6 +20,21 @@ import type { ExtensionStorage } from './panel.js';
 // ============================================================================
 
 /**
+ * Menu item that can be added to the editor's "..." actions menu.
+ * Extensions can register these to add custom actions to the header bar.
+ */
+export interface EditorMenuItem {
+  /** Display text for the menu item */
+  label: string;
+
+  /** Optional Material Symbols icon name (e.g., 'cloud_upload', 'settings') */
+  icon?: string;
+
+  /** Callback when the menu item is clicked */
+  onClick: () => void;
+}
+
+/**
  * Configuration for diff mode display (AI edit review)
  */
 export interface DiffConfig {
@@ -218,6 +233,39 @@ export interface EditorHost {
    * Use for preferences, history, cached data, etc.
    */
   readonly storage: ExtensionStorage;
+
+  // ============ MENU ITEMS ============
+
+  /**
+   * Register menu items to appear in the editor's "..." actions menu.
+   * Items appear in a dedicated "Extension" section of the dropdown.
+   *
+   * Call this once during editor initialization.
+   * Call again with an empty array to remove all items.
+   *
+   * @param items Array of menu items to register
+   *
+   * @example
+   * ```tsx
+   * useEffect(() => {
+   *   host.registerMenuItems([
+   *     {
+   *       label: 'Save to Cloud',
+   *       icon: 'cloud_upload',
+   *       onClick: () => saveToCloud()
+   *     },
+   *     {
+   *       label: 'Export as PDF',
+   *       icon: 'picture_as_pdf',
+   *       onClick: () => exportPdf()
+   *     }
+   *   ]);
+   *
+   *   return () => host.registerMenuItems([]); // Cleanup
+   * }, [host]);
+   * ```
+   */
+  registerMenuItems(items: EditorMenuItem[]): void;
 }
 
 /**

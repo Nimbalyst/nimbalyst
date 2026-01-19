@@ -5,7 +5,7 @@
  * This bridges the EditorHost interface (from runtime) to TabEditor's machinery.
  */
 
-import type { EditorHost, DiffConfig, DiffResult, ExtensionStorage } from '@nimbalyst/runtime';
+import type { EditorHost, DiffConfig, DiffResult, ExtensionStorage, EditorMenuItem } from '@nimbalyst/runtime';
 
 export interface EditorHostOptions {
   /** Absolute path to the file being edited */
@@ -88,6 +88,11 @@ export interface EditorHostOptions {
 
   /** Extension storage instance for persisting state */
   storage: ExtensionStorage;
+
+  // ============ MENU ITEMS ============
+
+  /** Callback when extension registers menu items for the header bar */
+  onMenuItemsChanged?: (items: EditorMenuItem[]) => void;
 }
 
 /**
@@ -179,5 +184,10 @@ export function createEditorHost(options: EditorHostOptions): EditorHost {
 
     // ============ STORAGE ============
     storage: options.storage,
+
+    // ============ MENU ITEMS ============
+    registerMenuItems(items: EditorMenuItem[]): void {
+      options.onMenuItemsChanged?.(items);
+    },
   };
 }

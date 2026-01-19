@@ -284,6 +284,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const sourceModeChangedCallbackRef = useRef<((isSourceMode: boolean) => void) | null>(null); // For EditorHost source mode subscription
   const themeChangeCallbackRef = useRef<((theme: 'light' | 'dark' | 'crystal-dark') => void) | null>(null); // For EditorHost theme change subscription
 
+  // State for extension-contributed menu items
+  const [extensionMenuItems, setExtensionMenuItems] = useState<Array<{ label: string; icon?: string; onClick: () => void }>>([]);
+
   // Helper to update pending AI edit state - updates both ref and Jotai atom
   const editorKey = useMemo(() => makeEditorKey(filePath), [filePath]);
   const setPendingAIEditTag = useCallback((tag: {tagId: string, sessionId: string, filePath: string} | null) => {
@@ -2234,6 +2237,11 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
       // ============ STORAGE ============
       storage: extensionStorage,
+
+      // ============ MENU ITEMS ============
+      onMenuItemsChanged: (items) => {
+        setExtensionMenuItems(items);
+      },
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filePath, fileName, workspaceId, theme, extensionStorage]); // Recreate when file, workspace, theme, or storage changes
@@ -2275,6 +2283,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           workspaceId={workspaceId}
           isMarkdown={isMarkdown}
           isCustomEditor={isCustom}
+          extensionId={customEditorRegistration?.extensionId}
           lexicalEditor={isMarkdown && !sourceMode ? editorRef.current : undefined}
           onViewHistory={onViewHistory}
           onToggleSourceMode={() => editorHost.toggleSourceMode?.()}
@@ -2286,6 +2295,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           }}
           onSwitchToAgentMode={onSwitchToAgentMode}
           onOpenSessionInChat={onOpenSessionInChat}
+          extensionMenuItems={extensionMenuItems}
           onToggleDebugTree={() => setShowTreeView(prev => !prev)}
         />
         <FixedTabHeaderContainer
