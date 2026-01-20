@@ -578,6 +578,9 @@ app.whenReady().then(async () => {
     });
 
     ClaudeCodeProvider.setMCPConfigLoader(async (workspacePath?: string) => {
+        if (!mcpConfigService) {
+            throw new Error('MCP config service not initialized');
+        }
         const mergedConfig = await mcpConfigService.getMergedConfig(workspacePath);
         const allServers = mergedConfig.mcpServers || {};
 

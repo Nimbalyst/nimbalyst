@@ -147,7 +147,6 @@ const TEMPLATE_CATEGORIES: Record<string, TemplateCategory> = {
   atlassian: 'productivity',
   notion: 'productivity',
   zapier: 'automation',
-  corridor: 'automation',
   'sequential-thinking': 'ai',
   'knowledge-graph-memory': 'ai',
   stripe: 'commerce',
@@ -233,11 +232,6 @@ const ENV_VAR_HELP: Record<string, { label: string; help: string; link?: string 
     label: 'Zapier MCP URL',
     help: 'Get your personal MCP URL from Zapier MCP dashboard',
     link: 'https://zapier.com/mcp'
-  },
-  CORRIDOR_API_KEY: {
-    label: 'Corridor API Key',
-    help: 'Get your API key from Corridor dashboard',
-    link: 'https://corridor.dev'
   },
   FILESYSTEM_ALLOWED_DIR: {
     label: 'Allowed Directory',
@@ -734,7 +728,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
       );
 
       if (template.authType === 'oauth') {
-        checkOAuthStatus(template.config.args || []);
+        checkOAuthStatus(template.config);
       } else {
         setOauthStatus('unknown');
       }
@@ -985,7 +979,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
         setTestStatus('error');
         setTestMessage(`Authorization failed: ${errorMsg}`);
         setIsStalePortError(result.isStalePortError === true);
-        await checkOAuthStatus(formArgs);
+        await checkOAuthStatus(config);
       }
     } catch (error: unknown) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error occurred';
