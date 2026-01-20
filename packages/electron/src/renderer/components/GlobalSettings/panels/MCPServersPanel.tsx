@@ -802,7 +802,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
         setTestStatus('idle');
         setTestMessage('');
         // Track successful OAuth
-        posthog?.capture('mcp_oauth_result', {
+        posthog?.capture('mcp_oauth_authorize', {
           templateId: selectedTemplate?.id || null,
           success: true
         });
@@ -814,7 +814,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
         setIsStalePortError(result.isStalePortError === true);
         await checkOAuthStatus(config);
         // Track failed OAuth
-        posthog?.capture('mcp_oauth_result', {
+        posthog?.capture('mcp_oauth_authorize', {
           templateId: selectedTemplate?.id || null,
           success: false,
           errorType: result.isStalePortError ? 'stale_port' : 'auth_rejected'
@@ -827,7 +827,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
       setTestMessage(`Authorization error: ${errorMsg}`);
       setOauthStatus('not-authorized');
       // Track OAuth exception
-      posthog?.capture('mcp_oauth_result', {
+      posthog?.capture('mcp_oauth_authorize', {
         templateId: selectedTemplate?.id || null,
         success: false,
         errorType: 'exception'
@@ -911,7 +911,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
         setOauthStatus('authorized');
         setTestStatus('idle');
         setTestMessage('');
-        posthog?.capture('mcp_oauth_result', {
+        posthog?.capture('mcp_oauth_authorize', {
           templateId: selectedTemplate?.id || null,
           success: true,
           retryAfterCacheClear: true
@@ -999,12 +999,14 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
       setSaveStatus('saved');
 
       // Track successful MCP server configuration
-      posthog?.capture('mcp_server_configured', {
+      const isNewServer = !selectedServer || selectedServer.name !== formName.trim();
+      posthog?.capture('mcp_server_added', {
         templateId: selectedTemplate?.id || null,
         scope,
         isCustom: !selectedTemplate,
         authType: selectedTemplate?.authType || 'none',
-        transportType: formType
+        transportType: formType,
+        isNew: isNewServer
       });
 
       setTimeout(() => setSaveStatus('idle'), 2000);

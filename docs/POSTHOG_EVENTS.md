@@ -131,9 +131,9 @@ All events include `$session_id` property automatically. Dev users are marked wi
 
 | Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |
 | --- | --- | --- | --- | --- | --- |
-| `mcp_server_configured` | `MCPServersPanel.tsx:967` | User successfully saves an MCP server configuration | `templateId` (null if custom)<br/>`scope` (user/workspace)<br/>`isCustom`<br/>`authType` (oauth/api-key/none)<br/>`transportType` (stdio/sse) | (pending release as of 4734f601) |  |
+| `mcp_server_added` | `MCPServersPanel.tsx:1003` | User successfully saves an MCP server configuration (add or edit) | `templateId` (null if custom)<br/>`scope` (user/workspace)<br/>`isCustom`<br/>`authType` (oauth/api-key/none)<br/>`transportType` (stdio/sse/http)<br/>`isNew` (true if adding, false if editing) | (pending release as of 4734f601) | (pending release as of 8a7a1220): Renamed from mcp_server_configured, added isNew property, added http transportType |
 | `mcp_server_test_result` | `MCPServersPanel.tsx:1134` | User tests MCP server connection | `templateId` (null if custom)<br/>`success`<br/>`errorType` (command_not_found/timeout/auth_failure/network/other/exception, only on failure)<br/>`durationMs` | (pending release as of 4734f601) |  |
-| `mcp_oauth_result` | `MCPServersPanel.tsx:852` | OAuth authorization flow completes | `templateId` (null if custom)<br/>`success`<br/>`errorType` (auth_rejected/exception, only on failure) | (pending release as of 4734f601) |  |
+| `mcp_oauth_authorize` | `MCPServersPanel.tsx:805,817,830,914` | OAuth authorization attempt completes (success or failure) | `templateId` (null if custom)<br/>`success`<br/>`errorType` (stale_port/auth_rejected/exception, only on failure) | (pending release as of 4734f601) | (pending release as of 8a7a1220): Renamed from mcp_oauth_result, added stale_port errorType |
 
 ### Terminal
 
