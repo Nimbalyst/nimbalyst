@@ -18,7 +18,7 @@ Requirements for the session name:
 - Concise and descriptive
 - Task-focused (e.g., "Fix authentication bug", "Add dark mode", "Refactor database layer")
 
-Call this tool as soon as you understand what the user wants to accomplish. Do NOT call this tool more than once per session.`;
+Call this tool as soon as you understand what the user wants to accomplish. Do NOT call this tool more than once. After it has been called once successfully subsequent calls will return an error.`;
 }
 
 /**
