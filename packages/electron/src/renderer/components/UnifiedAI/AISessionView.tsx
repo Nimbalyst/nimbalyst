@@ -1,7 +1,9 @@
 import React, { useCallback, useRef, useImperativeHandle, forwardRef, useEffect, useState } from 'react';
-import { useAtom, useSetAtom } from 'jotai';
+import { useAtom, useSetAtom, useAtomValue } from 'jotai';
 import { usePostHog } from 'posthog-js/react';
-import { AgentTranscriptPanel, TodoItem, FileEditSummary, storeAskUserQuestionAnswers } from '@nimbalyst/runtime';
+import { AgentTranscriptPanel, TodoItem, storeAskUserQuestionAnswers, ProviderIcon, FileEditsSidebar, FileEditSummary } from '@nimbalyst/runtime';
+import { MaterialSymbol } from '@nimbalyst/runtime/ui/icons/MaterialSymbol';
+import { getProviderDisplayName } from '../../utils/modelUtils';
 import type { SessionData, ChatAttachment } from '@nimbalyst/runtime/ai/server/types';
 import { AIInput, AIInputRef } from './AIInput';
 import { PromptQueueList } from './PromptQueueList';
@@ -14,6 +16,25 @@ import { AskUserQuestionConfirmation, AskUserQuestionData } from './AskUserQuest
 import { ToolPermissionConfirmation, ToolPermissionData } from './ToolPermissionConfirmation';
 import { SlashCommandSuggestions } from './SlashCommandSuggestions';
 import { diffTreeGroupByDirectoryAtom, setDiffTreeGroupByDirectoryAtom } from '../../store/atoms/projectState';
+import { SessionEditorArea, SessionEditorAreaRef } from './SessionEditorArea';
+import { AgentSessionHeader } from '../AgenticCoding/AgentSessionHeader';
+import {
+  store,
+  sessionEditorStateAtom,
+  setSessionSplitRatioAtom,
+  sessionDraftInputAtom,
+  sessionDraftAttachmentsAtom,
+  sessionDataAtom,
+  sessionLoadingAtom,
+  sessionModeAtom,
+  sessionModelAtom,
+  sessionArchivedAtom,
+  sessionActiveAtom,
+  sessionProcessingAtom,
+  loadSessionDataAtom,
+  reloadSessionDataAtom,
+  updateSessionDataAtom,
+} from '../../store';
 
 interface Todo {
   status: 'pending' | 'in_progress' | 'completed';
@@ -24,30 +45,25 @@ interface Todo {
 export interface AISessionViewRef {
   focusInput: () => void;
   getInputElement?: () => HTMLInputElement | HTMLTextAreaElement | null;
+  /** Open a file in the session's embedded editor (for non-worktree sessions) */
+  openFileInSessionEditor?: (filePath: string) => void;
 }
 
 export interface AISessionViewProps {
-  // Identity
+  // Identity - only sessionId is required, component loads its own data
   sessionId: string;
-  sessionData: SessionData;
 
-  // UI state
-  isActive: boolean; // Determines visibility, not mount/unmount
-  mode: 'chat' | 'agent'; // chat = sidebar mode, agent = full window mode
+  // UI mode: chat = sidebar mode, agent = full window mode
+  mode: 'chat' | 'agent';
 
   // Context
   workspacePath: string;
   documentContext?: any; // DocumentContext type
 
-  // Input handling
-  draftInput?: string;
-  draftAttachments?: ChatAttachment[];
-  onDraftInputChange?: (sessionId: string, value: string) => void;
-  onDraftAttachmentsChange?: (sessionId: string, attachments: ChatAttachment[]) => void;
-
-  // Message handling
-  onSendMessage?: (sessionId: string, message: string, attachments: ChatAttachment[]) => void;
-  onCancelRequest?: (sessionId: string) => void;
+  // NOTE: Session data, mode, model, archive status, processing state, and
+  // isActive are all managed via Jotai atoms. AISessionView loads its own data
+  // on mount. This eliminates re-render cascades from parent state changes.
+  // Parent uses store.set(sessionActiveAtom(sessionId), true/false) to control visibility.
 
   // File mention support
   fileMentionOptions?: TypeaheadOption[];
@@ -58,26 +74,12 @@ export interface AISessionViewProps {
   onFileClick?: (filePath: string) => void;
   onTodoClick?: (todo: TodoItem) => void;
 
-  // Loading state (passed from parent)
-  isLoading?: boolean;
-
   // History navigation (up/down arrow in input)
   onNavigateHistory?: (sessionId: string, direction: 'up' | 'down') => void;
 
-  // AI Mode (plan vs agent)
-  aiMode?: AIMode;
-  onAIModeChange?: (mode: AIMode) => void;
-
-  // Model selection
-  currentModel?: string;
-  onModelChange?: (modelId: string) => void;
-  sessionHasMessages?: boolean;  // Whether current session has any messages
-  currentProviderType?: 'agent' | 'model' | null;  // Type of current session's provider
-
-  // Archive state and actions
-  isArchived?: boolean;
+  // Callbacks for tab management (parent still manages open/close)
   onCloseAndArchive?: (sessionId: string) => void;
-  onUnarchive?: (sessionId: string) => void;
+  onSessionTitleChanged?: (sessionId: string, title: string) => void;
 }
 
 /**
@@ -101,6 +103,8 @@ interface TranscriptSectionProps {
   onUnarchive?: () => void;
   provider: string;
   onCommandSelect: (command: string) => void;
+  /** Force hide the sidebar (when rendered externally) */
+  hideSidebar?: boolean;
 }
 
 // Helper to read files from the main process (for persisted output files)
@@ -138,7 +142,8 @@ const TranscriptSectionComponent: React.FC<TranscriptSectionProps> = ({
   onCloseAndArchive,
   onUnarchive,
   provider,
-  onCommandSelect
+  onCommandSelect,
+  hideSidebar: hideSidebarProp
 }) => {
   // Track files with pending AI edits for this session
   const [pendingReviewFiles, setPendingReviewFiles] = useState<Set<string>>(new Set());
@@ -240,7 +245,7 @@ const TranscriptSectionComponent: React.FC<TranscriptSectionProps> = ({
           todos={todos}
           isProcessing={isProcessing}
           onFileClick={onFileClick}
-          hideSidebar={mode === 'chat'} // Hide sidebar in chat mode
+          hideSidebar={hideSidebarProp || mode === 'chat'} // Hide sidebar when explicitly requested or in chat mode
           workspacePath={workspacePath}
           initialSettings={{
             showToolCalls: true,
@@ -301,7 +306,8 @@ const TranscriptSection = React.memo(TranscriptSectionComponent, (prevProps, nex
     prevProps.queuedPrompts === nextProps.queuedPrompts &&
     prevProps.isProcessing === nextProps.isProcessing &&
     prevProps.isArchived === nextProps.isArchived &&
-    prevProps.provider === nextProps.provider
+    prevProps.provider === nextProps.provider &&
+    prevProps.hideSidebar === nextProps.hideSidebar
   );
 });
 
@@ -320,41 +326,134 @@ const TranscriptSection = React.memo(TranscriptSectionComponent, (prevProps, nex
  */
 const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(({
   sessionId,
-  sessionData,
-  isActive,
   mode,
   workspacePath,
   documentContext,
-  draftInput = '',
-  draftAttachments = [],
-  onDraftInputChange,
-  onDraftAttachmentsChange,
-  onSendMessage,
-  onCancelRequest,
   fileMentionOptions = [],
   onFileMentionSearch,
   onFileMentionSelect,
   onFileClick,
   onTodoClick,
-  isLoading = false,
   onNavigateHistory,
-  aiMode = 'agent',
-  onAIModeChange,
-  currentModel,
-  onModelChange,
-  sessionHasMessages,
-  currentProviderType,
-  isArchived,
   onCloseAndArchive,
-  onUnarchive
+  onSessionTitleChanged,
 }, ref) => {
+  // isActive is managed via Jotai atom to prevent re-render cascades
+  // Parent sets it via store.set(sessionActiveAtom(sessionId), true/false)
+  const isActive = useAtomValue(sessionActiveAtom(sessionId));
   const posthog = usePostHog();
   const inputRef = useRef<AIInputRef>(null);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [queuedPrompts, setQueuedPrompts] = useState<any[]>([]);
   const [pendingExitPlanConfirmation, setPendingExitPlanConfirmation] = useState<ExitPlanModeConfirmationData | null>(null);
   const [pendingAskUserQuestion, setPendingAskUserQuestion] = useState<AskUserQuestionData | null>(null);
+
+  // ============================================================
+  // Session state via Jotai atoms - component owns its own data
+  // ============================================================
+  const [sessionData, setSessionData] = useAtom(sessionDataAtom(sessionId));
+  const isDataLoading = useAtomValue(sessionLoadingAtom(sessionId));
+  const [aiMode, setAiMode] = useAtom(sessionModeAtom(sessionId));
+  const [currentModel, setCurrentModel] = useAtom(sessionModelAtom(sessionId));
+  const [isArchived, setIsArchived] = useAtom(sessionArchivedAtom(sessionId));
+  // Processing state is managed by AgenticPanel via sessionState.onStateChange
+  // We only read it here - don't write to it directly (use store.set for error recovery only)
+  const isProcessing = useAtomValue(sessionProcessingAtom(sessionId));
+  const loadSessionData = useSetAtom(loadSessionDataAtom);
+  const reloadSessionData = useSetAtom(reloadSessionDataAtom);
+  const updateSessionData = useSetAtom(updateSessionDataAtom);
+
+  // Draft input state via Jotai atoms - only this component re-renders on typing
+  const [draftInput, setDraftInput] = useAtom(sessionDraftInputAtom(sessionId));
+  const [draftAttachments, setDraftAttachments] = useAtom(sessionDraftAttachmentsAtom(sessionId));
   const [pendingToolPermissions, setPendingToolPermissions] = useState<ToolPermissionData[]>([]);
+
+  // Track if we're currently sending a message (for local UI state)
+  const sendingRef = useRef(false);
+
+  // ============================================================
+  // Files sidebar state (for agent mode non-worktree sessions)
+  // ============================================================
+  const [sidebarWidth, setSidebarWidth] = useState(256);
+  const [isDraggingSidebar, setIsDraggingSidebar] = useState(false);
+  const [fileEdits, setFileEdits] = useState<FileEditSummary[]>([]);
+  const [pendingReviewFilesMain, setPendingReviewFilesMain] = useState<Set<string>>(new Set());
+
+  // Diff tree grouping state (for files sidebar)
+  const [groupByDirectory] = useAtom(diffTreeGroupByDirectoryAtom);
+  const setDiffTreeGroupByDirectory = useSetAtom(setDiffTreeGroupByDirectoryAtom);
+
+  const setGroupByDirectory = useCallback((value: boolean) => {
+    if (workspacePath) {
+      setDiffTreeGroupByDirectory({ groupByDirectory: value, workspacePath });
+    }
+  }, [workspacePath, setDiffTreeGroupByDirectory]);
+
+  // ============================================================
+  // Load session data on mount
+  // ============================================================
+  useEffect(() => {
+    if (!sessionId || !workspacePath) return;
+
+    // Load session data if not already loaded
+    if (!sessionData) {
+      loadSessionData({ sessionId, workspacePath });
+    }
+  }, [sessionId, workspacePath, sessionData, loadSessionData]);
+
+  // ============================================================
+  // Subscribe to IPC events for session updates
+  // NOTE: Processing state (sessionProcessingAtom) is managed by AgenticPanel
+  // via sessionState.onStateChange. Don't duplicate that logic here.
+  // ============================================================
+  useEffect(() => {
+    if (!sessionId || !window.electronAPI?.on) return;
+
+    // Handle message logged events - reload session data
+    const handleMessageLogged = (data: { sessionId: string; direction: string }) => {
+      if (data.sessionId !== sessionId) return;
+      // Only reload on assistant output messages
+      if (data.direction === 'output') {
+        reloadSessionData({ sessionId, workspacePath });
+        // Clear sending ref when we get an output message
+        sendingRef.current = false;
+      }
+    };
+
+    // Handle session title updates
+    const handleTitleUpdated = (data: { sessionId: string; title: string }) => {
+      if (data.sessionId === sessionId && sessionData) {
+        updateSessionData({ sessionId, updates: { title: data.title } });
+        onSessionTitleChanged?.(sessionId, data.title);
+      }
+    };
+
+    // Handle token usage updates (for claude-code provider)
+    const handleTokenUsageUpdated = (data: { sessionId: string; tokenUsage: any }) => {
+      if (data.sessionId === sessionId && sessionData) {
+        updateSessionData({ sessionId, updates: { tokenUsage: data.tokenUsage } });
+      }
+    };
+
+    const cleanup1 = window.electronAPI.on('ai:message-logged', handleMessageLogged);
+    const cleanup2 = window.electronAPI.on('session:title-updated', handleTitleUpdated);
+    const cleanup3 = window.electronAPI.on('ai:tokenUsageUpdated', handleTokenUsageUpdated);
+
+    return () => {
+      cleanup1?.();
+      cleanup2?.();
+      cleanup3?.();
+    };
+  }, [sessionId, workspacePath, sessionData, reloadSessionData, updateSessionData, onSessionTitleChanged]);
+
+  // Derived values from session data
+  const isLoading = isProcessing || sendingRef.current;
+  const sessionHasMessages = (sessionData?.messages?.length ?? 0) > 0;
+  const currentProviderType = sessionData?.provider === 'claude-code' ? 'agent' : 'model';
+
+  // Determine if we should show the session editor area
+  const isWorktreeSession = Boolean(sessionData?.worktreeId && sessionData?.worktreePath);
+  const showSessionEditor = mode === 'agent' && !isWorktreeSession;
 
   // Listen for ExitPlanMode confirmation requests for this session
   useEffect(() => {
@@ -439,13 +538,11 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
       await window.electronAPI.invoke('ai:exitPlanModeConfirmResponse', requestId, confirmSessionId, true);
       setPendingExitPlanConfirmation(null);
       // Update the UI mode to 'agent' since we've exited plan mode
-      if (onAIModeChange) {
-        onAIModeChange('agent');
-      }
+      setAiMode('agent');
     } catch (error) {
       console.error('[AISessionView] Failed to send ExitPlanMode approval:', error);
     }
-  }, [onAIModeChange]);
+  }, [setAiMode]);
 
   const handleExitPlanModeDeny = useCallback(async (requestId: string, confirmSessionId: string) => {
     // TODO: Debug logging - uncomment if needed
@@ -645,7 +742,7 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
 
   // Extract todos from session metadata when sessionData changes
   useEffect(() => {
-    const currentTodos = sessionData.metadata?.currentTodos;
+    const currentTodos = sessionData?.metadata?.currentTodos;
     if (Array.isArray(currentTodos)) {
       // console.log(`[AISessionView] Extracting todos for session ${sessionId}:`, currentTodos);
       setTodos(currentTodos);
@@ -653,36 +750,123 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
       // console.log(`[AISessionView] No todos found in session metadata for ${sessionId}`);
       setTodos([]);
     }
-  }, [sessionId, sessionData.metadata?.currentTodos]);
+  }, [sessionId, sessionData?.metadata?.currentTodos]);
 
-  // Expose focusInput method through ref
+  // ============================================================
+  // Files sidebar data fetching (for agent mode non-worktree sessions)
+  // ============================================================
+  const showFileSidebar = mode === 'agent' && !isWorktreeSession;
+
+  // Fetch file edits for this session (sidebar)
+  useEffect(() => {
+    if (!showFileSidebar) return;
+
+    const fetchFileLinks = async () => {
+      try {
+        if (typeof window !== 'undefined' && window.electronAPI) {
+          const result = await window.electronAPI.invoke('session-files:get-by-session', sessionId);
+          if (result.success && result.files) {
+            const fileEditsFromDb: FileEditSummary[] = result.files.map((file: any) => ({
+              filePath: file.filePath,
+              linkType: file.linkType,
+              operation: file.metadata?.operation,
+              linesAdded: file.metadata?.linesAdded,
+              linesRemoved: file.metadata?.linesRemoved,
+              timestamp: new Date(file.timestamp).toISOString(),
+              metadata: file.metadata
+            }));
+            setFileEdits(fileEditsFromDb);
+          }
+        }
+      } catch (error) {
+        console.error('[AISessionView] Failed to fetch file links:', error);
+      }
+    };
+
+    fetchFileLinks();
+
+    // Listen for file updates
+    const handleFileUpdate = async (updatedSessionId: string) => {
+      if (updatedSessionId === sessionId) {
+        fetchFileLinks();
+      }
+    };
+
+    const cleanup = window.electronAPI?.on?.('session-files:updated', handleFileUpdate);
+    return () => {
+      cleanup?.();
+    };
+  }, [sessionId, showFileSidebar]);
+
+  // Fetch pending review files for sidebar
+  useEffect(() => {
+    if (!showFileSidebar || !workspacePath) {
+      setPendingReviewFilesMain(new Set());
+      return;
+    }
+
+    const fetchPendingFiles = async () => {
+      try {
+        if (window.electronAPI?.history?.getPendingFilesForSession) {
+          const files = await window.electronAPI.history.getPendingFilesForSession(workspacePath, sessionId);
+          setPendingReviewFilesMain(new Set(files));
+        }
+      } catch (error) {
+        console.error('[AISessionView] Failed to fetch pending review files for sidebar:', error);
+      }
+    };
+
+    fetchPendingFiles();
+
+    const unsubscribePendingCleared = window.electronAPI?.history?.onPendingCleared?.(
+      (data: { workspacePath: string; sessionId?: string; clearedFiles: string[] }) => {
+        if (data.workspacePath === workspacePath) {
+          fetchPendingFiles();
+        }
+      }
+    );
+
+    const unsubscribePendingCount = window.electronAPI?.history?.onPendingCountChanged?.(
+      (data: { workspacePath: string; count: number }) => {
+        if (data.workspacePath === workspacePath) {
+          fetchPendingFiles();
+        }
+      }
+    );
+
+    return () => {
+      unsubscribePendingCleared?.();
+      unsubscribePendingCount?.();
+    };
+  }, [sessionId, workspacePath, showFileSidebar]);
+
+  // Ref for session editor area (for non-worktree sessions)
+  const sessionEditorRef = useRef<SessionEditorAreaRef>(null);
+
+  // Expose methods through ref
   useImperativeHandle(ref, () => ({
     focusInput: () => {
       inputRef.current?.focus();
+    },
+    openFileInSessionEditor: (filePath: string) => {
+      sessionEditorRef.current?.openFile(filePath);
     }
   }));
-  // Handle input change
+
+  // Handle input change - updates Jotai atom directly
   const handleInputChange = useCallback((value: string) => {
-    if (onDraftInputChange) {
-      onDraftInputChange(sessionId, value);
-    }
-  }, [sessionId, onDraftInputChange]);
+    setDraftInput(value);
+  }, [setDraftInput]);
 
   // Handle attachment add
   const handleAttachmentAdd = useCallback((attachment: ChatAttachment) => {
-    if (onDraftAttachmentsChange) {
-      const newAttachments = [...draftAttachments, attachment];
-      onDraftAttachmentsChange(sessionId, newAttachments);
-    }
-  }, [sessionId, draftAttachments, onDraftAttachmentsChange]);
+    setDraftAttachments(prev => [...prev, attachment]);
+  }, [setDraftAttachments]);
 
   // Handle attachment remove
   const handleAttachmentRemove = useCallback((attachmentId: string) => {
-    if (onDraftAttachmentsChange) {
-      const newAttachments = draftAttachments.filter(a => a.id !== attachmentId);
-      onDraftAttachmentsChange(sessionId, newAttachments);
-    }
-  }, [sessionId, draftAttachments, onDraftAttachmentsChange]);
+    setDraftAttachments(prev => prev.filter(a => a.id !== attachmentId));
+  }, [setDraftAttachments]);
 
   // Track in-flight queue requests to prevent duplicate submissions
   const queueingRef = useRef(false);
@@ -732,22 +916,18 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
       setQueuedPrompts(prev => [...prev, queuedPrompt]);
 
       // Clear draft
-      if (onDraftInputChange) {
-        onDraftInputChange(sessionId, '');
-      }
-      if (onDraftAttachmentsChange) {
-        onDraftAttachmentsChange(sessionId, []);
-      }
+      setDraftInput('');
+      setDraftAttachments([]);
     } catch (error) {
       console.error('[AISessionView] Failed to queue prompt:', error);
     } finally {
       queueingRef.current = false;
     }
-  }, [sessionId, documentContext, draftAttachments, onDraftInputChange, onDraftAttachmentsChange]);
+  }, [sessionId, documentContext, draftAttachments, setDraftInput, setDraftAttachments]);
 
-  // Handle send message
-  const handleSend = useCallback(() => {
-    if (!draftInput.trim()) return;
+  // Handle send message - now calls IPC directly
+  const handleSend = useCallback(async () => {
+    if (!draftInput.trim() || !sessionData) return;
 
     console.log('[AISessionView] handleSend called', { sessionId, isLoading, draftInputLength: draftInput.length });
 
@@ -758,29 +938,61 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
       return;
     }
 
-    if (onSendMessage) {
-      console.log('[AISessionView] Calling onSendMessage with sessionId:', sessionId);
-      onSendMessage(sessionId, draftInput.trim(), draftAttachments);
-    }
+    const message = draftInput.trim();
+    const attachments = draftAttachments;
 
-    // Notify parent to clear draft
-    if (onDraftInputChange) {
-      onDraftInputChange(sessionId, '');
-    }
-    if (onDraftAttachmentsChange) {
-      onDraftAttachmentsChange(sessionId, []);
-    }
-  }, [sessionId, draftInput, draftAttachments, isLoading, onSendMessage, onDraftInputChange, onDraftAttachmentsChange, handleQueue]);
+    // Clear draft immediately for responsive UI
+    setDraftInput('');
+    setDraftAttachments([]);
 
-  // Handle cancel
-  const handleCancel = useCallback(() => {
-    console.log('[AISessionView] handleCancel called, sessionId:', sessionId, 'onCancelRequest:', !!onCancelRequest);
-    if (onCancelRequest) {
-      onCancelRequest(sessionId);
-    } else {
-      console.warn('[AISessionView] onCancelRequest is undefined!');
+    // Set local sending flag for immediate UI feedback
+    // Note: sessionProcessingAtom is managed by AgenticPanel via sessionState.onStateChange
+    sendingRef.current = true;
+
+    // Add user message to local state optimistically
+    const userMessage = {
+      id: `msg-${Date.now()}`,
+      role: 'user' as const,
+      content: message,
+      timestamp: Date.now(),
+    };
+    updateSessionData({
+      sessionId,
+      updates: {
+        messages: [...(sessionData.messages || []), userMessage],
+      },
+    });
+
+    try {
+      // Build document context with attachments included
+      // The handler expects: (message, documentContext, sessionId, workspacePath)
+      const docContext = {
+        filePath: documentContext?.filePath,
+        content: documentContext?.content,
+        fileType: documentContext?.fileType,
+        attachments: attachments.length > 0 ? attachments : undefined,
+        mode: aiMode,
+      };
+
+      // Send message via IPC using positional arguments
+      await window.electronAPI.invoke('ai:sendMessage', message, docContext, sessionId, workspacePath);
+    } catch (error) {
+      console.error('[AISessionView] Failed to send message:', error);
+      sendingRef.current = false;
     }
-  }, [sessionId, onCancelRequest]);
+  }, [sessionId, sessionData, draftInput, draftAttachments, isLoading, documentContext, aiMode, setDraftInput, setDraftAttachments, updateSessionData, handleQueue]);
+
+  // Handle cancel - now calls IPC directly
+  // Note: sessionProcessingAtom will be set to false by AgenticPanel when the cancel completes
+  const handleCancel = useCallback(async () => {
+    console.log('[AISessionView] handleCancel called, sessionId:', sessionId);
+    try {
+      await window.electronAPI.invoke('ai:cancelRequest', sessionId);
+      sendingRef.current = false;
+    } catch (error) {
+      console.error('[AISessionView] Failed to cancel request:', error);
+    }
+  }, [sessionId]);
 
   // Handle file click
   const handleFileClick = useCallback((filePath: string) => {
@@ -828,9 +1040,7 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
       setQueuedPrompts(prev => prev.filter(p => p.id !== id));
 
       // Set input value
-      if (onDraftInputChange) {
-        onDraftInputChange(sessionId, prompt);
-      }
+      setDraftInput(prompt);
 
       // Focus the input
       inputRef.current?.focus();
@@ -839,142 +1049,497 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
     } catch (error) {
       console.error('[AISessionView] Failed to edit queued prompt:', error);
     }
-  }, [sessionId, onDraftInputChange]);
+  }, [setDraftInput]);
 
   // Handle close and archive session
-  const handleCloseAndArchive = useCallback(() => {
-    if (onCloseAndArchive) {
-      onCloseAndArchive(sessionId);
+  const handleCloseAndArchive = useCallback(async () => {
+    try {
+      // Archive in database
+      await window.electronAPI.invoke('sessions:update-metadata', sessionId, { isArchived: true });
+      setIsArchived(true);
+      // Notify parent to close the tab
+      onCloseAndArchive?.(sessionId);
+    } catch (error) {
+      console.error('[AISessionView] Failed to archive session:', error);
     }
-  }, [sessionId, onCloseAndArchive]);
+  }, [sessionId, setIsArchived, onCloseAndArchive]);
 
   // Handle unarchive session
-  const handleUnarchive = useCallback(() => {
-    if (onUnarchive) {
-      onUnarchive(sessionId);
+  const handleUnarchive = useCallback(async () => {
+    try {
+      // Unarchive in database
+      await window.electronAPI.invoke('sessions:update-metadata', sessionId, { isArchived: false });
+      setIsArchived(false);
+    } catch (error) {
+      console.error('[AISessionView] Failed to unarchive session:', error);
     }
-  }, [sessionId, onUnarchive]);
+  }, [sessionId, setIsArchived]);
+
+  // Handle AI mode change
+  const handleAIModeChange = useCallback(async (newMode: AIMode) => {
+    setAiMode(newMode);
+    // Persist to database
+    try {
+      await window.electronAPI.invoke('sessions:update-metadata', sessionId, { mode: newMode });
+    } catch (error) {
+      console.error('[AISessionView] Failed to update mode:', error);
+    }
+  }, [sessionId, setAiMode]);
+
+  // Handle model change
+  const handleModelChange = useCallback(async (modelId: string) => {
+    setCurrentModel(modelId);
+    // Persist to database
+    try {
+      await window.electronAPI.invoke('sessions:update-metadata', sessionId, { model: modelId });
+    } catch (error) {
+      console.error('[AISessionView] Failed to update model:', error);
+    }
+  }, [sessionId, setCurrentModel]);
 
   // Handle slash command suggestion selection
   const handleCommandSelect = useCallback((command: string) => {
-    if (onDraftInputChange) {
-      onDraftInputChange(sessionId, command);
-    }
+    setDraftInput(command);
     // Focus the input after inserting command
     inputRef.current?.focus();
-  }, [sessionId, onDraftInputChange]);
+  }, [setDraftInput]);
+
+  // Handle sidebar resize drag (for files sidebar)
+  const handleSidebarResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDraggingSidebar(true);
+    const startX = e.clientX;
+    const startWidth = sidebarWidth;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = startX - moveEvent.clientX;
+      const newWidth = Math.max(180, Math.min(400, startWidth + deltaX));
+      setSidebarWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingSidebar(false);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    document.body.style.cursor = 'ew-resize';
+    document.body.style.userSelect = 'none';
+  }, [sidebarWidth]);
 
   // Feature flags based on mode and provider
-  const enableSlashCommands = sessionData.provider === 'claude-code'; // Only for Claude Code
+  const enableSlashCommands = sessionData?.provider === 'claude-code'; // Only for Claude Code
   const enableAttachments = true; // Available in both chat and agent modes
   const enableHistoryNavigation = true; // Available in both chat and agent modes
 
   // Calculate last user message timestamp for mockup annotation indicator
   const lastUserMessageTimestamp = React.useMemo(() => {
-    const userMessages = sessionData.messages?.filter(m => m.role === 'user') || [];
+    const userMessages = sessionData?.messages?.filter(m => m.role === 'user') || [];
     if (userMessages.length === 0) return null;
     const lastUserMessage = userMessages[userMessages.length - 1];
     return lastUserMessage.timestamp || null;
-  }, [sessionData.messages]);
+  }, [sessionData?.messages]);
+
+  // Get session editor layout state for non-worktree sessions
+  const sessionEditorState = useAtomValue(sessionEditorStateAtom(sessionId));
+  const setSessionSplitRatio = useSetAtom(setSessionSplitRatioAtom);
+
+  // Ref for the left column container (used for resize calculations)
+  const leftColumnRef = useRef<HTMLDivElement>(null);
+
+  // Handle transcript header resize drag
+  const handleTranscriptResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const container = leftColumnRef.current;
+    if (!container) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const containerHeight = containerRect.height;
+    const startY = e.clientY;
+    const startRatio = sessionEditorState.splitRatio;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaY = moveEvent.clientY - startY;
+      const currentHeight = startRatio * containerHeight;
+      const newHeight = currentHeight + deltaY;
+      const newRatio = newHeight / containerHeight;
+
+      // Clamp between 10% and 90%
+      const clampedRatio = Math.max(0.1, Math.min(0.9, newRatio));
+      setSessionSplitRatio({ sessionId, ratio: clampedRatio });
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    document.body.style.cursor = 'ns-resize';
+    document.body.style.userSelect = 'none';
+  }, [sessionId, sessionEditorState.splitRatio, setSessionSplitRatio]);
+
+  // Calculate transcript section style based on layout mode
+  // Important: TranscriptSection returns a fragment, so we need the wrapper to handle flex sizing
+  // and the inner content already has flex: 1 on the AgentTranscriptPanel wrapper
+  const transcriptStyle = React.useMemo((): React.CSSProperties => {
+    if (!showSessionEditor || sessionEditorState.layoutMode === 'transcript') {
+      // Full height when no session editor or transcript-only mode
+      return { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 };
+    }
+    if (sessionEditorState.layoutMode === 'editor') {
+      // Hidden when editor is maximized - use flex: 0 to collapse but keep in DOM for state
+      return { flex: 0, height: 0, overflow: 'hidden', minHeight: 0 };
+    }
+    // Split mode: take remaining space
+    return { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: '100px' };
+  }, [showSessionEditor, sessionEditorState.layoutMode]);
+
+  // Calculate wrapper style for editor + transcript area (excludes input)
+  // When in editor mode, this should expand to fill space
+  const editorTranscriptWrapperStyle = React.useMemo((): React.CSSProperties => {
+    return { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 };
+  }, []);
+
+  // Show loading state while session data is being fetched
+  if (!sessionData) {
+    return (
+      <div
+        style={{
+          height: '100%',
+          display: isActive ? 'flex' : 'none',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'var(--text-secondary)',
+        }}
+        data-session-id={sessionId}
+        data-active={isActive}
+      >
+        {isDataLoading ? 'Loading session...' : 'Session not found'}
+      </div>
+    );
+  }
 
   return (
     <div
       style={{
         height: '100%',
         display: isActive ? 'flex' : 'none', // Use display:none to keep mounted but hidden
-        flexDirection: 'column',
+        flexDirection: 'row', // Horizontal: main content on left, full-height sidebar on right
         overflow: 'hidden'
       }}
       data-session-id={sessionId}
       data-active={isActive}
     >
-      {/* Transcript and gutters - memoized to prevent re-render on input changes */}
-      <TranscriptSection
-        sessionId={sessionId}
-        sessionData={sessionData}
-        workspacePath={workspacePath}
-        mode={mode}
-        todos={todos}
-        queuedPrompts={queuedPrompts}
-        isProcessing={isLoading}
-        onFileClick={handleFileClick}
-        onTodoClick={handleTodoClick}
-        onCancelQueuedPrompt={handleCancelQueuedPrompt}
-        onEditQueuedPrompt={handleEditQueuedPrompt}
-        isArchived={isArchived}
-        onCloseAndArchive={handleCloseAndArchive}
-        onUnarchive={handleUnarchive}
-        provider={sessionData.provider}
-        onCommandSelect={handleCommandSelect}
-      />
+      {/* Left side: Header + Content (vertical stack) */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+        {/* Session Header - only in agent mode */}
+        {mode === 'agent' && (
+          <AgentSessionHeader sessionData={sessionData} />
+        )}
 
-      {/* ExitPlanMode confirmation - shown when agent requests to exit planning mode */}
-      {pendingExitPlanConfirmation && (
-        <ExitPlanModeConfirmation
-          data={pendingExitPlanConfirmation}
-          onApprove={handleExitPlanModeApprove}
-          onDeny={handleExitPlanModeDeny}
+        {/* Content area: Editor + Transcript + Input */}
+        <div ref={leftColumnRef} style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
+          {/* Wrapper for Editor + Transcript (flex: 1 to fill space, input stays at bottom) */}
+          <div style={editorTranscriptWrapperStyle}>
+            {/* Session Editor Area - for non-worktree agent mode sessions */}
+            {showSessionEditor && (
+              <SessionEditorArea
+                ref={sessionEditorRef}
+                sessionId={sessionId}
+                workspacePath={workspacePath}
+              />
+            )}
+
+            {/* Transcript header - shows agent info when in split view, draggable to resize */}
+            {showSessionEditor && sessionEditorState.layoutMode !== 'editor' && (
+              <div
+                className="transcript-header"
+                onMouseDown={sessionEditorState.layoutMode === 'split' ? handleTranscriptResizeStart : undefined}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  padding: '0.5rem 0.75rem',
+                  borderTop: '3px solid var(--border-primary)',
+                  borderBottom: '1px solid var(--border-primary)',
+                  backgroundColor: 'var(--surface-secondary)',
+                  cursor: sessionEditorState.layoutMode === 'split' ? 'ns-resize' : 'default',
+                  flexShrink: 0
+                }}
+                title={sessionEditorState.layoutMode === 'split' ? 'Drag to resize' : undefined}
+              >
+                <ProviderIcon provider={sessionData.provider} size={18} />
+                <span style={{ fontWeight: 500, fontSize: '13px', color: 'var(--text-primary)' }}>
+                  {getProviderDisplayName(sessionData.provider)}
+                </span>
+                {sessionData.model && (
+                  <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginLeft: 'auto' }}>
+                    {sessionData.model.split(':').pop()}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Transcript and gutters - memoized to prevent re-render on input changes */}
+            <div style={transcriptStyle}>
+          <TranscriptSection
+            sessionId={sessionId}
+            sessionData={sessionData}
+            workspacePath={workspacePath}
+            mode={mode}
+            todos={todos}
+            queuedPrompts={queuedPrompts}
+            isProcessing={isLoading}
+            onFileClick={handleFileClick}
+            onTodoClick={handleTodoClick}
+            onCancelQueuedPrompt={handleCancelQueuedPrompt}
+            onEditQueuedPrompt={handleEditQueuedPrompt}
+            isArchived={isArchived}
+            onCloseAndArchive={handleCloseAndArchive}
+            onUnarchive={handleUnarchive}
+            provider={sessionData.provider}
+            onCommandSelect={handleCommandSelect}
+            hideSidebar={showSessionEditor}
+          />
+            </div>
+          </div>
+
+          {/* ExitPlanMode confirmation - shown when agent requests to exit planning mode */}
+        {pendingExitPlanConfirmation && (
+          <ExitPlanModeConfirmation
+            data={pendingExitPlanConfirmation}
+            onApprove={handleExitPlanModeApprove}
+            onDeny={handleExitPlanModeDeny}
+          />
+        )}
+
+        {/* AskUserQuestion confirmation - shown when agent asks clarifying questions */}
+        {pendingAskUserQuestion && (
+          <AskUserQuestionConfirmation
+            key={pendingAskUserQuestion.questionId}
+            data={pendingAskUserQuestion}
+            onSubmit={handleAskUserQuestionSubmit}
+            onCancel={handleAskUserQuestionCancel}
+          />
+        )}
+
+        {/* Tool permission confirmations - shown when tools require user approval */}
+        {pendingToolPermissions.map(permission => (
+          <ToolPermissionConfirmation
+            key={permission.requestId}
+            data={permission}
+            onSubmit={handleToolPermissionSubmit}
+            onCancel={handleToolPermissionCancel}
+          />
+        ))}
+
+        {/* Input area - separate so typing doesn't re-render transcript */}
+        <AIInput
+          ref={inputRef}
+          value={draftInput}
+          onChange={handleInputChange}
+          onSend={handleSend}
+          onCancel={handleCancel}
+          isLoading={isLoading}
+          workspacePath={workspacePath}
+          sessionId={sessionId}
+          fileMentionOptions={fileMentionOptions}
+          onFileMentionSearch={onFileMentionSearch}
+          onFileMentionSelect={onFileMentionSelect}
+          attachments={enableAttachments ? draftAttachments : undefined}
+          onAttachmentAdd={enableAttachments ? handleAttachmentAdd : undefined}
+          onAttachmentRemove={enableAttachments ? handleAttachmentRemove : undefined}
+          enableSlashCommands={enableSlashCommands}
+          onNavigateHistory={enableHistoryNavigation ? handleNavigateHistory : undefined}
+          placeholder={
+            mode === 'chat'
+              ? "Ask a question. @ for files. / for commands"
+              : enableSlashCommands
+                ? "Type your message... (Enter to send, Shift+Enter for new line, @ for files, / for commands)"
+                : "Type your message... (Enter to send, Shift+Enter for new line, @ for files)"
+          }
+          mode={aiMode}
+          onModeChange={handleAIModeChange}
+          currentModel={currentModel}
+          onModelChange={handleModelChange}
+          sessionHasMessages={sessionHasMessages}
+          currentProviderType={currentProviderType}
+          tokenUsage={sessionData.tokenUsage}
+          provider={sessionData.provider}
+          onQueue={handleQueue}
+          queueCount={queuedPrompts.length}
+          currentFilePath={documentContext?.filePath}
+          lastUserMessageTimestamp={lastUserMessageTimestamp}
         />
-      )}
+        </div>
+      </div>
 
-      {/* AskUserQuestion confirmation - shown when agent asks clarifying questions */}
-      {pendingAskUserQuestion && (
-        <AskUserQuestionConfirmation
-          key={pendingAskUserQuestion.questionId}
-          data={pendingAskUserQuestion}
-          onSubmit={handleAskUserQuestionSubmit}
-          onCancel={handleAskUserQuestionCancel}
-        />
-      )}
+      {/* Files Sidebar - only for agent mode non-worktree sessions (full height, sibling to left side) */}
+      {showFileSidebar && (
+          <>
+            {/* Draggable Divider */}
+            <div
+              onMouseDown={handleSidebarResizeStart}
+              style={{
+                width: '4px',
+                cursor: 'ew-resize',
+                background: isDraggingSidebar ? 'var(--border-focus)' : 'var(--border-primary)',
+                transition: isDraggingSidebar ? 'none' : 'background-color 0.15s ease',
+                flexShrink: 0
+              }}
+            />
+            <div
+              className="session-files-sidebar"
+              style={{
+                width: `${sidebarWidth}px`,
+                display: 'flex',
+                flexDirection: 'column',
+                flexShrink: 0,
+                borderLeft: '1px solid var(--border-primary)',
+                backgroundColor: 'var(--surface-secondary)'
+              }}
+            >
+              {/* Header with Files label and controls */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                padding: '0.5rem 0.75rem',
+                borderBottom: '1px solid var(--border-primary)',
+                backgroundColor: 'var(--surface-secondary)'
+              }}>
+                <MaterialSymbol icon="description" size={16} />
+                <span style={{ fontWeight: 500, color: 'var(--text-primary)' }}>Files Edited</span>
+                {/* Controls */}
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.25rem' }}>
+                  <button
+                    onClick={() => setGroupByDirectory(!groupByDirectory)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '24px',
+                      height: '24px',
+                      border: 'none',
+                      borderRadius: '4px',
+                      background: groupByDirectory ? 'var(--surface-tertiary)' : 'transparent',
+                      color: 'var(--text-secondary)',
+                      cursor: 'pointer'
+                    }}
+                    title="Group by directory"
+                  >
+                    <MaterialSymbol icon="folder" size={16} />
+                  </button>
+                  <button
+                    onClick={() => {
+                      window.dispatchEvent(new CustomEvent('file-edits-sidebar:expand-all'));
+                    }}
+                    disabled={!groupByDirectory}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '24px',
+                      height: '24px',
+                      border: 'none',
+                      borderRadius: '4px',
+                      background: 'transparent',
+                      color: groupByDirectory ? 'var(--text-secondary)' : 'var(--text-disabled)',
+                      cursor: groupByDirectory ? 'pointer' : 'default',
+                      opacity: groupByDirectory ? 1 : 0.5
+                    }}
+                    title="Expand all"
+                  >
+                    <MaterialSymbol icon="unfold_more" size={16} />
+                  </button>
+                  <button
+                    onClick={() => {
+                      window.dispatchEvent(new CustomEvent('file-edits-sidebar:collapse-all'));
+                    }}
+                    disabled={!groupByDirectory}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '24px',
+                      height: '24px',
+                      border: 'none',
+                      borderRadius: '4px',
+                      background: 'transparent',
+                      color: groupByDirectory ? 'var(--text-secondary)' : 'var(--text-disabled)',
+                      cursor: groupByDirectory ? 'pointer' : 'default',
+                      opacity: groupByDirectory ? 1 : 0.5
+                    }}
+                    title="Collapse all"
+                  >
+                    <MaterialSymbol icon="unfold_less" size={16} />
+                  </button>
+                </div>
+              </div>
 
-      {/* Tool permission confirmations - shown when tools require user approval */}
-      {pendingToolPermissions.map(permission => (
-        <ToolPermissionConfirmation
-          key={permission.requestId}
-          data={permission}
-          onSubmit={handleToolPermissionSubmit}
-          onCancel={handleToolPermissionCancel}
-        />
-      ))}
+              {/* Pending review banner */}
+              <PendingReviewBanner workspacePath={workspacePath} sessionId={sessionId} />
 
-      {/* Input area - separate so typing doesn't re-render transcript */}
-      <AIInput
-        ref={inputRef}
-        value={draftInput}
-        onChange={handleInputChange}
-        onSend={handleSend}
-        onCancel={handleCancel}
-        isLoading={isLoading}
-        workspacePath={workspacePath}
-        sessionId={sessionId}
-        fileMentionOptions={fileMentionOptions}
-        onFileMentionSearch={onFileMentionSearch}
-        onFileMentionSelect={onFileMentionSelect}
-        attachments={enableAttachments ? draftAttachments : undefined}
-        onAttachmentAdd={enableAttachments ? handleAttachmentAdd : undefined}
-        onAttachmentRemove={enableAttachments ? handleAttachmentRemove : undefined}
-        enableSlashCommands={enableSlashCommands}
-        onNavigateHistory={enableHistoryNavigation ? handleNavigateHistory : undefined}
-        placeholder={
-          mode === 'chat'
-            ? "Ask a question. @ for files. / for commands"
-            : enableSlashCommands
-              ? "Type your message... (Enter to send, Shift+Enter for new line, @ for files, / for commands)"
-              : "Type your message... (Enter to send, Shift+Enter for new line, @ for files)"
-        }
-        mode={aiMode}
-        onModeChange={onAIModeChange}
-        currentModel={currentModel}
-        onModelChange={onModelChange}
-        sessionHasMessages={sessionHasMessages}
-        currentProviderType={currentProviderType}
-        tokenUsage={sessionData.tokenUsage}
-        provider={sessionData.provider}
-        onQueue={handleQueue}
-        queueCount={queuedPrompts.length}
-        currentFilePath={documentContext?.filePath}
-        lastUserMessageTimestamp={lastUserMessageTimestamp}
-      />
+              {/* Files Content */}
+              <div style={{ flex: 1, overflow: 'hidden' }}>
+                <FileEditsSidebar
+                  fileEdits={fileEdits}
+                  onFileClick={handleFileClick}
+                  workspacePath={workspacePath}
+                  pendingReviewFiles={pendingReviewFilesMain}
+                  groupByDirectory={groupByDirectory}
+                  onGroupByDirectoryChange={setGroupByDirectory}
+                  hideControls
+                />
+              </div>
+
+              {/* Todo list below file edits */}
+              {Array.isArray(todos) && todos.length > 0 && (
+                <div style={{
+                  borderTop: '1px solid var(--border-primary)',
+                  backgroundColor: 'var(--surface-secondary)',
+                  padding: '0.75rem',
+                  maxHeight: '150px',
+                  overflow: 'auto'
+                }}>
+                  <div style={{ marginBottom: '0.5rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                    Tasks ({todos.filter(t => t.status === 'completed').length}/{todos.length})
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                    {todos.map((todo, index) => {
+                      const displayText = todo.status === 'in_progress' ? todo.activeForm : todo.content;
+                      return (
+                        <div key={index} style={{
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: '0.5rem',
+                          fontSize: '0.75rem',
+                          color: 'var(--text-primary)',
+                          opacity: todo.status === 'completed' ? 0.6 : 1
+                        }}>
+                          <div style={{ marginTop: '2px', flexShrink: 0 }}>
+                            {todo.status === 'pending' && <span style={{ fontSize: '0.625rem' }}>○</span>}
+                            {todo.status === 'in_progress' && <span style={{ fontSize: '0.625rem', animation: 'spin 1s linear infinite' }}>◐</span>}
+                            {todo.status === 'completed' && <span style={{ fontSize: '0.625rem', color: 'var(--primary-color)' }}>●</span>}
+                          </div>
+                          <div style={{ flex: 1, wordBreak: 'break-word' }}>{displayText}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        )}
     </div>
   );
 });
@@ -982,92 +1547,18 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
 AISessionViewComponent.displayName = 'AISessionView';
 
 // Memoize to prevent re-renders when props haven't changed
-// This is critical for performance when multiple session tabs are open
+// Most session state is now managed via Jotai atoms, so props comparison is simple
+// NOTE: isActive is now an atom, not a prop - this prevents re-render cascades when switching sessions
 export const AISessionView = React.memo(AISessionViewComponent, (prevProps, nextProps) => {
-  // Only compare data props, not callback props
-  // Callback props (onDraftInputChange, onSendMessage, etc.) may have new references
-  // but don't affect what's displayed, so we ignore them for performance
-
-  // Basic props comparison
+  // Compare only the props that are actually passed from parent
+  // Session data, processing state, isActive, etc. are all in atoms
   if (
     prevProps.sessionId !== nextProps.sessionId ||
-    prevProps.isActive !== nextProps.isActive ||
-    prevProps.draftInput !== nextProps.draftInput ||
-    prevProps.isLoading !== nextProps.isLoading ||
-    prevProps.aiMode !== nextProps.aiMode ||
-    prevProps.currentModel !== nextProps.currentModel ||
     prevProps.workspacePath !== nextProps.workspacePath ||
     prevProps.mode !== nextProps.mode ||
-    prevProps.isArchived !== nextProps.isArchived ||
-    prevProps.draftAttachments?.length !== nextProps.draftAttachments?.length ||
     prevProps.fileMentionOptions?.length !== nextProps.fileMentionOptions?.length
   ) {
     return false; // Props changed, should re-render
-  }
-
-  // Deep comparison of sessionData - only re-render if actual content changed
-  const prevData = prevProps.sessionData;
-  const nextData = nextProps.sessionData;
-
-  if (prevData === nextData) {
-    return true; // Same reference, no re-render needed
-  }
-
-  // Compare key properties of sessionData
-  // Note: queuedPrompts are now loaded from database, not from session metadata
-  if (
-    prevData.id !== nextData.id ||
-    prevData.provider !== nextData.provider ||
-    prevData.model !== nextData.model ||
-    prevData.messages.length !== nextData.messages.length ||
-    prevData.metadata?.currentTodos !== nextData.metadata?.currentTodos
-  ) {
-    return false; // Content changed, should re-render
-  }
-
-  // Compare tokenUsage (for ContextUsageDisplay updates)
-  const prevTokenUsage = prevData.tokenUsage;
-  const nextTokenUsage = nextData.tokenUsage;
-  if (prevTokenUsage !== nextTokenUsage) {
-    // Check if the values actually changed (not just reference)
-    if (!prevTokenUsage || !nextTokenUsage ||
-        prevTokenUsage.inputTokens !== nextTokenUsage.inputTokens ||
-        prevTokenUsage.outputTokens !== nextTokenUsage.outputTokens ||
-        prevTokenUsage.totalTokens !== nextTokenUsage.totalTokens ||
-        prevTokenUsage.contextWindow !== nextTokenUsage.contextWindow) {
-      return false; // Token usage changed, should re-render
-    }
-
-    const prevCategories = prevTokenUsage.categories ?? [];
-    const nextCategories = nextTokenUsage.categories ?? [];
-    if (prevCategories.length !== nextCategories.length) {
-      return false;
-    }
-    for (let i = 0; i < prevCategories.length; i++) {
-      const prevCat = prevCategories[i];
-      const nextCat = nextCategories[i];
-      if (
-        prevCat.name !== nextCat.name ||
-        prevCat.tokens !== nextCat.tokens ||
-        prevCat.percentage !== nextCat.percentage
-      ) {
-        return false;
-      }
-    }
-  }
-
-  // Check if messages content actually changed (compare last message)
-  if (prevData.messages.length > 0) {
-    const prevLastMsg = prevData.messages[prevData.messages.length - 1];
-    const nextLastMsg = nextData.messages[nextData.messages.length - 1];
-
-    if (
-      prevLastMsg.content !== nextLastMsg.content ||
-      prevLastMsg.role !== nextLastMsg.role ||
-      prevLastMsg.timestamp !== nextLastMsg.timestamp
-    ) {
-      return false; // Last message changed, should re-render
-    }
   }
 
   // Compare documentContext if present

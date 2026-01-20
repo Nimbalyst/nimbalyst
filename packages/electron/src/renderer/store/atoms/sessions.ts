@@ -17,6 +17,7 @@
 import { atom } from 'jotai';
 import { atomFamily } from 'jotai/utils';
 import { store } from '@nimbalyst/runtime/store';
+import type { ChatAttachment, Message } from '@nimbalyst/runtime/ai/server/types';
 
 /**
  * Session info stored in the session list.
@@ -84,6 +85,227 @@ export const sessionPendingPermissionAtom = atomFamily((_sessionId: string) =>
 export const sessionLastReadAtom = atomFamily((_sessionId: string) =>
   atom<number>(0)
 );
+
+// ============================================================
+// Per-session draft input state
+// These atoms encapsulate input state within AISessionView,
+// eliminating the need for AgenticPanel to manage draft state.
+// ============================================================
+
+/**
+ * Per-session draft input text.
+ * AIInput subscribes directly - no props needed from parent.
+ * Typing only causes AIInput to re-render, not the entire tree.
+ */
+export const sessionDraftInputAtom = atomFamily((_sessionId: string) =>
+  atom<string>('')
+);
+
+/**
+ * Per-session draft attachments.
+ * File attachments being composed before sending.
+ */
+export const sessionDraftAttachmentsAtom = atomFamily((_sessionId: string) =>
+  atom<ChatAttachment[]>([])
+);
+
+// ============================================================
+// Per-session full data state
+// AISessionView subscribes to this and loads/manages its own data.
+// This eliminates the need for AgenticPanel to hold session state.
+// ============================================================
+
+import type { SessionData } from '@nimbalyst/runtime/ai/server/types';
+import type { AIMode } from '../../components/UnifiedAI/ModeTag';
+
+/**
+ * Session tab state - the minimal data AgenticPanel needs for an open session.
+ * This replaces the old SessionTab interface with just what's needed for tabs.
+ */
+export interface OpenSession {
+  id: string;
+  name: string;
+  isPinned?: boolean;
+}
+
+/**
+ * Per-session full data.
+ * AISessionView subscribes directly - loads its own data, saves changes.
+ * This allows the component to be fully self-contained.
+ *
+ * Initial value is null - AISessionView loads data on mount.
+ */
+export const sessionDataAtom = atomFamily((_sessionId: string) =>
+  atom<SessionData | null>(null)
+);
+
+/**
+ * Per-session loading state.
+ * True while session data is being fetched from database.
+ */
+export const sessionLoadingAtom = atomFamily((_sessionId: string) =>
+  atom<boolean>(true)
+);
+
+/**
+ * Per-session AI mode (plan vs agent).
+ */
+export const sessionModeAtom = atomFamily((_sessionId: string) =>
+  atom<AIMode>('agent')
+);
+
+/**
+ * Per-session current model ID.
+ */
+export const sessionModelAtom = atomFamily((_sessionId: string) =>
+  atom<string>('claude-code:sonnet')
+);
+
+/**
+ * Per-session archived state.
+ */
+export const sessionArchivedAtom = atomFamily((_sessionId: string) =>
+  atom<boolean>(false)
+);
+
+/**
+ * Per-session active/visible state.
+ * Components subscribe to this instead of receiving isActive as a prop.
+ * This prevents parent re-renders from cascading to children.
+ */
+export const sessionActiveAtom = atomFamily((_sessionId: string) =>
+  atom<boolean>(false)
+);
+
+/**
+ * Open sessions list - just IDs and names for tab display.
+ * AgenticPanel manages this list (open/close tabs).
+ * AISessionView instances manage their own full session data.
+ */
+export const openSessionsAtom = atom<OpenSession[]>([]);
+
+/**
+ * Load session data into the atom.
+ * Called by AISessionView on mount.
+ */
+export const loadSessionDataAtom = atom(
+  null,
+  async (get, set, { sessionId, workspacePath }: { sessionId: string; workspacePath: string }) => {
+    if (!sessionId || !workspacePath || !window.electronAPI) {
+      return null;
+    }
+
+    set(sessionLoadingAtom(sessionId), true);
+
+    try {
+      const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspacePath);
+      if (sessionData) {
+        set(sessionDataAtom(sessionId), sessionData);
+        set(sessionModeAtom(sessionId), sessionData.mode || 'agent');
+        set(sessionModelAtom(sessionId), sessionData.model || sessionData.provider || 'claude-code:sonnet');
+        set(sessionArchivedAtom(sessionId), sessionData.isArchived || false);
+
+        // Initialize draft input if session has saved draft
+        if (sessionData.draftInput) {
+          set(sessionDraftInputAtom(sessionId), sessionData.draftInput);
+        }
+
+        return sessionData;
+      }
+    } catch (error) {
+      console.error(`[sessions] Failed to load session ${sessionId}:`, error);
+    } finally {
+      set(sessionLoadingAtom(sessionId), false);
+    }
+
+    return null;
+  }
+);
+
+/**
+ * Update session data in the atom (after streaming updates, etc.).
+ */
+export const updateSessionDataAtom = atom(
+  null,
+  (get, set, { sessionId, updates }: { sessionId: string; updates: Partial<SessionData> }) => {
+    const current = get(sessionDataAtom(sessionId));
+    if (current) {
+      set(sessionDataAtom(sessionId), { ...current, ...updates });
+    }
+  }
+);
+
+/**
+ * Reload session data from database.
+ * Called after message-logged events, etc.
+ */
+export const reloadSessionDataAtom = atom(
+  null,
+  async (get, set, { sessionId, workspacePath }: { sessionId: string; workspacePath: string }) => {
+    if (!sessionId || !workspacePath || !window.electronAPI) {
+      return;
+    }
+
+    try {
+      const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspacePath);
+      if (sessionData) {
+        const current = get(sessionDataAtom(sessionId));
+
+        // Merge messages: preserve local-only messages not yet in database
+        if (current) {
+          const dbMessages = sessionData.messages || [];
+          const localMessages = current.messages || [];
+
+          const latestDbTimestamp = dbMessages.length > 0
+            ? Math.max(...dbMessages.map((m: Message) => m.timestamp || 0))
+            : 0;
+
+          const localOnlyMessages = localMessages.filter((localMsg: Message) => {
+            const localTs = localMsg.timestamp || 0;
+            return localTs > latestDbTimestamp &&
+              !dbMessages.some((dbMsg: Message) => dbMsg.timestamp === localTs);
+          });
+
+          sessionData.messages = [...dbMessages, ...localOnlyMessages];
+
+          // Preserve read state
+          const preservedTimestamp = current.lastReadMessageTimestamp || 0;
+          const dbTimestamp = sessionData.lastReadMessageTimestamp || 0;
+          sessionData.lastReadMessageTimestamp = Math.max(preservedTimestamp, dbTimestamp);
+
+          // For claude-code, preserve tokenUsage (comes from /context IPC, not database)
+          if (sessionData.provider === 'claude-code' && current.tokenUsage) {
+            sessionData.tokenUsage = current.tokenUsage;
+          }
+        }
+
+        set(sessionDataAtom(sessionId), sessionData);
+        set(sessionArchivedAtom(sessionId), sessionData.isArchived || false);
+      }
+    } catch (error) {
+      console.error(`[sessions] Failed to reload session ${sessionId}:`, error);
+    }
+  }
+);
+
+/**
+ * Clean up session atoms when closing a session tab.
+ */
+export const cleanupSessionAtom = atom(null, (get, set, sessionId: string) => {
+  // Remove all per-session atoms
+  sessionDataAtom.remove(sessionId);
+  sessionLoadingAtom.remove(sessionId);
+  sessionModeAtom.remove(sessionId);
+  sessionModelAtom.remove(sessionId);
+  sessionArchivedAtom.remove(sessionId);
+  sessionProcessingAtom.remove(sessionId);
+  sessionUnreadAtom.remove(sessionId);
+  sessionPendingPromptAtom.remove(sessionId);
+  sessionPendingPermissionAtom.remove(sessionId);
+  sessionLastReadAtom.remove(sessionId);
+  sessionDraftInputAtom.remove(sessionId);
+  sessionDraftAttachmentsAtom.remove(sessionId);
+});
 
 /**
  * Derived: total unread session count.
@@ -161,6 +383,8 @@ export const removeSessionAtom = atom(null, (get, set, sessionId: string) => {
   sessionPendingPromptAtom.remove(sessionId);
   sessionPendingPermissionAtom.remove(sessionId);
   sessionLastReadAtom.remove(sessionId);
+  sessionDraftInputAtom.remove(sessionId);
+  sessionDraftAttachmentsAtom.remove(sessionId);
 });
 
 /**

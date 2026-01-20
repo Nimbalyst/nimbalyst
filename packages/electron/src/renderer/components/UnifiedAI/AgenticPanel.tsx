@@ -6,7 +6,6 @@ import { SessionDropdown } from '../AIChat/SessionDropdown';
 import { SessionHistory } from '../AgenticCoding/SessionHistory';
 import { SessionImportDialog } from '../AgenticCoding/SessionImportDialog';
 import { ResizablePanel } from '../AgenticCoding/ResizablePanel';
-import { AgentSessionHeader } from '../AgenticCoding/AgentSessionHeader';
 import { useFileMention } from '../../hooks/useFileMention';
 import type { TypeaheadOption } from '../Typeahead/GenericTypeahead';
 import type { AIMode } from './ModeTag';
@@ -21,6 +20,8 @@ import {
   sessionProcessingAtom,
   sessionUnreadAtom,
   sessionPendingPromptAtom,
+  sessionDraftInputAtom,
+  sessionActiveAtom,
   initSessionList,
   sessionListFullAtom,
   refreshSessionListAtom,
@@ -34,6 +35,7 @@ import {
   setCollapsedGroupsAtom,
   setSortOrderAtom,
   initAgentModeLayout,
+  initSessionEditors,
 } from '../../store';
 import type { AIModel } from '../../store/atoms/appSettings';
 import { WorktreeOnboardingModal } from '../WorktreeOnboardingModal';
@@ -79,8 +81,9 @@ interface SessionTab {
   name: string;
   sessionData: SessionData;
   isPinned?: boolean;
-  draftInput?: string;
-  draftAttachments?: ChatAttachment[];
+  // NOTE: draftInput and draftAttachments are now managed via Jotai atoms
+  // (sessionDraftInputAtom, sessionDraftAttachmentsAtom) in each AISessionView.
+  // This prevents re-renders of the entire AgenticPanel on every keystroke.
   mode?: AIMode; // Planning vs Agent mode (default: agent)
   model?: string; // Current model ID (provider:model format)
   isArchived?: boolean; // Whether session is archived
@@ -167,8 +170,27 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
   // Session state
   const [sessionTabs, setSessionTabs] = useState<SessionTab[]>([]);
-  const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  const [activeTabId, setActiveTabIdRaw] = useState<string | null>(null);
   const [closedSessions, setClosedSessions] = useState<SessionTab[]>([]);
+
+  // Wrapper to update both local state AND Jotai atoms for active session
+  // This allows AISessionView to subscribe to sessionActiveAtom and avoid re-renders
+  const prevActiveTabIdRef = useRef<string | null>(null);
+  const setActiveTabId = useCallback((newActiveId: string | null) => {
+    const prevId = prevActiveTabIdRef.current;
+
+    // Update local state
+    setActiveTabIdRaw(newActiveId);
+    prevActiveTabIdRef.current = newActiveId;
+
+    // Update atoms - deactivate old, activate new
+    if (prevId && prevId !== newActiveId) {
+      store.set(sessionActiveAtom(prevId), false);
+    }
+    if (newActiveId) {
+      store.set(sessionActiveAtom(newActiveId), true);
+    }
+  }, []);
 
   // NOTE: Window title and find handlers are managed internally in agent mode.
   // App.tsx no longer needs to know about the current AI session.
@@ -285,10 +307,10 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // Focus input when panel becomes active (e.g., Cmd+K to switch to agent mode)
   // or when switching between session tabs
   const prevIsActiveRef = useRef(isActive);
-  const prevActiveTabIdRef = useRef(activeTabId);
+  const prevFocusTabIdRef = useRef(activeTabId);
   useEffect(() => {
     const panelBecameActive = isActive && !prevIsActiveRef.current;
-    const tabChanged = activeTabId !== prevActiveTabIdRef.current && activeTabId !== null;
+    const tabChanged = activeTabId !== prevFocusTabIdRef.current && activeTabId !== null;
 
     // Focus when panel becomes active OR when switching tabs (while panel is active)
     if ((panelBecameActive || (isActive && tabChanged)) && activeTabId) {
@@ -300,7 +322,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     }
 
     prevIsActiveRef.current = isActive;
-    prevActiveTabIdRef.current = activeTabId;
+    prevFocusTabIdRef.current = activeTabId;
   }, [isActive, activeTabId]);
 
   // Constants
@@ -320,12 +342,15 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           // console.log('[AgenticPanel] Lazy loading session data for:', activeTabId);
           const sessionData = await window.electronAPI.aiLoadSession(activeTabId, workspacePath);
           if (sessionData) {
+            // Initialize draft input atom if session has saved draft
+            if (sessionData.draftInput) {
+              store.set(sessionDraftInputAtom(activeTabId), sessionData.draftInput);
+            }
             setSessionTabs(prev => prev.map(tab =>
               tab.id === activeTabId
                 ? {
                     ...tab,
                     sessionData,
-                    draftInput: sessionData.draftInput || tab.draftInput,
                     mode: sessionData.mode || tab.mode,
                     model: sessionData.model || sessionData.provider || tab.model,
                     isArchived: sessionData.isArchived,
@@ -442,11 +467,12 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     }
   });
 
-  // Initialize session history layout from workspace state via Jotai atoms
+  // Initialize session history layout and session editors from workspace state via Jotai atoms
   useEffect(() => {
     if (mode !== 'agent') return; // Only for agent mode
     if (workspacePath) {
       initAgentModeLayout(workspacePath);
+      initSessionEditors(workspacePath);
     }
   }, [workspacePath, mode]);
 
@@ -837,11 +863,15 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           ? { ...sessionData, tokenUsage: undefined }
           : sessionData;
 
+        // Initialize draft input atom if session has saved draft
+        if (sessionData.draftInput) {
+          store.set(sessionDraftInputAtom(sessionData.id), sessionData.draftInput);
+        }
+
         const newTab: SessionTab = {
           id: sessionData.id,
           name: tabName,
           sessionData: sessionDataForTab,
-          draftInput: sessionData.draftInput,
           mode: sessionData.mode || 'agent',
           model: sessionData.model || sessionData.provider || 'claude-code',
           isArchived: sessionData.isArchived
@@ -1025,6 +1055,22 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     }
   }, []);
 
+  // Handle session title changed (called by AISessionView when title updates)
+  const handleSessionTitleChanged = useCallback((sessionId: string, title: string) => {
+    // Update local tab state for consistency
+    setSessionTabs(prev => prev.map(tab =>
+      tab.id === sessionId ? { ...tab, name: title } : tab
+    ));
+
+    // Update window title if this is the active session
+    if (sessionId === activeTabIdRef.current) {
+      updateWindowTitle(title);
+    }
+
+    // Trigger session history refresh
+    setRenamedSession({ id: sessionId, title });
+  }, [updateWindowTitle]);
+
   // Create a new session
   const createNewSession = useCallback(async (planPath?: string) => {
     try {
@@ -1090,8 +1136,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       throw new Error('Failed to load newly created session');
     }
 
-    // If planPath provided, create @ mention for draft input
-    let initialDraftInput = sessionData.draftInput;
+    // Initialize draft input atom - use planPath reference or saved draft
     if (planPath) {
       // Convert absolute path to workspace-relative path
       let relativePath = planPath;
@@ -1102,14 +1147,15 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           relativePath = relativePath.substring(1);
         }
       }
-      initialDraftInput = `@${relativePath} `;
+      store.set(sessionDraftInputAtom(sessionData.id), `@${relativePath} `);
+    } else if (sessionData.draftInput) {
+      store.set(sessionDraftInputAtom(sessionData.id), sessionData.draftInput);
     }
 
     const newTab: SessionTab = {
       id: sessionData.id,
       name: tabName,
       sessionData,
-      draftInput: initialDraftInput,
       mode: sessionData.mode || 'agent',
       model: sessionData.model || defaultModel
     };
@@ -1286,11 +1332,15 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         throw new Error('Failed to load newly created worktree session');
       }
 
+      // Initialize draft input atom if session has saved draft
+      if (sessionData.draftInput) {
+        store.set(sessionDraftInputAtom(sessionData.id), sessionData.draftInput);
+      }
+
       const newTab: SessionTab = {
         id: sessionData.id,
         name: tabName,
         sessionData,
-        draftInput: sessionData.draftInput,
         mode: 'agent',
         model: defaultModel
       };
@@ -1423,11 +1473,15 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         throw new Error('Failed to load newly created worktree session');
       }
 
+      // Initialize draft input atom if session has saved draft
+      if (sessionData.draftInput) {
+        store.set(sessionDraftInputAtom(sessionData.id), sessionData.draftInput);
+      }
+
       const newTab: SessionTab = {
         id: sessionData.id,
         name: tabName,
         sessionData,
-        draftInput: sessionData.draftInput,
         mode: 'agent',
         model: defaultModel
       };
@@ -1579,12 +1633,15 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                   activeLoadTime = performance.now() - loadStart;
                   console.log(`[AgenticPanel] PERF: Active session load took ${activeLoadTime.toFixed(1)}ms for ${sessionData.messages.length} messages`);
                   if (sessionData) {
+                    // Initialize draft input atom if session has saved draft
+                    if (sessionData.draftInput) {
+                      store.set(sessionDraftInputAtom(sessionId), sessionData.draftInput);
+                    }
                     restoredTabs.push({
                       id: sessionId,
                       name: savedTab.fileName,
                       sessionData,
                       isPinned: savedTab.isPinned,
-                      draftInput: sessionData.draftInput,
                       mode: sessionData.mode || 'agent',
                       model: sessionData.model || sessionData.provider || 'claude-code',
                       isArchived: sessionData.isArchived
@@ -1593,6 +1650,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                 } else {
                   placeholderCount++;
                   // Create placeholder for background tabs - they'll load when activated
+                  // Draft input will be initialized when tab becomes active and session loads
                   restoredTabs.push({
                     id: sessionId,
                     name: savedTab.fileName,
@@ -1606,7 +1664,6 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                       _needsLoad: true, // Flag to indicate lazy loading needed
                     } as any,
                     isPinned: savedTab.isPinned,
-                    draftInput: '',
                     mode: 'agent',
                     model: 'claude-code'
                   });
@@ -1641,11 +1698,15 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             try {
               const sessionData = await window.electronAPI.aiLoadSession(savedSessionId, workspacePath);
               if (sessionData) {
+                // Initialize draft input atom if session has saved draft
+                if (sessionData.draftInput) {
+                  store.set(sessionDraftInputAtom(sessionData.id), sessionData.draftInput);
+                }
+
                 const tab: SessionTab = {
                   id: sessionData.id,
                   name: sessionData.title || 'Session',
                   sessionData,
-                  draftInput: sessionData.draftInput,
                   mode: sessionData.mode || 'agent',
                   model: sessionData.model || sessionData.provider || 'claude-code'
                 };
@@ -1667,6 +1728,11 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         if (initialSessionId) {
           const sessionData = await window.electronAPI.aiLoadSession(initialSessionId, workspacePath);
           if (sessionData) {
+            // Initialize draft input atom if session has saved draft
+            if (sessionData.draftInput) {
+              store.set(sessionDraftInputAtom(sessionData.id), sessionData.draftInput);
+            }
+
             const planPath = sessionData.metadata?.planDocumentPath as string | undefined;
             const tabName = planPath
               ? `Plan: ${getFileName(planPath)}`
@@ -1676,7 +1742,6 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
               id: sessionData.id,
               name: tabName,
               sessionData,
-              draftInput: sessionData.draftInput,
               mode: sessionData.mode || 'agent',
               model: sessionData.model || sessionData.provider || 'claude-code'
             };
@@ -1723,9 +1788,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       }
     }
 
-    // Set the draft input with the file reference
+    // Set the draft input with the file reference via Jotai atom
     const fileRef = `@${relativePath} `;
-    handleDraftInputChange(activeTabId, fileRef);
+    store.set(sessionDraftInputAtom(activeTabId), fileRef);
   }, [planDocumentPath, activeTabId, workspacePath]);
 
   // Save to workspace state when tabs/session changes
@@ -2270,7 +2335,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       // Only process if this session was tracked as waiting for auto-context
       // This prevents duplicate processing across multiple AgenticPanel instances
       if (!globalAutoContextSessions.has(data.sessionId)) {
-        console.log('[AgenticPanel] Session not in globalAutoContextSessions, skipping queue processing');
+        // Not tracked, skip queue processing
         return;
       }
 
@@ -2279,16 +2344,16 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       // so the UI was ready for input immediately. We just deferred queued prompt processing.
       globalAutoContextSessions.delete(data.sessionId);
 
-      console.log('[AgenticPanel] Auto-context ended, processing queued prompts:', data.sessionId);
+      // console.log('[AgenticPanel] Auto-context ended, processing queued prompts:', data.sessionId);
 
       // Process any queued prompts after auto-context completes
       setTimeout(() => {
         const tab = sessionTabsRef.current.find(t => t.id === data.sessionId);
-        console.log('[AgenticPanel] Auto-context end - processing queue:', {
-          sessionId: data.sessionId,
-          tabFound: !!tab,
-          processQueuedPromptsRefSet: !!processQueuedPromptsRef.current
-        });
+        // console.log('[AgenticPanel] Auto-context end - processing queue:', {
+        //   sessionId: data.sessionId,
+        //   tabFound: !!tab,
+        //   processQueuedPromptsRefSet: !!processQueuedPromptsRef.current
+        // });
         if (tab && processQueuedPromptsRef.current) {
           processQueuedPromptsRef.current(data.sessionId, tab);
         }
@@ -2374,71 +2439,12 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     };
   }, []);
 
-  // Handle draft input change (optimized to avoid recreating all tabs)
-  const handleDraftInputChange = useCallback((sessionId: string, value: string) => {
-    setSessionTabs(prev => {
-      const filtered = prev.filter(tab => tab != null);
-      const index = filtered.findIndex(tab => tab.id === sessionId);
-      if (index === -1 || filtered[index].draftInput === value) {
-        return filtered;
-      }
-
-      const newTabs = [...filtered];
-      newTabs[index] = { ...filtered[index], draftInput: value };
-      return newTabs;
-    });
-  }, []);
-
-  // Persist draft input to database (debounced)
-  // Track previous draft input values to only save when they actually change
-  const previousDraftInputRef = useRef<Map<string, string>>(new Map());
-
-  useEffect(() => {
-    const timers = new Map<string, ReturnType<typeof setTimeout>>();
-    const previousDraftInput = previousDraftInputRef.current;
-
-    sessionTabs.forEach(tab => {
-      if (tab.draftInput !== undefined) {
-        const previousValue = previousDraftInput.get(tab.id);
-
-        // Only save if draft input actually changed
-        if (previousValue !== tab.draftInput) {
-          // Update previous value
-          previousDraftInput.set(tab.id, tab.draftInput);
-
-          // Set new timer to save after 500ms of inactivity
-          const timer = setTimeout(async () => {
-            try {
-              await window.electronAPI.invoke('sessions:update-draft-input', tab.id, tab.draftInput || '');
-            } catch (err) {
-              console.error('[AgenticPanel] Failed to save draft input:', err);
-            }
-          }, 500);
-
-          timers.set(tab.id, timer);
-        }
-      }
-    });
-
-    return () => {
-      timers.forEach(timer => clearTimeout(timer));
-    };
-  }, [sessionTabs]);
-
-  // Handle draft attachments change (optimized to avoid recreating all tabs)
-  const handleDraftAttachmentsChange = useCallback((sessionId: string, attachments: ChatAttachment[]) => {
-    setSessionTabs(prev => {
-      const filtered = prev.filter(tab => tab != null);
-      const index = filtered.findIndex(tab => tab.id === sessionId);
-      if (index === -1 || filtered[index].draftAttachments === attachments) return filtered;
-
-      const newTabs = [...filtered];
-      newTabs[index] = { ...filtered[index], draftAttachments: attachments };
-      return newTabs;
-    });
-  }, []);
+  // NOTE: Draft input/attachments are now managed via Jotai atoms in AISessionView.
+  // This eliminates re-renders of AgenticPanel on every keystroke.
+  // See sessionDraftInputAtom and sessionDraftAttachmentsAtom.
 
   // Handle history navigation (up/down arrow in input)
+  // Uses Jotai atoms directly to read/write draft input
   const handleNavigateHistory = useCallback((sessionId: string, direction: 'up' | 'down') => {
     const currentTab = sessionTabs.filter(tab => tab != null).find(tab => tab.id === sessionId);
     if (!currentTab) return;
@@ -2453,6 +2459,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     // Get current position (default to -1 for "not navigating")
     const currentPosition = historyPosition.get(sessionId) ?? -1;
 
+    // Read current draft input from Jotai atom
+    const currentDraftInput = store.get(sessionDraftInputAtom(sessionId));
+
     if (direction === 'up') {
       // Move to previous prompt (more recent = higher index)
       const newPosition = currentPosition === -1 ? userPrompts.length - 1 : Math.max(0, currentPosition - 1);
@@ -2460,7 +2469,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       // Save current draft on first navigation
       if (currentPosition === -1) {
         const newSavedDraft = new Map(savedDraft);
-        newSavedDraft.set(sessionId, currentTab.draftInput || '');
+        newSavedDraft.set(sessionId, currentDraftInput);
         setSavedDraft(newSavedDraft);
       }
 
@@ -2469,8 +2478,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       newHistoryPosition.set(sessionId, newPosition);
       setHistoryPosition(newHistoryPosition);
 
-      // Update draft input
-      handleDraftInputChange(sessionId, userPrompts[newPosition]);
+      // Update draft input via Jotai atom
+      store.set(sessionDraftInputAtom(sessionId), userPrompts[newPosition]);
     } else {
       // Move to next prompt or restore draft
       if (currentPosition === -1) return; // Not navigating
@@ -2480,7 +2489,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       if (newPosition >= userPrompts.length) {
         // Past the last prompt - restore original draft
         const draft = savedDraft.get(sessionId) || '';
-        handleDraftInputChange(sessionId, draft);
+        store.set(sessionDraftInputAtom(sessionId), draft);
 
         // Clear history navigation state
         const newHistoryPosition = new Map(historyPosition);
@@ -2496,10 +2505,10 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         newHistoryPosition.set(sessionId, newPosition);
         setHistoryPosition(newHistoryPosition);
 
-        handleDraftInputChange(sessionId, userPrompts[newPosition]);
+        store.set(sessionDraftInputAtom(sessionId), userPrompts[newPosition]);
       }
     }
-  }, [sessionTabs, historyPosition, savedDraft, handleDraftInputChange]);
+  }, [sessionTabs, historyPosition, savedDraft]);
 
   // Handle mode change (plan <-> agent)
   const handleModeChange = useCallback(async (sessionId: string, newMode: AIMode) => {
@@ -2596,12 +2605,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       return newMap;
     });
 
-    // CRITICAL: Immediately clear draft input in database to prevent it from
-    // being restored by Y.js sync. Don't wait for the debounced effect.
+    // Clear draft input in database (Jotai atom is already cleared in AISessionView's handleSend)
     try {
       await window.electronAPI.invoke('sessions:update-draft-input', sessionId, '');
-      // Also update the previous draft input tracker so the debounced effect doesn't overwrite
-      previousDraftInputRef.current.set(sessionId, '');
     } catch (err) {
       console.error('[AgenticPanel] Failed to clear draft input:', err);
     }
@@ -2831,6 +2837,13 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           return;
         }
 
+        // Initialize draft input atom if provided or from session data
+        if (draftInput) {
+          store.set(sessionDraftInputAtom(sessionId), draftInput);
+        } else if (sessionData.draftInput) {
+          store.set(sessionDraftInputAtom(sessionId), sessionData.draftInput);
+        }
+
         // Use functional state update to avoid dependency on sessionTabs
         setSessionTabs(prev => {
           // Check if session is already open in a tab
@@ -2849,7 +2862,6 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             id: sessionData.id,
             name: `Session ${prev.length + 1}`,
             sessionData,
-            draftInput: draftInput || sessionData.draftInput || '',
             mode: sessionData.mode || 'agent',
             model: sessionData.model || 'claude-sonnet-4-5-20250929'
           };
@@ -2893,13 +2905,13 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // Process queued prompts for a session (from mobile sync or local queue)
   // Uses the new queued_prompts table with atomic claim
   const processQueuedPrompts = useCallback(async (sessionId: string, _tab: SessionTab) => {
-    console.log(`[AgenticPanel] processQueuedPrompts called`, {
-      sessionId,
-      panelId: panelInstanceIdRef.current,
-      globalSendingHasId: globalSendingSessions.has(sessionId),
-      globalProcessingQueueHasId: globalProcessingSessionQueues.has(sessionId),
-      localProcessingQueueHasId: processingQueueRef.current.has(sessionId)
-    });
+    // console.log(`[AgenticPanel] processQueuedPrompts called`, {
+    //   sessionId,
+    //   panelId: panelInstanceIdRef.current,
+    //   globalSendingHasId: globalSendingSessions.has(sessionId),
+    //   globalProcessingQueueHasId: globalProcessingSessionQueues.has(sessionId),
+    //   localProcessingQueueHasId: processingQueueRef.current.has(sessionId)
+    // });
 
     // Use GLOBAL set to prevent duplicate processing across AgenticPanel instances
     // This is critical when both agent mode and files mode have the same session open
@@ -2938,7 +2950,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     }>;
 
     if (!pendingPrompts || pendingPrompts.length === 0) {
-      console.log(`[AgenticPanel] processQueuedPrompts: no pending prompts found for session ${sessionId}`);
+      // console.log(`[AgenticPanel] processQueuedPrompts: no pending prompts found for session ${sessionId}`);
       return;
     }
 
@@ -3148,7 +3160,14 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       }
     }
 
-    // Fallback to old files mode for non-worktree sessions
+    // For non-worktree sessions, open in the session's embedded editor
+    const sessionViewRef = sessionViewRefsRef.current.get(sessionId);
+    if (sessionViewRef?.current?.openFileInSessionEditor) {
+      sessionViewRef.current.openFileInSessionEditor(filePath);
+      return;
+    }
+
+    // Fallback to main workspace files mode for non-worktree sessions without embedded editor
     try {
       if (onFileOpen) {
         await onFileOpen(filePath);
@@ -3429,38 +3448,16 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           <AISessionView
             ref={getSessionViewRef(activeTab.id)}
             sessionId={activeTab.id}
-            sessionData={activeTab.sessionData}
-            isActive={true}
             mode="chat"
             workspacePath={workspacePath}
             documentContext={documentContext}
-            draftInput={activeTab.draftInput}
-            draftAttachments={activeTab.draftAttachments}
-            onDraftInputChange={handleDraftInputChange}
-            onDraftAttachmentsChange={handleDraftAttachmentsChange}
-            onSendMessage={handleSendMessage}
-            onCancelRequest={handleCancelRequest}
             onNavigateHistory={handleNavigateHistory}
             fileMentionOptions={fileMentionOptions}
             onFileMentionSearch={handleFileMentionSearch}
             onFileMentionSelect={handleFileMentionSelect}
             onFileClick={(filePath) => handleFileClick(activeTab.id, filePath)}
-            isLoading={sendingSessionsRef.current.has(activeTab.id)}
-            aiMode={activeTab.mode || 'agent'}
-            onAIModeChange={(newMode) => handleModeChange(activeTab.id, newMode)}
-            currentModel={activeTab.model || activeTab.sessionData.model || 'claude-code'}
-            onModelChange={(newModel) => handleModelChange(activeTab.id, newModel)}
-            sessionHasMessages={(activeTab.sessionData.messages?.length ?? 0) > 0}
-            currentProviderType={
-              activeTab.sessionData.provider === 'claude-code' || activeTab.sessionData.provider === 'openai-codex'
-                ? 'agent'
-                : activeTab.sessionData.provider
-                  ? 'model'
-                  : null
-            }
-            isArchived={activeTab.isArchived}
             onCloseAndArchive={handleCloseAndArchive}
-            onUnarchive={handleUnarchive}
+            onSessionTitleChanged={handleSessionTitleChanged}
           />
         ) : (
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -3492,10 +3489,6 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   }
 
   // Agent mode: multi-tab with session history
-  const activeAgentTab = activeTabId ? sessionTabs.find(tab => tab.id === activeTabId) : null;
-  const activeWorktreeId = activeAgentTab?.sessionData.worktreeId;
-  const activeAgentWorktreeMode: WorktreeContentMode = activeWorktreeId ? (worktreeModes.get(activeWorktreeId) ?? 'agent') : 'agent';
-
   return (
     <div className="agentic-panel agentic-panel--agent" style={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--surface-primary)' }}>
       <ResizablePanel
@@ -3536,13 +3529,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           />
         }
         rightPanel={
-          <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-            {/* Session Header */}
-            {activeAgentTab && (
-              <AgentSessionHeader sessionData={activeAgentTab.sessionData} />
-            )}
-
-            {/* Session views */}
+          <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            {/* Session views - each AISessionView now renders its own header and sidebar */}
             {sessionTabs.filter(tab => tab != null).map(tab => {
               // Terminal sessions render TerminalPanel (check first, before worktree)
               if (tab.sessionData.sessionType === 'terminal') {
@@ -3597,38 +3585,16 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                         key={`chat-${tab.id}`}
                         ref={getSessionViewRef(tab.id)}
                         sessionId={tab.id}
-                        sessionData={tab.sessionData}
-                        isActive={tab.id === activeTabId}
                         mode={currentMode === 'agent' ? 'agent' : 'chat'}
                         workspacePath={workspacePath}
                         documentContext={documentContext}
-                        draftInput={tab.draftInput}
-                        draftAttachments={tab.draftAttachments}
-                        onDraftInputChange={handleDraftInputChange}
-                        onDraftAttachmentsChange={handleDraftAttachmentsChange}
-                        onSendMessage={handleSendMessage}
-                        onCancelRequest={handleCancelRequest}
                         onNavigateHistory={handleNavigateHistory}
                         fileMentionOptions={fileMentionOptions}
                         onFileMentionSearch={handleFileMentionSearch}
                         onFileMentionSelect={handleFileMentionSelect}
                         onFileClick={(filePath) => handleFileClick(tab.id, filePath)}
-                        isLoading={sendingSessionsRef.current.has(tab.id)}
-                        aiMode={tab.mode || 'agent'}
-                        onAIModeChange={(newMode) => handleModeChange(tab.id, newMode)}
-                        currentModel={tab.model || tab.sessionData.model || 'claude-code'}
-                        onModelChange={(newModel) => handleModelChange(tab.id, newModel)}
-                        sessionHasMessages={(tab.sessionData.messages?.length ?? 0) > 0}
-                        currentProviderType={
-                          tab.sessionData.provider === 'claude-code' || tab.sessionData.provider === 'openai-codex'
-                            ? 'agent'
-                            : tab.sessionData.provider
-                              ? 'model'
-                              : null
-                        }
-                        isArchived={tab.isArchived}
                         onCloseAndArchive={handleCloseAndArchive}
-                        onUnarchive={handleUnarchive}
+                        onSessionTitleChanged={handleSessionTitleChanged}
                       />
                     )}
                   />
@@ -3636,44 +3602,22 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
               }
 
               // Non-worktree sessions render standalone AISessionView
-              // (Terminal sessions are handled at the top of the loop)
+              // AISessionView now handles its own header and sidebar internally
               return (
                 <AISessionView
                   key={tab.id}
                   ref={getSessionViewRef(tab.id)}
                   sessionId={tab.id}
-                  sessionData={tab.sessionData}
-                  isActive={tab.id === activeTabId}
                   mode="agent"
                   workspacePath={workspacePath}
                   documentContext={documentContext}
-                  draftInput={tab.draftInput}
-                  draftAttachments={tab.draftAttachments}
-                  onDraftInputChange={handleDraftInputChange}
-                  onDraftAttachmentsChange={handleDraftAttachmentsChange}
-                  onSendMessage={handleSendMessage}
-                  onCancelRequest={handleCancelRequest}
                   onNavigateHistory={handleNavigateHistory}
                   fileMentionOptions={fileMentionOptions}
                   onFileMentionSearch={handleFileMentionSearch}
                   onFileMentionSelect={handleFileMentionSelect}
                   onFileClick={(filePath) => handleFileClick(tab.id, filePath)}
-                  isLoading={sendingSessionsRef.current.has(tab.id)}
-                  aiMode={tab.mode || 'agent'}
-                  onAIModeChange={(newMode) => handleModeChange(tab.id, newMode)}
-                  currentModel={tab.model || tab.sessionData.model || 'claude-code'}
-                  onModelChange={(newModel) => handleModelChange(tab.id, newModel)}
-                  sessionHasMessages={(tab.sessionData.messages?.length ?? 0) > 0}
-                  currentProviderType={
-                    tab.sessionData.provider === 'claude-code' || tab.sessionData.provider === 'openai-codex'
-                      ? 'agent'
-                      : tab.sessionData.provider
-                        ? 'model'
-                        : null
-                  }
-                  isArchived={tab.isArchived}
                   onCloseAndArchive={handleCloseAndArchive}
-                  onUnarchive={handleUnarchive}
+                  onSessionTitleChanged={handleSessionTitleChanged}
                 />
               );
             })}

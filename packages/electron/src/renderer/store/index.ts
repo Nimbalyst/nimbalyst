@@ -74,6 +74,8 @@ export {
   sessionPendingPromptAtom,
   sessionPendingPermissionAtom,
   sessionLastReadAtom,
+  sessionDraftInputAtom,
+  sessionDraftAttachmentsAtom,
   totalUnreadCountAtom,
   anySessionProcessingAtom,
   anyPendingPermissionAtom,
@@ -92,8 +94,21 @@ export {
   addSessionFullAtom,
   updateSessionFullAtom,
   removeSessionFullAtom,
+  // Per-session data (AISessionView owns its own data)
+  sessionDataAtom,
+  sessionLoadingAtom,
+  sessionModeAtom,
+  sessionModelAtom,
+  sessionArchivedAtom,
+  sessionActiveAtom,
+  openSessionsAtom,
+  loadSessionDataAtom,
+  updateSessionDataAtom,
+  reloadSessionDataAtom,
+  cleanupSessionAtom,
   type SessionInfo,
   type SessionListItem,
+  type OpenSession,
 } from './atoms/sessions';
 
 // File tree atoms (Electron file watcher)
@@ -207,3 +222,26 @@ export {
   type SettingsScope,
   type SettingsNavigationState,
 } from './atoms/settingsNavigation';
+
+// Session editor atoms (per-session embedded editor tabs)
+export {
+  sessionEditorStateAtom,
+  sessionTabKeysAtom,
+  sessionActiveTabKeyAtom,
+  sessionLayoutModeAtom,
+  sessionSplitRatioAtom,
+  sessionEditorVisibleAtom,
+  sessionHasTabsAtom,
+  sessionTabCountAtom,
+  setSessionTabCountAtom,
+  openFileInSessionEditorAtom,
+  setSessionLayoutModeAtom,
+  setSessionSplitRatioAtom,
+  toggleSessionEditorAtom,
+  persistSessionTabs,
+  initSessionEditors,
+  loadSessionEditorState,
+  cleanupSessionEditorState,
+  type SessionLayoutMode,
+  type SessionEditorState,
+} from './atoms/sessionEditors';

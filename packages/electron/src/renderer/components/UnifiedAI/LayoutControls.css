@@ -1,0 +1,53 @@
+/**
+ * LayoutControls styles
+ *
+ * Toggle buttons for session editor layout modes.
+ */
+
+.layout-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  background: var(--background-tertiary, rgba(0, 0, 0, 0.1));
+  border-radius: 6px;
+}
+
+.layout-control-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted, #6b7280);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.layout-control-btn:hover:not(:disabled) {
+  background: var(--background-hover, rgba(255, 255, 255, 0.1));
+  color: var(--text-primary, #e5e7eb);
+}
+
+.layout-control-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.layout-control-btn.active {
+  background: var(--accent-color, #3b82f6);
+  color: white;
+}
+
+.layout-control-btn.active:hover {
+  background: var(--accent-color-hover, #2563eb);
+}
+
+/* Icon styling */
+.layout-control-btn .material-symbols-rounded {
+  font-size: 16px;
+}

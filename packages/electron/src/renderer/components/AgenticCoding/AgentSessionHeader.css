@@ -134,3 +134,11 @@
     transform: rotate(360deg);
   }
 }
+
+/* Layout controls */
+.agent-session-header-layout-controls {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding-left: 16px;
+  border-left: 1px solid var(--border-primary);
+}

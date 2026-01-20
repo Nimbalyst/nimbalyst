@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { useAtomValue } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { ProviderIcon } from '@nimbalyst/runtime';
 import type { SessionData } from '@nimbalyst/runtime/ai/server/types';
-import { sessionProcessingAtom } from '../../store';
+import { sessionProcessingAtom, sessionEditorStateAtom, setSessionLayoutModeAtom, sessionHasTabsAtom } from '../../store';
+import { LayoutControls } from '../UnifiedAI/LayoutControls';
 import './AgentSessionHeader.css';
 
 interface WorktreeWithStatus {
@@ -33,6 +34,15 @@ export const AgentSessionHeader: React.FC<AgentSessionHeaderProps> = ({
 }) => {
   // Subscribe to processing atom for this session
   const isProcessing = useAtomValue(sessionProcessingAtom(sessionData?.id ?? ''));
+
+  // Layout state for non-worktree sessions
+  const sessionEditorState = useAtomValue(sessionEditorStateAtom(sessionData?.id ?? ''));
+  const setSessionLayoutMode = useSetAtom(setSessionLayoutModeAtom);
+  const hasTabs = useAtomValue(sessionHasTabsAtom(sessionData?.id ?? ''));
+
+  // Determine if this is a worktree session (layout controls only for non-worktree)
+  const isWorktreeSession = !!sessionData?.worktreeId;
+  const showLayoutControls = sessionData && !isWorktreeSession;
   // Use cached data immediately if available
   const cachedData = sessionData?.worktreeId ? worktreeCache.get(sessionData.worktreeId) ?? null : null;
   const [worktreeData, setWorktreeData] = useState<WorktreeWithStatus | null>(cachedData);
@@ -121,9 +131,6 @@ export const AgentSessionHeader: React.FC<AgentSessionHeaderProps> = ({
     ? sessionData.model.split(':')[1]
     : sessionData.model;
 
-  // Determine if this is a worktree session immediately from sessionData (no async needed)
-  const isWorktreeSession = !!sessionData.worktreeId;
-
   return (
     <div className="agent-session-header">
       <div className="agent-session-header-main">
@@ -186,6 +193,17 @@ export const AgentSessionHeader: React.FC<AgentSessionHeaderProps> = ({
         {isProcessing && (
           <div className="agent-session-header-processing">
             <div className="agent-session-header-spinner" />
+          </div>
+        )}
+
+        {/* Layout controls for non-worktree sessions */}
+        {showLayoutControls && (
+          <div className="agent-session-header-layout-controls">
+            <LayoutControls
+              mode={sessionEditorState.layoutMode}
+              hasTabs={hasTabs}
+              onModeChange={(mode) => setSessionLayoutMode({ sessionId: sessionData.id, mode })}
+            />
           </div>
         )}
       </div>

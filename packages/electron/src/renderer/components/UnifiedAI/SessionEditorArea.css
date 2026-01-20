@@ -1,0 +1,105 @@
+/**
+ * SessionEditorArea styles
+ *
+ * Embedded editor area for AI sessions with resizable split view.
+ */
+
+.session-editor-area {
+  display: flex;
+  flex-direction: column;
+  background: var(--background-color);
+  border-bottom: 1px solid var(--border-color);
+  overflow: hidden;
+  position: relative;
+}
+
+/* Header with tabs and layout controls */
+.session-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--tab-bar-background, var(--background-secondary));
+  border-bottom: 1px solid var(--border-color);
+  padding-right: 8px;
+  min-height: 36px;
+}
+
+.session-editor-tabs {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Override TabManager styles for embedded use */
+.session-editor-tabs .tab-manager {
+  min-height: auto;
+}
+
+.session-editor-tabs .tab-bar {
+  background: transparent;
+  border-bottom: none;
+}
+
+/* Editor content area */
+.session-editor-content {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Resize handle */
+.session-editor-resize-handle {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  cursor: ns-resize;
+  background: transparent;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.session-editor-resize-handle:hover {
+  background: var(--accent-color-transparent, rgba(59, 130, 246, 0.1));
+}
+
+.resize-handle-grip {
+  width: 40px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--text-muted, #6b7280);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.session-editor-resize-handle:hover .resize-handle-grip {
+  opacity: 0.5;
+}
+
+/* When actively resizing */
+.session-editor-area.resizing .session-editor-resize-handle {
+  background: var(--accent-color-transparent, rgba(59, 130, 246, 0.2));
+}
+
+.session-editor-area.resizing .resize-handle-grip {
+  opacity: 0.8;
+}
+
+/* Collapsed state animation */
+.session-editor-area.collapsed {
+  height: 0 !important;
+  min-height: 0 !important;
+  border-bottom: none;
+  overflow: hidden;
+}
+
+/* Container for the whole split view */
+.session-editor-split-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
