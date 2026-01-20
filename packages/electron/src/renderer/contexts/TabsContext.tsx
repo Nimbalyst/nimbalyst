@@ -74,13 +74,16 @@ interface TabsProviderProps {
   workspacePath: string | null;
   onTabClose?: (tab: TabData) => void;
   getNavigationState?: () => any;
+  /** If true, tabs are not persisted to/restored from workspace state. Useful for session-specific editors. */
+  disablePersistence?: boolean;
 }
 
 export function TabsProvider({
   children,
   workspacePath,
   onTabClose,
-  getNavigationState
+  getNavigationState,
+  disablePersistence = false
 }: TabsProviderProps) {
   if (import.meta.env.DEV) console.log('[TabsProvider] render');
   // Store state in refs to avoid re-renders
@@ -389,7 +392,7 @@ export function TabsProvider({
 
   // Restore tabs from storage on mount
   React.useEffect(() => {
-    if (!workspacePath || !window.electronAPI?.invoke) return;
+    if (disablePersistence || !workspacePath || !window.electronAPI?.invoke) return;
 
     const timer = setTimeout(async () => {
       try {
@@ -450,11 +453,11 @@ export function TabsProvider({
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [workspacePath, notify]);
+  }, [disablePersistence, workspacePath, notify]);
 
   // Save tabs to storage when they change
   React.useEffect(() => {
-    if (!workspacePath || !window.electronAPI?.invoke) return;
+    if (disablePersistence || !workspacePath || !window.electronAPI?.invoke) return;
 
     const saveState = async () => {
       const store = storeRef.current;
@@ -522,7 +525,7 @@ export function TabsProvider({
       unsubscribe();
       clearInterval(interval);
     };
-  }, [workspacePath, subscribe]);
+  }, [disablePersistence, workspacePath, subscribe]);
 
   const contextValue: TabsContextValue = {
     subscribe,

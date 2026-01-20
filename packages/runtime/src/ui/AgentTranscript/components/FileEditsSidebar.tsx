@@ -1,6 +1,5 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import type { FileEditSummary } from '../types';
-import { formatTimeAgo } from '../../../utils/dateUtils';
 import { MaterialSymbol } from '../../icons/MaterialSymbol';
 import './FileEditsSidebar.css';
 
@@ -14,6 +13,8 @@ interface FileEditsSidebarProps {
   groupByDirectory?: boolean;
   /** Callback when groupByDirectory changes */
   onGroupByDirectoryChange?: (value: boolean) => void;
+  /** If true, hide the internal controls (for when controls are rendered externally) */
+  hideControls?: boolean;
 }
 
 interface FileGitStatus {
@@ -35,9 +36,9 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
   workspacePath,
   pendingReviewFiles,
   groupByDirectory: groupByDirectoryProp,
-  onGroupByDirectoryChange
+  onGroupByDirectoryChange,
+  hideControls = false
 }) => {
-  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [gitStatus, setGitStatus] = useState<Record<string, FileGitStatus>>({});
   // Use prop if provided, otherwise use local state
   const [localGroupByDirectory, setLocalGroupByDirectory] = useState(false);
@@ -78,7 +79,6 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
 
       // Build directory tree
       let currentNode = root;
-      const fileName = parts[parts.length - 1];
       const dirParts = parts.slice(0, -1);
 
       dirParts.forEach((part, index) => {
@@ -146,7 +146,7 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
 
     // If this node has exactly one subdirectory and no files, collapse it
     if (node.subdirectories.size === 1 && node.files.length === 0) {
-      const [childKey, childNode] = Array.from(node.subdirectories.entries())[0];
+      const [, childNode] = Array.from(node.subdirectories.entries())[0];
 
       // Merge the paths
       const newDisplayPath = node.displayPath
@@ -162,65 +162,44 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
     return node;
   };
 
-  // Group edits by link type, then by file path
-  const groupedByType = useMemo(() => {
-    const editedFiles: FileEditSummary[] = [];
-    const referencedFiles: FileEditSummary[] = [];
-    const readFiles: FileEditSummary[] = [];
+  // Group edited files by file path
+  const editedFiles = useMemo(() => {
+    const edited = fileEdits.filter(edit => edit.linkType === 'edited');
 
-    fileEdits.forEach(edit => {
-      if (edit.linkType === 'edited') {
-        editedFiles.push(edit);
-      } else if (edit.linkType === 'referenced') {
-        referencedFiles.push(edit);
-      } else if (edit.linkType === 'read') {
-        readFiles.push(edit);
-      }
+    // Group by file path
+    const groups = new Map<string, FileEditSummary[]>();
+    edited.forEach(file => {
+      const existing = groups.get(file.filePath) || [];
+      existing.push(file);
+      groups.set(file.filePath, existing);
     });
 
-    // Group by file path within each type
-    const groupByPath = (files: FileEditSummary[]) => {
-      const groups = new Map<string, FileEditSummary[]>();
-      files.forEach(file => {
-        const existing = groups.get(file.filePath) || [];
-        existing.push(file);
-        groups.set(file.filePath, existing);
-      });
+    return Array.from(groups.entries()).map(([filePath, edits]) => {
+      const totalAdded = edits.reduce((sum, e) => sum + (e.linesAdded || 0), 0);
+      const totalRemoved = edits.reduce((sum, e) => sum + (e.linesRemoved || 0), 0);
+      const lastEdit = edits[edits.length - 1];
 
-      return Array.from(groups.entries()).map(([filePath, edits]) => {
-        const totalAdded = edits.reduce((sum, e) => sum + (e.linesAdded || 0), 0);
-        const totalRemoved = edits.reduce((sum, e) => sum + (e.linesRemoved || 0), 0);
-        const lastEdit = edits[edits.length - 1];
-
-        return {
-          filePath,
-          edits,
-          totalAdded,
-          totalRemoved,
-          operation: lastEdit.operation,
-          timestamp: lastEdit.timestamp
-        };
-      });
-    };
-
-    return {
-      edited: groupByPath(editedFiles),
-      referenced: groupByPath(referencedFiles),
-      read: groupByPath(readFiles)
-    };
+      return {
+        filePath,
+        edits,
+        totalAdded,
+        totalRemoved,
+        operation: lastEdit.operation,
+        timestamp: lastEdit.timestamp
+      };
+    });
   }, [fileEdits]);
 
   // Fetch git status for edited files
   useEffect(() => {
-    if (!workspacePath || groupedByType.edited.length === 0) {
+    if (!workspacePath || editedFiles.length === 0) {
       setGitStatus({});
       return;
     }
 
     const fetchGitStatus = async () => {
       try {
-        // Get list of edited file paths
-        const filePaths = groupedByType.edited.map(f => getRelativePath(f.filePath));
+        const filePaths = editedFiles.map(f => getRelativePath(f.filePath));
 
         if (typeof window !== 'undefined' && (window as any).electronAPI) {
           const result = await (window as any).electronAPI.invoke(
@@ -248,14 +227,7 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
     return () => {
       window.removeEventListener('focus', handleFocus);
     };
-  }, [groupedByType.edited, workspacePath]);
-
-  const toggleSection = (sectionName: string) => {
-    setCollapsedSections(prev => ({
-      ...prev,
-      [sectionName]: !prev[sectionName]
-    }));
-  };
+  }, [editedFiles, workspacePath]);
 
   const toggleFolder = (folderPath: string) => {
     setExpandedFolders(prev => {
@@ -279,46 +251,42 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
     return paths;
   };
 
-  const expandAll = () => {
-    const allPaths: string[] = [];
-    if (groupedByType.edited.length > 0) {
-      const tree = buildDirectoryTree(groupedByType.edited);
-      getAllFolderPaths(tree, allPaths);
+  const expandAll = useCallback(() => {
+    if (editedFiles.length > 0) {
+      const tree = buildDirectoryTree(editedFiles);
+      const allPaths = getAllFolderPaths(tree);
+      setExpandedFolders(new Set(allPaths));
     }
-    if (groupedByType.referenced.length > 0) {
-      const tree = buildDirectoryTree(groupedByType.referenced);
-      getAllFolderPaths(tree, allPaths);
-    }
-    if (groupedByType.read.length > 0) {
-      const tree = buildDirectoryTree(groupedByType.read);
-      getAllFolderPaths(tree, allPaths);
-    }
-    setExpandedFolders(new Set(allPaths));
-  };
+  }, [editedFiles]);
 
-  const collapseAll = () => {
+  const collapseAll = useCallback(() => {
     setExpandedFolders(new Set());
-  };
+  }, []);
 
   // Auto-expand all folders when groupByDirectory is enabled or files change
   useEffect(() => {
-    if (groupByDirectory) {
-      const allPaths: string[] = [];
-      if (groupedByType.edited.length > 0) {
-        const tree = buildDirectoryTree(groupedByType.edited);
-        getAllFolderPaths(tree, allPaths);
-      }
-      if (groupedByType.referenced.length > 0) {
-        const tree = buildDirectoryTree(groupedByType.referenced);
-        getAllFolderPaths(tree, allPaths);
-      }
-      if (groupedByType.read.length > 0) {
-        const tree = buildDirectoryTree(groupedByType.read);
-        getAllFolderPaths(tree, allPaths);
-      }
+    if (groupByDirectory && editedFiles.length > 0) {
+      const tree = buildDirectoryTree(editedFiles);
+      const allPaths = getAllFolderPaths(tree);
       setExpandedFolders(new Set(allPaths));
     }
-  }, [groupByDirectory, groupedByType]);
+  }, [groupByDirectory, editedFiles]);
+
+  // Listen for external expand/collapse events (when hideControls is true)
+  useEffect(() => {
+    if (!hideControls) return;
+
+    const handleExpandAll = () => expandAll();
+    const handleCollapseAll = () => collapseAll();
+
+    window.addEventListener('file-edits-sidebar:expand-all', handleExpandAll);
+    window.addEventListener('file-edits-sidebar:collapse-all', handleCollapseAll);
+
+    return () => {
+      window.removeEventListener('file-edits-sidebar:expand-all', handleExpandAll);
+      window.removeEventListener('file-edits-sidebar:collapse-all', handleCollapseAll);
+    };
+  }, [hideControls, expandAll, collapseAll]);
 
   const getOperationIcon = (operation: string) => {
     switch (operation) {
@@ -377,33 +345,55 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
     );
   };
 
-  const getLinkTypeIcon = (linkType: 'edited' | 'referenced' | 'read') => {
-    switch (linkType) {
-      case 'edited':
-        return (
-          <MaterialSymbol icon="edit" size={14} className="file-edits-sidebar__section-icon" />
-        );
-      case 'referenced':
-        return (
-          <MaterialSymbol icon="tag" size={14} className="file-edits-sidebar__section-icon" />
-        );
-      case 'read':
-        return (
-          <MaterialSymbol icon="visibility" size={14} className="file-edits-sidebar__section-icon" />
-        );
-    }
+  const renderFile = ({ filePath, totalAdded, totalRemoved, operation }: { filePath: string; totalAdded: number; totalRemoved: number; operation?: string }) => {
+    const hasPendingReview = pendingReviewFiles?.has(filePath);
+    return (
+      <button
+        key={filePath}
+        onClick={() => onFileClick?.(filePath)}
+        className={`file-edits-sidebar__file ${hasPendingReview ? 'file-edits-sidebar__file--pending' : ''}`}
+      >
+        <div className="file-edits-sidebar__file-content">
+          {hasPendingReview && (
+            <MaterialSymbol
+              icon="rate_review"
+              size={14}
+              className="file-edits-sidebar__pending-icon"
+              title="Pending review"
+            />
+          )}
+          {operation && (
+            <div className="file-edits-sidebar__file-operation-icon">
+              {getOperationIcon(operation)}
+            </div>
+          )}
+          {renderGitStatus(filePath)}
+          <div className="file-edits-sidebar__file-info">
+            <div className="file-edits-sidebar__file-name" title={getRelativePath(filePath)}>
+              {formatFileName(filePath)}
+            </div>
+          </div>
+          {(totalAdded > 0 || totalRemoved > 0) && (
+            <div className="file-edits-sidebar__file-stats">
+              {totalAdded > 0 && (
+                <span className="file-edits-sidebar__file-stats-added">+{totalAdded}</span>
+              )}
+              {totalRemoved > 0 && (
+                <span className="file-edits-sidebar__file-stats-removed">-{totalRemoved}</span>
+              )}
+            </div>
+          )}
+        </div>
+      </button>
+    );
   };
 
-  const renderDirectoryNode = (
-    node: DirectoryNode,
-    linkType: 'edited' | 'referenced' | 'read',
-    isNested: boolean = false
-  ): React.ReactNode => {
+  const renderDirectoryNode = (node: DirectoryNode): React.ReactNode => {
     const isExpanded = expandedFolders.has(node.path);
     const hasContent = node.files.length > 0 || node.subdirectories.size > 0;
 
     return (
-      <div key={node.path} className={`file-edits-sidebar__directory-node ${isNested ? 'file-edits-sidebar__directory-node--nested' : ''}`}>
+      <div key={node.path || 'root'} className="file-edits-sidebar__directory-node">
         {node.displayPath && (
           <button
             onClick={() => toggleFolder(node.path)}
@@ -425,151 +415,23 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
         )}
 
         {(isExpanded || !node.displayPath) && hasContent && (
-          <div className="file-edits-sidebar__directory-children">
+          <div className={node.displayPath ? "file-edits-sidebar__directory-children" : undefined}>
             {/* Render subdirectories first */}
             {Array.from(node.subdirectories.values()).map(subdir =>
-              renderDirectoryNode(subdir, linkType, true)
+              renderDirectoryNode(subdir)
             )}
 
             {/* Render files */}
-            {node.files.map(({ filePath, totalAdded, totalRemoved, operation, timestamp, edits }) => {
-              const hasPendingReview = linkType === 'edited' && pendingReviewFiles?.has(filePath);
-              return (
-                <button
-                  key={filePath}
-                  onClick={() => onFileClick?.(filePath)}
-                  className={`file-edits-sidebar__file ${hasPendingReview ? 'file-edits-sidebar__file--pending' : ''}`}
-                >
-                  <div className="file-edits-sidebar__file-content">
-                    {hasPendingReview && (
-                      <MaterialSymbol
-                        icon="rate_review"
-                        size={14}
-                        className="file-edits-sidebar__pending-icon"
-                        title="Pending review"
-                      />
-                    )}
-                    {operation && (
-                      <div className="file-edits-sidebar__file-operation-icon">
-                        {getOperationIcon(operation)}
-                      </div>
-                    )}
-                    {linkType === 'edited' && renderGitStatus(filePath)}
-                    <div className="file-edits-sidebar__file-info">
-                      <div className="file-edits-sidebar__file-name" title={getRelativePath(filePath)}>
-                        {formatFileName(filePath)}
-                      </div>
-                    </div>
-                    {linkType === 'edited' && (totalAdded > 0 || totalRemoved > 0) && (
-                      <div className="file-edits-sidebar__file-stats">
-                        {totalAdded > 0 && (
-                          <span className="file-edits-sidebar__file-stats-added">+{totalAdded}</span>
-                        )}
-                        {totalRemoved > 0 && (
-                          <span className="file-edits-sidebar__file-stats-removed">-{totalRemoved}</span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
+            {node.files.map(file => renderFile(file))}
           </div>
         )}
       </div>
     );
   };
-
-  const renderSection = (
-    title: string,
-    linkType: 'edited' | 'referenced' | 'read',
-    files: Array<{ filePath: string; edits: FileEditSummary[]; totalAdded: number; totalRemoved: number; operation?: string; timestamp: string }>
-  ) => {
-    if (files.length === 0) return null;
-
-    const isCollapsed = collapsedSections[linkType];
-
-    return (
-      <div key={linkType} className="file-edits-sidebar__section">
-        <button
-          onClick={() => toggleSection(linkType)}
-          className="file-edits-sidebar__section-header"
-        >
-          <div className="file-edits-sidebar__section-header-content">
-            {getLinkTypeIcon(linkType)}
-            <span>{title}</span>
-            <span className="file-edits-sidebar__section-count">
-              {files.length}
-            </span>
-          </div>
-          <MaterialSymbol
-            icon={isCollapsed ? "chevron_right" : "expand_more"}
-            size={16}
-            className={`file-edits-sidebar__section-chevron ${isCollapsed ? 'file-edits-sidebar__section-chevron--collapsed' : ''}`}
-          />
-        </button>
-
-        {!isCollapsed && (
-          <div className="file-edits-sidebar__section-files">
-            {groupByDirectory ? (
-              // Directory mode: render directory tree
-              renderDirectoryNode(buildDirectoryTree(files), linkType)
-            ) : (
-              // Flat mode: render files directly
-              files.map(({ filePath, totalAdded, totalRemoved, operation, timestamp, edits }) => {
-                const hasPendingReview = linkType === 'edited' && pendingReviewFiles?.has(filePath);
-                return (
-                  <button
-                    key={filePath}
-                    onClick={() => onFileClick?.(filePath)}
-                    className={`file-edits-sidebar__file ${hasPendingReview ? 'file-edits-sidebar__file--pending' : ''}`}
-                  >
-                    <div className="file-edits-sidebar__file-content">
-                      {hasPendingReview && (
-                        <MaterialSymbol
-                          icon="rate_review"
-                          size={14}
-                          className="file-edits-sidebar__pending-icon"
-                          title="Pending review"
-                        />
-                      )}
-                      {operation && (
-                        <div className="file-edits-sidebar__file-operation-icon">
-                          {getOperationIcon(operation)}
-                        </div>
-                      )}
-                      {linkType === 'edited' && renderGitStatus(filePath)}
-                      <div className="file-edits-sidebar__file-info">
-                        <div className="file-edits-sidebar__file-name" title={getRelativePath(filePath)}>
-                          {formatFileName(filePath)}
-                        </div>
-                      </div>
-                      {linkType === 'edited' && (totalAdded > 0 || totalRemoved > 0) && (
-                        <div className="file-edits-sidebar__file-stats">
-                          {totalAdded > 0 && (
-                            <span className="file-edits-sidebar__file-stats-added">+{totalAdded}</span>
-                          )}
-                          {totalRemoved > 0 && (
-                            <span className="file-edits-sidebar__file-stats-removed">-{totalRemoved}</span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </button>
-                );
-              })
-            )}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const totalFiles = groupedByType.edited.length + groupedByType.referenced.length + groupedByType.read.length;
 
   return (
     <div className="file-edits-sidebar">
-      {totalFiles > 0 && (
+      {!hideControls && editedFiles.length > 0 && (
         <div className="file-edits-sidebar__controls">
           <button
             onClick={() => setGroupByDirectory(!groupByDirectory)}
@@ -596,17 +458,15 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
           </button>
         </div>
       )}
-      <div className="file-edits-sidebar__content">
-        {totalFiles === 0 ? (
+      <div className="file-edits-sidebar__files">
+        {editedFiles.length === 0 ? (
           <div className="file-edits-sidebar__empty">
-            No file interactions yet
+            No files edited yet
           </div>
+        ) : groupByDirectory ? (
+          renderDirectoryNode(buildDirectoryTree(editedFiles))
         ) : (
-          <>
-            {renderSection('Edited', 'edited', groupedByType.edited)}
-            {renderSection('Referenced', 'referenced', groupedByType.referenced)}
-            {renderSection('Read', 'read', groupedByType.read)}
-          </>
+          editedFiles.map(file => renderFile(file))
         )}
       </div>
     </div>
