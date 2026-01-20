@@ -105,10 +105,13 @@ export class MCPConfigService {
   private legacyConfigPath: string;
   private userConfigWatcher: FSWatcher | null = null;
   private workspaceWatchers = new Map<string, FSWatcher>();
+  private workspaceDirWatchers = new Map<string, FSWatcher>(); // For detecting new .mcp.json files
   private changeCallbacks: Array<(scope: 'user' | 'workspace', workspacePath?: string) => void> = [];
+  private debounceTimers = new Map<string, NodeJS.Timeout>();
 
   private CONNECTION_TIMEOUT_MS = 30000; // Base timeout
   private DOWNLOAD_TIMEOUT_MS = 120000; // Extended timeout when downloading packages
+  private DEBOUNCE_MS = 500; // Debounce file watcher events
 
   constructor() {
     // Primary location: ~/.claude.json (used by Claude Code CLI)
@@ -326,8 +329,10 @@ export class MCPConfigService {
     try {
       this.userConfigWatcher = watch(this.userConfigPath, (eventType) => {
         if (eventType === 'change') {
-          logger.mcp.info('[MCPConfigService] User config file changed');
-          this.notifyChange('user');
+          this.debouncedNotify('user-config', () => {
+            logger.mcp.info('[MCPConfigService] User config file changed');
+            this.notifyChange('user');
+          });
         }
       });
 
@@ -344,6 +349,10 @@ export class MCPConfigService {
   /**
    * Start watching a workspace-level MCP config file (.mcp.json) for changes.
    * Call this when a workspace is opened.
+   *
+   * This uses a two-watcher approach:
+   * 1. Watch the .mcp.json file directly if it exists
+   * 2. Watch the workspace directory to detect when .mcp.json is created
    */
   startWatchingWorkspaceConfig(workspacePath: string): void {
     if (!workspacePath) {
@@ -357,25 +366,56 @@ export class MCPConfigService {
 
     const mcpJsonPath = path.join(workspacePath, '.mcp.json');
 
+    // Try to watch the .mcp.json file directly
     try {
-      const watcher = watch(mcpJsonPath, (eventType) => {
+      const fileWatcher = watch(mcpJsonPath, (eventType) => {
         if (eventType === 'change') {
-          logger.mcp.info('[MCPConfigService] Workspace config changed:', workspacePath);
-          this.notifyChange('workspace', workspacePath);
+          this.debouncedNotify(`workspace-${workspacePath}`, () => {
+            logger.mcp.info('[MCPConfigService] Workspace config changed:', workspacePath);
+            this.notifyChange('workspace', workspacePath);
+          });
         }
       });
 
-      watcher.on('error', (error) => {
+      fileWatcher.on('error', (error) => {
         // Don't log missing file errors - workspace might not have .mcp.json
         if ((error as any).code !== 'ENOENT') {
           logger.mcp.error('[MCPConfigService] Workspace config watcher error:', error);
         }
       });
 
-      this.workspaceWatchers.set(workspacePath, watcher);
+      this.workspaceWatchers.set(workspacePath, fileWatcher);
       logger.mcp.info('[MCPConfigService] Started watching workspace config:', mcpJsonPath);
     } catch (error) {
-      logger.mcp.error('[MCPConfigService] Failed to start workspace config watcher:', error);
+      // File doesn't exist yet - that's fine, we'll watch the directory instead
+      logger.mcp.debug('[MCPConfigService] .mcp.json does not exist yet, watching directory');
+    }
+
+    // Also watch the workspace directory to detect when .mcp.json is created
+    try {
+      const dirWatcher = watch(workspacePath, (eventType, filename) => {
+        if (filename === '.mcp.json' && (eventType === 'rename' || eventType === 'change')) {
+          this.debouncedNotify(`workspace-dir-${workspacePath}`, () => {
+            logger.mcp.info('[MCPConfigService] Workspace .mcp.json created/changed:', workspacePath);
+
+            // If we weren't watching the file yet, start watching it now
+            if (!this.workspaceWatchers.has(workspacePath)) {
+              this.startWatchingWorkspaceConfig(workspacePath);
+            }
+
+            this.notifyChange('workspace', workspacePath);
+          });
+        }
+      });
+
+      dirWatcher.on('error', (error) => {
+        logger.mcp.error('[MCPConfigService] Workspace directory watcher error:', error);
+      });
+
+      this.workspaceDirWatchers.set(workspacePath, dirWatcher);
+      logger.mcp.info('[MCPConfigService] Started watching workspace directory:', workspacePath);
+    } catch (error) {
+      logger.mcp.error('[MCPConfigService] Failed to start workspace directory watcher:', error);
     }
   }
 
@@ -384,11 +424,32 @@ export class MCPConfigService {
    * Call this when a workspace is closed.
    */
   stopWatchingWorkspaceConfig(workspacePath: string): void {
+    // Stop watching the .mcp.json file
     const watcher = this.workspaceWatchers.get(workspacePath);
     if (watcher) {
       watcher.close();
       this.workspaceWatchers.delete(workspacePath);
       logger.mcp.info('[MCPConfigService] Stopped watching workspace config:', workspacePath);
+    }
+
+    // Stop watching the workspace directory
+    const dirWatcher = this.workspaceDirWatchers.get(workspacePath);
+    if (dirWatcher) {
+      dirWatcher.close();
+      this.workspaceDirWatchers.delete(workspacePath);
+      logger.mcp.info('[MCPConfigService] Stopped watching workspace directory:', workspacePath);
+    }
+
+    // Clean up any pending debounce timers for this workspace
+    const fileTimerKey = `workspace-${workspacePath}`;
+    const dirTimerKey = `workspace-dir-${workspacePath}`;
+    if (this.debounceTimers.has(fileTimerKey)) {
+      clearTimeout(this.debounceTimers.get(fileTimerKey)!);
+      this.debounceTimers.delete(fileTimerKey);
+    }
+    if (this.debounceTimers.has(dirTimerKey)) {
+      clearTimeout(this.debounceTimers.get(dirTimerKey)!);
+      this.debounceTimers.delete(dirTimerKey);
     }
   }
 
@@ -414,22 +475,57 @@ export class MCPConfigService {
   }
 
   /**
+   * Debounce file watcher notifications to avoid multiple toasts for single save.
+   * Editors often write temp files which trigger multiple fs.watch events.
+   */
+  private debouncedNotify(key: string, callback: () => void): void {
+    // Clear existing timer for this key
+    if (this.debounceTimers.has(key)) {
+      clearTimeout(this.debounceTimers.get(key)!);
+    }
+
+    // Set new timer
+    const timer = setTimeout(() => {
+      this.debounceTimers.delete(key);
+      callback();
+    }, this.DEBOUNCE_MS);
+
+    this.debounceTimers.set(key, timer);
+  }
+
+  /**
    * Cleanup all file watchers.
    * Call this during app shutdown.
    */
   cleanup(): void {
+    // Stop user config watcher
     if (this.userConfigWatcher) {
       this.userConfigWatcher.close();
       this.userConfigWatcher = null;
       logger.mcp.info('[MCPConfigService] Stopped watching user config');
     }
 
+    // Stop all workspace file watchers
     this.workspaceWatchers.forEach((watcher, workspacePath) => {
       watcher.close();
       logger.mcp.info('[MCPConfigService] Stopped watching workspace config:', workspacePath);
     });
     this.workspaceWatchers.clear();
 
+    // Stop all workspace directory watchers
+    this.workspaceDirWatchers.forEach((watcher, workspacePath) => {
+      watcher.close();
+      logger.mcp.info('[MCPConfigService] Stopped watching workspace directory:', workspacePath);
+    });
+    this.workspaceDirWatchers.clear();
+
+    // Clear all pending debounce timers
+    this.debounceTimers.forEach((timer) => {
+      clearTimeout(timer);
+    });
+    this.debounceTimers.clear();
+
+    // Clear callbacks
     this.changeCallbacks = [];
   }
 

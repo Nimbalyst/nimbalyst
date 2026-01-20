@@ -1230,6 +1230,7 @@ app.on('before-quit', async (event) => {
         if (mcpConfigService) {
             try {
                 mcpConfigService.cleanup();
+                mcpConfigService = null; // Prevent double cleanup on race condition
                 console.log('[QUIT] MCP config service cleaned up');
             } catch (error) {
                 console.error('[QUIT] Error cleaning up MCP config service:', error);

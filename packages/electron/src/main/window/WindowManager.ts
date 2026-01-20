@@ -396,14 +396,15 @@ export function createWindow(
                         console.log('[MAIN] Destroyed FileSystemService for workspace:', state.workspacePath);
                     }
                     // Stop watching MCP config for this workspace
-                    const mcpService = getMcpConfigService();
-                    if (mcpService) {
-                        try {
+                    try {
+                        const mcpService = getMcpConfigService();
+                        if (mcpService) {
                             mcpService.stopWatchingWorkspaceConfig(state.workspacePath);
                             console.log('[MAIN] Stopped watching MCP config for workspace:', state.workspacePath);
-                        } catch (error) {
-                            console.error('[MAIN] Error stopping MCP config watcher:', error);
                         }
+                    } catch (error) {
+                        // Log error but don't throw - window cleanup must continue
+                        console.error('[MAIN] Error stopping MCP config watcher:', error);
                     }
                 }
             }

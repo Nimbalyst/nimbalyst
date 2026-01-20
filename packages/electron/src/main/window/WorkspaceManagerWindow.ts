@@ -386,13 +386,14 @@ export function setupWorkspaceManagerHandlers() {
     const window = createWindow(false, true, workspacePath, savedState?.bounds);
 
     // Start watching workspace MCP config for changes
-    const mcpService = getMcpConfigService();
-    if (mcpService) {
-      try {
+    try {
+      const mcpService = getMcpConfigService();
+      if (mcpService) {
         mcpService.startWatchingWorkspaceConfig(workspacePath);
-      } catch (error) {
-        console.error('[MCP] Failed to start watching workspace config:', error);
       }
+    } catch (error) {
+      // Log error but don't throw - workspace opening must continue
+      console.error('[MCP] Failed to start watching workspace config:', error);
     }
 
     // Restore dev tools if they were open
