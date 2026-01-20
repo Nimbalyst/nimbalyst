@@ -1017,11 +1017,20 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       const enabledModels = modelsResult?.models || [];
       const providerIsEnabled = enabledModels.some((model: any) => model.provider === provider);
 
-      // If provider is not enabled, fall back to claude-code (which is enabled by default)
+      // If provider is not enabled, find the first available provider
       if (!providerIsEnabled) {
-        console.warn(`[AgenticPanel] Provider ${provider} from saved default model is not enabled, falling back to claude-code`);
-        provider = 'claude-code';
-        defaultModel = 'claude-code:sonnet';
+        console.warn(`[AgenticPanel] Provider ${provider} from saved default model is not enabled`);
+
+        // Try to find any enabled provider
+        if (enabledModels.length > 0) {
+          const firstModel = enabledModels[0];
+          provider = firstModel.provider;
+          defaultModel = firstModel.id;
+          console.log(`[AgenticPanel] Falling back to first available provider: ${provider} (${defaultModel})`);
+        } else {
+          // No providers enabled at all - throw error
+          throw new Error('No AI providers are enabled. Please enable at least one provider in Settings.');
+        }
       }
 
       console.log(`[AgenticPanel] Creating new session with default model: ${defaultModel}, provider: ${provider}`);
