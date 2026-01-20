@@ -9,6 +9,8 @@ PODS:
   - CapacitorBrowser (7.0.3):
     - Capacitor
   - CapacitorCordova (7.4.5)
+  - CapacitorHaptics (7.0.3):
+    - Capacitor
   - CapacitorLocalNotifications (7.0.4):
     - Capacitor
   - CapacitorPreferences (7.0.3):
@@ -27,6 +29,7 @@ DEPENDENCIES:
   - "CapacitorBarcodeScanner (from `../../../../node_modules/@capacitor/barcode-scanner`)"
   - "CapacitorBrowser (from `../../../../node_modules/@capacitor/browser`)"
   - "CapacitorCordova (from `../../../../node_modules/@capacitor/ios`)"
+  - "CapacitorHaptics (from `../../../../node_modules/@capacitor/haptics`)"
   - "CapacitorLocalNotifications (from `../../../../node_modules/@capacitor/local-notifications`)"
   - "CapacitorPreferences (from `../../../../node_modules/@capacitor/preferences`)"
   - "CapacitorPushNotifications (from `../../../../node_modules/@capacitor/push-notifications`)"
@@ -48,6 +51,8 @@ EXTERNAL SOURCES:
     :path: "../../../../node_modules/@capacitor/browser"
   CapacitorCordova:
     :path: "../../../../node_modules/@capacitor/ios"
+  CapacitorHaptics:
+    :path: "../../../../node_modules/@capacitor/haptics"
   CapacitorLocalNotifications:
     :path: "../../../../node_modules/@capacitor/local-notifications"
   CapacitorPreferences:
@@ -63,6 +68,7 @@ SPEC CHECKSUMS:
   CapacitorBarcodeScanner: 4e00db2f78415726d0c1f905adc11aaac6225b11
   CapacitorBrowser: b98aa3db018a2ce4c68242d27e596c344f3b81b3
   CapacitorCordova: 31bbe4466000c6b86d9b7f1181ee286cff0205aa
+  CapacitorHaptics: ce15be8f287fa2c61c7d2d9e958885b90cf0bebc
   CapacitorLocalNotifications: ba2a08bd92887b08f352e6b2db430575cef0cea3
   CapacitorPreferences: 913eef88272c13eb6445b21e51fe8ef6635412cc
   CapacitorPushNotifications: 7604512af53bbfdf1dd8fb2256b9ef1e8a69cdc2
@@ -70,6 +76,6 @@ SPEC CHECKSUMS:
   OSBarcodeLib: 57987d2eb1f916f701f4554e20e349b3cb83f023
   SwiftKeychainWrapper: 807ba1d63c33a7d0613288512399cd1eda1e470c
 
-PODFILE CHECKSUM: 6198d78894a6d2098c5d679d8d732f520a094bac
+PODFILE CHECKSUM: 33cd2e7273d0afff24210ac3e76bce6b4f7e645d
 
 COCOAPODS: 1.16.2

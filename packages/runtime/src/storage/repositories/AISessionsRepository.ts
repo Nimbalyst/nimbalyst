@@ -75,6 +75,15 @@ export const AISessionsRepository = {
     await store.updateMetadata(sessionId, { title, hasBeenNamed: true } as any);
     return true;
   },
+
+  async getBranches(sessionId: string): Promise<SessionListItem[]> {
+    const store = requireStore();
+    if (store.getBranches) {
+      return await store.getBranches(sessionId);
+    }
+    // Fallback: return empty array if store doesn't support branching
+    return [];
+  },
 };
 
 export type {

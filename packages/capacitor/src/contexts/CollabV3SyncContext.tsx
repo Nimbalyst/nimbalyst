@@ -29,6 +29,12 @@ import forge from 'node-forge';
 // Re-export the shared type from runtime
 export type SessionIndexEntry = RuntimeSessionIndexEntry;
 
+/** Voice metadata for prompts created via voice control */
+export interface VoiceMetadata {
+  duration: number; // Recording duration in seconds
+  originalTranscript: string; // Before user edits
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -78,7 +84,13 @@ interface SyncContextValue {
    */
   sendIndexUpdate: (sessionId: string, update: {
     pendingExecution?: { messageId: string; sentAt: number; sentBy: 'mobile' | 'desktop' };
-    queuedPrompts?: Array<{ id: string; prompt: string; timestamp: number }>;
+    queuedPrompts?: Array<{
+      id: string;
+      prompt: string;
+      timestamp: number;
+      source?: 'keyboard' | 'voice';
+      voiceMetadata?: VoiceMetadata;
+    }>;
   }) => void;
   /** Trigger a reconnection (e.g., after login) */
   reconnect: () => void;
@@ -107,6 +119,15 @@ interface SyncContextValue {
     type: string,
     payload?: Record<string, unknown>
   ) => void;
+  /**
+   * OpenAI API key synced from desktop for voice mode.
+   * This is received encrypted and decrypted locally.
+   */
+  syncedOpenAIApiKey: string | null;
+  /**
+   * Voice mode settings synced from desktop.
+   */
+  syncedVoiceModeSettings: SyncedVoiceModeSettings | null;
 }
 
 // ============================================================================
@@ -121,6 +142,12 @@ interface EncryptedQueuedPrompt {
   /** IV for prompt decryption (base64) */
   iv: string;
   timestamp: number;
+  /** Source of the prompt (keyboard or voice) */
+  source?: 'keyboard' | 'voice';
+  /** Encrypted voice metadata (base64) - only present for voice prompts */
+  encrypted_voice_metadata?: string;
+  /** IV for voice metadata decryption (base64) */
+  voice_metadata_iv?: string;
 }
 
 /** Plaintext queued prompt (after decryption) */
@@ -128,6 +155,8 @@ interface PlaintextQueuedPrompt {
   id: string;
   prompt: string;
   timestamp: number;
+  source?: 'keyboard' | 'voice';
+  voiceMetadata?: VoiceMetadata;
 }
 
 interface ServerSessionEntry {
@@ -257,7 +286,30 @@ type ServerMessage =
   | { type: 'error'; code: string; message: string }
   | { type: 'devices_list'; devices: DeviceInfo[] }
   | { type: 'device_joined'; device: DeviceInfo }
-  | { type: 'device_left'; device_id: string };
+  | { type: 'device_left'; device_id: string }
+  | { type: 'settings_sync_broadcast'; settings: EncryptedSettingsPayload; from_connection_id?: string };
+
+/** Encrypted settings payload from desktop */
+interface EncryptedSettingsPayload {
+  encrypted_settings: string;
+  settings_iv: string;
+  device_id: string;
+  timestamp: number;
+  version: number;
+}
+
+/** Voice mode settings synced from desktop */
+export interface SyncedVoiceModeSettings {
+  voice?: 'alloy' | 'ash' | 'ballad' | 'coral' | 'echo' | 'sage' | 'shimmer' | 'verse' | 'marin' | 'cedar';
+  submitDelayMs?: number;
+}
+
+/** Decrypted synced settings */
+interface SyncedSettings {
+  openaiApiKey?: string;
+  voiceMode?: SyncedVoiceModeSettings;
+  version: number;
+}
 
 // ============================================================================
 // Encryption Utilities (using node-forge for mobile compatibility)
@@ -345,12 +397,23 @@ async function encryptQueuedPrompts(
   return Promise.all(
     prompts.map(async (prompt) => {
       const { encrypted, iv } = await encrypt(prompt.prompt, key);
-      return {
+      const result: EncryptedQueuedPrompt = {
         id: prompt.id,
         encrypted_prompt: encrypted,
         iv,
         timestamp: prompt.timestamp,
+        source: prompt.source,
       };
+
+      // Encrypt voice metadata if present
+      if (prompt.voiceMetadata) {
+        const voiceMetadataJson = JSON.stringify(prompt.voiceMetadata);
+        const { encrypted: encryptedMetadata, iv: metadataIv } = await encrypt(voiceMetadataJson, key);
+        result.encrypted_voice_metadata = encryptedMetadata;
+        result.voice_metadata_iv = metadataIv;
+      }
+
+      return result;
     })
   );
 }
@@ -365,11 +428,28 @@ async function decryptQueuedPrompts(
   return Promise.all(
     prompts.map(async (prompt) => {
       const decryptedPrompt = await decrypt(prompt.encrypted_prompt, prompt.iv, key);
-      return {
+      const result: PlaintextQueuedPrompt = {
         id: prompt.id,
         prompt: decryptedPrompt,
         timestamp: prompt.timestamp,
+        source: prompt.source,
       };
+
+      // Decrypt voice metadata if present
+      if (prompt.encrypted_voice_metadata && prompt.voice_metadata_iv) {
+        try {
+          const decryptedMetadataJson = await decrypt(
+            prompt.encrypted_voice_metadata,
+            prompt.voice_metadata_iv,
+            key
+          );
+          result.voiceMetadata = JSON.parse(decryptedMetadataJson);
+        } catch (err) {
+          console.error('[CollabV3] Failed to decrypt voice metadata:', err);
+        }
+      }
+
+      return result;
     })
   );
 }
@@ -704,6 +784,10 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   // Connected devices tracking
   const [connectedDevices, setConnectedDevices] = useState<DeviceInfo[]>([]);
+  // OpenAI API key synced from desktop for voice mode
+  const [syncedOpenAIApiKey, setSyncedOpenAIApiKey] = useState<string | null>(null);
+  // Voice mode settings synced from desktop
+  const [syncedVoiceModeSettings, setSyncedVoiceModeSettings] = useState<SyncedVoiceModeSettings | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -1035,6 +1119,48 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
             );
             break;
           }
+
+          case 'settings_sync_broadcast': {
+            // Desktop synced settings (e.g., OpenAI API key for voice mode)
+            console.log('[CollabV3] Received settings sync from device:', message.settings.device_id, 'version:', message.settings.version);
+
+            if (!encryptionKeyRef.current) {
+              console.error('[CollabV3] Cannot decrypt settings - no encryption key available');
+              break;
+            }
+
+            try {
+              // Decrypt the settings JSON
+              console.log('[CollabV3] Attempting to decrypt settings...');
+              const settingsJson = await decrypt(
+                message.settings.encrypted_settings,
+                message.settings.settings_iv,
+                encryptionKeyRef.current
+              );
+              const settings: SyncedSettings = JSON.parse(settingsJson);
+
+              console.log('[CollabV3] Decrypted settings successfully, version:', settings.version, 'hasOpenAIKey:', !!settings.openaiApiKey, 'hasVoiceMode:', !!settings.voiceMode);
+
+              // Update the synced API key
+              if (settings.openaiApiKey) {
+                console.log('[CollabV3] Setting OpenAI API key from desktop (length:', settings.openaiApiKey.length, ')');
+                setSyncedOpenAIApiKey(settings.openaiApiKey);
+              } else {
+                console.log('[CollabV3] Settings received but no OpenAI API key present');
+              }
+
+              // Update voice mode settings
+              if (settings.voiceMode) {
+                console.log('[CollabV3] Setting voice mode settings from desktop:', settings.voiceMode.voice, 'submitDelay:', settings.voiceMode.submitDelayMs);
+                setSyncedVoiceModeSettings(settings.voiceMode);
+              }
+            } catch (err) {
+              console.error('[CollabV3] Failed to decrypt settings:', err);
+              console.error('[CollabV3] Encrypted settings length:', message.settings.encrypted_settings?.length);
+              console.error('[CollabV3] IV length:', message.settings.settings_iv?.length);
+            }
+            break;
+          }
         }
       } catch (err) {
         console.error('[CollabV3] Failed to parse message:', err);
@@ -1056,11 +1182,18 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
   const sendIndexUpdate = useCallback(
     async (sessionId: string, update: {
       pendingExecution?: { messageId: string; sentAt: number; sentBy: 'mobile' | 'desktop' };
-      queuedPrompts?: Array<{ id: string; prompt: string; timestamp: number }>;
+      queuedPrompts?: Array<{
+        id: string;
+        prompt: string;
+        timestamp: number;
+        source?: 'keyboard' | 'voice';
+        voiceMetadata?: VoiceMetadata;
+      }>;
     }) => {
+      // Check connection and throw if not connected
       if (wsRef.current?.readyState !== WebSocket.OPEN) {
-        console.warn('[CollabV3] Cannot send index update - not connected');
-        return;
+        console.error('[CollabV3] Cannot send index update - not connected');
+        throw new Error('Not connected to sync server. Please check your connection.');
       }
 
       // Find the session in our cache to get its metadata
@@ -1128,79 +1261,6 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
       wsRef.current.send(JSON.stringify(msg));
     },
     [allSessions]
-  );
-
-  // Create a new session on the desktop
-  const createSession = useCallback(
-    async (projectId: string, initialPrompt?: string): Promise<{ success: boolean; sessionId?: string; error?: string }> => {
-      if (wsRef.current?.readyState !== WebSocket.OPEN) {
-        return { success: false, error: 'Not connected to sync server' };
-      }
-
-      // Encryption is required
-      if (!encryptionKeyRef.current) {
-        return { success: false, error: 'No encryption key available' };
-      }
-
-      // Generate a unique request ID
-      const requestId = `mobile-create-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-      setIsCreatingSession(true);
-
-      // Encrypt project_id upfront
-      let encrypted_project_id: string;
-      let project_id_iv: string;
-      try {
-        const result = await encryptProjectId(projectId, encryptionKeyRef.current);
-        encrypted_project_id = result.encrypted_project_id;
-        project_id_iv = result.project_id_iv;
-      } catch (err) {
-        console.error('[CollabV3] Failed to encrypt project_id:', err);
-        setIsCreatingSession(false);
-        return { success: false, error: 'Failed to encrypt project ID' };
-      }
-
-      return new Promise((resolve) => {
-        // Set a timeout for the request
-        const timeout = setTimeout(() => {
-          pendingSessionCreationsRef.current.delete(requestId);
-          setIsCreatingSession(false);
-          resolve({ success: false, error: 'Session creation request timed out' });
-        }, 30000); // 30 second timeout
-
-        // Store the pending request
-        pendingSessionCreationsRef.current.set(requestId, { resolve, timeout });
-
-        // Build the request with encrypted project_id
-        const wireRequest: EncryptedCreateSessionRequest = {
-          request_id: requestId,
-          encrypted_project_id,
-          project_id_iv,
-          timestamp: Date.now(),
-        };
-
-        // Encrypt initial prompt if present (async operation)
-        const sendRequest = async () => {
-          if (initialPrompt && encryptionKeyRef.current) {
-            try {
-              const { encrypted, iv } = await encrypt(initialPrompt, encryptionKeyRef.current);
-              wireRequest.encrypted_initial_prompt = encrypted;
-              wireRequest.initial_prompt_iv = iv;
-            } catch (err) {
-              console.error('[CollabV3] Failed to encrypt initial prompt:', err);
-            }
-          }
-
-          const msg: ClientMessage = { type: 'create_session_request', request: wireRequest };
-          // Debug logging - uncomment if needed
-          // console.log('[CollabV3] Sending create_session_request:', requestId, 'project:', projectId);
-          wsRef.current?.send(JSON.stringify(msg));
-        };
-
-        sendRequest();
-      });
-    },
-    []
   );
 
   // Send a generic session control message to other devices
@@ -1432,6 +1492,113 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
     };
   }, [authenticated, serverUrl, handleMessage, requestSync]);
 
+  // Helper to ensure connection before sending critical messages
+  const ensureConnected = useCallback(async (): Promise<boolean> => {
+    // Already connected
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      return true;
+    }
+
+    // Need auth and pairing to reconnect
+    if (!authenticated || !serverUrl) {
+      console.log('[CollabV3] Cannot ensure connection - not authenticated or not paired');
+      return false;
+    }
+
+    console.log('[CollabV3] Not connected, attempting to establish connection...');
+
+    // Trigger reconnection
+    await connect();
+
+    // Wait for connection to establish (up to 5 seconds)
+    const startTime = Date.now();
+    while (Date.now() - startTime < 5000) {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        console.log('[CollabV3] Connection established successfully');
+        return true;
+      }
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    console.error('[CollabV3] Failed to establish connection within timeout');
+    return false;
+  }, [authenticated, serverUrl, connect]);
+
+  // Create a new session on the desktop
+  const createSession = useCallback(
+    async (projectId: string, initialPrompt?: string): Promise<{ success: boolean; sessionId?: string; error?: string }> => {
+      // Ensure we're connected before attempting to create session
+      const connected = await ensureConnected();
+      if (!connected) {
+        return { success: false, error: 'Unable to connect to sync server' };
+      }
+
+      // Encryption is required
+      if (!encryptionKeyRef.current) {
+        return { success: false, error: 'No encryption key available' };
+      }
+
+      // Generate a unique request ID
+      const requestId = `mobile-create-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+      setIsCreatingSession(true);
+
+      // Encrypt project_id upfront
+      let encrypted_project_id: string;
+      let project_id_iv: string;
+      try {
+        const result = await encryptProjectId(projectId, encryptionKeyRef.current);
+        encrypted_project_id = result.encrypted_project_id;
+        project_id_iv = result.project_id_iv;
+      } catch (err) {
+        console.error('[CollabV3] Failed to encrypt project_id:', err);
+        setIsCreatingSession(false);
+        return { success: false, error: 'Failed to encrypt project ID' };
+      }
+
+      return new Promise((resolve) => {
+        // Set a timeout for the request
+        const timeout = setTimeout(() => {
+          pendingSessionCreationsRef.current.delete(requestId);
+          setIsCreatingSession(false);
+          resolve({ success: false, error: 'Session creation request timed out' });
+        }, 30000); // 30 second timeout
+
+        // Store the pending request
+        pendingSessionCreationsRef.current.set(requestId, { resolve, timeout });
+
+        // Build the request with encrypted project_id
+        const wireRequest: EncryptedCreateSessionRequest = {
+          request_id: requestId,
+          encrypted_project_id,
+          project_id_iv,
+          timestamp: Date.now(),
+        };
+
+        // Encrypt initial prompt if present (async operation)
+        const sendRequest = async () => {
+          if (initialPrompt && encryptionKeyRef.current) {
+            try {
+              const { encrypted, iv } = await encrypt(initialPrompt, encryptionKeyRef.current);
+              wireRequest.encrypted_initial_prompt = encrypted;
+              wireRequest.initial_prompt_iv = iv;
+            } catch (err) {
+              console.error('[CollabV3] Failed to encrypt initial prompt:', err);
+            }
+          }
+
+          const msg: ClientMessage = { type: 'create_session_request', request: wireRequest };
+          // Debug logging - uncomment if needed
+          // console.log('[CollabV3] Sending create_session_request:', requestId, 'project:', projectId);
+          wsRef.current?.send(JSON.stringify(msg));
+        };
+
+        sendRequest();
+      });
+    },
+    [ensureConnected]
+  );
+
   // Disconnect
   const disconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) {
@@ -1608,6 +1775,8 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
     connectedDevices,
     isDesktopConnected,
     sendSessionControlMessage,
+    syncedOpenAIApiKey,
+    syncedVoiceModeSettings,
   };
 
   return <SyncContext.Provider value={value}>{children}</SyncContext.Provider>;

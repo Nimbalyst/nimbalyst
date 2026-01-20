@@ -468,6 +468,45 @@ export function registerWorktreeHandlers(): void {
   });
 
   /**
+   * Update worktree display name
+   *
+   * @param worktreeId - ID of the worktree to update
+   * @param displayName - New display name for the worktree
+   * @returns Success status
+   */
+  ipcMain.handle('worktree:update-display-name', async (_event, worktreeId: string, displayName: string) => {
+    try {
+      if (!worktreeId) {
+        throw new Error('worktreeId is required');
+      }
+
+      if (!displayName) {
+        throw new Error('displayName is required');
+      }
+
+      logger.info('Updating worktree display name', { worktreeId, displayName });
+
+      const db = getDatabase();
+      if (!db) {
+        throw new Error('Database not initialized');
+      }
+
+      const worktreeStore = createWorktreeStore(db);
+      await worktreeStore.update(worktreeId, { displayName });
+
+      return {
+        success: true,
+      };
+    } catch (error) {
+      logger.error('Failed to update worktree display name:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update worktree display name',
+      };
+    }
+  });
+
+  /**
    * Get all changed files in a worktree compared to base branch
    *
    * @param worktreePath - Path to the worktree

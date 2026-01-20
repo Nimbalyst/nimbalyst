@@ -70,10 +70,13 @@ interface SessionListItemProps {
   onUnarchive?: () => void;
   onRename?: (newName: string) => void; // Callback when session is renamed
   onPinToggle?: (isPinned: boolean) => void; // Callback when pin status changes
+  onBranch?: () => void; // Callback when user wants to branch this session
   provider?: string;
   model?: string;
   messageCount?: number;
   sessionType?: 'chat' | 'planning' | 'coding' | 'terminal'; // Type of session
+  parentSessionId?: string; // ID of parent session if this is a branch
+  branchedAt?: number; // Timestamp when this session was branched
 }
 
 export const SessionListItem: React.FC<SessionListItemProps> = ({
@@ -96,10 +99,13 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
   onUnarchive,
   onRename,
   onPinToggle,
+  onBranch,
   provider,
   model,
   messageCount,
-  sessionType
+  sessionType,
+  parentSessionId,
+  branchedAt
 }) => {
   const [isHovering, setIsHovering] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
@@ -133,6 +139,14 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
     setShowContextMenu(false);
     if (onPinToggle) {
       onPinToggle(!isPinned);
+    }
+  };
+
+  const handleBranch = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    if (onBranch) {
+      onBranch();
     }
   };
 
@@ -269,6 +283,9 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
       {isPinned && (
         <MaterialSymbol icon="push_pin" size={12} className="session-list-item-pin-icon" />
       )}
+      {parentSessionId && (
+        <MaterialSymbol icon="fork_right" size={12} className="session-list-item-branch-icon" title="Branched conversation" />
+      )}
       <div className="session-list-item-content">
         {isRenaming ? (
           <input
@@ -336,6 +353,15 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
             >
               <MaterialSymbol icon="push_pin" size={14} />
               {isPinned ? 'Unpin' : 'Pin'}
+            </button>
+          )}
+          {onBranch && (
+            <button
+              className="session-list-item-context-menu-item"
+              onClick={handleBranch}
+            >
+              <MaterialSymbol icon="fork_right" size={14} />
+              Branch conversation
             </button>
           )}
           <button

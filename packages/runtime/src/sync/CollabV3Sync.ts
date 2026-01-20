@@ -28,6 +28,8 @@ import type {
   DeviceInfo,
   CreateSessionRequest,
   CreateSessionResponse,
+  EncryptedSettingsPayload,
+  SyncedSettings,
   SessionControlMessage,
 } from './types';
 
@@ -179,7 +181,8 @@ type ClientMessage =
   | { type: 'create_session_request'; request: EncryptedCreateSessionRequest }
   | { type: 'create_session_response'; response: EncryptedCreateSessionResponse }
   | { type: 'session_control'; message: { session_id: string; message_type: string; payload?: Record<string, unknown>; timestamp: number; sent_by: 'desktop' | 'mobile' } }
-  | { type: 'request_mobile_push'; session_id: string; title: string; body: string };
+  | { type: 'request_mobile_push'; session_id: string; title: string; body: string }
+  | { type: 'settings_sync'; settings: EncryptedSettingsPayload };
 
 /** Encrypted project index entry from server */
 interface ServerProjectEntry {
@@ -207,6 +210,7 @@ type ServerMessage =
   | { type: 'create_session_request_broadcast'; request: EncryptedCreateSessionRequest; from_connection_id?: string }
   | { type: 'create_session_response_broadcast'; response: EncryptedCreateSessionResponse; from_connection_id?: string }
   | { type: 'session_control_broadcast'; message: { session_id: string; message_type: string; payload?: Record<string, unknown>; timestamp: number; sent_by: 'desktop' | 'mobile' }; from_connection_id?: string }
+  | { type: 'settings_sync_broadcast'; settings: EncryptedSettingsPayload; from_connection_id?: string }
   | { type: 'error'; code: string; message: string };
 
 // ============================================================================
@@ -587,9 +591,13 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
   const connectedDevices = new Map<string, DeviceInfo>();
   const deviceStatusListeners = new Set<(devices: DeviceInfo[]) => void>();
 
+  // Settings sync listeners (for receiving synced settings from other devices)
+  const settingsSyncListeners = new Set<(settings: SyncedSettings) => void>();
+
   // Notify all device status listeners
   function notifyDeviceStatusChange(): void {
     const devices = Array.from(connectedDevices.values());
+    console.log('[CollabV3] notifyDeviceStatusChange:', devices.length, 'devices,', deviceStatusListeners.size, 'listeners');
     for (const listener of deviceStatusListeners) {
       try {
         listener(devices);
@@ -1346,7 +1354,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
             break;
 
           case 'device_joined':
-            // console.log('[CollabV3] Device joined:', message.device.name);
+            console.log('[CollabV3] Device joined:', message.device.name, message.device.type);
             connectedDevices.set(message.device.device_id, message.device);
             notifyDeviceStatusChange();
             break;
@@ -1447,6 +1455,46 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                 console.error('[CollabV3] Error in session control message listener:', err);
               }
             });
+            break;
+          }
+
+          case 'settings_sync_broadcast': {
+            // Another device synced settings (e.g., desktop syncing API key to mobile)
+            const payload = message.settings;
+
+            // Don't process our own broadcasts
+            const ourDeviceId = config.getDeviceInfo?.()?.device_id ?? config.deviceInfo?.device_id;
+            if (ourDeviceId && payload.device_id === ourDeviceId) {
+              break;
+            }
+
+            // Decrypt settings
+            if (!config.encryptionKey) {
+              console.error('[CollabV3] Cannot decrypt settings - no encryption key');
+              break;
+            }
+
+            try {
+              const decryptedSettingsJson = await decrypt(
+                payload.encrypted_settings,
+                payload.settings_iv,
+                config.encryptionKey
+              );
+              const settings: SyncedSettings = JSON.parse(decryptedSettingsJson);
+
+              console.log('[CollabV3] Received settings sync from device:', payload.device_id, 'version:', settings.version);
+
+              // Notify all listeners
+              settingsSyncListeners.forEach((callback) => {
+                try {
+                  callback(settings);
+                } catch (err) {
+                  console.error('[CollabV3] Error in settings sync listener:', err);
+                }
+              });
+            } catch (err) {
+              console.error('[CollabV3] Failed to decrypt settings:', err);
+            }
             break;
           }
 
@@ -2139,9 +2187,21 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
     },
 
     /** Send a response to a session creation request */
-    sendCreateSessionResponse(response: CreateSessionResponse): void {
+    async sendCreateSessionResponse(response: CreateSessionResponse): Promise<void> {
+      // Ensure we're connected before sending the response
       if (!indexWs || !indexConnected) {
-        console.error('[CollabV3] Cannot send create session response - not connected');
+        console.log('[CollabV3] Not connected to index, attempting to reconnect before sending create session response...');
+        try {
+          await connectToIndex();
+        } catch (err) {
+          console.error('[CollabV3] Failed to connect to index before sending create session response:', err);
+          return;
+        }
+      }
+
+      // Double-check connection after await
+      if (!indexWs || !indexConnected) {
+        console.error('[CollabV3] Cannot send create session response - failed to establish connection');
         return;
       }
 
@@ -2159,8 +2219,20 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
     /** Send a session creation request (for mobile to request desktop to create a session) */
     async sendCreateSessionRequest(request: CreateSessionRequest): Promise<void> {
+      // Ensure we're connected before sending the request
       if (!indexWs || !indexConnected) {
-        console.error('[CollabV3] Cannot send create session request - not connected');
+        console.log('[CollabV3] Not connected to index, attempting to reconnect before sending create session request...');
+        try {
+          await connectToIndex();
+        } catch (err) {
+          console.error('[CollabV3] Failed to connect to index before sending create session request:', err);
+          return;
+        }
+      }
+
+      // Double-check connection after await
+      if (!indexWs || !indexConnected) {
+        console.error('[CollabV3] Cannot send create session request - failed to establish connection');
         return;
       }
 
@@ -2213,17 +2285,33 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
     /** Subscribe to device status changes (devices joining/leaving) */
     onDeviceStatusChange(callback: (devices: DeviceInfo[]) => void): () => void {
       deviceStatusListeners.add(callback);
+      console.log('[CollabV3] Device status listener registered, total:', deviceStatusListeners.size);
       // Immediately notify with current state
-      callback(Array.from(connectedDevices.values()));
+      const currentDevices = Array.from(connectedDevices.values());
+      console.log('[CollabV3] Immediately notifying with', currentDevices.length, 'devices');
+      callback(currentDevices);
       return () => {
         deviceStatusListeners.delete(callback);
+        console.log('[CollabV3] Device status listener unregistered, total:', deviceStatusListeners.size);
       };
     },
 
     /** Send a generic session control message (cross-device via IndexRoom) */
-    sendSessionControlMessage(message: SessionControlMessage): void {
+    async sendSessionControlMessage(message: SessionControlMessage): Promise<void> {
+      // Ensure we're connected before sending the message
       if (!indexWs || !indexConnected) {
-        console.error('[CollabV3] Cannot send session control message - not connected');
+        console.log('[CollabV3] Not connected to index, attempting to reconnect before sending session control message...');
+        try {
+          await connectToIndex();
+        } catch (err) {
+          console.error('[CollabV3] Failed to connect to index before sending session control message:', err);
+          return;
+        }
+      }
+
+      // Double-check connection after await
+      if (!indexWs || !indexConnected) {
+        console.error('[CollabV3] Cannot send session control message - failed to establish connection');
         return;
       }
 
@@ -2249,10 +2337,84 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       };
     },
 
-    /** Request the sync server to send a push notification to mobile devices */
-    requestMobilePush(sessionId: string, title: string, body: string): void {
+    /** Sync settings to other devices (encrypted via index room) */
+    async syncSettings(settings: SyncedSettings): Promise<void> {
+      // Ensure we're connected before sending
       if (!indexWs || !indexConnected) {
-        console.error('[CollabV3] Cannot request mobile push - not connected');
+        console.log('[CollabV3] Not connected to index, attempting to reconnect before syncing settings...');
+        try {
+          await connectToIndex();
+        } catch (err) {
+          console.error('[CollabV3] Failed to connect to index before syncing settings:', err);
+          return;
+        }
+      }
+
+      // Double-check connection after await
+      if (!indexWs || !indexConnected) {
+        console.error('[CollabV3] Cannot sync settings - failed to establish connection');
+        return;
+      }
+
+      // Encryption is required
+      if (!config.encryptionKey) {
+        console.error('[CollabV3] Cannot sync settings - no encryption key');
+        return;
+      }
+
+      try {
+        // Get our device ID
+        const deviceId = config.getDeviceInfo?.()?.device_id ?? config.deviceInfo?.device_id ?? 'unknown';
+
+        // Encrypt the settings as JSON
+        const settingsJson = JSON.stringify(settings);
+        const { encrypted, iv } = await encrypt(settingsJson, config.encryptionKey);
+
+        const payload: EncryptedSettingsPayload = {
+          encrypted_settings: encrypted,
+          settings_iv: iv,
+          device_id: deviceId,
+          timestamp: Date.now(),
+          version: settings.version,
+        };
+
+        const msg: ClientMessage = { type: 'settings_sync', settings: payload };
+        console.log('[CollabV3] Syncing settings, version:', settings.version, 'ws state:', indexWs.readyState);
+        if (indexWs.readyState !== WebSocket.OPEN) {
+          console.error('[CollabV3] Cannot sync settings - websocket not open, state:', indexWs.readyState);
+          return;
+        }
+        indexWs.send(JSON.stringify(msg));
+        console.log('[CollabV3] Settings sync message sent successfully');
+      } catch (err) {
+        console.error('[CollabV3] Failed to encrypt/send settings:', err);
+      }
+    },
+
+    /** Subscribe to settings sync events from other devices */
+    onSettingsSync(callback: (settings: SyncedSettings) => void): () => void {
+      settingsSyncListeners.add(callback);
+      return () => {
+        settingsSyncListeners.delete(callback);
+      };
+    },
+
+    /** Request the sync server to send a push notification to mobile devices */
+    async requestMobilePush(sessionId: string, title: string, body: string): Promise<void> {
+      // Ensure we're connected before sending the request
+      if (!indexWs || !indexConnected) {
+        console.log('[CollabV3] Not connected to index, attempting to reconnect before requesting mobile push...');
+        try {
+          await connectToIndex();
+        } catch (err) {
+          console.error('[CollabV3] Failed to connect to index before requesting mobile push:', err);
+          return;
+        }
+      }
+
+      // Double-check connection and WebSocket state after await
+      if (!indexWs || !indexConnected) {
+        console.error('[CollabV3] Cannot request mobile push - failed to establish connection');
         return;
       }
 

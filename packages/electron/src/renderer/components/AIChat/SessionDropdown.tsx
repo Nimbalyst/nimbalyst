@@ -1,9 +1,28 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, memo } from 'react';
+import { useAtomValue } from 'jotai';
 import { MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
 import { parseModelInfo, getProviderLabel } from '../../utils/modelUtils';
 import type { SessionData } from '@nimbalyst/runtime/ai/server/types';
 import { formatDate } from '@nimbalyst/runtime';
+import { sessionProcessingAtom, sessionUnreadAtom } from '../../store';
 import './SessionDropdown.css';
+
+/**
+ * Status indicator that subscribes to session atoms.
+ * Only this component re-renders when the session's state changes.
+ */
+const SessionStatusIndicator = memo<{ sessionId: string }>(({ sessionId }) => {
+  const isProcessing = useAtomValue(sessionProcessingAtom(sessionId));
+  const hasUnread = useAtomValue(sessionUnreadAtom(sessionId));
+
+  if (isProcessing) {
+    return <div className="session-status-indicator processing" title="Running" />;
+  }
+  if (hasUnread) {
+    return <div className="session-status-indicator unread" title="Unread response" />;
+  }
+  return null;
+});
 
 // SessionDropdownItem extends SessionData with message count for display
 type SessionDropdownItem = Pick<SessionData, 'id' | 'createdAt' | 'name' | 'title' | 'provider' | 'model'> & {
@@ -13,8 +32,6 @@ type SessionDropdownItem = Pick<SessionData, 'id' | 'createdAt' | 'name' | 'titl
 interface SessionDropdownProps {
   currentSessionId: string | null;
   sessions: SessionDropdownItem[];
-  processingSessions?: Set<string>;
-  unreadSessions?: Set<string>;
   onSessionSelect: (sessionId: string) => void;
   onNewSession: () => void;
   onDeleteSession: (sessionId: string) => void;
@@ -25,8 +42,6 @@ interface SessionDropdownProps {
 export function SessionDropdown({
   currentSessionId,
   sessions,
-  processingSessions = new Set(),
-  unreadSessions = new Set(),
   onSessionSelect,
   onNewSession,
   onDeleteSession,
@@ -116,9 +131,7 @@ export function SessionDropdown({
         onClick={handleToggle}
         title="Session History"
       >
-        {currentSessionId && processingSessions.has(currentSessionId) && (
-          <div className="session-status-indicator processing" title="Running" />
-        )}
+        {currentSessionId && <SessionStatusIndicator sessionId={currentSessionId} />}
         <ProviderIcon provider={getCurrentSession()?.provider || 'claude'} size={16} />
         <span className="session-dropdown-name">{getCurrentSessionName()}</span>
         <MaterialSymbol icon="expand_more" size={16} className={`session-dropdown-arrow ${isOpen ? 'open' : ''}`} />
@@ -174,12 +187,7 @@ export function SessionDropdown({
                         }}
                       >
                         <div className="session-name-row">
-                          {processingSessions.has(session.id) && (
-                            <div className="session-status-indicator processing" title="Running" />
-                          )}
-                          {!processingSessions.has(session.id) && unreadSessions.has(session.id) && (
-                            <div className="session-status-indicator unread" title="Unread response" />
-                          )}
+                          <SessionStatusIndicator sessionId={session.id} />
                           <span className="session-name">{formatSessionName(session)}</span>
                           {session.provider && (
                             <span className={`session-provider-badge provider-${session.provider}`}>

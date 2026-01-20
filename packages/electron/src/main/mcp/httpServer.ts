@@ -13,6 +13,7 @@ import { existsSync } from 'fs';
 import path, { isAbsolute } from 'path';
 import { MockupScreenshotService } from '../services/MockupScreenshotService';
 import { isVoiceModeActive, sendToVoiceAgent, getActiveVoiceSessionId, stopVoiceSession } from '../services/voice/VoiceModeService';
+import { findWindowByWorkspace } from '../window/WindowManager';
 
 /**
  * Compress a base64 image to JPEG if it exceeds 0.28 MB.
@@ -535,6 +536,34 @@ async function tryCreateServer(port: number): Promise<any> {
               },
               required: ['file_path']
             }
+          },
+          {
+            name: 'open_workspace',
+            description: 'Open a workspace (project directory) in Nimbalyst. This allows switching between different projects or opening additional workspaces. The workspace will open in a new window.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                workspace_path: {
+                  type: 'string',
+                  description: 'The absolute path to the workspace directory to open'
+                }
+              },
+              required: ['workspace_path']
+            }
+          },
+          {
+            name: 'open_file',
+            description: 'Open a file in the Nimbalyst editor. The file will open in a new tab in the current window.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                file_path: {
+                  type: 'string',
+                  description: 'The absolute path to the file to open'
+                }
+              },
+              required: ['file_path']
+            }
           }
         ];
 
@@ -1008,6 +1037,225 @@ async function tryCreateServer(port: number): Promise<any> {
             }
           }
 
+          case 'open_file': {
+            const filePathArg = args?.file_path as string;
+            console.log('[MCP Server] open_file called with:', { file_path: filePathArg });
+
+            // Validate file path
+            if (!filePathArg || typeof filePathArg !== 'string') {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: 'Error: file_path is required and must be a string'
+                  }
+                ],
+                isError: true
+              };
+            }
+
+            // Validate it's an absolute path
+            if (!isAbsolute(filePathArg)) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: `Error: file_path must be an absolute path. Got: ${filePathArg}`
+                  }
+                ],
+                isError: true
+              };
+            }
+
+            // Validate file exists
+            if (!existsSync(filePathArg)) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: `Error: File does not exist: ${filePathArg}`
+                  }
+                ],
+                isError: true
+              };
+            }
+
+            try {
+              // Find which workspace contains this file
+              let fileWorkspacePath: string | undefined;
+
+              // Check registered workspaces first
+              for (const wsPath of workspaceToWindowMap.keys()) {
+                if (filePathArg.startsWith(wsPath + '/') || filePathArg === wsPath) {
+                  if (!fileWorkspacePath || wsPath.length > fileWorkspacePath.length) {
+                    fileWorkspacePath = wsPath;
+                  }
+                }
+              }
+
+              // Fallback to session workspaces
+              if (!fileWorkspacePath) {
+                for (const state of documentStateBySession.values()) {
+                  const wsPath = state.workspacePath;
+                  if (wsPath && (filePathArg.startsWith(wsPath + '/') || filePathArg === wsPath)) {
+                    if (!fileWorkspacePath || wsPath.length > fileWorkspacePath.length) {
+                      fileWorkspacePath = wsPath;
+                    }
+                  }
+                }
+              }
+
+              if (!fileWorkspacePath) {
+                return {
+                  content: [
+                    {
+                      type: 'text',
+                      text: `Error: File "${filePathArg}" does not belong to any open workspace. Please open the workspace first.`
+                    }
+                  ],
+                  isError: true
+                };
+              }
+
+              // Find the window for this workspace
+              let targetWindow: BrowserWindow | null = null;
+              const windowId = workspaceToWindowMap.get(fileWorkspacePath);
+              if (windowId) {
+                targetWindow = BrowserWindow.fromId(windowId);
+              }
+
+              if (!targetWindow || targetWindow.isDestroyed()) {
+                targetWindow = findWindowByWorkspace(fileWorkspacePath);
+              }
+
+              if (!targetWindow || targetWindow.isDestroyed()) {
+                return {
+                  content: [
+                    {
+                      type: 'text',
+                      text: `Error: No window found for workspace "${fileWorkspacePath}"`
+                    }
+                  ],
+                  isError: true
+                };
+              }
+
+              // Register the workspace if not already registered
+              if (!workspaceToWindowMap.has(fileWorkspacePath)) {
+                workspaceToWindowMap.set(fileWorkspacePath, targetWindow.id);
+                console.log(`[MCP Server] Registered workspace ${fileWorkspacePath} -> window ${targetWindow.id}`);
+              }
+
+              // Send IPC to open the file
+              targetWindow.webContents.send('file:open', { filePath: filePathArg });
+
+              console.log(`[MCP Server] Opened file: ${filePathArg} in window ${targetWindow.id}`);
+
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: `Successfully opened file: ${filePathArg}`
+                  }
+                ],
+                isError: false
+              };
+            } catch (error) {
+              console.error('[MCP Server] Failed to open file:', error);
+              const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: `Error opening file: ${errorMessage}`
+                  }
+                ],
+                isError: true
+              };
+            }
+          }
+
+          case 'open_workspace': {
+            const workspacePathArg = args?.workspace_path as string;
+            console.log('[MCP Server] open_workspace called with:', { workspace_path: workspacePathArg });
+
+            // Validate workspace path
+            if (!workspacePathArg || typeof workspacePathArg !== 'string') {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: 'Error: workspace_path is required and must be a string'
+                  }
+                ],
+                isError: true
+              };
+            }
+
+            // Validate it's an absolute path
+            if (!isAbsolute(workspacePathArg)) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: `Error: workspace_path must be an absolute path. Got: ${workspacePathArg}`
+                  }
+                ],
+                isError: true
+              };
+            }
+
+            // Validate directory exists
+            if (!existsSync(workspacePathArg)) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: `Error: Workspace directory does not exist: ${workspacePathArg}`
+                  }
+                ],
+                isError: true
+              };
+            }
+
+            try {
+              // Import createWindow dynamically to avoid circular dependencies
+              const { createWindow } = await import('../window/WindowManager');
+
+              // Open the workspace in a new window
+              // createWindow(isOpeningFile, isWorkspaceMode, workspacePath, savedBounds)
+              const newWindow = createWindow(false, true, workspacePathArg);
+
+              // Register the workspace immediately
+              workspaceToWindowMap.set(workspacePathArg, newWindow.id);
+              console.log(`[MCP Server] Opened workspace: ${workspacePathArg}, registered as window ${newWindow.id}`);
+
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: `Successfully opened workspace: ${workspacePathArg}`
+                  }
+                ],
+                isError: false
+              };
+            } catch (error) {
+              console.error('[MCP Server] Failed to open workspace:', error);
+              const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: `Error opening workspace: ${errorMessage}`
+                  }
+                ],
+                isError: true
+              };
+            }
+          }
+
           case 'capture_editor_screenshot': {
             let filePath = args?.file_path as string | undefined;
             const selector = args?.selector as string | undefined;
@@ -1048,8 +1296,29 @@ async function tryCreateServer(port: number): Promise<any> {
                 }
               }
 
+              // Fallback: Check all session workspaces if not in workspaceToWindowMap
+              // This handles cases where registerWorkspaceWindow hasn't been called yet
               if (!fileWorkspacePath) {
-                const availableWorkspaces = Array.from(workspaceToWindowMap.keys()).join(', ') || 'none';
+                console.log('[MCP Server] Workspace not in map, checking documentStateBySession...');
+                console.log('[MCP Server] Available session workspaces:', Array.from(documentStateBySession.values()).map(s => s.workspacePath));
+                for (const state of documentStateBySession.values()) {
+                  const wsPath = state.workspacePath;
+                  if (wsPath && (filePath.startsWith(wsPath + '/') || filePath === wsPath)) {
+                    if (!fileWorkspacePath || wsPath.length > fileWorkspacePath.length) {
+                      fileWorkspacePath = wsPath;
+                      console.log('[MCP Server] Found workspace in session state:', wsPath);
+                    }
+                  }
+                }
+              }
+
+              if (!fileWorkspacePath) {
+                const registeredWorkspaces = Array.from(workspaceToWindowMap.keys());
+                const sessionWorkspaces = Array.from(documentStateBySession.values())
+                  .map(s => s.workspacePath)
+                  .filter(Boolean);
+                const allWorkspaces = [...new Set([...registeredWorkspaces, ...sessionWorkspaces])];
+                const availableWorkspaces = allWorkspaces.join(', ') || 'none';
                 return {
                   content: [
                     {
@@ -1064,6 +1333,12 @@ async function tryCreateServer(port: number): Promise<any> {
               const windowId = workspaceToWindowMap.get(fileWorkspacePath);
               if (windowId) {
                 targetWindow = BrowserWindow.fromId(windowId);
+              }
+
+              // If no window mapping exists, try to find a window with this workspace
+              if (!targetWindow || targetWindow.isDestroyed()) {
+                // Use the existing findWindowByWorkspace utility
+                targetWindow = findWindowByWorkspace(fileWorkspacePath);
               }
 
               if (!targetWindow || targetWindow.isDestroyed()) {

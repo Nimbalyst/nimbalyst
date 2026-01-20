@@ -1,42 +1,26 @@
 /**
  * Voice Mode Settings Panel
+ *
+ * Self-contained component that subscribes directly to Jotai atoms.
+ * No props needed - settings are read from and written to atoms.
  */
 
 import React from 'react';
+import { useAtom, useAtomValue } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
-
-interface SystemPromptConfig {
-  prepend?: string;
-  append?: string;
-}
-
-interface TurnDetectionConfig {
-  mode: 'server_vad' | 'push_to_talk';
-  vadThreshold?: number;
-  silenceDuration?: number;
-  interruptible?: boolean;
-}
-
-// Voice type - all available OpenAI Realtime voices
-type VoiceId = 'alloy' | 'ash' | 'ballad' | 'coral' | 'echo' | 'sage' | 'shimmer' | 'verse' | 'marin' | 'cedar';
+import {
+  voiceModeSettingsAtom,
+  setVoiceModeSettingsAtom,
+  apiKeysAtom,
+  type VoiceModeSettings,
+  type VoiceId,
+  type TurnDetectionConfig,
+  type SystemPromptConfig,
+} from '../../store/atoms/appSettings';
 
 interface VoiceModePanelProps {
-  enabled: boolean;
-  onEnabledChange: (enabled: boolean) => void;
-  voice: VoiceId;
-  onVoiceChange: (voice: VoiceId) => void;
-  showTranscription: boolean;
-  onShowTranscriptionChange: (show: boolean) => void;
-  turnDetection?: TurnDetectionConfig;
-  onTurnDetectionChange?: (config: TurnDetectionConfig) => void;
-  hasOpenAIKey: boolean;
-  voiceAgentPrompt?: SystemPromptConfig;
-  onVoiceAgentPromptChange?: (config: SystemPromptConfig) => void;
-  codingAgentPrompt?: SystemPromptConfig;
-  onCodingAgentPromptChange?: (config: SystemPromptConfig) => void;
+  /** Optional workspace path for project-specific features like summary generation */
   workspacePath?: string;
-  submitDelayMs?: number;
-  onSubmitDelayMsChange?: (delayMs: number) => void;
 }
 
 // Default turn detection config
@@ -80,23 +64,32 @@ const VOICE_GROUPS = [
 ];
 
 export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
-  enabled,
-  onEnabledChange,
-  voice,
-  onVoiceChange,
-  showTranscription,
-  onShowTranscriptionChange,
-  turnDetection,
-  onTurnDetectionChange,
-  hasOpenAIKey,
-  voiceAgentPrompt,
-  onVoiceAgentPromptChange,
-  codingAgentPrompt,
-  onCodingAgentPromptChange,
   workspacePath,
-  submitDelayMs,
-  onSubmitDelayMsChange,
 }) => {
+  // Subscribe to atoms directly - no props needed
+  const [voiceModeSettings] = useAtom(voiceModeSettingsAtom);
+  const [, updateVoiceModeSettings] = useAtom(setVoiceModeSettingsAtom);
+  const apiKeys = useAtomValue(apiKeysAtom);
+
+  // Extract values from atom
+  const {
+    enabled,
+    voice,
+    showTranscription,
+    turnDetection,
+    voiceAgentPrompt,
+    codingAgentPrompt,
+    submitDelayMs,
+  } = voiceModeSettings;
+
+  // Check if OpenAI key is configured
+  const hasOpenAIKey = !!apiKeys.openai;
+
+  // Handler to update any voice mode setting
+  const handleSettingChange = React.useCallback((updates: Partial<VoiceModeSettings>) => {
+    updateVoiceModeSettings(updates);
+  }, [updateVoiceModeSettings]);
+
   const [showVoiceAgentPrompt, setShowVoiceAgentPrompt] = React.useState(false);
   const [showCodingAgentPrompt, setShowCodingAgentPrompt] = React.useState(false);
   const [isPreviewPlaying, setIsPreviewPlaying] = React.useState(false);
@@ -162,7 +155,7 @@ export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
 
   // Auto-generate summary when voice mode is first enabled
   const handleEnabledChange = async (newEnabled: boolean) => {
-    onEnabledChange(newEnabled);
+    handleSettingChange({ enabled: newEnabled });
 
     // If enabling voice mode and no summary exists, generate one
     if (newEnabled && workspacePath && projectSummaryExists === false) {
@@ -209,9 +202,7 @@ export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
   const currentTurnDetection = { ...DEFAULT_TURN_DETECTION, ...turnDetection };
 
   const handleTurnDetectionChange = (updates: Partial<TurnDetectionConfig>) => {
-    if (onTurnDetectionChange) {
-      onTurnDetectionChange({ ...currentTurnDetection, ...updates });
-    }
+    handleSettingChange({ turnDetection: { ...currentTurnDetection, ...updates } });
   };
 
   const handlePreviewVoice = async () => {
@@ -292,7 +283,7 @@ export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
                 <select
                   value={voice}
-                  onChange={(e) => onVoiceChange(e.target.value as VoiceId)}
+                  onChange={(e) => handleSettingChange({ voice: e.target.value as VoiceId })}
                   style={{
                     flex: 1,
                     padding: '6px 12px',
@@ -457,7 +448,7 @@ export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
                 <input
                   type="checkbox"
                   checked={showTranscription}
-                  onChange={(e) => onShowTranscriptionChange(e.target.checked)}
+                  onChange={(e) => handleSettingChange({ showTranscription: e.target.checked })}
                   className="setting-checkbox"
                 />
                 <div className="setting-text">
@@ -489,7 +480,7 @@ export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
                   max="10000"
                   step="500"
                   value={submitDelayMs ?? 3000}
-                  onChange={(e) => onSubmitDelayMsChange?.(parseInt(e.target.value))}
+                  onChange={(e) => handleSettingChange({ submitDelayMs: parseInt(e.target.value) })}
                   style={{ flex: 1 }}
                 />
                 <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>10 seconds</span>
@@ -646,7 +637,7 @@ export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
               Voice Agent Instructions
             </button>
 
-            {showVoiceAgentPrompt && onVoiceAgentPromptChange && (
+            {showVoiceAgentPrompt && (
               <div style={{ marginBottom: '24px', paddingLeft: '28px' }}>
                 <p className="provider-panel-hint" style={{ marginBottom: '12px' }}>
                   Customize the voice assistant (GPT-4 Realtime) that handles speech interaction.
@@ -661,9 +652,11 @@ export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
                   </div>
                   <textarea
                     value={voiceAgentPrompt?.prepend || ''}
-                    onChange={(e) => onVoiceAgentPromptChange({
-                      ...voiceAgentPrompt,
-                      prepend: e.target.value,
+                    onChange={(e) => handleSettingChange({
+                      voiceAgentPrompt: {
+                        ...voiceAgentPrompt,
+                        prepend: e.target.value,
+                      },
                     })}
                     placeholder="e.g., Always respond in a formal tone..."
                     style={{
@@ -691,9 +684,11 @@ export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
                   </div>
                   <textarea
                     value={voiceAgentPrompt?.append || ''}
-                    onChange={(e) => onVoiceAgentPromptChange({
-                      ...voiceAgentPrompt,
-                      append: e.target.value,
+                    onChange={(e) => handleSettingChange({
+                      voiceAgentPrompt: {
+                        ...voiceAgentPrompt,
+                        append: e.target.value,
+                      },
                     })}
                     placeholder="e.g., When discussing code, always mention file names..."
                     style={{
@@ -735,7 +730,7 @@ export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
               Coding Agent Instructions (Voice Mode)
             </button>
 
-            {showCodingAgentPrompt && onCodingAgentPromptChange && (
+            {showCodingAgentPrompt && (
               <div style={{ paddingLeft: '28px' }}>
                 <p className="provider-panel-hint" style={{ marginBottom: '12px' }}>
                   Customize the coding agent (Claude) when processing voice mode requests.
@@ -751,9 +746,11 @@ export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
                   </div>
                   <textarea
                     value={codingAgentPrompt?.prepend || ''}
-                    onChange={(e) => onCodingAgentPromptChange({
-                      ...codingAgentPrompt,
-                      prepend: e.target.value,
+                    onChange={(e) => handleSettingChange({
+                      codingAgentPrompt: {
+                        ...codingAgentPrompt,
+                        prepend: e.target.value,
+                      },
                     })}
                     placeholder="e.g., When responding to voice requests, prioritize brevity..."
                     style={{
@@ -781,9 +778,11 @@ export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
                   </div>
                   <textarea
                     value={codingAgentPrompt?.append || ''}
-                    onChange={(e) => onCodingAgentPromptChange({
-                      ...codingAgentPrompt,
-                      append: e.target.value,
+                    onChange={(e) => handleSettingChange({
+                      codingAgentPrompt: {
+                        ...codingAgentPrompt,
+                        append: e.target.value,
+                      },
                     })}
                     placeholder="e.g., Always summarize what you did in 1-2 sentences at the end..."
                     style={{

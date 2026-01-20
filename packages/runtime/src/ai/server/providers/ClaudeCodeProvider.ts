@@ -611,12 +611,40 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
       options.env = env;
 
-      // If we have a session ID and a claude session ID, resume
+      // Handle session resumption and branching
       if (sessionId) {
         const claudeSessionId = this.claudeSessionIds.get(sessionId);
+        console.log('[CLAUDE-CODE] Session resumption check:', {
+          sessionId,
+          existingClaudeSessionId: claudeSessionId,
+          parentSessionId: (documentContext as any)?.parentSessionId,
+          parentProviderSessionId: (documentContext as any)?.parentProviderSessionId,
+        });
         if (claudeSessionId) {
           options.resume = claudeSessionId;
+          console.log('[CLAUDE-CODE] Resuming existing session:', claudeSessionId);
         } else {
+          // Check if this is a branched session
+          const parentSessionId = (documentContext as any)?.parentSessionId;
+          const parentProviderSessionId = (documentContext as any)?.parentProviderSessionId;
+          if (parentSessionId && parentProviderSessionId) {
+            // Resume from parent's provider session ID and fork it
+            options.resume = parentProviderSessionId;
+            options.forkSession = true;
+            console.log('[CLAUDE-CODE] Branching from parent session:', parentSessionId, 'with provider session:', parentProviderSessionId);
+          } else if (parentSessionId) {
+            // Fallback: try the in-memory map (if parent was used in this app session)
+            const parentClaudeSessionId = this.claudeSessionIds.get(parentSessionId);
+            if (parentClaudeSessionId) {
+              options.resume = parentClaudeSessionId;
+              options.forkSession = true;
+              console.log('[CLAUDE-CODE] Branching from parent session (in-memory):', parentSessionId);
+            } else {
+              console.warn('[CLAUDE-CODE] Cannot branch: parent provider session ID not available. parentSessionId:', parentSessionId);
+            }
+          } else {
+            console.log('[CLAUDE-CODE] Starting new session (no parent or existing session ID)');
+          }
         }
       }
 
@@ -2846,7 +2874,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               hookSpecificOutput: {
                 hookEventName: 'PreToolUse' as const,
                 permissionDecision: 'deny' as const,
-                errorMessage: `The user chose to continue planning. Please refine the plan further before attempting to exit plan mode.`
+                permissionDecisionReason: `The user chose to continue planning. Please refine the plan further before attempting to exit plan mode.`
               }
             };
           }
@@ -2857,7 +2885,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             hookSpecificOutput: {
               hookEventName: 'PreToolUse' as const,
               permissionDecision: 'deny' as const,
-              errorMessage: `ExitPlanMode was cancelled or interrupted.`
+              permissionDecisionReason: `ExitPlanMode was cancelled or interrupted.`
             }
           };
         }
@@ -2967,7 +2995,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                   hookSpecificOutput: {
                     hookEventName: 'PreToolUse' as const,
                     permissionDecision: 'deny' as const,
-                    errorMessage: `Command denied: ${subCommand.slice(0, 50)}`
+                    permissionDecisionReason: `Command denied: ${subCommand.slice(0, 50)}`
                   }
                 };
               }
@@ -2992,7 +3020,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                 hookSpecificOutput: {
                   hookEventName: 'PreToolUse' as const,
                   permissionDecision: 'deny' as const,
-                  errorMessage: `Permission check failed for: ${subCommand.slice(0, 50)}`
+                  permissionDecisionReason: `Permission check failed for: ${subCommand.slice(0, 50)}`
                 }
               };
             }
@@ -3050,7 +3078,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                 hookSpecificOutput: {
                   hookEventName: 'PreToolUse' as const,
                   permissionDecision: 'deny' as const,
-                  errorMessage: `Planning mode restricts file operations to markdown files only. ` +
+                  permissionDecisionReason: `Planning mode restricts file operations to markdown files only. ` +
                     `Cannot use ${toolName} on '${filePath}'. ` +
                     `Please only edit .md files in the nimbalyst-local/plans/ directory.`
                 }

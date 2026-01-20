@@ -8,8 +8,22 @@
 
 import type { AgentMessagesStore } from '@nimbalyst/runtime/storage/repositories/AgentMessagesRepository';
 import type { CreateAgentMessageInput, AgentMessage } from '@nimbalyst/runtime';
-import { getMessageSyncHandler } from './SyncManager';
+import { getMessageSyncHandler, triggerIncrementalSync } from './SyncManager';
 import { logger } from '../utils/logger';
+
+// Debounce index sync to avoid spamming on rapid message creation
+let indexSyncTimeout: NodeJS.Timeout | null = null;
+function scheduleIndexSync() {
+  if (indexSyncTimeout) {
+    clearTimeout(indexSyncTimeout);
+  }
+  indexSyncTimeout = setTimeout(() => {
+    indexSyncTimeout = null;
+    triggerIncrementalSync().catch(err => {
+      logger.main.warn('[SyncedAgentMessagesStore] Failed to sync index:', err);
+    });
+  }, 1000); // Wait 1 second after last message before syncing index
+}
 
 /**
  * Wraps an AgentMessagesStore to sync messages to the SessionsIndex.
@@ -49,6 +63,9 @@ export function createSyncedAgentMessagesStore(
 
           // Pass the same timestamp for session index update
           messageSyncHandler.onMessageCreated(syncMessage, timestamp.getTime());
+
+          // Schedule index sync to update message counts (debounced)
+          scheduleIndexSync();
         } catch (error) {
           logger.main.warn('[SyncedAgentMessagesStore] Failed to sync message:', error);
         }

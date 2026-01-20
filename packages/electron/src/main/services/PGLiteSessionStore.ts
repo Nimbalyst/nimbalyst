@@ -160,12 +160,15 @@ export async function getAllSessionsForSync(includeMessages = false): Promise<Ar
 }
 
 /**
- * Get messages for a session, optionally starting from an offset.
- * Used for delta sync - only fetch messages the server doesn't have.
+ * Get messages for a session created after a given timestamp.
+ * Used for delta sync - only fetch messages newer than the server's last sync.
+ *
+ * @param sessionId The session ID
+ * @param sinceTimestamp Epoch milliseconds - only return messages created AFTER this time (0 = all)
  */
 export async function getSessionMessagesForSync(
   sessionId: string,
-  offset: number = 0
+  sinceTimestamp: number = 0
 ): Promise<SyncedMessage[]> {
   if (!moduleDb) {
     throw new Error('Session store not initialized');
@@ -174,13 +177,15 @@ export async function getSessionMessagesForSync(
     await moduleEnsureReady();
   }
 
+  // Convert milliseconds to Date for PostgreSQL comparison
+  const sinceDate = new Date(sinceTimestamp);
+
   const { rows: msgRows } = await moduleDb.query<any>(
     `SELECT id, session_id, created_at, source, direction, content, metadata, hidden
      FROM ai_agent_messages
-     WHERE session_id = $1
-     ORDER BY created_at ASC
-     OFFSET $2`,
-    [sessionId, offset]
+     WHERE session_id = $1 AND created_at > $2
+     ORDER BY created_at ASC`,
+    [sessionId, sinceDate]
   );
 
   return msgRows.map((m: any): AgentMessage => ({
@@ -229,15 +234,19 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       //   sessionType: (payload as any).sessionType
       // });
 
+      const branchedAt = (payload as any).branchedAt ? new Date((payload as any).branchedAt) : null;
+
       await db.query(
         `INSERT INTO ai_sessions (
           id, workspace_id, file_path, worktree_id, provider, model, title, session_type, mode,
           document_context, provider_config, provider_session_id, draft_input, metadata,
-          has_been_named, created_at, updated_at
+          has_been_named, created_at, updated_at,
+          parent_session_id, branch_point_message_id, branched_at
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9,
           $10, $11, $12, $13, $14,
-          $15, $16, $17
+          $15, $16, $17,
+          $18, $19, $20
         )
         ON CONFLICT (id) DO UPDATE SET
           workspace_id = EXCLUDED.workspace_id,
@@ -254,7 +263,10 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           draft_input = EXCLUDED.draft_input,
           metadata = EXCLUDED.metadata,
           has_been_named = EXCLUDED.has_been_named,
-          updated_at = EXCLUDED.updated_at
+          updated_at = EXCLUDED.updated_at,
+          parent_session_id = EXCLUDED.parent_session_id,
+          branch_point_message_id = EXCLUDED.branch_point_message_id,
+          branched_at = EXCLUDED.branched_at
       `,
         [
           payload.id,
@@ -274,6 +286,9 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           (payload as any).hasBeenNamed ?? false,
           createdAt,
           updatedAt,
+          (payload as any).parentSessionId ?? null,
+          (payload as any).branchPointMessageId ?? null,
+          branchedAt,
         ]
       );
 
@@ -335,9 +350,11 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
         `SELECT s.*,
          EXTRACT(EPOCH FROM s.last_read_timestamp) * 1000 AS last_read_ms,
          w.path AS worktree_path,
-         w.workspace_id AS worktree_project_path
+         w.workspace_id AS worktree_project_path,
+         parent.provider_session_id AS parent_provider_session_id
          FROM ai_sessions s
          LEFT JOIN worktrees w ON s.worktree_id = w.id
+         LEFT JOIN ai_sessions parent ON s.parent_session_id = parent.id
          WHERE s.id=$1 LIMIT 1`,
         [sessionId]
       );
@@ -371,6 +388,11 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
         hasBeenNamed: row.has_been_named ?? false,
         isArchived: row.is_archived ?? false,
         isPinned: row.is_pinned ?? false,
+        // Branch tracking - include parent's provider session ID for forking
+        parentSessionId: row.parent_session_id ?? undefined,
+        branchPointMessageId: row.branch_point_message_id ? parseInt(row.branch_point_message_id) : undefined,
+        branchedAt: row.branched_at ? toMillis(row.branched_at) : undefined,
+        parentProviderSessionId: row.parent_provider_session_id ?? undefined,
       } satisfies ChatSession;
     },
 
@@ -384,12 +406,14 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       const queryStart = performance.now();
       const { rows } = await db.query<any>(
         `SELECT s.id, s.provider, s.model, s.session_type, s.mode, s.title, s.workspace_id,
-                s.worktree_id, s.created_at, s.updated_at, s.is_archived, s.is_pinned, COUNT(m.id) as message_count
+                s.worktree_id, s.created_at, s.updated_at, s.is_archived, s.is_pinned,
+                s.parent_session_id, s.branch_point_message_id, s.branched_at, COUNT(m.id) as message_count
          FROM ai_sessions s
          LEFT JOIN ai_agent_messages m ON s.id = m.session_id AND m.direction = 'input' AND (m.hidden = FALSE OR m.hidden IS NULL)
          WHERE s.workspace_id=$1 ${archiveFilter}
          GROUP BY s.id, s.provider, s.model, s.session_type, s.mode, s.title, s.workspace_id,
-                  s.worktree_id, s.created_at, s.updated_at, s.is_archived, s.is_pinned
+                  s.worktree_id, s.created_at, s.updated_at, s.is_archived, s.is_pinned,
+                  s.parent_session_id, s.branch_point_message_id, s.branched_at
          ORDER BY s.updated_at DESC`,
         [workspaceId]
       );
@@ -399,6 +423,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       return rows.map(row => {
         const createdAt = toMillis(row.created_at);
         const updatedAt = toMillis(row.updated_at);
+        const branchedAt = row.branched_at ? toMillis(row.branched_at) : undefined;
         const messageCount = parseInt(row.message_count) || 0;
         return {
           id: row.id,
@@ -414,6 +439,9 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           messageCount,
           isArchived: row.is_archived ?? false,
           isPinned: row.is_pinned ?? false,
+          parentSessionId: row.parent_session_id ?? undefined,
+          branchPointMessageId: row.branch_point_message_id ? parseInt(row.branch_point_message_id) : undefined,
+          branchedAt,
         };
       });
     },
@@ -448,6 +476,9 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
             s.updated_at,
             s.is_archived,
             s.is_pinned,
+            s.parent_session_id,
+            s.branch_point_message_id,
+            s.branched_at,
             ts_rank_cd(to_tsvector('english', COALESCE(s.title, '')), to_tsquery('english', $2)) * 2 as rank
           FROM ai_sessions s
           WHERE s.workspace_id = $1
@@ -470,6 +501,9 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
             s.updated_at,
             s.is_archived,
             s.is_pinned,
+            s.parent_session_id,
+            s.branch_point_message_id,
+            s.branched_at,
             MAX(ts_rank_cd(to_tsvector('english', m.content), to_tsquery('english', $2))) as rank
           FROM ai_sessions s
           INNER JOIN ai_agent_messages m ON s.id = m.session_id
@@ -478,7 +512,8 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
             AND to_tsvector('english', m.content) @@ to_tsquery('english', $2)
             ${archiveFilter}
           GROUP BY s.id, s.provider, s.model, s.session_type, s.mode, s.title, s.workspace_id,
-                   s.worktree_id, s.created_at, s.updated_at, s.is_archived, s.is_pinned
+                   s.worktree_id, s.created_at, s.updated_at, s.is_archived, s.is_pinned,
+                   s.parent_session_id, s.branch_point_message_id, s.branched_at
         )
         SELECT
           sm.id,
@@ -493,12 +528,16 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           sm.updated_at,
           sm.is_archived,
           sm.is_pinned,
+          sm.parent_session_id,
+          sm.branch_point_message_id,
+          sm.branched_at,
           MAX(sm.rank) as max_rank,
           COUNT(m.id) as message_count
         FROM session_matches sm
         LEFT JOIN ai_agent_messages m ON sm.id = m.session_id AND m.direction = 'input' AND (m.hidden = FALSE OR m.hidden IS NULL)
         GROUP BY sm.id, sm.provider, sm.model, sm.session_type, sm.mode, sm.title, sm.workspace_id,
-                 sm.worktree_id, sm.created_at, sm.updated_at, sm.is_archived, sm.is_pinned
+                 sm.worktree_id, sm.created_at, sm.updated_at, sm.is_archived, sm.is_pinned,
+                 sm.parent_session_id, sm.branch_point_message_id, sm.branched_at
         ORDER BY max_rank DESC, sm.updated_at DESC`,
         [workspaceId, searchTerms]
       );
@@ -506,6 +545,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       return rows.map(row => {
         const createdAt = toMillis(row.created_at);
         const updatedAt = toMillis(row.updated_at);
+        const branchedAt = row.branched_at ? toMillis(row.branched_at) : undefined;
         const messageCount = parseInt(row.message_count) || 0;
         return {
           id: row.id,
@@ -521,6 +561,50 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           messageCount,
           isArchived: row.is_archived ?? false,
           isPinned: row.is_pinned ?? false,
+          parentSessionId: row.parent_session_id ?? undefined,
+          branchPointMessageId: row.branch_point_message_id ? parseInt(row.branch_point_message_id) : undefined,
+          branchedAt,
+        };
+      });
+    },
+
+    async getBranches(sessionId: string): Promise<SessionListItem[]> {
+      await ensureReady();
+      const { rows } = await db.query<any>(
+        `SELECT s.id, s.provider, s.model, s.session_type, s.mode, s.title, s.workspace_id,
+                s.worktree_id, s.created_at, s.updated_at, s.is_archived, s.is_pinned,
+                s.parent_session_id, s.branch_point_message_id, s.branched_at, COUNT(m.id) as message_count
+         FROM ai_sessions s
+         LEFT JOIN ai_agent_messages m ON s.id = m.session_id AND m.direction = 'input' AND (m.hidden = FALSE OR m.hidden IS NULL)
+         WHERE s.parent_session_id=$1
+         GROUP BY s.id, s.provider, s.model, s.session_type, s.mode, s.title, s.workspace_id,
+                  s.worktree_id, s.created_at, s.updated_at, s.is_archived, s.is_pinned,
+                  s.parent_session_id, s.branch_point_message_id, s.branched_at
+         ORDER BY s.branched_at DESC`,
+        [sessionId]
+      );
+      return rows.map(row => {
+        const createdAt = toMillis(row.created_at);
+        const updatedAt = toMillis(row.updated_at);
+        const branchedAt = row.branched_at ? toMillis(row.branched_at) : undefined;
+        const messageCount = parseInt(row.message_count) || 0;
+        return {
+          id: row.id,
+          provider: row.provider,
+          model: row.model ?? undefined,
+          sessionType: row.session_type ?? undefined,
+          mode: row.mode ?? undefined,
+          title: row.title ?? undefined,
+          workspaceId: row.workspace_id,
+          worktreeId: row.worktree_id ?? undefined,
+          createdAt,
+          updatedAt,
+          messageCount,
+          isArchived: row.is_archived ?? false,
+          isPinned: row.is_pinned ?? false,
+          parentSessionId: row.parent_session_id ?? undefined,
+          branchPointMessageId: row.branch_point_message_id ? parseInt(row.branch_point_message_id) : undefined,
+          branchedAt,
         };
       });
     },

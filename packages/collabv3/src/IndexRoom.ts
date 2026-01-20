@@ -25,6 +25,8 @@ import type {
   SessionControlBroadcastMessage,
   RegisterPushTokenMessage,
   RequestMobilePushMessage,
+  EncryptedSettingsPayload,
+  SettingsSyncBroadcastMessage,
 } from './types';
 import { createLogger } from './logger';
 
@@ -307,6 +309,10 @@ export class IndexRoom implements DurableObject {
 
         case 'session_control':
           await this.handleSessionControl(ws, connState, message.message);
+          break;
+
+        case 'settings_sync':
+          await this.handleSettingsSync(ws, connState, message.settings);
           break;
 
         case 'register_push_token':
@@ -624,6 +630,27 @@ export class IndexRoom implements DurableObject {
   }
 
   /**
+   * Handle settings sync from desktop to broadcast to other devices (mobile)
+   */
+  private async handleSettingsSync(
+    ws: WebSocket,
+    connState: ConnectionState,
+    settings: EncryptedSettingsPayload
+  ): Promise<void> {
+    log.debug('Received settings_sync from device:', settings.device_id, 'version:', settings.version);
+
+    // Broadcast encrypted settings to all other connections
+    const broadcastMessage: SettingsSyncBroadcastMessage = {
+      type: 'settings_sync_broadcast',
+      settings,
+      from_connection_id: this.getConnectionId(ws),
+    };
+    this.broadcast(broadcastMessage, ws);
+
+    log.debug('Broadcast settings_sync to', this.connections.size - 1, 'other connections');
+  }
+
+  /**
    * Handle push token registration from mobile devices
    */
   private async handleRegisterPushToken(
@@ -660,19 +687,6 @@ export class IndexRoom implements DurableObject {
   ): Promise<void> {
     console.log('[IndexRoom] Received push request for session:', message.session_id);
 
-    // TODO: Re-enable presence-aware suppression once basic push is working reliably
-    // For now, always send push notifications to debug delivery issues
-    // const devices = this.getConnectedDevices();
-    // const desktop = devices.find(d => d.type === 'desktop');
-    // if (desktop) {
-    //   const isDesktopActive = desktop.status === 'active' ||
-    //     (desktop.is_focused && Date.now() - (desktop.last_active_at || 0) < 5 * 60 * 1000);
-    //   if (isDesktopActive) {
-    //     log.debug('Suppressing push notification - desktop is active');
-    //     return;
-    //   }
-    // }
-
     // Get all registered push tokens for mobile devices
     const pushTokens = await this.state.storage.list<{
       token: string;
@@ -688,7 +702,8 @@ export class IndexRoom implements DurableObject {
       return;
     }
 
-    // Send push to each registered device
+    // Send push to all registered devices - iOS automatically suppresses
+    // notification banners when the app is in the foreground
     for (const [key, tokenData] of pushTokens) {
       console.log('[IndexRoom] Sending push to device:', tokenData.device_id, 'platform:', tokenData.platform);
       if (tokenData.platform === 'ios') {

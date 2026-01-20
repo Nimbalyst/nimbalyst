@@ -1681,7 +1681,10 @@ export class AIService {
           // Include worktree context so provider can warn Claude Code about the isolated environment
           worktreeId: session.worktreeId,
           worktreePath: session.worktreePath,
-          worktreeProjectPath: session.worktreeProjectPath
+          worktreeProjectPath: session.worktreeProjectPath,
+          // Include branch tracking for session forking (Claude Code SDK forkSession)
+          parentSessionId: session.parentSessionId,
+          parentProviderSessionId: session.parentProviderSessionId,
         } as any : {
           sessionType: session.sessionType,
           mode: session.mode,
@@ -1689,7 +1692,10 @@ export class AIService {
           attachments,
           worktreeId: session.worktreeId,
           worktreePath: session.worktreePath,
-          worktreeProjectPath: session.worktreeProjectPath
+          worktreeProjectPath: session.worktreeProjectPath,
+          // Include branch tracking for session forking (Claude Code SDK forkSession)
+          parentSessionId: session.parentSessionId,
+          parentProviderSessionId: session.parentProviderSessionId,
         } as any;
 
         // Update MCP document state for Claude Code provider so it knows which file-scoped tools to show
@@ -2219,12 +2225,11 @@ export class AIService {
               });
 
               // Request mobile push notification for agent completion
-              // Server will check presence and only push if user is away from desktop
               if (syncProvider) {
                 syncProvider.requestMobilePush?.(
                   session.id,
-                  'AI Response Ready',
-                  `${session.provider}: ${notificationBody}`
+                  session.title || 'AI Session',
+                  notificationBody
                 );
               }
 
@@ -2319,11 +2324,10 @@ export class AIService {
             });
 
             // Request mobile push notification for agent error
-            const errorPushTitle = session.title || 'Agent error';
             syncProvider.requestMobilePush?.(
               session.id,
-              'AI Error',
-              `${session.provider}: ${errorPushTitle}`
+              session.title || 'AI Session',
+              'Error occurred'
             );
           }
         }
@@ -2897,6 +2901,12 @@ export class AIService {
           const key = settings.apiKeys.openai;
           if (key && key !== this.maskApiKey(currentKeys['openai'] || '')) {
             currentKeys['openai'] = key as string;
+            // Sync to mobile devices for voice mode
+            import('../SyncManager').then(({ syncSettingsToMobile }) => {
+              syncSettingsToMobile(key as string);
+            }).catch(() => {
+              // Sync manager may not be available
+            });
           }
         }
 

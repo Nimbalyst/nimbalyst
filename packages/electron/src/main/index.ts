@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, nativeImage, nativeTheme } from 'electron';
+import { app, BrowserWindow, dialog, nativeImage, nativeTheme, session } from 'electron';
 import { safeHandle, safeOn } from './utils/ipcRegistry';
 import { markBootComplete } from './utils/bootState';
 import { markStart, markEnd, checkpoint, logSummary } from './utils/startupTiming';
@@ -393,6 +393,41 @@ function parseCommandLineArgs() {
 // App ready handler
 app.whenReady().then(async () => {
     checkpoint('app-ready');
+
+    // Set up permission request handler to control when system permission dialogs appear
+    // This prevents microphone permission prompt from appearing on app launch
+    // Microphone access is only granted when the user explicitly enables voice mode
+    // The voice mode flow (VoiceModeService) uses systemPreferences.askForMediaAccess()
+    // which bypasses this handler and properly requests OS-level permission
+    session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+        // Allow most permissions by default
+        if (permission === 'media') {
+            // For media permissions, check what type is being requested
+            // details.mediaTypes contains 'audio' and/or 'video'
+            const mediaTypes = (details as any).mediaTypes || [];
+
+            // Check if microphone permission has already been granted at the OS level
+            // If so, allow the renderer to access it
+            if (mediaTypes.includes('audio')) {
+                const { systemPreferences } = require('electron');
+                const micStatus = systemPreferences.getMediaAccessStatus('microphone');
+
+                if (micStatus === 'granted') {
+                    // User has already granted microphone permission via voice mode activation
+                    callback(true);
+                    return;
+                }
+
+                // Microphone not yet granted - deny to prevent premature permission prompt
+                // The voice mode activation flow will request permission properly
+                callback(false);
+                return;
+            }
+        }
+
+        // Allow other permissions
+        callback(true);
+    });
 
     // Override console methods to capture all console output in log file
     // This must be called FIRST before any console.log calls

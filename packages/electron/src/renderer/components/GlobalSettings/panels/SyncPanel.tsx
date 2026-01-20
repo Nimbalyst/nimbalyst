@@ -1,6 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { usePostHog } from 'posthog-js/react';
+import { useAtom, useAtomValue } from 'jotai';
 import { QRPairingModal } from './QRPairingModal';
+import {
+  syncConfigAtom,
+  setSyncConfigAtom,
+  type SyncConfig,
+} from '../../../store/atoms/appSettings';
 
 /** Format a timestamp as relative time (e.g., "5 minutes ago") */
 function formatRelativeTime(timestamp: number): string {
@@ -28,12 +34,9 @@ function formatRelativeTime(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString();
 }
 
-export interface SyncConfig {
-  enabled: boolean;
-  serverUrl: string;
-  enabledProjects?: string[]; // workspace paths that are enabled for sync
-  environment?: 'development' | 'production'; // dev only: override environment
-}
+// SyncConfig is now exported from appSettings.ts
+// Re-export for backward compatibility
+export type { SyncConfig } from '../../../store/atoms/appSettings';
 
 interface Project {
   path: string;
@@ -50,13 +53,8 @@ interface DeviceInfo {
   last_active_at: number;
 }
 
-interface SyncPanelProps {
-  config: SyncConfig;
-  onConfigChange: (config: SyncConfig) => void;
-  onTestConnection: () => void;
-  testStatus: 'idle' | 'testing' | 'success' | 'error';
-  testMessage?: string;
-}
+// NOTE: Props have been removed - SyncPanel now uses Jotai atoms directly.
+// The component is self-contained and doesn't need external config management.
 
 interface StytchAuthState {
   isAuthenticated: boolean;
@@ -217,15 +215,13 @@ function ProjectPickerPopup({
   );
 }
 
-export function SyncPanel({
-  config,
-  onConfigChange,
-  onTestConnection,
-  testStatus,
-  testMessage,
-}: SyncPanelProps) {
+export function SyncPanel() {
   const posthog = usePostHog();
   const isDevelopment = import.meta.env.DEV;
+
+  // Sync config from Jotai atom
+  const config = useAtomValue(syncConfigAtom);
+  const [, updateConfig] = useAtom(setSyncConfigAtom);
 
   // Compute effective server URL early so it can be used throughout
   // Only honor config.environment in dev builds - production always uses production sync
@@ -348,8 +344,8 @@ export function SyncPanel({
     }
   }, [config.enabled, effectiveServerUrl]);
 
-  const handleFieldChange = (field: keyof SyncConfig, value: string | boolean) => {
-    onConfigChange({ ...config, [field]: value });
+  const handleFieldChange = (field: keyof SyncConfig, value: string | boolean | number) => {
+    updateConfig({ [field]: value });
   };
 
   const handleProjectToggle = (projectPath: string, enabled: boolean) => {
@@ -357,7 +353,7 @@ export function SyncPanel({
     const updated = enabled
       ? [...enabledProjects, projectPath]
       : enabledProjects.filter(p => p !== projectPath);
-    onConfigChange({ ...config, enabledProjects: updated });
+    updateConfig({ enabledProjects: updated });
   };
 
   // Environment switch handler (dev only)
@@ -367,10 +363,11 @@ export function SyncPanel({
     // Don't set serverUrl explicitly to avoid stale persisted values
     const newConfig = { ...config, environment: newEnv, serverUrl: '' };
 
-    // Update local state
-    onConfigChange(newConfig);
+    // Update atom (will trigger debounced persistence, but we also save immediately below)
+    updateConfig({ environment: newEnv, serverUrl: '' });
 
     // Save immediately so main process has correct config for auth
+    // (This bypasses debounce because auth needs the config right away)
     try {
       await window.electronAPI.invoke('sync:set-config', newConfig);
     } catch (err) {
@@ -775,6 +772,38 @@ export function SyncPanel({
             </div>
           </label>
         </div>
+
+        {config.enabled && (
+          <div className="setting-item" style={{ marginTop: '12px' }}>
+            <div className="setting-text" style={{ marginBottom: '8px' }}>
+              <span className="setting-name">Idle Timeout</span>
+              <span className="setting-description">
+                Minutes of inactivity before mobile push notifications are sent.
+              </span>
+            </div>
+            <select
+              value={config.idleTimeoutMinutes ?? 5}
+              onChange={(e) => handleFieldChange('idleTimeoutMinutes', Number(e.target.value))}
+              style={{
+                padding: '8px 12px',
+                fontSize: '13px',
+                background: 'var(--surface-secondary)',
+                border: '1px solid var(--border-primary)',
+                borderRadius: '6px',
+                color: 'var(--text-primary)',
+                cursor: 'pointer',
+                width: '100%',
+              }}
+            >
+              <option value={1}>1 minute (for testing)</option>
+              <option value={2}>2 minutes</option>
+              <option value={5}>5 minutes (default)</option>
+              <option value={10}>10 minutes</option>
+              <option value={15}>15 minutes</option>
+              <option value={30}>30 minutes</option>
+            </select>
+          </div>
+        )}
       </div>
 
       {config.enabled && (
