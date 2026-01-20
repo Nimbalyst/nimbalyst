@@ -1184,9 +1184,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       const worktree = worktreeResult.worktree;
 
       // Step 2: Create session with worktree association
-      // Always use claude-code for worktree sessions
-      const defaultModel = 'claude-code:sonnet';
-      const provider = 'claude-code';
+      // Get the default model from app settings, fallback to claude-code
+      const defaultModel = await window.electronAPI.invoke('settings:get-default-ai-model') || 'claude-code:sonnet';
+      const [provider] = defaultModel.split(':');
 
       const session = await window.electronAPI.aiCreateSession(
         provider as 'claude' | 'claude-code' | 'openai' | 'lmstudio',
@@ -1297,9 +1297,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
       const worktree = worktreeResult.worktree;
 
-      // Create session with worktree association using default provider
-      const defaultModel = 'claude-code:sonnet';
-      const provider = 'claude-code';
+      // Create session with worktree association using default model from app settings
+      const defaultModel = await window.electronAPI.invoke('settings:get-default-ai-model') || 'claude-code:sonnet';
+      const [provider] = defaultModel.split(':');
 
       const session = await window.electronAPI.aiCreateSession(
         provider as 'claude' | 'claude-code' | 'openai' | 'lmstudio',
