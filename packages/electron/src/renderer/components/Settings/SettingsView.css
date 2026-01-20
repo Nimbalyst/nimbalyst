@@ -72,6 +72,43 @@
   color: var(--text-secondary);
 }
 
+/* Project-specific settings indicator */
+.settings-project-indicator {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+  margin-bottom: 24px;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 8px;
+  color: var(--text-primary);
+}
+
+.settings-project-indicator .material-symbols-outlined {
+  color: #3b82f6;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.settings-project-indicator-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-project-indicator-text strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.settings-project-indicator-text span {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
 .settings-view-body {
   display: flex;
   flex: 1;

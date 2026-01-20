@@ -119,6 +119,10 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
   const [installedPackageCount, setInstalledPackageCount] = useState(0);
   const [totalPackageCount, setTotalPackageCount] = useState(0);
 
+  // Track if workspace has MCP servers (for indicator on Project tab)
+  const [hasWorkspaceMcpServers, setHasWorkspaceMcpServers] = useState(false);
+  const [workspaceMcpServerCount, setWorkspaceMcpServerCount] = useState(0);
+
   // Valid categories for each scope
   const projectCategories: SettingsCategory[] = ['tool-packages', 'agent-permissions', 'installed-extensions', 'claude-plugins', 'mcp-servers', 'claude-code', 'claude', 'openai', 'openai-codex', 'lmstudio'];
   const userCategories: SettingsCategory[] = ['claude-code', 'claude', 'openai', 'openai-codex', 'lmstudio', 'sync', 'notifications', 'voice-mode', 'advanced', 'installed-extensions', 'claude-plugins', 'mcp-servers'];
@@ -146,6 +150,30 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
   useEffect(() => {
     loadSettings();
   }, []);
+
+  // Check if workspace has MCP servers (for indicator on Project tab when in global scope)
+  useEffect(() => {
+    const checkWorkspaceMcpServers = async () => {
+      if (workspacePath && scope === 'user') {
+        try {
+          const config = await window.electronAPI.invoke('mcp-config:read-workspace', workspacePath);
+          const serverCount = config?.mcpServers ? Object.keys(config.mcpServers).length : 0;
+          const hasServers = serverCount > 0;
+          setHasWorkspaceMcpServers(hasServers);
+          setWorkspaceMcpServerCount(serverCount);
+        } catch (error) {
+          console.error('Failed to check workspace MCP servers:', error);
+          setHasWorkspaceMcpServers(false);
+          setWorkspaceMcpServerCount(0);
+        }
+      } else {
+        setHasWorkspaceMcpServers(false);
+        setWorkspaceMcpServerCount(0);
+      }
+    };
+
+    checkWorkspaceMcpServers();
+  }, [workspacePath, scope, selectedCategory]);
 
   const loadSettings = async () => {
     try {
@@ -622,10 +650,23 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
         );
       case 'mcp-servers':
         return (
-          <MCPServersPanel
-            scope={scope === 'project' ? 'workspace' : 'user'}
-            workspacePath={scope === 'project' ? workspacePath ?? undefined : undefined}
-          />
+          <>
+            {hasWorkspaceMcpServers && scope === 'user' && (
+              <div className="settings-project-indicator">
+                <MaterialSymbol icon="info" size={20} />
+                <div className="settings-project-indicator-text">
+                  <strong>
+                    There {workspaceMcpServerCount === 1 ? 'is' : 'are'} {workspaceMcpServerCount} additional MCP {workspaceMcpServerCount === 1 ? 'server' : 'servers'} configured just for this project.
+                  </strong>
+                  <span>Switch to the Project tab above to view or edit project-specific MCP servers.</span>
+                </div>
+              </div>
+            )}
+            <MCPServersPanel
+              scope={scope === 'project' ? 'workspace' : 'user'}
+              workspacePath={scope === 'project' ? workspacePath ?? undefined : undefined}
+            />
+          </>
         );
       case 'claude-plugins':
         return (
