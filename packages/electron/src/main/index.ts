@@ -160,6 +160,7 @@ let aiService: AIService | null = null;
 let runtimeSessionStore: SessionStore | null = null;
 let mcpHttpServer: any = null;
 let mcpConfigService: MCPConfigService | null = null;
+let mcpConfigServiceCleanedUp = false;
 
 /**
  * Get the MCP config service instance (for use by other modules)
@@ -531,7 +532,7 @@ app.whenReady().then(async () => {
 
     // Register change callback to notify all windows when MCP config changes
     mcpConfigService.onChange((scope, workspacePath) => {
-        console.log('[MCP] Config changed:', { scope, workspacePath });
+        logger.mcp.info('[MCP] Config changed:', { scope, workspacePath });
 
         // Notify all windows
         BrowserWindow.getAllWindows().forEach(window => {
@@ -1227,10 +1228,11 @@ app.on('before-quit', async (event) => {
         mcpHttpServer = null;
 
         // Clean up MCP config service file watchers
-        if (mcpConfigService) {
+        if (mcpConfigService && !mcpConfigServiceCleanedUp) {
             try {
+                mcpConfigServiceCleanedUp = true;
                 mcpConfigService.cleanup();
-                mcpConfigService = null; // Prevent double cleanup on race condition
+                mcpConfigService = null;
                 console.log('[QUIT] MCP config service cleaned up');
             } catch (error) {
                 console.error('[QUIT] Error cleaning up MCP config service:', error);
