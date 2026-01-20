@@ -778,8 +778,15 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
    * Check if this is an OAuth server (uses mcp-remote or http transport)
    */
   const isOAuthServer = (config: MCPServerConfig): boolean => {
-    // HTTP transport always uses OAuth via mcp-remote wrapper
+    // HTTP transport - check if it uses API key auth via headers (Bearer token)
+    // If it has an Authorization header with a template variable, it uses API key, not OAuth
     if (config.type === 'http') {
+      const authHeader = config.headers?.Authorization || config.headers?.authorization;
+      if (authHeader && (authHeader.includes('${') || authHeader.startsWith('Bearer '))) {
+        // Has API key in headers, not OAuth
+        return false;
+      }
+      // HTTP without API key headers = OAuth
       return true;
     }
 
