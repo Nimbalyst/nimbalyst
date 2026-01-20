@@ -159,13 +159,11 @@
       "nimbalyst-logo.png",
       "node_modules/**/*"
     ],
-    "extraFiles": [
+    "extraResources": [
       {
         "from": "../../node_modules/node-pty",
-        "to": "Resources/node-pty"
-      }
-    ],
-    "extraResources": [
+        "to": "node-pty"
+      },
       {
         "from": "out/worker.bundle.js",
         "to": "worker.bundle.js"
