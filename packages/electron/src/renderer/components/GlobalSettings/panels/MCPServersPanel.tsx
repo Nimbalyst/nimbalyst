@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { usePostHog } from 'posthog-js/react';
+import { MaterialSymbol } from '@nimbalyst/runtime';
 import { ErrorBoundary } from '../../ErrorBoundary';
 import { useTheme } from '../../../hooks/useTheme';
 import './MCPServersPanel.css';
@@ -569,6 +570,9 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
   const [oauthStatus, setOauthStatus] = useState<'unknown' | 'checking' | 'authorized' | 'not-authorized'>('unknown');
   const [oauthAction, setOauthAction] = useState<'idle' | 'authorizing' | 'revoking' | 'clearing-cache'>('idle');
 
+  // Track OAuth status for all servers in the list
+  const [serverOAuthStatuses, setServerOAuthStatuses] = useState<Record<string, 'unknown' | 'checking' | 'authorized' | 'not-authorized'>>({});
+
   // Template search
   const [templateSearch, setTemplateSearch] = useState('');
 
@@ -576,6 +580,13 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
   useEffect(() => {
     loadServers();
   }, [scope, workspacePath]);
+
+  // Check OAuth status for all servers when they're loaded
+  useEffect(() => {
+    servers.forEach(server => {
+      checkServerOAuthStatus(server.name, server);
+    });
+  }, [servers]);
 
   const loadServers = async () => {
     try {
@@ -718,6 +729,33 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
     // stdio with mcp-remote explicitly
     return config.command === 'npx' &&
            Boolean(config.args?.some(arg => arg === 'mcp-remote' || arg.includes('mcp-remote')));
+  };
+
+  /**
+   * Check OAuth authorization status for a specific server (for list display)
+   */
+  const checkServerOAuthStatus = async (serverName: string, config: MCPServerConfig) => {
+    if (!isOAuthServer(config)) {
+      return;
+    }
+
+    const serverUrl = getOAuthServerUrl(config);
+    if (!serverUrl) {
+      setServerOAuthStatuses(prev => ({ ...prev, [serverName]: 'unknown' }));
+      return;
+    }
+
+    setServerOAuthStatuses(prev => ({ ...prev, [serverName]: 'checking' }));
+    try {
+      const result = await window.electronAPI.invoke('mcp-config:check-oauth-status', serverUrl);
+      setServerOAuthStatuses(prev => ({
+        ...prev,
+        [serverName]: result.authorized ? 'authorized' : 'not-authorized'
+      }));
+    } catch (error) {
+      console.error('Failed to check OAuth status:', error);
+      setServerOAuthStatuses(prev => ({ ...prev, [serverName]: 'unknown' }));
+    }
   };
 
   /**
@@ -1918,6 +1956,11 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
                       <div className="mcp-server-item-name">{server.name}</div>
                       <div className="mcp-server-item-command">{server.command || server.url}</div>
                     </div>
+                    {isOAuthServer(server) && serverOAuthStatuses[server.name] === 'not-authorized' && (
+                      <div className="mcp-server-status-icon mcp-server-status-not-authorized">
+                        <MaterialSymbol icon="error" size={16} title="Not authorized" />
+                      </div>
+                    )}
                   </div>
                 ))
               )}

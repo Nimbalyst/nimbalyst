@@ -315,6 +315,22 @@
   color: rgba(255, 255, 255, 0.8);
 }
 
+/* Server OAuth status icon - only shown when not authorized */
+.mcp-server-status-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.mcp-server-status-icon.mcp-server-status-not-authorized {
+  color: #f39c12;
+}
+
+.mcp-server-item.active .mcp-server-status-icon.mcp-server-status-not-authorized {
+  color: #fbbf24;
+}
+
 .mcp-server-details {
   flex: 1;
   border: 1px solid var(--border-primary);
