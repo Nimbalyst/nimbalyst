@@ -20,6 +20,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.51.19] - 2026-01-20
+
+
+### Added
+- Session branching for AI conversations
+- Worktree rename functionality to agentic coding UI
+- HTTP headers support and workspace MCP server detection
+- HTTP header support for MCP server configuration
+- Commands to open files and workspaces in new windows
+- Mobile voice mode with synced settings from desktop
+- Mobile voice mode UI and capture services
+- Mobile voice mode receives OpenAI API key from desktop
+- Smarter notification suppression for both desktop and mobile
+
+### Changed
+- MCP config migration and file watching
+- Bundled mcp-remote as dependency instead of downloading via npx
+- Agent mode state now uses Jotai atoms instead of prop drilling
+- Window mode and settings navigation state moved to Jotai atoms
+- Settings panels now self-contained with Jotai atoms
+- Tab editor content state refactored to avoid redundancy
+
+### Fixed
+- Provider fallback logic in session creation
+- LM Studio configuration storage and error handling
+- Session naming tool can only be called once
+- MCP server OAuth detection for HTTP servers with API key auth
+- New worktrees now default to the last used model
+- Workspace MCP server deletion by syncing both config locations
+- MCP config file watcher robustness and error handling
+- MCP analytics event naming and tracking
+- OAuth status warning icons to MCP server list
+- Visual indicator for project-specific MCP servers in global settings
+- Agent now sees why tool calls are denied in planning mode
+- Skip sync when server connection fails instead of full resync
+- OOM crashes during session sync with large histories prevented
+- Mobile session list now updates turn counts in real-time
+- Mobile push notifications now show session name as title
+- Mobile session creation works after app sits idle
+- Microphone permission only prompts when enabling voice mode
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.51.10] - 2026-01-16
 
 
