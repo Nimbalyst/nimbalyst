@@ -1605,7 +1605,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         const commandName = commandMatch ? commandMatch[1] : 'unknown';
 
         const errorMessage = `The command "/${commandName}" did not produce any output. This command may not exist or may have failed silently. Try typing "/" to see available commands.`;
-        console.error(`[CLAUDE-CODE] Slash command /${commandName} returned no output`);
+        // console.error(`[CLAUDE-CODE] Slash command /${commandName} returned no output`);
 
         // Log error to database for persistence
         // The logError call saves the message to the database and emits 'message:logged'

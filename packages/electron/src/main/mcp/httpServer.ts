@@ -699,9 +699,9 @@ async function tryCreateServer(port: number): Promise<any> {
           inputSchema: tool.inputSchema
         }));
 
-        if (extensionTools.length > 0) {
-          console.log(`[MCP Server] Including ${extensionTools.length} extension tools for file: ${currentFilePath}`);
-        }
+        // if (extensionTools.length > 0) {
+        //   console.log(`[MCP Server] Including ${extensionTools.length} extension tools for file: ${currentFilePath}`);
+        // }
 
         const allTools = [...builtInTools, ...extensionToolSchemas];
         // Debug logging - uncomment if needed for troubleshooting tool registration

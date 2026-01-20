@@ -15,7 +15,7 @@ export function startPerformanceMonitoring() {
 
         const cpuPercent = ((userDiff + systemDiff) / (timeDiff * 1000)) * 100;
 
-        if (cpuPercent > 10) {
+        if (cpuPercent > 50) {
             console.log('[PERF] High CPU usage:', JSON.stringify({
                 cpu: `${cpuPercent.toFixed(1)}%`,
                 memory: `${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB`,

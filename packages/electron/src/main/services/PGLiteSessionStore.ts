@@ -154,8 +154,8 @@ export async function getAllSessionsForSync(includeMessages = false): Promise<Ar
     }
   }
 
-  const totalTime = performance.now() - startTime;
-  console.log(`[PGLiteSessionStore] getAllSessionsForSync() - ensureReady: ${ensureTime.toFixed(1)}ms, query: ${queryTime.toFixed(1)}ms, total: ${totalTime.toFixed(1)}ms, rows: ${rows.length}`);
+  // const totalTime = performance.now() - startTime;
+  // console.log(`[PGLiteSessionStore] getAllSessionsForSync() - ensureReady: ${ensureTime.toFixed(1)}ms, query: ${queryTime.toFixed(1)}ms, total: ${totalTime.toFixed(1)}ms, rows: ${rows.length}`);
   return sessions;
 }
 

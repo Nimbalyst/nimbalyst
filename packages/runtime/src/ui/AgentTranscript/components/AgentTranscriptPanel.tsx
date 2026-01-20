@@ -325,7 +325,7 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
               backgroundColor: 'var(--surface-secondary)'
             }}>
               <MaterialSymbol icon="description" size={16} />
-              <span style={{ fontWeight: 500, color: 'var(--text-primary)' }}>Files</span>
+              <span style={{ fontWeight: 500, color: 'var(--text-primary)' }}>Files Edited</span>
               {fileEdits.length > 0 && (
                 <span style={{
                   marginLeft: 'auto',

@@ -409,12 +409,12 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
 
         // Step 1: Fetch the server's current index
         const fetchStart = performance.now();
-        logger.main.info('[SyncManager] Fetching server index...');
+        // logger.main.info('[SyncManager] Fetching server index...');
         let serverIndex: Awaited<ReturnType<NonNullable<typeof provider.fetchIndex>>>;
         try {
           serverIndex = await provider.fetchIndex();
           const fetchTime = performance.now() - fetchStart;
-          logger.main.info(`[SyncManager] Server has ${serverIndex.sessions.length} sessions (fetch took ${fetchTime.toFixed(1)}ms)`);
+          logger.main.debug(`[SyncManager] Server has ${serverIndex.sessions.length} sessions (fetch took ${fetchTime.toFixed(1)}ms)`);
         } catch (fetchError) {
           // Don't fall back to full sync - that would load ALL messages for ALL sessions into memory
           // and cause OOM crashes. Instead, skip sync and wait for connection to be restored.
@@ -432,7 +432,7 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
         const { getAllSessionsForSync } = await import('./PGLiteSessionStore');
         const allLocalSessions = await getAllSessionsForSync(false); // No messages yet
         const localTime = performance.now() - localStart;
-        logger.main.info(`[SyncManager] Local has ${allLocalSessions.length} sessions (query took ${localTime.toFixed(1)}ms)`);
+        logger.main.debug(`[SyncManager] Local has ${allLocalSessions.length} sessions (query took ${localTime.toFixed(1)}ms)`);
 
         // Get enabled projects filter (if configured)
         const { store } = await import('../utils/store');
@@ -482,7 +482,7 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
           }
         }
 
-        logger.main.info('[SyncManager] Delta sync results:', {
+        logger.main.debug('[SyncManager] Delta sync results:', {
           totalLocal: allLocalSessions.length,
           totalServer: serverIndex.sessions.length,
           needingIndexUpdate: sessionsNeedingIndexUpdate.length,
@@ -491,7 +491,7 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
 
         // Sync sessions that need it
         if (sessionsNeedingIndexUpdate.length === 0 && sessionsNeedingMessageSync.length === 0) {
-          logger.main.info('[SyncManager] All sessions up to date, no sync needed');
+          // logger.main.info('[SyncManager] All sessions up to date, no sync needed');
         } else {
           // For sessions needing message sync, load ONLY the messages the server doesn't have (delta sync)
           if (sessionsNeedingMessageSync.length > 0) {
@@ -653,17 +653,17 @@ export async function triggerIncrementalSync(): Promise<void> {
   }
 
   const syncStart = performance.now();
-  logger.main.info('[SyncManager] Starting triggered incremental sync...');
+  // logger.main.info('[SyncManager] Starting triggered incremental sync...');
 
   try {
     // Fetch the server's current index
     const fetchStart = performance.now();
-    logger.main.info('[SyncManager] Fetching server index...');
+    // logger.main.info('[SyncManager] Fetching server index...');
     let serverIndex: Awaited<ReturnType<NonNullable<typeof provider.fetchIndex>>>;
     try {
       serverIndex = await provider.fetchIndex();
       const fetchTime = performance.now() - fetchStart;
-      logger.main.info(`[SyncManager] Server has ${serverIndex.sessions.length} sessions (fetch took ${fetchTime.toFixed(1)}ms)`);
+      // logger.main.info(`[SyncManager] Server has ${serverIndex.sessions.length} sessions (fetch took ${fetchTime.toFixed(1)}ms)`);
     } catch (fetchError) {
       // Don't fall back to full sync - that would load ALL messages for ALL sessions into memory
       // and cause OOM crashes. Instead, skip sync and wait for connection to be restored.
@@ -681,7 +681,7 @@ export async function triggerIncrementalSync(): Promise<void> {
     const { getAllSessionsForSync } = await import('./PGLiteSessionStore');
     const allLocalSessions = await getAllSessionsForSync(false);
     const localTime = performance.now() - localStart;
-    logger.main.info(`[SyncManager] Local has ${allLocalSessions.length} sessions (query took ${localTime.toFixed(1)}ms)`);
+    // logger.main.info(`[SyncManager] Local has ${allLocalSessions.length} sessions (query took ${localTime.toFixed(1)}ms)`);
 
     // Get enabled projects filter
     const { store } = await import('../utils/store');
@@ -724,15 +724,15 @@ export async function triggerIncrementalSync(): Promise<void> {
       }
     }
 
-    logger.main.info('[SyncManager] Triggered sync results:', {
-      totalLocal: allLocalSessions.length,
-      totalServer: serverIndex.sessions.length,
-      needingIndexUpdate: sessionsNeedingIndexUpdate.length,
-      needingMessageSync: sessionsNeedingMessageSync.length,
-    });
+    // logger.main.info('[SyncManager] Triggered sync results:', {
+    //   totalLocal: allLocalSessions.length,
+    //   totalServer: serverIndex.sessions.length,
+    //   needingIndexUpdate: sessionsNeedingIndexUpdate.length,
+    //   needingMessageSync: sessionsNeedingMessageSync.length,
+    // });
 
     if (sessionsNeedingIndexUpdate.length === 0 && sessionsNeedingMessageSync.length === 0) {
-      logger.main.info('[SyncManager] All sessions up to date, no sync needed');
+      // logger.main.info('[SyncManager] All sessions up to date, no sync needed');
     } else {
       if (sessionsNeedingMessageSync.length > 0) {
         const { getSessionMessagesForSync } = await import('./PGLiteSessionStore');
@@ -754,8 +754,8 @@ export async function triggerIncrementalSync(): Promise<void> {
       });
     }
 
-    const totalSyncTime = performance.now() - syncStart;
-    logger.main.info(`[SyncManager] Triggered sync completed in ${totalSyncTime.toFixed(1)}ms`);
+    // const totalSyncTime = performance.now() - syncStart;
+    // logger.main.info(`[SyncManager] Triggered sync completed in ${totalSyncTime.toFixed(1)}ms`);
   } catch (error) {
     logger.main.error('[SyncManager] Triggered sync failed:', error);
   }
