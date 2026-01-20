@@ -540,10 +540,11 @@ export class MCPConfigService {
     }
 
     // Convert HTTP config to stdio with mcp-remote
+    // Using bundled mcp-remote from node_modules (managed as a package.json dependency)
     return {
       type: 'stdio',
       command: 'npx',
-      args: ['-y', 'mcp-remote', serverConfig.url],
+      args: ['mcp-remote', serverConfig.url],
       env: serverConfig.env,
       disabled: serverConfig.disabled
     };
