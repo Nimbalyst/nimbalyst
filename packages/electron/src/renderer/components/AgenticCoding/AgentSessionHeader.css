@@ -1,6 +1,6 @@
 .agent-session-header {
   flex-shrink: 0;
-  padding: 16px 20px;
+  padding: 8px 16px;
   border-bottom: 1px solid var(--border-primary);
   background: var(--surface-primary);
 }
@@ -8,24 +8,25 @@
 .agent-session-header-main {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
 }
 
 .agent-session-header-icon {
   flex-shrink: 0;
+  color: var(--text-secondary);
 }
 
 /* Worktree icon wrapper - similar to WorktreeSingle but larger */
 .agent-session-header-icon-wrapper {
   position: relative;
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
 }
 
 .agent-session-header-wt-icon {
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
   color: var(--text-secondary);
 }
 
@@ -53,26 +54,22 @@
 
 .agent-session-header-title {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: 1rem;
   font-weight: 600;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1.3;
+  line-height: 1.2;
 }
 
 .agent-session-header-meta {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 4px;
+  margin-top: 2px;
   font-size: 0.75rem;
   color: var(--text-secondary);
-}
-
-.agent-session-header-model {
-  color: var(--text-tertiary);
 }
 
 .agent-session-header-worktree-name {
@@ -139,6 +136,6 @@
 .agent-session-header-layout-controls {
   flex-shrink: 0;
   margin-left: auto;
-  padding-left: 16px;
+  padding-left: 12px;
   border-left: 1px solid var(--border-primary);
 }

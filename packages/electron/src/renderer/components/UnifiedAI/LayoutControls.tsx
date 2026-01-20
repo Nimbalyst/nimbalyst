@@ -48,12 +48,13 @@ export function LayoutControls({ mode, hasTabs, onModeChange }: LayoutControlsPr
   return (
     <div className="layout-controls">
       <button
-        className={`layout-control-btn ${mode === 'editor' ? 'active' : ''}`}
+        className={`layout-control-btn with-label ${mode === 'editor' ? 'active' : ''}`}
         onClick={() => onModeChange('editor')}
         title="Maximize editor"
         disabled={!hasTabs}
         data-testid="layout-maximize-editor"
       >
+        <span className="layout-label">Files</span>
         <EditorMaxIcon />
       </button>
       <button
@@ -66,12 +67,13 @@ export function LayoutControls({ mode, hasTabs, onModeChange }: LayoutControlsPr
         <SplitViewIcon />
       </button>
       <button
-        className={`layout-control-btn ${mode === 'transcript' ? 'active' : ''}`}
+        className={`layout-control-btn with-label ${mode === 'transcript' ? 'active' : ''}`}
         onClick={() => onModeChange('transcript')}
         title="Maximize transcript"
         data-testid="layout-maximize-transcript"
       >
         <TranscriptMaxIcon />
+        <span className="layout-label">Agent</span>
       </button>
     </div>
   );

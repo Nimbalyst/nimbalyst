@@ -127,9 +127,6 @@ export const AgentSessionHeader: React.FC<AgentSessionHeaderProps> = ({
   }
 
   const displayTitle = sessionData.title || sessionData.name || 'Untitled Session';
-  const displayModel = sessionData.model?.includes(':')
-    ? sessionData.model.split(':')[1]
-    : sessionData.model;
 
   return (
     <div className="agent-session-header">
@@ -152,7 +149,7 @@ export const AgentSessionHeader: React.FC<AgentSessionHeaderProps> = ({
           </div>
         ) : (
           <div className="agent-session-header-icon">
-            <ProviderIcon provider={sessionData.provider || 'claude'} size={24} />
+            <ProviderIcon provider={sessionData.provider || 'claude'} size={20} />
           </div>
         )}
 
@@ -184,9 +181,7 @@ export const AgentSessionHeader: React.FC<AgentSessionHeaderProps> = ({
               ) : (
                 <span className="agent-session-header-worktree-name agent-session-header-loading">Loading...</span>
               )
-            ) : (
-              displayModel && <span className="agent-session-header-model">{displayModel}</span>
-            )}
+            ) : null}
           </div>
         </div>
 

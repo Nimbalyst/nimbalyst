@@ -51,3 +51,17 @@
 .layout-control-btn .material-symbols-rounded {
   font-size: 16px;
 }
+
+/* Buttons with labels */
+.layout-control-btn.with-label {
+  width: auto;
+  padding: 0 8px;
+  gap: 4px;
+}
+
+.layout-label {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
