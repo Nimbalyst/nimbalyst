@@ -86,7 +86,7 @@ function SessionSidebar() {
   return (
     <div className="w-80 flex flex-col h-full bg-[var(--surface-secondary)]">
       {/* Header */}
-      <header className="flex items-center justify-between px-3 py-2 border-b border-[var(--border-primary)]">
+      <header className="flex items-center justify-between px-3 py-2 border-b border-[var(--border-primary)] safe-area-top">
         <div className="flex items-center gap-1">
           {/* Project Picker Button */}
           <button
