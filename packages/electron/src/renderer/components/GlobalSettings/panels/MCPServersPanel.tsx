@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { usePostHog } from 'posthog-js/react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import { ErrorBoundary } from '../../ErrorBoundary';
@@ -583,26 +583,23 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
   // Template search
   const [templateSearch, setTemplateSearch] = useState('');
 
-  // Reload servers when scope or workspace path changes
-  useEffect(() => {
-    loadServers();
-  }, [scope, workspacePath]);
+  // Track if we're currently making changes (to ignore file watcher updates)
+  // Use ref instead of state because the callback closure needs current value
+  const isLocalChangeRef = useRef(false);
 
-  // Check OAuth status for all servers when they're loaded
-  useEffect(() => {
-    servers.forEach(server => {
-      checkServerOAuthStatus(server.name, server);
-    });
-  }, [servers]);
-
-  const loadServers = async () => {
+  // Define loadServers before the useEffects that use it
+  const loadServers = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
+      console.log('[MCPServersPanel] loadServers called with scope:', scope, 'workspace:', workspacePath);
+
       const config: MCPConfig = scope === 'workspace' && workspacePath
         ? await window.electronAPI.invoke('mcp-config:read-workspace', workspacePath)
         : await window.electronAPI.invoke('mcp-config:read-user');
+
+      console.log('[MCPServersPanel] Loaded config:', Object.keys(config.mcpServers));
 
       const serverList: MCPServerWithName[] = Object.entries(config.mcpServers || {}).map(
         ([name, serverConfig]) => ({
@@ -619,7 +616,55 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
     } finally {
       setLoading(false);
     }
-  };
+  }, [scope, workspacePath]);
+
+  // Reload servers when scope or workspace path changes
+  useEffect(() => {
+    loadServers();
+  }, [loadServers]);
+
+  // Listen for external config changes (file watcher) and reload
+  useEffect(() => {
+    if (!window.electronAPI?.onMcpConfigChanged) {
+      return;
+    }
+
+    const cleanup = window.electronAPI.onMcpConfigChanged((data) => {
+      console.log('[MCPServersPanel] File watcher event received:', {
+        eventData: data,
+        currentScope: scope,
+        currentWorkspace: workspacePath,
+        isLocalChangeFlag: isLocalChangeRef.current
+      });
+
+      // Only reload if this is an external change (not from our own saves/deletes)
+      if (isLocalChangeRef.current) {
+        console.log('[MCPServersPanel] Ignoring file watcher event - local change in progress');
+        return;
+      }
+
+      // Check if this event is relevant to our scope
+      const isRelevant =
+        (data.scope === 'user' && scope === 'user') ||
+        (data.scope === 'workspace' && scope === 'workspace' && data.workspacePath === workspacePath);
+
+      console.log('[MCPServersPanel] Event relevance check:', { isRelevant, reason: isRelevant ? 'will reload' : 'ignoring - not relevant' });
+
+      if (isRelevant) {
+        console.log('[MCPServersPanel] Reloading due to external config change:', data);
+        loadServers();
+      }
+    });
+
+    return cleanup;
+  }, [scope, workspacePath, loadServers]);
+
+  // Check OAuth status for all servers when they're loaded
+  useEffect(() => {
+    servers.forEach(server => {
+      checkServerOAuthStatus(server.name, server);
+    });
+  }, [servers]);
 
   const handleServerSelect = (server: MCPServerWithName) => {
     setSelectedServer(server);
@@ -960,6 +1005,8 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
 
     try {
       setSaveStatus('saving');
+      // Mark as local change to ignore file watcher updates
+      isLocalChangeRef.current = true;
 
       const serverConfig: MCPServerConfig = {
         type: formType,
@@ -1004,6 +1051,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
       const validation = await window.electronAPI.invoke('mcp-config:validate', config);
       if (!validation.valid) {
         setSaveStatus('error');
+        isLocalChangeRef.current = false;
         return;
       }
 
@@ -1013,6 +1061,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
 
       if (!result.success) {
         setSaveStatus('error');
+        isLocalChangeRef.current = false;
         return;
       }
 
@@ -1037,12 +1086,18 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
       });
 
       setTimeout(() => setSaveStatus('idle'), 2000);
+
+      // Clear the flag after a longer delay to ensure file watcher events are ignored
+      setTimeout(() => {
+        isLocalChangeRef.current = false;
+      }, 2000);
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to save server';
       console.error('Failed to save server:', errorMsg);
       setSaveStatus('error');
       setTestStatus('error');
       setTestMessage(`Save error: ${errorMsg}`);
+      isLocalChangeRef.current = false;
     }
   };
 
@@ -1054,11 +1109,18 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
     }
 
     try {
+      // Mark as local change to ignore file watcher updates
+      console.log('[MCPServersPanel] Setting isLocalChangeRef = true before delete');
+      isLocalChangeRef.current = true;
+
       const config: MCPConfig = scope === 'workspace' && workspacePath
         ? await window.electronAPI.invoke('mcp-config:read-workspace', workspacePath)
         : await window.electronAPI.invoke('mcp-config:read-user');
 
+      console.log('[MCPServersPanel] Deleting server:', selectedServer.name);
+      console.log('[MCPServersPanel] Config before delete:', Object.keys(config.mcpServers));
       delete config.mcpServers[selectedServer.name];
+      console.log('[MCPServersPanel] Config after delete:', Object.keys(config.mcpServers));
 
       const result = scope === 'workspace' && workspacePath
         ? await window.electronAPI.invoke('mcp-config:write-workspace', workspacePath, config)
@@ -1066,20 +1128,34 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
 
       if (!result.success) {
         alert(`Failed to delete: ${result.error}`);
+        isLocalChangeRef.current = false;
         return;
       }
 
+      console.log('[MCPServersPanel] Write successful, reloading servers');
+      // Wait a bit for file watcher to process, then reload and clear flag
       await loadServers();
       setSelectedServer(null);
+
+      // Clear the flag after a longer delay to ensure file watcher events are ignored
+      // File watcher has 500ms debounce + can fire twice (file + dir), so wait longer
+      setTimeout(() => {
+        console.log('[MCPServersPanel] Clearing isLocalChangeRef flag');
+        isLocalChangeRef.current = false;
+      }, 2000);
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to delete server';
       console.error('Failed to delete server:', errorMsg);
       alert(`Error: ${errorMsg}`);
+      isLocalChangeRef.current = false;
     }
   };
 
   const handleToggleDisabled = async (serverName: string, disabled: boolean) => {
     try {
+      // Mark as local change to ignore file watcher updates
+      isLocalChangeRef.current = true;
+
       const config: MCPConfig = scope === 'workspace' && workspacePath
         ? await window.electronAPI.invoke('mcp-config:read-workspace', workspacePath)
         : await window.electronAPI.invoke('mcp-config:read-user');
@@ -1098,14 +1174,21 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
 
       if (!result.success) {
         console.error('Failed to toggle server:', result.error);
+        isLocalChangeRef.current = false;
         return;
       }
 
       await loadServers();
+
+      // Clear the flag after a longer delay to ensure file watcher events are ignored
+      setTimeout(() => {
+        isLocalChangeRef.current = false;
+      }, 2000);
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to toggle server';
       console.error('Failed to toggle server:', errorMsg);
       alert(`Error: ${errorMsg}`);
+      isLocalChangeRef.current = false;
     }
   };
 

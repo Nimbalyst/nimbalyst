@@ -300,6 +300,7 @@ export class MCPConfigService {
 
   /**
    * Write workspace-scope MCP configuration (.mcp.json in project root).
+   * Also updates ~/.claude.json projects section to keep both locations in sync.
    */
   async writeWorkspaceMCPConfig(workspacePath: string, config: MCPConfig): Promise<void> {
     if (!workspacePath) {
@@ -312,10 +313,49 @@ export class MCPConfigService {
     const mcpJsonPath = path.join(workspacePath, '.mcp.json');
 
     try {
+      // 1. Write to .mcp.json in workspace root
       const content = JSON.stringify(config, null, 2);
       await fs.writeFile(mcpJsonPath, content, 'utf8');
-
       logger.mcp.info('Workspace MCP config saved:', mcpJsonPath);
+
+      // 2. Also update ~/.claude.json projects section to keep in sync
+      // This ensures deletes/updates work correctly since readWorkspaceMCPConfig merges both
+      try {
+        let claudeConfig: ClaudeConfig & {
+          projects?: Record<string, { mcpServers?: Record<string, MCPServerConfig>; [key: string]: any }>;
+        } = {};
+
+        try {
+          const existingContent = await fs.readFile(this.userConfigPath, 'utf8');
+          claudeConfig = JSON.parse(existingContent);
+        } catch (error: any) {
+          if (error.code !== 'ENOENT') {
+            throw error;
+          }
+          // File doesn't exist, will create new one
+        }
+
+        // Initialize projects section if it doesn't exist
+        if (!claudeConfig.projects) {
+          claudeConfig.projects = {};
+        }
+
+        // Initialize this project's entry if it doesn't exist
+        if (!claudeConfig.projects[workspacePath]) {
+          claudeConfig.projects[workspacePath] = {};
+        }
+
+        // Update the mcpServers for this project
+        claudeConfig.projects[workspacePath].mcpServers = config.mcpServers;
+
+        // Write back to ~/.claude.json
+        const claudeContent = JSON.stringify(claudeConfig, null, 2);
+        await fs.writeFile(this.userConfigPath, claudeContent, 'utf8');
+        logger.mcp.info('Updated workspace MCP config in ~/.claude.json projects section');
+      } catch (error) {
+        // Log but don't fail the whole operation if ~/.claude.json update fails
+        logger.mcp.warn('Failed to update ~/.claude.json projects section:', error);
+      }
     } catch (error) {
       logger.mcp.error('Failed to write workspace MCP config:', error);
       throw error;
