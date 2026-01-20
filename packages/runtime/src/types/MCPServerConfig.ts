@@ -35,6 +35,9 @@ export interface MCPServerConfig {
   /** Server URL for remote transport (sse or http only) */
   url?: string;
 
+  /** Custom HTTP headers for remote transport (http only) */
+  headers?: Record<string, string>;
+
   /** Environment variables to set (supports ${VAR} and ${VAR:-default} syntax) */
   env?: MCPServerEnv;
 

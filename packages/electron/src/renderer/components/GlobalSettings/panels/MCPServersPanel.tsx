@@ -9,6 +9,7 @@ interface MCPServerConfig {
   args?: string[];
   url?: string;
   type?: 'stdio' | 'sse' | 'http';
+  headers?: Record<string, string>;
   env?: Record<string, string>;
   disabled?: boolean;
 }
@@ -60,6 +61,7 @@ const TEMPLATE_ICON_CONFIG: Record<string, IconConfig> = {
   playwright: { type: 'simple-icons', slug: 'playwright' },
   context7: { type: 'simple-icons', slug: 'upstash' },
   sentry: { type: 'simple-icons', slug: 'sentry' },
+  corridor: { type: 'material-symbol', icon: 'shield' },
 
   // Generic tools using Material Symbols
   filesystem: { type: 'material-symbol', icon: 'folder' },
@@ -138,6 +140,7 @@ const TEMPLATE_CATEGORIES: Record<string, TemplateCategory> = {
   'chrome-devtools': 'development',
   serena: 'development',
   sentry: 'development',
+  corridor: 'development',
   linear: 'productivity',
   asana: 'productivity',
   atlassian: 'productivity',
@@ -184,6 +187,11 @@ const ENV_VAR_HELP: Record<string, { label: string; help: string; link?: string 
     label: 'PostHog Personal API Key',
     help: 'Get from PostHog > Settings > Personal API Keys',
     link: 'https://app.posthog.com/settings/user-api-keys'
+  },
+  CORRIDOR_API_KEY: {
+    label: 'Corridor API Key',
+    help: 'Get from Corridor dashboard',
+    link: 'https://app.corridor.dev'
   },
   AWS_ACCESS_KEY_ID: {
     label: 'AWS Access Key ID',
@@ -358,6 +366,23 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     config: {
       type: 'http',
       url: 'https://mcp.sentry.dev/mcp'
+    }
+  },
+  {
+    id: 'corridor',
+    name: 'Corridor',
+    description: 'Real-time security reviews for AI-powered development',
+    docsUrl: 'https://corridor.dev',
+    authType: 'api-key',
+    config: {
+      type: 'http',
+      url: 'https://app.corridor.dev/api/mcp',
+      headers: {
+        Authorization: 'Bearer ${CORRIDOR_API_KEY}'
+      },
+      env: {
+        CORRIDOR_API_KEY: ''
+      }
     }
   },
   {

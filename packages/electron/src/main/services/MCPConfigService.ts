@@ -254,20 +254,48 @@ export class MCPConfigService {
       throw new Error('workspacePath is required');
     }
 
-    const mcpJsonPath = path.join(workspacePath, '.mcp.json');
+    // Try reading from two locations and merge them:
+    // 1. ~/.claude.json projects section (Claude CLI standard)
+    // 2. .mcp.json in workspace root (legacy/alternative location)
 
+    let claudeJsonServers: Record<string, MCPServerConfig> = {};
+    let mcpJsonServers: Record<string, MCPServerConfig> = {};
+
+    // 1. Read from ~/.claude.json projects section
+    try {
+      const content = await fs.readFile(this.userConfigPath, 'utf8');
+      const claudeConfig = JSON.parse(content) as ClaudeConfig & {
+        projects?: Record<string, { mcpServers?: Record<string, MCPServerConfig> }>;
+      };
+
+      if (claudeConfig.projects && claudeConfig.projects[workspacePath]) {
+        claudeJsonServers = claudeConfig.projects[workspacePath].mcpServers || {};
+      }
+    } catch (error: any) {
+      if (error.code !== 'ENOENT') {
+        logger.mcp.warn('Failed to read workspace config from ~/.claude.json:', error);
+      }
+    }
+
+    // 2. Read from .mcp.json in workspace root
+    const mcpJsonPath = path.join(workspacePath, '.mcp.json');
     try {
       const content = await fs.readFile(mcpJsonPath, 'utf8');
       const config = JSON.parse(content) as MCPConfig;
-      return config;
+      mcpJsonServers = config.mcpServers || {};
     } catch (error: any) {
-      if (error.code === 'ENOENT') {
-        // File doesn't exist - return empty config
-        return { mcpServers: {} };
+      if (error.code !== 'ENOENT') {
+        logger.mcp.warn('Failed to read .mcp.json:', error);
       }
-      logger.mcp.error('Failed to read workspace MCP config:', error);
-      throw error;
     }
+
+    // Merge both sources: .mcp.json overrides ~/.claude.json projects
+    return {
+      mcpServers: {
+        ...claudeJsonServers,
+        ...mcpJsonServers
+      }
+    };
   }
 
   /**
@@ -331,7 +359,15 @@ export class MCPConfigService {
         if (eventType === 'change') {
           this.debouncedNotify('user-config', () => {
             logger.mcp.info('[MCPConfigService] User config file changed');
+
+            // Notify about user-level config change
             this.notifyChange('user');
+
+            // Also notify any active workspaces, since ~/.claude.json contains project-specific
+            // MCP servers in the "projects" section
+            for (const workspacePath of this.workspaceWatchers.keys()) {
+              this.notifyChange('workspace', workspacePath);
+            }
           });
         }
       });
@@ -539,12 +575,24 @@ export class MCPConfigService {
       return serverConfig;
     }
 
+    // Build args for mcp-remote
+    const args = ['mcp-remote', serverConfig.url];
+
+    // Add custom headers if provided
+    // Note: No spaces around ':' to work around Cursor/Claude Desktop bug with args escaping
+    // Format: --header "Authorization:${ENV_VAR}" or --header "Authorization:Bearer token"
+    if (serverConfig.headers) {
+      for (const [key, value] of Object.entries(serverConfig.headers)) {
+        args.push('--header', `${key}:${value}`);
+      }
+    }
+
     // Convert HTTP config to stdio with mcp-remote
     // Using bundled mcp-remote from node_modules (managed as a package.json dependency)
     return {
       type: 'stdio',
       command: 'npx',
-      args: ['mcp-remote', serverConfig.url],
+      args,
       env: serverConfig.env,
       disabled: serverConfig.disabled
     };
