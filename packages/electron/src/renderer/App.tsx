@@ -58,6 +58,7 @@ import { ExtensionHostComponents } from './components/ExtensionHostComponents';
 import { ClaudeCommandsToast } from './components/ClaudeCommandsToast';
 import { UpdateToast } from './components/UpdateToast';
 import { ProjectTrustToast } from './components/ProjectTrustToast';
+import { MCPConfigChangedToast } from './components/MCPConfigChangedToast';
 import { PostHogSurvey } from './components/PostHogSurvey';
 import OnboardingService from './services/OnboardingService';
 import { WalkthroughProvider } from './walkthroughs';
@@ -289,6 +290,10 @@ export default function App() {
   // Claude commands install toast state
   const [showCommandsToast, setShowCommandsToast] = useState(false);
   const hasCheckedCommandsRef = useRef(false);
+
+  // MCP config changed toast state
+  const [showMcpConfigToast, setShowMcpConfigToast] = useState(false);
+  const [mcpConfigChangeData, setMcpConfigChangeData] = useState<{ scope: 'user' | 'workspace'; workspacePath?: string } | null>(null);
 
   // Settings deep link state (for navigating directly to a specific settings section)
   const [settingsInitialCategory, setSettingsInitialCategory] = useState<SettingsCategory | undefined>(undefined);
@@ -1354,6 +1359,26 @@ export default function App() {
     LOG_CONFIG,
   });
 
+  // Handle MCP config changes
+  useEffect(() => {
+    if (!window.electronAPI?.onMcpConfigChanged) {
+      return;
+    }
+
+    const cleanup = window.electronAPI.onMcpConfigChanged((data) => {
+      console.log('[MCP] Config changed:', data);
+      setMcpConfigChangeData(data);
+      setShowMcpConfigToast(true);
+
+      // Auto-dismiss after 10 seconds
+      setTimeout(() => {
+        setShowMcpConfigToast(false);
+      }, 10000);
+    });
+
+    return cleanup;
+  }, []);
+
   // Handle AI tool createDocument requests
   useEffect(() => {
     const handleCreateDocument = async (event: CustomEvent) => {
@@ -1971,6 +1996,13 @@ export default function App() {
         forceShow={forceShowTrustToast}
         onDismiss={() => setForceShowTrustToast(false)}
       />
+      {showMcpConfigToast && mcpConfigChangeData && (
+        <MCPConfigChangedToast
+          scope={mcpConfigChangeData.scope}
+          workspacePath={mcpConfigChangeData.workspacePath}
+          onDismiss={() => setShowMcpConfigToast(false)}
+        />
+      )}
       {isPostHogSurveyOpen && (
         <PostHogSurvey onClose={() => setIsPostHogSurveyOpen(false)} />
       )}

@@ -1,0 +1,105 @@
+.mcp-config-toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 10000;
+  pointer-events: none;
+}
+
+.mcp-config-toast {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 16px;
+  min-width: 400px;
+  max-width: 500px;
+  pointer-events: auto;
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.mcp-config-toast-dismiss {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  width: 24px;
+  height: 24px;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+
+.mcp-config-toast-dismiss:hover {
+  opacity: 1;
+}
+
+.mcp-config-toast-dismiss svg {
+  width: 16px;
+  height: 16px;
+  color: var(--text-primary);
+}
+
+.mcp-config-toast-header {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.mcp-config-toast-icon {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: var(--accent-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mcp-config-toast-icon svg {
+  width: 20px;
+  height: 20px;
+  color: var(--accent-fg);
+}
+
+.mcp-config-toast-header-text {
+  flex: 1;
+  padding-right: 24px;
+}
+
+.mcp-config-toast-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.mcp-config-toast-subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.mcp-config-toast-note {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  border-left: 3px solid var(--border-info);
+}

@@ -139,6 +139,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('theme-change', handler);
     return () => ipcRenderer.removeListener('theme-change', handler);
   },
+  onMcpConfigChanged: (callback: (data: { scope: 'user' | 'workspace'; workspacePath?: string }) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('mcp-config-changed', handler);
+    return () => ipcRenderer.removeListener('mcp-config-changed', handler);
+  },
   onShowAbout: (callback: () => void) => {
     ipcRenderer.on('show-about', callback);
     return () => ipcRenderer.removeListener('show-about', callback);

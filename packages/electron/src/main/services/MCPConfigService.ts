@@ -1,6 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
+import { watch, FSWatcher } from 'fs';
 import { MCPConfig, MCPServerConfig, MCPServerEnv } from '@nimbalyst/runtime/types/MCPServerConfig';
 import { logger } from '../utils/logger';
 import { getEnhancedPath } from './CLIManager';
@@ -9,13 +10,23 @@ import { getEnhancedPath } from './CLIManager';
  * Service for managing MCP server configurations.
  *
  * Supports two scopes:
- * - User scope: Global MCP servers stored in Claude Code's standard location
+ * - User scope: Global MCP servers stored in ~/.claude.json (Claude Code CLI standard)
  * - Workspace scope: Project-specific MCP servers in .mcp.json
  *
  * This service reads/writes Claude Code's native config files for full compatibility.
+ *
+ * Migration: Automatically migrates from legacy ~/.config/claude/mcp.json to ~/.claude.json
  */
 export interface TestProgressCallback {
   (status: 'downloading' | 'connecting' | 'testing' | 'done', message: string): void;
+}
+
+/**
+ * Structure of ~/.claude.json file (contains both user settings and MCP servers)
+ */
+interface ClaudeConfig {
+  mcpServers?: Record<string, MCPServerConfig>;
+  [key: string]: any; // Other Claude Code settings
 }
 
 /**
@@ -91,32 +102,53 @@ export function getCommandNotFoundHelp(command: string): { message: string; help
 
 export class MCPConfigService {
   private userConfigPath: string;
+  private legacyConfigPath: string;
+  private userConfigWatcher: FSWatcher | null = null;
+  private workspaceWatchers = new Map<string, FSWatcher>();
+  private changeCallbacks: Array<(scope: 'user' | 'workspace', workspacePath?: string) => void> = [];
 
   private CONNECTION_TIMEOUT_MS = 30000; // Base timeout
   private DOWNLOAD_TIMEOUT_MS = 120000; // Extended timeout when downloading packages
 
   constructor() {
+    // Primary location: ~/.claude.json (used by Claude Code CLI)
+    this.userConfigPath = path.join(os.homedir(), '.claude.json');
 
-    // Claude Code stores user-level MCP config in ~/.config/claude/mcp.json (Linux/macOS)
-    // or %APPDATA%/claude/mcp.json (Windows)
-    const configDir = process.platform === 'win32'
+    // Legacy location: ~/.config/claude/mcp.json (Linux/macOS) or %APPDATA%/claude/mcp.json (Windows)
+    const legacyConfigDir = process.platform === 'win32'
       ? path.join(process.env.APPDATA || os.homedir(), 'claude')
       : path.join(os.homedir(), '.config', 'claude');
-
-    this.userConfigPath = path.join(configDir, 'mcp.json');
+    this.legacyConfigPath = path.join(legacyConfigDir, 'mcp.json');
   }
 
   /**
    * Read user-scope MCP configuration (global servers).
+   * Reads from ~/.claude.json and migrates from legacy ~/.config/claude/mcp.json if needed.
    */
   async readUserMCPConfig(): Promise<MCPConfig> {
     try {
+      // Try to read from primary location (~/.claude.json)
       const content = await fs.readFile(this.userConfigPath, 'utf8');
-      const config = JSON.parse(content) as MCPConfig;
-      return config;
+      const claudeConfig = JSON.parse(content) as ClaudeConfig;
+
+      // Check if we need to migrate from legacy location
+      if (!claudeConfig.mcpServers || Object.keys(claudeConfig.mcpServers).length === 0) {
+        const migratedConfig = await this.migrateLegacyConfig();
+        if (migratedConfig && Object.keys(migratedConfig.mcpServers).length > 0) {
+          return migratedConfig;
+        }
+      }
+
+      return { mcpServers: claudeConfig.mcpServers || {} };
     } catch (error: any) {
       if (error.code === 'ENOENT') {
-        // File doesn't exist - return empty config
+        // Primary file doesn't exist - try to migrate from legacy
+        const migratedConfig = await this.migrateLegacyConfig();
+        if (migratedConfig) {
+          return migratedConfig;
+        }
+
+        // No config exists anywhere - return empty config
         return { mcpServers: {} };
       }
       logger.mcp.error('Failed to read user MCP config:', error);
@@ -125,22 +157,86 @@ export class MCPConfigService {
   }
 
   /**
+   * Migrate MCP servers from legacy ~/.config/claude/mcp.json to ~/.claude.json
+   * Returns the migrated config if successful, null if no legacy config exists.
+   */
+  private async migrateLegacyConfig(): Promise<MCPConfig | null> {
+    try {
+      // Check if legacy config exists
+      const legacyContent = await fs.readFile(this.legacyConfigPath, 'utf8');
+      const legacyConfig = JSON.parse(legacyContent) as MCPConfig;
+
+      if (!legacyConfig.mcpServers || Object.keys(legacyConfig.mcpServers).length === 0) {
+        return null;
+      }
+
+      logger.mcp.info('Migrating MCP servers from legacy location to ~/.claude.json');
+      logger.mcp.info(`Found ${Object.keys(legacyConfig.mcpServers).length} servers to migrate`);
+
+      // Read existing ~/.claude.json or create new one
+      let claudeConfig: ClaudeConfig = {};
+      try {
+        const content = await fs.readFile(this.userConfigPath, 'utf8');
+        claudeConfig = JSON.parse(content);
+      } catch (error: any) {
+        if (error.code !== 'ENOENT') {
+          throw error;
+        }
+        // File doesn't exist, will create new one
+      }
+
+      // Merge legacy servers into ~/.claude.json
+      claudeConfig.mcpServers = {
+        ...(claudeConfig.mcpServers || {}),
+        ...legacyConfig.mcpServers
+      };
+
+      // Write merged config
+      await fs.writeFile(this.userConfigPath, JSON.stringify(claudeConfig, null, 2), 'utf8');
+
+      logger.mcp.info('Migration completed successfully');
+
+      return { mcpServers: claudeConfig.mcpServers };
+    } catch (error: any) {
+      if (error.code === 'ENOENT') {
+        // Legacy config doesn't exist - this is fine
+        return null;
+      }
+      logger.mcp.error('Error during legacy config migration:', error);
+      // Don't throw - just return null and continue with empty config
+      return null;
+    }
+  }
+
+  /**
    * Write user-scope MCP configuration.
+   * Writes to ~/.claude.json (merging with existing Claude Code settings).
    */
   async writeUserMCPConfig(config: MCPConfig): Promise<void> {
     try {
       // Validate config before writing
       this.validateConfig(config);
 
-      // Ensure config directory exists
-      const configDir = path.dirname(this.userConfigPath);
-      await fs.mkdir(configDir, { recursive: true });
+      // Read existing ~/.claude.json to preserve other settings
+      let claudeConfig: ClaudeConfig = {};
+      try {
+        const content = await fs.readFile(this.userConfigPath, 'utf8');
+        claudeConfig = JSON.parse(content);
+      } catch (error: any) {
+        if (error.code !== 'ENOENT') {
+          throw error;
+        }
+        // File doesn't exist, will create new one
+      }
 
-      // Write config file
-      const content = JSON.stringify(config, null, 2);
+      // Update mcpServers while preserving other settings
+      claudeConfig.mcpServers = config.mcpServers;
+
+      // Write merged config
+      const content = JSON.stringify(claudeConfig, null, 2);
       await fs.writeFile(this.userConfigPath, content, 'utf8');
 
-      logger.mcp.info('User MCP config saved');
+      logger.mcp.info('User MCP config saved to ~/.claude.json');
     } catch (error) {
       logger.mcp.error('Failed to write user MCP config:', error);
       throw error;
@@ -215,6 +311,126 @@ export class MCPConfigService {
         ...workspaceConfig.mcpServers
       }
     };
+  }
+
+  /**
+   * Start watching the user-level MCP config file for changes.
+   * Call this once during app initialization.
+   */
+  startWatchingUserConfig(): void {
+    if (this.userConfigWatcher) {
+      logger.mcp.warn('User config watcher already started');
+      return;
+    }
+
+    try {
+      this.userConfigWatcher = watch(this.userConfigPath, (eventType) => {
+        if (eventType === 'change') {
+          logger.mcp.info('[MCPConfigService] User config file changed');
+          this.notifyChange('user');
+        }
+      });
+
+      this.userConfigWatcher.on('error', (error) => {
+        logger.mcp.error('[MCPConfigService] User config watcher error:', error);
+      });
+
+      logger.mcp.info('[MCPConfigService] Started watching user config:', this.userConfigPath);
+    } catch (error) {
+      logger.mcp.error('[MCPConfigService] Failed to start user config watcher:', error);
+    }
+  }
+
+  /**
+   * Start watching a workspace-level MCP config file (.mcp.json) for changes.
+   * Call this when a workspace is opened.
+   */
+  startWatchingWorkspaceConfig(workspacePath: string): void {
+    if (!workspacePath) {
+      throw new Error('workspacePath is required');
+    }
+
+    if (this.workspaceWatchers.has(workspacePath)) {
+      logger.mcp.debug('[MCPConfigService] Already watching workspace:', workspacePath);
+      return;
+    }
+
+    const mcpJsonPath = path.join(workspacePath, '.mcp.json');
+
+    try {
+      const watcher = watch(mcpJsonPath, (eventType) => {
+        if (eventType === 'change') {
+          logger.mcp.info('[MCPConfigService] Workspace config changed:', workspacePath);
+          this.notifyChange('workspace', workspacePath);
+        }
+      });
+
+      watcher.on('error', (error) => {
+        // Don't log missing file errors - workspace might not have .mcp.json
+        if ((error as any).code !== 'ENOENT') {
+          logger.mcp.error('[MCPConfigService] Workspace config watcher error:', error);
+        }
+      });
+
+      this.workspaceWatchers.set(workspacePath, watcher);
+      logger.mcp.info('[MCPConfigService] Started watching workspace config:', mcpJsonPath);
+    } catch (error) {
+      logger.mcp.error('[MCPConfigService] Failed to start workspace config watcher:', error);
+    }
+  }
+
+  /**
+   * Stop watching a workspace-level MCP config file.
+   * Call this when a workspace is closed.
+   */
+  stopWatchingWorkspaceConfig(workspacePath: string): void {
+    const watcher = this.workspaceWatchers.get(workspacePath);
+    if (watcher) {
+      watcher.close();
+      this.workspaceWatchers.delete(workspacePath);
+      logger.mcp.info('[MCPConfigService] Stopped watching workspace config:', workspacePath);
+    }
+  }
+
+  /**
+   * Register a callback to be called when MCP config files change.
+   * @param callback Function called with scope ('user' or 'workspace') and optional workspacePath
+   */
+  onChange(callback: (scope: 'user' | 'workspace', workspacePath?: string) => void): void {
+    this.changeCallbacks.push(callback);
+  }
+
+  /**
+   * Notify all registered callbacks of a config change.
+   */
+  private notifyChange(scope: 'user' | 'workspace', workspacePath?: string): void {
+    this.changeCallbacks.forEach(callback => {
+      try {
+        callback(scope, workspacePath);
+      } catch (error) {
+        logger.mcp.error('[MCPConfigService] Error in change callback:', error);
+      }
+    });
+  }
+
+  /**
+   * Cleanup all file watchers.
+   * Call this during app shutdown.
+   */
+  cleanup(): void {
+    if (this.userConfigWatcher) {
+      this.userConfigWatcher.close();
+      this.userConfigWatcher = null;
+      logger.mcp.info('[MCPConfigService] Stopped watching user config');
+    }
+
+    this.workspaceWatchers.forEach((watcher, workspacePath) => {
+      watcher.close();
+      logger.mcp.info('[MCPConfigService] Stopped watching workspace config:', workspacePath);
+    });
+    this.workspaceWatchers.clear();
+
+    this.changeCallbacks = [];
   }
 
   /**
@@ -324,6 +540,13 @@ export class MCPConfigService {
    */
   getUserConfigPath(): string {
     return this.userConfigPath;
+  }
+
+  /**
+   * Get the path to the legacy user-level MCP config file.
+   */
+  getLegacyConfigPath(): string {
+    return this.legacyConfigPath;
   }
 
   /**

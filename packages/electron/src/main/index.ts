@@ -159,6 +159,14 @@ let aiService: AIService | null = null;
 // let agentService: AgentService | null = null;
 let runtimeSessionStore: SessionStore | null = null;
 let mcpHttpServer: any = null;
+let mcpConfigService: MCPConfigService | null = null;
+
+/**
+ * Get the MCP config service instance (for use by other modules)
+ */
+export function getMcpConfigService(): MCPConfigService | null {
+    return mcpConfigService;
+}
 
 // Set custom userData path if RUN_ONE_DEV_MODE environment variable is set
 // This allows running a dev instance alongside a production build without conflicts
@@ -516,7 +524,23 @@ app.whenReady().then(async () => {
 
     // Inject MCP config loader into ClaudeCodeProvider
     // This allows the runtime package to load merged user + workspace MCP configs
-    const mcpConfigService = new MCPConfigService();
+    mcpConfigService = new MCPConfigService();
+
+    // Start watching user-level MCP config for changes
+    mcpConfigService.startWatchingUserConfig();
+
+    // Register change callback to notify all windows when MCP config changes
+    mcpConfigService.onChange((scope, workspacePath) => {
+        console.log('[MCP] Config changed:', { scope, workspacePath });
+
+        // Notify all windows
+        BrowserWindow.getAllWindows().forEach(window => {
+            if (!window.isDestroyed()) {
+                window.webContents.send('mcp-config-changed', { scope, workspacePath });
+            }
+        });
+    });
+
     ClaudeCodeProvider.setMCPConfigLoader(async (workspacePath?: string) => {
         const mergedConfig = await mcpConfigService.getMergedConfig(workspacePath);
         const allServers = mergedConfig.mcpServers || {};
@@ -1201,6 +1225,16 @@ app.on('before-quit', async (event) => {
         console.log(`[QUIT] [${t7}] MCP HTTP server shutdown complete (${t7-t6}ms)`);
 
         mcpHttpServer = null;
+
+        // Clean up MCP config service file watchers
+        if (mcpConfigService) {
+            try {
+                mcpConfigService.cleanup();
+                console.log('[QUIT] MCP config service cleaned up');
+            } catch (error) {
+                console.error('[QUIT] Error cleaning up MCP config service:', error);
+            }
+        }
 
         // Clean up CLI manager
         const t8 = Date.now();

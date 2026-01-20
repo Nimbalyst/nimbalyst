@@ -16,6 +16,7 @@ import { navigationHistoryService } from '../services/NavigationHistoryService';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { FeatureTrackingService } from '../services/analytics/FeatureTrackingService';
 import { ExtensionLogService } from '../services/ExtensionLogService';
+import { getMcpConfigService } from '../index';
 
 // Window management
 export const windows = new Map<number, BrowserWindow>();
@@ -393,6 +394,16 @@ export function createWindow(
                         fileSystemServices.delete(state.workspacePath);
                         clearFileSystemService();
                         console.log('[MAIN] Destroyed FileSystemService for workspace:', state.workspacePath);
+                    }
+                    // Stop watching MCP config for this workspace
+                    const mcpService = getMcpConfigService();
+                    if (mcpService) {
+                        try {
+                            mcpService.stopWatchingWorkspaceConfig(state.workspacePath);
+                            console.log('[MAIN] Stopped watching MCP config for workspace:', state.workspacePath);
+                        } catch (error) {
+                            console.error('[MAIN] Error stopping MCP config watcher:', error);
+                        }
                     }
                 }
             }

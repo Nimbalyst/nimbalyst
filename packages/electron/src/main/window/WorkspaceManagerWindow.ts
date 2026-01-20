@@ -7,6 +7,7 @@ import { safeHandle } from '../utils/ipcRegistry';
 import { getBackgroundColor } from '../theme/ThemeManager';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { GitStatusService } from '../services/GitStatusService';
+import { getMcpConfigService } from '../index';
 
 let workspaceManagerWindow: BrowserWindow | null = null;
 
@@ -383,6 +384,16 @@ export function setupWorkspaceManagerHandlers() {
 
     // Create window with saved bounds if available
     const window = createWindow(false, true, workspacePath, savedState?.bounds);
+
+    // Start watching workspace MCP config for changes
+    const mcpService = getMcpConfigService();
+    if (mcpService) {
+      try {
+        mcpService.startWatchingWorkspaceConfig(workspacePath);
+      } catch (error) {
+        console.error('[MCP] Failed to start watching workspace config:', error);
+      }
+    }
 
     // Restore dev tools if they were open
     if (savedState?.devToolsOpen) {
