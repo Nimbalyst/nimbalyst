@@ -1,6 +1,9 @@
-import { BrowserWindow } from 'electron';
+import { BrowserWindow, safeStorage } from 'electron';
 import { safeHandle, safeOn } from '../utils/ipcRegistry';
 import * as os from 'os';
+import * as fs from 'fs';
+import * as path from 'path';
+import { app } from 'electron';
 import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel, getRecentItems, getDefaultAIModel, setDefaultAIModel, isAnalyticsEnabled, setAnalyticsEnabled, isMockupLMEnabled, setMockupLMEnabled, getSessionSyncConfig, setSessionSyncConfig, SessionSyncConfig, isExtensionDevToolsEnabled, setExtensionDevToolsEnabled, getAppSetting, setAppSetting } from '../utils/store';
 import { logger } from '../utils/logger';
 import { SoundNotificationService } from '../services/SoundNotificationService';
@@ -70,6 +73,98 @@ export function registerSettingsHandlers() {
 
     safeHandle('app-settings:set', (_event, key: string, value: unknown) => {
         setAppSetting(key, value);
+    });
+
+    // ============================================================
+    // Extension Secrets Storage (using safeStorage)
+    // Keys are namespaced: nimbalyst:extensionId:key
+    // ============================================================
+
+    const SECRETS_DIR = 'extension-secrets';
+
+    function getSecretsDir(): string {
+        const userDataPath = app.getPath('userData');
+        const secretsDir = path.join(userDataPath, SECRETS_DIR);
+        if (!fs.existsSync(secretsDir)) {
+            fs.mkdirSync(secretsDir, { recursive: true });
+        }
+        return secretsDir;
+    }
+
+    function getSecretFilePath(key: string): string {
+        // Sanitize key to be filesystem-safe
+        const safeKey = key.replace(/[^a-zA-Z0-9_:-]/g, '_');
+        return path.join(getSecretsDir(), `${safeKey}.enc`);
+    }
+
+    safeHandle('secrets:get', async (_event, key: string) => {
+        if (!key) {
+            throw new Error('Key is required for secrets:get');
+        }
+
+        const filePath = getSecretFilePath(key);
+
+        if (!fs.existsSync(filePath)) {
+            return null;
+        }
+
+        try {
+            const fileData = fs.readFileSync(filePath);
+
+            if (safeStorage.isEncryptionAvailable()) {
+                return safeStorage.decryptString(fileData);
+            } else {
+                // Fallback: read as plain text
+                return fileData.toString('utf8');
+            }
+        } catch (error) {
+            logger.main.error(`[secrets:get] Failed to read secret for key ${key}:`, error);
+            return null;
+        }
+    });
+
+    safeHandle('secrets:set', async (_event, key: string, value: string) => {
+        if (!key) {
+            throw new Error('Key is required for secrets:set');
+        }
+        if (value === undefined || value === null) {
+            throw new Error('Value is required for secrets:set');
+        }
+
+        const filePath = getSecretFilePath(key);
+
+        try {
+            if (safeStorage.isEncryptionAvailable()) {
+                const encrypted = safeStorage.encryptString(value);
+                fs.writeFileSync(filePath, encrypted);
+            } else {
+                // Fallback: save as plain text (with warning)
+                logger.main.warn(`[secrets:set] safeStorage not available - saving secret without encryption`);
+                fs.writeFileSync(filePath, value, 'utf8');
+            }
+            logger.main.info(`[secrets:set] Secret saved for key: ${key}`);
+        } catch (error) {
+            logger.main.error(`[secrets:set] Failed to save secret for key ${key}:`, error);
+            throw error;
+        }
+    });
+
+    safeHandle('secrets:delete', async (_event, key: string) => {
+        if (!key) {
+            throw new Error('Key is required for secrets:delete');
+        }
+
+        const filePath = getSecretFilePath(key);
+
+        try {
+            if (fs.existsSync(filePath)) {
+                fs.unlinkSync(filePath);
+                logger.main.info(`[secrets:delete] Secret deleted for key: ${key}`);
+            }
+        } catch (error) {
+            logger.main.error(`[secrets:delete] Failed to delete secret for key ${key}:`, error);
+            throw error;
+        }
     });
 
     // Get sidebar width

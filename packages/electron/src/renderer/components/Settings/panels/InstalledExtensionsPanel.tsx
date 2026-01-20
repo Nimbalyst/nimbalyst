@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { usePostHog } from 'posthog-js/react';
-import { MaterialSymbol } from '@nimbalyst/runtime';
-import type { ExtensionManifest } from '@nimbalyst/runtime';
+import { MaterialSymbol, createExtensionStorage } from '@nimbalyst/runtime';
+import type { ExtensionManifest, SettingsPanelProps } from '@nimbalyst/runtime';
 import { getExtensionLoader } from '@nimbalyst/runtime';
+import { themeIdAtom } from '@nimbalyst/runtime/store';
 import { ExtensionConfigPanel } from './ExtensionConfigPanel';
+import { useAtomValue } from 'jotai';
 
 interface InstalledExtension {
   id: string;
@@ -31,6 +33,7 @@ export const InstalledExtensionsPanel: React.FC<InstalledExtensionsPanelProps> =
   workspacePath,
 }) => {
   const posthog = usePostHog();
+  const themeId = useAtomValue(themeIdAtom);
   const [extensions, setExtensions] = useState<ExtensionWithState[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +44,18 @@ export const InstalledExtensionsPanel: React.FC<InstalledExtensionsPanelProps> =
   const [projectCommandsEnabled, setProjectCommandsEnabled] = useState(true);
   const [userCommandsEnabled, setUserCommandsEnabled] = useState(true);
   const [commandsLoading, setCommandsLoading] = useState(false);
+
+  // Get extension settings panels from the loader
+  const extensionSettingsPanels = useMemo(() => {
+    const loader = getExtensionLoader();
+    if (!loader) return new Map();
+
+    const panels = new Map<string, React.ComponentType<SettingsPanelProps>>();
+    for (const panel of loader.getSettingsPanels()) {
+      panels.set(panel.extensionId, panel.component);
+    }
+    return panels;
+  }, [extensions]); // Re-compute when extensions change
 
   // Load extensions and their enabled state
   useEffect(() => {
@@ -515,6 +530,17 @@ export const InstalledExtensionsPanel: React.FC<InstalledExtensionsPanelProps> =
                           workspacePath={workspacePath}
                         />
                       )}
+
+                      {/* Custom settings panel if extension provides one */}
+                      {ext.enabled && extensionSettingsPanels.has(ext.id) && (() => {
+                        const SettingsComponent = extensionSettingsPanels.get(ext.id)!;
+                        const storage = createExtensionStorage(ext.id);
+                        return (
+                          <div className="extension-settings-panel">
+                            <SettingsComponent storage={storage} theme={themeId} />
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
                 </div>

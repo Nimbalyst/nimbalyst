@@ -1,0 +1,44 @@
+{
+  "id": "com.nimbalyst.image-generation",
+  "name": "Image Generation",
+  "version": "1.0.0",
+  "description": "AI-powered image generation with support for sketches, diagrams, and illustrations",
+  "author": "Nimbalyst",
+  "main": "dist/index.js",
+  "styles": "dist/index.css",
+  "apiVersion": "1.0.0",
+  "permissions": {
+    "filesystem": true,
+    "ai": true,
+    "network": true
+  },
+  "contributions": {
+    "customEditors": [
+      {
+        "filePatterns": ["*.imgproj"],
+        "displayName": "Image Generation Project",
+        "component": "ImageProjectEditor",
+        "supportsSourceMode": true
+      }
+    ],
+    "aiTools": [
+      "image_generation.generate_image"
+    ],
+    "settingsPanel": {
+      "component": "ImageGenerationSettings",
+      "title": "Image Generation",
+      "icon": "image"
+    },
+    "fileIcons": {
+      "*.imgproj": "image"
+    },
+    "newFileMenu": [
+      {
+        "extension": ".imgproj",
+        "displayName": "Image Generation Project",
+        "icon": "image",
+        "defaultContent": "{\"version\":1,\"name\":\"New Image Project\",\"created\":\"\",\"provider\":\"nano-banana\",\"generations\":[],\"settings\":{\"defaultStyle\":\"sketch\",\"variationsPerPrompt\":3}}"
+      }
+    ]
+  }
+}

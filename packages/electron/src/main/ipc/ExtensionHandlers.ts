@@ -640,6 +640,19 @@ export function registerExtensionHandlers(): void {
     }
   });
 
+  // Write binary content to a file (base64 encoded)
+  safeHandle('extensions:write-binary', async (_event, filePath: string, base64Content: string) => {
+    try {
+      const dir = path.dirname(filePath);
+      await fs.mkdir(dir, { recursive: true });
+      const buffer = Buffer.from(base64Content, 'base64');
+      await fs.writeFile(filePath, buffer);
+    } catch (error) {
+      logger.main.error(`[ExtensionHandlers] Failed to write binary file ${filePath}:`, error);
+      throw error;
+    }
+  });
+
   // Check if a file exists
   safeHandle('extensions:file-exists', async (_event, filePath: string) => {
     try {

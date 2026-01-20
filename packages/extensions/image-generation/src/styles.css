@@ -1,0 +1,72 @@
+/**
+ * Image Generation Extension Styles
+ *
+ * Uses CSS variables from the Nimbalyst theme system.
+ */
+
+.image-project-editor {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu',
+    'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+}
+
+.image-project-editor[data-theme='dark'] {
+  --surface-primary: #2d2d2d;
+  --surface-secondary: #1a1a1a;
+  --surface-tertiary: #3a3a3a;
+  --surface-hover: rgba(255, 255, 255, 0.05);
+  --text-primary: #ffffff;
+  --text-secondary: #b3b3b3;
+  --text-tertiary: #808080;
+  --border-primary: #4a4a4a;
+  --border-focus: #60a5fa;
+  --accent-primary: #60a5fa;
+  --accent-hover: #3b82f6;
+  --error-color: #ef4444;
+}
+
+.image-project-editor[data-theme='light'] {
+  --surface-primary: #ffffff;
+  --surface-secondary: #f9fafb;
+  --surface-tertiary: #f3f4f6;
+  --surface-hover: rgba(0, 0, 0, 0.05);
+  --text-primary: #111827;
+  --text-secondary: #6b7280;
+  --text-tertiary: #9ca3af;
+  --border-primary: #e5e7eb;
+  --border-focus: #3b82f6;
+  --accent-primary: #3b82f6;
+  --accent-hover: #2563eb;
+  --error-color: #ef4444;
+}
+
+/* Focus styles */
+.image-project-editor input:focus,
+.image-project-editor textarea:focus,
+.image-project-editor select:focus {
+  outline: none;
+  border-color: var(--border-focus);
+}
+
+/* Button hover effects */
+.image-project-editor button:not(:disabled):hover {
+  opacity: 0.9;
+}
+
+/* Scrollbar styling for dark mode */
+.image-project-editor[data-theme='dark'] ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.image-project-editor[data-theme='dark'] ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.image-project-editor[data-theme='dark'] ::-webkit-scrollbar-thumb {
+  background: #4a4a4a;
+  border-radius: 4px;
+}
+
+.image-project-editor[data-theme='dark'] ::-webkit-scrollbar-thumb:hover {
+  background: #5a5a5a;
+}
