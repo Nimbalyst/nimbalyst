@@ -1006,10 +1006,23 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   const createNewSession = useCallback(async (planPath?: string) => {
     try {
       // Get the default model from app settings, fallback to claude-code
-      const defaultModel = await window.electronAPI.invoke('settings:get-default-ai-model') || 'claude-code:sonnet';
+      let defaultModel = await window.electronAPI.invoke('settings:get-default-ai-model') || 'claude-code:sonnet';
 
       // Parse provider from model ID (format: "provider:model" or just "provider")
-      const [provider] = defaultModel.split(':');
+      let [provider] = defaultModel.split(':');
+
+      // Validate that the provider is enabled for this workspace
+      // Get enabled models to check if provider is available
+      const modelsResult = await window.electronAPI.aiGetModels();
+      const enabledModels = modelsResult?.models || [];
+      const providerIsEnabled = enabledModels.some((model: any) => model.provider === provider);
+
+      // If provider is not enabled, fall back to claude-code (which is enabled by default)
+      if (!providerIsEnabled) {
+        console.warn(`[AgenticPanel] Provider ${provider} from saved default model is not enabled, falling back to claude-code`);
+        provider = 'claude-code';
+        defaultModel = 'claude-code:sonnet';
+      }
 
       console.log(`[AgenticPanel] Creating new session with default model: ${defaultModel}, provider: ${provider}`);
 

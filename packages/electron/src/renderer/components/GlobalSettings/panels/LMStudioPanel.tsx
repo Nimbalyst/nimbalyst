@@ -56,8 +56,8 @@ export function LMStudioPanel({
               <div className="api-key-row">
                 <input
                   type="text"
-                  value={apiKeys.lmstudio_url || 'http://127.0.0.1:8234'}
-                  onChange={(e) => onApiKeyChange('lmstudio_url', e.target.value)}
+                  value={config.baseUrl || 'http://127.0.0.1:8234'}
+                  onChange={(e) => onConfigChange({ baseUrl: e.target.value })}
                   onFocus={(e) => e.target.select()}
                   placeholder="http://127.0.0.1:8234"
                   className="api-key-input"

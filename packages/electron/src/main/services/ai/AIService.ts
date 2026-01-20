@@ -1438,7 +1438,8 @@ export class AIService {
 
         // Add baseUrl for LMStudio
         if (session.provider === 'lmstudio') {
-          reinitConfig.baseUrl = apiKeys['lmstudio_url'] || 'http://127.0.0.1:8234';
+          const providerSettings = this.getSettingsStore().get('providerSettings', {}) as any;
+          reinitConfig.baseUrl = providerSettings['lmstudio']?.baseUrl || 'http://127.0.0.1:8234';
         }
 
         // Only add model if it exists (openai-codex manages selection itself)
@@ -1476,12 +1477,29 @@ export class AIService {
 
           if (isProviderClaudeCode) {
           }
-        } catch (initError) {
+        } catch (initError: any) {
           if (isProviderClaudeCode) {
             console.error('[CLAUDE-CODE-SERVICE] Failed to initialize provider:', initError);
             console.error('[CLAUDE-CODE-SERVICE] Init config was:', reinitConfig);
           }
-          throw initError;
+
+          // Add provider initialization error as an assistant message in the conversation
+          // This provides better UX than showing a generic "Failed to load session" error
+          const errorMessage: Message = {
+            role: 'assistant',
+            content: `I encountered an error connecting to ${session.provider}:\n\n${initError.message || String(initError)}`,
+            timestamp: Date.now()
+          };
+
+          await this.sessionManager.addMessage(errorMessage, session.id);
+
+          // Clean up processing state
+          if (queuedPromptId) {
+            this.processingQueuedPromptIds.delete(queuedPromptId);
+          }
+
+          // Return empty response instead of throwing - the error message is now in the conversation
+          return { content: '' };
         }
 
         // CRITICAL: Restore provider session data from database
@@ -3037,7 +3055,8 @@ export class AIService {
 
         // For LMStudio, test the endpoint
         if (provider === 'lmstudio') {
-          const baseUrl = apiKeys['lmstudio_url'] || 'http://127.0.0.1:8234';
+          const providerSettings = this.getSettingsStore().get('providerSettings', {}) as any;
+          const baseUrl = providerSettings['lmstudio']?.baseUrl || 'http://127.0.0.1:8234';
           const response = await fetch(`${baseUrl}/v1/models`);
           if (!response.ok) {
             throw new Error(`LMStudio server not responding at ${baseUrl}`);
