@@ -1073,7 +1073,7 @@ export function SessionDetailScreen({ hiddenBackButton, voiceModeActive }: Sessi
             sessionId={sessionId || ''}
             sessionData={sessionData}
             hideSidebar={true}
-            renderHeaderActions={({ prompts, onNavigateToPrompt }: { prompts: any[]; onNavigateToPrompt: (index: number) => void }) => (
+            renderHeaderActions={({ prompts, onNavigateToPrompt }: { prompts: PromptMarker[]; onNavigateToPrompt: (marker: PromptMarker) => void }) => (
               <div className="mobile-prompts-menu-container">
                 <PromptsMenuButton
                   prompts={prompts}
