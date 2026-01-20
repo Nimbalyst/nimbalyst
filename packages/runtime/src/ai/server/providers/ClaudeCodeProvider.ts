@@ -646,33 +646,33 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         console.log('[CLAUDE-CODE] Session resumption check:', {
           sessionId,
           existingClaudeSessionId: claudeSessionId,
-          parentSessionId: (documentContext as any)?.parentSessionId,
-          parentProviderSessionId: (documentContext as any)?.parentProviderSessionId,
+          branchedFromSessionId: (documentContext as any)?.branchedFromSessionId,
+          branchedFromProviderSessionId: (documentContext as any)?.branchedFromProviderSessionId,
         });
         if (claudeSessionId) {
           options.resume = claudeSessionId;
           console.log('[CLAUDE-CODE] Resuming existing session:', claudeSessionId);
         } else {
-          // Check if this is a branched session
-          const parentSessionId = (documentContext as any)?.parentSessionId;
-          const parentProviderSessionId = (documentContext as any)?.parentProviderSessionId;
-          if (parentSessionId && parentProviderSessionId) {
-            // Resume from parent's provider session ID and fork it
-            options.resume = parentProviderSessionId;
+          // Check if this is a branched session (forked from another session)
+          const branchedFromSessionId = (documentContext as any)?.branchedFromSessionId;
+          const branchedFromProviderSessionId = (documentContext as any)?.branchedFromProviderSessionId;
+          if (branchedFromSessionId && branchedFromProviderSessionId) {
+            // Resume from source session's provider session ID and fork it
+            options.resume = branchedFromProviderSessionId;
             options.forkSession = true;
-            console.log('[CLAUDE-CODE] Branching from parent session:', parentSessionId, 'with provider session:', parentProviderSessionId);
-          } else if (parentSessionId) {
-            // Fallback: try the in-memory map (if parent was used in this app session)
-            const parentClaudeSessionId = this.claudeSessionIds.get(parentSessionId);
-            if (parentClaudeSessionId) {
-              options.resume = parentClaudeSessionId;
+            console.log('[CLAUDE-CODE] Branching from source session:', branchedFromSessionId, 'with provider session:', branchedFromProviderSessionId);
+          } else if (branchedFromSessionId) {
+            // Fallback: try the in-memory map (if source was used in this app session)
+            const sourceClaudeSessionId = this.claudeSessionIds.get(branchedFromSessionId);
+            if (sourceClaudeSessionId) {
+              options.resume = sourceClaudeSessionId;
               options.forkSession = true;
-              console.log('[CLAUDE-CODE] Branching from parent session (in-memory):', parentSessionId);
+              console.log('[CLAUDE-CODE] Branching from source session (in-memory):', branchedFromSessionId);
             } else {
-              console.warn('[CLAUDE-CODE] Cannot branch: parent provider session ID not available. parentSessionId:', parentSessionId);
+              console.warn('[CLAUDE-CODE] Cannot branch: source provider session ID not available. branchedFromSessionId:', branchedFromSessionId);
             }
           } else {
-            console.log('[CLAUDE-CODE] Starting new session (no parent or existing session ID)');
+            console.log('[CLAUDE-CODE] Starting new session (no branch source or existing session ID)');
           }
         }
       }

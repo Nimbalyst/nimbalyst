@@ -23,7 +23,6 @@ import {
   setSessionLayoutModeAtom,
   setSessionSplitRatioAtom,
   setSessionTabCountAtom,
-  sessionActiveAtom,
   type SessionLayoutMode,
 } from '../../store';
 import './SessionEditorArea.css';
@@ -31,11 +30,15 @@ import './SessionEditorArea.css';
 export interface SessionEditorAreaRef {
   openFile: (filePath: string) => void;
   hasTabs: () => boolean;
+  /** Get the active tab's file path, or null if no tab is active */
+  getActiveFilePath: () => string | null;
 }
 
 interface SessionEditorAreaProps {
   sessionId: string;
   workspacePath: string;
+  /** Whether this session is currently active/visible */
+  isActive?: boolean;
   /** Render prop for transcript content - rendered below editor in split mode */
   children?: React.ReactNode;
   /** Called when the number of open tabs changes */
@@ -49,6 +52,7 @@ interface SessionEditorAreaProps {
 interface SessionEditorAreaInnerProps {
   sessionId: string;
   workspacePath: string;
+  isActive: boolean;
   layoutMode: SessionLayoutMode;
   splitRatio: number;
   onLayoutModeChange: (mode: SessionLayoutMode) => void;
@@ -61,6 +65,7 @@ const SessionEditorAreaInner = forwardRef<SessionEditorAreaRef, SessionEditorAre
     {
       sessionId,
       workspacePath,
+      isActive,
       layoutMode,
       splitRatio,
       onLayoutModeChange,
@@ -69,9 +74,7 @@ const SessionEditorAreaInner = forwardRef<SessionEditorAreaRef, SessionEditorAre
     },
     ref
   ) {
-    // isActive is managed via Jotai atom to prevent re-render cascades
-    const isActive = useAtomValue(sessionActiveAtom(sessionId));
-    const { tabs } = useTabs();
+    const { tabs, activeTabId } = useTabs();
     const tabsActions = useTabsActions();
     const containerRef = useRef<HTMLDivElement>(null);
     const isResizingRef = useRef(false);
@@ -105,8 +108,13 @@ const SessionEditorAreaInner = forwardRef<SessionEditorAreaRef, SessionEditorAre
           }
         },
         hasTabs: () => tabs.length > 0,
+        getActiveFilePath: () => {
+          if (!activeTabId) return null;
+          const activeTab = tabs.find(t => t.id === activeTabId);
+          return activeTab?.filePath ?? null;
+        },
       }),
-      [tabsActions, tabs.length, layoutMode, onLayoutModeChange]
+      [tabsActions, tabs, activeTabId, layoutMode, onLayoutModeChange]
     );
 
     // Handle tab close
@@ -194,7 +202,7 @@ const SessionEditorAreaInner = forwardRef<SessionEditorAreaRef, SessionEditorAre
           </div>
         </div>
         <div className="session-editor-content">
-          <TabContent />
+          <TabContent workspaceId={workspacePath} />
         </div>
         {layoutMode === 'split' && (
           <div className="session-editor-resize-handle" onMouseDown={handleResizeStart}>
@@ -213,7 +221,7 @@ const SessionEditorAreaInner = forwardRef<SessionEditorAreaRef, SessionEditorAre
  * It manages the Jotai state for layout and wraps with TabsProvider for tab management.
  */
 const SessionEditorAreaComponent = forwardRef<SessionEditorAreaRef, SessionEditorAreaProps>(
-  function SessionEditorArea({ sessionId, workspacePath, children, onTabCountChange: onTabCountChangeProp }, ref) {
+  function SessionEditorArea({ sessionId, workspacePath, isActive = true, children, onTabCountChange: onTabCountChangeProp }, ref) {
     const state = useAtomValue(sessionEditorStateAtom(sessionId));
     const setLayoutMode = useSetAtom(setSessionLayoutModeAtom);
     const setSplitRatio = useSetAtom(setSessionSplitRatioAtom);
@@ -229,6 +237,7 @@ const SessionEditorAreaComponent = forwardRef<SessionEditorAreaRef, SessionEdito
           innerRef.current?.openFile(filePath);
         },
         hasTabs: () => innerRef.current?.hasTabs() ?? false,
+        getActiveFilePath: () => innerRef.current?.getActiveFilePath() ?? null,
       }),
       []
     );
@@ -256,13 +265,13 @@ const SessionEditorAreaComponent = forwardRef<SessionEditorAreaRef, SessionEdito
 
     // Always render TabsProvider to maintain tab state, but inner may return null
     // Use disablePersistence so session editors don't restore/save to workspace state
-    // Note: isActive is read from Jotai atom by inner component, not passed as prop
     return (
       <TabsProvider workspacePath={workspacePath} disablePersistence>
         <SessionEditorAreaInner
           ref={innerRef}
           sessionId={sessionId}
           workspacePath={workspacePath}
+          isActive={isActive}
           layoutMode={state.layoutMode}
           splitRatio={state.splitRatio}
           onLayoutModeChange={handleLayoutModeChange}

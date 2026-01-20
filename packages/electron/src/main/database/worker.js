@@ -768,17 +768,50 @@ class PGLiteWorker {
       throw error;
     }
 
-    // Add branch tracking columns to ai_sessions (migration)
+    // Add parent_session_id column to ai_sessions for hierarchical sessions (migration)
+    // This enables workstreams (grouped sessions) and hierarchical worktree sessions
+    // - parent_session_id = NULL means root level session (shows in left panel)
+    // - parent_session_id != NULL means child session (shows as tab within parent)
+    // - Children inherit worktree_id from parent
     try {
       await this.db.exec(`
         DO $$
         BEGIN
-          -- Add parent_session_id to track which session this was branched from
+          -- Add parent_session_id for hierarchical workstream structure
           IF NOT EXISTS (
             SELECT 1 FROM information_schema.columns
             WHERE table_name = 'ai_sessions' AND column_name = 'parent_session_id'
           ) THEN
             ALTER TABLE ai_sessions ADD COLUMN parent_session_id TEXT REFERENCES ai_sessions(id) ON DELETE SET NULL;
+          END IF;
+        END $$;
+      `);
+
+      // Create index for efficient child session queries
+      await this.db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_ai_sessions_parent ON ai_sessions(parent_session_id);
+      `);
+
+      console.log('[PGLite Worker] parent_session_id column added to ai_sessions');
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to add parent_session_id column:', error);
+      throw error;
+    }
+
+    // Add branch tracking columns to ai_sessions (migration)
+    // branched_from_session_id is SEPARATE from parent_session_id:
+    // - parent_session_id = hierarchical containment (workstreams, child tabs)
+    // - branched_from_session_id = session forking (branch off at a message to try different approach)
+    try {
+      await this.db.exec(`
+        DO $$
+        BEGIN
+          -- Add branched_from_session_id to track which session this was forked from
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'ai_sessions' AND column_name = 'branched_from_session_id'
+          ) THEN
+            ALTER TABLE ai_sessions ADD COLUMN branched_from_session_id TEXT REFERENCES ai_sessions(id) ON DELETE SET NULL;
           END IF;
 
           -- Add branch_point_message_id to track at which message the branch occurred
@@ -801,13 +834,31 @@ class PGLiteWorker {
 
       // Create index for branch queries
       await this.db.exec(`
-        CREATE INDEX IF NOT EXISTS idx_ai_sessions_parent ON ai_sessions(parent_session_id);
+        CREATE INDEX IF NOT EXISTS idx_ai_sessions_branched_from ON ai_sessions(branched_from_session_id);
       `);
 
       console.log('[PGLite Worker] Branch tracking columns added to ai_sessions');
     } catch (error) {
       console.error('[PGLite Worker] Failed to add branch tracking columns:', error);
       throw error;
+    }
+
+    // Migration: Move any existing branch data that was incorrectly stored in parent_session_id
+    // If a session has branch_point_message_id set, it's a branch (not a workstream child)
+    // Move that reference to branched_from_session_id
+    try {
+      await this.db.exec(`
+        UPDATE ai_sessions
+        SET branched_from_session_id = parent_session_id,
+            parent_session_id = NULL
+        WHERE branch_point_message_id IS NOT NULL
+          AND parent_session_id IS NOT NULL
+          AND branched_from_session_id IS NULL;
+      `);
+      console.log('[PGLite Worker] Migrated branch data to branched_from_session_id');
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to migrate branch data:', error);
+      // Non-fatal - continue even if migration fails (might be no data to migrate)
     }
   }
 

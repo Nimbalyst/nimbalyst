@@ -177,6 +177,144 @@ export const sessionActiveAtom = atomFamily((_sessionId: string) =>
   atom<boolean>(false)
 );
 
+// ============================================================
+// Hierarchical session support (workstreams)
+// These atoms enable parent-child session relationships for grouping
+// related sessions without requiring git worktrees.
+// ============================================================
+
+/**
+ * Per-session child IDs.
+ * Populated when loading parent sessions that have children.
+ * AISessionView uses this to render session tabs.
+ */
+export const sessionChildrenAtom = atomFamily((_sessionId: string) =>
+  atom<string[]>([])
+);
+
+/**
+ * Currently active child session within a parent.
+ * Used for tab selection within a parent session view.
+ * null means the parent session itself is active.
+ */
+export const sessionActiveChildAtom = atomFamily((_sessionId: string) =>
+  atom<string | null>(null)
+);
+
+/**
+ * Derived: whether a session has children.
+ * Useful for conditionally rendering session tabs UI.
+ */
+export const sessionHasChildrenAtom = atomFamily((sessionId: string) =>
+  atom((get) => {
+    const children = get(sessionChildrenAtom(sessionId));
+    return children.length > 0;
+  })
+);
+
+/**
+ * Per-session parent ID.
+ * null for root sessions, set for child sessions.
+ * Used to determine if session should be shown in main list or as a tab.
+ */
+export const sessionParentIdAtom = atomFamily((_sessionId: string) =>
+  atom<string | null>(null)
+);
+
+/**
+ * Load child sessions for a parent session.
+ * Called when opening a parent session that has children.
+ */
+export const loadSessionChildrenAtom = atom(
+  null,
+  async (get, set, { parentSessionId, workspacePath }: { parentSessionId: string; workspacePath: string }) => {
+    if (!parentSessionId || !workspacePath || !window.electronAPI) {
+      return [];
+    }
+
+    try {
+      const result = await window.electronAPI.invoke('sessions:list-children', parentSessionId, workspacePath);
+      if (result.success && Array.isArray(result.children)) {
+        const childIds = result.children.map((c: any) => c.id);
+        set(sessionChildrenAtom(parentSessionId), childIds);
+
+        // Set parent ID for each child
+        for (const child of result.children) {
+          set(sessionParentIdAtom(child.id), parentSessionId);
+        }
+
+        return childIds;
+      }
+    } catch (error) {
+      console.error(`[sessions] Failed to load children for session ${parentSessionId}:`, error);
+    }
+
+    return [];
+  }
+);
+
+/**
+ * Set the active child session within a parent.
+ * Marks the child as active and clears unread state.
+ */
+export const setActiveChildSessionAtom = atom(
+  null,
+  (get, set, { parentSessionId, childSessionId }: { parentSessionId: string; childSessionId: string | null }) => {
+    set(sessionActiveChildAtom(parentSessionId), childSessionId);
+    if (childSessionId) {
+      set(markSessionReadAtom, childSessionId);
+    }
+  }
+);
+
+/**
+ * Create a child session under a parent.
+ * Returns the new session ID.
+ */
+export const createChildSessionAtom = atom(
+  null,
+  async (get, set, { parentSessionId, workspacePath, provider }: {
+    parentSessionId: string;
+    workspacePath: string;
+    provider?: string;
+  }) => {
+    if (!parentSessionId || !workspacePath || !window.electronAPI) {
+      return null;
+    }
+
+    try {
+      // Get parent session to inherit worktree_id
+      const parentData = get(sessionDataAtom(parentSessionId));
+      const worktreeId = parentData?.worktreeId;
+
+      const result = await window.electronAPI.invoke('sessions:create-child', {
+        parentSessionId,
+        workspacePath,
+        worktreeId,
+        provider: provider || 'claude-code',
+      });
+
+      if (result.success && result.sessionId) {
+        // Add to children list
+        const children = get(sessionChildrenAtom(parentSessionId));
+        set(sessionChildrenAtom(parentSessionId), [...children, result.sessionId]);
+
+        // Set parent ID for the new child
+        set(sessionParentIdAtom(result.sessionId), parentSessionId);
+
+        // Make it the active child
+        set(sessionActiveChildAtom(parentSessionId), result.sessionId);
+
+        return result.sessionId;
+      }
+    } catch (error) {
+      console.error(`[sessions] Failed to create child session for ${parentSessionId}:`, error);
+    }
+
+    return null;
+  }
+);
+
 /**
  * Open sessions list - just IDs and names for tab display.
  * AgenticPanel manages this list (open/close tabs).
@@ -305,6 +443,10 @@ export const cleanupSessionAtom = atom(null, (get, set, sessionId: string) => {
   sessionLastReadAtom.remove(sessionId);
   sessionDraftInputAtom.remove(sessionId);
   sessionDraftAttachmentsAtom.remove(sessionId);
+  // Hierarchical session atoms
+  sessionChildrenAtom.remove(sessionId);
+  sessionActiveChildAtom.remove(sessionId);
+  sessionParentIdAtom.remove(sessionId);
 });
 
 /**
@@ -438,6 +580,9 @@ export interface SessionListItem {
   isArchived?: boolean;
   isPinned?: boolean;
   worktreeId?: string | null;
+  // Hierarchical session support (workstreams)
+  parentSessionId?: string | null;  // Parent session ID (null for root sessions)
+  childCount?: number;  // Number of child sessions (0 for leaf sessions)
 }
 
 /**
@@ -497,6 +642,8 @@ export const refreshSessionListAtom = atom(
           isArchived: s.isArchived || false,
           isPinned: s.isPinned || false,
           worktreeId: s.worktreeId || null,
+          parentSessionId: s.parentSessionId || null,
+          childCount: s.childCount || 0,
         }));
 
         set(sessionListFullAtom, sessions);

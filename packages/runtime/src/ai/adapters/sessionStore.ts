@@ -13,12 +13,15 @@ export interface SessionListItem {
   mode?: SessionMode;
   workspaceId: string;
   worktreeId?: string;  // ID of the associated worktree if this is a worktree session
+  parentSessionId?: string | null;  // Parent session ID for hierarchical workstreams
+  childCount?: number;  // Number of child sessions (0 for leaf sessions)
   createdAt: number;
   updatedAt: number;
   messageCount?: number;
   isArchived?: boolean;
   isPinned?: boolean;  // Whether this session is pinned to the top of the list
-  parentSessionId?: string;  // ID of the session this was branched from
+  // Branch tracking - SEPARATE from hierarchical parentSessionId
+  branchedFromSessionId?: string;  // ID of the session this was forked from
   branchPointMessageId?: number;  // Message ID where this branch diverged
   branchedAt?: number;  // Timestamp when the branch was created
 }
@@ -35,12 +38,14 @@ export interface CreateSessionPayload {
   worktreeId?: string;  // ID of the associated worktree
   worktreePath?: string;  // Path to the worktree directory
   worktreeProjectPath?: string;  // Path to the parent project (for permission lookups)
+  parentSessionId?: string | null;  // Parent session ID for hierarchical workstreams
   providerConfig?: Record<string, unknown>;
   providerSessionId?: string;
   documentContext?: Record<string, unknown> | undefined;
   createdAt?: number; // Optional override for imported sessions
   updatedAt?: number; // Optional override for imported sessions
-  parentSessionId?: string;  // ID of the session this was branched from
+  // Branch tracking - SEPARATE from hierarchical parentSessionId
+  branchedFromSessionId?: string;  // ID of the session this was forked from
   branchPointMessageId?: number;  // Message ID where this branch diverged
   branchedAt?: number;  // Timestamp when the branch was created
 }

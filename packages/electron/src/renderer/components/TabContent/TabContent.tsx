@@ -51,7 +51,7 @@ interface TabEditorInstance {
   content: string;
 }
 
-export const TabContent: React.FC<TabContentProps> = ({
+const TabContentComponent: React.FC<TabContentProps> = ({
   textReplacements,
   onManualSaveReady,
   onGetContentReady,
@@ -449,3 +449,14 @@ export const TabContent: React.FC<TabContentProps> = ({
   );
 };
 
+/**
+ * Memoized TabContent - prevents re-renders when parent re-renders.
+ * This component manages TabEditor instances imperatively and should only
+ * render once on mount. All state is stored in refs.
+ *
+ * Custom comparison: always returns true (never re-render) because:
+ * 1. All props are stored in propsRef and accessed via current value
+ * 2. Tab syncing happens via useTabsActions subscription, not props
+ * 3. workspaceId is only needed on mount for initial setup
+ */
+export const TabContent = React.memo(TabContentComponent, () => true);

@@ -21,7 +21,6 @@ import {
   sessionUnreadAtom,
   sessionPendingPromptAtom,
   sessionDraftInputAtom,
-  sessionActiveAtom,
   initSessionList,
   sessionListFullAtom,
   refreshSessionListAtom,
@@ -107,6 +106,7 @@ const globalSendingSessions = new Set<string>();
 // This ensures that when ai:auto-context-end fires, any panel can process the queued prompts
 const globalAutoContextSessions = new Set<string>();
 
+
 interface SessionHistoryRefreshDetail {
   workspacePath?: string;
   sourceId: string;
@@ -170,27 +170,11 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
   // Session state
   const [sessionTabs, setSessionTabs] = useState<SessionTab[]>([]);
-  const [activeTabId, setActiveTabIdRaw] = useState<string | null>(null);
+  const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [closedSessions, setClosedSessions] = useState<SessionTab[]>([]);
 
-  // Wrapper to update both local state AND Jotai atoms for active session
-  // This allows AISessionView to subscribe to sessionActiveAtom and avoid re-renders
-  const prevActiveTabIdRef = useRef<string | null>(null);
-  const setActiveTabId = useCallback((newActiveId: string | null) => {
-    const prevId = prevActiveTabIdRef.current;
-
-    // Update local state
-    setActiveTabIdRaw(newActiveId);
-    prevActiveTabIdRef.current = newActiveId;
-
-    // Update atoms - deactivate old, activate new
-    if (prevId && prevId !== newActiveId) {
-      store.set(sessionActiveAtom(prevId), false);
-    }
-    if (newActiveId) {
-      store.set(sessionActiveAtom(newActiveId), true);
-    }
-  }, []);
+  // Ref to track sessionTabs for callbacks that need current value
+  const sessionTabsRef = useRef<SessionTab[]>(sessionTabs);
 
   // NOTE: Window title and find handlers are managed internally in agent mode.
   // App.tsx no longer needs to know about the current AI session.
@@ -238,7 +222,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   const persistWorktreeModesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastReloadAtRef = useRef<Map<string, number>>(new Map());
   const reloadInProgressRef = useRef<Set<string>>(new Set()); // Track in-flight reloads
-  const sessionTabsRef = useRef<SessionTab[]>(sessionTabs);
+  // sessionTabsRef is defined earlier (before setActiveTabId callback)
   const workspacePathRef = useRef(workspacePath);
   const panelInstanceIdRef = useRef<string>(`agentic-panel-${Math.random().toString(36).slice(2)}`);
 
@@ -3586,6 +3570,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                         ref={getSessionViewRef(tab.id)}
                         sessionId={tab.id}
                         mode={currentMode === 'agent' ? 'agent' : 'chat'}
+                        isActive={tab.id === activeTabId}
                         workspacePath={workspacePath}
                         documentContext={documentContext}
                         onNavigateHistory={handleNavigateHistory}
@@ -3603,14 +3588,16 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
               // Non-worktree sessions render standalone AISessionView
               // AISessionView now handles its own header and sidebar internally
+              // Note: documentContext is intentionally not passed - agent mode sessions
+              // get their context from their embedded SessionEditorArea tabs
               return (
                 <AISessionView
                   key={tab.id}
                   ref={getSessionViewRef(tab.id)}
                   sessionId={tab.id}
                   mode="agent"
+                  isActive={tab.id === activeTabId}
                   workspacePath={workspacePath}
-                  documentContext={documentContext}
                   onNavigateHistory={handleNavigateHistory}
                   fileMentionOptions={fileMentionOptions}
                   onFileMentionSearch={handleFileMentionSearch}

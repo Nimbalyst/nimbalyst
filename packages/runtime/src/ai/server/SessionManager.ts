@@ -74,11 +74,13 @@ function sessionDataFromChatSession(session: ChatSession, fallbackWorkspace: str
     // Worktree fields - passed through from database query
     worktreeId: (session as any).worktreeId ?? undefined,
     worktreePath: (session as any).worktreePath ?? undefined,
-    // Branch tracking fields - passed through from database query
+    // Hierarchical workstream parent (separate from branch)
     parentSessionId: (session as any).parentSessionId ?? undefined,
+    // Branch tracking fields - passed through from database query
+    branchedFromSessionId: (session as any).branchedFromSessionId ?? undefined,
     branchPointMessageId: (session as any).branchPointMessageId ?? undefined,
     branchedAt: (session as any).branchedAt ?? undefined,
-    parentProviderSessionId: (session as any).parentProviderSessionId ?? undefined,
+    branchedFromProviderSessionId: (session as any).branchedFromProviderSessionId ?? undefined,
   } satisfies SessionData;
 }
 
@@ -623,11 +625,12 @@ export class SessionManager {
       branchTitle = `(branch ${maxCounter + 1}) ${baseTitle}`;
     }
 
-    // Store parent's providerSessionId so we can fork from it
+    // Store source session's providerSessionId so we can fork from it
     // This is the Claude SDK's session ID that we need to resume from
-    const parentProviderSessionId = parentSession.providerSessionId;
+    const branchedFromProviderSessionId = parentSession.providerSessionId;
 
-    // Create the branch session with parent tracking
+    // Create the branch session with branch tracking
+    // NOTE: branchedFromSessionId is SEPARATE from parentSessionId (hierarchical workstreams)
     await AISessionsRepository.create({
       id: branchSessionId,
       provider: parentSession.provider,
@@ -642,7 +645,7 @@ export class SessionManager {
       worktreeId: parentSession.worktreeId,
       worktreePath: parentSession.worktreePath,
       worktreeProjectPath: parentSession.worktreeProjectPath,
-      parentSessionId,
+      branchedFromSessionId: parentSessionId,  // The session this branch was forked from
       branchPointMessageId,
       branchedAt: now,
     });
@@ -663,11 +666,11 @@ export class SessionManager {
       worktreeId: parentSession.worktreeId,
       worktreePath: parentSession.worktreePath,
       worktreeProjectPath: parentSession.worktreeProjectPath,
-      parentSessionId,
+      branchedFromSessionId: parentSessionId,  // The session this branch was forked from
       branchPointMessageId,
       branchedAt: now,
-      // Store parent's provider session ID for forking
-      parentProviderSessionId,
+      // Store source session's provider session ID for forking
+      branchedFromProviderSessionId,
     };
 
     this.currentSession = session;

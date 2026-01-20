@@ -1701,8 +1701,8 @@ export class AIService {
           worktreePath: session.worktreePath,
           worktreeProjectPath: session.worktreeProjectPath,
           // Include branch tracking for session forking (Claude Code SDK forkSession)
-          parentSessionId: session.parentSessionId,
-          parentProviderSessionId: session.parentProviderSessionId,
+          branchedFromSessionId: session.branchedFromSessionId,
+          branchedFromProviderSessionId: session.branchedFromProviderSessionId,
         } as any : {
           sessionType: session.sessionType,
           mode: session.mode,
@@ -1712,8 +1712,8 @@ export class AIService {
           worktreePath: session.worktreePath,
           worktreeProjectPath: session.worktreeProjectPath,
           // Include branch tracking for session forking (Claude Code SDK forkSession)
-          parentSessionId: session.parentSessionId,
-          parentProviderSessionId: session.parentProviderSessionId,
+          branchedFromSessionId: session.branchedFromSessionId,
+          branchedFromProviderSessionId: session.branchedFromProviderSessionId,
         } as any;
 
         // Update MCP document state for Claude Code provider so it knows which file-scoped tools to show

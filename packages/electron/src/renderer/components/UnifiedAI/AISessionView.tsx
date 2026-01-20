@@ -29,11 +29,15 @@ import {
   sessionModeAtom,
   sessionModelAtom,
   sessionArchivedAtom,
-  sessionActiveAtom,
   sessionProcessingAtom,
   loadSessionDataAtom,
   reloadSessionDataAtom,
   updateSessionDataAtom,
+  // Hierarchical session atoms
+  sessionChildrenAtom,
+  sessionActiveChildAtom,
+  sessionHasChildrenAtom,
+  loadSessionChildrenAtom,
 } from '../../store';
 
 interface Todo {
@@ -60,10 +64,8 @@ export interface AISessionViewProps {
   workspacePath: string;
   documentContext?: any; // DocumentContext type
 
-  // NOTE: Session data, mode, model, archive status, processing state, and
-  // isActive are all managed via Jotai atoms. AISessionView loads its own data
-  // on mount. This eliminates re-render cascades from parent state changes.
-  // Parent uses store.set(sessionActiveAtom(sessionId), true/false) to control visibility.
+  // Visibility - parent controls which session is active
+  isActive?: boolean;
 
   // File mention support
   fileMentionOptions?: TypeaheadOption[];
@@ -337,10 +339,8 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
   onNavigateHistory,
   onCloseAndArchive,
   onSessionTitleChanged,
+  isActive = true, // Default to true for backwards compatibility
 }, ref) => {
-  // isActive is managed via Jotai atom to prevent re-render cascades
-  // Parent sets it via store.set(sessionActiveAtom(sessionId), true/false)
-  const isActive = useAtomValue(sessionActiveAtom(sessionId));
   const posthog = usePostHog();
   const inputRef = useRef<AIInputRef>(null);
   const [todos, setTodos] = useState<Todo[]>([]);
@@ -362,6 +362,14 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
   const loadSessionData = useSetAtom(loadSessionDataAtom);
   const reloadSessionData = useSetAtom(reloadSessionDataAtom);
   const updateSessionData = useSetAtom(updateSessionDataAtom);
+
+  // ============================================================
+  // Hierarchical session state (workstreams)
+  // ============================================================
+  const childSessionIds = useAtomValue(sessionChildrenAtom(sessionId));
+  const [activeChildId, setActiveChildId] = useAtom(sessionActiveChildAtom(sessionId));
+  const hasChildren = useAtomValue(sessionHasChildrenAtom(sessionId));
+  const loadSessionChildren = useSetAtom(loadSessionChildrenAtom);
 
   // Draft input state via Jotai atoms - only this component re-renders on typing
   const [draftInput, setDraftInput] = useAtom(sessionDraftInputAtom(sessionId));
@@ -400,6 +408,23 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
       loadSessionData({ sessionId, workspacePath });
     }
   }, [sessionId, workspacePath, sessionData, loadSessionData]);
+
+  // ============================================================
+  // Load child sessions when session has children (hierarchical sessions)
+  // This enables workstream-style grouped sessions
+  // ============================================================
+  useEffect(() => {
+    if (!sessionId || !workspacePath || !sessionData) return;
+
+    // Check if this session might have children (from childCount in list data or from metadata)
+    // We load children proactively so tabs can be displayed
+    // The atoms will dedupe if already loaded
+    const parentSessionId = sessionData.parentSessionId;
+    if (!parentSessionId) {
+      // This is a root session - check if it has children to load
+      loadSessionChildren({ parentSessionId: sessionId, workspacePath });
+    }
+  }, [sessionId, workspacePath, sessionData, loadSessionChildren]);
 
   // ============================================================
   // Subscribe to IPC events for session updates
@@ -843,6 +868,26 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
   // Ref for session editor area (for non-worktree sessions)
   const sessionEditorRef = useRef<SessionEditorAreaRef>(null);
 
+  // Get effective document context - for agent mode, use session's active tab instead of prop
+  const getEffectiveDocumentContext = useCallback(() => {
+    // In agent mode with embedded editor, prefer the session's active file
+    if (showSessionEditor) {
+      const activeFilePath = sessionEditorRef.current?.getActiveFilePath();
+      if (activeFilePath) {
+        // For agent mode, we just need the file path - claude-code can read the content via MCP
+        return {
+          filePath: activeFilePath,
+          content: undefined, // Agent can read file content via tools
+          fileType: activeFilePath.split('.').pop() || undefined,
+        };
+      }
+      // No active tab in session editor, return undefined (no context)
+      return undefined;
+    }
+    // In chat mode or worktree mode, use the documentContext prop from parent
+    return documentContext;
+  }, [showSessionEditor, documentContext]);
+
   // Expose methods through ref
   useImperativeHandle(ref, () => ({
     focusInput: () => {
@@ -887,10 +932,12 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
 
     try {
       // Only store serializable parts of documentContext
-      const serializableContext = documentContext ? {
-        filePath: documentContext.filePath,
-        content: documentContext.content,
-        fileType: documentContext.fileType
+      // For agent mode, get context from session's active tab instead of prop
+      const effectiveContext = getEffectiveDocumentContext();
+      const serializableContext = effectiveContext ? {
+        filePath: effectiveContext.filePath,
+        content: effectiveContext.content,
+        fileType: effectiveContext.fileType
       } : undefined;
 
       // Create the queued prompt in the database (same queue used by mobile sync)
@@ -923,7 +970,7 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
     } finally {
       queueingRef.current = false;
     }
-  }, [sessionId, documentContext, draftAttachments, setDraftInput, setDraftAttachments]);
+  }, [sessionId, getEffectiveDocumentContext, draftAttachments, setDraftInput, setDraftAttachments]);
 
   // Handle send message - now calls IPC directly
   const handleSend = useCallback(async () => {
@@ -965,11 +1012,12 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
 
     try {
       // Build document context with attachments included
-      // The handler expects: (message, documentContext, sessionId, workspacePath)
+      // For agent mode, get context from session's active tab instead of prop
+      const effectiveContext = getEffectiveDocumentContext();
       const docContext = {
-        filePath: documentContext?.filePath,
-        content: documentContext?.content,
-        fileType: documentContext?.fileType,
+        filePath: effectiveContext?.filePath,
+        content: effectiveContext?.content,
+        fileType: effectiveContext?.fileType,
         attachments: attachments.length > 0 ? attachments : undefined,
         mode: aiMode,
       };
@@ -980,7 +1028,7 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
       console.error('[AISessionView] Failed to send message:', error);
       sendingRef.current = false;
     }
-  }, [sessionId, sessionData, draftInput, draftAttachments, isLoading, documentContext, aiMode, setDraftInput, setDraftAttachments, updateSessionData, handleQueue]);
+  }, [sessionId, sessionData, draftInput, draftAttachments, isLoading, getEffectiveDocumentContext, aiMode, setDraftInput, setDraftAttachments, updateSessionData, handleQueue]);
 
   // Handle cancel - now calls IPC directly
   // Note: sessionProcessingAtom will be set to false by AgenticPanel when the cancel completes
@@ -1255,6 +1303,7 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
                 ref={sessionEditorRef}
                 sessionId={sessionId}
                 workspacePath={workspacePath}
+                isActive={isActive}
               />
             )}
 
@@ -1376,7 +1425,7 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
           provider={sessionData.provider}
           onQueue={handleQueue}
           queueCount={queuedPrompts.length}
-          currentFilePath={documentContext?.filePath}
+          currentFilePath={getEffectiveDocumentContext()?.filePath}
           lastUserMessageTimestamp={lastUserMessageTimestamp}
         />
         </div>
@@ -1547,29 +1596,5 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
 AISessionViewComponent.displayName = 'AISessionView';
 
 // Memoize to prevent re-renders when props haven't changed
-// Most session state is now managed via Jotai atoms, so props comparison is simple
-// NOTE: isActive is now an atom, not a prop - this prevents re-render cascades when switching sessions
-export const AISessionView = React.memo(AISessionViewComponent, (prevProps, nextProps) => {
-  // Compare only the props that are actually passed from parent
-  // Session data, processing state, isActive, etc. are all in atoms
-  if (
-    prevProps.sessionId !== nextProps.sessionId ||
-    prevProps.workspacePath !== nextProps.workspacePath ||
-    prevProps.mode !== nextProps.mode ||
-    prevProps.fileMentionOptions?.length !== nextProps.fileMentionOptions?.length
-  ) {
-    return false; // Props changed, should re-render
-  }
-
-  // Compare documentContext if present
-  if (prevProps.documentContext !== nextProps.documentContext) {
-    if (!prevProps.documentContext || !nextProps.documentContext) {
-      return false; // One is null/undefined, the other isn't
-    }
-    if (prevProps.documentContext.filePath !== nextProps.documentContext.filePath) {
-      return false; // Different file
-    }
-  }
-
-  return true; // No meaningful changes, skip re-render
-});
+// Using default shallow comparison - isActive changes will trigger re-render
+export const AISessionView = React.memo(AISessionViewComponent);

@@ -128,6 +128,10 @@ export interface SessionData {
   worktreePath?: string;  // Path to the worktree directory
   worktreeProjectPath?: string;  // Path to the parent project (for permission lookups)
 
+  // Hierarchical session support (workstreams)
+  // parent_session_id = hierarchical containment (child sessions within a workstream)
+  parentSessionId?: string | null;  // Parent session ID for hierarchical workstreams
+
   // Time tracking
   createdAt: number;  // Creation timestamp
   updatedAt: number;  // Last update timestamp
@@ -144,11 +148,12 @@ export interface SessionData {
   // Pin state
   isPinned?: boolean;  // Whether the session is pinned to the top of the list
 
-  // Branch tracking
-  parentSessionId?: string;  // ID of the session this was branched from
+  // Branch tracking - SEPARATE from hierarchical parent_session_id
+  // branched_from_session_id = session forking (branch off at a message to try different approach)
+  branchedFromSessionId?: string;  // ID of the session this was forked from
   branchPointMessageId?: number;  // Message ID where this branch diverged
   branchedAt?: number;  // Timestamp when the branch was created
-  parentProviderSessionId?: string;  // Parent's providerSessionId for forking (Claude Code SDK)
+  branchedFromProviderSessionId?: string;  // Source session's providerSessionId for forking (Claude Code SDK)
 
   // Token usage tracking (for providers that support it)
   tokenUsage?: {

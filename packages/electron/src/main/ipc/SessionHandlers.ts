@@ -201,7 +201,10 @@ export async function registerSessionHandlers() {
                 isArchived: entry.isArchived || false,
                 isPinned: (entry as any).isPinned || false,  // Include isPinned from repository
                 worktreeId: entry.worktreeId,  // Include worktreeId from repository
-                parentSessionId: entry.parentSessionId,  // Include branch tracking
+                parentSessionId: entry.parentSessionId || null,  // Hierarchical workstream support
+                childCount: entry.childCount || 0,  // Number of child sessions
+                // Branch tracking - SEPARATE from hierarchical parentSessionId
+                branchedFromSessionId: (entry as any).branchedFromSessionId,
                 branchPointMessageId: entry.branchPointMessageId,
                 branchedAt: entry.branchedAt,
                 metadata: {}
@@ -211,6 +214,72 @@ export async function registerSessionHandlers() {
         } catch (error) {
             console.error('[SessionHandlers] Failed to list sessions:', error);
             return { success: false, error: String(error), sessions: [] };
+        }
+    });
+
+    // List child sessions for a parent session
+    safeHandle('sessions:list-children', async (event, parentSessionId: string, workspacePath: string) => {
+        try {
+            const { database } = await import('../database/PGLiteDatabaseWorker');
+
+            const { rows } = await database.query<any>(
+                `SELECT s.id, s.provider, s.model, s.session_type, s.mode, s.title, s.workspace_id,
+                        s.worktree_id, s.parent_session_id, s.created_at, s.updated_at, s.is_archived, s.is_pinned,
+                        COUNT(m.id) as message_count
+                 FROM ai_sessions s
+                 LEFT JOIN ai_agent_messages m ON s.id = m.session_id AND m.direction = 'input' AND (m.hidden = FALSE OR m.hidden IS NULL)
+                 WHERE s.parent_session_id = $1 AND s.workspace_id = $2
+                 GROUP BY s.id, s.provider, s.model, s.session_type, s.mode, s.title, s.workspace_id,
+                          s.worktree_id, s.parent_session_id, s.created_at, s.updated_at, s.is_archived, s.is_pinned
+                 ORDER BY s.created_at ASC`,
+                [parentSessionId, workspacePath]
+            );
+
+            const children = rows.map((row: any) => ({
+                id: row.id,
+                title: row.title || 'Untitled Session',
+                provider: row.provider,
+                model: row.model,
+                createdAt: row.created_at instanceof Date ? row.created_at.getTime() : row.created_at,
+                updatedAt: row.updated_at instanceof Date ? row.updated_at.getTime() : row.updated_at,
+                messageCount: parseInt(row.message_count) || 0,
+                parentSessionId: row.parent_session_id,
+            }));
+
+            return { success: true, children };
+        } catch (error) {
+            console.error('[SessionHandlers] Failed to list child sessions:', error);
+            return { success: false, error: String(error), children: [] };
+        }
+    });
+
+    // Create a child session under a parent
+    safeHandle('sessions:create-child', async (event, payload: {
+        parentSessionId: string;
+        workspacePath: string;
+        worktreeId?: string;
+        provider?: string;
+    }) => {
+        try {
+            const { parentSessionId, workspacePath, worktreeId, provider = 'claude-code' } = payload;
+            const { v4: uuidv4 } = await import('uuid');
+
+            const sessionId = uuidv4();
+            const createPayload = {
+                id: sessionId,
+                provider,
+                title: 'New Session',
+                workspaceId: workspacePath,
+                parentSessionId,  // Link to parent
+                worktreeId: worktreeId || null,  // Inherit from parent if provided
+            };
+
+            await AISessionsRepository.create(createPayload as any);
+
+            return { success: true, sessionId };
+        } catch (error) {
+            console.error('[SessionHandlers] Failed to create child session:', error);
+            return { success: false, error: String(error) };
         }
     });
 
