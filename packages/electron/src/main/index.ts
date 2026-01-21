@@ -647,6 +647,18 @@ app.whenReady().then(async () => {
       };
     });
 
+    // Inject image compressor
+    // Compresses images to fit within Claude API 5MB base64 limit
+    ClaudeCodeProvider.setImageCompressor(async (buffer, mimeType, options) => {
+      const { compressImage } = await import('./services/ImageCompressor');
+      const result = await compressImage(buffer, mimeType, options);
+      return {
+        buffer: result.buffer,
+        mimeType: result.mimeType,
+        wasCompressed: result.wasCompressed
+      };
+    });
+
     registerMockupHandlers();
     registerDataModelHandlers();
     registerExtensionHandlers();

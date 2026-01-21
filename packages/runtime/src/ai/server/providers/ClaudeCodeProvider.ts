@@ -147,6 +147,14 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     workspacePath: string
   ) => { trusted: boolean; mode: 'ask' | 'allow-all' | 'bypass-all' | null }) | null = null;
 
+  // Image compressor (injected from electron main process)
+  // Compresses images to fit within API limits before sending
+  private static imageCompressor: ((
+    buffer: Buffer,
+    mimeType: string,
+    options?: { targetSizeBytes?: number }
+  ) => Promise<{ buffer: Buffer; mimeType: string; wasCompressed: boolean }>) | null = null;
+
   static readonly DEFAULT_MODEL = 'claude-code:sonnet';
 
   /**
@@ -214,6 +222,18 @@ export class ClaudeCodeProvider extends BaseAIProvider {
    */
   public static setSecurityLogger(logger: ((message: string, data?: any) => void) | null): void {
     ClaudeCodeProvider.securityLogger = logger;
+  }
+
+  /**
+   * Set the image compressor function (called from electron main process)
+   * Compresses images to fit within API limits before sending
+   */
+  public static setImageCompressor(compressor: ((
+    buffer: Buffer,
+    mimeType: string,
+    options?: { targetSizeBytes?: number }
+  ) => Promise<{ buffer: Buffer; mimeType: string; wasCompressed: boolean }>) | null): void {
+    ClaudeCodeProvider.imageCompressor = compressor;
   }
 
   /**
@@ -333,23 +353,30 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       for (const attachment of attachments) {
         if (attachment.type === 'image' && attachment.filepath) {
           try {
-            // Read image file and convert to base64
-            const imageData = await fs.promises.readFile(attachment.filepath);
+            // Read image file
+            let imageData = await fs.promises.readFile(attachment.filepath);
+            let mimeType = attachment.mimeType || 'image/png';
+
+            // Compress if needed to fit within API limits (5MB base64)
+            if (ClaudeCodeProvider.imageCompressor) {
+              const compressed = await ClaudeCodeProvider.imageCompressor(imageData, mimeType);
+              imageData = Buffer.from(compressed.buffer);
+              mimeType = compressed.mimeType;
+            }
+
             const base64Data = imageData.toString('base64');
 
-            // Determine media type from mimeType or extension
+            // Determine media type for API
             let mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' = 'image/png';
-            if (attachment.mimeType) {
-              const mimeType = attachment.mimeType.toLowerCase();
-              if (mimeType === 'image/jpeg' || mimeType === 'image/jpg') {
-                mediaType = 'image/jpeg';
-              } else if (mimeType === 'image/gif') {
-                mediaType = 'image/gif';
-              } else if (mimeType === 'image/webp') {
-                mediaType = 'image/webp';
-              } else if (mimeType === 'image/png') {
-                mediaType = 'image/png';
-              }
+            const normalizedMime = mimeType.toLowerCase();
+            if (normalizedMime === 'image/jpeg' || normalizedMime === 'image/jpg') {
+              mediaType = 'image/jpeg';
+            } else if (normalizedMime === 'image/gif') {
+              mediaType = 'image/gif';
+            } else if (normalizedMime === 'image/webp') {
+              mediaType = 'image/webp';
+            } else if (normalizedMime === 'image/png') {
+              mediaType = 'image/png';
             }
 
             imageContentBlocks.push({

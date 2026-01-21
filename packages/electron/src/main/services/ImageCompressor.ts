@@ -2,9 +2,11 @@
  * ImageCompressor - Handles image compression for chat attachments
  * Uses Jimp for pure JavaScript image processing (no native bindings)
  *
- * Strategy: Prioritize text readability by keeping PNG format (lossless).
- * Only resize if dimensions exceed the maximum. This preserves crisp text
- * in screenshots while still reducing file sizes for very large images.
+ * Strategy:
+ * 1. First attempt to keep original format (PNG stays PNG for text clarity)
+ * 2. If over target size (~3.5MB to stay under 5MB base64 API limit),
+ *    progressively reduce quality (convert to JPEG) and dimensions
+ * 3. Ensures images can be sent to AI APIs without exceeding limits
  */
 
 import { Jimp } from 'jimp';
@@ -58,10 +60,13 @@ export interface CompressionResult {
 
 export interface CompressionOptions {
   maxDimension?: number;  // Default: 2048
+  targetSizeBytes?: number;  // Target max size in bytes (will reduce quality/dimensions to achieve)
 }
 
 const DEFAULT_OPTIONS: Required<CompressionOptions> = {
-  maxDimension: 2048
+  maxDimension: 2048,
+  // Target ~3.5MB raw to stay under 5MB base64 limit (base64 adds ~33% overhead)
+  targetSizeBytes: 3.5 * 1024 * 1024
 };
 
 // Minimum file size to bother processing (100KB)
@@ -95,9 +100,8 @@ async function decodeHeicToJimp(buffer: Buffer): Promise<JimpImage> {
 /**
  * Compress an image buffer while maintaining aspect ratio and text readability
  * - Resizes to fit within maxDimension (if larger)
- * - Keeps original format (PNG stays PNG, JPEG stays JPEG) to preserve text clarity
- * - Converts HEIC to PNG (Apple's native format not widely supported)
- * - PNG is lossless so text remains crisp after resize
+ * - If still over targetSizeBytes, progressively reduces quality/dimensions
+ * - Keeps original format when possible, but converts to JPEG if needed for size
  * - Returns original buffer if compression would increase file size
  *
  * @throws {UnsupportedFormatError} If image format cannot be processed
@@ -148,10 +152,7 @@ export async function compressImage(
     }
   }
 
-  // Keep original format to preserve text readability
-  // PNG is lossless - text stays crisp
-  // JPEG users chose lossy format, so we keep it as JPEG
-  // HEIC/WebP: convert to PNG for best text quality and compatibility
+  // First attempt: keep original format to preserve text readability
   let outputMime: string;
   let outputBuffer: Buffer;
 
@@ -177,6 +178,13 @@ export async function compressImage(
       'Failed to encode compressed image',
       error instanceof Error ? error : undefined
     );
+  }
+
+  // If still over target size, progressively reduce quality/dimensions
+  if (outputBuffer.length > opts.targetSizeBytes) {
+    const result = await compressToTargetSize(image, opts.targetSizeBytes, opts.maxDimension);
+    outputBuffer = result.buffer;
+    outputMime = result.mimeType;
   }
 
   // If compression increased file size and format didn't change, return original
@@ -205,6 +213,71 @@ export async function compressImage(
     height: image.height,
     wasCompressed: true
   };
+}
+
+/**
+ * Progressively compress image to meet target size
+ * Strategy: First try JPEG at decreasing quality, then reduce dimensions
+ */
+async function compressToTargetSize(
+  image: InstanceType<typeof Jimp>,
+  targetSize: number,
+  startingMaxDimension: number
+): Promise<{ buffer: Buffer; mimeType: string }> {
+  // Quality levels to try (high to low)
+  const qualityLevels = [85, 75, 65, 55, 45];
+  // Dimension reduction factors (percentage of starting max dimension)
+  const dimensionFactors = [1.0, 0.75, 0.5, 0.375];
+
+  for (const dimFactor of dimensionFactors) {
+    const maxDim = Math.round(startingMaxDimension * dimFactor);
+
+    // Clone and resize if needed
+    let workingImage = image.clone();
+    if (workingImage.width > maxDim || workingImage.height > maxDim) {
+      if (workingImage.width > workingImage.height) {
+        workingImage.resize({ w: maxDim });
+      } else {
+        workingImage.resize({ h: maxDim });
+      }
+    }
+
+    for (const quality of qualityLevels) {
+      try {
+        const jpegBuffer = await workingImage.getBuffer('image/jpeg', { quality });
+
+        if (jpegBuffer.length <= targetSize) {
+          console.log(`[ImageCompressor] Achieved target size with JPEG quality=${quality}, maxDim=${maxDim}`, {
+            size: `${(jpegBuffer.length / 1024 / 1024).toFixed(2)} MB`,
+            target: `${(targetSize / 1024 / 1024).toFixed(2)} MB`
+          });
+          return { buffer: jpegBuffer, mimeType: 'image/jpeg' };
+        }
+      } catch {
+        // Continue to next quality level
+      }
+    }
+  }
+
+  // Last resort: smallest dimensions with lowest quality
+  const minDim = Math.round(startingMaxDimension * 0.25);
+  let smallestImage = image.clone();
+  if (smallestImage.width > minDim || smallestImage.height > minDim) {
+    if (smallestImage.width > smallestImage.height) {
+      smallestImage.resize({ w: minDim });
+    } else {
+      smallestImage.resize({ h: minDim });
+    }
+  }
+
+  const finalBuffer = await smallestImage.getBuffer('image/jpeg', { quality: 35 });
+  console.log(`[ImageCompressor] WARNING: Using minimum compression settings`, {
+    size: `${(finalBuffer.length / 1024 / 1024).toFixed(2)} MB`,
+    target: `${(targetSize / 1024 / 1024).toFixed(2)} MB`,
+    dimensions: `${smallestImage.width}x${smallestImage.height}`
+  });
+
+  return { buffer: finalBuffer, mimeType: 'image/jpeg' };
 }
 
 /**
