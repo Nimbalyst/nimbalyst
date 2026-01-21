@@ -62,6 +62,7 @@ jobs:
             --pattern "*.AppImage" \
             --pattern "*.yml" \
             --pattern "*.yaml" \
+            --pattern "*.blockmap" \
             --dir public-release-files || true
 
           echo "Downloaded artifacts:"
