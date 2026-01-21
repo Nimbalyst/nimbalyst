@@ -33,14 +33,27 @@ export function ModelSelector({
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
+      const target = event.target as Node;
+
+      // Don't close if clicking inside the dropdown
+      if (dropdownRef.current && dropdownRef.current.contains(target)) {
+        return;
       }
+
+      // Don't close if clicking on a help tooltip (which is portaled to document.body)
+      const helpTooltip = (target as Element).closest?.('.help-tooltip');
+      if (helpTooltip) {
+        return;
+      }
+
+      setIsOpen(false);
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [isOpen]);
 
   // Load models when dropdown opens
   useEffect(() => {
