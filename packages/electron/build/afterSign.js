@@ -1,10 +1,9 @@
 const { execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
-const os = require('os');
 
 exports.default = async function(context) {
-  const { appOutDir, packager } = context;
+  const { appOutDir, packager, arch } = context;
   
   if (packager.platform.name !== 'mac') {
     return;
@@ -68,8 +67,11 @@ exports.default = async function(context) {
     // Sign ripgrep binaries if we have signing credentials
     if (hasSigningCredentials && packager.platform.name === 'mac') {
       console.log('AfterSign: Signing ripgrep binaries...');
-      const arch = os.arch();
-      const rgBinaryDir = arch === 'arm64' ? 'arm64-darwin' : 'x64-darwin';
+      // Use target architecture from electron-builder context, not host architecture
+      // electron-builder arch enum: 0=ia32, 1=x64, 2=armv7l, 3=arm64, 4=universal
+      const targetArch = arch === 3 ? 'arm64' : 'x64';
+      console.log('AfterSign: Target architecture:', targetArch, '(context.arch =', arch, ')');
+      const rgBinaryDir = targetArch === 'arm64' ? 'arm64-darwin' : 'x64-darwin';
       const rgPath = path.join(vendorPath, 'ripgrep', rgBinaryDir, 'rg');
       
       if (fs.existsSync(rgPath)) {
