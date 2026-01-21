@@ -54,6 +54,10 @@ export function registerClaudeCodeHandlers() {
       // Build options for query
       const options: any = getClaudeCodeExecutableOptions();
 
+      // Pass the environment to the SDK so spawned subprocesses inherit it
+      // This is critical for packaged builds where ELECTRON_RUN_AS_NODE must be set
+      options.env = env;
+
       // Call query with proper signature: { prompt, options }
       // Use empty string prompt - SDK will write it directly without async iteration
       const session = query({
@@ -114,17 +118,18 @@ export function registerClaudeCodeHandlers() {
         throw new Error('Claude Agent SDK CLI not found in bundled installation. This is a build configuration issue.');
       }
 
-      // Open a Terminal window with the claude setup-token command
-      // This provides a proper TTY environment for the interactive OAuth flow
+      // Open a Terminal window with an interactive Claude session for /login
+      // The setup-token command is for CI/CD token generation, not interactive login
+      // Users need to type /login in the interactive session to authenticate
       if (platform === 'darwin') {
-        // macOS: Use AppleScript to open Terminal with the command
+        // macOS: Use AppleScript to open Terminal with interactive Claude session
 
         // Use Electron's bundled Node.js to run the CLI
         const nodePath = process.execPath;
         const script = `
 tell application "Terminal"
   activate
-  do script "clear && echo 'Claude Code Authentication' && echo '' && echo 'Please complete the OAuth flow in your browser.' && echo 'When finished, you can close this window.' && echo '' && ELECTRON_RUN_AS_NODE=1 '${nodePath}' '${cliPath}' setup-token"
+  do script "clear && echo 'Claude Code Authentication' && echo '' && echo 'Type /login and press Enter to authenticate.' && echo 'Complete the OAuth flow in your browser when prompted.' && echo 'When finished, type /quit to exit and close this window.' && echo '' && ELECTRON_RUN_AS_NODE=1 '${nodePath}' '${cliPath}'"
 end tell`;
 
         spawn('osascript', ['-e', script], {
@@ -135,17 +140,17 @@ end tell`;
         // Return immediately - user will complete the flow in the terminal
         return {
           success: true,
-          message: 'Terminal window opened. Please complete the authentication in your browser, then click "Refresh Status" to verify.'
+          message: 'Terminal window opened. Type /login and press Enter to authenticate, then click "Refresh Status" to verify.'
         };
       } else if (platform === 'win32') {
-        // Windows: Use start command to open a new cmd window
+        // Windows: Use start command to open a new cmd window with interactive Claude session
+        // Windows requires a native Claude installation because the Windows console host
+        // can't provide proper TTY raw mode required by Ink-based CLIs when running through Electron's Node.js
         const claudeCodePath = findWindowsClaudeExecutable();
         if (!claudeCodePath) {
           throw new Error('Claude Code executable not found. Please install Claude Code using the native installer or npm.');
         }
-        // TODO: On windows only, require access to a working claude installation because the Windows console
-        //  host is unable to provide a proper TTY raw mode required by Ink-based CLIs when running in Electron-NodeJS.
-        spawn('cmd', ['/c', 'start', '"Claude Code Authentication"', 'cmd', '/k', `"${claudeCodePath}" login`], {
+        spawn('cmd', ['/c', 'start', '"Claude Code Authentication"', 'cmd', '/k', `echo Claude Code Authentication && echo. && echo Type /login and press Enter to authenticate. && echo Complete the OAuth flow in your browser when prompted. && echo When finished, type /quit to exit and close this window. && echo. && "${claudeCodePath}"`], {
           detached: true,
           stdio: 'ignore',
           shell: true
@@ -153,10 +158,10 @@ end tell`;
 
         return {
           success: true,
-          message: 'Command prompt opened. Please complete the authentication in your browser, then click "Refresh Status" to verify.'
+          message: 'Terminal window opened. Type /login and press Enter to authenticate, then click "Refresh Status" to verify.'
         };
       } else {
-        // Linux: Try to open a terminal emulator
+        // Linux: Try to open a terminal emulator with interactive Claude session
         const nodePath = process.execPath;
         // Try common terminal emulators
         const terminals = ['gnome-terminal', 'konsole', 'xterm', 'x-terminal-emulator'];
@@ -164,7 +169,7 @@ end tell`;
 
         for (const terminal of terminals) {
           try {
-            spawn(terminal, ['-e', `bash -c "ELECTRON_RUN_AS_NODE=1 '${nodePath}' '${cliPath}' setup-token; read -p 'Press Enter to close...'"`], {
+            spawn(terminal, ['-e', `bash -c "clear; echo 'Claude Code Authentication'; echo ''; echo 'Type /login and press Enter to authenticate.'; echo 'Complete the OAuth flow in your browser when prompted.'; echo 'When finished, type /quit to exit.'; echo ''; ELECTRON_RUN_AS_NODE=1 '${nodePath}' '${cliPath}'"`], {
               detached: true,
               stdio: 'ignore'
             }).unref();
@@ -178,10 +183,10 @@ end tell`;
         if (terminalOpened) {
           return {
             success: true,
-            message: 'Terminal opened. Please complete the authentication in your browser, then click "Refresh Status" to verify.'
+            message: 'Terminal opened. Type /login and press Enter to authenticate, then click "Refresh Status" to verify.'
           };
         } else {
-          throw new Error('No terminal emulator found. Please run "' + nodePath + ' ' + cliPath + ' setup-token" manually in your terminal.');
+          throw new Error('No terminal emulator found. Please run "' + nodePath + ' ' + cliPath + '" manually and type /login to authenticate.');
         }
       }
     } catch (error) {
