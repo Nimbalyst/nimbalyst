@@ -4,10 +4,17 @@
  */
 
 import { promises as fs } from 'fs';
-import { join, basename } from 'path';
+import { join, basename, extname } from 'path';
 import { createHash } from 'crypto';
 import type { ChatAttachment } from '@nimbalyst/runtime';
 import {AnalyticsService} from "./analytics/AnalyticsService.ts";
+import {
+  compressImage,
+  shouldCompress,
+  ImageCompressionError,
+  HeicDecodeError,
+  UnsupportedFormatError
+} from './ImageCompressor';
 
 export interface AttachmentValidation {
   valid: boolean;
@@ -34,7 +41,9 @@ export class AttachmentService {
       'image/jpeg',
       'image/jpg',
       'image/gif',
-      'image/webp'
+      'image/webp',
+      'image/heic',
+      'image/heif'
     ],
     pdf: ['application/pdf'],
     document: [
@@ -46,7 +55,8 @@ export class AttachmentService {
   };
 
   // File size limits (in bytes)
-  private static readonly MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
+  // Images can be larger since we compress them automatically
+  private static readonly MAX_IMAGE_SIZE = 20 * 1024 * 1024; // 20MB (will be compressed)
   private static readonly MAX_DOCUMENT_SIZE = 10 * 1024 * 1024; // 10MB
 
   constructor(workspacePath: string, userDataPath: string) {
@@ -59,6 +69,7 @@ export class AttachmentService {
 
   /**
    * Save an attachment file to app user data
+   * Images are automatically compressed to reduce storage and API payload sizes
    */
   async saveAttachment(
     fileBuffer: Buffer,
@@ -73,36 +84,96 @@ export class AttachmentService {
         return { success: false, error: validation.error };
       }
 
+      // Compress image if applicable
+      let finalBuffer = fileBuffer;
+      let finalMimeType = mimeType;
+      let finalName = originalName;
+
+      const type = this.getAttachmentType(mimeType);
+      if (type === 'image' && shouldCompress(fileBuffer, mimeType)) {
+        try {
+          const result = await compressImage(fileBuffer, mimeType);
+
+          if (result.wasCompressed) {
+            finalBuffer = result.buffer;
+            finalMimeType = result.mimeType;
+
+            // Update filename extension if format changed
+            if (result.mimeType !== mimeType) {
+              const ext = result.mimeType === 'image/jpeg' ? '.jpg' : '.png';
+              finalName = this.changeExtension(originalName, ext);
+            }
+
+            const ratio = Math.round((1 - result.compressedSize / result.originalSize) * 100);
+            console.log('[AttachmentService] Compressed image', {
+              original: `${result.originalSize} bytes`,
+              compressed: `${result.compressedSize} bytes`,
+              ratio: `${ratio}% reduction`
+            });
+          } else {
+            console.log('[AttachmentService] Skipped compression (would increase size)', {
+              size: `${fileBuffer.length} bytes`
+            });
+          }
+        } catch (compressionError) {
+          // Determine error type for logging and analytics
+          let errorType: string;
+          if (compressionError instanceof HeicDecodeError) {
+            errorType = 'heic_decode_failed';
+            console.warn('[AttachmentService] HEIC decoding failed, using original', compressionError.message);
+          } else if (compressionError instanceof UnsupportedFormatError) {
+            errorType = 'unsupported_format';
+            console.warn('[AttachmentService] Unsupported format for compression', compressionError.message);
+          } else if (compressionError instanceof ImageCompressionError) {
+            errorType = 'compression_failed';
+            console.warn('[AttachmentService] Image compression failed', compressionError.message);
+          } else {
+            errorType = 'unexpected';
+            console.warn('[AttachmentService] Unexpected compression error, using original', compressionError);
+          }
+
+          // Track compression failures for monitoring
+          this.analytics.sendEvent('known_error', {
+            errorId: 'image_compression_failed',
+            context: 'attachment_save',
+            errorType,
+            mimeType
+          });
+
+          // Keep original buffer, mimeType, and name
+        }
+      }
+
       // Ensure session directory exists
       const sessionDir = join(this.attachmentsDir, sessionId);
       await fs.mkdir(sessionDir, { recursive: true });
 
       // Generate unique filename
       const timestamp = Date.now();
-      const sanitizedName = this.sanitizeFilename(originalName);
+      const sanitizedName = this.sanitizeFilename(finalName);
       const filename = `${timestamp}_${sanitizedName}`;
       const filepath = join(sessionDir, filename);
 
       // Write file to disk
-      await fs.writeFile(filepath, fileBuffer);
+      await fs.writeFile(filepath, finalBuffer);
 
       console.log('[AttachmentService] Saved attachment', {
         filename,
-        size: fileBuffer.length,
+        size: finalBuffer.length,
         sessionId
       });
 
       // Determine attachment type (validated above, so always non-null)
-      const type = this.getAttachmentType(mimeType)!;
+      const attachmentType = this.getAttachmentType(finalMimeType)!;
 
       // Create attachment object
       const attachment: ChatAttachment = {
         id: this.generateId(filepath),
         filename: sanitizedName,
         filepath,
-        mimeType,
-        size: fileBuffer.length,
-        type,
+        mimeType: finalMimeType,
+        size: finalBuffer.length,
+        type: attachmentType,
         addedAt: timestamp
       };
 
@@ -203,6 +274,17 @@ export class AttachmentService {
 
     // Replace dangerous characters
     return base.replace(/[^a-zA-Z0-9._-]/g, '_');
+  }
+
+  /**
+   * Change the file extension of a filename
+   */
+  private changeExtension(filename: string, newExt: string): string {
+    const currentExt = extname(filename);
+    if (!currentExt) {
+      return filename + newExt;
+    }
+    return filename.slice(0, -currentExt.length) + newExt;
   }
 
   /**

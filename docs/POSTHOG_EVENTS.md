@@ -210,6 +210,7 @@ The `known_error` event uses an `errorId` property to identify specific error co
 | --- | --- | --- | --- |
 | `pglite_wasm_runtime_crash` | `index.ts:418` | PGLite WASM runtime crashed during database initialization (often resolved by restarting computer) | `context`: database_initialization |
 | `database_initialization_failed` | `index.ts:424` | Database initialization failed for unknown reasons | `context`: database_initialization<br/>`errorMessage`: truncated error |
+| `image_compression_failed` | `AttachmentService.ts:136` | Image compression failed when saving attachment (original image is used as fallback) | `context`: attachment_save<br/>`errorType`: heic_decode_failed/unsupported_format/compression_failed/unexpected<br/>`mimeType`: original image mime type |
 
 ### Onboarding & Walkthrough
 
