@@ -305,3 +305,25 @@
   color: var(--primary-color);
   opacity: 0.7;
 }
+
+/* Drag-and-drop styles */
+.session-list-item[draggable="true"] {
+  cursor: grab;
+}
+
+.session-list-item.dragging {
+  opacity: 0.5;
+  cursor: grabbing;
+}
+
+.session-list-item.drop-target-valid {
+  background-color: var(--vscode-list-dropBackground, rgba(83, 89, 93, 0.4));
+  border: 2px dashed var(--vscode-focusBorder, var(--primary-color));
+  border-radius: 0.25rem;
+}
+
+/* Prevent text selection during drag */
+.session-list-item.dragging * {
+  user-select: none;
+  -webkit-user-select: none;
+}

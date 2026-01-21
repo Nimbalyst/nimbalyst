@@ -50,12 +50,15 @@ export interface SessionEditorState {
   splitRatio: number;
   /** Active tab key within this session's editor area */
   activeTabKey: EditorKey | null;
+  /** Whether the files edited sidebar is visible */
+  filesSidebarVisible: boolean;
 }
 
 const DEFAULT_SESSION_EDITOR_STATE: SessionEditorState = {
   layoutMode: 'transcript', // Start with transcript maximized (editor hidden)
   splitRatio: 0.5, // Default 50/50 when split mode activated
   activeTabKey: null,
+  filesSidebarVisible: true, // Show sidebar by default
 };
 
 // ============================================================
@@ -102,6 +105,13 @@ export const sessionLayoutModeAtom = atomFamily((sessionId: string) =>
  */
 export const sessionSplitRatioAtom = atomFamily((sessionId: string) =>
   atom((get) => get(sessionEditorStateAtom(sessionId)).splitRatio)
+);
+
+/**
+ * Files sidebar visibility for a specific session.
+ */
+export const sessionFilesSidebarVisibleAtom = atomFamily((sessionId: string) =>
+  atom((get) => get(sessionEditorStateAtom(sessionId)).filesSidebarVisible)
 );
 
 /**
@@ -223,6 +233,20 @@ export const toggleSessionEditorAtom = atom(null, (get, set, sessionId: string) 
   schedulePersist(sessionId, { ...state, layoutMode: newMode });
 });
 
+/**
+ * Toggle the files sidebar visibility for a session.
+ * Persists the state to workspace storage.
+ */
+export const toggleSessionFilesSidebarAtom = atom(
+  null,
+  (get, set, sessionId: string) => {
+    const state = get(sessionEditorStateAtom(sessionId));
+    const newState = { ...state, filesSidebarVisible: !state.filesSidebarVisible };
+    set(sessionEditorStateAtom(sessionId), newState);
+    schedulePersist(sessionId, newState);
+  }
+);
+
 // ============================================================
 // Persistence
 // ============================================================
@@ -265,6 +289,7 @@ function schedulePersist(sessionId: string, state: SessionEditorState): void {
           [sessionId]: {
             layoutMode: state.layoutMode,
             splitRatio: state.splitRatio,
+            filesSidebarVisible: state.filesSidebarVisible,
             openTabs: tabKeys.map((key) => ({
               key,
               isActive: key === store.get(sessionActiveTabKeyAtom(sessionId)),
@@ -320,6 +345,7 @@ export async function loadSessionEditorState(sessionId: string): Promise<void> {
         layoutMode: saved.layoutMode ?? 'transcript',
         splitRatio: saved.splitRatio ?? 0.5,
         activeTabKey: null, // Will be set when tabs are restored
+        filesSidebarVisible: saved.filesSidebarVisible ?? true,
       });
 
       // Restore tabs
@@ -359,6 +385,7 @@ export async function cleanupSessionEditorState(sessionId: string): Promise<void
   sessionActiveTabKeyAtom.remove(sessionId);
   sessionLayoutModeAtom.remove(sessionId);
   sessionSplitRatioAtom.remove(sessionId);
+  sessionFilesSidebarVisibleAtom.remove(sessionId);
   sessionEditorVisibleAtom.remove(sessionId);
   sessionHasTabsAtom.remove(sessionId);
 

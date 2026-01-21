@@ -79,9 +79,9 @@ All events include `$session_id` property automatically. Dev users are marked wi
 
 | Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |
 | --- | --- | --- | --- | --- | --- |
-| `worktree_archived` | `WorktreeHandlers.ts:719` | User archives a worktree (sessions archived immediately, cleanup queued) | `session_count`<br/>`worktree_age_days`<br/>`failed_sessions` | (pending release as of 6d0b51b5) | |
-| `worktree_archive_completed` | `WorktreeHandlers.ts:741` | Worktree cleanup completes successfully | `session_count`<br/>`duration_ms` | (pending release as of 6d0b51b5) | |
-| `worktree_archive_failed` | `WorktreeHandlers.ts:747, 771` | Worktree archive fails | `error_type`<br/>`stage` (archiving-sessions/removing-worktree) | (pending release as of 6d0b51b5) | |
+| `worktree_archived` | `WorktreeHandlers.ts:719` | User archives a worktree (sessions archived immediately, cleanup queued) | `session_count`<br/>`worktree_age_days`<br/>`failed_sessions` | (pending release as of 6d0b51b5) |  |
+| `worktree_archive_completed` | `WorktreeHandlers.ts:741` | Worktree cleanup completes successfully | `session_count`<br/>`duration_ms` | (pending release as of 6d0b51b5) |  |
+| `worktree_archive_failed` | `WorktreeHandlers.ts:747, 771` | Worktree archive fails | `error_type`<br/>`stage` (archiving-sessions/removing-worktree) | (pending release as of 6d0b51b5) |  |
 
 ### Theme Management
 
@@ -119,6 +119,7 @@ All events include `$session_id` property automatically. Dev users are marked wi
 | `cancel_ai_request` | `AIService.ts:1491` | User cancels active AI request | `provider` | v0.45.25 (2025-11-14) |  |
 | `ai_diff_accepted` | `DiffApprovalBar.tsx:315, 436`<br/>`TabEditor.tsx:1382` | User accepts diff or all diffs (markdown/code/mockup) | `acceptType` (partial/all)<br/>`replacementCount`<br/>`fileType` (mockup, optional) | v0.45.25 (2025-11-14) |  |
 | `ai_diff_rejected` | `DiffApprovalBar.tsx:380, 450`<br/>`TabEditor.tsx:1442` | User rejects diff or all diffs (markdown/code/mockup) | `rejectType` (partial/all)<br/>`replacementCount`<br/>`fileType` (mockup, optional) | v0.45.25 (2025-11-14) |  |
+| `session_reparented` | `SessionListItem.tsx:290` | User drags session to change parent (workstream reassignment) | `had_previous_parent`<br/>`workspace_path` | (pending release) |  |
 
 ### Claude Code (MCP)
 

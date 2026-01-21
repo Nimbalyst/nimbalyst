@@ -8,7 +8,7 @@
  * This component follows the same design pattern as FloatingDocumentActionsPlugin
  * in the TabEditor, with consistent styling, positioning, and interaction patterns.
  */
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import type { PromptMarker } from '../types';
 import { formatShortTime } from '../../../utils/dateUtils';
@@ -139,15 +139,11 @@ export const PromptsMenuButton: React.FC<PromptsMenuButtonProps> = ({
 
 interface FloatingTranscriptActionsProps {
   prompts: PromptMarker[];
-  isSidebarCollapsed: boolean;
-  onToggleSidebar: () => void;
+  /** Whether the sidebar is collapsed (only used if onToggleSidebar is provided) */
+  isSidebarCollapsed?: boolean;
+  /** Optional: Toggle sidebar visibility. If not provided, the toggle button is hidden. */
+  onToggleSidebar?: () => void;
   onNavigateToPrompt: (marker: PromptMarker) => void;
-  /** Whether the session is archived */
-  isArchived?: boolean;
-  /** Optional callback to close and archive the session */
-  onCloseAndArchive?: () => void;
-  /** Optional callback to unarchive the session */
-  onUnarchive?: () => void;
 }
 
 export const FloatingTranscriptActions: React.FC<FloatingTranscriptActionsProps> = ({
@@ -155,63 +151,32 @@ export const FloatingTranscriptActions: React.FC<FloatingTranscriptActionsProps>
   isSidebarCollapsed,
   onToggleSidebar,
   onNavigateToPrompt,
-  isArchived,
-  onCloseAndArchive,
-  onUnarchive
 }) => {
-  const historyButtonRef = useRef<HTMLButtonElement>(null);
-
   return (
     <div className="floating-transcript-actions">
-      {/* Archive/Unarchive Button - show based on current state */}
-      {isArchived ? (
-        // Show Unarchive button for archived sessions
-        onUnarchive && (
-          <button
-            className="floating-transcript-button"
-            onClick={onUnarchive}
-            aria-label="Unarchive session"
-            title="Unarchive session"
-          >
-            <MaterialSymbol icon="unarchive" size={20} />
-          </button>
-        )
-      ) : (
-        // Show Close and Archive button for non-archived sessions
-        onCloseAndArchive && (
-          <button
-            className="floating-transcript-button"
-            onClick={onCloseAndArchive}
-            aria-label="Close and archive session"
-            title="Close and archive session"
-          >
-            <MaterialSymbol icon="archive" size={20} />
-          </button>
-        )
-      )}
-
       {/* Prompts Menu Button */}
       <PromptsMenuButton
         prompts={prompts}
         onNavigateToPrompt={onNavigateToPrompt}
       />
 
-      {/* Toggle History Button */}
-      <button
-        ref={historyButtonRef}
-        className="floating-transcript-button"
-        onClick={onToggleSidebar}
-        aria-label={isSidebarCollapsed ? 'Show file history' : 'Hide file history'}
-        title={isSidebarCollapsed ? 'Show file history' : 'Hide file history'}
-      >
-        {isSidebarCollapsed ? (
-          // Show history icon (clock to expand)
-          <MaterialSymbol icon="schedule" size={20} />
-        ) : (
-          // Hide history icon (chevron right to collapse)
-          <MaterialSymbol icon="chevron_right" size={20} />
-        )}
-      </button>
+      {/* Toggle History Button - only shown if onToggleSidebar is provided */}
+      {onToggleSidebar && (
+        <button
+          className="floating-transcript-button"
+          onClick={onToggleSidebar}
+          aria-label={isSidebarCollapsed ? 'Show file history' : 'Hide file history'}
+          title={isSidebarCollapsed ? 'Show file history' : 'Hide file history'}
+        >
+          {isSidebarCollapsed ? (
+            // Show history icon (clock to expand)
+            <MaterialSymbol icon="schedule" size={20} />
+          ) : (
+            // Hide history icon (chevron right to collapse)
+            <MaterialSymbol icon="chevron_right" size={20} />
+          )}
+        </button>
+      )}
     </div>
   );
 };

@@ -21,8 +21,9 @@ import {
   sessionUnreadAtom,
   sessionPendingPromptAtom,
   sessionDraftInputAtom,
+  sessionDataAtom,
   initSessionList,
-  sessionListFullAtom,
+  sessionListRootAtom,
   refreshSessionListAtom,
   updateSessionFullAtom,
   // Agent mode layout atoms
@@ -39,6 +40,13 @@ import {
 import type { AIModel } from '../../store/atoms/appSettings';
 import { WorktreeOnboardingModal } from '../WorktreeOnboardingModal';
 
+/**
+ * @deprecated This component will be replaced by the unified session architecture.
+ * See nimbalyst-local/plans/unified-session-architecture.md for migration plan.
+ * Use the new AgentMode components with hierarchical session model and Jotai-based state management.
+ * This 3135-line component manages too much state in React useState, causing re-render cascades.
+ * The new architecture pushes state to Jotai atoms and uses EditorHost for content ownership.
+ */
 export interface AgenticPanelRef {
   createNewSession: (planPath?: string) => Promise<void>;
   openSessionInTab: (sessionId: string) => Promise<void>;
@@ -75,17 +83,24 @@ export interface AgenticPanelProps {
   onOpenQuickSearch?: () => void; // Callback for opening session quick search (Cmd+L)
 }
 
+/**
+ * SessionTab - MINIMAL data for tab management only.
+ *
+ * CRITICAL: Do NOT store sessionData here. Session data is managed via
+ * sessionDataAtom(sessionId) - each AISessionView loads its own data.
+ *
+ * Storing sessionData in tabs caused massive re-renders because every
+ * message update would trigger setSessionTabs -> re-render entire tree.
+ */
 interface SessionTab {
   id: string;
   name: string;
-  sessionData: SessionData;
   isPinned?: boolean;
-  // NOTE: draftInput and draftAttachments are now managed via Jotai atoms
-  // (sessionDraftInputAtom, sessionDraftAttachmentsAtom) in each AISessionView.
-  // This prevents re-renders of the entire AgenticPanel on every keystroke.
-  mode?: AIMode; // Planning vs Agent mode (default: agent)
-  model?: string; // Current model ID (provider:model format)
-  isArchived?: boolean; // Whether session is archived
+  // Minimal session type info needed for rendering (terminal vs session)
+  sessionType?: 'chat' | 'planning' | 'coding' | 'terminal';
+  // Worktree info needed for routing (not full sessionData)
+  worktreeId?: string | null;
+  worktreePath?: string | null;
 }
 
 type SessionListItem = Pick<SessionData, 'id' | 'createdAt' | 'name' | 'title' | 'provider' | 'model'> & {
@@ -125,6 +140,7 @@ function stripSystemMessage(content: string): string {
 }
 
 /**
+ * @Deprecated
  * AgenticPanel is the top-level container for unified AI interface.
  *
  * Key features:
@@ -150,7 +166,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   onOpenQuickSearch
 }: AgenticPanelProps, ref) {
   // === Atom subscriptions for session list ===
-  const sessionListFromAtom = useAtomValue(sessionListFullAtom);
+  // Use sessionListRootAtom to only show root sessions (not children of workstreams)
+  const sessionListFromAtom = useAtomValue(sessionListRootAtom);
   const refreshSessions = useSetAtom(refreshSessionListAtom);
   const updateSessionInAtom = useSetAtom(updateSessionFullAtom);
 
@@ -316,39 +333,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   useEffect(() => {
     if (!activeTabId) return;
 
-    const activeTab = sessionTabs.find(tab => tab.id === activeTabId);
-    if (!activeTab) return;
-
-    // Check if this tab needs to load its data
-    if ((activeTab.sessionData as any)?._needsLoad) {
-      const loadActiveSession = async () => {
-        try {
-          // console.log('[AgenticPanel] Lazy loading session data for:', activeTabId);
-          const sessionData = await window.electronAPI.aiLoadSession(activeTabId, workspacePath);
-          if (sessionData) {
-            // Initialize draft input atom if session has saved draft
-            if (sessionData.draftInput) {
-              store.set(sessionDraftInputAtom(activeTabId), sessionData.draftInput);
-            }
-            setSessionTabs(prev => prev.map(tab =>
-              tab.id === activeTabId
-                ? {
-                    ...tab,
-                    sessionData,
-                    mode: sessionData.mode || tab.mode,
-                    model: sessionData.model || sessionData.provider || tab.model,
-                    isArchived: sessionData.isArchived,
-                  }
-                : tab
-            ));
-          }
-        } catch (err) {
-          console.error('[AgenticPanel] Failed to lazy load session:', activeTabId, err);
-        }
-      };
-      loadActiveSession();
-    }
-  }, [activeTabId, workspacePath]); // Note: intentionally not including sessionTabs to avoid loops
+    // NOTE: Lazy loading is now handled via sessionDataAtom - AISessionView loads its own data
+    // No need to check _needsLoad or load sessionData here
+  }, [activeTabId, workspacePath]);
 
   // Helper to get or create ref for a session
   const getSessionViewRef = useCallback((sessionId: string) => {
@@ -406,10 +393,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
   // Mark a session as read - called whenever a session becomes active
   const markSessionAsRead = useCallback(async (sessionId: string) => {
-    const tab = sessionTabsRef.current.find(t => t.id === sessionId);
-    if (!tab) return;
-
-    const messages = tab.sessionData.messages || [];
+    // Get session data from atom (source of truth)
+    const sessionData = store.get(sessionDataAtom(sessionId));
+    const messages = sessionData?.messages || [];
     const lastMessage = messages[messages.length - 1];
     const lastMessageTimestamp = lastMessage?.timestamp ?? null;
 
@@ -417,20 +403,6 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     readStateRef.current.set(sessionId, {
       lastReadMessageTimestamp: lastMessageTimestamp
     });
-
-    // Update local state for persistence
-    setSessionTabs(prev => prev.filter(t => t != null).map(t => {
-      if (t.id === sessionId) {
-        return {
-          ...t,
-          sessionData: {
-            ...t.sessionData,
-            lastReadMessageTimestamp: lastMessageTimestamp
-          }
-        };
-      }
-      return t;
-    }));
 
     // Persist to database
     try {
@@ -627,145 +599,14 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       });
   }, [workspacePath]);
 
-  const scheduleSessionReload = useCallback((
-    sessionId: string,
-    options: { immediate?: boolean; reason?: string; minInterval?: number } = {}
-  ) => {
-    if (!sessionId || typeof window === 'undefined' || !window.electronAPI?.aiLoadSession) {
-      return;
-    }
-
-    const { immediate = false, reason, minInterval = 200 } = options;
-    const timers = reloadTimersRef.current;
-    const lastReloadMap = lastReloadAtRef.current;
-
-    const executeReload = async () => {
-      // Guard against concurrent reloads for the same session
-      if (reloadInProgressRef.current.has(sessionId)) {
-        // console.log(`[AgenticPanel] Reload already in progress for session ${sessionId}, skipping`);
-        return;
-      }
-
-      timers.delete(sessionId);
-      lastReloadMap.set(sessionId, Date.now());
-      reloadInProgressRef.current.add(sessionId);
-
-      try {
-        const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspacePathRef.current);
-        if (sessionData) {
-          setSessionTabs(prev => prev.filter(tab => tab != null).map(tab => {
-            if (tab.id !== sessionId) {
-              return tab;
-            }
-
-            // Merge messages: use database messages but preserve any local-only messages
-            // (messages that exist in local state but not in database yet)
-            const dbMessages = sessionData.messages || [];
-            const localMessages = tab.sessionData.messages || [];
-
-            // Find the latest timestamp in DB messages
-            const latestDbTimestamp = dbMessages.length > 0
-              ? Math.max(...dbMessages.map((m: Message) => m.timestamp || 0))
-              : 0;
-
-            // Keep any local messages that are newer than the latest DB message
-            // These are likely user messages that haven't been persisted yet
-            const localOnlyMessages = localMessages.filter(localMsg => {
-              const localTs = localMsg.timestamp || 0;
-              // Keep if it's newer than DB and not already in DB (by timestamp match)
-              return localTs > latestDbTimestamp &&
-                !dbMessages.some((dbMsg: Message) => dbMsg.timestamp === localTs);
-            });
-
-            // Merge: DB messages + any local-only messages
-            const messages = [...dbMessages, ...localOnlyMessages];
-
-            if (localOnlyMessages.length > 0) {
-              console.log('[AgenticPanel] Session reload preserving local-only messages:', {
-                sessionId,
-                localOnlyCount: localOnlyMessages.length,
-                dbMessageCount: dbMessages.length,
-                latestDbTimestamp,
-                localOnlyPreviews: localOnlyMessages.map(m => ({
-                  role: m.role,
-                  preview: m.content?.substring(0, 30),
-                  timestamp: m.timestamp
-                }))
-              });
-            }
-
-            // Preserve read state from ref (most recent), then tab state, then database
-            const refReadState = readStateRef.current.get(sessionId);
-            const preservedTimestamp = refReadState?.lastReadMessageTimestamp ?? tab.sessionData.lastReadMessageTimestamp ?? 0;
-            const dbTimestamp = sessionData.lastReadMessageTimestamp || 0;
-
-            // Use the most recent read state
-            const finalTimestamp = Math.max(preservedTimestamp, dbTimestamp);
-
-            // Update ref with the final read state
-            if (finalTimestamp > 0) {
-              readStateRef.current.set(sessionId, { lastReadMessageTimestamp: finalTimestamp });
-            }
-
-            // For claude-code sessions, don't use tokenUsage from database reload
-            // Token usage for claude-code comes ONLY from /context command via ai:tokenUsageUpdated IPC
-            // This prevents stale data from showing before fresh /context data arrives
-            const preserveTokenUsage = sessionData.provider === 'claude-code';
-
-            return {
-              ...tab,
-              name: sessionData.title || tab.name,
-              isArchived: sessionData.isArchived,
-              sessionData: {
-                ...sessionData,
-                messages,
-                lastReadMessageTimestamp: finalTimestamp,
-                // Keep existing tokenUsage for claude-code, use database value for other providers
-                tokenUsage: preserveTokenUsage ? tab.sessionData.tokenUsage : sessionData.tokenUsage
-              }
-            };
-          }));
-        }
-      } catch (err) {
-        console.error(`[AgenticPanel] Failed to reload session${reason ? ` (${reason})` : ''}:`, err);
-      } finally {
-        reloadInProgressRef.current.delete(sessionId);
-      }
-    };
-
-    const now = Date.now();
-    const lastReload = lastReloadMap.get(sessionId) ?? 0;
-
-    if (immediate) {
-      const existing = timers.get(sessionId);
-      if (existing) {
-        clearTimeout(existing);
-        timers.delete(sessionId);
-      }
-      void executeReload();
-      return;
-    }
-
-    if (now - lastReload >= minInterval) {
-      const existing = timers.get(sessionId);
-      if (existing) {
-        clearTimeout(existing);
-        timers.delete(sessionId);
-      }
-      void executeReload();
-      return;
-    }
-
-    const delay = Math.max(0, minInterval - (now - lastReload));
-    const existing = timers.get(sessionId);
-    if (existing) {
-      clearTimeout(existing);
-    }
-    timers.set(sessionId, setTimeout(() => {
-      timers.delete(sessionId);
-      void executeReload();
-    }, delay));
-  }, []); // No dependencies - uses refs for all values
+  // REMOVED: scheduleSessionReload
+  // Session data is now managed via sessionDataAtom in AISessionView/SessionTranscript.
+  // Each session view loads and manages its own data through atoms, eliminating the need
+  // for AgenticPanel to reload session data into tabs.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const scheduleSessionReload = useCallback((_sessionId: string, _options?: { immediate?: boolean; reason?: string; minInterval?: number }) => {
+    // No-op: session data is now managed via atoms
+  }, []);
 
   // Persist worktree modes to workspace state (debounced to prevent race conditions)
   const persistWorktreeModes = useCallback((modes: Map<string, WorktreeContentMode>) => {
@@ -814,8 +655,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         updateWindowTitle(existingTab.name);
         await markSessionAsRead(sessionId);
         // Switch to agent mode for this worktree when selecting a session
-        if (existingTab.sessionData.worktreeId) {
-          handleWorktreeModeChange(existingTab.sessionData.worktreeId, 'agent');
+        if (existingTab.worktreeId) {
+          handleWorktreeModeChange(existingTab.worktreeId, 'agent');
         }
         return;
       }
@@ -841,24 +682,18 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           ? `Plan: ${getFileName(planPath)}`
           : sessionData.title || `Session ${sessionTabs.length + 1}`;
 
-        // For claude-code sessions, don't use tokenUsage from database when opening tab
-        // Token usage for claude-code comes ONLY from /context command via ai:tokenUsageUpdated IPC
-        const sessionDataForTab = sessionData.provider === 'claude-code'
-          ? { ...sessionData, tokenUsage: undefined }
-          : sessionData;
-
         // Initialize draft input atom if session has saved draft
         if (sessionData.draftInput) {
           store.set(sessionDraftInputAtom(sessionData.id), sessionData.draftInput);
         }
 
+        // Create minimal tab - session data is loaded via atoms in AISessionView
         const newTab: SessionTab = {
           id: sessionData.id,
           name: tabName,
-          sessionData: sessionDataForTab,
-          mode: sessionData.mode || 'agent',
-          model: sessionData.model || sessionData.provider || 'claude-code',
-          isArchived: sessionData.isArchived
+          sessionType: sessionData.sessionType,
+          worktreeId: sessionData.worktreeId,
+          worktreePath: sessionData.worktreePath,
         };
 
         // console.log('[AgenticPanel] Created new tab:', newTab);
@@ -960,7 +795,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
     // Find all sessions for this worktree
     const worktreeSessions = sessionTabsRef.current.filter(
-      tab => tab?.sessionData?.worktreeId === worktreeId
+      tab => tab?.worktreeId === worktreeId
     );
 
     console.log('[AgenticPanel] Found worktree sessions to close:', worktreeSessions.map(s => s.id));
@@ -1016,6 +851,21 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       errorNotificationService.showError('Archive Failed', 'Failed to archive session');
     }
   }, [closeArchivedSession]);
+
+  // Navigate to a session (e.g., after creating a workstream)
+  // Opens the session in a tab and switches to it
+  const handleNavigateToSession = useCallback(async (sessionId: string) => {
+    try {
+      // Open the session in a tab (will also set it as active)
+      if (openSessionInTabRef.current) {
+        await openSessionInTabRef.current(sessionId);
+      }
+      // Refresh session history to show new structure
+      setSessionHistoryRefreshTrigger(prev => prev + 1);
+    } catch (err) {
+      console.error('[AgenticPanel] Failed to navigate to session:', err);
+    }
+  }, []);
 
   // Unarchive a session (for archived sessions that are opened)
   const handleUnarchive = useCallback(async (sessionId: string) => {
@@ -1139,9 +989,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     const newTab: SessionTab = {
       id: sessionData.id,
       name: tabName,
-      sessionData,
-      mode: sessionData.mode || 'agent',
-      model: sessionData.model || defaultModel
+      sessionType: sessionData.sessionType,
+      worktreeId: sessionData.worktreeId,
+      worktreePath: sessionData.worktreePath,
     };
 
     if (mode === 'chat') {
@@ -1218,17 +1068,13 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       }
 
       // Count existing terminals for naming
-      const terminalCount = sessionTabs.filter(t => t.sessionData.sessionType === 'terminal').length;
+      const terminalCount = sessionTabs.filter(t => t.sessionType === 'terminal').length;
       const tabName = terminalCount > 0 ? `Terminal ${terminalCount + 1}` : 'Terminal';
 
       const newTab: SessionTab = {
         id: sessionData.id,
         name: tabName,
-        sessionData: {
-          ...sessionData,
-          sessionType: 'terminal',
-        },
-        mode: 'agent',
+        sessionType: 'terminal',
       };
 
       if (mode === 'chat') {
@@ -1324,9 +1170,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       const newTab: SessionTab = {
         id: sessionData.id,
         name: tabName,
-        sessionData,
-        mode: 'agent',
-        model: defaultModel
+        sessionType: sessionData.sessionType,
+        worktreeId: sessionData.worktreeId,
+        worktreePath: sessionData.worktreePath,
       };
 
       if (mode === 'chat') {
@@ -1465,9 +1311,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       const newTab: SessionTab = {
         id: sessionData.id,
         name: tabName,
-        sessionData,
-        mode: 'agent',
-        model: defaultModel
+        sessionType: sessionData.sessionType,
+        worktreeId: sessionData.worktreeId,
+        worktreePath: sessionData.worktreePath,
       };
 
       if (mode === 'chat') {
@@ -1531,7 +1377,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
       // Count existing terminals in this worktree for naming
       const worktreeTerminalCount = sessionTabs.filter(
-        t => t.sessionData.sessionType === 'terminal' && t.sessionData.worktreeId === worktreeId
+        t => t.sessionType === 'terminal' && t.worktreeId === worktreeId
       ).length;
       const tabName = worktreeTerminalCount > 0
         ? `Terminal (${worktree.displayName || worktree.name}) ${worktreeTerminalCount + 1}`
@@ -1540,13 +1386,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       const newTab: SessionTab = {
         id: sessionData.id,
         name: tabName,
-        sessionData: {
-          ...sessionData,
-          sessionType: 'terminal',
-          worktreeId: worktree.id,
-          worktreePath: worktree.path,
-        },
-        mode: 'agent',
+        sessionType: 'terminal',
+        worktreeId: worktree.id,
+        worktreePath: worktree.path,
       };
 
       if (mode === 'chat') {
@@ -1624,32 +1466,19 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                     restoredTabs.push({
                       id: sessionId,
                       name: savedTab.fileName,
-                      sessionData,
                       isPinned: savedTab.isPinned,
-                      mode: sessionData.mode || 'agent',
-                      model: sessionData.model || sessionData.provider || 'claude-code',
-                      isArchived: sessionData.isArchived
+                      sessionType: sessionData.sessionType,
+                      worktreeId: sessionData.worktreeId,
+                      worktreePath: sessionData.worktreePath,
                     });
                   }
                 } else {
                   placeholderCount++;
-                  // Create placeholder for background tabs - they'll load when activated
-                  // Draft input will be initialized when tab becomes active and session loads
+                  // Create placeholder for background tabs - data loads via atoms when activated
                   restoredTabs.push({
                     id: sessionId,
                     name: savedTab.fileName,
-                    sessionData: {
-                      id: sessionId,
-                      title: savedTab.fileName,
-                      messages: [], // Empty - will load when tab becomes active
-                      provider: 'claude-code',
-                      createdAt: Date.now(),
-                      updatedAt: Date.now(),
-                      _needsLoad: true, // Flag to indicate lazy loading needed
-                    } as any,
                     isPinned: savedTab.isPinned,
-                    mode: 'agent',
-                    model: 'claude-code'
                   });
                 }
               } catch (err) {
@@ -1690,9 +1519,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                 const tab: SessionTab = {
                   id: sessionData.id,
                   name: sessionData.title || 'Session',
-                  sessionData,
-                  mode: sessionData.mode || 'agent',
-                  model: sessionData.model || sessionData.provider || 'claude-code'
+                  sessionType: sessionData.sessionType,
+                  worktreeId: sessionData.worktreeId,
+                  worktreePath: sessionData.worktreePath,
                 };
 
                 setSessionTabs([tab]);
@@ -1725,9 +1554,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             const tab: SessionTab = {
               id: sessionData.id,
               name: tabName,
-              sessionData,
-              mode: sessionData.mode || 'agent',
-              model: sessionData.model || sessionData.provider || 'claude-code'
+              sessionType: sessionData.sessionType,
+              worktreeId: sessionData.worktreeId,
+              worktreePath: sessionData.worktreePath,
             };
 
             setSessionTabs([tab]);
@@ -1863,32 +1692,18 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         setTimeout(async () => {
           const tab = sessionTabsRef.current.find(t => t.id === data.sessionId);
           if (tab) {
-            const messages = tab.sessionData.messages || [];
+            // Get messages from atom (source of truth)
+            const sessionData = store.get(sessionDataAtom(data.sessionId));
+            const messages = sessionData?.messages || [];
             const lastMessage = messages[messages.length - 1];
             const lastMessageTimestamp = lastMessage?.timestamp ?? null;
-
-            // console.log(`[AgenticPanel] Auto-marking active session ${data.sessionId} as read after message completion (timestamp: ${lastMessageTimestamp})`);
 
             // Update ref immediately
             readStateRef.current.set(data.sessionId, {
               lastReadMessageTimestamp: lastMessageTimestamp
             });
 
-            // Update state
-            setSessionTabs(prev => prev.filter(t => t != null).map(t => {
-              if (t.id === data.sessionId) {
-                return {
-                  ...t,
-                  sessionData: {
-                    ...t.sessionData,
-                    lastReadMessageTimestamp: lastMessageTimestamp
-                  }
-                };
-              }
-              return t;
-            }));
-
-            // Persist to database
+            // Persist read state to database
             await window.electronAPI.invoke('sessions:mark-read', data.sessionId, lastMessageTimestamp);
           }
         }, 300); // Delay to allow reload to complete
@@ -1949,17 +1764,10 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     const handleSessionTitleUpdated = (data: { sessionId: string; title: string }) => {
       if (!data || !data.sessionId || !data.title) return;
 
-      // Update session tabs if the session is open
+      // Update session tab name if the session is open
       setSessionTabs(prev => prev.map(tab => {
         if (tab && tab.id === data.sessionId) {
-          return {
-            ...tab,
-            name: data.title,
-            sessionData: {
-              ...tab.sessionData,
-              title: data.title
-            }
-          };
+          return { ...tab, name: data.title };
         }
         return tab;
       }));
@@ -2202,7 +2010,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           setTimeout(async () => {
             const tab = sessionTabsRef.current.find(t => t.id === data.sessionId);
             if (tab) {
-              const messages = tab.sessionData.messages || [];
+              // Get messages from atom (source of truth)
+              const sessionData = store.get(sessionDataAtom(data.sessionId));
+              const messages = sessionData?.messages || [];
               const lastMessage = messages[messages.length - 1];
               const lastMessageTimestamp = lastMessage?.timestamp ?? null;
 
@@ -2212,21 +2022,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                   lastReadMessageTimestamp: lastMessageTimestamp
                 });
 
-                // Update local state immediately for responsive UI
-                setSessionTabs(prev => prev.filter(t => t != null).map(t => {
-                  if (t.id === data.sessionId) {
-                    return {
-                      ...t,
-                      sessionData: {
-                        ...t.sessionData,
-                        lastReadMessageTimestamp: lastMessageTimestamp
-                      }
-                    };
-                  }
-                  return t;
-                }));
-
-                // Persist to database (don't await, fire and forget)
+                // Persist to database
                 window.electronAPI.invoke('sessions:mark-read', data.sessionId, lastMessageTimestamp).catch(err => {
                   console.error('[AgenticPanel] Failed to mark active session as read:', err);
                 });
@@ -2277,24 +2073,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       }
     }) => {
       if (!data || !data.sessionId) return;
-      // Update token usage in state
-      setSessionTabs(prev => prev.filter(tab => tab != null).map(tab => {
-        if (tab.id !== data.sessionId) return tab;
-        return {
-          ...tab,
-          sessionData: {
-            ...tab.sessionData,
-            tokenUsage: data.tokenUsage
-          }
-        };
-      }));
-
-      // Reload session to get filtered messages (removes /context messages)
-      scheduleSessionReload(data.sessionId, {
-        reason: 'token-usage-updated',
-        immediate: true,  // Reload immediately to show updated messages
-        minInterval: 0
-      });
+      // Token usage is now managed via atoms - SessionTranscript handles this IPC event
+      // No need to update local state here
     };
 
     const cleanupTokenUsageUpdated = window.electronAPI.on('ai:tokenUsageUpdated', handleTokenUsageUpdated);
@@ -2433,8 +2213,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     const currentTab = sessionTabs.filter(tab => tab != null).find(tab => tab.id === sessionId);
     if (!currentTab) return;
 
-    // Extract user prompts from session messages, stripping system messages
-    const userPrompts = currentTab.sessionData.messages
+    // Extract user prompts from session messages (from atom), stripping system messages
+    const sessionData = store.get(sessionDataAtom(sessionId));
+    const userPrompts = (sessionData?.messages || [])
       .filter(msg => msg.role === 'user')
       .map(msg => stripSystemMessage(msg.content));
 
@@ -2494,51 +2275,20 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     }
   }, [sessionTabs, historyPosition, savedDraft]);
 
-  // Handle mode change (plan <-> agent)
-  const handleModeChange = useCallback(async (sessionId: string, newMode: AIMode) => {
-    // Update local state
-    setSessionTabs(prev => prev.filter(tab => tab != null).map(tab =>
-      tab.id === sessionId ? { ...tab, mode: newMode } : tab
-    ));
-
-    // Persist mode to database
-    try {
-      await window.electronAPI.invoke('sessions:update-metadata', sessionId, { mode: newMode });
-    } catch (error) {
-      console.error('[AgenticPanel] Failed to update session mode:', error);
-    }
+  // Handle mode change (plan <-> agent) - now handled by SessionTranscript
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const handleModeChange = useCallback(async (_sessionId: string, _newMode: AIMode) => {
+    // Mode is managed via atoms in SessionTranscript
   }, []);
 
-  // Handle model change
+  // Handle model change - now handled by SessionTranscript
   const handleModelChange = useCallback(async (sessionId: string, newModel: string) => {
-    console.log(`[AgenticPanel] handleModelChange called - sessionId: ${sessionId}, newModel: ${newModel}`);
-
     // Parse provider from model ID (format: "provider:model" or just "provider")
     const [newProvider, ...modelParts] = newModel.split(':');
-    const actualModel = modelParts.length > 0 ? modelParts.join(':') : newModel;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const _actualModel = modelParts.length > 0 ? modelParts.join(':') : newModel;
 
-    console.log(`[AgenticPanel] Parsed provider: ${newProvider}, model: ${actualModel}`);
-
-    // Update local state immediately for responsive UI
-    setSessionTabs(prev => prev.filter(tab => tab != null).map(tab => {
-      if (tab.id === sessionId) {
-        console.log(`[AgenticPanel] Updating tab ${tab.id}:`);
-        console.log(`  - provider: ${tab.sessionData.provider} -> ${newProvider}`);
-        console.log(`  - model: ${tab.model} -> ${newModel}`);
-        console.log(`  - sessionData.model: ${tab.sessionData.model} -> ${newModel}`);
-        return {
-          ...tab,
-          model: newModel,
-          // Also update sessionData with both provider and model
-          sessionData: {
-            ...tab.sessionData,
-            provider: newProvider as any,
-            model: newModel
-          }
-        };
-      }
-      return tab;
-    }));
+    // Session data is managed via atoms - just persist to database
 
     // Persist both provider and model changes to session data in database
     try {
@@ -2604,51 +2354,13 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     store.set(sessionProcessingAtom(sessionId), true);
 
     // Get the session to determine sessionType and workspace path
+    // Session data is managed via atoms - just use tab's minimal data
     const currentTab = sessionTabs.filter(tab => tab != null).find(tab => tab.id === sessionId);
-    const sessionType = currentTab?.sessionData?.sessionType || (mode === 'agent' ? 'coding' : 'chat');
-    // Use the session's workspacePath (where it was created), not worktreePath (which is just metadata)
-    const effectiveWorkspacePath = currentTab?.sessionData?.workspacePath || workspacePath;
+    const sessionType = currentTab?.sessionType || (mode === 'agent' ? 'coding' : 'chat');
+    const effectiveWorkspacePath = currentTab?.worktreePath || workspacePath;
 
-    // Add user message immediately
-    setSessionTabs(prev => {
-      const existingTab = prev.find(tab => tab?.id === sessionId);
-
-      if (!existingTab) {
-        console.warn('[AgenticPanel] Tab not found in state when trying to add user message:', {
-          sessionId,
-          availableTabs: prev.map(t => t?.id),
-          queuedPromptId
-        });
-        return prev;
-      }
-
-      console.log('[AgenticPanel] Adding user message to transcript:', {
-        sessionId,
-        messagePreview: message.substring(0, 50),
-        queuedPromptId,
-        existingMessageCount: existingTab.sessionData.messages?.length || 0
-      });
-
-      const userMessage = {
-        role: 'user' as const,
-        content: message,
-        timestamp: Date.now(),
-        attachments: attachments.length > 0 ? attachments : undefined
-      };
-
-      return prev.filter(tab => tab != null).map(tab => {
-        if (tab.id === sessionId) {
-          return {
-            ...tab,
-            sessionData: {
-              ...tab.sessionData,
-              messages: [...tab.sessionData.messages, userMessage]
-            }
-          };
-        }
-        return tab;
-      });
-    });
+    // NOTE: User message is now added optimistically by SessionTranscript via atoms
+    // No need to update sessionTabs here - atoms handle this
 
     try {
       // Prepare document context - strip out non-serializable functions
@@ -2845,12 +2557,12 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           const newTab: SessionTab = {
             id: sessionData.id,
             name: `Session ${prev.length + 1}`,
-            sessionData,
-            mode: sessionData.mode || 'agent',
-            model: sessionData.model || 'claude-sonnet-4-5-20250929'
+            sessionType: sessionData.sessionType,
+            worktreeId: sessionData.worktreeId,
+            worktreePath: sessionData.worktreePath,
           };
 
-          console.log('[AgenticPanel] Creating new tab:', { tabId: newTab.id, tabName: newTab.name, mode: newTab.mode });
+          console.log('[AgenticPanel] Creating new tab:', { tabId: newTab.id, tabName: newTab.name });
           const updated = [...prev, newTab];
           console.log('[AgenticPanel] Updated sessionTabs:', updated.map(t => ({ id: t.id, name: t.name })));
           return updated;
@@ -3059,7 +2771,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
     // If this is a terminal session, destroy the PTY process
     // Terminal sessions should not be reopenable from history since PTY state is lost
-    if (closingTab && closingTab.sessionData.sessionType === 'terminal') {
+    if (closingTab && closingTab.sessionType === 'terminal') {
       try {
         await window.electronAPI.terminal.destroy(tabId);
         console.log(`[AgenticPanel] Destroyed PTY for terminal session ${tabId}`);
@@ -3094,8 +2806,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // Handle file click - route to worktree editor if applicable
   const handleFileClick = useCallback(async (sessionId: string, filePath: string) => {
     const tab = sessionTabsRef.current.find(t => t.id === sessionId);
-    const worktreeId = tab?.sessionData.worktreeId;
-    const isWorktreeSession = Boolean(worktreeId && tab?.sessionData.worktreePath);
+    const worktreeId = tab?.worktreeId;
+    const isWorktreeSession = Boolean(worktreeId && tab?.worktreePath);
 
     if (isWorktreeSession && worktreeId) {
       const currentMode = worktreeModesRef.current.get(worktreeId) ?? 'agent';
@@ -3191,7 +2903,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       setClosedSessions(remaining);
 
       // Reopen the session in a new tab
-      openSessionInTab(lastClosed.sessionData.id);
+      openSessionInTab(lastClosed.id);
     },
     nextTab: () => {
       const filtered = sessionTabs.filter(t => t != null);
@@ -3303,46 +3015,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     }
   }, [loadSessions, workspacePath, triggerSessionHistoryRefresh]);
 
-  // Helper to determine if a session has unread messages
-  const hasUnreadMessages = useCallback((tab: SessionTab): boolean => {
-    const messages = tab.sessionData.messages || [];
-    if (messages.length === 0) return false;
-
-    // Get the last message
-    const lastMessage = messages[messages.length - 1];
-
-    // Only consider it unread if last message is from assistant
-    if (lastMessage.role !== 'assistant') {
-      return false;
-    }
-
-    // Check read state from ref first (synchronous, most up-to-date)
-    // Fall back to session data if ref doesn't have it
-    const refReadState = readStateRef.current.get(tab.id);
-    const lastReadMessageTimestamp = refReadState?.lastReadMessageTimestamp ?? tab.sessionData.lastReadMessageTimestamp;
-    const lastMessageTimestamp = lastMessage.timestamp;
-
-    // console.log(`[AgenticPanel] hasUnreadMessages check for session ${tab.id}:`, {
-    //   lastMessageTimestamp,
-    //   lastReadMessageTimestamp,
-    //   refHasData: !!refReadState,
-    //   messagesLength: messages.length
-    // });
-
-    // If no read state is tracked yet (undefined or null), consider it unread
-    if (!lastReadMessageTimestamp) {
-      // console.log(`[AgenticPanel] Session ${tab.id} has no read state - marking as unread`);
-      return true;
-    }
-
-    // Check if the last message is newer than the last read message
-    const isUnread = lastMessageTimestamp > lastReadMessageTimestamp;
-    // console.log(`[AgenticPanel] Session ${tab.id} unread status: ${isUnread} (last message: ${lastMessageTimestamp}, last read: ${lastReadMessageTimestamp})`);
-
-    return isUnread;
-  }, []);
-
-  // Note: Processing and unread state is now managed via Jotai atoms
+  // NOTE: hasUnreadMessages was removed - unread state is now managed via sessionUnreadAtom
   // SessionListItem subscribes to sessionProcessingAtom and sessionUnreadAtom directly
   // No more useMemo here - this removes the re-render cascade when status changes
 
@@ -3436,9 +3109,6 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             workspacePath={workspacePath}
             documentContext={documentContext}
             onNavigateHistory={handleNavigateHistory}
-            fileMentionOptions={fileMentionOptions}
-            onFileMentionSearch={handleFileMentionSearch}
-            onFileMentionSelect={handleFileMentionSelect}
             onFileClick={(filePath) => handleFileClick(activeTab.id, filePath)}
             onCloseAndArchive={handleCloseAndArchive}
             onSessionTitleChanged={handleSessionTitleChanged}
@@ -3517,7 +3187,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             {/* Session views - each AISessionView now renders its own header and sidebar */}
             {sessionTabs.filter(tab => tab != null).map(tab => {
               // Terminal sessions render TerminalPanel (check first, before worktree)
-              if (tab.sessionData.sessionType === 'terminal') {
+              if (tab.sessionType === 'terminal') {
                 return (
                   <div
                     key={tab.id}
@@ -3532,59 +3202,16 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                   >
                     <TerminalPanel
                       sessionId={tab.id}
-                      workspacePath={tab.sessionData.worktreePath || workspacePath}
+                      workspacePath={tab.worktreePath || workspacePath}
                       isActive={tab.id === activeTabId}
                     />
                   </div>
                 );
               }
 
-              const isWorktreeSession = Boolean(tab.sessionData.worktreeId && tab.sessionData.worktreePath);
-              const currentMode: WorktreeContentMode = tab.sessionData.worktreeId
-                ? (worktreeModes.get(tab.sessionData.worktreeId) ?? 'agent')
-                : 'agent';
-
-              // Always render WorktreeFilesMode for worktree sessions to preserve tab state
-              if (isWorktreeSession && tab.sessionData.worktreePath) {
-                return (
-                  <WorktreeFilesMode
-                    key={`worktree-${tab.id}`}
-                    ref={getWorktreeFilesModeRef(tab.id)}
-                    sessionId={tab.id}
-                    sessionData={tab.sessionData}
-                    worktreePath={tab.sessionData.worktreePath}
-                    workspacePath={workspacePath}
-                    isActive={tab.id === activeTabId}
-                    mode={currentMode}
-                    onMounted={handleWorktreeFilesModeMounted}
-                    onMaximize={tab.sessionData.worktreeId ? () => handleWorktreeModeChange(tab.sessionData.worktreeId!, 'agent') : undefined}
-                    onArchived={() => {
-                      if (tab.sessionData.worktreeId) {
-                        console.log('[AgenticPanel] onArchived called, closing all sessions for worktreeId:', tab.sessionData.worktreeId);
-                        closeArchivedWorktree(tab.sessionData.worktreeId);
-                      }
-                    }}
-                    chatPanel={(
-                      <AISessionView
-                        key={`chat-${tab.id}`}
-                        ref={getSessionViewRef(tab.id)}
-                        sessionId={tab.id}
-                        mode={currentMode === 'agent' ? 'agent' : 'chat'}
-                        isActive={tab.id === activeTabId}
-                        workspacePath={workspacePath}
-                        documentContext={documentContext}
-                        onNavigateHistory={handleNavigateHistory}
-                        fileMentionOptions={fileMentionOptions}
-                        onFileMentionSearch={handleFileMentionSearch}
-                        onFileMentionSelect={handleFileMentionSelect}
-                        onFileClick={(filePath) => handleFileClick(tab.id, filePath)}
-                        onCloseAndArchive={handleCloseAndArchive}
-                        onSessionTitleChanged={handleSessionTitleChanged}
-                      />
-                    )}
-                  />
-                );
-              }
+              // TEMP: Worktree sessions are disabled - skip worktree rendering
+              // const isWorktreeSession = Boolean(tab.worktreeId && tab.worktreePath);
+              // if (isWorktreeSession && tab.worktreePath) { ... }
 
               // Non-worktree sessions render standalone AISessionView
               // AISessionView now handles its own header and sidebar internally
@@ -3599,12 +3226,10 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                   isActive={tab.id === activeTabId}
                   workspacePath={workspacePath}
                   onNavigateHistory={handleNavigateHistory}
-                  fileMentionOptions={fileMentionOptions}
-                  onFileMentionSearch={handleFileMentionSearch}
-                  onFileMentionSelect={handleFileMentionSelect}
                   onFileClick={(filePath) => handleFileClick(tab.id, filePath)}
                   onCloseAndArchive={handleCloseAndArchive}
                   onSessionTitleChanged={handleSessionTitleChanged}
+                  onNavigateToSession={handleNavigateToSession}
                 />
               );
             })}

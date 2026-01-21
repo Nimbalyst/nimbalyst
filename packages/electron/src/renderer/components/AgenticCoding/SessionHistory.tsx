@@ -4,13 +4,14 @@ import { CollapsibleGroup } from './CollapsibleGroup';
 import { SessionListItem } from './SessionListItem';
 import { WorktreeGroup } from './WorktreeGroup';
 import { WorktreeSingle } from './WorktreeSingle';
+import { WorkstreamGroup } from './WorkstreamGroup';
 import { ArchiveProgress } from './ArchiveProgress';
 import { IndexBuildDialog } from './IndexBuildDialog';
 import { getTimeGroupKey, TimeGroupKey } from '../../utils/dateFormatting';
 import { getFileName } from '../../utils/pathUtils';
 import { KeyboardShortcuts, getShortcutDisplay } from '../../../shared/KeyboardShortcuts';
 import {
-  sessionListFullAtom,
+  sessionListRootAtom,
   sessionListLoadingAtom,
   showArchivedSessionsAtom,
   refreshSessionListAtom,
@@ -35,7 +36,11 @@ interface SessionItem {
   isArchived?: boolean;
   isPinned?: boolean; // Whether this session is pinned to the top
   worktree_id?: string | null; // Associated worktree ID if this is a worktree session
-  parentSessionId?: string; // ID of parent session if this is a branch
+  childCount?: number; // Number of child sessions (workstream indicator)
+  parentSessionId?: string | null; // Parent session ID for hierarchical workstreams
+  projectPath?: string; // Workspace path for drag-drop validation
+  // Branch tracking - SEPARATE from hierarchical parentSessionId
+  branchedFromSessionId?: string; // ID of session this was forked from
   branchPointMessageId?: number; // Message ID where this branch diverged
   branchedAt?: number; // Timestamp when this session was branched
 }
@@ -70,6 +75,7 @@ interface SessionHistoryProps {
   renamedWorktree?: { worktreeId: string; displayName: string } | null; // Worktree that just got a display name
   updatedSession?: { id: string; timestamp: number } | null; // Session that was just updated
   onSessionSelect: (sessionId: string) => void;
+  onChildSessionSelect?: (childSessionId: string, parentId: string, parentType: 'workstream' | 'worktree') => void;
   onSessionDelete?: (sessionId: string) => void;
   onSessionArchive?: (sessionId: string) => void; // Callback when session is archived (to close tab)
   onSessionRename?: (sessionId: string, newName: string) => void; // Callback when session is renamed
@@ -199,7 +205,8 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   mode = 'agent'
 }) => {
   // === Atom subscriptions for session list ===
-  const allSessionsFromAtom = useAtomValue(sessionListFullAtom);
+  // Use sessionListRootAtom to only show root sessions (not children of workstreams)
+  const allSessionsFromAtom = useAtomValue(sessionListRootAtom);
   const atomLoading = useAtomValue(sessionListLoadingAtom);
   const showArchivedAtom = useAtomValue(showArchivedSessionsAtom);
   const setShowArchivedAtom = useSetAtom(showArchivedSessionsAtom);
@@ -223,6 +230,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       isArchived: s.isArchived || false,
       isPinned: s.isPinned || false,
       worktree_id: s.worktreeId || null,
+      childCount: s.childCount || 0,
+      parentSessionId: s.parentSessionId || null,
+      projectPath: s.projectPath,
     }));
   }, [allSessionsFromAtom]);
 
@@ -244,6 +254,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
   const [lastSelectedId, setLastSelectedId] = useState<string | null>(null); // For shift+click range selection
   const [worktreeCache, setWorktreeCache] = useState<Map<string, WorktreeWithStatus>>(new Map()); // Cache worktree data
+  const [workstreamChildrenCache, setWorkstreamChildrenCache] = useState<Map<string, SessionItem[]>>(new Map()); // Cache workstream children
 
   // FTS index build dialog state
   const [showIndexDialog, setShowIndexDialog] = useState(false);
@@ -311,7 +322,10 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
           isProcessing: false,
           hasUnread: false,
           isArchived: s.isArchived || false,
-          worktree_id: s.worktreeId || null
+          worktree_id: s.worktreeId || null,
+          childCount: s.childCount || 0,
+          parentSessionId: s.parentSessionId || null,
+          projectPath: s.projectPath,
         }));
 
         // Filter out worktree sessions in non-agent mode
@@ -362,11 +376,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     // Reset content search trigger when query changes
     setContentSearchTriggered(false);
 
-    // Filter out worktree sessions in non-agent mode
+    // Filter out sessions that belong to worktrees (they're shown in WorktreeGroup instead)
+    // But keep standalone worktree sessions that should appear as WorktreeSingle
     let sessionsToFilter = allSessions;
-    if (mode !== 'agent') {
-      sessionsToFilter = allSessions.filter(session => !session.worktree_id);
-    }
 
     if (!searchQuery.trim()) {
       // No search query - show all sessions (filtered by mode)
@@ -783,9 +795,10 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     return Array.from(worktreeGroupsData.keys());
   }, [worktreeGroupsData]);
 
-  // Create unified list items that can be either a session or a worktree group
+  // Create unified list items that can be a session, workstream, or worktree group
   type UnifiedListItem =
     | { type: 'session'; session: SessionItem; timestamp: number }
+    | { type: 'workstream'; session: SessionItem; sessions: SessionItem[]; timestamp: number }
     | { type: 'worktree'; worktreeId: string; sessions: SessionItem[]; timestamp: number };
 
   // Build unified time-grouped data with both sessions and worktrees interleaved
@@ -794,16 +807,32 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     const items: UnifiedListItem[] = [];
     const pinnedItems: UnifiedListItem[] = [];
 
-    // Add regular sessions (those without worktree_id)
+    // Add regular sessions and workstreams (those without worktree_id)
     for (const session of sessions) {
       if (!session.worktree_id) {
         const timestamp = timestampField === 'updatedAt' ? (session.updatedAt || session.createdAt) : session.createdAt;
-        const item = { type: 'session' as const, session, timestamp };
 
-        if (session.isPinned) {
-          pinnedItems.push(item);
+        // Check if this is a workstream (has children)
+        const isWorkstream = (session.childCount ?? 0) > 0;
+        if (isWorkstream) {
+          // Create workstream item with cached children (or empty array if not loaded yet)
+          const cachedChildren = workstreamChildrenCache.get(session.id) || [];
+          const item = { type: 'workstream' as const, session, sessions: cachedChildren, timestamp };
+
+          if (session.isPinned) {
+            pinnedItems.push(item);
+          } else {
+            items.push(item);
+          }
         } else {
-          items.push(item);
+          // Regular session
+          const item = { type: 'session' as const, session, timestamp };
+
+          if (session.isPinned) {
+            pinnedItems.push(item);
+          } else {
+            items.push(item);
+          }
         }
       }
     }
@@ -864,7 +893,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     }
 
     return result as Record<TimeGroupKey | 'Pinned', UnifiedListItem[]>;
-  }, [sessions, worktreeGroupsData, sortBy, worktreeCache]);
+  }, [sessions, worktreeGroupsData, sortBy, worktreeCache, workstreamChildrenCache]);
 
   const groupKeys = Object.keys(groupedItems) as (TimeGroupKey | 'Pinned')[];
 
@@ -897,6 +926,52 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
 
     fetchBatch();
   }, [sortedWorktreeIds, worktreeCache]);
+
+  // Fetch children for expanded workstreams
+  useEffect(() => {
+    // Find workstream sessions that are expanded but don't have cached children
+    const workstreamSessions = sessions.filter(s =>
+      !s.worktree_id &&
+      (s.childCount ?? 0) > 0 &&
+      !collapsedGroups.includes(`workstream:${s.id}`) &&
+      !workstreamChildrenCache.has(s.id)
+    );
+
+    if (workstreamSessions.length === 0) {
+      return;
+    }
+
+    const fetchChildren = async () => {
+      for (const session of workstreamSessions) {
+        try {
+          const result = await window.electronAPI.invoke('sessions:list-children', session.id, workspacePath);
+          if (result.success && Array.isArray(result.children)) {
+            const children: SessionItem[] = result.children.map((c: any) => ({
+              id: c.id,
+              title: c.title || c.name || 'Untitled Session',
+              createdAt: c.createdAt,
+              updatedAt: c.updatedAt,
+              provider: c.provider || 'claude',
+              model: c.model,
+              sessionType: c.sessionType || 'chat',
+              messageCount: c.messageCount || 0,
+              isArchived: c.isArchived || false,
+              isPinned: c.isPinned || false,
+            }));
+            setWorkstreamChildrenCache(prev => {
+              const updated = new Map(prev);
+              updated.set(session.id, children);
+              return updated;
+            });
+          }
+        } catch (err) {
+          console.error(`[SessionHistory] Failed to fetch children for workstream ${session.id}:`, err);
+        }
+      }
+    };
+
+    fetchChildren();
+  }, [sessions, collapsedGroups, workstreamChildrenCache, workspacePath]);
 
   if (loading) {
     return (
@@ -1500,33 +1575,73 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                 >
                   {items.map(item => {
                     if (item.type === 'worktree') {
+                      // Worktree group - use new unified WorkstreamGroup
                       const worktreeData = worktreeCache.get(item.worktreeId);
                       const isWorktreeExpanded = !collapsedGroups.includes(`worktree:${item.worktreeId}`);
 
                       return (
-                        <WorktreeGroup
+                        <WorkstreamGroup
                           key={`worktree-${item.worktreeId}`}
-                          worktree={worktreeData || { id: item.worktreeId, name: 'Loading...', path: '', branch: '' }}
-                          gitStatus={worktreeData?.gitStatus}
+                          type="worktree"
+                          id={item.worktreeId}
+                          title={worktreeData?.displayName || worktreeData?.name || 'Loading...'}
+                          isExpanded={isWorktreeExpanded}
+                          isActive={item.sessions.some(s => s.id === activeSessionId)}
+                          onToggle={() => handleToggleGroup(`worktree:${item.worktreeId}`)}
+                          onSelect={() => {
+                            // Select first session in worktree when clicking header
+                            const firstSession = item.sessions[0];
+                            if (firstSession) {
+                              onSessionSelect(firstSession.id);
+                            }
+                          }}
                           sessions={item.sessions}
                           activeSessionId={activeSessionId}
-                          isExpanded={isWorktreeExpanded}
-                          onToggle={() => handleToggleGroup(`worktree:${item.worktreeId}`)}
                           onSessionSelect={onSessionSelect}
-                          onAddSession={onAddSessionToWorktree || (() => {})}
-                          onAddTerminal={onAddTerminalToWorktree}
                           onSessionDelete={onSessionDelete ? handleDeleteSession : undefined}
                           onSessionArchive={handleArchiveSession}
-                          onWorktreePinToggle={handleWorktreePinToggle}
-                          onWorktreeArchive={handleArchiveWorktree}
-                          onWorktreeRename={handleWorktreeRename}
                           onSessionPinToggle={handleSessionPinToggle}
                           onSessionRename={onSessionRename}
+                          worktree={worktreeData || { id: item.worktreeId, name: 'Loading...', path: '', branch: '' }}
+                          gitStatus={worktreeData?.gitStatus}
+                          onWorktreePinToggle={handleWorktreePinToggle}
+                          onWorktreeArchive={handleArchiveWorktree}
                           onFilesMode={onWorktreeFilesMode}
                           onChangesMode={onWorktreeChangesMode}
+                          onAddSession={onAddSessionToWorktree}
+                          onAddTerminal={onAddTerminalToWorktree}
+                        />
+                      );
+                    } else if (item.type === 'workstream') {
+                      // Workstream (session with children) - use new unified WorkstreamGroup
+                      const session = item.session;
+                      const isWorkstreamExpanded = !collapsedGroups.includes(`workstream:${session.id}`);
+
+                      return (
+                        <WorkstreamGroup
+                          key={`workstream-${session.id}`}
+                          type="workstream"
+                          id={session.id}
+                          title={session.title || 'Untitled Workstream'}
+                          isExpanded={isWorkstreamExpanded}
+                          isActive={session.id === activeSessionId || item.sessions.some(s => s.id === activeSessionId)}
+                          onToggle={() => handleToggleGroup(`workstream:${session.id}`)}
+                          onSelect={() => onSessionSelect(session.id)}
+                          sessions={item.sessions}
+                          activeSessionId={activeSessionId}
+                          onSessionSelect={onSessionSelect}
+                          onSessionDelete={onSessionDelete ? handleDeleteSession : undefined}
+                          onSessionArchive={handleArchiveSession}
+                          onSessionPinToggle={handleSessionPinToggle}
+                          onSessionRename={onSessionRename}
+                          provider={session.provider}
+                          isPinned={session.isPinned}
+                          isArchived={session.isArchived}
+                          childCount={session.childCount}
                         />
                       );
                     } else {
+                      // Regular session - use SessionListItem
                       const session = item.session;
                       return (
                         <SessionListItem
@@ -1555,7 +1670,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                           hasUnread={session.hasUnread}
                           hasPendingPrompt={session.hasPendingPrompt}
                           sessionType={session.sessionType}
+                          isWorkstream={false}
                           parentSessionId={session.parentSessionId}
+                          projectPath={session.projectPath}
                           branchedAt={session.branchedAt}
                         />
                       );

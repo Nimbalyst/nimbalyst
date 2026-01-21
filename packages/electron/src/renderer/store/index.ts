@@ -88,6 +88,7 @@ export {
   sessionListFullAtom,
   sessionListLoadingAtom,
   sessionListWorkspaceAtom,
+  sessionListRootAtom,
   showArchivedSessionsAtom,
   refreshSessionListAtom,
   initSessionList,
@@ -101,6 +102,8 @@ export {
   sessionModelAtom,
   sessionArchivedAtom,
   sessionActiveAtom,
+  sessionTitleAtom,
+  sessionProviderAtom,
   openSessionsAtom,
   loadSessionDataAtom,
   updateSessionDataAtom,
@@ -110,13 +113,26 @@ export {
   sessionChildrenAtom,
   sessionActiveChildAtom,
   sessionHasChildrenAtom,
+  sessionOrChildProcessingAtom,
   sessionParentIdAtom,
   loadSessionChildrenAtom,
   setActiveChildSessionAtom,
   createChildSessionAtom,
+  // Workstream atoms (AgentMode rewrite)
+  selectedWorkstreamAtom,
+  setSelectedWorkstreamAtom,
+  workstreamSessionsAtom,
+  setActiveSessionInWorkstreamAtom, // Wrapper that also marks as read
+  workstreamProcessingAtom,
+  workstreamUnreadAtom,
+  workstreamPendingPromptAtom,
+  workstreamPendingPermissionAtom,
+  workstreamTitleAtom,
   type SessionInfo,
   type SessionListItem,
   type OpenSession,
+  type WorkstreamType,
+  reparentSessionAtom
 } from './atoms/sessions';
 
 // File tree atoms (Electron file watcher)
@@ -238,6 +254,7 @@ export {
   sessionActiveTabKeyAtom,
   sessionLayoutModeAtom,
   sessionSplitRatioAtom,
+  sessionFilesSidebarVisibleAtom,
   sessionEditorVisibleAtom,
   sessionHasTabsAtom,
   sessionTabCountAtom,
@@ -246,6 +263,7 @@ export {
   setSessionLayoutModeAtom,
   setSessionSplitRatioAtom,
   toggleSessionEditorAtom,
+  toggleSessionFilesSidebarAtom,
   persistSessionTabs,
   initSessionEditors,
   loadSessionEditorState,
@@ -253,3 +271,46 @@ export {
   type SessionLayoutMode,
   type SessionEditorState,
 } from './atoms/sessionEditors';
+
+// Unified workstream state (replaces fragmented atoms from sessions.ts)
+export {
+  type WorkstreamState,
+  type WorkstreamLayoutMode,
+  workstreamStateAtom,
+  workstreamTypeAtom,
+  workstreamActiveChildAtom,
+  workstreamChildrenAtom,
+  workstreamLayoutModeAtom,
+  workstreamSplitRatioAtom,
+  workstreamFilesSidebarVisibleAtom,
+  workstreamOpenFilesAtom,
+  workstreamActiveFileAtom,
+  workstreamWorktreeIdAtom,
+  workstreamHasChildrenAtom,
+  workstreamHasOpenFilesAtom,
+  setWorkstreamActiveChildAtom,
+  setWorkstreamLayoutModeAtom,
+  setWorkstreamSplitRatioAtom,
+  toggleWorkstreamFilesSidebarAtom,
+  addWorkstreamFileAtom,
+  closeWorkstreamFileAtom,
+  addWorkstreamChildAtom,
+  convertToWorkstreamAtom,
+  cleanupWorkstreamAtom,
+  initWorkstreamState,
+  loadWorkstreamStates,
+  loadWorkstreamState,
+  persistWorkstreamState,
+} from './atoms/workstreamState';
+
+// File mention atoms (for @ file mentions in AIInput)
+export {
+  fileMentionOptionsAtom,
+  fileMentionQueryAtom,
+  documentsLoadingAtom,
+  loadDocumentsAtom,
+  searchFileMentionAtom,
+  selectFileMentionAtom,
+  clearFileMentionSearchAtom,
+  type FileMentionReference,
+} from './atoms/fileMention';

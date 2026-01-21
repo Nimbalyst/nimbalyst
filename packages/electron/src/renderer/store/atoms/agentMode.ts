@@ -18,6 +18,7 @@
 
 import { atom } from 'jotai';
 import { store } from '@nimbalyst/runtime/store';
+import { selectedWorkstreamAtom, type WorkstreamType } from './sessions';
 
 // ============================================================
 // Types
@@ -189,6 +190,7 @@ export const setSortOrderAtom = atom(
 /**
  * Initialize agent mode layout from workspace state.
  * Call this when workspace path is known (typically in useEffect).
+ * Restores layout settings and selected workstream.
  */
 export async function initAgentModeLayout(workspacePath: string): Promise<void> {
   store.set(agentModeWorkspaceAtom, workspacePath);
@@ -209,6 +211,12 @@ export async function initAgentModeLayout(workspacePath: string): Promise<void> 
         collapsedGroups: layout.collapsedGroups ?? DEFAULT_LAYOUT.collapsedGroups,
         sortOrder: layout.sortOrder ?? DEFAULT_LAYOUT.sortOrder,
       });
+    }
+
+    // Restore selected workstream if saved
+    if (result?.selectedWorkstream) {
+      const selection = result.selectedWorkstream as { type: WorkstreamType; id: string };
+      store.set(selectedWorkstreamAtom(workspacePath), selection);
     }
   } catch (err) {
     console.error('[agentMode] Failed to load layout:', err);

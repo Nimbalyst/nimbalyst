@@ -1,0 +1,167 @@
+/* Main container - horizontal layout with sidebar on right */
+.agent-workstream-panel {
+  display: flex;
+  flex-direction: row;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Main column - header + content (left side) */
+.agent-workstream-panel-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Header */
+.workstream-header {
+  flex-shrink: 0;
+  height: 48px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border-primary);
+  background: var(--surface-primary);
+}
+
+.workstream-header-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 100%;
+}
+
+.workstream-header-icon {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.workstream-header-content {
+  min-width: 0;
+}
+
+.workstream-header-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.workstream-header-spacer {
+  flex: 1;
+}
+
+/* Processing spinner */
+.workstream-header-processing {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.workstream-header-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border-primary);
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: workstream-header-spin 0.8s linear infinite;
+}
+
+@keyframes workstream-header-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Sidebar toggle button */
+.workstream-sidebar-toggle {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  margin-left: 8px;
+}
+
+.workstream-sidebar-toggle:hover {
+  background: var(--surface-hover);
+  color: var(--text-secondary);
+}
+
+.workstream-sidebar-toggle.active {
+  color: var(--accent-primary, #60a5fa);
+}
+
+/* Content area - contains editor and session areas */
+.agent-workstream-panel-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Editor area */
+.agent-workstream-editor-area {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-primary);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.agent-workstream-editor-area.maximized {
+  flex: 1;
+  border-bottom: none;
+}
+
+/* Session area */
+.agent-workstream-session-area {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.agent-workstream-session-area.maximized {
+  flex: 1;
+}
+
+/* Vertical resizer between editor and session */
+.agent-workstream-vertical-resizer {
+  height: 4px;
+  flex-shrink: 0;
+  cursor: ns-resize;
+  background: var(--border-primary);
+  transition: background-color 0.15s ease;
+}
+
+.agent-workstream-vertical-resizer:hover,
+.agent-workstream-vertical-resizer.dragging {
+  background: var(--accent-primary, #60a5fa);
+}
+
+/* Sidebar resizer between content and sidebar */
+.agent-workstream-sidebar-resizer {
+  width: 4px;
+  flex-shrink: 0;
+  cursor: ew-resize;
+  background: var(--border-primary);
+  transition: background-color 0.15s ease;
+}
+
+.agent-workstream-sidebar-resizer:hover,
+.agent-workstream-sidebar-resizer.dragging {
+  background: var(--accent-primary, #60a5fa);
+}

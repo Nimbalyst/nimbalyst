@@ -428,6 +428,6 @@ export const aiTools: ExtensionAITool[] = [
 
 ## Next Steps
 
-- See [Custom Editors](./custom-editors.md) to build the visual component
-- Check [Manifest Reference](./manifest-reference.md) for all configuration options
+- See [custom-editors.md](./custom-editors.md) to build the visual component
+- Check [manifest-reference.md](./manifest-reference.md) for all configuration options
 - Look at [examples/ai-tool](./examples/ai-tool/) for a complete working example

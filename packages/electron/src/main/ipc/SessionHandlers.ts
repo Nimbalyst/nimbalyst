@@ -34,10 +34,11 @@ export async function registerSessionHandlers() {
                 id: session.id,
                 provider: session.provider,
                 model: session.model,
-                title: session.metadata?.planDocumentPath ? `Plan: ${path.basename(session.metadata.planDocumentPath)}` : 'Agentic Coding',
+                title: session.title || 'Untitled',
                 workspaceId: workspaceId,
                 providerConfig: session.providerConfig,
-                providerSessionId: session.providerSessionId
+                providerSessionId: session.providerSessionId,
+                worktreeId: session.worktreeId || null
             };
             console.log('[SessionHandlers] Creating session with payload:', JSON.stringify(createPayload));
 
@@ -260,11 +261,12 @@ export async function registerSessionHandlers() {
         worktreeId?: string;
         provider?: string;
     }) => {
+        console.log('[SessionHandlers] sessions:create-child called with:', JSON.stringify(payload));
         try {
             const { parentSessionId, workspacePath, worktreeId, provider = 'claude-code' } = payload;
-            const { v4: uuidv4 } = await import('uuid');
-
-            const sessionId = uuidv4();
+            // Use crypto.randomUUID() instead of dynamic import to avoid bundling issues
+            const sessionId = crypto.randomUUID();
+            console.log(`[SessionHandlers] Creating child session ${sessionId} for parent ${parentSessionId}`);
             const createPayload = {
                 id: sessionId,
                 provider,
@@ -275,10 +277,69 @@ export async function registerSessionHandlers() {
             };
 
             await AISessionsRepository.create(createPayload as any);
+            console.log(`[SessionHandlers] Child session ${sessionId} created successfully`);
 
             return { success: true, sessionId };
         } catch (error) {
             console.error('[SessionHandlers] Failed to create child session:', error);
+            return { success: false, error: String(error) };
+        }
+    });
+
+    // Set parent for a session (reparent operation for drag-drop)
+    safeHandle('sessions:set-parent', async (event, payload: {
+        sessionId: string;
+        newParentId: string | null;
+        workspacePath: string;
+    }) => {
+        try {
+            const { sessionId, newParentId, workspacePath } = payload;
+
+            // Validate session exists
+            const session = await AISessionsRepository.get(sessionId);
+            if (!session) {
+                return { success: false, error: 'Session not found' };
+            }
+
+            // Validate session belongs to the workspace
+            if (session.workspacePath !== workspacePath) {
+                return { success: false, error: 'Session does not belong to this workspace' };
+            }
+
+            // If setting a parent, validate the parent exists and is in same workspace
+            if (newParentId) {
+                const parent = await AISessionsRepository.get(newParentId);
+                if (!parent) {
+                    return { success: false, error: 'Parent session not found' };
+                }
+                if (parent.workspacePath !== workspacePath) {
+                    return { success: false, error: 'Parent session is in a different workspace' };
+                }
+
+                // Validate parent is a workstream (has children)
+                const { database } = await import('../database/PGLiteDatabaseWorker');
+                const { rows } = await database.query<{ count: number }>(
+                    'SELECT COUNT(*) as count FROM ai_sessions WHERE parent_session_id = $1',
+                    [newParentId]
+                );
+                const childCount = parseInt(String(rows[0]?.count || '0'));
+
+                // Parent must already have children to be a valid drop target
+                // (or be explicitly marked as a workstream root in metadata)
+                const parentMetadata = parent.metadata || {};
+                const isWorkstreamRoot = (parentMetadata as any).isWorkstreamRoot === true;
+
+                if (childCount === 0 && !isWorkstreamRoot) {
+                    return { success: false, error: 'Parent session must be a workstream (have children)' };
+                }
+            }
+
+            // Update parent_session_id
+            await AISessionsRepository.updateMetadata(sessionId, { parentSessionId: newParentId });
+
+            return { success: true };
+        } catch (error) {
+            console.error('[SessionHandlers] Failed to set session parent:', error);
             return { success: false, error: String(error) };
         }
     });

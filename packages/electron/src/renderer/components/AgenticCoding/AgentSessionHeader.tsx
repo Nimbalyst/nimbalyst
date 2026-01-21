@@ -1,8 +1,13 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
-import { ProviderIcon } from '@nimbalyst/runtime';
+import { ProviderIcon, MaterialSymbol } from '@nimbalyst/runtime';
 import type { SessionData } from '@nimbalyst/runtime/ai/server/types';
-import { sessionProcessingAtom, sessionEditorStateAtom, setSessionLayoutModeAtom, sessionHasTabsAtom } from '../../store';
+import {
+  sessionOrChildProcessingAtom,
+  sessionEditorStateAtom,
+  setSessionLayoutModeAtom,
+  sessionHasTabsAtom,
+} from '../../store';
 import { LayoutControls } from '../UnifiedAI/LayoutControls';
 import './AgentSessionHeader.css';
 
@@ -25,23 +30,30 @@ const worktreeCache = new Map<string, WorktreeWithStatus>();
 
 interface AgentSessionHeaderProps {
   sessionData: SessionData | null;
+  workspacePath: string;
   /** @deprecated - Now uses Jotai atom subscription. This prop is ignored. */
   isProcessing?: boolean;
 }
 
 export const AgentSessionHeader: React.FC<AgentSessionHeaderProps> = ({
   sessionData,
+  workspacePath,
 }) => {
-  // Subscribe to processing atom for this session
-  const isProcessing = useAtomValue(sessionProcessingAtom(sessionData?.id ?? ''));
+  const sessionId = sessionData?.id ?? '';
+
+  // Subscribe to processing atom - uses aggregated atom that includes child sessions
+  // This ensures the header shows processing when ANY child in a workstream is running
+  const isProcessing = useAtomValue(sessionOrChildProcessingAtom(sessionId));
 
   // Layout state for non-worktree sessions
-  const sessionEditorState = useAtomValue(sessionEditorStateAtom(sessionData?.id ?? ''));
+  const sessionEditorState = useAtomValue(sessionEditorStateAtom(sessionId));
   const setSessionLayoutMode = useSetAtom(setSessionLayoutModeAtom);
-  const hasTabs = useAtomValue(sessionHasTabsAtom(sessionData?.id ?? ''));
+  const hasTabs = useAtomValue(sessionHasTabsAtom(sessionId));
 
   // Determine if this is a worktree session (layout controls only for non-worktree)
   const isWorktreeSession = !!sessionData?.worktreeId;
+  // Determine if this is a workstream child session (has a parent)
+  const isWorkstreamSession = !!sessionData?.parentSessionId;
   const showLayoutControls = sessionData && !isWorktreeSession;
   // Use cached data immediately if available
   const cachedData = sessionData?.worktreeId ? worktreeCache.get(sessionData.worktreeId) ?? null : null;
@@ -67,14 +79,15 @@ export const AgentSessionHeader: React.FC<AgentSessionHeaderProps> = ({
       let gitStatus: { ahead?: number; behind?: number; uncommitted?: boolean } | undefined;
       if (!worktree.isArchived) {
         try {
-          const statusResult = await window.electronAPI.invoke('worktree:get-status', worktree.path);
-          if (statusResult.success && statusResult.status) {
-            gitStatus = {
-              ahead: statusResult.status.ahead,
-              behind: statusResult.status.behind,
-              uncommitted: statusResult.status.hasUncommittedChanges,
-            };
-          }
+          // TODO GH: RE-ENABLE
+          // const statusResult = await window.electronAPI.invoke('worktree:get-status', worktree.path);
+          // if (statusResult.success && statusResult.status) {
+          //   gitStatus = {
+          //     ahead: statusResult.status.ahead,
+          //     behind: statusResult.status.behind,
+          //     uncommitted: statusResult.status.hasUncommittedChanges,
+          //   };
+          // }
         } catch (err) {
           // Continue without git status
         }
@@ -131,7 +144,7 @@ export const AgentSessionHeader: React.FC<AgentSessionHeaderProps> = ({
   return (
     <div className="agent-session-header">
       <div className="agent-session-header-main">
-        {/* Icon renders immediately - worktree icon if worktreeId exists, otherwise provider icon */}
+        {/* Icon renders immediately - worktree icon if worktreeId exists, workstream icon if parentSessionId exists, otherwise provider icon */}
         {isWorktreeSession ? (
           <div className="agent-session-header-icon-wrapper">
             <div className="agent-session-header-wt-icon">
@@ -146,6 +159,10 @@ export const AgentSessionHeader: React.FC<AgentSessionHeaderProps> = ({
             <div className="agent-session-header-ai-badge">
               <ProviderIcon provider={sessionData.provider || 'claude'} size={12} />
             </div>
+          </div>
+        ) : isWorkstreamSession ? (
+          <div className="agent-session-header-icon workstream-header-icon">
+            <MaterialSymbol icon="account_tree" size={20} />
           </div>
         ) : (
           <div className="agent-session-header-icon">
@@ -202,6 +219,7 @@ export const AgentSessionHeader: React.FC<AgentSessionHeaderProps> = ({
           </div>
         )}
       </div>
+
     </div>
   );
 };

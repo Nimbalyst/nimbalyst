@@ -76,28 +76,51 @@ export const setWindowModeAtom = atom(
 // Initialization
 // ============================================================
 
+// Guard against double-initialization (React StrictMode calls effects twice)
+let initPromise: Promise<void> | null = null;
+let initializedWorkspace: string | null = null;
+
 /**
  * Initialize window mode from workspace state.
  * Call this when workspace path is known.
+ *
+ * Guarded against double-initialization - if called multiple times for the
+ * same workspace, returns the existing promise.
  */
 export async function initWindowMode(workspacePath: string): Promise<void> {
-  store.set(windowModeWorkspaceAtom, workspacePath);
-
-  try {
-    const workspaceState = await window.electronAPI.invoke(
-      'workspace:get-state',
-      workspacePath
-    );
-
-    if (workspaceState?.activeMode) {
-      const validModes: ContentMode[] = ['files', 'agent', 'settings'];
-      if (validModes.includes(workspaceState.activeMode)) {
-        store.set(windowModeAtom, workspaceState.activeMode);
-      }
-    }
-  } catch (err) {
-    console.error('[windowMode] Failed to load:', err);
+  // If already initialized for this workspace, return existing promise
+  if (initializedWorkspace === workspacePath && initPromise) {
+    return initPromise;
   }
+
+  // If initializing a different workspace, reset
+  if (initializedWorkspace !== workspacePath) {
+    initializedWorkspace = workspacePath;
+    initPromise = null;
+  }
+
+  // Create the initialization promise
+  initPromise = (async () => {
+    store.set(windowModeWorkspaceAtom, workspacePath);
+
+    try {
+      const workspaceState = await window.electronAPI.invoke(
+        'workspace:get-state',
+        workspacePath
+      );
+
+      if (workspaceState?.activeMode) {
+        const validModes: ContentMode[] = ['files', 'agent', 'settings'];
+        if (validModes.includes(workspaceState.activeMode)) {
+          store.set(windowModeAtom, workspaceState.activeMode);
+        }
+      }
+    } catch (err) {
+      console.error('[windowMode] Failed to load:', err);
+    }
+  })();
+
+  return initPromise;
 }
 
 /**
@@ -106,4 +129,6 @@ export async function initWindowMode(workspacePath: string): Promise<void> {
 export function resetWindowMode(): void {
   store.set(windowModeAtom, 'files');
   store.set(windowModeWorkspaceAtom, null);
+  initPromise = null;
+  initializedWorkspace = null;
 }

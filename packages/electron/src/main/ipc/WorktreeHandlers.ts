@@ -6,7 +6,7 @@
  */
 
 import { ipcMain } from 'electron';
-import log from 'electron-log';
+import log from 'electron-log/main';
 import { GitWorktreeService } from '../services/GitWorktreeService';
 import { WorktreeStore, createWorktreeStore } from '../services/WorktreeStore';
 import { getDatabase } from '../database/initialize';

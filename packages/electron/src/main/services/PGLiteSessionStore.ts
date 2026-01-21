@@ -330,6 +330,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       if ((metadata as any).hasBeenNamed !== undefined) pushUpdate('has_been_named =', (metadata as any).hasBeenNamed);
       if (metadata.isArchived !== undefined) pushUpdate('is_archived =', metadata.isArchived);
       if ((metadata as any).isPinned !== undefined) pushUpdate('is_pinned =', (metadata as any).isPinned);
+      if ((metadata as any).parentSessionId !== undefined) pushUpdate('parent_session_id =', (metadata as any).parentSessionId);
 
       // NOTE: We intentionally do NOT update updated_at here. The updated_at timestamp
       // should only change when messages are added (via PGLiteAgentMessagesStore.create),

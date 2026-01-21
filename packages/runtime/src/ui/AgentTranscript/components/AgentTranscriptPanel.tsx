@@ -24,6 +24,8 @@ interface AgentTranscriptPanelProps {
   initialSettings?: TranscriptSettings;
   onFileClick?: (filePath: string) => void;
   hideSidebar?: boolean;  // Hide the prompts/files sidebar
+  /** Show floating actions (prompts menu, archive) even when sidebar is hidden. Defaults to !hideSidebar */
+  showFloatingActions?: boolean;
   workspacePath?: string; // Explicit workspace path (falls back to sessionData.workspacePath)
   /** Optional: render function for custom header content (receives prompts and navigation callback) */
   renderHeaderActions?: (props: {
@@ -60,6 +62,7 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
   initialSettings,
   onFileClick,
   hideSidebar = false,
+  showFloatingActions,
   workspacePath: workspacePathProp,
   renderHeaderActions,
   renderEmptyExtra,
@@ -72,6 +75,8 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
   groupByDirectory,
   onGroupByDirectoryChange
 }) => {
+  // Show floating actions if explicitly enabled, otherwise default to showing when sidebar is visible
+  const shouldShowFloatingActions = showFloatingActions ?? !hideSidebar;
   // Use prop if provided, otherwise fall back to sessionData.workspacePath
   const effectiveWorkspacePath = workspacePathProp || sessionData.workspacePath;
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
@@ -260,16 +265,13 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
           onOpenFile={onFileClick}
         />
 
-        {/* Floating Actions - hidden if hideSidebar is true */}
-        {!hideSidebar && (
+        {/* Floating Actions - show based on showFloatingActions prop */}
+        {shouldShowFloatingActions && (
           <FloatingTranscriptActions
             prompts={prompts}
-            isSidebarCollapsed={isSidebarCollapsed}
-            onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            isSidebarCollapsed={hideSidebar || isSidebarCollapsed}
+            onToggleSidebar={hideSidebar ? undefined : () => setIsSidebarCollapsed(!isSidebarCollapsed)}
             onNavigateToPrompt={handleNavigateToPrompt}
-            isArchived={isArchived}
-            onCloseAndArchive={onCloseAndArchive}
-            onUnarchive={onUnarchive}
           />
         )}
 

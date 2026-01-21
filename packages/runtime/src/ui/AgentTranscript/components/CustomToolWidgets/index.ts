@@ -45,6 +45,7 @@ export { MockupScreenshotWidget } from './MockupScreenshotWidget';
 export { AskUserQuestionWidget, storeAskUserQuestionAnswers } from './AskUserQuestionWidget';
 export { VisualDisplayWidget } from './VisualDisplayWidget';
 export { BashWidget } from './BashWidget';
+export { GitCommitConfirmationWidget } from './GitCommitConfirmationWidget';
 
 /**
  * Props passed to custom tool widgets
@@ -77,6 +78,7 @@ import { MockupScreenshotWidget } from './MockupScreenshotWidget';
 import { AskUserQuestionWidget } from './AskUserQuestionWidget';
 import { VisualDisplayWidget } from './VisualDisplayWidget';
 import { BashWidget } from './BashWidget';
+import { GitCommitConfirmationWidget } from './GitCommitConfirmationWidget';
 
 /**
  * Registry of custom tool widgets
@@ -101,6 +103,9 @@ export const CUSTOM_TOOL_WIDGETS: CustomToolWidgetRegistry = {
 
   // Bash tool - terminal-style display for shell commands
   'Bash': BashWidget,
+
+  // Git commit proposal tool - interactive commit confirmation widget
+  'git_commit_proposal': GitCommitConfirmationWidget,
 };
 
 /**

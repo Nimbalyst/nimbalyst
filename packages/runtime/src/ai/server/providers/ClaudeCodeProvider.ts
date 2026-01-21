@@ -493,12 +493,12 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       }
 
       // Log the complete system prompt being sent to SDK for debugging
-      console.log('[CLAUDE-CODE] ========================================');
-      console.log('[CLAUDE-CODE] COMPLETE SYSTEM PROMPT BEING APPENDED TO SDK:');
-      console.log('[CLAUDE-CODE] Length:', systemPrompt.length, 'characters');
-      console.log('[CLAUDE-CODE] ========================================');
-      console.log(systemPrompt);
-      console.log('[CLAUDE-CODE] ========================================');
+      // console.log('[CLAUDE-CODE] ========================================');
+      // console.log('[CLAUDE-CODE] COMPLETE SYSTEM PROMPT BEING APPENDED TO SDK:');
+      // console.log('[CLAUDE-CODE] Length:', systemPrompt.length, 'characters');
+      // console.log('[CLAUDE-CODE] ========================================');
+      // console.log(systemPrompt);
+      // console.log('[CLAUDE-CODE] ========================================');
 
       const options: any = {
         // The SDK might internally need the CLI path

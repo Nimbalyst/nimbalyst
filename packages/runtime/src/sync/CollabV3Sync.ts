@@ -1354,7 +1354,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
             break;
 
           case 'device_joined':
-            console.log('[CollabV3] Device joined:', message.device.name, message.device.type);
+            // console.log('[CollabV3] Device joined:', message.device.name, message.device.type);
             connectedDevices.set(message.device.device_id, message.device);
             notifyDeviceStatusChange();
             break;

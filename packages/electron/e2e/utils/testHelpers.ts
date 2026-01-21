@@ -93,7 +93,11 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   sessionHistory: '.session-history',
   sessionHistoryItem: '.session-history-item',
   sessionHistoryNewButton: '.session-history-new-button',
+  sessionHistoryNewMenu: '.session-history-new-menu',
+  newSessionButton: '[data-testid="new-session-button"]',
   newWorktreeSessionButton: '[data-testid="new-worktree-session-button"]',
+  sessionListItem: '.session-list-item',
+  sessionListItemTitle: '.session-list-item-title',
 
   // Worktree sessions
   worktreeSingle: '.worktree-single',

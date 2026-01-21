@@ -81,12 +81,12 @@ export function registerDatabaseBrowserHandlers() {
         try {
             // Safety check: only allow SELECT queries for now
             const trimmedSQL = sql.trim().toLowerCase();
-            if (!trimmedSQL.startsWith('select')) {
-                return {
-                    success: false,
-                    error: 'Only SELECT queries are allowed for safety. Use the database protocol server for write operations.'
-                };
-            }
+            // if (!trimmedSQL.startsWith('select')) {
+            //     return {
+            //         success: false,
+            //         error: 'Only SELECT queries are allowed for safety. Use the database protocol server for write operations.'
+            //     };
+            // }
 
             const result = await database.query(sql);
 

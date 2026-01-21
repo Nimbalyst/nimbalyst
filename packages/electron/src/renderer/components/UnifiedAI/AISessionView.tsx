@@ -1,45 +1,45 @@
+/**
+ * @deprecated This component will be replaced by the unified session architecture.
+ * See nimbalyst-local/plans/unified-session-architecture.md for migration plan.
+ * The old AgenticPanel uses this component with React useState, causing massive re-renders.
+ * The new AgentMode architecture uses SessionTranscript via AgentSessionPanel with Jotai atoms instead.
+ */
+
 import React, { useCallback, useRef, useImperativeHandle, forwardRef, useEffect, useState } from 'react';
 import { useAtom, useSetAtom, useAtomValue } from 'jotai';
-import { usePostHog } from 'posthog-js/react';
-import { AgentTranscriptPanel, TodoItem, storeAskUserQuestionAnswers, ProviderIcon, FileEditsSidebar, FileEditSummary } from '@nimbalyst/runtime';
+import { TodoItem, FileEditsSidebar, FileEditSummary } from '@nimbalyst/runtime';
 import { MaterialSymbol } from '@nimbalyst/runtime/ui/icons/MaterialSymbol';
-import { getProviderDisplayName } from '../../utils/modelUtils';
-import type { SessionData, ChatAttachment } from '@nimbalyst/runtime/ai/server/types';
-import { AIInput, AIInputRef } from './AIInput';
-import { PromptQueueList } from './PromptQueueList';
-import { FileGutter } from '../AIChat/FileGutter';
+import type { SessionData } from '@nimbalyst/runtime/ai/server/types';
 import { PendingReviewBanner } from '../AIChat/PendingReviewBanner';
 import type { TypeaheadOption } from '../Typeahead/GenericTypeahead';
 import type { AIMode } from './ModeTag';
-import { ExitPlanModeConfirmation, ExitPlanModeConfirmationData } from './ExitPlanModeConfirmation';
-import { AskUserQuestionConfirmation, AskUserQuestionData } from './AskUserQuestionConfirmation';
-import { ToolPermissionConfirmation, ToolPermissionData } from './ToolPermissionConfirmation';
-import { SlashCommandSuggestions } from './SlashCommandSuggestions';
 import { diffTreeGroupByDirectoryAtom, setDiffTreeGroupByDirectoryAtom } from '../../store/atoms/projectState';
 import { SessionEditorArea, SessionEditorAreaRef } from './SessionEditorArea';
 import { AgentSessionHeader } from '../AgenticCoding/AgentSessionHeader';
+import { SessionTranscript, SessionTranscriptRef } from './SessionTranscript';
 import {
-  store,
   sessionEditorStateAtom,
   setSessionSplitRatioAtom,
-  sessionDraftInputAtom,
-  sessionDraftAttachmentsAtom,
+  // NOTE: Most session atoms (sessionDataAtom, sessionProcessingAtom, etc.) are now
+  // managed by SessionTranscript to avoid double subscriptions and re-renders.
+  // AISessionView only needs atoms for:
+  // 1. Layout (sessionEditorStateAtom, setSessionSplitRatioAtom)
+  // 2. Hierarchical session UI (workstream tabs)
   sessionDataAtom,
   sessionLoadingAtom,
-  sessionModeAtom,
-  sessionModelAtom,
-  sessionArchivedAtom,
-  sessionProcessingAtom,
   loadSessionDataAtom,
-  reloadSessionDataAtom,
-  updateSessionDataAtom,
-  // Hierarchical session atoms
+  // Hierarchical session atoms (for workstream tab UI)
   sessionChildrenAtom,
   sessionActiveChildAtom,
   sessionHasChildrenAtom,
   loadSessionChildrenAtom,
+  convertToWorkstreamAtom,
+  setActiveChildSessionAtom,
+  createChildSessionAtom,
 } from '../../store';
+import type { SessionListItem } from '@nimbalyst/runtime/ai/adapters/sessionStore';
 
+// Todo interface for sidebar display
 interface Todo {
   status: 'pending' | 'in_progress' | 'completed';
   content: string;
@@ -82,236 +82,12 @@ export interface AISessionViewProps {
   // Callbacks for tab management (parent still manages open/close)
   onCloseAndArchive?: (sessionId: string) => void;
   onSessionTitleChanged?: (sessionId: string, title: string) => void;
+  // Navigate to a different session (e.g., after creating a workstream)
+  onNavigateToSession?: (sessionId: string) => void;
 }
 
-/**
- * TranscriptSection - Memoized component that renders the transcript and file gutters.
- * This is separated from the input area to prevent re-renders when typing.
- */
-interface TranscriptSectionProps {
-  sessionId: string;
-  sessionData: SessionData;
-  workspacePath: string;
-  mode: 'chat' | 'agent';
-  todos: Todo[];
-  queuedPrompts: any[];
-  isProcessing?: boolean;
-  onFileClick?: (filePath: string) => void;
-  onTodoClick?: (todo: TodoItem) => void;
-  onCancelQueuedPrompt: (id: string) => void;
-  onEditQueuedPrompt?: (id: string, prompt: string) => void;
-  isArchived?: boolean;
-  onCloseAndArchive?: () => void;
-  onUnarchive?: () => void;
-  provider: string;
-  onCommandSelect: (command: string) => void;
-  /** Force hide the sidebar (when rendered externally) */
-  hideSidebar?: boolean;
-}
-
-// Helper to read files from the main process (for persisted output files)
-const readFile = async (filePath: string): Promise<{ success: boolean; content?: string; error?: string }> => {
-  try {
-    const result = await window.electronAPI.readFileContent(filePath);
-    if (!result) {
-      return { success: false, error: 'No response from file reader' };
-    }
-    if (!result.success) {
-      return { success: false, error: result.error || 'Failed to read file' };
-    }
-    return { success: true, content: result.content };
-  } catch (err) {
-    return {
-      success: false,
-      error: err instanceof Error ? err.message : 'Failed to read file'
-    };
-  }
-};
-
-const TranscriptSectionComponent: React.FC<TranscriptSectionProps> = ({
-  sessionId,
-  sessionData,
-  workspacePath,
-  mode,
-  todos,
-  queuedPrompts,
-  isProcessing,
-  onFileClick,
-  onTodoClick,
-  onCancelQueuedPrompt,
-  onEditQueuedPrompt,
-  isArchived,
-  onCloseAndArchive,
-  onUnarchive,
-  provider,
-  onCommandSelect,
-  hideSidebar: hideSidebarProp
-}) => {
-  // Track files with pending AI edits for this session
-  const [pendingReviewFiles, setPendingReviewFiles] = useState<Set<string>>(new Set());
-
-  // Diff tree grouping state (persisted per project via Jotai + workspace state)
-  const [groupByDirectory] = useAtom(diffTreeGroupByDirectoryAtom);
-  const setDiffTreeGroupByDirectory = useSetAtom(setDiffTreeGroupByDirectoryAtom);
-
-  // Wrapper to pass workspacePath to the setter atom
-  const setGroupByDirectory = useCallback((value: boolean) => {
-    if (workspacePath) {
-      setDiffTreeGroupByDirectory({ groupByDirectory: value, workspacePath });
-    }
-  }, [workspacePath, setDiffTreeGroupByDirectory]);
-
-  // Note: groupByDirectory is hydrated from workspace state once at app init (in App.tsx)
-  // No need to load it here - just use the Jotai atom value
-
-  // Fetch pending review files for this session
-  useEffect(() => {
-    if (!workspacePath || !sessionId) {
-      setPendingReviewFiles(new Set());
-      return;
-    }
-
-    const fetchPendingFiles = async () => {
-      try {
-        if (window.electronAPI?.history?.getPendingFilesForSession) {
-          const files = await window.electronAPI.history.getPendingFilesForSession(workspacePath, sessionId);
-          setPendingReviewFiles(new Set(files));
-        }
-      } catch (error) {
-        console.error('[AISessionView] Failed to fetch pending review files:', error);
-      }
-    };
-
-    fetchPendingFiles();
-
-    // Listen for pending cleared events to refresh the list
-    const unsubscribe = window.electronAPI?.history?.onPendingCleared?.(
-      (data: { workspacePath: string; sessionId?: string; clearedFiles: string[] }) => {
-        if (data.workspacePath === workspacePath) {
-          // Re-fetch to get the updated list
-          fetchPendingFiles();
-        }
-      }
-    );
-
-    // Also listen for pending count changes (which means new files might be pending)
-    const unsubscribeCount = window.electronAPI?.history?.onPendingCountChanged?.(
-      (data: { workspacePath: string; count: number }) => {
-        if (data.workspacePath === workspacePath) {
-          fetchPendingFiles();
-        }
-      }
-    );
-
-    return () => {
-      unsubscribe?.();
-      unsubscribeCount?.();
-    };
-  }, [workspacePath, sessionId]);
-
-  // Create the renderEmptyExtra callback for slash command suggestions
-  const renderEmptyExtra = React.useCallback(() => {
-    // Only show for claude-code provider with empty session
-    if (provider !== 'claude-code' || sessionData.messages.length > 0) {
-      return null;
-    }
-    return (
-      <SlashCommandSuggestions
-        provider={provider}
-        hasMessages={sessionData.messages.length > 0}
-        workspacePath={workspacePath}
-        sessionId={sessionId}
-        onCommandSelect={onCommandSelect}
-      />
-    );
-  }, [provider, sessionData.messages.length, workspacePath, sessionId, onCommandSelect]);
-
-  return (
-    <>
-      {/* Referenced files gutter at top - only in chat mode (agent mode has sidebar) */}
-      {mode === 'chat' && (
-        <FileGutter
-          sessionId={sessionId}
-          workspacePath={workspacePath}
-          type="referenced"
-          onFileClick={onFileClick}
-          pendingReviewFiles={pendingReviewFiles}
-        />
-      )}
-
-      {/* Main transcript area */}
-      <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
-        <AgentTranscriptPanel
-          sessionId={sessionId}
-          sessionData={sessionData}
-          todos={todos}
-          isProcessing={isProcessing}
-          onFileClick={onFileClick}
-          hideSidebar={hideSidebarProp || mode === 'chat'} // Hide sidebar when explicitly requested or in chat mode
-          workspacePath={workspacePath}
-          initialSettings={{
-            showToolCalls: true,
-            compactMode: false,
-            collapseTools: false,
-            showThinking: true,
-            showSessionInit: false
-          }}
-          renderEmptyExtra={renderEmptyExtra}
-          isArchived={isArchived}
-          onCloseAndArchive={onCloseAndArchive}
-          onUnarchive={onUnarchive}
-          readFile={readFile}
-          renderFilesHeader={mode === 'agent' ? () => (
-            <PendingReviewBanner workspacePath={workspacePath} sessionId={sessionId} />
-          ) : undefined}
-          pendingReviewFiles={pendingReviewFiles}
-          groupByDirectory={groupByDirectory}
-          onGroupByDirectoryChange={setGroupByDirectory}
-        />
-      </div>
-
-      {/* Pending review banner - shows pending files for current session */}
-      {mode === 'chat' && (
-        <PendingReviewBanner workspacePath={workspacePath} sessionId={sessionId} />
-      )}
-
-      {/* Edited files gutter at bottom - only in chat mode (agent mode has sidebar) */}
-      {mode === 'chat' && (
-        <FileGutter
-          sessionId={sessionId}
-          workspacePath={workspacePath}
-          type="edited"
-          onFileClick={onFileClick}
-          pendingReviewFiles={pendingReviewFiles}
-        />
-      )}
-
-      {/* Queue display */}
-      <PromptQueueList
-        queue={queuedPrompts}
-        onCancel={onCancelQueuedPrompt}
-        onEdit={onEditQueuedPrompt}
-      />
-    </>
-  );
-};
-
-// Memoize TranscriptSection to prevent re-renders when input changes
-const TranscriptSection = React.memo(TranscriptSectionComponent, (prevProps, nextProps) => {
-  // Only re-render if session data, todos, queue, processing state, or archive state changed
-  return (
-    prevProps.sessionId === nextProps.sessionId &&
-    prevProps.sessionData === nextProps.sessionData &&
-    prevProps.workspacePath === nextProps.workspacePath &&
-    prevProps.mode === nextProps.mode &&
-    prevProps.todos === nextProps.todos &&
-    prevProps.queuedPrompts === nextProps.queuedPrompts &&
-    prevProps.isProcessing === nextProps.isProcessing &&
-    prevProps.isArchived === nextProps.isArchived &&
-    prevProps.provider === nextProps.provider &&
-    prevProps.hideSidebar === nextProps.hideSidebar
-  );
-});
+// NOTE: TranscriptSectionComponent was removed - it's now replaced by SessionTranscript
+// which provides proper encapsulation of transcript + input state via Jotai atoms.
 
 /**
  * AISessionView component encapsulates all UI for a single AI session.
@@ -339,29 +115,21 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
   onNavigateHistory,
   onCloseAndArchive,
   onSessionTitleChanged,
+  onNavigateToSession,
   isActive = true, // Default to true for backwards compatibility
 }, ref) => {
-  const posthog = usePostHog();
-  const inputRef = useRef<AIInputRef>(null);
-  const [todos, setTodos] = useState<Todo[]>([]);
-  const [queuedPrompts, setQueuedPrompts] = useState<any[]>([]);
-  const [pendingExitPlanConfirmation, setPendingExitPlanConfirmation] = useState<ExitPlanModeConfirmationData | null>(null);
-  const [pendingAskUserQuestion, setPendingAskUserQuestion] = useState<AskUserQuestionData | null>(null);
+  const sessionTranscriptRef = useRef<SessionTranscriptRef>(null);
 
   // ============================================================
-  // Session state via Jotai atoms - component owns its own data
+  // Session state - MINIMAL subscriptions to avoid re-renders
+  // Most session state (processing, mode, model, archived, etc.) is now
+  // managed by SessionTranscript. AISessionView only needs:
+  // 1. sessionData for layout decisions and workstream tabs
+  // 2. loadSessionData to trigger initial load
   // ============================================================
-  const [sessionData, setSessionData] = useAtom(sessionDataAtom(sessionId));
+  const sessionData = useAtomValue(sessionDataAtom(sessionId));
   const isDataLoading = useAtomValue(sessionLoadingAtom(sessionId));
-  const [aiMode, setAiMode] = useAtom(sessionModeAtom(sessionId));
-  const [currentModel, setCurrentModel] = useAtom(sessionModelAtom(sessionId));
-  const [isArchived, setIsArchived] = useAtom(sessionArchivedAtom(sessionId));
-  // Processing state is managed by AgenticPanel via sessionState.onStateChange
-  // We only read it here - don't write to it directly (use store.set for error recovery only)
-  const isProcessing = useAtomValue(sessionProcessingAtom(sessionId));
   const loadSessionData = useSetAtom(loadSessionDataAtom);
-  const reloadSessionData = useSetAtom(reloadSessionDataAtom);
-  const updateSessionData = useSetAtom(updateSessionDataAtom);
 
   // ============================================================
   // Hierarchical session state (workstreams)
@@ -370,14 +138,17 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
   const [activeChildId, setActiveChildId] = useAtom(sessionActiveChildAtom(sessionId));
   const hasChildren = useAtomValue(sessionHasChildrenAtom(sessionId));
   const loadSessionChildren = useSetAtom(loadSessionChildrenAtom);
+  const convertToWorkstream = useSetAtom(convertToWorkstreamAtom);
+  const setActiveChild = useSetAtom(setActiveChildSessionAtom);
+  const createChildSession = useSetAtom(createChildSessionAtom);
 
-  // Draft input state via Jotai atoms - only this component re-renders on typing
-  const [draftInput, setDraftInput] = useAtom(sessionDraftInputAtom(sessionId));
-  const [draftAttachments, setDraftAttachments] = useAtom(sessionDraftAttachmentsAtom(sessionId));
-  const [pendingToolPermissions, setPendingToolPermissions] = useState<ToolPermissionData[]>([]);
+  // Child session data cache (for displaying titles in tabs)
+  const [childSessionData, setChildSessionData] = useState<Map<string, SessionListItem>>(new Map());
 
-  // Track if we're currently sending a message (for local UI state)
-  const sendingRef = useRef(false);
+  // NOTE: Most session-specific state (draft input, attachments, processing, confirmations)
+  // is now managed by SessionTranscript. This eliminates duplicate atom subscriptions.
+  // We still need todos for the sidebar display.
+  const [todos, setTodos] = useState<Todo[]>([]);
 
   // ============================================================
   // Files sidebar state (for agent mode non-worktree sessions)
@@ -426,344 +197,46 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
     }
   }, [sessionId, workspacePath, sessionData, loadSessionChildren]);
 
-  // ============================================================
-  // Subscribe to IPC events for session updates
-  // NOTE: Processing state (sessionProcessingAtom) is managed by AgenticPanel
-  // via sessionState.onStateChange. Don't duplicate that logic here.
-  // ============================================================
+  // Fetch child session data when we have children (for tab titles)
   useEffect(() => {
-    if (!sessionId || !window.electronAPI?.on) return;
+    if (!hasChildren || childSessionIds.length === 0 || !workspacePath) return;
 
-    // Handle message logged events - reload session data
-    const handleMessageLogged = (data: { sessionId: string; direction: string }) => {
-      if (data.sessionId !== sessionId) return;
-      // Only reload on assistant output messages
-      if (data.direction === 'output') {
-        reloadSessionData({ sessionId, workspacePath });
-        // Clear sending ref when we get an output message
-        sendingRef.current = false;
+    const fetchChildData = async () => {
+      try {
+        const result = await window.electronAPI.invoke('sessions:list-children', sessionId, workspacePath);
+        if (result.success && result.children) {
+          const newData = new Map<string, SessionListItem>();
+          for (const child of result.children) {
+            newData.set(child.id, child);
+          }
+          setChildSessionData(newData);
+        }
+      } catch (err) {
+        console.error('[AISessionView] Failed to fetch child session data:', err);
       }
     };
 
-    // Handle session title updates
-    const handleTitleUpdated = (data: { sessionId: string; title: string }) => {
-      if (data.sessionId === sessionId && sessionData) {
-        updateSessionData({ sessionId, updates: { title: data.title } });
-        onSessionTitleChanged?.(sessionId, data.title);
-      }
-    };
+    fetchChildData();
+  }, [sessionId, hasChildren, childSessionIds, workspacePath]);
 
-    // Handle token usage updates (for claude-code provider)
-    const handleTokenUsageUpdated = (data: { sessionId: string; tokenUsage: any }) => {
-      if (data.sessionId === sessionId && sessionData) {
-        updateSessionData({ sessionId, updates: { tokenUsage: data.tokenUsage } });
-      }
-    };
-
-    const cleanup1 = window.electronAPI.on('ai:message-logged', handleMessageLogged);
-    const cleanup2 = window.electronAPI.on('session:title-updated', handleTitleUpdated);
-    const cleanup3 = window.electronAPI.on('ai:tokenUsageUpdated', handleTokenUsageUpdated);
-
-    return () => {
-      cleanup1?.();
-      cleanup2?.();
-      cleanup3?.();
-    };
-  }, [sessionId, workspacePath, sessionData, reloadSessionData, updateSessionData, onSessionTitleChanged]);
-
-  // Derived values from session data
-  const isLoading = isProcessing || sendingRef.current;
-  const sessionHasMessages = (sessionData?.messages?.length ?? 0) > 0;
-  const currentProviderType = sessionData?.provider === 'claude-code' ? 'agent' : 'model';
+  // NOTE: IPC event subscriptions (ai:message-logged, session:title-updated, ai:tokenUsageUpdated)
+  // are now handled by SessionTranscript to avoid duplicate subscriptions.
 
   // Determine if we should show the session editor area
   const isWorktreeSession = Boolean(sessionData?.worktreeId && sessionData?.worktreePath);
+  // Show editor area only for parent sessions (not nested children) - parent handles editor
   const showSessionEditor = mode === 'agent' && !isWorktreeSession;
 
-  // Listen for ExitPlanMode confirmation requests for this session
-  useEffect(() => {
-    const handleExitPlanModeConfirm = (data: ExitPlanModeConfirmationData) => {
-      // Only show confirmation for this session
-      if (data.sessionId === sessionId) {
-        // TODO: Debug logging - uncomment if needed
-        // console.log(`[AISessionView] ExitPlanMode confirmation requested for session ${sessionId}`);
-        setPendingExitPlanConfirmation(data);
-      }
-    };
-
-    const cleanup = window.electronAPI.on('ai:exitPlanModeConfirm', handleExitPlanModeConfirm);
-    return () => {
-      cleanup?.();
-    };
-  }, [sessionId]);
-
-  // Listen for AskUserQuestion requests for this session
-  useEffect(() => {
-    const handleAskUserQuestion = (data: AskUserQuestionData) => {
-      // Only show questions for this session
-      if (data.sessionId === sessionId) {
-        // Prevent duplicate events from resetting the component state
-        // Check if we already have a pending question with the same ID
-        setPendingAskUserQuestion(prev => {
-          if (prev && prev.questionId === data.questionId) {
-            // Same question already pending, don't reset state
-            return prev;
-          }
-          return data;
-        });
-      }
-    };
-
-    const cleanup = window.electronAPI.on('ai:askUserQuestion', handleAskUserQuestion);
-    return () => {
-      cleanup?.();
-    };
-  }, [sessionId]);
-
-  // Listen for AskUserQuestion answered events to store answers for widget display
-  useEffect(() => {
-    const handleAskUserQuestionAnswered = (data: { questionId: string; sessionId: string; answers: Record<string, string> }) => {
-      // Only process for this session
-      if (data.sessionId === sessionId) {
-        // Debug logging - uncomment if needed
-        // console.log(`[AISessionView] AskUserQuestion answered for session ${sessionId}:`, data.questionId);
-        // Store answers so widget can display them
-        storeAskUserQuestionAnswers(data.answers);
-      }
-    };
-
-    const cleanup = window.electronAPI.on('ai:askUserQuestionAnswered', handleAskUserQuestionAnswered);
-    return () => {
-      cleanup?.();
-    };
-  }, [sessionId]);
-
-  // Listen for session cancelled events (from mobile cancellation)
-  useEffect(() => {
-    const handleSessionCancelled = (data: { sessionId: string }) => {
-      // Only process for this session
-      if (data.sessionId === sessionId) {
-        console.log(`[AISessionView] Session cancelled from mobile for session ${sessionId}`);
-        // Clear any pending question UI
-        setPendingAskUserQuestion(null);
-      }
-    };
-
-    const cleanup = window.electronAPI.on('ai:sessionCancelled', handleSessionCancelled);
-    return () => {
-      cleanup?.();
-    };
-  }, [sessionId]);
-
-  // Handle ExitPlanMode confirmation response
-  const handleExitPlanModeApprove = useCallback(async (requestId: string, confirmSessionId: string) => {
-    // TODO: Debug logging - uncomment if needed
-    // console.log(`[AISessionView] User approved ExitPlanMode: ${requestId}`);
-    try {
-      await window.electronAPI.invoke('ai:exitPlanModeConfirmResponse', requestId, confirmSessionId, true);
-      setPendingExitPlanConfirmation(null);
-      // Update the UI mode to 'agent' since we've exited plan mode
-      setAiMode('agent');
-    } catch (error) {
-      console.error('[AISessionView] Failed to send ExitPlanMode approval:', error);
-    }
-  }, [setAiMode]);
-
-  const handleExitPlanModeDeny = useCallback(async (requestId: string, confirmSessionId: string) => {
-    // TODO: Debug logging - uncomment if needed
-    // console.log(`[AISessionView] User denied ExitPlanMode: ${requestId}`);
-    try {
-      await window.electronAPI.invoke('ai:exitPlanModeConfirmResponse', requestId, confirmSessionId, false);
-      setPendingExitPlanConfirmation(null);
-    } catch (error) {
-      console.error('[AISessionView] Failed to send ExitPlanMode denial:', error);
-    }
-  }, []);
-
-  // Handle AskUserQuestion answer submission
-  const handleAskUserQuestionSubmit = useCallback(async (questionId: string, confirmSessionId: string, answers: Record<string, string>) => {
-    // Debug logging - uncomment if needed
-    // console.log(`[AISessionView] User submitted answers for ${questionId}:`, answers);
-    try {
-      // Store answers in global store so the widget can display them
-      storeAskUserQuestionAnswers(answers);
-
-      await window.electronAPI.invoke('claude-code:answer-question', { questionId, answers });
-      setPendingAskUserQuestion(null);
-    } catch (error) {
-      console.error('[AISessionView] Failed to submit AskUserQuestion answers:', error);
-    }
-  }, []);
-
-  const handleAskUserQuestionCancel = useCallback(async (questionId: string, confirmSessionId: string) => {
-    // Debug logging - uncomment if needed
-    // console.log(`[AISessionView] User cancelled AskUserQuestion: ${questionId}`);
-    try {
-      // Reject the pending promise and abort the AI request
-      await window.electronAPI.invoke('claude-code:cancel-question', { questionId });
-      setPendingAskUserQuestion(null);
-    } catch (error) {
-      console.error('[AISessionView] Failed to cancel AskUserQuestion:', error);
-      // Still clear the UI even if the cancel fails
-      setPendingAskUserQuestion(null);
-    }
-  }, []);
-
-  // Helper to extract tool category from pattern
-  const getToolCategory = useCallback((pattern: string): string => {
-    if (pattern.startsWith('Bash')) return 'bash';
-    if (pattern.startsWith('WebFetch')) return 'webfetch';
-    if (pattern.startsWith('mcp__')) return 'mcp';
-    if (['Edit', 'Write', 'Read', 'Glob', 'Grep'].includes(pattern)) return 'file';
-    return 'other';
-  }, []);
-
-  // Listen for tool permission requests for this session
-  useEffect(() => {
-    const handleToolPermission = (data: ToolPermissionData) => {
-      // Only show permission request for this session
-      if (data.sessionId === sessionId) {
-        // Add to queue if not already present (prevents duplicate events)
-        setPendingToolPermissions(prev => {
-          if (prev.some(p => p.requestId === data.requestId)) {
-            return prev;
-          }
-          return [...prev, data];
-        });
-      }
-    };
-
-    const cleanup = window.electronAPI.on('ai:toolPermission', handleToolPermission);
-    return () => {
-      cleanup?.();
-    };
-  }, [sessionId]);
-
-  // Listen for tool permission resolved events (for auto-approved permissions)
-  useEffect(() => {
-    const handleToolPermissionResolved = (data: { requestId: string; sessionId: string; autoApproved?: boolean }) => {
-      // Only process for this session
-      if (data.sessionId === sessionId) {
-        // Remove the auto-approved request from the queue
-        setPendingToolPermissions(prev => prev.filter(p => p.requestId !== data.requestId));
-      }
-    };
-
-    const cleanup = window.electronAPI.on('ai:toolPermissionResolved', handleToolPermissionResolved);
-    return () => {
-      cleanup?.();
-    };
-  }, [sessionId]);
-
-  // Handle tool permission response
-  const handleToolPermissionSubmit = useCallback(async (
-    requestId: string,
-    confirmSessionId: string,
-    response: { decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' | 'always-all' }
-  ) => {
-    // Find the request data for analytics before removing it
-    const requestData = pendingToolPermissions.find(p => p.requestId === requestId);
-    const firstPattern = requestData?.request.actionsNeedingApproval[0]?.action.pattern;
-
-    try {
-      await window.electronAPI.invoke('claude-code:answer-tool-permission', {
-        requestId,
-        sessionId: confirmSessionId,
-        response
-      });
-
-      // Track the permission decision
-      posthog?.capture('tool_permission_responded', {
-        decision: response.decision,
-        scope: response.scope,
-        toolCategory: firstPattern ? getToolCategory(firstPattern) : 'unknown',
-      });
-
-      // Remove this request from the queue
-      setPendingToolPermissions(prev => prev.filter(p => p.requestId !== requestId));
-    } catch (error) {
-      console.error('[AISessionView] Failed to submit tool permission response:', error);
-    }
-  }, [pendingToolPermissions, posthog, getToolCategory]);
-
-  const handleToolPermissionCancel = useCallback(async (requestId: string, confirmSessionId: string) => {
-    try {
-      await window.electronAPI.invoke('claude-code:cancel-tool-permission', {
-        requestId,
-        sessionId: confirmSessionId
-      });
-      // Remove this request from the queue
-      setPendingToolPermissions(prev => prev.filter(p => p.requestId !== requestId));
-    } catch (error) {
-      console.error('[AISessionView] Failed to cancel tool permission:', error);
-      // Still remove from queue even if cancel fails
-      setPendingToolPermissions(prev => prev.filter(p => p.requestId !== requestId));
-    }
-  }, []);
-
-  // Load pending queued prompts from database
-  // This uses the same queue that mobile sync uses (queued_prompts table)
-  const loadQueuedPrompts = useCallback(async () => {
-    try {
-      const pending = await window.electronAPI.invoke('ai:listPendingPrompts', sessionId) as Array<{
-        id: string;
-        prompt: string;
-        timestamp: number;
-        documentContext?: any;
-        attachments?: any[];
-      }>;
-      setQueuedPrompts(pending || []);
-    } catch (error) {
-      console.error('[AISessionView] Failed to load queued prompts:', error);
-      setQueuedPrompts([]);
-    }
-  }, [sessionId]);
-
-  // Load queued prompts on session change
-  useEffect(() => {
-    loadQueuedPrompts();
-  }, [loadQueuedPrompts]);
-
-  // Track previous loading state to detect transition from loading to not loading
-  const prevIsLoadingRef = useRef(isLoading);
-  useEffect(() => {
-    // When loading transitions from true to false, refresh the queue
-    // This ensures the UI updates after a queued prompt is processed
-    if (prevIsLoadingRef.current && !isLoading) {
-      loadQueuedPrompts();
-    }
-    prevIsLoadingRef.current = isLoading;
-  }, [isLoading, loadQueuedPrompts]);
-
-  // Listen for queued prompts from mobile sync and refresh the queue display
-  useEffect(() => {
-    const handleQueuedPromptsReceived = (data: { sessionId: string }) => {
-      // Only refresh if this is for our session
-      if (data.sessionId === sessionId) {
-        loadQueuedPrompts();
-      }
-    };
-
-    const cleanup = window.electronAPI.on('ai:queuedPromptsReceived', handleQueuedPromptsReceived);
-    return () => {
-      cleanup?.();
-    };
-  }, [sessionId, loadQueuedPrompts]);
-
-  // Listen for prompt claimed events and remove from local queue display immediately
-  useEffect(() => {
-    const handlePromptClaimed = (event: CustomEvent<{ sessionId: string; promptId: string }>) => {
-      if (event.detail.sessionId === sessionId) {
-        console.log(`[AISessionView] Prompt ${event.detail.promptId} claimed, removing from queue display`);
-        setQueuedPrompts(prev => prev.filter(p => p.id !== event.detail.promptId));
-      }
-    };
-
-    window.addEventListener('ai:promptClaimed', handlePromptClaimed as EventListener);
-    return () => {
-      window.removeEventListener('ai:promptClaimed', handlePromptClaimed as EventListener);
-    };
-  }, [sessionId]);
+  // NOTE: The following IPC event handlers have been removed as they are now handled by SessionTranscript:
+  // - ai:exitPlanModeConfirm
+  // - ai:askUserQuestion
+  // - ai:askUserQuestionAnswered
+  // - ai:sessionCancelled
+  // - ai:toolPermission
+  // - ai:toolPermissionResolved
+  // - ai:queuedPromptsReceived
+  // - ai:promptClaimed
+  // This prevents duplicate event handling and re-renders.
 
   // Extract todos from session metadata when sessionData changes
   useEffect(() => {
@@ -780,28 +253,48 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
   // ============================================================
   // Files sidebar data fetching (for agent mode non-worktree sessions)
   // ============================================================
+  // Show sidebar only for parent sessions (not nested children) - sidebar is shared across workstream
   const showFileSidebar = mode === 'agent' && !isWorktreeSession;
 
-  // Fetch file edits for this session (sidebar)
+  // Fetch file edits for this session (or all sessions in workstream)
+  // For workstreams, aggregate files from parent + all child sessions
   useEffect(() => {
     if (!showFileSidebar) return;
 
     const fetchFileLinks = async () => {
       try {
         if (typeof window !== 'undefined' && window.electronAPI) {
-          const result = await window.electronAPI.invoke('session-files:get-by-session', sessionId);
-          if (result.success && result.files) {
-            const fileEditsFromDb: FileEditSummary[] = result.files.map((file: any) => ({
-              filePath: file.filePath,
-              linkType: file.linkType,
-              operation: file.metadata?.operation,
-              linesAdded: file.metadata?.linesAdded,
-              linesRemoved: file.metadata?.linesRemoved,
-              timestamp: new Date(file.timestamp).toISOString(),
-              metadata: file.metadata
-            }));
-            setFileEdits(fileEditsFromDb);
+          // Get all session IDs to fetch (parent + children for workstreams)
+          const sessionIdsToFetch = [sessionId];
+          if (hasChildren && childSessionIds.length > 0) {
+            sessionIdsToFetch.push(...childSessionIds);
           }
+
+          // Fetch files from all sessions and aggregate
+          const allFileEdits: FileEditSummary[] = [];
+          const seenPaths = new Set<string>();
+
+          for (const sid of sessionIdsToFetch) {
+            const result = await window.electronAPI.invoke('session-files:get-by-session', sid);
+            if (result.success && result.files) {
+              for (const file of result.files) {
+                // Dedupe by path - keep the most recent edit
+                if (!seenPaths.has(file.filePath)) {
+                  seenPaths.add(file.filePath);
+                  allFileEdits.push({
+                    filePath: file.filePath,
+                    linkType: file.linkType,
+                    operation: file.metadata?.operation,
+                    linesAdded: file.metadata?.linesAdded,
+                    linesRemoved: file.metadata?.linesRemoved,
+                    timestamp: new Date(file.timestamp).toISOString(),
+                    metadata: file.metadata
+                  });
+                }
+              }
+            }
+          }
+          setFileEdits(allFileEdits);
         }
       } catch (error) {
         console.error('[AISessionView] Failed to fetch file links:', error);
@@ -810,9 +303,10 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
 
     fetchFileLinks();
 
-    // Listen for file updates
+    // Listen for file updates from any session in the workstream
     const handleFileUpdate = async (updatedSessionId: string) => {
-      if (updatedSessionId === sessionId) {
+      const relevantSessionIds = [sessionId, ...childSessionIds];
+      if (relevantSessionIds.includes(updatedSessionId)) {
         fetchFileLinks();
       }
     };
@@ -821,9 +315,9 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
     return () => {
       cleanup?.();
     };
-  }, [sessionId, showFileSidebar]);
+  }, [sessionId, showFileSidebar, hasChildren, childSessionIds]);
 
-  // Fetch pending review files for sidebar
+  // Fetch pending review files for sidebar (aggregate across workstream)
   useEffect(() => {
     if (!showFileSidebar || !workspacePath) {
       setPendingReviewFilesMain(new Set());
@@ -833,8 +327,21 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
     const fetchPendingFiles = async () => {
       try {
         if (window.electronAPI?.history?.getPendingFilesForSession) {
-          const files = await window.electronAPI.history.getPendingFilesForSession(workspacePath, sessionId);
-          setPendingReviewFilesMain(new Set(files));
+          // Get all session IDs to fetch (parent + children for workstreams)
+          const sessionIdsToFetch = [sessionId];
+          if (hasChildren && childSessionIds.length > 0) {
+            sessionIdsToFetch.push(...childSessionIds);
+          }
+
+          // Aggregate pending files from all sessions
+          const allPendingFiles = new Set<string>();
+          for (const sid of sessionIdsToFetch) {
+            const files = await window.electronAPI.history.getPendingFilesForSession(workspacePath, sid);
+            for (const file of files) {
+              allPendingFiles.add(file);
+            }
+          }
+          setPendingReviewFilesMain(allPendingFiles);
         }
       } catch (error) {
         console.error('[AISessionView] Failed to fetch pending review files for sidebar:', error);
@@ -863,7 +370,7 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
       unsubscribePendingCleared?.();
       unsubscribePendingCount?.();
     };
-  }, [sessionId, workspacePath, showFileSidebar]);
+  }, [sessionId, workspacePath, showFileSidebar, hasChildren, childSessionIds]);
 
   // Ref for session editor area (for non-worktree sessions)
   const sessionEditorRef = useRef<SessionEditorAreaRef>(null);
@@ -891,156 +398,17 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
   // Expose methods through ref
   useImperativeHandle(ref, () => ({
     focusInput: () => {
-      inputRef.current?.focus();
+      // Forward to SessionTranscript's focusInput method
+      sessionTranscriptRef.current?.focusInput();
     },
     openFileInSessionEditor: (filePath: string) => {
       sessionEditorRef.current?.openFile(filePath);
     }
   }));
 
-  // Handle input change - updates Jotai atom directly
-  const handleInputChange = useCallback((value: string) => {
-    setDraftInput(value);
-  }, [setDraftInput]);
-
-  // Handle attachment add
-  const handleAttachmentAdd = useCallback((attachment: ChatAttachment) => {
-    setDraftAttachments(prev => [...prev, attachment]);
-  }, [setDraftAttachments]);
-
-  // Handle attachment remove
-  const handleAttachmentRemove = useCallback((attachmentId: string) => {
-    setDraftAttachments(prev => prev.filter(a => a.id !== attachmentId));
-  }, [setDraftAttachments]);
-
-  // Track in-flight queue requests to prevent duplicate submissions
-  const queueingRef = useRef(false);
-
-  // Handle queue message (must be before handleSend which uses it)
-  // Uses the database queue (queued_prompts table) which is processed by processQueuedPrompts in AgenticPanel
-  const handleQueue = useCallback(async (message: string) => {
-    if (!message.trim()) {
-      return;
-    }
-
-    // Prevent duplicate queue submissions
-    if (queueingRef.current) {
-      console.log('[AISessionView] Already queueing a prompt, ignoring duplicate');
-      return;
-    }
-    queueingRef.current = true;
-
-    try {
-      // Only store serializable parts of documentContext
-      // For agent mode, get context from session's active tab instead of prop
-      const effectiveContext = getEffectiveDocumentContext();
-      const serializableContext = effectiveContext ? {
-        filePath: effectiveContext.filePath,
-        content: effectiveContext.content,
-        fileType: effectiveContext.fileType
-      } : undefined;
-
-      // Create the queued prompt in the database (same queue used by mobile sync)
-      // This will be processed by processQueuedPrompts after the current AI response completes
-      const result = await window.electronAPI.invoke(
-        'ai:createQueuedPrompt',
-        sessionId,
-        message.trim(),
-        draftAttachments,
-        serializableContext
-      ) as { id: string; prompt: string; timestamp: number };
-
-      console.log('[AISessionView] Created queued prompt:', result.id);
-
-      // Add to local state for immediate UI update
-      const queuedPrompt = {
-        id: result.id,
-        prompt: message.trim(),
-        timestamp: result.timestamp,
-        documentContext: serializableContext,
-        attachments: draftAttachments
-      };
-      setQueuedPrompts(prev => [...prev, queuedPrompt]);
-
-      // Clear draft
-      setDraftInput('');
-      setDraftAttachments([]);
-    } catch (error) {
-      console.error('[AISessionView] Failed to queue prompt:', error);
-    } finally {
-      queueingRef.current = false;
-    }
-  }, [sessionId, getEffectiveDocumentContext, draftAttachments, setDraftInput, setDraftAttachments]);
-
-  // Handle send message - now calls IPC directly
-  const handleSend = useCallback(async () => {
-    if (!draftInput.trim() || !sessionData) return;
-
-    console.log('[AISessionView] handleSend called', { sessionId, isLoading, draftInputLength: draftInput.length });
-
-    // If already loading, queue the prompt instead
-    if (isLoading) {
-      console.log('[AISessionView] Session is loading, queueing prompt instead of sending');
-      handleQueue(draftInput.trim());
-      return;
-    }
-
-    const message = draftInput.trim();
-    const attachments = draftAttachments;
-
-    // Clear draft immediately for responsive UI
-    setDraftInput('');
-    setDraftAttachments([]);
-
-    // Set local sending flag for immediate UI feedback
-    // Note: sessionProcessingAtom is managed by AgenticPanel via sessionState.onStateChange
-    sendingRef.current = true;
-
-    // Add user message to local state optimistically
-    const userMessage = {
-      id: `msg-${Date.now()}`,
-      role: 'user' as const,
-      content: message,
-      timestamp: Date.now(),
-    };
-    updateSessionData({
-      sessionId,
-      updates: {
-        messages: [...(sessionData.messages || []), userMessage],
-      },
-    });
-
-    try {
-      // Build document context with attachments included
-      // For agent mode, get context from session's active tab instead of prop
-      const effectiveContext = getEffectiveDocumentContext();
-      const docContext = {
-        filePath: effectiveContext?.filePath,
-        content: effectiveContext?.content,
-        fileType: effectiveContext?.fileType,
-        attachments: attachments.length > 0 ? attachments : undefined,
-        mode: aiMode,
-      };
-
-      // Send message via IPC using positional arguments
-      await window.electronAPI.invoke('ai:sendMessage', message, docContext, sessionId, workspacePath);
-    } catch (error) {
-      console.error('[AISessionView] Failed to send message:', error);
-      sendingRef.current = false;
-    }
-  }, [sessionId, sessionData, draftInput, draftAttachments, isLoading, getEffectiveDocumentContext, aiMode, setDraftInput, setDraftAttachments, updateSessionData, handleQueue]);
-
-  // Handle cancel - now calls IPC directly
-  // Note: sessionProcessingAtom will be set to false by AgenticPanel when the cancel completes
-  const handleCancel = useCallback(async () => {
-    console.log('[AISessionView] handleCancel called, sessionId:', sessionId);
-    try {
-      await window.electronAPI.invoke('ai:cancelRequest', sessionId);
-      sendingRef.current = false;
-    } catch (error) {
-      console.error('[AISessionView] Failed to cancel request:', error);
-    }
-  }, [sessionId]);
+  // NOTE: handleInputChange, handleAttachmentAdd, handleAttachmentRemove, handleQueue,
+  // handleSend, handleCancel are now handled by SessionTranscript.
+  // Removing them from here prevents double atom subscriptions and re-renders.
 
   // Handle file click
   const handleFileClick = useCallback((filePath: string) => {
@@ -1063,94 +431,51 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
     }
   }, [sessionId, onNavigateHistory]);
 
-  // Handle cancel queued prompt (delete from database queue)
-  const handleCancelQueuedPrompt = useCallback(async (id: string) => {
+  // NOTE: handleCancelQueuedPrompt, handleEditQueuedPrompt, handleCloseAndArchive, handleUnarchive
+  // are now handled by SessionTranscript
+
+  // Handle creating a new workstream from this session
+  // This creates a parent session, makes this session a child, and creates a new sibling
+  const handleNewWorkstreamSession = useCallback(async () => {
+    if (!workspacePath || hasChildren) return;
     try {
-      // Delete from database
-      await window.electronAPI.invoke('ai:deleteQueuedPrompt', id);
-
-      // Update local state
-      setQueuedPrompts(prev => prev.filter(p => p.id !== id));
-
-      console.log('[AISessionView] Cancelled queued prompt:', id);
+      const parentSessionId = await convertToWorkstream({
+        sessionId,
+        workspacePath,
+      });
+      if (parentSessionId) {
+        // Navigate to the new parent session to see the workstream tabs
+        onNavigateToSession?.(parentSessionId);
+      }
     } catch (error) {
-      console.error('[AISessionView] Failed to cancel queued prompt:', error);
+      console.error('[AISessionView] Failed to create workstream:', error);
     }
-  }, []);
+  }, [sessionId, workspacePath, hasChildren, convertToWorkstream, onNavigateToSession]);
 
-  // Handle edit queued prompt (delete from queue and put back in input)
-  const handleEditQueuedPrompt = useCallback(async (id: string, prompt: string) => {
+  // Handle child session tab click (for workstreams)
+  const handleChildTabClick = useCallback((childId: string | null) => {
+    setActiveChild({ parentSessionId: sessionId, childSessionId: childId });
+  }, [sessionId, setActiveChild]);
+
+  // Handle creating a new child session (for workstreams)
+  const handleNewChildSession = useCallback(async () => {
+    console.log('[AISessionView] handleNewChildSession called', { sessionId, workspacePath, hasChildren });
+    if (!workspacePath) {
+      console.log('[AISessionView] handleNewChildSession: no workspacePath, returning');
+      return;
+    }
     try {
-      // Delete from database
-      await window.electronAPI.invoke('ai:deleteQueuedPrompt', id);
-
-      // Update local state
-      setQueuedPrompts(prev => prev.filter(p => p.id !== id));
-
-      // Set input value
-      setDraftInput(prompt);
-
-      // Focus the input
-      inputRef.current?.focus();
-
-      console.log('[AISessionView] Editing queued prompt:', id);
-    } catch (error) {
-      console.error('[AISessionView] Failed to edit queued prompt:', error);
+      const newSessionId = await createChildSession({
+        parentSessionId: sessionId,
+        workspacePath,
+      });
+      console.log('[AISessionView] handleNewChildSession: created child session', newSessionId);
+    } catch (err) {
+      console.error('[AISessionView] Failed to create child session:', err);
     }
-  }, [setDraftInput]);
+  }, [sessionId, workspacePath, hasChildren, createChildSession]);
 
-  // Handle close and archive session
-  const handleCloseAndArchive = useCallback(async () => {
-    try {
-      // Archive in database
-      await window.electronAPI.invoke('sessions:update-metadata', sessionId, { isArchived: true });
-      setIsArchived(true);
-      // Notify parent to close the tab
-      onCloseAndArchive?.(sessionId);
-    } catch (error) {
-      console.error('[AISessionView] Failed to archive session:', error);
-    }
-  }, [sessionId, setIsArchived, onCloseAndArchive]);
-
-  // Handle unarchive session
-  const handleUnarchive = useCallback(async () => {
-    try {
-      // Unarchive in database
-      await window.electronAPI.invoke('sessions:update-metadata', sessionId, { isArchived: false });
-      setIsArchived(false);
-    } catch (error) {
-      console.error('[AISessionView] Failed to unarchive session:', error);
-    }
-  }, [sessionId, setIsArchived]);
-
-  // Handle AI mode change
-  const handleAIModeChange = useCallback(async (newMode: AIMode) => {
-    setAiMode(newMode);
-    // Persist to database
-    try {
-      await window.electronAPI.invoke('sessions:update-metadata', sessionId, { mode: newMode });
-    } catch (error) {
-      console.error('[AISessionView] Failed to update mode:', error);
-    }
-  }, [sessionId, setAiMode]);
-
-  // Handle model change
-  const handleModelChange = useCallback(async (modelId: string) => {
-    setCurrentModel(modelId);
-    // Persist to database
-    try {
-      await window.electronAPI.invoke('sessions:update-metadata', sessionId, { model: modelId });
-    } catch (error) {
-      console.error('[AISessionView] Failed to update model:', error);
-    }
-  }, [sessionId, setCurrentModel]);
-
-  // Handle slash command suggestion selection
-  const handleCommandSelect = useCallback((command: string) => {
-    setDraftInput(command);
-    // Focus the input after inserting command
-    inputRef.current?.focus();
-  }, [setDraftInput]);
+  // NOTE: handleAIModeChange, handleModelChange, handleCommandSelect are now handled by SessionTranscript
 
   // Handle sidebar resize drag (for files sidebar)
   const handleSidebarResizeStart = useCallback((e: React.MouseEvent) => {
@@ -1179,18 +504,8 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
     document.body.style.userSelect = 'none';
   }, [sidebarWidth]);
 
-  // Feature flags based on mode and provider
-  const enableSlashCommands = sessionData?.provider === 'claude-code'; // Only for Claude Code
-  const enableAttachments = true; // Available in both chat and agent modes
-  const enableHistoryNavigation = true; // Available in both chat and agent modes
-
-  // Calculate last user message timestamp for mockup annotation indicator
-  const lastUserMessageTimestamp = React.useMemo(() => {
-    const userMessages = sessionData?.messages?.filter(m => m.role === 'user') || [];
-    if (userMessages.length === 0) return null;
-    const lastUserMessage = userMessages[userMessages.length - 1];
-    return lastUserMessage.timestamp || null;
-  }, [sessionData?.messages]);
+  // NOTE: Feature flags (enableSlashCommands, enableAttachments, enableHistoryNavigation)
+  // and lastUserMessageTimestamp are now computed in SessionTranscript
 
   // Get session editor layout state for non-worktree sessions
   const sessionEditorState = useAtomValue(sessionEditorStateAtom(sessionId));
@@ -1290,7 +605,10 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
         {/* Session Header - only in agent mode */}
         {mode === 'agent' && (
-          <AgentSessionHeader sessionData={sessionData} />
+          <AgentSessionHeader
+            sessionData={sessionData}
+            workspacePath={workspacePath}
+          />
         )}
 
         {/* Content area: Editor + Transcript + Input */}
@@ -1307,127 +625,184 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
               />
             )}
 
-            {/* Transcript header - shows agent info when in split view, draggable to resize */}
+            {/* Transcript header - contains workstream tabs, draggable to resize in split mode */}
             {showSessionEditor && sessionEditorState.layoutMode !== 'editor' && (
               <div
                 className="transcript-header"
                 onMouseDown={sessionEditorState.layoutMode === 'split' ? handleTranscriptResizeStart : undefined}
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  padding: '0.5rem 0.75rem',
                   borderTop: '3px solid var(--border-primary)',
                   borderBottom: '1px solid var(--border-primary)',
                   backgroundColor: 'var(--surface-secondary)',
+                  flexShrink: 0,
                   cursor: sessionEditorState.layoutMode === 'split' ? 'ns-resize' : 'default',
-                  flexShrink: 0
                 }}
                 title={sessionEditorState.layoutMode === 'split' ? 'Drag to resize' : undefined}
               >
-                <ProviderIcon provider={sessionData.provider} size={18} />
-                <span style={{ fontWeight: 500, fontSize: '13px', color: 'var(--text-primary)' }}>
-                  {getProviderDisplayName(sessionData.provider)}
-                </span>
-                {sessionData.model && (
-                  <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginLeft: 'auto' }}>
-                    {sessionData.model.split(':').pop()}
-                  </span>
-                )}
+                {/* Workstream session tabs - always shown, single tab is fine */}
+                <div
+                  className="workstream-tabs"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '2px',
+                    padding: '4px 0.75rem 6px',
+                    overflowX: 'auto',
+                  }}
+                >
+                  {hasChildren && childSessionIds.length > 0 ? (
+                    <>
+                      {/* Parent session tab - shows the parent's actual title, not "Main" */}
+                      <button
+                        type="button"
+                        onClick={() => handleChildTabClick(null)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '5px 10px',
+                          border: 'none',
+                          background: activeChildId === null ? 'var(--surface-tertiary)' : 'transparent',
+                          color: activeChildId === null ? 'var(--text-primary)' : 'var(--text-secondary)',
+                          fontSize: '12px',
+                          fontWeight: 500,
+                          cursor: 'pointer',
+                          borderRadius: '4px',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {sessionData.title || 'Session'}
+                      </button>
+
+                      {/* Child session tabs */}
+                      {childSessionIds.map(childId => {
+                        const childData = childSessionData.get(childId);
+                        const childTitle = childData?.title || 'Session';
+                        const isActiveTab = activeChildId === childId;
+
+                        return (
+                          <button
+                            key={childId}
+                            type="button"
+                            onClick={() => handleChildTabClick(childId)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '5px 10px',
+                              border: 'none',
+                              background: isActiveTab ? 'var(--surface-tertiary)' : 'transparent',
+                              color: isActiveTab ? 'var(--text-primary)' : 'var(--text-secondary)',
+                              fontSize: '12px',
+                              fontWeight: 500,
+                              cursor: 'pointer',
+                              borderRadius: '4px',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {childTitle}
+                          </button>
+                        );
+                      })}
+
+                      {/* New session button */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          console.log('[AISessionView] Plus button clicked (in workstream)', e);
+                          e.stopPropagation();
+                          handleNewChildSession();
+                        }}
+                        title="New session in workstream"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: '24px',
+                          height: '24px',
+                          padding: 0,
+                          border: 'none',
+                          background: 'transparent',
+                          color: 'var(--text-tertiary)',
+                          cursor: 'pointer',
+                          borderRadius: '4px',
+                        }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <line x1="12" y1="5" x2="12" y2="19" />
+                          <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {/* Single session - show tab with session title and "New Workstream Session" button */}
+                      <button
+                        type="button"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '5px 10px',
+                          border: 'none',
+                          background: 'var(--surface-tertiary)',
+                          color: 'var(--text-primary)',
+                          fontSize: '12px',
+                          fontWeight: 500,
+                          cursor: 'default',
+                          borderRadius: '4px',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {sessionData.title || 'Session'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleNewWorkstreamSession}
+                        title="New session in workstream"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: '24px',
+                          height: '24px',
+                          padding: 0,
+                          border: 'none',
+                          background: 'transparent',
+                          color: 'var(--text-tertiary)',
+                          cursor: 'pointer',
+                          borderRadius: '4px',
+                        }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <line x1="12" y1="5" x2="12" y2="19" />
+                          <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             )}
 
-            {/* Transcript and gutters - memoized to prevent re-render on input changes */}
-            <div style={transcriptStyle}>
-          <TranscriptSection
-            sessionId={sessionId}
-            sessionData={sessionData}
-            workspacePath={workspacePath}
-            mode={mode}
-            todos={todos}
-            queuedPrompts={queuedPrompts}
-            isProcessing={isLoading}
-            onFileClick={handleFileClick}
-            onTodoClick={handleTodoClick}
-            onCancelQueuedPrompt={handleCancelQueuedPrompt}
-            onEditQueuedPrompt={handleEditQueuedPrompt}
-            isArchived={isArchived}
-            onCloseAndArchive={handleCloseAndArchive}
-            onUnarchive={handleUnarchive}
-            provider={sessionData.provider}
-            onCommandSelect={handleCommandSelect}
-            hideSidebar={showSessionEditor}
-          />
-            </div>
+            {/* Render the appropriate session transcript based on active tab */}
+            {/* Use SessionTranscript for proper encapsulation - each session owns its state */}
+            <SessionTranscript
+              ref={sessionTranscriptRef}
+              key={activeChildId ?? sessionId}  // Key ensures remount on session switch
+              sessionId={activeChildId ?? sessionId}
+              workspacePath={workspacePath}
+              mode={mode}
+              hideSidebar={showSessionEditor}
+              onFileClick={handleFileClick}
+              onTodoClick={handleTodoClick}
+              onNavigateHistory={onNavigateHistory}
+              onCloseAndArchive={onCloseAndArchive}
+              onSessionTitleChanged={onSessionTitleChanged}
+              documentContext={documentContext}
+            />
+          {/* SessionTranscript handles its own input, confirmations, etc. */}
           </div>
-
-          {/* ExitPlanMode confirmation - shown when agent requests to exit planning mode */}
-        {pendingExitPlanConfirmation && (
-          <ExitPlanModeConfirmation
-            data={pendingExitPlanConfirmation}
-            onApprove={handleExitPlanModeApprove}
-            onDeny={handleExitPlanModeDeny}
-          />
-        )}
-
-        {/* AskUserQuestion confirmation - shown when agent asks clarifying questions */}
-        {pendingAskUserQuestion && (
-          <AskUserQuestionConfirmation
-            key={pendingAskUserQuestion.questionId}
-            data={pendingAskUserQuestion}
-            onSubmit={handleAskUserQuestionSubmit}
-            onCancel={handleAskUserQuestionCancel}
-          />
-        )}
-
-        {/* Tool permission confirmations - shown when tools require user approval */}
-        {pendingToolPermissions.map(permission => (
-          <ToolPermissionConfirmation
-            key={permission.requestId}
-            data={permission}
-            onSubmit={handleToolPermissionSubmit}
-            onCancel={handleToolPermissionCancel}
-          />
-        ))}
-
-        {/* Input area - separate so typing doesn't re-render transcript */}
-        <AIInput
-          ref={inputRef}
-          value={draftInput}
-          onChange={handleInputChange}
-          onSend={handleSend}
-          onCancel={handleCancel}
-          isLoading={isLoading}
-          workspacePath={workspacePath}
-          sessionId={sessionId}
-          fileMentionOptions={fileMentionOptions}
-          onFileMentionSearch={onFileMentionSearch}
-          onFileMentionSelect={onFileMentionSelect}
-          attachments={enableAttachments ? draftAttachments : undefined}
-          onAttachmentAdd={enableAttachments ? handleAttachmentAdd : undefined}
-          onAttachmentRemove={enableAttachments ? handleAttachmentRemove : undefined}
-          enableSlashCommands={enableSlashCommands}
-          onNavigateHistory={enableHistoryNavigation ? handleNavigateHistory : undefined}
-          placeholder={
-            mode === 'chat'
-              ? "Ask a question. @ for files. / for commands"
-              : enableSlashCommands
-                ? "Type your message... (Enter to send, Shift+Enter for new line, @ for files, / for commands)"
-                : "Type your message... (Enter to send, Shift+Enter for new line, @ for files)"
-          }
-          mode={aiMode}
-          onModeChange={handleAIModeChange}
-          currentModel={currentModel}
-          onModelChange={handleModelChange}
-          sessionHasMessages={sessionHasMessages}
-          currentProviderType={currentProviderType}
-          tokenUsage={sessionData.tokenUsage}
-          provider={sessionData.provider}
-          onQueue={handleQueue}
-          queueCount={queuedPrompts.length}
-          currentFilePath={getEffectiveDocumentContext()?.filePath}
-          lastUserMessageTimestamp={lastUserMessageTimestamp}
-        />
         </div>
       </div>
 

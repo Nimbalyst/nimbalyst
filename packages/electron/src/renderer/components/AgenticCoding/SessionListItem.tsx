@@ -1,8 +1,8 @@
 import React, { useState, useCallback, useEffect, useRef, memo } from 'react';
-import { useAtomValue } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
-import { sessionProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom } from '../../store';
+import { sessionOrChildProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom, reparentSessionAtom, refreshSessionListAtom } from '../../store';
 import './SessionListItem.css';
 
 /**
@@ -11,7 +11,8 @@ import './SessionListItem.css';
  * Only this component re-renders when the session's state changes.
  */
 const SessionStatusIndicator = memo<{ sessionId: string; messageCount?: number }>(({ sessionId, messageCount }) => {
-  const isProcessing = useAtomValue(sessionProcessingAtom(sessionId));
+  // Use aggregated atom that checks this session AND any children (for workstreams)
+  const isProcessing = useAtomValue(sessionOrChildProcessingAtom(sessionId));
   const hasPendingPrompt = useAtomValue(sessionPendingPromptAtom(sessionId));
   const hasUnread = useAtomValue(sessionUnreadAtom(sessionId));
 
@@ -40,9 +41,9 @@ const SessionStatusIndicator = memo<{ sessionId: string; messageCount?: number }
     );
   }
 
-  if (messageCount !== undefined) {
-    return <span className="session-list-item-message-count">{messageCount}</span>;
-  }
+  // if (messageCount !== undefined) {
+  //   return <span className="session-list-item-message-count">{messageCount}</span>;
+  // }
 
   return null;
 });
@@ -75,8 +76,10 @@ interface SessionListItemProps {
   model?: string;
   messageCount?: number;
   sessionType?: 'chat' | 'planning' | 'coding' | 'terminal'; // Type of session
-  parentSessionId?: string; // ID of parent session if this is a branch
-  branchedAt?: number; // Timestamp when this session was branched
+  isWorkstream?: boolean; // Whether this session is a workstream (has children)
+  parentSessionId?: string | null; // Parent session ID for hierarchical workstreams
+  projectPath?: string; // Workspace path for drag-drop validation
+  branchedAt?: number; // Timestamp when this session was branched (branch tracking)
 }
 
 export const SessionListItem: React.FC<SessionListItemProps> = ({
@@ -104,17 +107,37 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
   model,
   messageCount,
   sessionType,
-  parentSessionId,
-  branchedAt
+  isWorkstream = false,
+  parentSessionId = null,
+  projectPath,
+  branchedAt,
 }) => {
+  // Debug workstream icon
+  if (isWorkstream) {
+    // console.log('[SessionListItem] Workstream session:', id, title);
+  }
+
   const [isHovering, setIsHovering] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
   const [adjustedContextMenuPosition, setAdjustedContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
+  const [isValidDropTarget, setIsValidDropTarget] = useState(false);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
+
+  // Atom setters for drag-drop
+  const reparentSession = useSetAtom(reparentSessionAtom);
+  const refreshSessionList = useSetAtom(refreshSessionListAtom);
+
+  // Determine if this session can be dragged
+  // Can drag if: (1) Has a parent (is a child session), OR (2) Is an orphan (no parent, no children)
+  const isDraggable = parentSessionId !== null || !isWorkstream;
+
+  // Determine if this session can accept drops (only workstreams can be drop targets)
+  const isDropTarget = isWorkstream;
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -189,6 +212,107 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
     }
   };
 
+  // Drag-and-drop handlers
+  const handleDragStart = useCallback((e: React.DragEvent) => {
+    if (!isDraggable || !projectPath) {
+      e.preventDefault();
+      return;
+    }
+
+    const dragData = {
+      sessionId: id,
+      parentId: parentSessionId,
+      workspacePath: projectPath,
+    };
+
+    e.dataTransfer.setData('application/x-nimbalyst-session', JSON.stringify(dragData));
+    e.dataTransfer.effectAllowed = 'move';
+    setIsDragging(true);
+  }, [isDraggable, id, parentSessionId, projectPath]);
+
+  const handleDragEnd = useCallback((e: React.DragEvent) => {
+    setIsDragging(false);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    if (!isDropTarget) return;
+
+    // Check if dragging a session
+    const hasSessionData = e.dataTransfer.types.includes('application/x-nimbalyst-session');
+    if (!hasSessionData) return;
+
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setIsValidDropTarget(true);
+  }, [isDropTarget]);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    // Only clear drop target if actually leaving the element
+    // (not when entering a child element)
+    const relatedTarget = e.relatedTarget as HTMLElement;
+    if (!e.currentTarget.contains(relatedTarget)) {
+      setIsValidDropTarget(false);
+    }
+  }, []);
+
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsValidDropTarget(false);
+
+    const dataStr = e.dataTransfer.getData('application/x-nimbalyst-session');
+    if (!dataStr || !projectPath) return;
+
+    try {
+      const { sessionId, parentId, workspacePath } = JSON.parse(dataStr);
+
+      // Validate same workspace
+      if (workspacePath !== projectPath) {
+        console.error('[SessionListItem] Cannot move session between workspaces');
+        return;
+      }
+
+      // Validate not dropping on self
+      if (sessionId === id) {
+        console.error('[SessionListItem] Cannot drop session on itself');
+        return;
+      }
+
+      // Validate not dropping on current parent (no-op)
+      if (parentId === id) {
+        console.log('[SessionListItem] Session already belongs to this workstream');
+        return;
+      }
+
+      // Execute reparent
+      console.log(`[SessionListItem] Reparenting session ${sessionId} from ${parentId} to ${id}`);
+      const success = await reparentSession({
+        sessionId,
+        oldParentId: parentId,
+        newParentId: id,
+        workspacePath: projectPath,
+      });
+
+      if (success) {
+        // Refresh session list to ensure consistency
+        await refreshSessionList();
+
+        // Track analytics
+        if (window.electronAPI) {
+          await window.electronAPI.invoke('analytics:track', {
+            event: 'session_reparented',
+            properties: {
+              had_previous_parent: parentId !== null,
+              workspace_path: projectPath,
+            },
+          });
+        }
+      }
+    } catch (error) {
+      console.error('[SessionListItem] Failed to handle drop:', error);
+    }
+  }, [projectPath, id, reparentSession, refreshSessionList]);
+
   // Auto-focus and select text when rename input appears
   useEffect(() => {
     if (isRenaming && renameInputRef.current) {
@@ -254,11 +378,17 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
   return (
     <div
         id={"session-list-item-" + id}
-      className={`session-list-item ${isActive ? 'active' : ''} ${isLoaded ? 'loaded' : ''} ${isArchived ? 'archived' : ''} ${isSelected ? 'selected' : ''} ${isPinned ? 'pinned' : ''}`}
+      className={`session-list-item ${isActive ? 'active' : ''} ${isLoaded ? 'loaded' : ''} ${isArchived ? 'archived' : ''} ${isSelected ? 'selected' : ''} ${isPinned ? 'pinned' : ''} ${isDragging ? 'dragging' : ''} ${isValidDropTarget ? 'drop-target-valid' : ''}`}
       onClick={onClick}
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => { setIsHovering(false); setShowContextMenu(false); }}
       onContextMenu={handleContextMenu}
+      draggable={isDraggable}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
@@ -270,9 +400,11 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
       aria-label={`Session: ${truncatedTitle}, ${timestampLabel} ${relativeTime}${isLoaded ? ' (loaded in tab)' : ''}${isArchived ? ' (archived)' : ''}`}
       aria-current={isActive ? 'page' : undefined}
     >
-      <div className={`session-list-item-icon ${sessionType === 'terminal' ? 'terminal-icon' : ''}`}>
+      <div className={`session-list-item-icon ${sessionType === 'terminal' ? 'terminal-icon' : ''} ${isWorkstream ? 'workstream-icon' : ''}`}>
         {sessionType === 'terminal' ? (
           <MaterialSymbol icon="terminal" size={16} />
+        ) : isWorkstream ? (
+          <MaterialSymbol icon="account_tree" size={16} />
         ) : (
           <ProviderIcon provider={provider || 'claude'} size={16} />
         )}
@@ -314,8 +446,8 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
           <button
             className={`session-list-item-archive ${isHovering ? 'visible' : ''}`}
             onClick={handleArchiveToggle}
-            aria-label={isArchived ? "Unarchive session" : "Archive session"}
-            title={isArchived ? "Unarchive session" : "Archive session"}
+            aria-label={isArchived ? `Unarchive ${isWorkstream ? 'workstream' : 'session'}` : `Archive ${isWorkstream ? 'workstream' : 'session'}`}
+            title={isArchived ? `Unarchive ${isWorkstream ? 'workstream' : 'session'}` : `Archive ${isWorkstream ? 'workstream' : 'session'}`}
           >
             {isArchived ? (
               <MaterialSymbol icon="unarchive" size={14} />
@@ -371,12 +503,12 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
             {isArchived ? (
               <>
                 <MaterialSymbol icon="unarchive" size={14} />
-                Unarchive
+                Unarchive {isWorkstream ? 'Workstream' : 'Session'}
               </>
             ) : (
               <>
                 <MaterialSymbol icon="archive" size={14} />
-                Archive
+                Archive {isWorkstream ? 'Workstream' : 'Session'}
               </>
             )}
           </button>

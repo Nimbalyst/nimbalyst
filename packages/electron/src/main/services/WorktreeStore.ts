@@ -5,7 +5,7 @@
  * Follows patterns from PGLiteSessionStore and PGLiteAgentMessagesStore.
  */
 
-import log from 'electron-log';
+import log from 'electron-log/main';
 
 const logger = log.scope('WorktreeStore');
 

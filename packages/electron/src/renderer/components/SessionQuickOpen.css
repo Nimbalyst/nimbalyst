@@ -137,6 +137,11 @@
   font-weight: 600;
 }
 
+.session-quick-open-badge.workstream-badge {
+  background: var(--accent-primary, #60a5fa);
+  color: white;
+}
+
 .session-quick-open-item-meta {
   font-size: 12px;
   color: var(--text-tertiary);

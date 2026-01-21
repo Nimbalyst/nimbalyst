@@ -36,6 +36,10 @@
         {
           "name": "ios-build",
           "description": "Build and deploy iOS apps"
+        },
+        {
+          "name": "fastlane",
+          "description": "Automate iOS builds, code signing, and TestFlight deployments"
         }
       ]
     },
@@ -46,7 +50,11 @@
       "*.storyboard": "widgets",
       "*.xib": "widgets",
       "*.xcassets": "image",
-      "project.yml": "settings"
+      "project.yml": "settings",
+      "Fastfile": "settings",
+      "Appfile": "settings",
+      "Matchfile": "settings",
+      "Gemfile": "settings"
     },
     "newFileMenu": [
       {

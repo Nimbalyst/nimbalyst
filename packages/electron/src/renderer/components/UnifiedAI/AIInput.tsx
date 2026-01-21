@@ -24,6 +24,10 @@ import {
 } from './interactivePrompts';
 import { HelpTooltip } from '../../help';
 import { showTranscriptionAtom } from '../../store/atoms/appSettings';
+import {
+  fileMentionOptionsAtom,
+  searchFileMentionAtom,
+} from '../../store';
 import '../AIChat/AIChat.css';
 
 export interface AIInputRef {
@@ -44,11 +48,6 @@ interface AIInputProps {
 
   // History navigation support (from ChatInput)
   onNavigateHistory?: (direction: 'up' | 'down') => void;
-
-  // File mention support
-  fileMentionOptions?: TypeaheadOption[];
-  onFileMentionSearch?: (query: string) => void;
-  onFileMentionSelect?: (option: TypeaheadOption) => void;
 
   // Attachment support (from AgenticInput)
   attachments?: ChatAttachment[];
@@ -119,9 +118,6 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
     workspacePath,
     sessionId,
     onNavigateHistory,
-    fileMentionOptions = [],
-    onFileMentionSearch,
-    onFileMentionSelect,
     attachments = [],
     onAttachmentAdd,
     onAttachmentRemove,
@@ -154,6 +150,13 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
     // Voice mode state
     const [isVoiceActive, setIsVoiceActive] = useState(false);
     const showTranscription = useAtomValue(showTranscriptionAtom);
+
+    // File mention state via Jotai atoms
+    // Subscribes directly to atoms instead of receiving props (no prop drilling)
+    const fileMentionOptions = useAtomValue(
+      fileMentionOptionsAtom(workspacePath || '')
+    );
+    const searchFileMention = useSetAtom(searchFileMentionAtom);
 
     // Pending voice command atom
     const setPendingVoiceCommand = useSetAtom(pendingVoiceCommandAtom);
@@ -430,8 +433,9 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
       const pos = textarea.selectionStart;
 
       // Build trigger list based on enabled features
+      // File mentions are enabled when workspacePath is provided
       const triggers: string[] = [];
-      if (onFileMentionSearch) triggers.push('@');
+      if (workspacePath) triggers.push('@');
       if (enableSlashCommands) triggers.push('/');
 
       if (triggers.length === 0) {
@@ -448,8 +452,9 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
 
         // Debounce the expensive filtering operations
         const timerId = setTimeout(() => {
-          if (match.trigger === '@' && onFileMentionSearch) {
-            onFileMentionSearch(match.query);
+          if (match.trigger === '@' && workspacePath) {
+            // Use atom-based search instead of prop callback
+            searchFileMention({ workspacePath, query: match.query });
             if (fileMentionOptions.length > 0) {
               setSelectedIndex(0);
             }
@@ -466,7 +471,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
         setSelectedOption(null);
       }
       return undefined;
-    }, [value, cursorPosition, onFileMentionSearch, filterSlashCommands, enableSlashCommands, fileMentionOptions.length]);
+    }, [value, cursorPosition, workspacePath, searchFileMention, filterSlashCommands, enableSlashCommands, fileMentionOptions.length]);
 
     // Update cursor position on selection change
     const handleSelectionChange = useCallback(() => {
@@ -531,14 +536,10 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
         }
       }, 0);
 
-      if (typeaheadMatch.trigger === '@' && onFileMentionSelect) {
-        onFileMentionSelect(option);
-      }
-
       setTypeaheadMatch(null);
       setSelectedIndex(null);
       setSelectedOption(null);
-    }, [typeaheadMatch, value, onChange, onFileMentionSelect]);
+    }, [typeaheadMatch, value, onChange]);
 
     const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
       const currentOptions = typeaheadMatch?.trigger === '@' ? fileMentionOptions : slashCommandOptions;

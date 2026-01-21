@@ -1,0 +1,13 @@
+.agent-session-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Ensure SessionTranscript fills available space */
+.agent-session-panel > div {
+  flex: 1;
+  min-height: 0;
+}

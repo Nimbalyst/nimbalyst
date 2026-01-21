@@ -2,6 +2,11 @@ import React from 'react';
 import { ProviderIcon } from '@nimbalyst/runtime';
 import './WorktreeSingle.css';
 
+/**
+ * @deprecated This component will be replaced by the unified session architecture.
+ * See nimbalyst-local/plans/unified-session-architecture.md for migration plan.
+ * Use the new AgentMode components with hierarchical session model instead.
+ */
 interface SessionListItemData {
   id: string;
   title?: string;
@@ -32,6 +37,11 @@ interface WorktreeSingleProps {
   onContextMenu?: (e: React.MouseEvent) => void;
 }
 
+/**
+ * @deprecated This component will be replaced by the unified session architecture.
+ * See nimbalyst-local/plans/unified-session-architecture.md for migration plan.
+ * Use the new AgentMode components with hierarchical session model instead.
+ */
 export const WorktreeSingle: React.FC<WorktreeSingleProps> = ({
   session,
   worktreeName,
@@ -44,6 +54,7 @@ export const WorktreeSingle: React.FC<WorktreeSingleProps> = ({
   return (
     <div
       className={`worktree-single ${isActive ? 'active' : ''}`}
+      data-testid="worktree-single"
       onClick={onClick}
       onContextMenu={onContextMenu}
       role="button"

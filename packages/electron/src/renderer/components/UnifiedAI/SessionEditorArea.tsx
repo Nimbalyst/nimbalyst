@@ -1,4 +1,10 @@
 /**
+ * @deprecated This component will be replaced by the unified session architecture.
+ * See nimbalyst-local/plans/unified-session-architecture.md for migration plan.
+ * The old AgenticPanel architecture has per-session editor tabs.
+ * The new AgentMode architecture uses WorkstreamEditorTabs at the workstream level instead,
+ * where all sessions in a workstream share the same editor tabs.
+ *
  * SessionEditorArea - Embedded editor tabs for an AI session
  *
  * This component provides a resizable editor area within the agent mode interface.

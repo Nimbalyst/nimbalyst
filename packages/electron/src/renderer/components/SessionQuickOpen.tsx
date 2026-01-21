@@ -11,6 +11,7 @@ interface SessionItem {
   provider: string;
   model?: string;
   messageCount: number;
+  parentSessionId?: string | null;
 }
 
 interface SessionQuickOpenProps {
@@ -50,6 +51,8 @@ export const SessionQuickOpen: React.FC<SessionQuickOpenProps> = ({
       window.electronAPI.invoke('sessions:list', workspacePath, { includeArchived: false })
         .then((result: { success: boolean; sessions: SessionItem[] }) => {
           console.log('[SessionQuickOpen] sessions:list returned', result.sessions?.length, 'sessions');
+          const sessionsWithParent = result.sessions?.filter(s => s.parentSessionId);
+          console.log('[SessionQuickOpen] Sessions with parentSessionId:', sessionsWithParent?.length, sessionsWithParent?.map(s => ({ id: s.id, title: s.title, parent: s.parentSessionId })));
           if (result.success && Array.isArray(result.sessions)) {
             setAllSessions(result.sessions);
           } else {
@@ -131,6 +134,9 @@ export const SessionQuickOpen: React.FC<SessionQuickOpenProps> = ({
   }, [isOpen, selectedIndex, displaySessions, onClose]);
 
   const handleSessionSelect = (sessionId: string) => {
+    // Pass the session ID to the parent handler
+    // The AgentMode component will handle loading the session and determining
+    // if it's a child session that needs to open its parent workstream
     onSessionSelect(sessionId);
     onClose();
   };
@@ -178,6 +184,11 @@ export const SessionQuickOpen: React.FC<SessionQuickOpenProps> = ({
                   <div className="session-quick-open-item-content">
                     <div className="session-quick-open-item-name">
                       {session.title || 'New conversation'}
+                      {session.parentSessionId && (
+                        <span className="session-quick-open-badge workstream-badge">
+                          In Workstream
+                        </span>
+                      )}
                       {session.messageCount > 0 && (
                         <span className="session-quick-open-badge">
                           {session.messageCount} msg{session.messageCount !== 1 ? 's' : ''}

@@ -28,10 +28,95 @@ Tests are organized by feature area under `packages/electron/e2e/`:
 
 - `e2e/ai/` - AI-related tests (diff reliability, file mentions, etc.)
 - `e2e/core/` - Core app functionality (window restore, workspace tabs, etc.)
+- `e2e/editors/` - Editor-specific tests (one consolidated file per editor type)
 - `e2e/files/` - File operations (manual save, autosave, file watching, etc.)
 - `e2e/tabs/` - Tab management (reordering, autosave navigation, etc.)
 - `e2e/theme/` - Theme switching tests
 - `e2e/plugins/` - Plugin-specific tests
+
+## Test Consolidation (Performance Critical)
+
+**IMPORTANT:** Electron E2E tests have significant startup overhead (~4-5 seconds per app launch). To keep the test suite fast, we consolidate related tests to share a single app instance.
+
+### Why Consolidate?
+
+- Each `launchElectronApp()` call costs 4-5 seconds
+- With 300+ tests, launching separately = 20-25 minutes of pure overhead
+- Consolidation reduces this dramatically (e.g., 5 separate files -> 1 file = 16-20 seconds saved)
+
+### The Pattern: One App Per Spec File
+
+Instead of launching the app in `beforeEach`, use `beforeAll` to share one instance:
+
+```typescript
+// GOOD: Consolidated test file
+let electronApp: ElectronApplication;
+let page: Page;
+let workspaceDir: string;
+
+test.beforeAll(async () => {
+  workspaceDir = await createTempWorkspace();
+
+  // Create ALL test files upfront for all scenarios
+  await fs.writeFile(path.join(workspaceDir, 'test1.md'), '# Test 1\n');
+  await fs.writeFile(path.join(workspaceDir, 'test2.md'), '# Test 2\n');
+  await fs.writeFile(path.join(workspaceDir, 'test3.md'), '# Test 3\n');
+
+  electronApp = await launchElectronApp({ workspace: workspaceDir });
+  page = await electronApp.firstWindow();
+  await waitForAppReady(page);
+});
+
+test.afterAll(async () => {
+  await electronApp?.close();
+  await fs.rm(workspaceDir, { recursive: true, force: true });
+});
+
+test('scenario 1', async () => {
+  await openFileFromTree(page, 'test1.md');
+  // ... test logic ...
+  await closeTabByFileName(page, 'test1.md'); // Clean up for next test
+});
+
+test('scenario 2', async () => {
+  await openFileFromTree(page, 'test2.md');
+  // ... test logic ...
+  await closeTabByFileName(page, 'test2.md');
+});
+```
+
+```typescript
+// BAD: Separate launches per test (slow!)
+test.beforeEach(async () => {
+  workspaceDir = await createTempWorkspace();
+  electronApp = await launchElectronApp({ workspace: workspaceDir }); // 4-5 sec each time!
+  page = await electronApp.firstWindow();
+});
+```
+
+### Key Rules for Consolidation
+
+1. **Pre-create all test files in beforeAll** - Create every file any test might need upfront
+2. **Use different files per test** - Each test opens a different pre-created file to avoid state conflicts
+3. **Close tabs between tests** - Call `closeTabByFileName()` at the end of each test
+4. **Keep spec files focused** - Group by editor type or feature (e.g., all markdown tests together)
+
+### When Tests CANNOT Share an App
+
+Some tests require a fresh app instance:
+- Tests for app startup behavior
+- Tests for session restore across app restarts
+- Tests that intentionally corrupt or reset app state
+- Tests for permission mode switching (which is set at launch)
+
+For these, use `beforeEach`/`afterEach` but keep them in separate spec files.
+
+### Consolidation Examples
+
+| Before | After | Savings |
+|--------|-------|---------|
+| `markdown/autosave.spec.ts`, `markdown/dirty-close.spec.ts`, etc. (5 files) | `markdown.spec.ts` (1 file) | 4 app launches (~16-20s) |
+| `csv/autosave.spec.ts`, `csv/keyboard-nav.spec.ts`, etc. (8 files) | `csv.spec.ts` (1 file) | 7 app launches (~28-35s) |
 
 ## Using Test Helpers
 

@@ -33,7 +33,8 @@ import { FeatureWalkthrough } from './components/FeatureWalkthrough/FeatureWalkt
 import { WorkspaceManager } from './components/WorkspaceManager/WorkspaceManager.tsx';
 import { AIUsageReport } from './components/AIUsageReport';
 import { DatabaseBrowser } from './components/DatabaseBrowser/DatabaseBrowser';
-import { AgenticPanel, type AgenticPanelRef } from './components/UnifiedAI';
+import { AgentMode, type AgentModeRef } from './components/AgentMode';
+import { ChatSidebar, type ChatSidebarRef } from './components/ChatSidebar';
 import EditorMode, { type EditorModeRef } from './components/EditorMode/EditorMode';
 import { TabsProvider } from './contexts/TabsContext';
 import { NavigationGutter } from './components/NavigationGutter';
@@ -515,28 +516,20 @@ export default function App() {
     initializeElectronStorageBackend(workspacePath);
   }, [workspacePath]);
 
-  // Load active mode and diff tree state from workspace state
+  // Load diff tree state from workspace state
+  // NOTE: activeMode is restored by initWindowMode() in the initial load effect
   useEffect(() => {
     if (!workspacePath || !window.electronAPI?.invoke) return;
 
-    console.log('[App Layout] Loading workspace state for:', workspacePath);
     window.electronAPI.invoke('workspace:get-state', workspacePath)
       .then(state => {
-        // console.log('[App Layout] Loaded workspace state:', JSON.stringify(state, null, 2));
-        if (state?.activeMode) {
-          // console.log('[App Layout] Restoring activeMode:', state.activeMode);
-          setActiveMode(state.activeMode as ContentMode);
-        } else {
-          console.log('[App Layout] No activeMode in state (keys:', Object.keys(state || {}), ')');
-        }
-
         // Hydrate diff tree grouping state into Jotai atom
         if (state?.diffTreeGroupByDirectory !== undefined) {
           setDiffTreeGroupByDirectory({ groupByDirectory: state.diffTreeGroupByDirectory, workspacePath });
         }
       })
       .catch(error => {
-        console.error('[ContentMode] Failed to load active mode:', error);
+        console.error('[App] Failed to load workspace state:', error);
       });
   }, [workspacePath, setDiffTreeGroupByDirectory]);
 
@@ -714,7 +707,8 @@ export default function App() {
   }, [extensionPanelAIContext]);
   const searchCommandRef = useRef<LexicalCommand<undefined> | null>(null);
   const isInitializedRef = useRef<boolean>(false);
-  const agenticPanelRef = useRef<AgenticPanelRef>(null);
+  const chatSidebarRef = useRef<ChatSidebarRef>(null);
+  const agentModeRef = useRef<AgentModeRef>(null);
   const editorModeRef = useRef<EditorModeRef>(null);
 
   // NOTE: autoSaveIntervalRef and autoSaveCancellationRef removed - EditorContainer handles autosave now
@@ -800,17 +794,18 @@ export default function App() {
     // Switch to agent mode first
     setActiveMode('agent');
 
-    // Wait for next tick to ensure AgenticPanel is mounted/visible
+    // Wait for next tick to ensure AgentMode is mounted/visible
     setTimeout(() => {
       if (planDocumentPath) {
         // Create new session with document reference
-        if (agenticPanelRef.current?.createNewSession) {
-          agenticPanelRef.current.createNewSession(planDocumentPath);
+        // AgentMode doesn't support planDocumentPath yet, just create a new session
+        if (agentModeRef.current?.createNewSession) {
+          agentModeRef.current.createNewSession();
         }
-      } else if (sessionId && agenticPanelRef.current) {
+      } else if (sessionId && agentModeRef.current) {
         // Load existing session
         console.log('Load session:', sessionId);
-        agenticPanelRef.current.openSessionInTab(sessionId);
+        agentModeRef.current.openSessionInTab(sessionId);
       }
     }, 100);
   }, []);
@@ -915,10 +910,10 @@ export default function App() {
 
     const handleAgentNewSession = () => {
       console.log('[App] Received agent-new-session event');
-      if (agenticPanelRef.current) {
-        agenticPanelRef.current.createNewSession();
+      if (agentModeRef.current) {
+        agentModeRef.current.createNewSession();
       } else {
-        console.warn('[App] agenticPanelRef not available');
+        console.warn('[App] agentModeRef not available');
       }
     };
 
@@ -1247,9 +1242,9 @@ export default function App() {
       setActiveMode('agent');
     }
 
-    // Open session in AgenticPanel
-    if (agenticPanelRef.current) {
-      await agenticPanelRef.current.openSessionInTab(sessionId);
+    // Open session in AgentMode
+    if (agentModeRef.current) {
+      await agentModeRef.current.openSessionInTab(sessionId);
     }
   }, [activeMode]);
 
@@ -1280,9 +1275,9 @@ export default function App() {
             setWorkspaceName(initialState.workspaceName ?? null);
             // NOTE: fileTree loading moved to EditorMode
 
-            // Initialize window mode from workspace state
+            // Initialize window mode from workspace state (await to prevent flash of wrong mode)
             if (initialState.workspacePath) {
-              initWindowMode(initialState.workspacePath);
+              await initWindowMode(initialState.workspacePath);
             }
           }
         }
@@ -1300,7 +1295,7 @@ export default function App() {
   // Mode-aware tab navigation handlers
   const handleNextTab = () => {
     if (activeMode === 'agent') {
-      agenticPanelRef.current?.nextTab?.();
+      agentModeRef.current?.nextTab?.();
     } else {
       editorModeRef.current?.tabs?.nextTab?.();
     }
@@ -1308,7 +1303,7 @@ export default function App() {
 
   const handlePreviousTab = () => {
     if (activeMode === 'agent') {
-      agenticPanelRef.current?.previousTab?.();
+      agentModeRef.current?.previousTab?.();
     } else {
       editorModeRef.current?.tabs?.previousTab?.();
     }
@@ -1491,8 +1486,8 @@ export default function App() {
 
       console.log('[App] handleCloseActiveTab IPC received, activeMode:', activeModeStateRef.current);
       if (activeModeStateRef.current === 'agent') {
-        console.log('[App] Routing to agenticPanelRef.closeActiveTab()');
-        agenticPanelRef.current?.closeActiveTab();
+        console.log('[App] Routing to agentModeRef.closeActiveTab()');
+        agentModeRef.current?.closeActiveTab();
       } else if (activeModeStateRef.current === 'files') {
         console.log('[App] Routing to editorModeRef.closeActiveTab()');
         editorModeRef.current?.closeActiveTab();
@@ -1511,8 +1506,8 @@ export default function App() {
     const handleReopenLastClosedTab = () => {
       // console.log('[App] handleReopenLastClosedTab called, activeMode:', activeModeStateRef.current);
       if (activeModeStateRef.current === 'agent') {
-        // console.log('[App] Calling agenticPanelRef.current?.reopenLastClosedSession()');
-        agenticPanelRef.current?.reopenLastClosedSession?.();
+        // console.log('[App] Calling agentModeRef.current?.reopenLastClosedSession()');
+        agentModeRef.current?.reopenLastClosedSession?.();
       } else if (activeModeStateRef.current === 'files') {
         // console.log('[App] Calling editorModeRef.current?.reopenLastClosedTab()');
         editorModeRef.current?.reopenLastClosedTab?.();
@@ -1699,16 +1694,12 @@ export default function App() {
               }}
             >
               {workspacePath ? (
-                <AgenticPanel
-                  ref={agenticPanelRef}
-                  mode="agent"
+                <AgentMode
+                  ref={agentModeRef}
                   workspacePath={workspacePath}
                   workspaceName={workspaceName || ''}
-                  documentContext={documentContext}
-                  planDocumentPath={agentPlanReference || undefined}
-                  onContentModeChange={setActiveMode as (mode: string) => void}
-                  onFileOpen={handleWorkspaceFileSelect}
                   isActive={activeMode === 'agent'}
+                  onFileOpen={handleWorkspaceFileSelect}
                   onOpenQuickSearch={() => setIsSessionQuickOpenVisible(true)}
                 />
               ) : (
@@ -1768,13 +1759,10 @@ export default function App() {
                           overflow: 'hidden',
                         }}
                       >
-                        <AgenticPanel
-                          mode="chat"
+                        <ChatSidebar
+                          ref={chatSidebarRef}
                           workspacePath={workspacePath}
-                          workspaceName={workspaceName || ''}
                           documentContext={extensionPanelDocumentContext}
-                          isActive={true}
-                          onContentModeChange={setActiveMode as (mode: string) => void}
                           onFileOpen={handleWorkspaceFileSelect}
                         />
                       </div>

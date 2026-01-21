@@ -1,0 +1,30 @@
+.chat-sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.chat-sidebar-loading,
+.chat-sidebar-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-secondary);
+}
+
+.chat-sidebar-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--border-primary);
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: chat-sidebar-spin 0.8s linear infinite;
+}
+
+@keyframes chat-sidebar-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

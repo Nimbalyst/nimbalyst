@@ -3,6 +3,11 @@ import { MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
 import './WorktreeGroup.css';
 
+/**
+ * @deprecated This component will be replaced by the unified session architecture.
+ * See nimbalyst-local/plans/unified-session-architecture.md for migration plan.
+ * Use the new AgentMode components with hierarchical session model instead.
+ */
 interface SessionItem {
   id: string;
   title?: string;
@@ -55,6 +60,11 @@ interface WorktreeGroupProps {
   onChangesMode?: (worktreeId: string) => void;
 }
 
+/**
+ * @deprecated This component will be replaced by the unified session architecture.
+ * See nimbalyst-local/plans/unified-session-architecture.md for migration plan.
+ * Use the new AgentMode components with hierarchical session model instead.
+ */
 export const WorktreeGroup: React.FC<WorktreeGroupProps> = ({
   worktree,
   gitStatus,
@@ -203,6 +213,7 @@ export const WorktreeGroup: React.FC<WorktreeGroupProps> = ({
   return (
     <div
       className={`worktree-group ${worktree.isArchived ? 'archived' : ''}`}
+      data-testid="worktree-group"
       onMouseLeave={handleCloseContextMenu}
     >
       {/* Worktree Header */}

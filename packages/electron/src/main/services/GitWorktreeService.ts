@@ -16,7 +16,7 @@ import simpleGit, { SimpleGit } from 'simple-git';
 import * as path from 'path';
 import * as fs from 'fs';
 import { ulid } from 'ulid';
-import log from 'electron-log';
+import log from 'electron-log/main';
 
 const logger = log.scope('GitWorktreeService');
 

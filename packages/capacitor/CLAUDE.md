@@ -53,6 +53,13 @@ This will:
 | `npm run cap:open:ios` | Open iOS project in Xcode |
 | `npm run ios:dev` | Build, sync, and open Xcode |
 | `npm run ios:build` | Build and sync for iOS (no Xcode open) |
+| `npm run fastlane:setup` | Install fastlane and dependencies |
+| `npm run fastlane:device` | Build and install on connected device |
+| `npm run fastlane:build` | Build for App Store/TestFlight |
+| `npm run fastlane:beta` | Build and upload to TestFlight |
+| `npm run fastlane:deploy` | Alias for beta (build + upload) |
+| `npm run fastlane:setup-signing` | Initialize code signing with match |
+| `npm run fastlane:sync-signing` | Refresh certificates/profiles |
 
 ## Architecture
 
@@ -110,6 +117,116 @@ If you add custom encryption libraries (e.g., bundled native crypto code), you m
    - Distribute App > App Store Connect
 
 3. Submit to TestFlight in App Store Connect.
+
+## Fastlane for iOS Deployment
+
+Fastlane automates iOS builds and TestFlight deployments. All fastlane commands should be run from `packages/capacitor`.
+
+### Quick Reference
+
+| Command | Description |
+|---------|-------------|
+| `npm run fastlane:setup` | Install fastlane and dependencies |
+| `npm run fastlane:device` | Build and install on connected device |
+| `npm run fastlane:build` | Build for App Store/TestFlight |
+| `npm run fastlane:beta` | Build and upload to TestFlight |
+| `npm run fastlane:deploy` | Alias for beta (build + upload) |
+| `npm run fastlane:setup-signing` | Initialize code signing with match |
+| `npm run fastlane:sync-signing` | Refresh certificates/profiles |
+
+### First-Time Setup
+
+1. **Install fastlane dependencies**:
+   ```bash
+   cd packages/capacitor
+   npm run fastlane:setup
+   ```
+
+2. **Configure environment variables** - create `ios/fastlane/.env`:
+   ```bash
+   cd ios/fastlane
+   cp .env.example .env
+   # Edit .env with your credentials
+   ```
+
+   Required variables:
+   - `APPLE_ID` - Your Apple Developer email
+   - `TEAM_ID` - Apple Developer Team ID (found in App Store Connect > Membership)
+   - `MATCH_GIT_URL` - Private git repo for certificates (e.g., `git@github.com:org/certificates.git`)
+   - `MATCH_PASSWORD` - Encryption password for match
+
+   Optional (for automated uploads):
+   - `APP_STORE_CONNECT_API_KEY_KEY_ID`
+   - `APP_STORE_CONNECT_API_KEY_ISSUER_ID`
+   - `APP_STORE_CONNECT_API_KEY_KEY` (base64-encoded .p8 file)
+
+3. **Set up code signing** (first time only):
+   ```bash
+   npm run fastlane:setup-signing
+   ```
+
+### Development: Install on Device
+
+To build and install on a connected iOS device (via USB or WiFi):
+
+```bash
+npm run fastlane:device
+```
+
+This uses automatic signing and `xcrun devicectl` to install the app. Make sure your device is:
+- Connected via USB, or
+- On the same WiFi network with "Connect via network" enabled in Xcode > Window > Devices
+
+### TestFlight Deployment
+
+```bash
+# Build only (creates .ipa)
+npm run fastlane:build
+
+# Build and upload to TestFlight
+npm run fastlane:beta
+```
+
+The build process:
+1. Builds web assets with Vite
+2. Syncs to iOS via Capacitor
+3. Increments build number automatically
+4. Builds signed .ipa for App Store
+
+### Registering Test Devices
+
+1. Edit `ios/fastlane/devices.txt`:
+   ```
+   Device ID	Device Name	Device Platform
+   00008030-001234567890ABCD	John's iPhone	ios
+   ```
+
+2. Register devices:
+   ```bash
+   cd ios && bundle exec fastlane register_devices
+   ```
+
+3. Regenerate profiles:
+   ```bash
+   npm run fastlane:sync-signing
+   ```
+
+### Common Issues
+
+**Code signing errors**: Make sure `.env` credentials are correct, then try:
+```bash
+cd ios && bundle exec fastlane match nuke distribution
+npm run fastlane:setup-signing
+```
+
+**No connected device found**: Ensure device is connected via USB or WiFi pairing is enabled.
+
+**Build number conflict**: Manually increment if needed:
+```bash
+cd ios && bundle exec fastlane run increment_build_number xcodeproj:"App/App.xcodeproj"
+```
+
+See `FASTLANE_SETUP.md` for detailed setup instructions.
 
 ## Troubleshooting
 
