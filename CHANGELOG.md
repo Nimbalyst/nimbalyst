@@ -20,6 +20,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.51.21] - 2026-01-21
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+- macOS artifacts now use user-friendly architecture names (Apple Silicon, Intel)
+- Updated Claude Agent SDK to 0.2.14
+
+### Fixed
+- ClaudeCodeProvider now properly cleans up resources on destroy
+- Home directory resolution now uses os.homedir() for reliability
+- Chat image attachments now automatically compressed for better performance
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.51.20] - 2026-01-21
 
 
