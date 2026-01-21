@@ -8,7 +8,12 @@
  */
 
 import { Jimp } from 'jimp';
-import decodeHeic from 'heic-decode';
+
+// heic-decode doesn't have type declarations
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const decodeHeic = require('heic-decode') as (options: {
+  buffer: Buffer | ArrayBuffer;
+}) => Promise<{ width: number; height: number; data: Uint8ClampedArray }>;
 
 /**
  * Custom error types for granular error handling
@@ -65,10 +70,13 @@ const MIN_SIZE_FOR_COMPRESSION = 100 * 1024;
 // HEIC MIME types (Apple's native format)
 const HEIC_MIME_TYPES = ['image/heic', 'image/heif'];
 
+// Use a simplified type for Jimp images since the library's generic types are complex
+type JimpImage = Awaited<ReturnType<typeof Jimp.read>>;
+
 /**
  * Decode HEIC/HEIF image to raw RGBA data, then create a Jimp image
  */
-async function decodeHeicToJimp(buffer: Buffer): Promise<InstanceType<typeof Jimp>> {
+async function decodeHeicToJimp(buffer: Buffer): Promise<JimpImage> {
   try {
     const { data, width, height } = await decodeHeic({ buffer });
 
@@ -76,7 +84,9 @@ async function decodeHeicToJimp(buffer: Buffer): Promise<InstanceType<typeof Jim
     const image = new Jimp({ width, height, color: 0x00000000 });
     image.bitmap.data = Buffer.from(data);
 
-    return image;
+    // Cast to JimpImage - both types have the same runtime behavior
+    // The type mismatch is due to Jimp's complex generic system
+    return image as unknown as JimpImage;
   } catch (error) {
     throw new HeicDecodeError(error instanceof Error ? error : undefined);
   }
@@ -103,7 +113,7 @@ export async function compressImage(
   const originalSize = buffer.length;
 
   // Load image - handle HEIC specially since Jimp doesn't support it
-  let image: InstanceType<typeof Jimp>;
+  let image: JimpImage;
   try {
     if (HEIC_MIME_TYPES.includes(mimeType)) {
       image = await decodeHeicToJimp(buffer);
