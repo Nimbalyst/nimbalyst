@@ -1225,7 +1225,19 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               // Break out of the loop since we have an error
               break;
             }
-            // Don't yield result content as text - it's already been sent in the assistant message
+
+            // For slash commands, the result contains the command output directly
+            // (e.g., /context returns context usage in chunk.result)
+            // In SDK 0.2.x, slash command output comes via result.result instead of user message with <local-command-stdout>
+            if (isSlashCommand && chunk.result && typeof chunk.result === 'string' && chunk.result.trim().length > 0) {
+              fullContent = chunk.result;
+              yield {
+                type: 'text',
+                content: chunk.result,
+                isSystem: true
+              };
+            }
+            // Don't yield result content as text for non-slash commands - it's already been sent in the assistant message
             // Only errors need to be displayed from result chunks
           } else if (chunk.type === 'system') {
             // Handle system messages from Claude Code (initialization, etc.)
@@ -1315,10 +1327,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             // Don't yield most system messages to UI - they're internal
           } else if (chunk.type === 'user') {
             // Handle user messages (including tool results and slash command output)
-            //   role: chunk.message?.role,
-            //   hasContent: !!chunk.message?.content,
-            //   contentType: Array.isArray(chunk.message?.content) ? 'array' : typeof chunk.message?.content
-            // });
 
             const content = chunk.message?.content;
 
@@ -1389,6 +1397,9 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               const match = content.match(/<local-command-stdout>([\s\S]*?)<\/local-command-stdout>/);
               if (match && match[1]) {
                 const commandOutput = match[1].trim();
+
+                // Track that we received content (prevents false "no output" error)
+                fullContent += commandOutput;
 
                 // Yield as a system message type
                 yield {

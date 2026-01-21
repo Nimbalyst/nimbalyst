@@ -73,9 +73,13 @@ export function parseContextUsageMessage(content?: string): ParsedContextUsage |
 }
 
 function extractCategories(content: string): TokenUsageCategory[] {
-  const categoriesStart = content.indexOf('### Categories');
+  // Try both old and new format headers
+  let categoriesStart = content.indexOf('### Estimated usage by category');
   if (categoriesStart === -1) {
-    return [];
+    categoriesStart = content.indexOf('### Categories');
+    if (categoriesStart === -1) {
+      return [];
+    }
   }
 
   const section = content.slice(categoriesStart);
@@ -88,7 +92,8 @@ function extractCategories(content: string): TokenUsageCategory[] {
     const tokens = convertToTokens(match[2], match[3]);
     const percentage = Number.parseFloat(match[4]);
 
-    if (!name || Number.isNaN(tokens) || Number.isNaN(percentage)) {
+    // Skip header rows
+    if (name === 'Category' || name === '---' || !name || Number.isNaN(tokens) || Number.isNaN(percentage)) {
       continue;
     }
 
