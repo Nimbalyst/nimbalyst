@@ -50,42 +50,60 @@ function getReleaseNotes() {
 
 // Function to generate latest-mac.yml
 function generateMacYml() {
-  // Find the DMG and ZIP files - try both with and without version
-  let dmgFile = `${productName}-${version}-arm64.dmg`;
-  let dmgPath = path.join(releaseDir, dmgFile);
-
-  // If versioned file doesn't exist, try without version
-  if (!fs.existsSync(dmgPath)) {
-    dmgFile = `${productName}-arm64.dmg`;
-    dmgPath = path.join(releaseDir, dmgFile);
-  }
-
-  let zipFile = `${productName}-${version}-arm64.zip`;
-  let zipPath = path.join(releaseDir, zipFile);
-
-  // If versioned file doesn't exist, try without version
-  if (!fs.existsSync(zipPath)) {
-    zipFile = `${productName}-arm64.zip`;
-    zipPath = path.join(releaseDir, zipFile);
-  }
+  // Use standard electron-builder filenames with architecture suffixes.
+  // electron-updater requires these suffixes to correctly route updates.
+  //
+  // Note: afterAllArtifactBuild.js also creates copies without the arch suffix
+  // (e.g., Nimbalyst-macOS.dmg) for backwards-compatible download links,
+  // but those are NOT referenced in the yml - only the arch-suffixed files are.
 
   const files = [];
 
-  // Add DMG file if it exists
-  if (fs.existsSync(dmgPath)) {
+  // Apple Silicon files
+  const arm64Zip = `${productName}-macOS-arm64.zip`;
+  const arm64ZipPath = path.join(releaseDir, arm64Zip);
+  const arm64Dmg = `${productName}-macOS-arm64.dmg`;
+  const arm64DmgPath = path.join(releaseDir, arm64Dmg);
+
+  // Intel files
+  const x64Zip = `${productName}-macOS-x64.zip`;
+  const x64ZipPath = path.join(releaseDir, x64Zip);
+  const x64Dmg = `${productName}-macOS-x64.dmg`;
+  const x64DmgPath = path.join(releaseDir, x64Dmg);
+
+  // Add Apple Silicon ZIP (primary)
+  if (fs.existsSync(arm64ZipPath)) {
     files.push({
-      url: dmgFile,
-      sha512: calculateSHA512(dmgPath),
-      size: getFileSize(dmgPath)
+      url: arm64Zip,
+      sha512: calculateSHA512(arm64ZipPath),
+      size: getFileSize(arm64ZipPath)
     });
   }
 
-  // Add ZIP file if it exists
-  if (fs.existsSync(zipPath)) {
+  // Add Intel ZIP
+  if (fs.existsSync(x64ZipPath)) {
     files.push({
-      url: zipFile,
-      sha512: calculateSHA512(zipPath),
-      size: getFileSize(zipPath)
+      url: x64Zip,
+      sha512: calculateSHA512(x64ZipPath),
+      size: getFileSize(x64ZipPath)
+    });
+  }
+
+  // Add Apple Silicon DMG
+  if (fs.existsSync(arm64DmgPath)) {
+    files.push({
+      url: arm64Dmg,
+      sha512: calculateSHA512(arm64DmgPath),
+      size: getFileSize(arm64DmgPath)
+    });
+  }
+
+  // Add Intel DMG
+  if (fs.existsSync(x64DmgPath)) {
+    files.push({
+      url: x64Dmg,
+      sha512: calculateSHA512(x64DmgPath),
+      size: getFileSize(x64DmgPath)
     });
   }
 
@@ -97,12 +115,15 @@ function generateMacYml() {
   // Get release notes
   const releaseNotes = getReleaseNotes();
 
+  // Primary file is the Apple Silicon ZIP (first in list)
+  const primaryFile = files[0];
+
   // Generate the YAML content
   const yamlContent = {
     version: version,
     files: files,
-    path: files[0].url, // Primary file
-    sha512: files[0].sha512,
+    path: primaryFile.url,
+    sha512: primaryFile.sha512,
     releaseDate: new Date().toISOString(),
     releaseNotes: releaseNotes
   };
