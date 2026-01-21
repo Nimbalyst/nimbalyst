@@ -2327,12 +2327,15 @@ export class AIService {
           });
         }
 
-        // Mark session as error
+        // Mark session as error and end it
         if (session?.id) {
           await stateManager.updateActivity({
             sessionId: session.id,
             status: 'error'
           });
+
+          // End the session to remove it from active sessions
+          await stateManager.endSession(session.id);
 
           // Clear executing flag for mobile sync on error
           if (syncProvider) {
