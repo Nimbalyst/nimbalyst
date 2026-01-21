@@ -1690,6 +1690,22 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   }
 
   /**
+   * Clean up provider resources including active subprocess
+   * Called when provider is destroyed (e.g., app quit, session cleanup)
+   */
+  destroy(): void {
+    console.log('[CLAUDE-CODE] Destroying provider');
+    // Abort any active SDK subprocess before base cleanup
+    this.abort();
+    // Reject any pending user interactions that will never be answered
+    // (abort() already calls rejectAllPendingConfirmations for ExitPlanMode)
+    this.rejectAllPendingQuestions();
+    this.rejectAllPendingPermissions();
+    // Call base class cleanup (removes event listeners)
+    super.destroy();
+  }
+
+  /**
    * Update session metadata with current todos
    * Uses the existing metadata update mechanism instead of custom IPC events
    */
