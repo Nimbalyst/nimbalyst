@@ -50,45 +50,29 @@ function getReleaseNotes() {
 
 // Function to generate latest-mac.yml
 function generateMacYml() {
-  // Find the DMG and ZIP files - try user-friendly names first, then fall back to arch names
-  // Priority: Apple-Silicon (new name from afterAllArtifactBuild) -> arm64 (original electron-builder output)
-  // Note: artifactName in package.json is "${productName}-macOS-${arch}.${ext}"
-  const dmgCandidates = [
-    `${productName}-macOS-Apple-Silicon.dmg`,
-    `${productName}-macOS-arm64.dmg`
-  ];
+  // Find the DMG and ZIP files - try both with and without version
+  let dmgFile = `${productName}-${version}-arm64.dmg`;
+  let dmgPath = path.join(releaseDir, dmgFile);
 
-  let dmgFile = null;
-  let dmgPath = null;
-  for (const candidate of dmgCandidates) {
-    const candidatePath = path.join(releaseDir, candidate);
-    if (fs.existsSync(candidatePath)) {
-      dmgFile = candidate;
-      dmgPath = candidatePath;
-      break;
-    }
+  // If versioned file doesn't exist, try without version
+  if (!fs.existsSync(dmgPath)) {
+    dmgFile = `${productName}-arm64.dmg`;
+    dmgPath = path.join(releaseDir, dmgFile);
   }
 
-  const zipCandidates = [
-    `${productName}-macOS-Apple-Silicon.zip`,
-    `${productName}-macOS-arm64.zip`
-  ];
+  let zipFile = `${productName}-${version}-arm64.zip`;
+  let zipPath = path.join(releaseDir, zipFile);
 
-  let zipFile = null;
-  let zipPath = null;
-  for (const candidate of zipCandidates) {
-    const candidatePath = path.join(releaseDir, candidate);
-    if (fs.existsSync(candidatePath)) {
-      zipFile = candidate;
-      zipPath = candidatePath;
-      break;
-    }
+  // If versioned file doesn't exist, try without version
+  if (!fs.existsSync(zipPath)) {
+    zipFile = `${productName}-arm64.zip`;
+    zipPath = path.join(releaseDir, zipFile);
   }
 
   const files = [];
 
   // Add DMG file if it exists
-  if (dmgPath && fs.existsSync(dmgPath)) {
+  if (fs.existsSync(dmgPath)) {
     files.push({
       url: dmgFile,
       sha512: calculateSHA512(dmgPath),
@@ -97,7 +81,7 @@ function generateMacYml() {
   }
 
   // Add ZIP file if it exists
-  if (zipPath && fs.existsSync(zipPath)) {
+  if (fs.existsSync(zipPath)) {
     files.push({
       url: zipFile,
       sha512: calculateSHA512(zipPath),

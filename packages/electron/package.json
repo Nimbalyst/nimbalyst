@@ -211,7 +211,6 @@
     ],
     "afterSign": "build/afterSign.js",
     "afterPack": "build/afterPack.js",
-    "afterAllArtifactBuild": "build/afterAllArtifactBuild.js",
     "fileAssociations": [
       {
         "ext": "md",
