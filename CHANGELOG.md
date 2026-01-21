@@ -20,6 +20,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.51.22] - 2026-01-21
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- macOS build signing now uses correct target architecture for ripgrep
+- macOS CI builds now properly import certificates on both Apple Silicon and Intel runners
+- macOS artifacts maintain backwards compatibility with arm64 naming convention
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.51.21] - 2026-01-21
 
 
