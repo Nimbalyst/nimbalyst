@@ -474,14 +474,6 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   useEffect(() => {
     const initSessionState = async () => {
       try {
-        // Get initial active sessions and set atoms
-        const result = await window.electronAPI.sessionState.getActiveSessionIds();
-        if (result.success && result.sessionIds) {
-          for (const sessionId of result.sessionIds) {
-            store.set(sessionProcessingAtom(sessionId), true);
-          }
-        }
-
         // Subscribe to state changes
         await window.electronAPI.sessionState.subscribe();
 
