@@ -20,6 +20,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.51.20] - 2026-01-21
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Claude Code login flow now uses interactive /login instead of setup-token
+- Linux node-pty packaging fixed by moving to extraResources
+- Session creation error handling and provider validation improved
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.51.19] - 2026-01-20
 
 
