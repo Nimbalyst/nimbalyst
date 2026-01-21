@@ -35,6 +35,7 @@ import {
   setSortOrderAtom,
   initAgentModeLayout,
 } from '../../store';
+import type { AIModel } from '../../store/atoms/appSettings';
 import { WorktreeOnboardingModal } from '../WorktreeOnboardingModal';
 
 export interface AgenticPanelRef {
@@ -1015,7 +1016,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       // Get enabled models to check if provider is available
       const modelsResult = await window.electronAPI.aiGetModels();
       const enabledModels = modelsResult?.models || [];
-      const providerIsEnabled = enabledModels.some((model: any) => model.provider === provider);
+      const providerIsEnabled = enabledModels.some((model: AIModel) => model.provider === provider);
 
       // If provider is not enabled, find the first available provider
       if (!providerIsEnabled) {
@@ -1136,7 +1137,13 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       return sessionData;
     } catch (error) {
       console.error('[AgenticPanel] Failed to create session:', error);
-      throw error;
+
+      // Show user-friendly error message
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      errorNotificationService.showError('Failed to Create Session', errorMessage);
+
+      // Don't re-throw - this prevents unhandled promise rejections in event handlers
+      return null;
     }
   }, [sessionTabs, workspacePath, mode, loadSessions, updateWindowTitle, triggerSessionHistoryRefresh]);
 
@@ -1207,8 +1214,29 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
       // Step 2: Create session with worktree association
       // Get the default model from app settings, fallback to claude-code
-      const defaultModel = await window.electronAPI.invoke('settings:get-default-ai-model') || 'claude-code:sonnet';
-      const [provider] = defaultModel.split(':');
+      let defaultModel = await window.electronAPI.invoke('settings:get-default-ai-model') || 'claude-code:sonnet';
+      let [provider] = defaultModel.split(':');
+
+      // Validate that the provider is enabled for this workspace
+      const modelsResult = await window.electronAPI.aiGetModels();
+      const enabledModels = modelsResult?.models || [];
+      const providerIsEnabled = enabledModels.some((model: AIModel) => model.provider === provider);
+
+      // If provider is not enabled, find the first available provider
+      if (!providerIsEnabled) {
+        console.warn(`[AgenticPanel] Provider ${provider} from saved default model is not enabled`);
+
+        // Try to find any enabled provider
+        if (enabledModels.length > 0) {
+          const firstModel = enabledModels[0];
+          provider = firstModel.provider;
+          defaultModel = firstModel.id;
+          console.log(`[AgenticPanel] Falling back to first available provider: ${provider} (${defaultModel})`);
+        } else {
+          // No providers enabled at all - throw error
+          throw new Error('No AI providers are enabled. Please enable at least one provider in Settings.');
+        }
+      }
 
       const session = await window.electronAPI.aiCreateSession(
         provider as 'claude' | 'claude-code' | 'openai' | 'lmstudio',
@@ -1272,8 +1300,11 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       return sessionData;
     } catch (error) {
       console.error('[AgenticPanel] Failed to create worktree session:', error);
-      errorNotificationService.showError('Worktree Creation Failed', String(error));
-      throw error;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      errorNotificationService.showError('Worktree Creation Failed', errorMessage);
+
+      // Don't re-throw - this prevents unhandled promise rejections in event handlers
+      return null;
     }
   }, [workspacePath, mode, loadSessions, updateWindowTitle, triggerSessionHistoryRefresh]);
 
@@ -1320,8 +1351,29 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       const worktree = worktreeResult.worktree;
 
       // Create session with worktree association using default model from app settings
-      const defaultModel = await window.electronAPI.invoke('settings:get-default-ai-model') || 'claude-code:sonnet';
-      const [provider] = defaultModel.split(':');
+      let defaultModel = await window.electronAPI.invoke('settings:get-default-ai-model') || 'claude-code:sonnet';
+      let [provider] = defaultModel.split(':');
+
+      // Validate that the provider is enabled for this workspace
+      const modelsResult = await window.electronAPI.aiGetModels();
+      const enabledModels = modelsResult?.models || [];
+      const providerIsEnabled = enabledModels.some((model: AIModel) => model.provider === provider);
+
+      // If provider is not enabled, find the first available provider
+      if (!providerIsEnabled) {
+        console.warn(`[AgenticPanel] Provider ${provider} from saved default model is not enabled`);
+
+        // Try to find any enabled provider
+        if (enabledModels.length > 0) {
+          const firstModel = enabledModels[0];
+          provider = firstModel.provider;
+          defaultModel = firstModel.id;
+          console.log(`[AgenticPanel] Falling back to first available provider: ${provider} (${defaultModel})`);
+        } else {
+          // No providers enabled at all - throw error
+          throw new Error('No AI providers are enabled. Please enable at least one provider in Settings.');
+        }
+      }
 
       const session = await window.electronAPI.aiCreateSession(
         provider as 'claude' | 'claude-code' | 'openai' | 'lmstudio',
@@ -1380,8 +1432,11 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       return sessionData;
     } catch (error) {
       console.error('[AgenticPanel] Failed to add session to worktree:', error);
-      errorNotificationService.showError('Failed to Add Session', String(error));
-      throw error;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      errorNotificationService.showError('Failed to Add Session', errorMessage);
+
+      // Don't re-throw - this prevents unhandled promise rejections in event handlers
+      return null;
     }
   }, [workspacePath, mode, loadSessions, updateWindowTitle, triggerSessionHistoryRefresh]);
 
