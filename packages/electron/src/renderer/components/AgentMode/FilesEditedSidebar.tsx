@@ -17,7 +17,6 @@ import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { FileEditsSidebar as FileEditsSidebarComponent, MaterialSymbol } from '@nimbalyst/runtime';
 import type { FileEditSummary } from '@nimbalyst/runtime';
 import { diffTreeGroupByDirectoryAtom, setDiffTreeGroupByDirectoryAtom } from '../../store/atoms/projectState';
-import { PendingReviewBanner } from '../AIChat/PendingReviewBanner';
 import { workstreamSessionsAtom, sessionTitleAtom } from '../../store/atoms/sessions';
 import { GitOperationsPanel } from './GitOperationsPanel';
 import './FilesEditedSidebar.css';
@@ -50,6 +49,7 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
   const [allFileEdits, setAllFileEdits] = useState<FileEditWithSession[]>([]);
   const [pendingReviewFiles, setPendingReviewFiles] = useState<Set<string>>(new Set());
   const [filterSessionId, setFilterSessionId] = useState<string | null>(null);
+  const [isClearing, setIsClearing] = useState(false);
 
   // Get all session IDs in this workstream
   const workstreamSessions = useAtomValue(workstreamSessionsAtom(workstreamId));
@@ -247,6 +247,28 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
     };
   }, [workstreamId, workspacePath, workstreamSessions]);
 
+  // Handle "Keep All" button click - clear pending for all sessions in workstream
+  const handleKeepAll = useCallback(async () => {
+    if (!workspacePath || isClearing || workstreamSessions.length === 0) return;
+
+    setIsClearing(true);
+    try {
+      if (typeof window !== 'undefined' && (window as any).electronAPI) {
+        // Clear pending for all sessions in the workstream
+        await Promise.all(
+          workstreamSessions.map(async (sessionId) => {
+            await (window as any).electronAPI.history.clearPendingForSession(workspacePath, sessionId);
+          })
+        );
+        // Pending files state will be updated via the event listener
+      }
+    } catch (error) {
+      console.error('[FilesEditedSidebar] Failed to clear pending for workstream:', error);
+    } finally {
+      setIsClearing(false);
+    }
+  }, [workspacePath, workstreamSessions, isClearing]);
+
   return (
     <div className="files-edited-sidebar" style={{ width }}>
       {/* Header with Files label and controls */}
@@ -301,8 +323,27 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
         </div>
       )}
 
-      {/* Pending review banner */}
-      <PendingReviewBanner workspacePath={workspacePath} sessionId={workstreamId} />
+      {/* Keep All button - show when there are pending files */}
+      {pendingReviewFiles.size > 0 && (
+        <div className="files-edited-sidebar__keep-all-banner">
+          <div className="files-edited-sidebar__keep-all-info">
+            <MaterialSymbol icon="rate_review" size={16} className="files-edited-sidebar__keep-all-icon" />
+            <span className="files-edited-sidebar__keep-all-text">
+              <span className="files-edited-sidebar__keep-all-count">{pendingReviewFiles.size}</span>
+              {' '}file{pendingReviewFiles.size !== 1 ? 's' : ''} pending review
+            </span>
+          </div>
+          <button
+            className="files-edited-sidebar__keep-all-btn"
+            onClick={handleKeepAll}
+            disabled={isClearing}
+            title="Accept all pending AI changes"
+          >
+            <MaterialSymbol icon="check_circle" size={14} />
+            {isClearing ? 'Keeping...' : 'Keep All'}
+          </button>
+        </div>
+      )}
 
       {/* Files Content */}
       <div className="files-edited-sidebar__content">
