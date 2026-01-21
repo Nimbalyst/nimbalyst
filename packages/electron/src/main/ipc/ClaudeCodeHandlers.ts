@@ -41,18 +41,17 @@ export function registerClaudeCodeHandlers() {
   });
   // Check login status
   safeHandle('claude-code:check-login', async () => {
-    // Save original environment to restore later
-    const originalEnv = { ...process.env };
-
     try {
       // Setup environment for packaged builds
       const env = setupClaudeCodeEnvironment();
 
-      // Apply environment to current process temporarily
-      Object.assign(process.env, env);
-
-      // Build options for query
-      const options: any = getClaudeCodeExecutableOptions();
+      // Build options for query - CRITICAL: pass env to options so SDK can find credentials
+      // This is especially important on Intel Macs where HOME may not be set correctly
+      // in packaged builds without explicitly passing the environment.
+      const options: any = {
+        ...getClaudeCodeExecutableOptions(),
+        env
+      };
 
       // Pass the environment to the SDK so spawned subprocesses inherit it
       // This is critical for packaged builds where ELECTRON_RUN_AS_NODE must be set
@@ -100,10 +99,6 @@ export function registerClaudeCodeHandlers() {
         isExpired: true,
         error: error.message
       };
-    } finally {
-      // Always restore original environment
-      Object.keys(process.env).forEach(key => delete process.env[key]);
-      Object.assign(process.env, originalEnv);
     }
   });
 

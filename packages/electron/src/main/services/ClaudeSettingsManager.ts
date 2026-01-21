@@ -16,6 +16,7 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as os from 'os';
 import { watch, FSWatcher } from 'fs';
 import { logger } from '../utils/logger';
 import { resolveWorkspacePathForPermissions } from './PermissionService';
@@ -105,8 +106,9 @@ export class ClaudeSettingsManager {
    * Get the path to the user-level settings file
    */
   private getUserLevelPath(): string {
-    const homeDir = process.env.HOME || process.env.USERPROFILE || '';
-    return path.join(homeDir, '.claude', 'settings.json');
+    // Use os.homedir() instead of process.env for packaged builds on Intel Macs
+    // where HOME may not be set correctly
+    return path.join(os.homedir(), '.claude', 'settings.json');
   }
 
   /**

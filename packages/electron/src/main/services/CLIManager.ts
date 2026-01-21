@@ -523,10 +523,14 @@ export class CLIManager {
         });
 
         // Create a minimal environment that excludes npm workspace variables
+        // Use os.homedir() instead of process.env.HOME for packaged builds on Intel Macs
+        // where HOME may not be set correctly
+        const homedir = os.homedir();
         const cleanEnv = {
           PATH: this.getEnhancedPath(),
-          HOME: process.env.HOME,
-          USER: process.env.USER,
+          HOME: homedir,
+          USERPROFILE: homedir, // Windows compatibility
+          USER: process.env.USER || os.userInfo().username,
           SHELL: process.env.SHELL,
           TERM: process.env.TERM,
           // Explicitly exclude npm workspace-related environment variables
@@ -602,10 +606,13 @@ export class CLIManager {
         const npmCommand = `npm uninstall -g ${packageName}`;
 
         // Create a minimal environment that excludes npm workspace variables
+        // Use os.homedir() instead of process.env.HOME for packaged builds on Intel Macs
+        const homedir = os.homedir();
         const cleanEnv = {
           PATH: this.getEnhancedPath(),
-          HOME: process.env.HOME,
-          USER: process.env.USER,
+          HOME: homedir,
+          USERPROFILE: homedir, // Windows compatibility
+          USER: process.env.USER || os.userInfo().username,
           SHELL: process.env.SHELL,
           TERM: process.env.TERM,
         };
@@ -708,10 +715,13 @@ export class CLIManager {
         });
 
         // Create a minimal environment that excludes npm workspace variables
+        // Use os.homedir() instead of process.env.HOME for packaged builds on Intel Macs
+        const homedir = os.homedir();
         const cleanEnv = {
           PATH: this.getEnhancedPath(),
-          HOME: process.env.HOME,
-          USER: process.env.USER,
+          HOME: homedir,
+          USERPROFILE: homedir, // Windows compatibility
+          USER: process.env.USER || os.userInfo().username,
           SHELL: process.env.SHELL,
           TERM: process.env.TERM,
         };
