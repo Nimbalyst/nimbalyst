@@ -285,6 +285,13 @@
   font-weight: 500;
 }
 
+.workstream-session-item-timestamp {
+  flex-shrink: 0;
+  font-size: 0.6875rem;
+  color: var(--text-tertiary);
+  margin-left: 0.5rem;
+}
+
 .workstream-session-item-right {
   display: flex;
   align-items: center;

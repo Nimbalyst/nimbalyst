@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useRef, memo } from 'react';
 import { useAtomValue } from 'jotai';
 import { MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
 import { sessionProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom } from '../../store';
+import { getRelativeTimeString } from '../../utils/dateFormatting';
 import './WorkstreamGroup.css';
 
 /**
@@ -617,7 +618,12 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
           onClick={(e) => e.stopPropagation()}
         />
       ) : (
-        <span className="workstream-session-item-title">{displayTitle}</span>
+        <>
+          <span className="workstream-session-item-title">{displayTitle}</span>
+          <span className="workstream-session-item-timestamp">
+            {getRelativeTimeString(session.updatedAt || session.createdAt)}
+          </span>
+        </>
       )}
       <div className="workstream-session-item-right">
         <WorkstreamSessionStatusIndicator sessionId={session.id} uncommittedCount={session.uncommittedCount} />

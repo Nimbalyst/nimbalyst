@@ -771,13 +771,21 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     // Add regular sessions and workstreams (those without worktree_id)
     for (const session of sessions) {
       if (!session.worktree_id) {
-        const timestamp = timestampField === 'updatedAt' ? (session.updatedAt || session.createdAt) : session.createdAt;
-
         // Check if this is a workstream (has children)
         const isWorkstream = (session.childCount ?? 0) > 0;
         if (isWorkstream) {
           // Create workstream item with cached children (or empty array if not loaded yet)
           const cachedChildren = workstreamChildrenCache.get(session.id) || [];
+
+          // For workstreams, use the maximum updatedAt from all children for sorting
+          // This ensures workstreams appear based on their most recent activity
+          let timestamp: number;
+          if (timestampField === 'updatedAt' && cachedChildren.length > 0) {
+            timestamp = Math.max(...cachedChildren.map(child => child.updatedAt || child.createdAt));
+          } else {
+            timestamp = timestampField === 'updatedAt' ? (session.updatedAt || session.createdAt) : session.createdAt;
+          }
+
           const item = { type: 'workstream' as const, session, sessions: cachedChildren, timestamp };
 
           if (session.isPinned) {
@@ -786,6 +794,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
             items.push(item);
           }
         } else {
+          const timestamp = timestampField === 'updatedAt' ? (session.updatedAt || session.createdAt) : session.createdAt;
           // Regular session
           const item = { type: 'session' as const, session, timestamp };
 
