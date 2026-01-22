@@ -222,17 +222,9 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       const updatedAtMs = payload.updatedAt ?? now;
 
       // Convert epoch milliseconds to Date objects
-      // PostgreSQL will handle these correctly without timezone conversion issues
+      // TIMESTAMPTZ columns handle Date objects correctly
       const createdAt = new Date(createdAtMs);
       const updatedAt = new Date(updatedAtMs);
-
-      // TODO: Debug logging - uncomment if needed
-      // console.log('[PGLiteSessionStore] Creating session:', {
-      //   id: payload.id,
-      //   workspaceId: payload.workspaceId,
-      //   provider: payload.provider,
-      //   sessionType: (payload as any).sessionType
-      // });
 
       const branchedAt = (payload as any).branchedAt ? new Date((payload as any).branchedAt) : null;
 

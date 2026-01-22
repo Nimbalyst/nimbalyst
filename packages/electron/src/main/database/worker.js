@@ -323,6 +323,8 @@ class PGLiteWorker {
     if (!this.db) throw new Error('Database not initialized');
 
     // AI Sessions table
+    // IMPORTANT: Use TIMESTAMPTZ (not TIMESTAMP) for all timestamp columns
+    // PGLite misinterprets Date objects for TIMESTAMP columns, adding local timezone offset
     await this.db.exec(`
       CREATE TABLE IF NOT EXISTS ai_sessions (
         id TEXT PRIMARY KEY,
@@ -338,10 +340,10 @@ class PGLiteWorker {
         draft_input TEXT,
         metadata JSONB DEFAULT '{}',
         last_read_message_id TEXT,
-        last_read_timestamp TIMESTAMP,
+        last_read_timestamp TIMESTAMPTZ,
         has_been_named BOOLEAN DEFAULT FALSE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
 
       CREATE INDEX IF NOT EXISTS idx_ai_sessions_workspace ON ai_sessions(workspace_id);
@@ -371,7 +373,7 @@ class PGLiteWorker {
           SELECT 1 FROM information_schema.columns
           WHERE table_name = 'ai_sessions' AND column_name = 'last_read_timestamp'
         ) THEN
-          ALTER TABLE ai_sessions ADD COLUMN last_read_timestamp TIMESTAMP;
+          ALTER TABLE ai_sessions ADD COLUMN last_read_timestamp TIMESTAMPTZ;
         END IF;
 
         -- Add session state tracking columns (migration)
@@ -386,7 +388,7 @@ class PGLiteWorker {
           SELECT 1 FROM information_schema.columns
           WHERE table_name = 'ai_sessions' AND column_name = 'last_activity'
         ) THEN
-          ALTER TABLE ai_sessions ADD COLUMN last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+          ALTER TABLE ai_sessions ADD COLUMN last_activity TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP;
         END IF;
 
         IF NOT EXISTS (
@@ -477,7 +479,7 @@ class PGLiteWorker {
         workspace_id TEXT NOT NULL,
         file_path TEXT NOT NULL,
         link_type TEXT NOT NULL CHECK (link_type IN ('edited', 'referenced', 'read')),
-        timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        timestamp TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
         metadata JSONB DEFAULT '{}'
       );
 
@@ -500,9 +502,9 @@ class PGLiteWorker {
           workspace TEXT NOT NULL,
           document_path TEXT,
           line_number INTEGER,
-          created TIMESTAMP DEFAULT NOW(),
-          updated TIMESTAMP DEFAULT NOW(),
-          last_indexed TIMESTAMP DEFAULT NOW(),
+          created TIMESTAMPTZ DEFAULT NOW(),
+          updated TIMESTAMPTZ DEFAULT NOW(),
+          last_indexed TIMESTAMPTZ DEFAULT NOW(),
           title TEXT GENERATED ALWAYS AS (data->>'title') STORED,
           status TEXT GENERATED ALWAYS AS (data->>'status') STORED
         );
@@ -621,9 +623,9 @@ class PGLiteWorker {
           status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'executing', 'completed', 'failed')),
           attachments JSONB,
           document_context JSONB,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          claimed_at TIMESTAMP,
-          completed_at TIMESTAMP,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          claimed_at TIMESTAMPTZ,
+          completed_at TIMESTAMPTZ,
           error_message TEXT,
           CONSTRAINT fk_queued_prompts_session
             FOREIGN KEY (session_id)
@@ -653,8 +655,8 @@ class PGLiteWorker {
           path TEXT NOT NULL,
           branch TEXT NOT NULL,
           base_branch TEXT DEFAULT 'main',
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         );
 
         CREATE INDEX IF NOT EXISTS idx_worktrees_workspace ON worktrees(workspace_id);
@@ -827,7 +829,7 @@ class PGLiteWorker {
             SELECT 1 FROM information_schema.columns
             WHERE table_name = 'ai_sessions' AND column_name = 'branched_at'
           ) THEN
-            ALTER TABLE ai_sessions ADD COLUMN branched_at TIMESTAMP;
+            ALTER TABLE ai_sessions ADD COLUMN branched_at TIMESTAMPTZ;
           END IF;
         END $$;
       `);
@@ -859,6 +861,57 @@ class PGLiteWorker {
     } catch (error) {
       console.error('[PGLite Worker] Failed to migrate branch data:', error);
       // Non-fatal - continue even if migration fails (might be no data to migrate)
+    }
+
+    // Migration: Convert ai_sessions timestamp columns from TIMESTAMP to TIMESTAMPTZ
+    // PGLite misinterprets Date objects for TIMESTAMP (without timezone) columns,
+    // adding the local timezone offset. TIMESTAMPTZ handles Date objects correctly.
+    try {
+      await this.db.exec(`
+        DO $$
+        BEGIN
+          -- Check if created_at is still TIMESTAMP (without timezone)
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'ai_sessions'
+              AND column_name = 'created_at'
+              AND data_type = 'timestamp without time zone'
+          ) THEN
+            ALTER TABLE ai_sessions ALTER COLUMN created_at TYPE TIMESTAMPTZ;
+          END IF;
+
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'ai_sessions'
+              AND column_name = 'updated_at'
+              AND data_type = 'timestamp without time zone'
+          ) THEN
+            ALTER TABLE ai_sessions ALTER COLUMN updated_at TYPE TIMESTAMPTZ;
+          END IF;
+
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'ai_sessions'
+              AND column_name = 'last_read_timestamp'
+              AND data_type = 'timestamp without time zone'
+          ) THEN
+            ALTER TABLE ai_sessions ALTER COLUMN last_read_timestamp TYPE TIMESTAMPTZ;
+          END IF;
+
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'ai_sessions'
+              AND column_name = 'branched_at'
+              AND data_type = 'timestamp without time zone'
+          ) THEN
+            ALTER TABLE ai_sessions ALTER COLUMN branched_at TYPE TIMESTAMPTZ;
+          END IF;
+        END $$;
+      `);
+      console.log('[PGLite Worker] Migrated ai_sessions timestamp columns to TIMESTAMPTZ');
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to migrate timestamp columns:', error);
+      // Non-fatal for existing installs
     }
   }
 
