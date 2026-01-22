@@ -32,7 +32,7 @@ export function startPerformanceMonitoring() {
 
         lastCpuUsage = currentCpuUsage;
         lastTime = currentTime;
-    }, 5000); // Check every 5 seconds
+    }, 10000); // Check every 5 seconds
 }
 
 export function stopPerformanceMonitoring() {
