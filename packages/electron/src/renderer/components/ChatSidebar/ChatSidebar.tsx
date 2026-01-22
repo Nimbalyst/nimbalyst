@@ -313,6 +313,7 @@ export const ChatSidebar = forwardRef<ChatSidebarRef, ChatSidebarProps>(({
       </div>
 
       <SessionTranscript
+        key={sessionId}
         ref={transcriptRef}
         sessionId={sessionId}
         workspacePath={workspacePath}

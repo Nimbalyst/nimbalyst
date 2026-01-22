@@ -38,7 +38,7 @@
   padding: 8px 16px;
   border-radius: 6px;
   border: 1px solid var(--border-color, #e0e0e0);
-  background: var(--button-background, #f5f5f5);
+  background: var(--surface-secondary, #f5f5f5);
   color: var(--text-primary, #333);
   cursor: pointer;
   font-size: 14px;
@@ -46,5 +46,5 @@
 }
 
 .agent-mode-new-button:hover {
-  background: var(--button-hover-background, #e8e8e8);
+  background: var(--surface-active, #e8e8e8);
 }

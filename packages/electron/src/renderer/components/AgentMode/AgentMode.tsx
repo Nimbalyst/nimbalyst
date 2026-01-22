@@ -33,7 +33,11 @@ import {
   setWorkstreamActiveChildAtom,
   loadSessionChildrenAtom,
   store,
+  refreshSessionListAtom,
+  removeSessionFullAtom,
+  updateSessionFullAtom,
 } from '../../store';
+import { errorNotificationService } from '../../services/ErrorNotificationService';
 import { initWorkstreamState, loadWorkstreamStates, workstreamStateAtom } from '../../store/atoms/workstreamState';
 import { initSessionStateListeners } from '../../store/sessionStateListeners';
 import './AgentMode.css';
@@ -285,6 +289,97 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
     });
   }, [workspacePath, setSelectedWorkstream]);
 
+  // Session management atoms
+  const refreshSessions = useSetAtom(refreshSessionListAtom);
+  const removeSessionFromAtom = useSetAtom(removeSessionFullAtom);
+  const updateSessionInAtom = useSetAtom(updateSessionFullAtom);
+
+  // Branch a session - creates a fork at the current message
+  const handleSessionBranch = useCallback(async (sessionId: string) => {
+    try {
+      console.log('[AgentMode] Branching session:', sessionId);
+
+      // Call IPC to create a branch
+      const result = await window.electronAPI.invoke('sessions:branch', {
+        parentSessionId: sessionId,
+        workspacePath
+      });
+
+      if (result.success && result.session) {
+        console.log('[AgentMode] Branch created:', result.session.id);
+
+        // Refresh session list to show the new branch
+        refreshSessions();
+
+        // Open the new branch
+        await openSessionInTab(result.session.id);
+      } else {
+        console.error('[AgentMode] Failed to branch session:', result.error);
+        errorNotificationService.showError('Failed to branch conversation', result.error || 'Unknown error');
+      }
+    } catch (err) {
+      console.error('[AgentMode] Error branching session:', err);
+      errorNotificationService.showError('Failed to branch conversation', String(err));
+    }
+  }, [workspacePath, refreshSessions, openSessionInTab]);
+
+  // Delete a session
+  const handleSessionDelete = useCallback(async (sessionId: string) => {
+    try {
+      const result = await window.electronAPI.invoke('sessions:delete', sessionId);
+      if (result.success) {
+        // Remove from atom store
+        removeSessionFromAtom(sessionId);
+
+        // If this was the selected session, clear selection
+        if (selectedWorkstream?.id === sessionId) {
+          setSelectedWorkstream({ workspacePath, selection: null });
+        }
+      } else {
+        console.error('[AgentMode] Failed to delete session:', result.error);
+        errorNotificationService.showError('Failed to delete session', result.error || 'Unknown error');
+      }
+    } catch (err) {
+      console.error('[AgentMode] Error deleting session:', err);
+      errorNotificationService.showError('Failed to delete session', String(err));
+    }
+  }, [removeSessionFromAtom, selectedWorkstream, workspacePath, setSelectedWorkstream]);
+
+  // Archive a session
+  const handleSessionArchive = useCallback(async (sessionId: string) => {
+    try {
+      const result = await window.electronAPI.invoke('sessions:update-metadata', sessionId, { isArchived: true });
+      if (result.success) {
+        // Update in atom store
+        updateSessionInAtom({ id: sessionId, isArchived: true });
+
+        // If this was the selected session, clear selection
+        if (selectedWorkstream?.id === sessionId) {
+          setSelectedWorkstream({ workspacePath, selection: null });
+        }
+      } else {
+        console.error('[AgentMode] Failed to archive session:', result.error);
+      }
+    } catch (err) {
+      console.error('[AgentMode] Error archiving session:', err);
+    }
+  }, [updateSessionInAtom, selectedWorkstream, workspacePath, setSelectedWorkstream]);
+
+  // Rename a session
+  const handleSessionRename = useCallback(async (sessionId: string, newName: string) => {
+    try {
+      const result = await window.electronAPI.invoke('sessions:update-metadata', sessionId, { title: newName });
+      if (result.success) {
+        // Update in atom store
+        updateSessionInAtom({ id: sessionId, title: newName });
+      } else {
+        console.error('[AgentMode] Failed to rename session:', result.error);
+      }
+    } catch (err) {
+      console.error('[AgentMode] Error renaming session:', err);
+    }
+  }, [updateSessionInAtom]);
+
   // Expose ref methods
   useImperativeHandle(ref, () => ({
     createNewSession,
@@ -327,6 +422,10 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
       workspacePath={workspacePath}
       activeSessionId={selectedWorkstream?.id || null}
       onSessionSelect={handleSessionSelect}
+      onSessionDelete={handleSessionDelete}
+      onSessionArchive={handleSessionArchive}
+      onSessionRename={handleSessionRename}
+      onSessionBranch={handleSessionBranch}
       onNewSession={createNewSession}
       onNewWorktreeSession={createNewWorktreeSession}
       collapsedGroups={collapsedGroups}

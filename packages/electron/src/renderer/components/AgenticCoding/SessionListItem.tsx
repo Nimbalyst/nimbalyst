@@ -412,7 +412,7 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
       {isPinned && (
         <MaterialSymbol icon="push_pin" size={12} className="session-list-item-pin-icon" />
       )}
-      {parentSessionId && (
+      {branchedAt && (
         <MaterialSymbol icon="fork_right" size={12} className="session-list-item-branch-icon" title="Branched conversation" />
       )}
       <div className="session-list-item-content">

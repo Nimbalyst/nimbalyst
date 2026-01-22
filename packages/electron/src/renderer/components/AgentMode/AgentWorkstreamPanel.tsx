@@ -16,7 +16,7 @@
  * Clicking a file in any session's sidebar opens it in the workstream editor tabs.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { ProviderIcon, MaterialSymbol } from '@nimbalyst/runtime';
 import { WorkstreamEditorTabs, type WorkstreamEditorTabsRef } from './WorkstreamEditorTabs';
@@ -33,6 +33,8 @@ import {
   sessionWorktreeIdAtom,
   loadSessionChildrenAtom,
   loadSessionDataAtom,
+  updateSessionFullAtom,
+  updateSessionDataAtom,
   type WorkstreamType,
 } from '../../store';
 import {
@@ -76,6 +78,13 @@ const WorkstreamHeader: React.FC<{
   const sessions = useAtomValue(workstreamSessionsAtom(workstreamId));
   const [isArchived, setIsArchived] = useState(false);
   const setLayoutMode = useSetAtom(setWorkstreamLayoutModeAtom);
+  const updateSession = useSetAtom(updateSessionFullAtom);
+  const updateSessionData = useSetAtom(updateSessionDataAtom);
+
+  // Inline editing state
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(title);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // A workstream has children if there are multiple sessions
   const hasChildren = sessions.length > 1;
@@ -85,6 +94,59 @@ const WorkstreamHeader: React.FC<{
   useEffect(() => {
     setIsArchived(archivedFromAtom);
   }, [archivedFromAtom]);
+
+  // Focus input when editing starts
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
+
+  // Update edit value when title changes externally
+  useEffect(() => {
+    if (!isEditing) {
+      setEditValue(title);
+    }
+  }, [title, isEditing]);
+
+  const handleTitleClick = useCallback(() => {
+    setEditValue(title);
+    setIsEditing(true);
+  }, [title]);
+
+  const handleRenameSubmit = useCallback(async () => {
+    const trimmedValue = editValue.trim();
+    if (trimmedValue && trimmedValue !== title) {
+      try {
+        const result = await window.electronAPI.invoke('sessions:update-metadata', workstreamId, { title: trimmedValue });
+        if (result.success) {
+          const now = Date.now();
+          // Update session list atom (for SessionHistory)
+          updateSession({ id: workstreamId, title: trimmedValue, name: trimmedValue, updatedAt: now });
+          // Update session data atom (for WorkstreamHeader title via workstreamTitleAtom)
+          updateSessionData({ sessionId: workstreamId, updates: { title: trimmedValue, name: trimmedValue, updatedAt: now } });
+        } else {
+          console.error('[WorkstreamHeader] Failed to rename session:', result.error);
+        }
+      } catch (err) {
+        console.error('[WorkstreamHeader] Error renaming session:', err);
+      }
+    }
+    setIsEditing(false);
+  }, [editValue, title, workstreamId, updateSession, updateSessionData]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleRenameSubmit();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setEditValue(title);
+      setIsEditing(false);
+    }
+  }, [handleRenameSubmit, title]);
 
   const handleLayoutChange = useCallback((mode: WorkstreamLayoutMode) => {
     setLayoutMode({ workstreamId, mode });
@@ -122,7 +184,25 @@ const WorkstreamHeader: React.FC<{
         </div>
 
         <div className="workstream-header-content">
-          <h2 className="workstream-header-title">{title}</h2>
+          {isEditing ? (
+            <input
+              ref={inputRef}
+              type="text"
+              className="workstream-header-title-input"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onBlur={handleRenameSubmit}
+              onKeyDown={handleKeyDown}
+            />
+          ) : (
+            <h2
+              className="workstream-header-title"
+              onClick={handleTitleClick}
+              title="Click to rename"
+            >
+              {title}
+            </h2>
+          )}
         </div>
 
         {isProcessing && (

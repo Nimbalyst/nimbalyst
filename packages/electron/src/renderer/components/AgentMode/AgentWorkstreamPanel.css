@@ -49,6 +49,29 @@
   overflow: hidden;
   text-overflow: ellipsis;
   line-height: 1.2;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: background-color 0.15s ease;
+}
+
+.workstream-header-title:hover {
+  background-color: var(--surface-hover);
+}
+
+.workstream-header-title-input {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-accent);
+  border-radius: 4px;
+  padding: 2px 4px;
+  margin: 0;
+  outline: none;
+  width: 100%;
+  min-width: 150px;
+  max-width: 300px;
 }
 
 .workstream-header-spacer {

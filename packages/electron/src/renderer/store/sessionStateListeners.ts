@@ -27,6 +27,7 @@ import {
   sessionProcessingAtom,
   reloadSessionDataAtom,
   sessionListWorkspaceAtom,
+  updateSessionFullAtom,
 } from './atoms/sessions';
 
 /**
@@ -93,6 +94,21 @@ export function initSessionStateListeners(): () => void {
     // Note: SessionTranscript also does this for mounted sessions, but this
     // ensures unmounted sessions (child sessions, inactive tabs) get updated too
     store.set(reloadSessionDataAtom, { sessionId, workspacePath });
+
+    // Update the session list's updatedAt timestamp so the list reflects recent activity
+    store.set(updateSessionFullAtom, { id: sessionId, updatedAt: Date.now() });
+  };
+
+  /**
+   * Handle session title updates globally.
+   * This ensures the session list updates when the agent names a session via MCP tool.
+   */
+  const handleTitleUpdated = (data: { sessionId: string; title: string }) => {
+    const { sessionId, title } = data;
+    if (!sessionId || !title) return;
+
+    // Update the session list with the new title
+    store.set(updateSessionFullAtom, { id: sessionId, title, name: title, updatedAt: Date.now() });
   };
 
   // First, subscribe to the session state manager (IPC call to register this window)
@@ -111,8 +127,10 @@ export function initSessionStateListeners(): () => void {
 
   // Subscribe to message logged events
   let cleanupMessageLogged: (() => void) | undefined;
+  let cleanupTitleUpdated: (() => void) | undefined;
   if (window.electronAPI?.on) {
     cleanupMessageLogged = window.electronAPI.on('ai:message-logged', handleMessageLogged);
+    cleanupTitleUpdated = window.electronAPI.on('session:title-updated', handleTitleUpdated);
   }
 
   // Return cleanup function
@@ -120,5 +138,6 @@ export function initSessionStateListeners(): () => void {
     window.electronAPI.sessionState?.removeStateChangeListener?.(handleStateChange);
     window.electronAPI.sessionState?.unsubscribe?.();
     cleanupMessageLogged?.();
+    cleanupTitleUpdated?.();
   };
 }

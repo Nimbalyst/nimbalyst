@@ -133,7 +133,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   const [aiMode, setAiMode] = useAtom(sessionModeAtom(sessionId));
   const [currentModel, setCurrentModel] = useAtom(sessionModelAtom(sessionId));
   const [isArchived, setIsArchived] = useAtom(sessionArchivedAtom(sessionId));
-  const isProcessing = useAtomValue(sessionProcessingAtom(sessionId));
+  const [isProcessing, setIsProcessing] = useAtom(sessionProcessingAtom(sessionId));
   const loadSessionData = useSetAtom(loadSessionDataAtom);
   const reloadSessionData = useSetAtom(reloadSessionDataAtom);
   const updateSessionData = useSetAtom(updateSessionDataAtom);
@@ -153,9 +153,8 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   const [pendingToolPermissions, setPendingToolPermissions] = useState<ToolPermissionData[]>([]);
   const [pendingReviewFiles, setPendingReviewFiles] = useState<Set<string>>(new Set());
 
-  // Track if we're currently sending a message (for local UI state)
-  const sendingRef = useRef(false);
-  const queueingRef = useRef(false);
+  // Track if we're currently queueing a message (prevents double-submission)
+  const [isQueueing, setIsQueueing] = useState(false);
 
   // Diff tree grouping state
   const [groupByDirectory] = useAtom(diffTreeGroupByDirectoryAtom);
@@ -187,9 +186,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       if (data.sessionId !== sessionId) return;
       // Reload on both input and output messages to ensure we stay in sync
       reloadSessionData({ sessionId, workspacePath });
-      if (data.direction === 'output') {
-        sendingRef.current = false;
-      }
+      // Note: processing state is managed by sessionProcessingAtom via sessionStateListeners
     };
 
     const handleTitleUpdated = (data: { sessionId: string; title: string }) => {
@@ -217,7 +214,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   }, [sessionId, workspacePath, sessionData, reloadSessionData, updateSessionData, onSessionTitleChanged]);
 
   // Derived values
-  const isLoading = isProcessing || sendingRef.current;
+  const isLoading = isProcessing;
   const sessionHasMessages = (sessionData?.messages?.length ?? 0) > 0;
   const currentProviderType = sessionData?.provider === 'claude-code' ? 'agent' : 'model';
 
@@ -410,8 +407,8 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   }, [setDraftAttachments]);
 
   const handleQueue = useCallback(async (message: string) => {
-    if (!message.trim() || queueingRef.current) return;
-    queueingRef.current = true;
+    if (!message.trim() || isQueueing) return;
+    setIsQueueing(true);
 
     try {
       const serializableContext = documentContext ? {
@@ -441,9 +438,9 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     } catch (error) {
       console.error('[SessionTranscript] Failed to queue prompt:', error);
     } finally {
-      queueingRef.current = false;
+      setIsQueueing(false);
     }
-  }, [sessionId, documentContext, draftAttachments, setDraftInput, setDraftAttachments]);
+  }, [sessionId, documentContext, draftAttachments, setDraftInput, setDraftAttachments, isQueueing]);
 
   const handleSend = useCallback(async () => {
     if (!draftInput.trim() || !sessionData) return;
@@ -458,7 +455,8 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
 
     setDraftInput('');
     setDraftAttachments([]);
-    sendingRef.current = true;
+    // Optimistically set processing state - will be confirmed by session:started event
+    setIsProcessing(true);
 
     const userMessage = {
       id: `msg-${Date.now()}`,
@@ -485,18 +483,19 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       await window.electronAPI.invoke('ai:sendMessage', message, docContext, sessionId, workspacePath);
     } catch (error) {
       console.error('[SessionTranscript] Failed to send message:', error);
-      sendingRef.current = false;
+      setIsProcessing(false);
     }
-  }, [sessionId, sessionData, draftInput, draftAttachments, isLoading, documentContext, aiMode, workspacePath, setDraftInput, setDraftAttachments, updateSessionData, handleQueue]);
+  }, [sessionId, sessionData, draftInput, draftAttachments, isLoading, documentContext, aiMode, workspacePath, setDraftInput, setDraftAttachments, updateSessionData, handleQueue, setIsProcessing]);
 
   const handleCancel = useCallback(async () => {
     try {
       await window.electronAPI.invoke('ai:cancelRequest', sessionId);
-      sendingRef.current = false;
+      // Note: session:interrupted event will also set this to false via sessionStateListeners
+      setIsProcessing(false);
     } catch (error) {
       console.error('[SessionTranscript] Failed to cancel request:', error);
     }
-  }, [sessionId]);
+  }, [sessionId, setIsProcessing]);
 
   const handleFileClick = useCallback((filePath: string) => {
     onFileClick?.(filePath);

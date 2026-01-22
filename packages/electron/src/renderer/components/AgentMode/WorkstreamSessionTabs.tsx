@@ -157,6 +157,7 @@ export const WorkstreamSessionTabs: React.FC<WorkstreamSessionTabsProps> = React
 
       <div className="workstream-session-tabs-content">
         <AgentSessionPanel
+          key={effectiveActiveSessionId}
           sessionId={effectiveActiveSessionId}
           workspacePath={workspacePath}
           onFileClick={onFileClick}
