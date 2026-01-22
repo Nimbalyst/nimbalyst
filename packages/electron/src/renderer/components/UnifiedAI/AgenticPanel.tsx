@@ -179,6 +179,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // Ref for synchronous checks only - atoms are source of truth for UI
   const sendingSessionsRef = useRef<Set<string>>(new Set());
   const [releaseChannel, setReleaseChannel] = useState<'stable' | 'alpha'>('stable');
+  const [isGitRepo, setIsGitRepo] = useState(false);
 
   // Note: Running sessions state is now managed via sessionProcessingAtom (Jotai atoms)
   // SessionListItem subscribes directly to the atom for processing state
@@ -594,6 +595,27 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       triggerSessionHistoryRefresh('mode-switch');
     }
   }, [mode, triggerSessionHistoryRefresh]);
+
+  // Check if workspace is a git repository (for worktree feature availability)
+  useEffect(() => {
+    if (!workspacePath || !window.electronAPI?.invoke) {
+      setIsGitRepo(false);
+      return;
+    }
+
+    window.electronAPI.invoke('git:is-repo', workspacePath)
+      .then(result => {
+        if (result?.success) {
+          setIsGitRepo(result.isRepo);
+        } else {
+          setIsGitRepo(false);
+        }
+      })
+      .catch(error => {
+        console.error('[AgenticPanel] Failed to check if git repo:', error);
+        setIsGitRepo(false);
+      });
+  }, [workspacePath]);
 
   const scheduleSessionReload = useCallback((
     sessionId: string,
@@ -3498,6 +3520,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             onNewSession={() => createNewSession()}
             onNewTerminal={releaseChannel === 'alpha' ? () => createNewTerminal() : undefined}
             onNewWorktreeSession={releaseChannel === 'alpha' ? createNewWorktreeSession : undefined}
+            isGitRepo={isGitRepo}
             onAddSessionToWorktree={handleAddSessionToWorktree}
             onAddTerminalToWorktree={releaseChannel === 'alpha' ? handleAddTerminalToWorktree : undefined}
             onWorktreeFilesMode={(worktreeId) => handleWorktreeModeChange(worktreeId, 'files')}

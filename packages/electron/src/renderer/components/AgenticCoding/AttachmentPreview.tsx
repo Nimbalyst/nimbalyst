@@ -3,6 +3,31 @@ import type { ChatAttachment } from '@nimbalyst/runtime';
 import { getFileIcon } from '@nimbalyst/runtime';
 import './AttachmentPreview.css';
 
+interface ProcessingAttachmentPreviewProps {
+  filename: string;
+}
+
+/**
+ * Shows a loading indicator for an attachment that is being processed (e.g., compressed).
+ */
+export function ProcessingAttachmentPreview({ filename }: ProcessingAttachmentPreviewProps) {
+  return (
+    <div className="attachment-preview attachment-preview-processing">
+      <div className="attachment-preview-thumbnail">
+        <div className="attachment-preview-spinner" />
+      </div>
+      <div className="attachment-preview-info">
+        <div className="attachment-preview-filename" title={filename}>
+          {filename}
+        </div>
+        <div className="attachment-preview-size attachment-preview-processing-text">
+          Processing...
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface AttachmentPreviewProps {
   attachment: ChatAttachment;
   onRemove: (attachmentId: string) => void;

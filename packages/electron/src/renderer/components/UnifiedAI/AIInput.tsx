@@ -148,6 +148,9 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
     const [allSlashCommands, setAllSlashCommands] = useState<any[]>([]);
     const [dragActive, setDragActive] = useState(false);
 
+    // Track attachments that are being processed (e.g., compressed)
+    const [processingAttachments, setProcessingAttachments] = useState<Array<{ id: string; filename: string }>>([]);
+
     // Voice mode state
     const [isVoiceActive, setIsVoiceActive] = useState(false);
     const showTranscription = useAtomValue(showTranscriptionAtom);
@@ -674,6 +677,9 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
     const handleFileAttachment = useCallback(async (file: File) => {
       if (!onAttachmentAdd || !sessionId) return;
 
+      // Generate a temporary ID for tracking processing state
+      const processingId = `processing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
       try {
         const validation = await window.electronAPI.invoke('attachment:validate', {
           fileSize: file.size,
@@ -686,6 +692,9 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
           return;
         }
 
+        // Add to processing state before starting compression
+        setProcessingAttachments(prev => [...prev, { id: processingId, filename: file.name }]);
+
         const arrayBuffer = await file.arrayBuffer();
         const uint8Array = new Uint8Array(arrayBuffer);
 
@@ -696,6 +705,9 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
           sessionId
         });
 
+        // Remove from processing state
+        setProcessingAttachments(prev => prev.filter(p => p.id !== processingId));
+
         if (result.success && result.attachment) {
           onAttachmentAdd(result.attachment);
           const reference = `@${file.name} `;
@@ -705,6 +717,8 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
           alert(result.error || 'Failed to save attachment');
         }
       } catch (error) {
+        // Remove from processing state on error
+        setProcessingAttachments(prev => prev.filter(p => p.id !== processingId));
         console.error('[AIInput] Error handling file attachment:', error);
         alert('Failed to attach file');
       }
@@ -901,11 +915,12 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
         )}
 
         {/* Attachment preview list */}
-        {attachments && attachments.length > 0 && (
+        {((attachments && attachments.length > 0) || processingAttachments.length > 0) && (
           <AttachmentPreviewList
             attachments={attachments}
             onRemove={handleRemoveAttachment}
             onConvertToText={handleConvertToText}
+            processingAttachments={processingAttachments}
           />
         )}
 

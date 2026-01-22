@@ -511,3 +511,12 @@
   color: var(--text-secondary);
   opacity: 0.7;
 }
+
+.session-history-new-option.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.session-history-new-option.disabled:hover {
+  background-color: transparent;
+}

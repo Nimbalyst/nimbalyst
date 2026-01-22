@@ -583,15 +583,21 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
 
   // Define loadServers before the useEffects that use it
   const loadServers = useCallback(async () => {
+    const loadStart = performance.now();
     try {
       setLoading(true);
       setError(null);
 
       console.log('[MCPServersPanel] loadServers called with scope:', scope, 'workspace:', workspacePath);
 
+      const ipcStart = performance.now();
       const config: MCPConfig = scope === 'workspace' && workspacePath
         ? await window.electronAPI.invoke('mcp-config:read-workspace', workspacePath)
         : await window.electronAPI.invoke('mcp-config:read-user');
+      const ipcDuration = performance.now() - ipcStart;
+      if (ipcDuration > 500) {
+        console.warn(`[MCPServersPanel] loadServers IPC call took ${ipcDuration.toFixed(0)}ms (>500ms threshold)`);
+      }
 
       console.log('[MCPServersPanel] Loaded config:', Object.keys(config.mcpServers));
 
@@ -603,8 +609,13 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
       );
 
       setServers(serverList);
+      const loadDuration = performance.now() - loadStart;
+      if (loadDuration > 1000) {
+        console.warn(`[MCPServersPanel] loadServers completed in ${loadDuration.toFixed(0)}ms (>1s threshold)`);
+      }
     } catch (err: unknown) {
-      console.error('Failed to load MCP servers:', err);
+      const loadDuration = performance.now() - loadStart;
+      console.error(`Failed to load MCP servers after ${loadDuration.toFixed(0)}ms:`, err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to load MCP servers';
       setError(errorMessage);
     } finally {
@@ -655,9 +666,29 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
 
   // Check OAuth status for all servers when they're loaded
   useEffect(() => {
-    servers.forEach(server => {
-      checkServerOAuthStatus(server.name, server);
-    });
+    const oauthServers = servers.filter(s => isOAuthServer(s));
+    if (oauthServers.length > 0) {
+      console.log(`[MCPServersPanel] Starting OAuth status check for ${oauthServers.length} server(s)`);
+      const startTime = performance.now();
+      let completedCount = 0;
+
+      oauthServers.forEach(server => {
+        const serverStart = performance.now();
+        checkServerOAuthStatus(server.name, server).finally(() => {
+          const serverDuration = performance.now() - serverStart;
+          completedCount++;
+          if (serverDuration > 1000) {
+            console.warn(`[MCPServersPanel] OAuth check for "${server.name}" took ${serverDuration.toFixed(0)}ms (>1s threshold)`);
+          }
+          if (completedCount === oauthServers.length) {
+            const totalDuration = performance.now() - startTime;
+            if (totalDuration > 2000) {
+              console.warn(`[MCPServersPanel] All OAuth checks completed in ${totalDuration.toFixed(0)}ms total (>2s threshold)`);
+            }
+          }
+        });
+      });
+    }
   }, [servers]);
 
   const handleServerSelect = (server: MCPServerWithName) => {
@@ -810,14 +841,20 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
     }
 
     setServerOAuthStatuses(prev => ({ ...prev, [serverName]: 'checking' }));
+    const ipcStart = performance.now();
     try {
       const result = await window.electronAPI.invoke('mcp-config:check-oauth-status', serverUrl);
+      const ipcDuration = performance.now() - ipcStart;
+      if (ipcDuration > 1000) {
+        console.warn(`[MCPServersPanel] IPC call for "${serverName}" OAuth check took ${ipcDuration.toFixed(0)}ms (>1s threshold)`);
+      }
       setServerOAuthStatuses(prev => ({
         ...prev,
         [serverName]: result.authorized ? 'authorized' : 'not-authorized'
       }));
     } catch (error) {
-      console.error('Failed to check OAuth status:', error);
+      const ipcDuration = performance.now() - ipcStart;
+      console.error(`Failed to check OAuth status for "${serverName}" after ${ipcDuration.toFixed(0)}ms:`, error);
       setServerOAuthStatuses(prev => ({ ...prev, [serverName]: 'unknown' }));
     }
   };
@@ -1004,6 +1041,8 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
     if (formType === 'stdio' && !formCommand.trim()) return;
     if ((formType === 'sse' || formType === 'http') && !formUrl.trim()) return;
 
+    const saveStart = performance.now();
+    console.log('[MCPServersPanel] autoSave starting for server:', formName.trim());
     try {
       setSaveStatus('saving');
       // Mark as local change to ignore file watcher updates
@@ -1086,6 +1125,12 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
         isNew: isNewServer
       });
 
+      const saveDuration = performance.now() - saveStart;
+      console.log(`[MCPServersPanel] autoSave completed in ${saveDuration.toFixed(0)}ms`);
+      if (saveDuration > 2000) {
+        console.warn(`[MCPServersPanel] autoSave took ${saveDuration.toFixed(0)}ms (>2s threshold)`);
+      }
+
       setTimeout(() => setSaveStatus('idle'), 2000);
 
       // Clear the flag after a longer delay to ensure file watcher events are ignored
@@ -1093,8 +1138,9 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
         isLocalChangeRef.current = false;
       }, 2000);
     } catch (err: unknown) {
+      const saveDuration = performance.now() - saveStart;
       const errorMsg = err instanceof Error ? err.message : 'Failed to save server';
-      console.error('Failed to save server:', errorMsg);
+      console.error(`Failed to save server after ${saveDuration.toFixed(0)}ms:`, errorMsg);
       setSaveStatus('error');
       setTestStatus('error');
       setTestMessage(`Save error: ${errorMsg}`);

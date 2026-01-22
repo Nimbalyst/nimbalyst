@@ -180,12 +180,19 @@ function getServerHashes(serverUrl: string): string[] {
  * mcp-remote stores tokens in versioned directories like ~/.mcp-auth/mcp-remote-0.1.36/
  */
 async function checkMcpRemoteAuthStatus(serverUrl: string): Promise<{ authorized: boolean; tokenPath?: string }> {
+  const startTime = Date.now();
   const authDir = getMcpAuthDir();
   const serverHashes = getServerHashes(serverUrl);
 
   try {
     // First, find all mcp-remote version directories
+    const readdirStart = Date.now();
     const entries = await fs.promises.readdir(authDir, { withFileTypes: true });
+    const readdirDuration = Date.now() - readdirStart;
+    if (readdirDuration > 500) {
+      logger.main.warn(`[MCP] checkMcpRemoteAuthStatus: initial readdir took ${readdirDuration}ms (>500ms threshold)`);
+    }
+
     const versionDirs = entries
       .filter(e => e.isDirectory() && e.name.startsWith('mcp-remote-'))
       .map(e => e.name)
@@ -207,6 +214,10 @@ async function checkMcpRemoteAuthStatus(serverUrl: string): Promise<{ authorized
                 const content = await fs.promises.readFile(tokenPath, 'utf-8');
                 const tokens = JSON.parse(content);
                 if (tokens.access_token || tokens.accessToken) {
+                  const totalDuration = Date.now() - startTime;
+                  if (totalDuration > 1000) {
+                    logger.main.warn(`[MCP] checkMcpRemoteAuthStatus: found token but took ${totalDuration}ms total (>1s threshold)`);
+                  }
                   logger.main.info('[MCP] Found OAuth tokens at:', tokenPath);
                   return { authorized: true, tokenPath };
                 }
@@ -232,6 +243,10 @@ async function checkMcpRemoteAuthStatus(serverUrl: string): Promise<{ authorized
           const content = await fs.promises.readFile(tokenPath, 'utf-8');
           const tokens = JSON.parse(content);
           if (tokens.access_token || tokens.accessToken) {
+            const totalDuration = Date.now() - startTime;
+            if (totalDuration > 1000) {
+              logger.main.warn(`[MCP] checkMcpRemoteAuthStatus: found token (legacy) but took ${totalDuration}ms total (>1s threshold)`);
+            }
             return { authorized: true, tokenPath };
           }
         } catch {
@@ -243,6 +258,10 @@ async function checkMcpRemoteAuthStatus(serverUrl: string): Promise<{ authorized
     // Auth directory doesn't exist
   }
 
+  const totalDuration = Date.now() - startTime;
+  if (totalDuration > 1000) {
+    logger.main.warn(`[MCP] checkMcpRemoteAuthStatus: no token found, took ${totalDuration}ms total (>1s threshold)`);
+  }
   return { authorized: false };
 }
 

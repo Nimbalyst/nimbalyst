@@ -77,6 +77,7 @@ interface SessionHistoryProps {
   onNewSession?: () => void;
   onNewTerminal?: () => void; // Callback for creating a new terminal session
   onNewWorktreeSession?: () => void; // Callback for creating new worktree session
+  isGitRepo?: boolean; // Whether the workspace is a git repository (needed for worktree feature)
   onAddSessionToWorktree?: (worktreeId: string) => void; // Callback for adding session to existing worktree
   onAddTerminalToWorktree?: (worktreeId: string) => void; // Callback for adding terminal to existing worktree
   onWorktreeFilesMode?: (worktreeId: string) => void; // Callback to open Files mode for a worktree
@@ -183,6 +184,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   onNewSession,
   onNewTerminal,
   onNewWorktreeSession,
+  isGitRepo = false,
   onAddSessionToWorktree,
   onAddTerminalToWorktree,
   onWorktreeFilesMode,
@@ -963,9 +965,11 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                     )}
                     {onNewWorktreeSession && (
                       <button
-                        className="session-history-new-option"
+                        className={`session-history-new-option ${!isGitRepo ? 'disabled' : ''}`}
                         data-testid="new-worktree-session-button"
-                        onClick={() => { onNewWorktreeSession(); setNewDropdownOpen(false); }}
+                        onClick={() => { if (isGitRepo) { onNewWorktreeSession(); setNewDropdownOpen(false); } }}
+                        disabled={!isGitRepo}
+                        title={!isGitRepo ? 'Worktrees require a git repository' : undefined}
                       >
                         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                           <path d="M5 13v-2.5a1.5 1.5 0 0 1 1.5-1.5h3"/>
@@ -1095,9 +1099,11 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                     )}
                     {onNewWorktreeSession && (
                       <button
-                        className="session-history-new-option"
+                        className={`session-history-new-option ${!isGitRepo ? 'disabled' : ''}`}
                         data-testid="new-worktree-session-button"
-                        onClick={() => { onNewWorktreeSession(); setNewDropdownOpen(false); }}
+                        onClick={() => { if (isGitRepo) { onNewWorktreeSession(); setNewDropdownOpen(false); } }}
+                        disabled={!isGitRepo}
+                        title={!isGitRepo ? 'Worktrees require a git repository' : undefined}
                       >
                         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                           <path d="M5 13v-2.5a1.5 1.5 0 0 1 1.5-1.5h3"/>
@@ -1194,9 +1200,11 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                     )}
                     {onNewWorktreeSession && (
                       <button
-                        className="session-history-new-option"
+                        className={`session-history-new-option ${!isGitRepo ? 'disabled' : ''}`}
                         data-testid="new-worktree-session-button"
-                        onClick={() => { onNewWorktreeSession(); setNewDropdownOpen(false); }}
+                        onClick={() => { if (isGitRepo) { onNewWorktreeSession(); setNewDropdownOpen(false); } }}
+                        disabled={!isGitRepo}
+                        title={!isGitRepo ? 'Worktrees require a git repository' : undefined}
                       >
                         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                           <path d="M5 13v-2.5a1.5 1.5 0 0 1 1.5-1.5h3"/>
@@ -1306,9 +1314,11 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                   )}
                   {onNewWorktreeSession && (
                     <button
-                      className="session-history-new-option"
+                      className={`session-history-new-option ${!isGitRepo ? 'disabled' : ''}`}
                       data-testid="new-worktree-session-button"
-                      onClick={() => { onNewWorktreeSession(); setNewDropdownOpen(false); }}
+                      onClick={() => { if (isGitRepo) { onNewWorktreeSession(); setNewDropdownOpen(false); } }}
+                      disabled={!isGitRepo}
+                      title={!isGitRepo ? 'Worktrees require a git repository' : undefined}
                     >
                       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                         <path d="M5 13v-2.5a1.5 1.5 0 0 1 1.5-1.5h3"/>

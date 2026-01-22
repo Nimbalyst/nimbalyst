@@ -20,11 +20,12 @@ export function resolveProjectPath(workspacePath: string): string {
   }
 
   // Normalize the path to remove trailing slashes for consistent matching
-  const normalizedPath = workspacePath.replace(/\/+$/, '');
+  const normalizedPath = path.normalize(workspacePath);
 
   // Match pattern: /{project}_worktrees/{name}
   // This matches our worktree creation pattern in GitWorktreeService
-  const match = normalizedPath.match(/^(.+)_worktrees\/[^/]+$/);
+  // Use [\\/] to match both forward and backslash (Windows and Unix)
+  const match = normalizedPath.match(/^(.+)_worktrees[\\/][^\\/]+$/);
   return match ? match[1] : workspacePath;
 }
 
@@ -39,8 +40,9 @@ export function isWorktreePath(workspacePath: string): boolean {
     return false;
   }
 
-  const normalizedPath = workspacePath.replace(/\/+$/, '');
-  return /_worktrees\/[^/]+$/.test(normalizedPath);
+  const normalizedPath = path.normalize(workspacePath);
+  // Use [\\/] to match both forward and backslash (Windows and Unix)
+  return /_worktrees[\\/][^\\/]+$/.test(normalizedPath);
 }
 
 /**

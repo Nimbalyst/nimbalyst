@@ -52,6 +52,9 @@ export function AgenticInput({
   const [allSlashCommands, setAllSlashCommands] = useState<any[]>([]);
   const [dragActive, setDragActive] = useState(false);
 
+  // Track attachments that are being processed (e.g., compressed)
+  const [processingAttachments, setProcessingAttachments] = useState<Array<{ id: string; filename: string }>>([]);
+
   // Auto-resize textarea
   useEffect(() => {
     if (textareaRef.current) {
@@ -328,6 +331,9 @@ export function AgenticInput({
   const handleFileAttachment = useCallback(async (file: File) => {
     if (!onAttachmentAdd || !sessionId) return;
 
+    // Generate a temporary ID for tracking processing state
+    const processingId = `processing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
     try {
       // Validate file before uploading
       const validation = await window.electronAPI.invoke('attachment:validate', {
@@ -341,6 +347,9 @@ export function AgenticInput({
         return;
       }
 
+      // Add to processing state before starting compression
+      setProcessingAttachments(prev => [...prev, { id: processingId, filename: file.name }]);
+
       // Read file as array buffer (for IPC transfer)
       const arrayBuffer = await file.arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
@@ -353,6 +362,9 @@ export function AgenticInput({
         sessionId
       });
 
+      // Remove from processing state
+      setProcessingAttachments(prev => prev.filter(p => p.id !== processingId));
+
       if (result.success && result.attachment) {
         onAttachmentAdd(result.attachment);
 
@@ -364,6 +376,8 @@ export function AgenticInput({
         alert(result.error || 'Failed to save attachment');
       }
     } catch (error) {
+      // Remove from processing state on error
+      setProcessingAttachments(prev => prev.filter(p => p.id !== processingId));
       console.error('[AgenticInput] Error handling file attachment:', error);
       alert('Failed to attach file');
     }
@@ -424,10 +438,11 @@ export function AgenticInput({
   return (
     <div className="ai-chat-input" style={{ position: 'relative' }}>
       {/* Attachment preview list */}
-      {attachments.length > 0 && (
+      {(attachments.length > 0 || processingAttachments.length > 0) && (
         <AttachmentPreviewList
           attachments={attachments}
           onRemove={handleRemoveAttachment}
+          processingAttachments={processingAttachments}
         />
       )}
 

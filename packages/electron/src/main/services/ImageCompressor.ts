@@ -220,7 +220,7 @@ export async function compressImage(
  * Strategy: First try JPEG at decreasing quality, then reduce dimensions
  */
 async function compressToTargetSize(
-  image: InstanceType<typeof Jimp>,
+  image: JimpImage,
   targetSize: number,
   startingMaxDimension: number
 ): Promise<{ buffer: Buffer; mimeType: string }> {

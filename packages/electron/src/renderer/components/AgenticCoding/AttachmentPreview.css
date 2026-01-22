@@ -207,3 +207,28 @@
 .attachment-context-menu-item:hover {
   background: var(--surface-hover);
 }
+
+/* Processing attachment styles */
+.attachment-preview-processing {
+  opacity: 0.8;
+}
+
+.attachment-preview-processing-text {
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.attachment-preview-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border-primary);
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: attachment-spin 0.8s linear infinite;
+}
+
+@keyframes attachment-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

@@ -604,8 +604,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // Set up environment variables for the SDK
       // If user has configured a claude-code API key, pass it via environment
       const env: any = {
-        ...process.env
-        // Note: MCP is enabled when we have MCP servers configured (like session naming)
+        ...process.env,
+        // Enable MCP tool search when MCP tools exceed 10% of context (same as CLI default)
+        // Options: 'auto' (10%), 'auto:N' (custom N%), 'true' (always), 'false' (never)
+        ENABLE_TOOL_SEARCH: 'auto:10'
       };
 
       if (this.config.apiKey) {
@@ -763,10 +765,17 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         promptInput = message;
       }
 
+      console.log('[CLAUDE-CODE] Calling SDK query() - this spawns the claude process...');
+      const queryCallStart = Date.now();
       const queryIterator = query({
         prompt: promptInput as any,
         options
       }) as AsyncIterable<any>;
+      const queryCallDuration = Date.now() - queryCallStart;
+      console.log(`[CLAUDE-CODE] SDK query() returned iterator in ${queryCallDuration}ms`);
+      if (queryCallDuration > 5000) {
+        console.warn(`[CLAUDE-CODE] SDK query() took ${queryCallDuration}ms to return iterator (>5s threshold) - possible Windows Defender/antivirus delay`);
+      }
 
 
       let fullContent = '';
@@ -826,6 +835,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           if (!firstChunkTime) {
             firstChunkTime = Date.now();
             const timeToFirstChunk = firstChunkTime - queryStartTime;
+            console.log(`[CLAUDE-CODE] First chunk received in ${timeToFirstChunk}ms from query start`);
+            if (timeToFirstChunk > 10000) {
+              console.warn(`[CLAUDE-CODE] Time to first chunk was ${timeToFirstChunk}ms (>10s threshold) - possible Windows Defender/antivirus delay during subprocess spawn`);
+            }
           }
           if (typeof chunk === 'string') {
             // Text chunk - always display it
