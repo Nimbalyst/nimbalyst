@@ -119,6 +119,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   renamedWorktree = null,
   updatedSession = null,
   onSessionSelect,
+  onChildSessionSelect,
   onSessionDelete,
   onSessionArchive,
   onSessionRename,
@@ -389,6 +390,29 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
         }
         return session;
       }));
+
+      // Also update workstream children cache if this is a child session
+      // This ensures renamed children show updated names immediately
+      setWorkstreamChildrenCache(prev => {
+        const updated = new Map(prev);
+        let cacheUpdated = false;
+
+        for (const [parentId, children] of prev.entries()) {
+          const childIndex = children.findIndex(c => c.id === renamedSession.id);
+          if (childIndex !== -1) {
+            const updatedChildren = [...children];
+            updatedChildren[childIndex] = {
+              ...updatedChildren[childIndex],
+              title: renamedSession.title
+            };
+            updated.set(parentId, updatedChildren);
+            cacheUpdated = true;
+            break;
+          }
+        }
+
+        return cacheUpdated ? updated : prev;
+      });
     }
   }, [renamedSession]);
 
@@ -866,12 +890,11 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
 
   // Fetch children for expanded workstreams
   useEffect(() => {
-    // Find workstream sessions that are expanded but don't have cached children
+    // Find workstream sessions that are expanded
     const workstreamSessions = sessions.filter(s =>
       !s.worktree_id &&
       (s.childCount ?? 0) > 0 &&
-      !collapsedGroups.includes(`workstream:${s.id}`) &&
-      !workstreamChildrenCache.has(s.id)
+      !collapsedGroups.includes(`workstream:${s.id}`)
     );
 
     if (workstreamSessions.length === 0) {
@@ -909,7 +932,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     };
 
     fetchChildren();
-  }, [sessions, collapsedGroups, workstreamChildrenCache, workspacePath]);
+  }, [sessions, collapsedGroups, workspacePath]);
 
   if (loading) {
     return (
@@ -1536,6 +1559,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                           sessions={item.sessions}
                           activeSessionId={activeSessionId}
                           onSessionSelect={onSessionSelect}
+                          onChildSessionSelect={onChildSessionSelect}
                           onSessionDelete={onSessionDelete ? handleDeleteSession : undefined}
                           onSessionArchive={handleArchiveSession}
                           onSessionPinToggle={handleSessionPinToggle}
@@ -1568,6 +1592,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                           sessions={item.sessions}
                           activeSessionId={activeSessionId}
                           onSessionSelect={onSessionSelect}
+                          onChildSessionSelect={onChildSessionSelect}
                           onSessionDelete={onSessionDelete ? handleDeleteSession : undefined}
                           onSessionArchive={handleArchiveSession}
                           onSessionPinToggle={handleSessionPinToggle}

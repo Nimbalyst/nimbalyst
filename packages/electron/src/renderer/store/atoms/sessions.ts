@@ -546,6 +546,32 @@ export const createChildSessionAtom = atom(
           childId: result.sessionId,
         });
 
+        // Add the new child to the session registry so it appears immediately in the UI
+        // This is critical - without it, SessionHistory won't show the new child until refreshed
+        const now = Date.now();
+        set(addSessionFullAtom, {
+          id: result.sessionId,
+          name: result.title || 'Untitled Session',
+          title: result.title || 'Untitled Session',
+          provider: provider || 'claude-code',
+          createdAt: now,
+          updatedAt: now,
+          projectPath: workspacePath,
+          messageCount: 0,
+          isArchived: false,
+          isPinned: false,
+          worktreeId,
+          parentSessionId,
+          childCount: 0,
+          uncommittedCount: 0,
+        });
+
+        // Update parent's childCount in registry
+        set(updateSessionFullAtom, {
+          id: parentSessionId,
+          childCount: children.length + 1,
+        });
+
         return result.sessionId;
       }
     } catch (error) {
