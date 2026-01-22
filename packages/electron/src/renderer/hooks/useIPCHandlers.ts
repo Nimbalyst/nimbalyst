@@ -364,7 +364,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       }
     }));
     // Handle menu:find - route to editor's SearchReplace dialog
-    // Agent mode handles its own menu:find via AgenticPanel
+    // Agent mode handles its own menu:find via CustomEvent
     cleanupFns.push(window.electronAPI.on('menu:find', () => {
       const mode = propsRef.current.activeMode;
 
@@ -374,12 +374,32 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
         if (activeFilePath) {
           SearchReplaceStateManager.toggle(activeFilePath);
         }
+      } else if (mode === 'agent') {
+        // Agent mode: dispatch CustomEvent for AgentWorkstreamPanel to handle
+        window.dispatchEvent(new CustomEvent('menu:find'));
       }
-      // Agent mode: AgenticPanel handles menu:find directly
     }));
 
-    // menu:find-next and menu:find-previous for editor mode are handled by Monaco/Lexical internally
-    // Agent mode: AgenticPanel handles these directly
+    // Handle menu:find-next
+    cleanupFns.push(window.electronAPI.on('menu:find-next', () => {
+      const mode = propsRef.current.activeMode;
+      if (mode === 'agent') {
+        // Agent mode: dispatch CustomEvent for AgentWorkstreamPanel to handle
+        window.dispatchEvent(new CustomEvent('menu:find-next'));
+      }
+      // Editor mode: Monaco/Lexical handle this internally via their own keyboard shortcuts
+    }));
+
+    // Handle menu:find-previous
+    cleanupFns.push(window.electronAPI.on('menu:find-previous', () => {
+      const mode = propsRef.current.activeMode;
+      if (mode === 'agent') {
+        // Agent mode: dispatch CustomEvent for AgentWorkstreamPanel to handle
+        window.dispatchEvent(new CustomEvent('menu:find-previous'));
+      }
+      // Editor mode: Monaco/Lexical handle this internally via their own keyboard shortcuts
+    }));
+
     cleanupFns.push(window.electronAPI.onFileDeleted((data) => {
       console.log('[FILE_DELETED] File deleted event received:', data.filePath);
       // console.log('[FILE_DELETED] Tabs object:', editorModeRef.current?.tabs);

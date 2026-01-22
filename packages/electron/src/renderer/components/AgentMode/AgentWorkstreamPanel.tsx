@@ -268,6 +268,9 @@ export const AgentWorkstreamPanel: React.FC<AgentWorkstreamPanelProps> = React.m
   // Ref for the content container (used for resize calculations)
   const contentRef = useRef<HTMLDivElement>(null);
 
+  // Ref for the editor area to check focus
+  const editorAreaRef = useRef<HTMLDivElement>(null);
+
   // For single sessions, the workstreamId IS the sessionId
   // For workstreams, ensure activeSessionId is actually in the sessions array
   // (the parent workstream ID should not be used as the active session)
@@ -374,6 +377,90 @@ export const AgentWorkstreamPanel: React.FC<AgentWorkstreamPanelProps> = React.m
     document.body.style.userSelect = 'none';
   }, [sidebarWidth]);
 
+  // Handle CMD+F routing based on focus
+  // Route to editor if editor has focus, otherwise route to transcript
+  useEffect(() => {
+    const handleFind = () => {
+      // Check if the editor area has focus
+      const activeElement = document.activeElement;
+      const editorHasFocus = editorAreaRef.current?.contains(activeElement);
+
+      if (editorHasFocus && editorTabsRef.current) {
+        // Editor has focus - trigger find in the active editor
+        // Monaco and Lexical handle CMD+F natively, so we dispatch a keyboard event
+        // to simulate the user pressing CMD+F directly in the focused editor
+        const event = new KeyboardEvent('keydown', {
+          key: 'f',
+          code: 'KeyF',
+          metaKey: true,
+          bubbles: true,
+          cancelable: true,
+        });
+        activeElement?.dispatchEvent(event);
+      } else if (effectiveActiveSessionId) {
+        // Transcript has focus - dispatch to transcript with sessionId
+        window.dispatchEvent(new CustomEvent('menu:find', {
+          detail: { sessionId: effectiveActiveSessionId }
+        }));
+      }
+    };
+
+    const handleFindNext = () => {
+      const activeElement = document.activeElement;
+      const editorHasFocus = editorAreaRef.current?.contains(activeElement);
+
+      if (editorHasFocus) {
+        // Editor has focus - trigger find next in the active editor
+        const event = new KeyboardEvent('keydown', {
+          key: 'g',
+          code: 'KeyG',
+          metaKey: true,
+          bubbles: true,
+          cancelable: true,
+        });
+        activeElement?.dispatchEvent(event);
+      } else if (effectiveActiveSessionId) {
+        // Transcript has focus - dispatch to transcript with sessionId
+        window.dispatchEvent(new CustomEvent('menu:find-next', {
+          detail: { sessionId: effectiveActiveSessionId }
+        }));
+      }
+    };
+
+    const handleFindPrevious = () => {
+      const activeElement = document.activeElement;
+      const editorHasFocus = editorAreaRef.current?.contains(activeElement);
+
+      if (editorHasFocus) {
+        // Editor has focus - trigger find previous in the active editor
+        const event = new KeyboardEvent('keydown', {
+          key: 'g',
+          code: 'KeyG',
+          metaKey: true,
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        });
+        activeElement?.dispatchEvent(event);
+      } else if (effectiveActiveSessionId) {
+        // Transcript has focus - dispatch to transcript with sessionId
+        window.dispatchEvent(new CustomEvent('menu:find-previous', {
+          detail: { sessionId: effectiveActiveSessionId }
+        }));
+      }
+    };
+
+    window.addEventListener('menu:find', handleFind);
+    window.addEventListener('menu:find-next', handleFindNext);
+    window.addEventListener('menu:find-previous', handleFindPrevious);
+
+    return () => {
+      window.removeEventListener('menu:find', handleFind);
+      window.removeEventListener('menu:find-next', handleFindNext);
+      window.removeEventListener('menu:find-previous', handleFindPrevious);
+    };
+  }, [effectiveActiveSessionId]);
+
   // Determine what to show based on layout mode
   const showEditorTabs = layoutMode === 'split' || layoutMode === 'editor';
   const showSessionTabs = layoutMode === 'split' || layoutMode === 'transcript';
@@ -392,6 +479,7 @@ export const AgentWorkstreamPanel: React.FC<AgentWorkstreamPanelProps> = React.m
           {/* Editor tabs for the entire workstream */}
           {showEditorTabs && (
             <div
+              ref={editorAreaRef}
               className={`agent-workstream-editor-area ${layoutMode === 'editor' ? 'maximized' : ''}`}
               style={layoutMode === 'split' ? { height: `${splitRatio * 100}%`, minHeight: '100px' } : undefined}
             >
