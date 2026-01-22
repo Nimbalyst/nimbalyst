@@ -1,5 +1,7 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, memo } from 'react';
+import { useAtomValue } from 'jotai';
 import { MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
+import { sessionProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom } from '../../store';
 import './WorkstreamGroup.css';
 
 /**
@@ -424,6 +426,47 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
   );
 };
 
+/**
+ * Status indicator for workstream child sessions.
+ * Subscribes to Jotai atoms for real-time processing/unread/pending state.
+ */
+const WorkstreamSessionStatusIndicator = memo<{ sessionId: string; messageCount?: number }>(({ sessionId, messageCount }) => {
+  const isProcessing = useAtomValue(sessionProcessingAtom(sessionId));
+  const hasPendingPrompt = useAtomValue(sessionPendingPromptAtom(sessionId));
+  const hasUnread = useAtomValue(sessionUnreadAtom(sessionId));
+
+  // Priority: processing > pending prompt > unread > message count
+  if (isProcessing) {
+    return (
+      <div className="workstream-session-item-status processing" title="Processing...">
+        <MaterialSymbol icon="progress_activity" size={12} />
+      </div>
+    );
+  }
+
+  if (hasPendingPrompt) {
+    return (
+      <div className="workstream-session-item-status pending-prompt" title="Waiting for your response">
+        <MaterialSymbol icon="help" size={12} />
+      </div>
+    );
+  }
+
+  if (hasUnread) {
+    return (
+      <div className="workstream-session-item-status unread" title="Unread response">
+        <MaterialSymbol icon="circle" size={6} fill />
+      </div>
+    );
+  }
+
+  if (messageCount && messageCount > 0) {
+    return <span className="workstream-session-item-count">{messageCount}</span>;
+  }
+
+  return null;
+});
+
 // Child session item within a workstream group
 interface WorkstreamSessionItemProps {
   session: SessionItem;
@@ -549,21 +592,7 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
         <span className="workstream-session-item-title">{displayTitle}</span>
       )}
       <div className="workstream-session-item-right">
-        {session.isProcessing ? (
-          <div className="workstream-session-item-status processing" title="Processing...">
-            <MaterialSymbol icon="progress_activity" size={12} />
-          </div>
-        ) : session.hasPendingPrompt ? (
-          <div className="workstream-session-item-status pending-prompt" title="Waiting for your response">
-            <MaterialSymbol icon="help" size={12} />
-          </div>
-        ) : session.hasUnread ? (
-          <div className="workstream-session-item-status unread" title="Unread response">
-            <MaterialSymbol icon="circle" size={6} fill />
-          </div>
-        ) : session.messageCount > 0 ? (
-          <span className="workstream-session-item-count">{session.messageCount}</span>
-        ) : null}
+        <WorkstreamSessionStatusIndicator sessionId={session.id} messageCount={session.messageCount} />
       </div>
 
       {/* Context Menu */}

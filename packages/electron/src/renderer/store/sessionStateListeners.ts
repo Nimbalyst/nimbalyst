@@ -27,7 +27,7 @@ import {
   sessionProcessingAtom,
   reloadSessionDataAtom,
   sessionListWorkspaceAtom,
-  updateSessionFullAtom,
+  updateSessionStoreAtom,
 } from './atoms/sessions';
 
 /**
@@ -95,8 +95,9 @@ export function initSessionStateListeners(): () => void {
     // ensures unmounted sessions (child sessions, inactive tabs) get updated too
     store.set(reloadSessionDataAtom, { sessionId, workspacePath });
 
-    // Update the session list's updatedAt timestamp so the list reflects recent activity
-    store.set(updateSessionFullAtom, { id: sessionId, updatedAt: Date.now() });
+    // Update session metadata with updatedAt timestamp
+    // This automatically syncs both sessionStoreAtom and sessionRegistryAtom
+    store.set(updateSessionStoreAtom, { sessionId, updates: { updatedAt: Date.now() } });
   };
 
   /**
@@ -107,8 +108,9 @@ export function initSessionStateListeners(): () => void {
     const { sessionId, title } = data;
     if (!sessionId || !title) return;
 
-    // Update the session list with the new title
-    store.set(updateSessionFullAtom, { id: sessionId, title, name: title, updatedAt: Date.now() });
+    // Update session with new title
+    // This automatically syncs both sessionStoreAtom and sessionRegistryAtom
+    store.set(updateSessionStoreAtom, { sessionId, updates: { title, updatedAt: Date.now() } });
   };
 
   // First, subscribe to the session state manager (IPC call to register this window)

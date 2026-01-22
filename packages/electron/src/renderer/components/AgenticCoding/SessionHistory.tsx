@@ -13,7 +13,7 @@ import {
   sessionListLoadingAtom,
   showArchivedSessionsAtom,
   refreshSessionListAtom,
-  updateSessionFullAtom,
+  updateSessionStoreAtom,
   removeSessionFullAtom,
   type SessionListItem as SessionListItemType,
 } from '../../store';
@@ -147,7 +147,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   const showArchivedAtom = useAtomValue(showArchivedSessionsAtom);
   const setShowArchivedAtom = useSetAtom(showArchivedSessionsAtom);
   const refreshSessions = useSetAtom(refreshSessionListAtom);
-  const updateSessionInAtom = useSetAtom(updateSessionFullAtom);
+  const updateSessionStore = useSetAtom(updateSessionStoreAtom);
   const removeSessionFromAtom = useSetAtom(removeSessionFullAtom);
 
   // Convert atom sessions to local SessionItem format
@@ -443,7 +443,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       await window.electronAPI.invoke('sessions:update-metadata', sessionId, { isArchived: true });
       // Update atom state immediately for instant feedback (optimistic update)
       // If not showing archived, this effectively removes it from view
-      updateSessionInAtom({ id: sessionId, isArchived: true });
+      updateSessionStore({ sessionId, updates: { isArchived: true } });
       // Also remove from filtered list for immediate feedback
       setSessions(prev => prev.filter(s => s.id !== sessionId));
       // Notify parent to close the tab if open
@@ -496,7 +496,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     try {
       await window.electronAPI.invoke('sessions:update-metadata', sessionId, { isArchived: false });
       // Update atom state immediately for instant feedback (optimistic update)
-      updateSessionInAtom({ id: sessionId, isArchived: false });
+      updateSessionStore({ sessionId, updates: { isArchived: false } });
       // Also update filtered list for immediate feedback
       setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, isArchived: false } : s));
     } catch (err) {
@@ -574,7 +574,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     await Promise.all(promises);
     // Update atom state for each archived session
     selectedSessionIds.forEach(sessionId => {
-      updateSessionInAtom({ id: sessionId, isArchived: true });
+      updateSessionStore({ sessionId, updates: { isArchived: true } });
     });
     setSessions(prev => prev.filter(s => !selectedSessionIds.has(s.id)));
     // Notify parent to close tabs for all archived sessions
@@ -592,7 +592,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     await Promise.all(promises);
     // Update atom state for each unarchived session
     selectedSessionIds.forEach(sessionId => {
-      updateSessionInAtom({ id: sessionId, isArchived: false });
+      updateSessionStore({ sessionId, updates: { isArchived: false } });
     });
     setSessions(prev => prev.map(s => selectedSessionIds.has(s.id) ? { ...s, isArchived: false } : s));
     clearSelection();
@@ -618,13 +618,13 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     try {
       await window.electronAPI.invoke('sessions:update-pinned', sessionId, isPinned);
       // Update atom state (optimistic update)
-      updateSessionInAtom({ id: sessionId, isPinned });
+      updateSessionStore({ sessionId, updates: { isPinned } });
       // Also update filtered list for immediate feedback
       setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, isPinned } : s));
     } catch (error) {
       console.error('[SessionHistory] Failed to toggle session pin:', error);
     }
-  }, [updateSessionInAtom]);
+  }, [updateSessionStore]);
 
   // Toggle pin status for a worktree
   const handleWorktreePinToggle = useCallback(async (worktreeId: string, isPinned: boolean) => {

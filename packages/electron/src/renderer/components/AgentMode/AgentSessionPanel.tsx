@@ -2,7 +2,7 @@
  * AgentSessionPanel - Fully encapsulated session view.
  *
  * This component owns ALL state for a single session:
- * - Session data (via sessionDataAtom)
+ * - Session data (via sessionStoreAtom)
  * - Draft input (via sessionDraftInputAtom)
  * - Processing state (via sessionProcessingAtom)
  * - Queued prompts, todos, dialogs (local state)

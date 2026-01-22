@@ -32,8 +32,56 @@ export interface SessionInfo {
 }
 
 /**
- * Session list at workspace level.
- * SessionHistory subscribes to this for the list of sessions to display.
+ * Lightweight session metadata for the registry.
+ * Minimal fields needed for sorting/filtering in the list view.
+ */
+export interface SessionMeta {
+  id: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+  provider: string;
+  sessionType: 'chat' | 'planning' | 'coding' | 'terminal';
+  messageCount: number;
+  isArchived: boolean;
+  isPinned: boolean;
+  parentSessionId: string | null;
+  worktreeId: string | null;
+  childCount: number;
+  uncommittedCount: number;
+}
+
+/**
+ * Session registry - lightweight Map for O(1) lookups and efficient updates.
+ * This is populated during initSessionList() and kept in sync with all session changes.
+ * Single source of truth for session metadata used in lists.
+ */
+export const sessionRegistryAtom = atom<Map<string, SessionMeta>>(new Map());
+
+/**
+ * Derived: Sorted array of all sessions from registry.
+ * For use by components that need the full session list.
+ */
+export const sessionListFromRegistryAtom = atom((get) => {
+  const registry = get(sessionRegistryAtom);
+  return Array.from(registry.values())
+    .sort((a, b) => b.updatedAt - a.updatedAt);
+});
+
+/**
+ * Derived: Root sessions only from registry (no parent).
+ * These are the sessions that should show in the main session history list.
+ */
+export const sessionListRootFromRegistryAtom = atom((get) => {
+  const registry = get(sessionRegistryAtom);
+  return Array.from(registry.values())
+    .filter(s => !s.parentSessionId) // Root sessions only
+    .sort((a, b) => b.updatedAt - a.updatedAt);
+});
+
+/**
+ * Legacy session list - writable atom for backward compatibility.
+ * @deprecated Use sessionRegistryAtom and derived atoms instead
  */
 export const sessionListAtom = atom<SessionInfo[]>([]);
 
@@ -130,14 +178,62 @@ export interface OpenSession {
 }
 
 /**
- * Per-session full data.
+ * Per-session full data store.
+ * Single source of truth for all session fields including messages, metadata, and state.
  * AISessionView subscribes directly - loads its own data, saves changes.
  * This allows the component to be fully self-contained.
  *
  * Initial value is null - AISessionView loads data on mount.
+ * Updates to this atom should go through updateSessionStoreAtom to keep registry in sync.
  */
-export const sessionDataAtom = atomFamily((_sessionId: string) =>
+export const sessionStoreAtom = atomFamily((_sessionId: string) =>
   atom<SessionData | null>(null)
+);
+
+/**
+ * @deprecated Use sessionStoreAtom instead
+ */
+export const sessionDataAtom = sessionStoreAtom;
+
+/**
+ * Unified session update atom.
+ * SINGLE update point for all session metadata changes.
+ * Automatically syncs both sessionStoreAtom and sessionRegistryAtom.
+ *
+ * This is the ONLY way to update session state - replaces updateSessionDataAtom and updateSessionFullAtom.
+ */
+export const updateSessionStoreAtom = atom(
+  null,
+  (get, set, update: { sessionId: string; updates: Partial<SessionData> }) => {
+    const { sessionId, updates } = update;
+
+    // 1. Update full session data if loaded
+    const current = get(sessionStoreAtom(sessionId));
+    if (current) {
+      set(sessionStoreAtom(sessionId), { ...current, ...updates });
+    }
+
+    // 2. Always update registry with metadata fields
+    const registry = new Map(get(sessionRegistryAtom));
+    const meta = registry.get(sessionId);
+    if (meta) {
+      registry.set(sessionId, {
+        ...meta,
+        // Sync fields that exist in both SessionData and SessionMeta
+        ...(updates.title !== undefined && { title: updates.title }),
+        ...(updates.updatedAt !== undefined && { updatedAt: updates.updatedAt }),
+        ...(updates.isArchived !== undefined && { isArchived: updates.isArchived }),
+        ...(updates.isPinned !== undefined && { isPinned: updates.isPinned }),
+        ...(updates.parentSessionId !== undefined && { parentSessionId: updates.parentSessionId }),
+        ...(updates.worktreeId !== undefined && { worktreeId: updates.worktreeId }),
+        ...(updates.provider !== undefined && { provider: updates.provider }),
+        ...(updates.sessionType !== undefined && { sessionType: updates.sessionType }),
+        // Note: messageCount is not in SessionData, only in SessionListItem
+        // It gets updated via updateSessionFullAtom for now (Phase 1 backward compat)
+      });
+      set(sessionRegistryAtom, registry);
+    }
+  }
 );
 
 /**
@@ -160,7 +256,7 @@ export const sessionModeAtom = atomFamily((_sessionId: string) =>
  * Returns only the parentSessionId field, avoiding rerenders when other fields change.
  */
 export const sessionParentIdDerivedAtom = atomFamily((sessionId: string) =>
-  atom((get) => get(sessionDataAtom(sessionId))?.parentSessionId ?? null)
+  atom((get) => get(sessionStoreAtom(sessionId))?.parentSessionId ?? null)
 );
 
 /**
@@ -168,7 +264,7 @@ export const sessionParentIdDerivedAtom = atomFamily((sessionId: string) =>
  * Returns only the worktreeId field, avoiding rerenders when other fields change.
  */
 export const sessionWorktreeIdAtom = atomFamily((sessionId: string) =>
-  atom((get) => get(sessionDataAtom(sessionId))?.worktreeId ?? null)
+  atom((get) => get(sessionStoreAtom(sessionId))?.worktreeId ?? null)
 );
 
 /**
@@ -200,7 +296,7 @@ export const sessionActiveAtom = atomFamily((_sessionId: string) =>
  */
 export const sessionTitleAtom = atomFamily((sessionId: string) =>
   atom((get) => {
-    const data = get(sessionDataAtom(sessionId));
+    const data = get(sessionStoreAtom(sessionId));
     return data?.title || data?.name || 'Untitled';
   })
 );
@@ -211,7 +307,7 @@ export const sessionTitleAtom = atomFamily((sessionId: string) =>
  */
 export const sessionProviderAtom = atomFamily((sessionId: string) =>
   atom((get) => {
-    const data = get(sessionDataAtom(sessionId));
+    const data = get(sessionStoreAtom(sessionId));
     return data?.provider || 'claude';
   })
 );
@@ -222,7 +318,7 @@ export const sessionProviderAtom = atomFamily((sessionId: string) =>
  */
 export const sessionMessagesAtom = atomFamily((sessionId: string) =>
   atom((get) => {
-    const data = get(sessionDataAtom(sessionId));
+    const data = get(sessionStoreAtom(sessionId));
     return data?.messages || [];
   })
 );
@@ -233,7 +329,7 @@ export const sessionMessagesAtom = atomFamily((sessionId: string) =>
  */
 export const sessionTokenUsageAtom = atomFamily((sessionId: string) =>
   atom((get) => {
-    const data = get(sessionDataAtom(sessionId));
+    const data = get(sessionStoreAtom(sessionId));
     return data?.tokenUsage;
   })
 );
@@ -281,6 +377,10 @@ export const sessionHasChildrenAtom = atomFamily((sessionId: string) =>
  * For workstreams, the parent header should show processing if ANY child is running.
  * This atom provides that aggregated view - subscribe to this instead of sessionProcessingAtom
  * when displaying processing state for a session that might be a workstream parent.
+ *
+ * Checks children from TWO sources:
+ * 1. sessionChildrenAtom - populated when workstream is opened (has exact child IDs)
+ * 2. sessionRegistryAtom - always available (finds children by parentSessionId)
  */
 export const sessionOrChildProcessingAtom = atomFamily((sessionId: string) =>
   atom((get) => {
@@ -289,11 +389,22 @@ export const sessionOrChildProcessingAtom = atomFamily((sessionId: string) =>
       return true;
     }
 
-    // Check if any child session is processing
-    const children = get(sessionChildrenAtom(sessionId));
-    for (const childId of children) {
+    // Check children from sessionChildrenAtom (populated when workstream is opened)
+    const loadedChildren = get(sessionChildrenAtom(sessionId));
+    for (const childId of loadedChildren) {
       if (get(sessionProcessingAtom(childId))) {
         return true;
+      }
+    }
+
+    // Also check children from registry (works even before workstream is opened)
+    // This ensures session list shows processing state for unopened workstreams
+    const registry = get(sessionRegistryAtom);
+    for (const [childId, meta] of registry) {
+      if (meta.parentSessionId === sessionId) {
+        if (get(sessionProcessingAtom(childId))) {
+          return true;
+        }
       }
     }
 
@@ -403,7 +514,7 @@ export const createChildSessionAtom = atom(
 
     try {
       // Get parent session to inherit worktree_id
-      const parentData = get(sessionDataAtom(parentSessionId));
+      const parentData = get(sessionStoreAtom(parentSessionId));
       const worktreeId = parentData?.worktreeId;
       console.log(`[sessions:createChildSessionAtom] Parent data: worktreeId=${worktreeId}, hasMessages=${!!parentData?.messages?.length}`);
 
@@ -573,7 +684,7 @@ export const convertToWorkstreamAtom = atom(
 
     try {
       // Get current session data
-      const sessionData = get(sessionDataAtom(sessionId));
+      const sessionData = get(sessionStoreAtom(sessionId));
       if (!sessionData) {
         console.error(`[sessions] Cannot convert to workstream: session ${sessionId} not found`);
         return null;
@@ -593,11 +704,11 @@ export const convertToWorkstreamAtom = atom(
         return null;
       }
 
-      // Also check database via session list for childCount
-      const allSessions = get(sessionListFullAtom);
-      const sessionListItem = allSessions.find(s => s.id === sessionId);
-      if (sessionListItem?.childCount && sessionListItem.childCount > 0) {
-        console.error(`[sessions] Cannot convert to workstream: session ${sessionId} already has ${sessionListItem.childCount} children in database`);
+      // Also check database via registry for childCount
+      const registry = get(sessionRegistryAtom);
+      const sessionMeta = registry.get(sessionId);
+      if (sessionMeta?.childCount && sessionMeta.childCount > 0) {
+        console.error(`[sessions] Cannot convert to workstream: session ${sessionId} already has ${sessionMeta.childCount} children in database`);
         return null;
       }
 
@@ -786,7 +897,7 @@ export const loadSessionDataAtom = atom(
     try {
       const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspacePath);
       if (sessionData) {
-        set(sessionDataAtom(sessionId), sessionData);
+        set(sessionStoreAtom(sessionId), sessionData);
         set(sessionModeAtom(sessionId), sessionData.mode || 'agent');
         set(sessionModelAtom(sessionId), sessionData.model || sessionData.provider || 'claude-code:sonnet');
         set(sessionArchivedAtom(sessionId), sessionData.isArchived || false);
@@ -822,13 +933,17 @@ export const loadSessionDataAtom = atom(
 
 /**
  * Update session data in the atom (after streaming updates, etc.).
+ * @deprecated Use updateSessionStoreAtom instead - it syncs both stores
  */
 export const updateSessionDataAtom = atom(
   null,
   (get, set, { sessionId, updates }: { sessionId: string; updates: Partial<SessionData> }) => {
-    const current = get(sessionDataAtom(sessionId));
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('[DEPRECATED] updateSessionDataAtom is deprecated. Use updateSessionStoreAtom instead.');
+    }
+    const current = get(sessionStoreAtom(sessionId));
     if (current) {
-      set(sessionDataAtom(sessionId), { ...current, ...updates });
+      set(sessionStoreAtom(sessionId), { ...current, ...updates });
     }
   }
 );
@@ -847,7 +962,7 @@ export const reloadSessionDataAtom = atom(
     try {
       const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspacePath);
       if (sessionData) {
-        const current = get(sessionDataAtom(sessionId));
+        const current = get(sessionStoreAtom(sessionId));
 
         // Merge messages: preserve local-only messages not yet in database
         if (current) {
@@ -877,7 +992,7 @@ export const reloadSessionDataAtom = atom(
           }
         }
 
-        set(sessionDataAtom(sessionId), sessionData);
+        set(sessionStoreAtom(sessionId), sessionData);
         set(sessionArchivedAtom(sessionId), sessionData.isArchived || false);
       }
     } catch (error) {
@@ -891,7 +1006,7 @@ export const reloadSessionDataAtom = atom(
  */
 export const cleanupSessionAtom = atom(null, (get, set, sessionId: string) => {
   // Remove all per-session atoms
-  sessionDataAtom.remove(sessionId);
+  sessionStoreAtom.remove(sessionId);
   sessionLoadingAtom.remove(sessionId);
   sessionModeAtom.remove(sessionId);
   sessionModelAtom.remove(sessionId);
@@ -966,58 +1081,6 @@ export const setActiveSessionAtom = atom(
 /**
  * Remove a session and clean up its atoms.
  */
-export const removeSessionAtom = atom(null, (get, set, sessionId: string) => {
-  // Remove from list
-  const sessions = get(sessionListAtom);
-  set(
-    sessionListAtom,
-    sessions.filter((s) => s.id !== sessionId)
-  );
-
-  // If this was active, clear active
-  if (get(activeSessionIdAtom) === sessionId) {
-    set(activeSessionIdAtom, null);
-  }
-
-  // Clean up per-session atoms
-  sessionProcessingAtom.remove(sessionId);
-  sessionUnreadAtom.remove(sessionId);
-  sessionPendingPromptAtom.remove(sessionId);
-  sessionPendingPermissionAtom.remove(sessionId);
-  sessionLastReadAtom.remove(sessionId);
-  sessionDraftInputAtom.remove(sessionId);
-  sessionDraftAttachmentsAtom.remove(sessionId);
-});
-
-/**
- * Add a new session to the list.
- */
-export const addSessionAtom = atom(
-  null,
-  (get, set, session: SessionInfo) => {
-    const sessions = get(sessionListAtom);
-    // Avoid duplicates
-    if (sessions.some((s) => s.id === session.id)) {
-      return;
-    }
-    set(sessionListAtom, [...sessions, session]);
-  }
-);
-
-/**
- * Update session metadata (name, updatedAt).
- */
-export const updateSessionAtom = atom(
-  null,
-  (get, set, update: Partial<SessionInfo> & { id: string }) => {
-    const sessions = get(sessionListAtom);
-    set(
-      sessionListAtom,
-      sessions.map((s) => (s.id === update.id ? { ...s, ...update } : s))
-    );
-  }
-);
-
 // ============================================================
 // Session list loading and refresh
 // ============================================================
@@ -1047,19 +1110,43 @@ export interface SessionListItem {
 }
 
 /**
- * Full session list with extended info.
- * This is what SessionHistory uses for display.
+ * Convert SessionMeta to SessionListItem format.
+ * Helper for derived atoms that need SessionListItem[] format.
  */
-export const sessionListFullAtom = atom<SessionListItem[]>([]);
+function sessionMetaToListItem(meta: SessionMeta, projectPath: string): SessionListItem {
+  return {
+    id: meta.id,
+    name: meta.title,
+    title: meta.title,
+    createdAt: meta.createdAt,
+    updatedAt: meta.updatedAt,
+    provider: meta.provider,
+    sessionType: meta.sessionType,
+    messageCount: meta.messageCount,
+    projectPath,
+    isArchived: meta.isArchived,
+    isPinned: meta.isPinned,
+    worktreeId: meta.worktreeId,
+    parentSessionId: meta.parentSessionId,
+    childCount: meta.childCount,
+    uncommittedCount: meta.uncommittedCount,
+  };
+}
 
 /**
  * Derived: Root sessions only (no parent).
  * These are the sessions that should show in the main session history list.
  * Child sessions are displayed as tabs within their parent.
+ * Now derives from sessionRegistryAtom instead of sessionListFullAtom.
  */
 export const sessionListRootAtom = atom<SessionListItem[]>((get) => {
-  const sessions = get(sessionListFullAtom);
-  return sessions.filter(s => !s.parentSessionId);
+  const registry = get(sessionRegistryAtom);
+  const workspacePath = get(sessionListWorkspaceAtom) || '';
+
+  return Array.from(registry.values())
+    .filter(s => !s.parentSessionId)
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .map(meta => sessionMetaToListItem(meta, workspacePath));
 });
 
 /**
@@ -1067,16 +1154,22 @@ export const sessionListRootAtom = atom<SessionListItem[]>((get) => {
  * Includes standalone sessions and workstream children, but excludes:
  * - Workstream parent sessions (they're just containers)
  * - Worktree sessions (they're against different directories)
+ * Now derives from sessionRegistryAtom instead of sessionListFullAtom.
  */
 export const sessionListChatAtom = atom<SessionListItem[]>((get) => {
-  const sessions = get(sessionListFullAtom);
-  return sessions.filter(s => {
-    // Exclude worktree sessions
-    if (s.worktreeId) return false;
-    // Exclude workstream parents (childCount > 0 means it's a parent)
-    if (s.childCount && s.childCount > 0) return false;
-    return true;
-  });
+  const registry = get(sessionRegistryAtom);
+  const workspacePath = get(sessionListWorkspaceAtom) || '';
+
+  return Array.from(registry.values())
+    .filter(s => {
+      // Exclude worktree sessions
+      if (s.worktreeId) return false;
+      // Exclude workstream parents (childCount > 0 means it's a parent)
+      if (s.childCount && s.childCount > 0) return false;
+      return true;
+    })
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .map(meta => sessionMetaToListItem(meta, workspacePath));
 });
 
 /**
@@ -1140,17 +1233,26 @@ export const refreshSessionListAtom = atom(
         console.log(`[refreshSessionListAtom] Received ${sessions.length} sessions, ${withCounts.length} have uncommittedCount:`,
           withCounts.slice(0, 3).map(s => ({ id: s.id.substring(0, 8), title: s.title?.substring(0, 30), uncommittedCount: s.uncommittedCount })));
 
-        set(sessionListFullAtom, sessions);
-
-        // Also update the basic sessionListAtom for derived atoms
-        const basicSessions: SessionInfo[] = sessions.map((s) => ({
-          id: s.id,
-          name: s.name,
-          createdAt: s.createdAt,
-          updatedAt: s.updatedAt,
-          projectPath: s.projectPath,
-        }));
-        set(sessionListAtom, basicSessions);
+        // Populate the session registry with metadata (single source of truth)
+        const registry = new Map<string, SessionMeta>();
+        for (const s of sessions) {
+          registry.set(s.id, {
+            id: s.id,
+            title: s.title || s.name || 'Untitled Session',
+            createdAt: s.createdAt,
+            updatedAt: s.updatedAt,
+            provider: s.provider,
+            sessionType: s.sessionType || 'chat',
+            messageCount: s.messageCount,
+            isArchived: s.isArchived || false,
+            isPinned: s.isPinned || false,
+            parentSessionId: s.parentSessionId || null,
+            worktreeId: s.worktreeId || null,
+            childCount: s.childCount || 0,
+            uncommittedCount: s.uncommittedCount || 0,
+          });
+        }
+        set(sessionRegistryAtom, registry);
       }
     } catch (error) {
       console.error('[sessions] Failed to refresh session list:', error);
@@ -1176,59 +1278,73 @@ export async function initSessionList(workspacePath: string): Promise<void> {
 export const addSessionFullAtom = atom(
   null,
   (get, set, session: SessionListItem) => {
-    const sessions = get(sessionListFullAtom);
+    // Update registry (single source of truth)
+    const registry = new Map(get(sessionRegistryAtom));
     // Avoid duplicates
-    if (sessions.some((s) => s.id === session.id)) {
+    if (registry.has(session.id)) {
       return;
     }
-    set(sessionListFullAtom, [session, ...sessions]);
-
-    // Also update basic list
-    set(addSessionAtom, {
+    registry.set(session.id, {
       id: session.id,
-      name: session.name,
+      title: session.title || session.name || 'Untitled Session',
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
-      projectPath: session.projectPath,
+      provider: session.provider,
+      sessionType: session.sessionType || 'chat',
+      messageCount: session.messageCount,
+      isArchived: session.isArchived || false,
+      isPinned: session.isPinned || false,
+      parentSessionId: session.parentSessionId || null,
+      worktreeId: session.worktreeId || null,
+      childCount: session.childCount || 0,
+      uncommittedCount: session.uncommittedCount || 0,
     });
+    set(sessionRegistryAtom, registry);
   }
 );
 
 /**
- * Update a session in the full list.
+ * Update a session in the registry.
+ * @deprecated Use updateSessionStoreAtom instead for full sync
  */
 export const updateSessionFullAtom = atom(
   null,
   (get, set, update: Partial<SessionListItem> & { id: string }) => {
-    const sessions = get(sessionListFullAtom);
-    set(
-      sessionListFullAtom,
-      sessions.map((s) => (s.id === update.id ? { ...s, ...update } : s))
-    );
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('[DEPRECATED] updateSessionFullAtom is deprecated. Use updateSessionStoreAtom instead.');
+    }
 
-    // Also update basic list if name changed
-    if (update.name) {
-      set(updateSessionAtom, {
-        id: update.id,
-        name: update.name,
-        updatedAt: update.updatedAt,
+    // Update registry (single source of truth)
+    const registry = new Map(get(sessionRegistryAtom));
+    const meta = registry.get(update.id);
+    if (meta) {
+      registry.set(update.id, {
+        ...meta,
+        ...(update.title !== undefined && { title: update.title }),
+        ...(update.updatedAt !== undefined && { updatedAt: update.updatedAt }),
+        ...(update.isArchived !== undefined && { isArchived: update.isArchived }),
+        ...(update.isPinned !== undefined && { isPinned: update.isPinned }),
+        ...(update.parentSessionId !== undefined && { parentSessionId: update.parentSessionId }),
+        ...(update.worktreeId !== undefined && { worktreeId: update.worktreeId }),
+        ...(update.childCount !== undefined && { childCount: update.childCount }),
+        ...(update.uncommittedCount !== undefined && { uncommittedCount: update.uncommittedCount }),
+        ...(update.messageCount !== undefined && { messageCount: update.messageCount }),
+        ...(update.provider !== undefined && { provider: update.provider }),
+        ...(update.sessionType !== undefined && { sessionType: update.sessionType }),
       });
+      set(sessionRegistryAtom, registry);
     }
   }
 );
 
 /**
- * Remove a session from the full list.
+ * Remove a session from the registry.
  */
 export const removeSessionFullAtom = atom(null, (get, set, sessionId: string) => {
-  const sessions = get(sessionListFullAtom);
-  set(
-    sessionListFullAtom,
-    sessions.filter((s) => s.id !== sessionId)
-  );
-
-  // Also remove from basic list
-  set(removeSessionAtom, sessionId);
+  // Remove from registry (single source of truth)
+  const registry = new Map(get(sessionRegistryAtom));
+  registry.delete(sessionId);
+  set(sessionRegistryAtom, registry);
 });
 
 // ============================================================
@@ -1318,17 +1434,17 @@ export const workstreamSessionsAtom = atomFamily((workstreamId: string) =>
       return children;
     }
 
-    // Get session list and session data for further checks
-    const allSessions = get(sessionListFullAtom);
-    const sessionData = get(sessionDataAtom(workstreamId));
+    // Get session data and registry for further checks
+    const sessionData = get(sessionStoreAtom(workstreamId));
+    const registry = get(sessionRegistryAtom);
 
     // Check if this session has a worktree_id
     if (sessionData?.worktreeId) {
       // This is a worktree session - find all sessions with the same worktreeId
-      const worktreeSessions = allSessions
+      const worktreeSessions = Array.from(registry.values())
         .filter(s => s.worktreeId === sessionData.worktreeId)
         .map(s => s.id);
-      // If no sessions found in list (might not be populated yet), at least include self
+      // If no sessions found in registry (might not be populated yet), at least include self
       if (worktreeSessions.length === 0) {
         // console.log('[workstreamSessionsAtom]', workstreamId, 'worktree session - returning self');
         return [workstreamId];
@@ -1338,14 +1454,17 @@ export const workstreamSessionsAtom = atomFamily((workstreamId: string) =>
     }
 
     // Check if this is a workstream root that hasn't had children loaded yet
-    // Look up childCount from the session list (more reliable than metadata)
-    const sessionListItem = allSessions.find(s => s.id === workstreamId);
-    // console.log('[workstreamSessionsAtom]', workstreamId, 'sessionListItem:', sessionListItem?.id, 'childCount:', sessionListItem?.childCount);
-    if (sessionListItem?.childCount && sessionListItem.childCount > 0) {
-      // This is a workstream parent waiting for children to load
-      // Return empty array - children will be loaded and this will re-derive
-      // console.log('[workstreamSessionsAtom]', workstreamId, 'returning empty (waiting for children)');
-      return [];
+    // Look up childCount from the registry (more reliable than metadata)
+    const sessionMeta = registry.get(workstreamId);
+    // console.log('[workstreamSessionsAtom]', workstreamId, 'sessionMeta:', sessionMeta?.id, 'childCount:', sessionMeta?.childCount);
+    if (sessionMeta?.childCount && sessionMeta.childCount > 0) {
+      // This is a workstream parent - find children from registry by parentSessionId
+      // This works even before the workstream is opened
+      const childrenFromRegistry = Array.from(registry.values())
+        .filter(s => s.parentSessionId === workstreamId)
+        .map(s => s.id);
+      // console.log('[workstreamSessionsAtom]', workstreamId, 'returning children from registry:', childrenFromRegistry);
+      return childrenFromRegistry;
     }
 
     // Single session with no children and no worktree
@@ -1412,7 +1531,7 @@ export const workstreamPendingPermissionAtom = atomFamily((workstreamId: string)
  */
 export const workstreamTitleAtom = atomFamily((workstreamId: string) =>
   atom((get) => {
-    const sessionData = get(sessionDataAtom(workstreamId));
+    const sessionData = get(sessionStoreAtom(workstreamId));
     return sessionData?.title || sessionData?.name || 'Untitled';
   })
 );

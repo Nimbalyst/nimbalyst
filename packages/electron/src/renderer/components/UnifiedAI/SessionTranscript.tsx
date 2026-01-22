@@ -31,7 +31,7 @@ import { diffTreeGroupByDirectoryAtom, setDiffTreeGroupByDirectoryAtom } from '.
 import {
   sessionDraftInputAtom,
   sessionDraftAttachmentsAtom,
-  sessionDataAtom,
+  sessionStoreAtom,
   sessionMessagesAtom,
   sessionProviderAtom,
   sessionTokenUsageAtom,
@@ -42,7 +42,7 @@ import {
   sessionProcessingAtom,
   loadSessionDataAtom,
   reloadSessionDataAtom,
-  updateSessionDataAtom,
+  updateSessionStoreAtom,
 } from '../../store';
 import { usePostHog } from 'posthog-js/react';
 
@@ -136,10 +136,10 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   const [isProcessing, setIsProcessing] = useAtom(sessionProcessingAtom(sessionId));
   const loadSessionData = useSetAtom(loadSessionDataAtom);
   const reloadSessionData = useSetAtom(reloadSessionDataAtom);
-  const updateSessionData = useSetAtom(updateSessionDataAtom);
+  const updateSessionStore = useSetAtom(updateSessionStoreAtom);
 
   // Still need full sessionData for certain operations (updating, checking loaded state)
-  const sessionData = useAtomValue(sessionDataAtom(sessionId));
+  const sessionData = useAtomValue(sessionStoreAtom(sessionId));
 
   // Draft input state via Jotai atoms - only this component re-renders on typing
   const [draftInput, setDraftInput] = useAtom(sessionDraftInputAtom(sessionId));
@@ -191,14 +191,14 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
 
     const handleTitleUpdated = (data: { sessionId: string; title: string }) => {
       if (data.sessionId === sessionId && sessionData) {
-        updateSessionData({ sessionId, updates: { title: data.title } });
+        updateSessionStore({ sessionId, updates: { title: data.title } });
         onSessionTitleChanged?.(sessionId, data.title);
       }
     };
 
     const handleTokenUsageUpdated = (data: { sessionId: string; tokenUsage: any }) => {
       if (data.sessionId === sessionId && sessionData) {
-        updateSessionData({ sessionId, updates: { tokenUsage: data.tokenUsage } });
+        updateSessionStore({ sessionId, updates: { tokenUsage: data.tokenUsage } });
       }
     };
 
@@ -211,7 +211,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       cleanup2?.();
       cleanup3?.();
     };
-  }, [sessionId, workspacePath, sessionData, reloadSessionData, updateSessionData, onSessionTitleChanged]);
+  }, [sessionId, workspacePath, sessionData, reloadSessionData, updateSessionStore, onSessionTitleChanged]);
 
   // Derived values
   const isLoading = isProcessing;
@@ -464,7 +464,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       content: message,
       timestamp: Date.now(),
     };
-    updateSessionData({
+    updateSessionStore({
       sessionId,
       updates: {
         messages: [...messages, userMessage],
@@ -485,7 +485,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       console.error('[SessionTranscript] Failed to send message:', error);
       setIsProcessing(false);
     }
-  }, [sessionId, sessionData, draftInput, draftAttachments, isLoading, documentContext, aiMode, workspacePath, setDraftInput, setDraftAttachments, updateSessionData, handleQueue, setIsProcessing]);
+  }, [sessionId, sessionData, draftInput, draftAttachments, isLoading, documentContext, aiMode, workspacePath, setDraftInput, setDraftAttachments, updateSessionStore, handleQueue, setIsProcessing]);
 
   const handleCancel = useCallback(async () => {
     try {
@@ -511,7 +511,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       content: message,
       timestamp: Date.now(),
     };
-    updateSessionData({
+    updateSessionStore({
       sessionId,
       updates: {
         messages: [...messages, userMessage],
@@ -530,7 +530,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     } catch (error) {
       console.error('[SessionTranscript] Failed to send /compact command:', error);
     }
-  }, [sessionId, sessionData, messages, documentContext, aiMode, workspacePath, updateSessionData]);
+  }, [sessionId, sessionData, messages, documentContext, aiMode, workspacePath, updateSessionStore]);
 
   const handleTodoClick = useCallback((todo: TodoItem) => {
     onTodoClick?.(todo);

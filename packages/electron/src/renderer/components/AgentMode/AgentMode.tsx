@@ -35,7 +35,7 @@ import {
   store,
   refreshSessionListAtom,
   removeSessionFullAtom,
-  updateSessionFullAtom,
+  updateSessionStoreAtom,
 } from '../../store';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
 import { initWorkstreamState, loadWorkstreamStates, workstreamStateAtom } from '../../store/atoms/workstreamState';
@@ -292,7 +292,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
   // Session management atoms
   const refreshSessions = useSetAtom(refreshSessionListAtom);
   const removeSessionFromAtom = useSetAtom(removeSessionFullAtom);
-  const updateSessionInAtom = useSetAtom(updateSessionFullAtom);
+  const updateSessionStore = useSetAtom(updateSessionStoreAtom);
 
   // Branch a session - creates a fork at the current message
   const handleSessionBranch = useCallback(async (sessionId: string) => {
@@ -350,8 +350,8 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
     try {
       const result = await window.electronAPI.invoke('sessions:update-metadata', sessionId, { isArchived: true });
       if (result.success) {
-        // Update in atom store
-        updateSessionInAtom({ id: sessionId, isArchived: true });
+        // Update in atom store (syncs both sessionStoreAtom and sessionRegistryAtom)
+        updateSessionStore({ sessionId, updates: { isArchived: true } });
 
         // If this was the selected session, clear selection
         if (selectedWorkstream?.id === sessionId) {
@@ -363,22 +363,22 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
     } catch (err) {
       console.error('[AgentMode] Error archiving session:', err);
     }
-  }, [updateSessionInAtom, selectedWorkstream, workspacePath, setSelectedWorkstream]);
+  }, [updateSessionStore, selectedWorkstream, workspacePath, setSelectedWorkstream]);
 
   // Rename a session
   const handleSessionRename = useCallback(async (sessionId: string, newName: string) => {
     try {
       const result = await window.electronAPI.invoke('sessions:update-metadata', sessionId, { title: newName });
       if (result.success) {
-        // Update in atom store
-        updateSessionInAtom({ id: sessionId, title: newName });
+        // Update in atom store (syncs both sessionStoreAtom and sessionRegistryAtom)
+        updateSessionStore({ sessionId, updates: { title: newName, updatedAt: Date.now() } });
       } else {
         console.error('[AgentMode] Failed to rename session:', result.error);
       }
     } catch (err) {
       console.error('[AgentMode] Error renaming session:', err);
     }
-  }, [updateSessionInAtom]);
+  }, [updateSessionStore]);
 
   // Expose ref methods
   useImperativeHandle(ref, () => ({

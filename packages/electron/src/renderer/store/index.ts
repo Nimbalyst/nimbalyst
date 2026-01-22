@@ -81,11 +81,7 @@ export {
   anyPendingPermissionAtom,
   markSessionReadAtom,
   setActiveSessionAtom,
-  removeSessionAtom,
-  addSessionAtom,
-  updateSessionAtom,
   // Session list loading
-  sessionListFullAtom,
   sessionListLoadingAtom,
   sessionListWorkspaceAtom,
   sessionListRootAtom,
@@ -96,8 +92,14 @@ export {
   addSessionFullAtom,
   updateSessionFullAtom,
   removeSessionFullAtom,
+  // New registry-based atoms
+  sessionRegistryAtom,
+  sessionListFromRegistryAtom,
+  sessionListRootFromRegistryAtom,
   // Per-session data (AISessionView owns its own data)
-  sessionDataAtom,
+  sessionStoreAtom,
+  sessionDataAtom, // deprecated alias
+  updateSessionStoreAtom, // Unified update atom
   sessionMessagesAtom,
   sessionTokenUsageAtom,
   sessionLoadingAtom,
@@ -111,7 +113,7 @@ export {
   sessionWorktreeIdAtom,
   openSessionsAtom,
   loadSessionDataAtom,
-  updateSessionDataAtom,
+  updateSessionDataAtom, // deprecated - use updateSessionStoreAtom
   reloadSessionDataAtom,
   cleanupSessionAtom,
   // Hierarchical session atoms (workstreams)

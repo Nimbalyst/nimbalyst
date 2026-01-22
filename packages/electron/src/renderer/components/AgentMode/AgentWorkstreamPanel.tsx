@@ -28,13 +28,12 @@ import {
   workstreamTitleAtom,
   workstreamProcessingAtom,
   sessionArchivedAtom,
-  sessionDataAtom,
+  sessionStoreAtom,
   sessionParentIdDerivedAtom,
   sessionWorktreeIdAtom,
   loadSessionChildrenAtom,
   loadSessionDataAtom,
-  updateSessionFullAtom,
-  updateSessionDataAtom,
+  updateSessionStoreAtom,
   type WorkstreamType,
 } from '../../store';
 import {
@@ -72,14 +71,13 @@ const WorkstreamHeader: React.FC<{
 }> = React.memo(({ workstreamId, onToggleSidebar, sidebarVisible, onArchiveStatusChange }) => {
   const title = useAtomValue(workstreamTitleAtom(workstreamId));
   const isProcessing = useAtomValue(workstreamProcessingAtom(workstreamId));
-  const sessionData = useAtomValue(sessionDataAtom(workstreamId));
+  const sessionData = useAtomValue(sessionStoreAtom(workstreamId));
   const layoutMode = useAtomValue(workstreamLayoutModeAtom(workstreamId));
   const hasTabs = useAtomValue(workstreamHasOpenFilesAtom(workstreamId));
   const sessions = useAtomValue(workstreamSessionsAtom(workstreamId));
   const [isArchived, setIsArchived] = useState(false);
   const setLayoutMode = useSetAtom(setWorkstreamLayoutModeAtom);
-  const updateSession = useSetAtom(updateSessionFullAtom);
-  const updateSessionData = useSetAtom(updateSessionDataAtom);
+  const updateSessionStore = useSetAtom(updateSessionStoreAtom);
 
   // Inline editing state
   const [isEditing, setIsEditing] = useState(false);
@@ -122,10 +120,8 @@ const WorkstreamHeader: React.FC<{
         const result = await window.electronAPI.invoke('sessions:update-metadata', workstreamId, { title: trimmedValue });
         if (result.success) {
           const now = Date.now();
-          // Update session list atom (for SessionHistory)
-          updateSession({ id: workstreamId, title: trimmedValue, name: trimmedValue, updatedAt: now });
-          // Update session data atom (for WorkstreamHeader title via workstreamTitleAtom)
-          updateSessionData({ sessionId: workstreamId, updates: { title: trimmedValue, name: trimmedValue, updatedAt: now } });
+          // Update session with new title (syncs both sessionStoreAtom and sessionRegistryAtom)
+          updateSessionStore({ sessionId: workstreamId, updates: { title: trimmedValue, updatedAt: now } });
         } else {
           console.error('[WorkstreamHeader] Failed to rename session:', result.error);
         }
@@ -134,7 +130,7 @@ const WorkstreamHeader: React.FC<{
       }
     }
     setIsEditing(false);
-  }, [editValue, title, workstreamId, updateSession, updateSessionData]);
+  }, [editValue, title, workstreamId, updateSessionStore]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     e.stopPropagation();
