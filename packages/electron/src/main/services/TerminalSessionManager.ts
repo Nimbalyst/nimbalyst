@@ -289,16 +289,19 @@ export class TerminalSessionManager {
 
   private async prepareShellBootstrap(sessionId: string, shell: ShellInfo, historyFile: string): Promise<ShellBootstrapConfig | null> {
     const shellName = shell.name?.toLowerCase() || '';
+    const shellPath = shell.path?.toLowerCase() || '';
     const initCommand = this.getHistoryInitCommand(shell, historyFile);
     if (!initCommand) {
       return null;
     }
 
-    if (shellName.includes('zsh')) {
+    if (shellName.includes('zsh') || shellPath.includes('zsh')) {
       return this.prepareZshBootstrap(sessionId, initCommand);
     }
 
-    if (shellName.includes('bash')) {
+    // Check both name and path for bash - on some systems the shell name from /etc/passwd
+    // might differ from the actual binary name
+    if (shellName.includes('bash') || shellPath.includes('bash')) {
       return this.prepareBashBootstrap(sessionId, initCommand, shell.args);
     }
 
@@ -306,6 +309,8 @@ export class TerminalSessionManager {
       return this.preparePowerShellBootstrap(initCommand, shell.args);
     }
 
+    // For unknown shells (like dash, sh, fish without history support), return null
+    // to use default args without custom rcfile that might not be supported
     return null;
   }
 
@@ -342,6 +347,12 @@ export class TerminalSessionManager {
   }
 
   private async prepareBashBootstrap(sessionId: string, initCommand: string, baseArgs: string[]): Promise<ShellBootstrapConfig> {
+    // Validate sessionId to prevent malformed paths
+    if (!sessionId || typeof sessionId !== 'string' || sessionId.length === 0) {
+      console.error(`[TerminalSessionManager] Invalid sessionId for bash bootstrap: ${sessionId}`);
+      return { args: baseArgs };
+    }
+
     const bootstrapDir = await this.getBootstrapDirectory();
     const rcfilePath = path.join(bootstrapDir, `${sessionId}-bashrc`);
     const homeDir = app.getPath('home');
@@ -380,6 +391,15 @@ export class TerminalSessionManager {
     ].join('\n');
 
     await fs.writeFile(rcfilePath, rcfileContent, 'utf8');
+
+    // Verify the rcfile was created
+    try {
+      await fs.access(rcfilePath);
+    } catch {
+      console.error(`[TerminalSessionManager] Failed to create bash rcfile at ${rcfilePath}`);
+      // Fall back to default args if rcfile creation failed
+      return { args: baseArgs };
+    }
 
     const args = [...baseArgs];
     args.push('--rcfile', rcfilePath);
@@ -500,10 +520,23 @@ export class TerminalSessionManager {
       Object.assign(spawnEnv, bootstrapConfig.env);
     }
 
-    console.log(`[TerminalSessionManager] Creating terminal ${sessionId} with shell: ${shell.path}`);
+    // Filter out any undefined/null/empty args to prevent shell errors
+    const filteredArgs = spawnArgs.filter((arg): arg is string =>
+      typeof arg === 'string' && arg.length > 0
+    );
+
+    // Log detailed spawn info for debugging - helpful when diagnosing shell errors
+    console.log(`[TerminalSessionManager] Creating terminal ${sessionId}:`, {
+      shell: shell.path,
+      shellName: shell.name,
+      originalArgs: JSON.stringify(spawnArgs),
+      filteredArgs: JSON.stringify(filteredArgs),
+      cwd,
+      platform: process.platform,
+    });
 
     // Create PTY process
-    const ptyProcess = pty.spawn(shell.path, spawnArgs, {
+    const ptyProcess = pty.spawn(shell.path, filteredArgs, {
       name: 'xterm-256color',
       cols,
       rows,
@@ -596,10 +629,18 @@ export class TerminalSessionManager {
    */
   resizeTerminal(sessionId: string, cols: number, rows: number): void {
     const terminal = this.terminals.get(sessionId);
-    if (terminal) {
+    if (!terminal) {
+      return;
+    }
+
+    try {
       terminal.pty.resize(cols, rows);
       terminal.cols = cols;
       terminal.rows = rows;
+    } catch (error) {
+      // EBADF errors occur when the PTY file descriptor is no longer valid
+      // (e.g., terminal exited). This is expected and can be safely ignored.
+      console.warn(`[TerminalSessionManager] Failed to resize terminal ${sessionId}:`, error);
     }
   }
 
