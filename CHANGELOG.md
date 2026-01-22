@@ -20,6 +20,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.51.23] - 2026-01-21
+
+
+### Added
+- Send-time image compression for Claude API 5MB limit
+- Proprietary license file
+- Blockmap files included in public releases
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Shell detection and error handling in TerminalSessionManager
+- Packaged app crashes when processing HEIC images
+- ModelSelector dropdown closing when clicking help tooltips
+- /context parsing for Claude Agent SDK 0.2.x
+- TypeScript errors in ImageCompressor
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.51.22] - 2026-01-21
 
 
