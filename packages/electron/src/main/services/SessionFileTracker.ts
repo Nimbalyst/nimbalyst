@@ -11,6 +11,7 @@
 import { BrowserWindow } from 'electron';
 import { SessionFilesRepository } from '@nimbalyst/runtime';
 import type { FileLinkType, EditedFileMetadata, ReadFileMetadata, ReferencedFileMetadata } from '@nimbalyst/runtime/ai/server/types';
+import { parseBashForFileOps } from '@nimbalyst/runtime/ai/server/providers/bashUtils';
 import { logger } from '../utils/logger';
 import { startFileWatcher } from '../file/FileWatcher';
 import { documentServices } from '../window/WindowManager';
@@ -39,7 +40,7 @@ function extractFileMentions(message: string): string[] {
  * Determine link type based on tool name
  */
 function getLinkTypeForTool(toolName: string): FileLinkType | null {
-  const editTools = ['Write', 'Edit', 'NotebookEdit', 'writeFile', 'editFile', 'applyDiff', 'streamContent'];
+  const editTools = ['Write', 'Edit', 'NotebookEdit', 'writeFile', 'editFile', 'applyDiff', 'streamContent', 'Bash'];
   const readTools = ['Read', 'Glob', 'Grep', 'readFile', 'searchFiles', 'listFiles', 'getDocumentContent'];
 
   if (editTools.includes(toolName)) {
@@ -53,7 +54,9 @@ function getLinkTypeForTool(toolName: string): FileLinkType | null {
 }
 
 /**
- * Extract file path from tool arguments
+ * Extract file path(s) from tool arguments
+ * Returns the first file path found, or null if none
+ * For Bash commands, this will be handled separately by extractBashFilePaths
  */
 function extractFilePathFromArgs(toolName: string, args: any): string | null {
   if (!args) return null;
@@ -77,6 +80,14 @@ function extractFilePathFromArgs(toolName: string, args: any): string | null {
 }
 
 /**
+ * Extract file paths from Bash command
+ * Uses the same parser from ClaudeCodeProvider to detect file operations
+ */
+function extractBashFilePaths(command: string, workspaceId: string): string[] {
+  return parseBashForFileOps(command, workspaceId);
+}
+
+/**
  * Extract metadata for edited files
  */
 function extractEditMetadata(toolName: string, args: any, result: any): EditedFileMetadata {
@@ -89,6 +100,12 @@ function extractEditMetadata(toolName: string, args: any, result: any): EditedFi
     metadata.operation = 'create';
   } else if (toolName === 'Edit' || toolName === 'editFile' || toolName === 'applyDiff') {
     metadata.operation = 'edit';
+  } else if (toolName === 'Bash') {
+    // For Bash, store the command for reference
+    metadata.operation = 'bash';
+    if (args?.command) {
+      metadata.bashCommand = args.command.slice(0, 200); // Store first 200 chars
+    }
   }
 
   // Try to extract line counts from result
@@ -166,6 +183,30 @@ export class SessionFileTracker {
         return;
       }
 
+      // Special handling for Bash commands - extract all affected files from the command
+      if (toolName === 'Bash') {
+        const command = args?.command;
+        if (!command || typeof command !== 'string') {
+          logger.main.debug('[SessionFileTracker] No command found in Bash args');
+          return;
+        }
+
+        const filePaths = extractBashFilePaths(command, workspaceId);
+        console.log('[SessionFileTracker] Extracted Bash file paths:', filePaths);
+
+        if (filePaths.length === 0) {
+          logger.main.debug('[SessionFileTracker] No file operations detected in Bash command');
+          return;
+        }
+
+        // Track each affected file
+        for (const filePath of filePaths) {
+          await this.trackSingleFile(sessionId, workspaceId, filePath, linkType, toolName, args, result, window);
+        }
+        return;
+      }
+
+      // For non-Bash tools, extract single file path from args
       const filePath = extractFilePathFromArgs(toolName, args);
       // console.log('[SessionFileTracker] Extracted file path:', { toolName, filePath, args });
 
@@ -174,6 +215,30 @@ export class SessionFileTracker {
         // console.log('[SessionFileTracker] No file path found in args');
         return;
       }
+
+      await this.trackSingleFile(sessionId, workspaceId, filePath, linkType, toolName, args, result, window);
+    } catch (error) {
+      logger.main.error('[SessionFileTracker] Failed to track tool execution:', error);
+      console.error('[SessionFileTracker] Error details:', error);
+      // Don't throw - tracking failures shouldn't break AI operations
+    }
+  }
+
+  /**
+   * Track a single file link
+   * Extracted as a separate method to handle both single-file and multi-file (Bash) tracking
+   */
+  private async trackSingleFile(
+    sessionId: string,
+    workspaceId: string,
+    filePath: string,
+    linkType: FileLinkType,
+    toolName: string,
+    args: any,
+    result: any,
+    window?: BrowserWindow | null
+  ): Promise<void> {
+    try {
 
       // Prepare metadata based on link type
       let metadata: any = {};

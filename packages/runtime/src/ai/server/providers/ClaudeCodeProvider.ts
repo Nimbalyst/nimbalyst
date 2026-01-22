@@ -27,6 +27,7 @@ import { app } from 'electron';
 import { buildClaudeCodeSystemPrompt } from '../../prompt';
 import { setupClaudeCodeEnvironment, getClaudeCodeExecutableOptions } from '../../../electron/claudeCodeEnvironment';
 import { SessionManager } from '../SessionManager';
+import { parseBashForFileOps, hasShellChainingOperators, splitOnShellOperators } from './bashUtils';
 
 /**
  * Track changes in the agent-sdk and claude-code itself here:
@@ -2364,68 +2365,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   }
 
   /**
-   * Check if a command contains shell chaining operators (&&, ||, ;)
-   * Uses shell-quote library for proper parsing that handles quotes and heredocs
-   */
-  private hasShellChainingOperators(command: string): boolean {
-    try {
-      const parsed = parseShellCommand(command);
-      // shell-quote returns operators as { op: '&&' } objects
-      return parsed.some(token =>
-        typeof token === 'object' &&
-        token !== null &&
-        'op' in token &&
-        ['&&', '||', ';'].includes(token.op)
-      );
-    } catch {
-      // If parsing fails, fall back to simple regex (less accurate but safe)
-      return /\s*&&\s*|\s*\|\|\s*|\s*;\s*/.test(command);
-    }
-  }
-
-  /**
-   * Split a command on shell chaining operators (&&, ||, ;)
-   * Uses shell-quote library for proper parsing that handles quotes and heredocs
-   * Returns array of individual commands
-   */
-  private splitOnShellOperators(command: string): string[] {
-    try {
-      const parsed = parseShellCommand(command);
-      const commands: string[] = [];
-      let currentTokens: string[] = [];
-
-      for (const token of parsed) {
-        if (typeof token === 'object' && token !== null && 'op' in token) {
-          // This is an operator
-          if (['&&', '||', ';'].includes(token.op)) {
-            // Chaining operator - flush current command
-            if (currentTokens.length > 0) {
-              commands.push(currentTokens.join(' '));
-              currentTokens = [];
-            }
-          } else {
-            // Other operators (|, >, <, etc.) - keep as part of current command
-            currentTokens.push(token.op);
-          }
-        } else if (typeof token === 'string') {
-          currentTokens.push(token);
-        }
-        // Skip other token types (comments, etc.)
-      }
-
-      // Don't forget the last command
-      if (currentTokens.length > 0) {
-        commands.push(currentTokens.join(' '));
-      }
-
-      return commands.length > 0 ? commands : [command];
-    } catch {
-      // If parsing fails, return original command as single element
-      return [command];
-    }
-  }
-
-  /**
    * Generate a tool pattern for Claude Code's allowedTools format.
    * These patterns are written to .claude/settings.local.json when user approves with "Always".
    *
@@ -2444,7 +2383,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         // Detect compound commands - these should not be cached
         // because approving "git add" shouldn't auto-approve "git add && git commit"
         // Use quote-aware detection to avoid false positives on heredocs/quoted strings
-        if (this.hasShellChainingOperators(command)) {
+        if (hasShellChainingOperators(command)) {
           // Return a unique pattern that won't match future commands
           return `Bash:compound:${Date.now()}`;
         }
@@ -2993,6 +2932,50 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         }
       }
 
+      // BASH FILE OPERATION TRACKING: Detect file operations in Bash commands FIRST
+      // Parse the command to find files that will be modified, then tag them
+      // This enables local history and session file tracking for Bash edits
+      // IMPORTANT: This must run BEFORE security checks so it works in bypass-all mode
+      if (toolName === 'Bash') {
+        const command = (toolInput?.command as string) || '';
+        const cwd = workspacePath || process.cwd();
+
+        // Parse command to detect file operations
+        const affectedFiles = parseBashForFileOps(command, cwd);
+
+        if (affectedFiles.length > 0) {
+          console.log('[BASH-FILE-OPS] Detected file operations:', JSON.stringify({
+            command: command.slice(0, 100),
+            files: affectedFiles.map(f => path.basename(f)),
+            fullPaths: affectedFiles
+          }, null, 2));
+
+          // Tag each file and track for end-of-turn snapshot
+          for (const filePath of affectedFiles) {
+            // Track this file as edited during this turn
+            this.editedFilesThisTurn.add(filePath);
+            console.log('[BASH-FILE-OPS] Added to editedFilesThisTurn:', filePath);
+            console.log('[BASH-FILE-OPS] Current editedFilesThisTurn size:', this.editedFilesThisTurn.size);
+
+            // Create unique tag ID for this edit
+            const actualToolUseId = toolUseID || `tool-${Date.now()}`;
+
+            try {
+              // Check if file exists
+              fs.readFileSync(filePath, 'utf-8');
+              // File exists - tag with current content
+              console.log('[BASH-FILE-OPS] File exists, tagging:', path.basename(filePath));
+              await this.tagFileBeforeEdit(filePath, workspacePath!, sessionId, actualToolUseId);
+            } catch (error) {
+              // File doesn't exist yet (Bash creating new file)
+              // Create a pre-edit tag with empty content so diff mode shows the full new file
+              console.log('[BASH-FILE-OPS] File is new, tagging as new:', path.basename(filePath));
+              await this.tagFileBeforeEdit(filePath, workspacePath!, sessionId, actualToolUseId, true);
+            }
+          }
+        }
+      }
+
       // SECURITY: Check each part of compound Bash commands separately
       // Claude's pattern matching (e.g., Bash(git add:*)) can be bypassed with chained commands
       // like "git add file && rm -rf /". PreToolUse runs BEFORE SDK's allow rules, so we can catch this.
@@ -3010,11 +2993,11 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
         const command = (toolInput?.command as string) || '';
         // Use quote-aware detection to avoid false positives on heredocs/quoted strings
-        if (this.hasShellChainingOperators(command)) {
+        if (hasShellChainingOperators(command)) {
           this.logSecurity(`[PreToolUse] Compound Bash command detected, checking each part:`, { command: command.slice(0, 100) });
 
           // Split on unquoted &&, ||, ; while respecting quotes and heredocs
-          const subCommands = this.splitOnShellOperators(command);
+          const subCommands = splitOnShellOperators(command);
 
           // Check each sub-command
           for (const subCommand of subCommands) {
@@ -3143,6 +3126,12 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // The SDK reads settings.json and calls canUseTool when permission is needed
       if (toolName === 'WebFetch' || toolName === 'WebSearch') {
         this.logSecurity(`[PreToolUse] ${toolName} - deferring to SDK/canUseTool`);
+        return {};
+      }
+
+      // Bash: Continue to canUseTool for permission checking
+      // (File operation tracking happens earlier in this function)
+      if (toolName === 'Bash') {
         return {};
       }
 
@@ -3327,6 +3316,29 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   private createPostToolUseHook(workspacePath: string, sessionId?: string) {
     return async (input: any, toolUseID: string | undefined, options: { signal: AbortSignal }) => {
       const toolName = input.tool_name;
+      const toolInput = input.tool_input;
+
+      // Handle Bash file operations
+      if (toolName === 'Bash') {
+        const command = (toolInput?.command as string) || '';
+        const cwd = workspacePath || process.cwd();
+
+        // Check if this Bash command affected any files
+        const affectedFiles = this.parseBashForFileOps(command, cwd);
+
+        if (affectedFiles.length > 0) {
+          // Add delay for file watcher to detect changes from Bash operations
+          // Same delay as Edit/Write/MultiEdit to ensure consistent behavior
+          await new Promise(resolve => setTimeout(resolve, 200));
+
+          console.log('[BASH-FILE-OPS] PostToolUse delay complete, files should be visible to watcher:', {
+            count: affectedFiles.length,
+            files: affectedFiles.map(f => path.basename(f))
+          });
+        }
+
+        return {};
+      }
 
       // Only care about file editing tools
       if (toolName !== 'Edit' && toolName !== 'Write' && toolName !== 'MultiEdit') {
