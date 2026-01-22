@@ -1045,6 +1045,7 @@ export function getEnhancedPath(): string {
   } else if (process.platform === 'win32') {
     // On Windows, GUI apps don't inherit the full user PATH from shell sessions.
     // Query the actual user PATH from the registry to get the complete PATH.
+    const regQueryStart = Date.now();
     try {
       const { execSync } = require('child_process');
       // Get User PATH from registry
@@ -1052,11 +1053,17 @@ export function getEnhancedPath(): string {
         'reg query "HKCU\\Environment" /v Path',
         { encoding: 'utf8', timeout: 5000, windowsHide: true }
       );
+      const regQueryDuration = Date.now() - regQueryStart;
+      if (regQueryDuration > 1000) {
+        console.warn(`[getEnhancedPath] Windows registry query took ${regQueryDuration}ms (>1s threshold)`);
+      }
       const userPathMatch = userPathResult.match(/Path\s+REG_(?:EXPAND_)?SZ\s+(.+)/i);
       if (userPathMatch && userPathMatch[1]) {
         paths.push(userPathMatch[1].trim());
       }
     } catch (e) {
+      const regQueryDuration = Date.now() - regQueryStart;
+      console.warn(`[getEnhancedPath] Windows registry query failed after ${regQueryDuration}ms:`, e);
       // Registry query failed, fall back to common paths
     }
 
