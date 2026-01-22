@@ -24,6 +24,8 @@ import './FilesEditedSidebar.css';
 interface FilesEditedSidebarProps {
   /** The workstream ID (parent session ID) - files from all child sessions will be shown */
   workstreamId: string;
+  /** The currently active session ID within the workstream - used for AI commit requests */
+  activeSessionId: string | null;
   workspacePath: string;
   onFileClick: (filePath: string) => void;
   width?: number;
@@ -42,6 +44,7 @@ const SessionFilterOption: React.FC<{ sessionId: string }> = ({ sessionId }) => 
 
 export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(({
   workstreamId,
+  activeSessionId,
   workspacePath,
   onFileClick,
   width = 256,
@@ -366,7 +369,7 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
       {/* Git Operations Panel */}
       <GitOperationsPanel
         workspacePath={workspacePath}
-        sessionId={workstreamId}
+        sessionId={activeSessionId || workstreamId}
         editedFiles={editedFilePaths}
       />
     </div>

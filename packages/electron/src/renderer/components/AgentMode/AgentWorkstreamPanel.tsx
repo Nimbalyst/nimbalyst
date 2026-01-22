@@ -610,6 +610,7 @@ export const AgentWorkstreamPanel: React.FC<AgentWorkstreamPanelProps> = React.m
       {sidebarVisible && (
         <FilesEditedSidebar
           workstreamId={workstreamId}
+          activeSessionId={effectiveActiveSessionId}
           workspacePath={workspacePath}
           onFileClick={handleFileClick}
           width={sidebarWidth}
