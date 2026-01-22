@@ -66,29 +66,44 @@ export function DiffContent({ worktreePath, filePath }: DiffContentProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  console.log('[DiffContent] Component render:', { worktreePath, filePath, isLoading, error, diffLinesCount: diffLines.length });
+  // Debug logging (only when DEBUG_DIFF_RENDERS is set to avoid performance issues during render storms)
+  if (process.env.DEBUG_DIFF_RENDERS === 'true') {
+    console.log('[DiffContent] Component render:', { worktreePath, filePath, isLoading, error, diffLinesCount: diffLines.length });
+  }
 
   useEffect(() => {
     const loadDiff = async () => {
       if (!worktreePath || !filePath) {
-        console.log('[DiffContent] Missing worktreePath or filePath:', { worktreePath, filePath });
+        if (process.env.DEBUG_DIFF_RENDERS === 'true') {
+          console.log('[DiffContent] Missing worktreePath or filePath:', { worktreePath, filePath });
+        }
         return;
       }
 
-      console.log('[DiffContent] Loading diff for:', { worktreePath, filePath });
+      if (process.env.DEBUG_DIFF_RENDERS === 'true') {
+        console.log('[DiffContent] Loading diff for:', { worktreePath, filePath });
+      }
       setIsLoading(true);
       setError(null);
 
       try {
         const result = await window.electronAPI.invoke('worktree:get-file-diff', worktreePath, filePath);
-        console.log('[DiffContent] Result:', result);
+        if (process.env.DEBUG_DIFF_RENDERS === 'true') {
+          console.log('[DiffContent] Result:', result);
+        }
         if (result?.success && result.diff) {
-          console.log('[DiffContent] Diff string:', result.diff.diff);
+          if (process.env.DEBUG_DIFF_RENDERS === 'true') {
+            console.log('[DiffContent] Diff string:', result.diff.diff);
+          }
           const parsed = parseDiff(result.diff.diff);
-          console.log('[DiffContent] Parsed lines:', parsed.length);
+          if (process.env.DEBUG_DIFF_RENDERS === 'true') {
+            console.log('[DiffContent] Parsed lines:', parsed.length);
+          }
           setDiffLines(parsed);
         } else {
-          console.log('[DiffContent] No diff or error:', result);
+          if (process.env.DEBUG_DIFF_RENDERS === 'true') {
+            console.log('[DiffContent] No diff or error:', result);
+          }
           setError(result?.error || 'Failed to load diff');
         }
       } catch (err) {

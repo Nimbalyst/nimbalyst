@@ -34,8 +34,10 @@ export function DiffModeView({ worktreePath, workspacePath, worktreeId, isActive
   const [changedFiles, setChangedFiles] = useState<ChangedFile[]>([]);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
 
-  // Debug logging
-  console.log('[DiffModeView] Render:', { worktreePath, workspacePath, isActive, selectedFile, changedFilesCount: changedFiles.length });
+  // Debug logging (only when DEBUG_DIFF_RENDERS is set to avoid performance issues during render storms)
+  if (process.env.DEBUG_DIFF_RENDERS === 'true') {
+    console.log('[DiffModeView] Render:', { worktreePath, workspacePath, isActive, selectedFile, changedFilesCount: changedFiles.length });
+  }
   const [commits, setCommits] = useState<CommitInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -68,16 +70,19 @@ export function DiffModeView({ worktreePath, workspacePath, worktreeId, isActive
         }));
         setChangedFiles(files);
 
-        // Select first file if none selected
-        if (files.length > 0 && !selectedFile) {
-          setSelectedFile(files[0].path);
-        }
+        // Select first file if none selected (use functional setState to avoid dependency)
+        setSelectedFile(currentSelected => {
+          if (files.length > 0 && !currentSelected) {
+            return files[0].path;
+          }
+          return currentSelected;
+        });
       }
     } catch (err) {
       console.error('[DiffModeView] Failed to load changed files:', err);
       setError('Failed to load changed files');
     }
-  }, [worktreePath, selectedFile]);
+  }, [worktreePath]);
 
   // Load commits
   const loadCommits = useCallback(async () => {
