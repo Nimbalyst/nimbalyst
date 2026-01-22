@@ -679,122 +679,10 @@ import {
       }
     }, [resolution, maxHeight, minWidth, maxWidth, options, anchorElem]);
 
-    // Don't render until position is calculated
-    // Render off-screen for measurement only, but make it truly invisible
-    if (!isMeasured) {
-      return (
-        <div
-          ref={menuRef}
-          className={`typeahead-menu ${className}`}
-          style={{
-            position: 'absolute',
-            top: -9999,
-            left: -9999,
-            visibility: 'hidden',
-            pointerEvents: 'none',
-            minWidth: `${minWidth}px`,
-            maxWidth: `${maxWidth}px`,
-            maxHeight: `${maxHeight}px`,
-            backgroundColor: 'var(--surface-primary, white)',
-            border: '1px solid var(--border-primary, #ccc)',
-            borderRadius: '6px',
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-          }}
-        >
-          {header && (
-            <div style={{
-              borderBottom: '1px solid var(--border-primary, #eee)',
-              padding: '8px 12px',
-              flexShrink: 0,
-            }}>
-              {header}
-            </div>
-          )}
-          <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '2px 0' }}>
-            {sectionNames.length > 1 || (sectionNames.length === 1 && sectionNames[0] !== '_default') ? (
-              sectionNames.map(sectionName => {
-                const sectionOptions = groupedOptions[sectionName];
-                if (!sectionOptions || sectionOptions.length === 0) return null;
-
-                return (
-                  <div key={sectionName} className="typeahead-section">
-                    {sectionName !== '_default' && (
-                      <div
-                        className="typeahead-section-header"
-                        style={{
-                          padding: '8px 12px',
-                          backgroundColor: 'var(--surface-tertiary, #f5f5f5)',
-                          fontSize: '0.75rem',
-                          fontWeight: 600,
-                          color: 'var(--text-secondary, #666)',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.5px',
-                          margin: '0',
-                          pointerEvents: 'none',
-                        }}
-                      >
-                        {sectionName}
-                      </div>
-                    )}
-                    {sectionOptions.map((option) => {
-                      // Find this option's index in the flat array
-                      const flatIndex = options.findIndex(opt => opt.id === option.id);
-
-                      return (
-                        <MenuOption
-                          key={option.id}
-                          option={option}
-                          isSelected={selectedOption?.id === option.id}
-                          onClick={() => option.type !== 'header' && onSelectOption(option)}
-                          onMouseEnter={() => option.type !== 'header' && flatIndex >= 0 && handleOptionMouseEnter(flatIndex)}
-                          className={optionClassName}
-                          selectedClassName={selectedOptionClassName}
-                        />
-                      );
-                    })}
-                  </div>
-                );
-              })
-            ) : (
-              options.map((option, index) => (
-                <MenuOption
-                  key={option.id}
-                  option={option}
-                  isSelected={selectedIndex === index}
-                  onClick={() => option.type !== 'header' && onSelectOption(option)}
-                  onMouseEnter={() => option.type !== 'header' && handleOptionMouseEnter(index)}
-                  className={optionClassName}
-                  selectedClassName={selectedOptionClassName}
-                />
-              ))
-            )}
-          </div>
-          {footer && (
-            <div style={{
-              borderTop: '1px solid var(--border-primary, #eee)',
-              padding: '8px 12px',
-              flexShrink: 0,
-            }}>
-              {footer}
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    // Safety check: if measured but no position, don't render
-    if (!position) {
-      return null;
-    }
-
-    return (
-      <div
-        ref={menuRef}
-        className={`typeahead-menu ${className}`}
-        role="listbox"
-        style={{
+    // Determine if menu should be visible based on measurement state
+    const isVisible = isMeasured && position;
+    const menuStyle: React.CSSProperties = isVisible
+      ? {
           position: 'absolute',
           top: `${position.top}px`,
           left: `${position.left}px`,
@@ -809,9 +697,32 @@ import {
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
-        }}
+        }
+      : {
+          position: 'absolute',
+          top: -9999,
+          left: -9999,
+          visibility: 'hidden',
+          pointerEvents: 'none',
+          minWidth: `${minWidth}px`,
+          maxWidth: `${maxWidth}px`,
+          maxHeight: `${maxHeight}px`,
+          backgroundColor: 'var(--surface-primary, white)',
+          border: '1px solid var(--border-primary, #ccc)',
+          borderRadius: '6px',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        };
+
+    return (
+      <div
+        ref={menuRef}
+        className={`typeahead-menu ${className}`}
+        role={isVisible ? "listbox" : undefined}
+        style={menuStyle}
         // Prevent menu from closing when clicking inside
-        onMouseDown={(e) => e.preventDefault()}
+        onMouseDown={isVisible ? (e) => e.preventDefault() : undefined}
       >
         {header && (
           <div style={{
