@@ -20,8 +20,8 @@ import {
   sessionProcessingAtom,
   sessionUnreadAtom,
   createChildSessionAtom,
-  convertToWorkstreamAtom,
 } from '../../store';
+import { convertToWorkstreamAtom } from '../../store/atoms/sessions';
 import { workstreamHasChildrenAtom } from '../../store/atoms/workstreamState';
 import './WorkstreamSessionTabs.css';
 

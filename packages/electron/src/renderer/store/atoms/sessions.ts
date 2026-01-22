@@ -200,6 +200,28 @@ export const sessionProviderAtom = atomFamily((sessionId: string) =>
   })
 );
 
+/**
+ * Derived: Session messages from sessionData.
+ * Allows components to subscribe only to messages without re-rendering on other field changes.
+ */
+export const sessionMessagesAtom = atomFamily((sessionId: string) =>
+  atom((get) => {
+    const data = get(sessionDataAtom(sessionId));
+    return data?.messages || [];
+  })
+);
+
+/**
+ * Derived: Session token usage from sessionData.
+ * Allows components to subscribe only to token usage without re-rendering on other field changes.
+ */
+export const sessionTokenUsageAtom = atomFamily((sessionId: string) =>
+  atom((get) => {
+    const data = get(sessionDataAtom(sessionId));
+    return data?.tokenUsage;
+  })
+);
+
 // ============================================================
 // Hierarchical session support (workstreams)
 // These atoms enable parent-child session relationships for grouping
@@ -1005,6 +1027,7 @@ export interface SessionListItem {
   // Hierarchical session support (workstreams)
   parentSessionId?: string | null;  // Parent session ID (null for root sessions)
   childCount?: number;  // Number of child sessions (0 for leaf sessions)
+  uncommittedCount?: number;  // Number of uncommitted files in this session
 }
 
 /**
@@ -1021,6 +1044,23 @@ export const sessionListFullAtom = atom<SessionListItem[]>([]);
 export const sessionListRootAtom = atom<SessionListItem[]>((get) => {
   const sessions = get(sessionListFullAtom);
   return sessions.filter(s => !s.parentSessionId);
+});
+
+/**
+ * Derived: Sessions for chat mode dropdown.
+ * Includes standalone sessions and workstream children, but excludes:
+ * - Workstream parent sessions (they're just containers)
+ * - Worktree sessions (they're against different directories)
+ */
+export const sessionListChatAtom = atom<SessionListItem[]>((get) => {
+  const sessions = get(sessionListFullAtom);
+  return sessions.filter(s => {
+    // Exclude worktree sessions
+    if (s.worktreeId) return false;
+    // Exclude workstream parents (childCount > 0 means it's a parent)
+    if (s.childCount && s.childCount > 0) return false;
+    return true;
+  });
 });
 
 /**
@@ -1076,7 +1116,13 @@ export const refreshSessionListAtom = atom(
           worktreeId: s.worktreeId || null,
           parentSessionId: s.parentSessionId || null,
           childCount: s.childCount || 0,
+          uncommittedCount: s.uncommittedCount || 0,
         }));
+
+        // Debug: log sessions with uncommittedCount
+        const withCounts = sessions.filter(s => s.uncommittedCount && s.uncommittedCount > 0);
+        console.log(`[refreshSessionListAtom] Received ${sessions.length} sessions, ${withCounts.length} have uncommittedCount:`,
+          withCounts.slice(0, 3).map(s => ({ id: s.id.substring(0, 8), title: s.title?.substring(0, 30), uncommittedCount: s.uncommittedCount })));
 
         set(sessionListFullAtom, sessions);
 

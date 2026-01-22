@@ -726,6 +726,30 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       }));
     }
 
+    // Git commit proposal handler - registers pending proposals for the widget
+    if ((window.electronAPI as any).onMcpGitCommitProposal) {
+      cleanupFns.push((window.electronAPI as any).onMcpGitCommitProposal((data: {
+        proposalId: string;
+        workspacePath: string;
+        filesToStage: string[];
+        commitMessage: string;
+        reasoning?: string;
+      }) => {
+        console.log('[MCP] Git commit proposal received:', data.proposalId);
+        // Dynamically import to avoid circular deps
+        import('@nimbalyst/runtime').then(({ registerPendingGitCommitProposal }) => {
+          if (registerPendingGitCommitProposal) {
+            registerPendingGitCommitProposal({
+              ...data,
+              timestamp: Date.now(),
+            });
+          }
+        }).catch(err => {
+          console.error('[MCP] Failed to register git commit proposal:', err);
+        });
+      }));
+    }
+
     // AI Tool handlers for document manipulation
     // Note: onAIApplyDiff is handled by aiApi.ts to avoid duplicate applications
 

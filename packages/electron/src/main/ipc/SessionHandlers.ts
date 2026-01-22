@@ -188,28 +188,84 @@ export async function registerSessionHandlers() {
             const entries = await AISessionsRepository.list(workspacePath, options);
             const listTime = performance.now() - startTime;
             // console.log(`[SessionHandlers] sessions:list query took ${listTime.toFixed(1)}ms for ${entries.length} sessions`);
+
+            // Get uncommitted file counts for all sessions
+            // Count files edited by each session that are currently uncommitted in git
+            const uncommittedMap = new Map<string, number>();
+            try {
+                const simpleGit = (await import('simple-git')).default;
+                const git = simpleGit(workspacePath);
+                const status = await git.status();
+
+                // Get all currently uncommitted files (modified, staged, or untracked)
+                const uncommittedFiles = new Set([
+                    ...status.modified,
+                    ...status.created,
+                    ...status.not_added,
+                    ...status.deleted,
+                    ...status.renamed.map(r => r.to),
+                    ...status.staged
+                ]);
+
+                if (uncommittedFiles.size > 0) {
+                    const { database } = await import('../database/PGLiteDatabaseWorker');
+
+                    // Get the MOST RECENT session that edited each file
+                    // This ensures we only count a file for the session that last touched it
+                    const { rows: sessionFiles } = await database.query<{ session_id: string; file_path: string; timestamp: string }>(
+                        `SELECT DISTINCT ON (file_path) session_id, file_path, timestamp
+                         FROM session_files
+                         WHERE workspace_id = $1 AND link_type = 'edited'
+                         ORDER BY file_path, timestamp DESC`,
+                        [workspacePath]
+                    );
+
+                    // Count uncommitted files per session (only for the session that last edited each file)
+                    sessionFiles.forEach(row => {
+                        const relativePath = row.file_path.replace(workspacePath + '/', '');
+                        if (uncommittedFiles.has(relativePath)) {
+                            uncommittedMap.set(row.session_id, (uncommittedMap.get(row.session_id) || 0) + 1);
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error('[SessionHandlers] Failed to get uncommitted counts:', error);
+            }
+
             // Use entry data directly - it already has all the info we need including updatedAt
-            const sessions = entries.map(entry => ({
-                id: entry.id,
-                createdAt: entry.createdAt,
-                updatedAt: entry.updatedAt,
-                name: entry.title,
-                title: entry.title,
-                provider: entry.provider,
-                model: entry.model,
-                sessionType: entry.sessionType || 'chat',
-                messageCount: entry.messageCount || 0,
-                isArchived: entry.isArchived || false,
-                isPinned: (entry as any).isPinned || false,  // Include isPinned from repository
-                worktreeId: entry.worktreeId,  // Include worktreeId from repository
-                parentSessionId: entry.parentSessionId || null,  // Hierarchical workstream support
-                childCount: entry.childCount || 0,  // Number of child sessions
-                // Branch tracking - SEPARATE from hierarchical parentSessionId
-                branchedFromSessionId: (entry as any).branchedFromSessionId,
-                branchPointMessageId: entry.branchPointMessageId,
-                branchedAt: entry.branchedAt,
-                metadata: {}
+            const sessions = entries.map(entry => {
+                const uncommittedCount = uncommittedMap.get(entry.id) || 0;
+                return {
+                    id: entry.id,
+                    createdAt: entry.createdAt,
+                    updatedAt: entry.updatedAt,
+                    name: entry.title,
+                    title: entry.title,
+                    provider: entry.provider,
+                    model: entry.model,
+                    sessionType: entry.sessionType || 'chat',
+                    messageCount: entry.messageCount || 0,
+                    isArchived: entry.isArchived || false,
+                    isPinned: (entry as any).isPinned || false,  // Include isPinned from repository
+                    worktreeId: entry.worktreeId,  // Include worktreeId from repository
+                    parentSessionId: entry.parentSessionId || null,  // Hierarchical workstream support
+                    childCount: entry.childCount || 0,  // Number of child sessions
+                    uncommittedCount,  // Number of uncommitted files
+                    // Branch tracking - SEPARATE from hierarchical parentSessionId
+                    branchedFromSessionId: (entry as any).branchedFromSessionId,
+                    branchPointMessageId: entry.branchPointMessageId,
+                    branchedAt: entry.branchedAt,
+                    metadata: {}
+                };
+            });
+
+            // Log a few sessions with their uncommitted counts for debugging
+            const samplesWithCount = sessions.slice(0, 3).map(s => ({
+                id: s.id.substring(0, 8),
+                title: s.title?.substring(0, 30),
+                uncommittedCount: s.uncommittedCount
             }));
+            console.log(`[SessionHandlers] Returning ${sessions.length} sessions, first 3:`, JSON.stringify(samplesWithCount));
 
             return { success: true, sessions };
         } catch (error) {

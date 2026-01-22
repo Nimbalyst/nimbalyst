@@ -165,6 +165,20 @@
   font-weight: 500;
 }
 
+/* Uncommitted changes badge */
+.session-list-item-badge {
+  font-size: 0.6875rem;
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.session-list-item-badge.uncommitted {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--warning-color);
+}
+
 /* Archived session styling */
 .session-list-item.archived {
   opacity: 0.6;

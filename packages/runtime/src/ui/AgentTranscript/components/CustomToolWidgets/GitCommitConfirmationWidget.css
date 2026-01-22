@@ -1,0 +1,373 @@
+/**
+ * Git Commit Confirmation Widget Styles
+ *
+ * Custom widget for displaying AI-proposed commits with file selection
+ * and message editing. Styled to match AskUserQuestionWidget.
+ */
+
+.git-commit-widget {
+  border-radius: 0.5rem;
+  background-color: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  overflow: hidden;
+}
+
+.git-commit-widget--success {
+  border-color: var(--success-color, #22c55e);
+}
+
+.git-commit-widget--error {
+  border-color: var(--error-color, #ef4444);
+}
+
+.git-commit-widget--cancelled {
+  opacity: 0.7;
+}
+
+/* Header */
+.git-commit-widget__header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-primary);
+  background-color: var(--surface-tertiary);
+}
+
+.git-commit-widget__icon--primary {
+  color: var(--primary-color);
+}
+
+.git-commit-widget__icon--success {
+  color: var(--success-color, #22c55e);
+}
+
+.git-commit-widget__icon--error {
+  color: var(--error-color, #ef4444);
+}
+
+.git-commit-widget__title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.git-commit-widget__status {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.25rem 0.5rem;
+  border-radius: 9999px;
+}
+
+.git-commit-widget__status--cancelled {
+  color: var(--text-secondary);
+  background-color: var(--surface-tertiary);
+}
+
+.git-commit-widget__commit-hash-badge {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--success-color, #22c55e);
+  background-color: color-mix(in srgb, var(--success-color, #22c55e) 12%, transparent);
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+}
+
+/* Body */
+.git-commit-widget__body {
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* Section */
+.git-commit-widget__section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.git-commit-widget__section-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-secondary);
+}
+
+/* Reasoning */
+.git-commit-widget__reasoning {
+  padding: 0.75rem;
+  background-color: var(--surface-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 0.375rem;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/* Files list */
+.git-commit-widget__files {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.git-commit-widget__file {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.5rem 0.625rem;
+  border-radius: 0.25rem;
+  border: 1px solid var(--border-primary);
+  background-color: var(--surface-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.git-commit-widget__file:hover {
+  background-color: var(--surface-tertiary);
+}
+
+.git-commit-widget__file--selected {
+  border-color: var(--primary-color);
+  background-color: color-mix(in srgb, var(--primary-color) 8%, var(--surface-secondary));
+}
+
+.git-commit-widget__file-checkbox {
+  width: 1rem;
+  height: 1rem;
+  margin-top: 0.125rem;
+  flex-shrink: 0;
+  border: 1px solid var(--border-primary);
+  border-radius: 0.125rem;
+  background-color: var(--surface-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary-color);
+}
+
+.git-commit-widget__file-checkbox--checked {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+  color: white;
+}
+
+.git-commit-widget__file-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.git-commit-widget__file-name {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+.git-commit-widget__file-path {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Textarea */
+.git-commit-widget__textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid var(--border-primary);
+  border-radius: 0.375rem;
+  background-color: var(--surface-primary);
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  font-family: var(--font-mono, monospace);
+  resize: vertical;
+  line-height: 1.4;
+}
+
+.git-commit-widget__textarea:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary-color) 20%, transparent);
+}
+
+.git-commit-widget__textarea::placeholder {
+  color: var(--text-tertiary);
+}
+
+/* Actions */
+.git-commit-widget__actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border-primary);
+}
+
+.git-commit-widget__btn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  border: none;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.git-commit-widget__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.git-commit-widget__btn--cancel {
+  background-color: var(--surface-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
+}
+
+.git-commit-widget__btn--cancel:hover:not(:disabled) {
+  background-color: var(--surface-tertiary);
+}
+
+.git-commit-widget__btn--confirm {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.git-commit-widget__btn--confirm:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--primary-color) 85%, black);
+}
+
+/* Success summary (shown after commit) */
+.git-commit-widget__success-summary {
+  padding: 0.75rem;
+  background-color: color-mix(in srgb, var(--success-color, #22c55e) 8%, var(--surface-primary));
+  border-top: none;
+}
+
+.git-commit-widget__success-message {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.4;
+  margin-bottom: 0.25rem;
+}
+
+.git-commit-widget__success-files {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+/* Error summary */
+.git-commit-widget__error-summary {
+  padding: 0.75rem;
+  background-color: color-mix(in srgb, var(--error-color, #ef4444) 8%, var(--surface-primary));
+  color: var(--error-color, #ef4444);
+  font-size: 0.8125rem;
+  border-top: none;
+}
+
+/* Directory tree styles */
+.git-commit-widget__directory {
+  display: flex;
+  flex-direction: column;
+}
+
+.git-commit-widget__directory-header {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.375rem 0.5rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s ease;
+}
+
+.git-commit-widget__directory-header:hover {
+  background-color: var(--surface-tertiary);
+}
+
+.git-commit-widget__directory-chevron {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.git-commit-widget__directory-icon {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.git-commit-widget__directory-path {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-commit-widget__directory-count {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  background-color: var(--surface-tertiary);
+  padding: 0.125rem 0.375rem;
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+
+.git-commit-widget__directory-children {
+  padding-left: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+/* Checkbox in directory header */
+.git-commit-widget__directory-header .git-commit-widget__file-checkbox {
+  margin-top: 0;
+  margin-right: 0.125rem;
+}
+
+.git-commit-widget__file-checkbox--partial {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+  color: white;
+}
+
+/* Simplified file item in tree view */
+.git-commit-widget__directory-children .git-commit-widget__file {
+  padding: 0.25rem 0.5rem;
+  border: none;
+  background-color: transparent;
+  gap: 0.375rem;
+}
+
+.git-commit-widget__directory-children .git-commit-widget__file:hover {
+  background-color: var(--surface-tertiary);
+}
+
+.git-commit-widget__directory-children .git-commit-widget__file--selected {
+  background-color: color-mix(in srgb, var(--primary-color) 8%, transparent);
+}

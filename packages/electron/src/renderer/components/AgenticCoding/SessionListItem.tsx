@@ -79,6 +79,7 @@ interface SessionListItemProps {
   isWorkstream?: boolean; // Whether this session is a workstream (has children)
   parentSessionId?: string | null; // Parent session ID for hierarchical workstreams
   projectPath?: string; // Workspace path for drag-drop validation
+  uncommittedCount?: number; // Number of uncommitted files in this session
   branchedAt?: number; // Timestamp when this session was branched (branch tracking)
 }
 
@@ -110,13 +111,9 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
   isWorkstream = false,
   parentSessionId = null,
   projectPath,
+  uncommittedCount,
   branchedAt,
 }) => {
-  // Debug workstream icon
-  if (isWorkstream) {
-    // console.log('[SessionListItem] Workstream session:', id, title);
-  }
-
   const [isHovering, setIsHovering] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
@@ -441,6 +438,11 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
         )}
       </div>
       <div className="session-list-item-right">
+        {uncommittedCount !== undefined && uncommittedCount > 0 && (
+          <span className="session-list-item-badge uncommitted" title={`${uncommittedCount} uncommitted change${uncommittedCount !== 1 ? 's' : ''}`}>
+            {uncommittedCount}
+          </span>
+        )}
         <SessionStatusIndicator sessionId={id} messageCount={messageCount} />
         {(onArchive || onUnarchive) && (
           <button

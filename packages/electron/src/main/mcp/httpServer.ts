@@ -14,6 +14,7 @@ import path, { isAbsolute } from 'path';
 import { MockupScreenshotService } from '../services/MockupScreenshotService';
 import { isVoiceModeActive, sendToVoiceAgent, getActiveVoiceSessionId, stopVoiceSession } from '../services/voice/VoiceModeService';
 import { findWindowByWorkspace } from '../window/WindowManager';
+import { SessionFilesRepository } from '@nimbalyst/runtime';
 
 /**
  * Compress a base64 image to JPEG if it exceeds 0.28 MB.
@@ -476,9 +477,20 @@ async function tryCreateServer(port: number): Promise<any> {
     if (pathname === '/mcp' && req.method === 'GET') {
       // console.log('[MCP Server] SSE connection request');
 
-      // Extract workspace path from query parameter (used by capture_mockup_screenshot)
+      // Extract workspace path and session ID from query parameters
       const workspacePath = parsedUrl.query.workspacePath as string | undefined;
-      // console.log('[MCP Server] Connection established with workspacePath:', workspacePath);
+      const sessionId = parsedUrl.query.sessionId as string | undefined;
+      // console.log('[MCP Server] Connection established with workspacePath:', workspacePath, 'sessionId:', sessionId);
+
+      // Register workspace-to-window mapping at connection time
+      // This ensures extension tools can route to the correct window
+      if (workspacePath) {
+        const targetWindow = findWindowByWorkspace(workspacePath);
+        if (targetWindow && !targetWindow.isDestroyed()) {
+          workspaceToWindowMap.set(workspacePath, targetWindow.id);
+          // console.log(`[MCP Server] Registered workspace ${workspacePath} -> window ${targetWindow.id}`);
+        }
+      }
 
       // Create a new MCP server instance for this connection
       const server = new Server(
@@ -690,6 +702,22 @@ async function tryCreateServer(port: number): Promise<any> {
             required: []
           }
         });
+
+        // Add session files tool if sessionId is available
+        if (sessionId) {
+          builtInTools.push({
+            name: 'get_session_edited_files',
+            description: 'Get the list of files that were edited during this AI session. Use this when you need to know which files have been modified as part of the current session, for example when preparing a git commit. Returns file paths relative to the workspace.',
+            inputSchema: {
+              type: 'object',
+              properties: {},
+              required: []
+            }
+          });
+
+          // Also update git_commit_proposal description to reference session files
+          // This is handled by the extension tool, but we add guidance here too
+        }
 
         // Get extension tools for the current workspace/file
         const extensionTools = getAvailableExtensionTools(workspacePath, currentFilePath);
@@ -1762,6 +1790,188 @@ async function tryCreateServer(port: number): Promise<any> {
                 isError: false // Not a hard error - just means no session was active
               };
             }
+          }
+
+          case 'get_session_edited_files': {
+            // Return the list of files edited during this session
+            if (!sessionId) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: 'Error: No session ID available. This tool is only available during an active AI session.'
+                  }
+                ],
+                isError: true
+              };
+            }
+
+            try {
+              const files = await SessionFilesRepository.getFilesBySession(sessionId, 'edited');
+              const filePaths = files.map(f => f.filePath);
+
+              if (filePaths.length === 0) {
+                return {
+                  content: [
+                    {
+                      type: 'text',
+                      text: 'No files have been edited in this session yet.'
+                    }
+                  ],
+                  isError: false
+                };
+              }
+
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: `Files edited in this session (${filePaths.length}):\n${filePaths.map(p => `- ${p}`).join('\n')}`
+                  }
+                ],
+                isError: false
+              };
+            } catch (error) {
+              console.error('[MCP Server] Failed to get session edited files:', error);
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: `Error getting session files: ${error instanceof Error ? error.message : String(error)}`
+                  }
+                ],
+                isError: true
+              };
+            }
+          }
+
+          case 'developer_git_commit_proposal':
+          case 'developer.git_commit_proposal': {
+            // Git commit proposal tool - waits for user confirmation before returning
+            // This allows Claude to see the final result (committed/cancelled)
+            const proposalArgs = args as {
+              filesToStage?: string[];
+              commitMessage?: string;
+              reasoning?: string;
+            } | undefined;
+
+            if (!proposalArgs?.filesToStage || !proposalArgs?.commitMessage) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: 'Error: filesToStage and commitMessage are required'
+                  }
+                ],
+                isError: true
+              };
+            }
+
+            if (!workspacePath) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: 'Error: workspacePath is required for git commit proposal'
+                  }
+                ],
+                isError: true
+              };
+            }
+
+            // Find the target window
+            const commitWindowId = workspaceToWindowMap.get(workspacePath);
+            if (!commitWindowId) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: `Error: No window found for workspace: ${workspacePath}`
+                  }
+                ],
+                isError: true
+              };
+            }
+
+            const commitWindow = BrowserWindow.fromId(commitWindowId);
+            if (!commitWindow || commitWindow.isDestroyed()) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: 'Error: Window no longer exists'
+                  }
+                ],
+                isError: true
+              };
+            }
+
+            // Generate a unique proposal ID
+            const proposalId = `git-commit-proposal-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+            // Wait for user confirmation (with a longer timeout since user interaction is involved)
+            const GIT_COMMIT_TIMEOUT_MS = 300000; // 5 minutes
+
+            return new Promise((resolve) => {
+              const timeout = setTimeout(() => {
+                ipcMain.removeAllListeners(proposalId);
+
+                resolve({
+                  content: [
+                    {
+                      type: 'text',
+                      text: 'Git commit proposal timed out waiting for user confirmation.'
+                    }
+                  ],
+                  isError: true
+                });
+              }, GIT_COMMIT_TIMEOUT_MS);
+
+              // Listen for the user's response
+              ipcMain.once(proposalId, (_event, result: {
+                action: 'committed' | 'cancelled';
+                commitHash?: string;
+                error?: string;
+                filesCommitted?: string[];
+                commitMessage?: string;
+              }) => {
+                clearTimeout(timeout);
+
+                if (result.action === 'committed') {
+                  const filesCount = result.filesCommitted?.length || proposalArgs.filesToStage!.length;
+                  resolve({
+                    content: [
+                      {
+                        type: 'text',
+                        text: `User confirmed and committed ${filesCount} file(s).\nCommit hash: ${result.commitHash || 'unknown'}\nCommit message: ${result.commitMessage || proposalArgs.commitMessage}`
+                      }
+                    ],
+                    isError: false
+                  });
+                } else {
+                  resolve({
+                    content: [
+                      {
+                        type: 'text',
+                        text: result.error
+                          ? `Commit failed: ${result.error}`
+                          : 'User cancelled the commit proposal.'
+                      }
+                    ],
+                    isError: result.error ? true : false
+                  });
+                }
+              });
+
+              // Send the proposal to the renderer
+              commitWindow.webContents.send('mcp:gitCommitProposal', {
+                proposalId,
+                workspacePath,
+                filesToStage: proposalArgs.filesToStage,
+                commitMessage: proposalArgs.commitMessage,
+                reasoning: proposalArgs.reasoning,
+              });
+            });
           }
 
           default: {

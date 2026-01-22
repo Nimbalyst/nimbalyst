@@ -242,6 +242,22 @@ interface ElectronAPI {
   updateMcpDocumentState: (state: any) => void;
   clearMcpDocumentState: () => Promise<void>;
 
+  // Git commit proposal IPC (waits for user confirmation)
+  onMcpGitCommitProposal: (callback: (data: {
+    proposalId: string;
+    workspacePath: string;
+    filesToStage: string[];
+    commitMessage: string;
+    reasoning?: string;
+  }) => void) => () => void;
+  sendMcpGitCommitProposalResult: (proposalId: string, result: {
+    action: 'committed' | 'cancelled';
+    commitHash?: string;
+    error?: string;
+    filesCommitted?: string[];
+    commitMessage?: string;
+  }) => void;
+
   // Extension tool registration for MCP
   registerExtensionTools: (workspacePath: string, tools: any[]) => void;
   onExecuteExtensionTool: (callback: (data: { toolName: string; args: any; resultChannel: string; context: any }) => void) => () => void;

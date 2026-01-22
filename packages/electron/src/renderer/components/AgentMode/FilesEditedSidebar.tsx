@@ -83,6 +83,11 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
     return allFileEdits.filter(edit => edit.sessionId === filterSessionId);
   }, [allFileEdits, filterSessionId]);
 
+  // Memoize editedFiles array for GitOperationsPanel to prevent unnecessary re-renders
+  const editedFilePaths = useMemo(() => {
+    return fileEdits.map((f) => f.filePath);
+  }, [fileEdits]);
+
   // Fetch file edits from database for ALL sessions in the workstream
   useEffect(() => {
     if (!workstreamId || !workspacePath || workstreamSessions.length === 0) {
@@ -362,7 +367,7 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
       <GitOperationsPanel
         workspacePath={workspacePath}
         sessionId={workstreamId}
-        editedFiles={fileEdits.map((f) => f.filePath)}
+        editedFiles={editedFilePaths}
       />
     </div>
   );

@@ -33,10 +33,10 @@ import {
   sessionActiveChildAtom,
   sessionHasChildrenAtom,
   loadSessionChildrenAtom,
-  convertToWorkstreamAtom,
   setActiveChildSessionAtom,
   createChildSessionAtom,
 } from '../../store';
+import { convertToWorkstreamAtom } from '../../store/atoms/sessions';
 import type { SessionListItem } from '@nimbalyst/runtime/ai/adapters/sessionStore';
 
 // Todo interface for sidebar display

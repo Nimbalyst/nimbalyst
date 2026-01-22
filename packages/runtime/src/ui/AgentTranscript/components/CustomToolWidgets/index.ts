@@ -45,7 +45,7 @@ export { MockupScreenshotWidget } from './MockupScreenshotWidget';
 export { AskUserQuestionWidget, storeAskUserQuestionAnswers } from './AskUserQuestionWidget';
 export { VisualDisplayWidget } from './VisualDisplayWidget';
 export { BashWidget } from './BashWidget';
-export { GitCommitConfirmationWidget } from './GitCommitConfirmationWidget';
+export { GitCommitConfirmationWidget, registerPendingProposal as registerPendingGitCommitProposal } from './GitCommitConfirmationWidget';
 
 /**
  * Props passed to custom tool widgets
@@ -106,6 +106,10 @@ export const CUSTOM_TOOL_WIDGETS: CustomToolWidgetRegistry = {
 
   // Git commit proposal tool - interactive commit confirmation widget
   'git_commit_proposal': GitCommitConfirmationWidget,
+  'developer_git_commit_proposal': GitCommitConfirmationWidget,
+  'developer.git_commit_proposal': GitCommitConfirmationWidget,
+  'mcp__nimbalyst-mcp__developer_git_commit_proposal': GitCommitConfirmationWidget,
+  'mcp__nimbalyst-extension-dev__developer_git_commit_proposal': GitCommitConfirmationWidget,
 };
 
 /**

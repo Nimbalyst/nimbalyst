@@ -39,6 +39,7 @@ interface SessionItem {
   childCount?: number; // Number of child sessions (workstream indicator)
   parentSessionId?: string | null; // Parent session ID for hierarchical workstreams
   projectPath?: string; // Workspace path for drag-drop validation
+  uncommittedCount?: number; // Number of uncommitted files in this session
   // Branch tracking - SEPARATE from hierarchical parentSessionId
   branchedFromSessionId?: string; // ID of session this was forked from
   branchPointMessageId?: number; // Message ID where this branch diverged
@@ -233,6 +234,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       childCount: s.childCount || 0,
       parentSessionId: s.parentSessionId || null,
       projectPath: s.projectPath,
+      uncommittedCount: s.uncommittedCount || 0,
     }));
   }, [allSessionsFromAtom]);
 
@@ -1673,6 +1675,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                           isWorkstream={false}
                           parentSessionId={session.parentSessionId}
                           projectPath={session.projectPath}
+                          uncommittedCount={session.uncommittedCount}
                           branchedAt={session.branchedAt}
                         />
                       );

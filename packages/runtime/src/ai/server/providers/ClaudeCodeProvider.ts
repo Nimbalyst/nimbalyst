@@ -2141,10 +2141,14 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     // Include shared MCP server if it's started (provides capture_mockup_screenshot tool only)
     // applyDiff and streamContent are NOT exposed via MCP - they're only for chat providers via IPC
     if (ClaudeCodeProvider.mcpServerPort !== null && workspacePath) {
+      let mcpUrl = `http://127.0.0.1:${ClaudeCodeProvider.mcpServerPort}/mcp?workspacePath=${encodeURIComponent(workspacePath)}`;
+      if (sessionId) {
+        mcpUrl += `&sessionId=${encodeURIComponent(sessionId)}`;
+      }
       config['nimbalyst-mcp'] = {
         type: 'sse',
         transport: 'sse',
-        url: `http://127.0.0.1:${ClaudeCodeProvider.mcpServerPort}/mcp?workspacePath=${encodeURIComponent(workspacePath)}`
+        url: mcpUrl
       };
     }
 

@@ -7,6 +7,6 @@ export { TodosSidebar } from './TodosSidebar';
 export { LoginRequiredWidget } from './LoginRequiredWidget';
 export { ContextLimitWidget } from './ContextLimitWidget';
 export { PromptsMenuButton, FloatingTranscriptActions } from './FloatingTranscriptActions';
-export { storeAskUserQuestionAnswers } from './CustomToolWidgets';
+export { storeAskUserQuestionAnswers, registerPendingGitCommitProposal } from './CustomToolWidgets';
 export { InteractivePromptWidget } from './InteractivePromptWidget';
 export type { InteractivePromptWidgetProps } from './InteractivePromptWidget';
