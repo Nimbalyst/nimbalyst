@@ -502,6 +502,37 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     onFileClick?.(filePath);
   }, [onFileClick]);
 
+  const handleCompact = useCallback(async () => {
+    if (!sessionData) return;
+
+    const message = '/compact';
+    const userMessage = {
+      id: `msg-${Date.now()}`,
+      role: 'user' as const,
+      content: message,
+      timestamp: Date.now(),
+    };
+    updateSessionData({
+      sessionId,
+      updates: {
+        messages: [...messages, userMessage],
+      },
+    });
+
+    try {
+      const docContext = {
+        filePath: documentContext?.filePath,
+        content: documentContext?.content,
+        fileType: documentContext?.fileType,
+        mode: aiMode,
+      };
+
+      await window.electronAPI.invoke('ai:sendMessage', message, docContext, sessionId, workspacePath);
+    } catch (error) {
+      console.error('[SessionTranscript] Failed to send /compact command:', error);
+    }
+  }, [sessionId, sessionData, messages, documentContext, aiMode, workspacePath, updateSessionData]);
+
   const handleTodoClick = useCallback((todo: TodoItem) => {
     onTodoClick?.(todo);
   }, [onTodoClick]);
@@ -734,6 +765,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
           pendingReviewFiles={pendingReviewFiles}
           groupByDirectory={groupByDirectory}
           onGroupByDirectoryChange={setGroupByDirectory}
+          onCompact={handleCompact}
         />
       </div>
 

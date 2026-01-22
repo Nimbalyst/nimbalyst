@@ -4,18 +4,15 @@ import './ContextLimitWidget.css';
 interface ContextLimitWidgetProps {
   sessionId?: string;
   isLastMessage?: boolean; // Only show compact button on the last message
+  onCompact?: () => void; // Callback to trigger /compact command
 }
 
-export const ContextLimitWidget: React.FC<ContextLimitWidgetProps> = ({ sessionId, isLastMessage = false }) => {
+export const ContextLimitWidget: React.FC<ContextLimitWidgetProps> = ({ sessionId, isLastMessage = false, onCompact }) => {
   const [isCompacting, setIsCompacting] = useState(false);
 
   const handleCompact = () => {
     setIsCompacting(true);
-
-    // Dispatch event for parent component to handle the /compact command
-    window.dispatchEvent(new CustomEvent('trigger-slash-command', {
-      detail: { sessionId, command: '/compact' }
-    }));
+    onCompact?.();
   };
 
   return (

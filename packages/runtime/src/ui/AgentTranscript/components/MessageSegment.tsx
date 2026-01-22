@@ -23,6 +23,8 @@ interface MessageSegmentProps {
   isLastMessage?: boolean; // For context limit widget to show compact button only on last message
   /** Optional: Open a file in the editor (makes file paths clickable) */
   onOpenFile?: (filePath: string) => void;
+  /** Optional: Callback to trigger /compact command */
+  onCompact?: () => void;
 }
 
 export const MessageSegment: React.FC<MessageSegmentProps> = ({
@@ -36,7 +38,8 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
   shouldShowLoginWidget = true,
   sessionId,
   isLastMessage = false,
-  onOpenFile
+  onOpenFile,
+  onCompact
 }) => {
   const [isDiffExpanded, setDiffExpanded] = useState(false);
   const [enlargedImage, setEnlargedImage] = useState<ChatAttachment | null>(null);
@@ -369,7 +372,7 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
 
     // Check if this is a context limit error
     if (isContextLimitError(errorMessage)) {
-      return <ContextLimitWidget sessionId={sessionId} isLastMessage={isLastMessage} />;
+      return <ContextLimitWidget sessionId={sessionId} isLastMessage={isLastMessage} onCompact={onCompact} />;
     }
 
     // Otherwise, render the generic error UI

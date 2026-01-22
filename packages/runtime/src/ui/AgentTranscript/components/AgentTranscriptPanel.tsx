@@ -50,6 +50,8 @@ interface AgentTranscriptPanelProps {
   groupByDirectory?: boolean;
   /** Callback when groupByDirectory changes */
   onGroupByDirectoryChange?: (value: boolean) => void;
+  /** Optional: Callback to trigger /compact command */
+  onCompact?: () => void;
 }
 
 const AgentTranscriptPanelComponent: React.FC<AgentTranscriptPanelProps> = ({
@@ -73,7 +75,8 @@ const AgentTranscriptPanelComponent: React.FC<AgentTranscriptPanelProps> = ({
   renderFilesHeader,
   pendingReviewFiles,
   groupByDirectory,
-  onGroupByDirectoryChange
+  onGroupByDirectoryChange,
+  onCompact
 }) => {
   // Show floating actions if explicitly enabled, otherwise default to showing when sidebar is visible
   const shouldShowFloatingActions = showFloatingActions ?? !hideSidebar;
@@ -263,6 +266,7 @@ const AgentTranscriptPanelComponent: React.FC<AgentTranscriptPanelProps> = ({
           renderEmptyExtra={renderEmptyExtra}
           readFile={readFile}
           onOpenFile={onFileClick}
+          onCompact={onCompact}
         />
 
         {/* Floating Actions - show based on showFloatingActions prop */}
