@@ -274,7 +274,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
     }
   }, [workspacePath, setSelectedWorkstream]);
 
-  // Handle session selection from list
+  // Handle session selection from list (for root sessions/workstreams)
   const handleSessionSelect = useCallback((sessionId: string) => {
     // Determine the actual type by checking the workstream state
     const state = store.get(workstreamStateAtom(sessionId));
@@ -286,6 +286,32 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
     setSelectedWorkstream({
       workspacePath,
       selection: { type, id: sessionId },
+    });
+  }, [workspacePath, setSelectedWorkstream]);
+
+  // Handle child session selection from workstream group
+  // Opens the parent workstream and sets the child as active
+  const handleChildSessionSelect = useCallback(async (
+    childSessionId: string,
+    parentId: string,
+    parentType: 'workstream' | 'worktree'
+  ) => {
+    // Load the parent's children to populate workstream state
+    await store.set(loadSessionChildrenAtom, {
+      parentSessionId: parentId,
+      workspacePath,
+    });
+
+    // Set the clicked child as active
+    store.set(setWorkstreamActiveChildAtom, {
+      workstreamId: parentId,
+      childId: childSessionId,
+    });
+
+    // Select the parent workstream
+    setSelectedWorkstream({
+      workspacePath,
+      selection: { type: parentType, id: parentId },
     });
   }, [workspacePath, setSelectedWorkstream]);
 
@@ -422,6 +448,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
       workspacePath={workspacePath}
       activeSessionId={selectedWorkstream?.id || null}
       onSessionSelect={handleSessionSelect}
+      onChildSessionSelect={handleChildSessionSelect}
       onSessionDelete={handleSessionDelete}
       onSessionArchive={handleSessionArchive}
       onSessionRename={handleSessionRename}

@@ -113,9 +113,6 @@ export const WorkstreamSessionTabs: React.FC<WorkstreamSessionTabsProps> = React
   const createChildSession = useSetAtom(createChildSessionAtom);
   const convertToWorkstream = useSetAtom(convertToWorkstreamAtom);
 
-  // If no active session but we have sessions, default to first
-  const effectiveActiveSessionId = activeSessionId || sessions[0] || null;
-
   // Handle creating a new child session
   const handleNewSession = useCallback(async () => {
     console.log(`[WorkstreamSessionTabs] handleNewSession - workstreamId=${workstreamId}, hasChildren=${hasChildren}`);
@@ -138,7 +135,7 @@ export const WorkstreamSessionTabs: React.FC<WorkstreamSessionTabsProps> = React
     }
   }, [workstreamId, workspacePath, hasChildren, createChildSession, convertToWorkstream]);
 
-  if (!effectiveActiveSessionId) {
+  if (!activeSessionId) {
     return (
       <div className="workstream-session-tabs-empty">
         <p>Loading sessions...</p>
@@ -150,15 +147,15 @@ export const WorkstreamSessionTabs: React.FC<WorkstreamSessionTabsProps> = React
     <div className="workstream-session-tabs">
       <SessionTabBar
         sessions={sessions}
-        activeSessionId={effectiveActiveSessionId}
+        activeSessionId={activeSessionId}
         onSessionSelect={onSessionSelect}
         onNewSession={handleNewSession}
       />
 
       <div className="workstream-session-tabs-content">
         <AgentSessionPanel
-          key={effectiveActiveSessionId}
-          sessionId={effectiveActiveSessionId}
+          key={activeSessionId}
+          sessionId={activeSessionId}
           workspacePath={workspacePath}
           onFileClick={onFileClick}
         />

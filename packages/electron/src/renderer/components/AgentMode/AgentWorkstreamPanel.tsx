@@ -347,14 +347,9 @@ export const AgentWorkstreamPanel: React.FC<AgentWorkstreamPanelProps> = React.m
   // Ref for the editor area to check focus
   const editorAreaRef = useRef<HTMLDivElement>(null);
 
-  // For single sessions, the workstreamId IS the sessionId
-  // For workstreams, ensure activeSessionId is actually in the sessions array
-  // (the parent workstream ID should not be used as the active session)
-  const effectiveActiveSessionId = (activeSessionId && sessions.includes(activeSessionId))
-    ? activeSessionId
-    : sessions[0] || null;
-
-  // console.log('[AgentWorkstreamPanel] Render - workstreamId:', workstreamId, 'sessions:', sessions, 'activeSessionId:', activeSessionId, 'effectiveActiveSessionId:', effectiveActiveSessionId);
+  // For single sessions, activeSessionId should be the session itself
+  // For workstreams, activeSessionId should be one of the children
+  // We trust the atom state - no fallback that masks bugs
 
   const handleSessionSelect = useCallback((sessionId: string) => {
     setActiveSession({ workstreamId, childId: sessionId });
@@ -473,10 +468,10 @@ export const AgentWorkstreamPanel: React.FC<AgentWorkstreamPanelProps> = React.m
           cancelable: true,
         });
         activeElement?.dispatchEvent(event);
-      } else if (effectiveActiveSessionId) {
+      } else if (activeSessionId) {
         // Transcript has focus - dispatch to transcript with sessionId
         window.dispatchEvent(new CustomEvent('menu:find', {
-          detail: { sessionId: effectiveActiveSessionId }
+          detail: { sessionId: activeSessionId }
         }));
       }
     };
@@ -495,10 +490,10 @@ export const AgentWorkstreamPanel: React.FC<AgentWorkstreamPanelProps> = React.m
           cancelable: true,
         });
         activeElement?.dispatchEvent(event);
-      } else if (effectiveActiveSessionId) {
+      } else if (activeSessionId) {
         // Transcript has focus - dispatch to transcript with sessionId
         window.dispatchEvent(new CustomEvent('menu:find-next', {
-          detail: { sessionId: effectiveActiveSessionId }
+          detail: { sessionId: activeSessionId }
         }));
       }
     };
@@ -518,10 +513,10 @@ export const AgentWorkstreamPanel: React.FC<AgentWorkstreamPanelProps> = React.m
           cancelable: true,
         });
         activeElement?.dispatchEvent(event);
-      } else if (effectiveActiveSessionId) {
+      } else if (activeSessionId) {
         // Transcript has focus - dispatch to transcript with sessionId
         window.dispatchEvent(new CustomEvent('menu:find-previous', {
-          detail: { sessionId: effectiveActiveSessionId }
+          detail: { sessionId: activeSessionId }
         }));
       }
     };
@@ -535,7 +530,7 @@ export const AgentWorkstreamPanel: React.FC<AgentWorkstreamPanelProps> = React.m
       window.removeEventListener('menu:find-next', handleFindNext);
       window.removeEventListener('menu:find-previous', handleFindPrevious);
     };
-  }, [effectiveActiveSessionId]);
+  }, [activeSessionId]);
 
   // Determine what to show based on layout mode
   const showEditorTabs = layoutMode === 'split' || layoutMode === 'editor';
@@ -585,7 +580,7 @@ export const AgentWorkstreamPanel: React.FC<AgentWorkstreamPanelProps> = React.m
                 workspacePath={workspacePath}
                 workstreamId={workstreamId}
                 sessions={sessions}
-                activeSessionId={effectiveActiveSessionId}
+                activeSessionId={activeSessionId}
                 onSessionSelect={handleSessionSelect}
                 onFileClick={handleFileClick}
               />
@@ -595,7 +590,7 @@ export const AgentWorkstreamPanel: React.FC<AgentWorkstreamPanelProps> = React.m
       </div>
 
       {/* Sidebar resizer */}
-      {sidebarVisible && effectiveActiveSessionId && (
+      {sidebarVisible && activeSessionId && (
         <div
           className={`agent-workstream-sidebar-resizer ${isDraggingSidebar ? 'dragging' : ''}`}
           onMouseDown={handleSidebarResizeStart}
@@ -606,7 +601,7 @@ export const AgentWorkstreamPanel: React.FC<AgentWorkstreamPanelProps> = React.m
       {sidebarVisible && (
         <FilesEditedSidebar
           workstreamId={workstreamId}
-          activeSessionId={effectiveActiveSessionId}
+          activeSessionId={activeSessionId}
           workspacePath={workspacePath}
           onFileClick={handleFileClick}
           width={sidebarWidth}
