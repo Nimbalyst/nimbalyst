@@ -344,7 +344,8 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
   };
 
   const formatFileName = (filePath: string) => {
-    const parts = filePath.split('/');
+    // Handle both Windows (\) and Unix (/) path separators
+    const parts = filePath.split(/[/\\]/);
     return parts[parts.length - 1];
   };
 
