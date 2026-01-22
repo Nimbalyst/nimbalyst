@@ -342,7 +342,8 @@
 }
 
 .git-commit-widget__directory-children {
-  padding-left: 1.25rem;
+  /* Indent to align with parent folder's checkbox: chevron (16px) + gap (4px) + checkbox (16px) + gap (2px) = 38px ~= 2.375rem */
+  padding-left: 2.375rem;
   display: flex;
   flex-direction: column;
   gap: 0.125rem;
