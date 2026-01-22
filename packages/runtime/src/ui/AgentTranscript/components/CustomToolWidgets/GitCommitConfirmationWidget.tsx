@@ -570,6 +570,7 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
 
         // Send the result back to httpServer to complete the MCP tool call
         if (pendingProposal && window.electronAPI.sendMcpGitCommitProposalResult) {
+          console.log('[GitCommitWidget] Sending result back to httpServer:', pendingProposal.proposalId, result.success ? 'committed' : 'cancelled');
           window.electronAPI.sendMcpGitCommitProposalResult(pendingProposal.proposalId, {
             action: result.success ? 'committed' : 'cancelled',
             commitHash: result.commitHash,

@@ -1932,6 +1932,7 @@ async function tryCreateServer(port: number): Promise<any> {
               // Helper to extract file path from string or object
               const getFilePath = (f: FileToStage) => typeof f === 'string' ? f : f.path;
 
+              console.log(`[MCP Server] Waiting for git commit proposal response: ${proposalId}`);
               ipcMain.once(proposalId, (_event, result: {
                 action: 'committed' | 'cancelled';
                 commitHash?: string;
@@ -1939,6 +1940,7 @@ async function tryCreateServer(port: number): Promise<any> {
                 filesCommitted?: string[];
                 commitMessage?: string;
               }) => {
+                console.log(`[MCP Server] Received git commit proposal response: ${proposalId}`, result.action);
                 clearTimeout(timeout);
 
                 if (result.action === 'committed') {
