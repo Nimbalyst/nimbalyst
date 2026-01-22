@@ -725,6 +725,7 @@ export const convertToWorkstreamAtom = atom(
           id: parentId,
           provider: sessionData.provider || 'claude-code',
           model: sessionData.model,
+          title: sessionData.title || 'Workstream',
           metadata: {
             isWorkstreamRoot: true,
           },
@@ -748,17 +749,6 @@ export const convertToWorkstreamAtom = atom(
           console.error(`[sessions] Failed to rollback parent session ${parentSessionId}:`, rollbackError);
         }
       };
-
-      // Set the title for the workstream parent
-      try {
-        await window.electronAPI.invoke('sessions:update-metadata', parentSessionId, {
-          title: sessionData.title || 'Workstream',
-        });
-      } catch (error) {
-        console.error('[sessions] Failed to set parent title, rolling back:', error);
-        await rollbackParent();
-        return null;
-      }
 
       // Update current session to be a child of the new parent
       try {
@@ -1426,11 +1416,9 @@ export const workstreamSessionsAtom = atomFamily((workstreamId: string) =>
   atom((get) => {
     // Check if this is a parent with children already loaded
     const children = get(sessionChildrenAtom(workstreamId));
-    // console.log('[workstreamSessionsAtom]', workstreamId, 'children:', children);
     if (children.length > 0) {
       // This is a workstream parent - only return children
       // The parent is a structural container, not a displayable session
-      // console.log('[workstreamSessionsAtom]', workstreamId, 'returning children:', children);
       return children;
     }
 
@@ -1528,11 +1516,18 @@ export const workstreamPendingPermissionAtom = atomFamily((workstreamId: string)
 
 /**
  * Workstream title - derived from the root session or worktree name.
+ * Falls back to registry if session data hasn't been loaded yet.
  */
 export const workstreamTitleAtom = atomFamily((workstreamId: string) =>
   atom((get) => {
     const sessionData = get(sessionStoreAtom(workstreamId));
-    return sessionData?.title || sessionData?.name || 'Untitled';
+    if (sessionData?.title || sessionData?.name) {
+      return sessionData.title || sessionData.name;
+    }
+    // Fallback to registry if session data not loaded yet
+    const registry = get(sessionRegistryAtom);
+    const meta = registry.get(workstreamId);
+    return meta?.title || 'Untitled';
   })
 );
 
