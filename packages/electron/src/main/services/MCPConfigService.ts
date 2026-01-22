@@ -109,6 +109,11 @@ export class MCPConfigService {
   private changeCallbacks: Array<(scope: 'user' | 'workspace', workspacePath?: string) => void> = [];
   private debounceTimers = new Map<string, NodeJS.Timeout>();
 
+  // Track recent writes to suppress file watcher events for our own changes
+  // Maps file path to timestamp of last write by this service
+  private recentWrites = new Map<string, number>();
+  private WRITE_SUPPRESSION_MS = 2000; // Suppress events for 2s after our own writes
+
   private CONNECTION_TIMEOUT_MS = 30000; // Base timeout
   private DOWNLOAD_TIMEOUT_MS = 120000; // Extended timeout when downloading packages
   private DEBOUNCE_MS = 500; // Debounce file watcher events
@@ -134,8 +139,10 @@ export class MCPConfigService {
       const content = await fs.readFile(this.userConfigPath, 'utf8');
       const claudeConfig = JSON.parse(content) as ClaudeConfig;
 
-      // Check if we need to migrate from legacy location
-      if (!claudeConfig.mcpServers || Object.keys(claudeConfig.mcpServers).length === 0) {
+      // Check if we need to migrate from legacy location.
+      // IMPORTANT: Only migrate if mcpServers key doesn't exist at all.
+      // An empty {} is a valid user state (all servers deleted) and should NOT trigger migration.
+      if (claudeConfig.mcpServers === undefined) {
         const migratedConfig = await this.migrateLegacyConfig();
         if (migratedConfig && Object.keys(migratedConfig.mcpServers).length > 0) {
           return migratedConfig;
@@ -162,6 +169,10 @@ export class MCPConfigService {
   /**
    * Migrate MCP servers from legacy ~/.config/claude/mcp.json to ~/.claude.json
    * Returns the migrated config if successful, null if no legacy config exists.
+   *
+   * NOTE: The legacy location was Nimbalyst-only (never used by Claude Code CLI).
+   * After successful migration, we delete the legacy file to prevent it from
+   * interfering with future reads (e.g., when user deletes all servers).
    */
   private async migrateLegacyConfig(): Promise<MCPConfig | null> {
     try {
@@ -170,6 +181,8 @@ export class MCPConfigService {
       const legacyConfig = JSON.parse(legacyContent) as MCPConfig;
 
       if (!legacyConfig.mcpServers || Object.keys(legacyConfig.mcpServers).length === 0) {
+        // Legacy file exists but has no servers - delete it to clean up
+        await this.deleteLegacyConfig();
         return null;
       }
 
@@ -197,6 +210,9 @@ export class MCPConfigService {
       // Write merged config
       await fs.writeFile(this.userConfigPath, JSON.stringify(claudeConfig, null, 2), 'utf8');
 
+      // Delete the legacy file now that migration is complete
+      await this.deleteLegacyConfig();
+
       logger.mcp.info('Migration completed successfully');
 
       return { mcpServers: claudeConfig.mcpServers };
@@ -208,6 +224,29 @@ export class MCPConfigService {
       logger.mcp.error('Error during legacy config migration:', error);
       // Don't throw - just return null and continue with empty config
       return null;
+    }
+  }
+
+  /**
+   * Delete the legacy config file after successful migration.
+   */
+  private async deleteLegacyConfig(): Promise<void> {
+    try {
+      await fs.unlink(this.legacyConfigPath);
+      logger.mcp.info('Deleted legacy config file:', this.legacyConfigPath);
+
+      // Also try to remove the parent directory if it's empty
+      const legacyDir = path.dirname(this.legacyConfigPath);
+      try {
+        await fs.rmdir(legacyDir);
+        logger.mcp.info('Removed empty legacy config directory:', legacyDir);
+      } catch {
+        // Directory not empty or can't be removed - that's fine
+      }
+    } catch (error: any) {
+      if (error.code !== 'ENOENT') {
+        logger.mcp.warn('Failed to delete legacy config file:', error);
+      }
     }
   }
 
@@ -237,6 +276,8 @@ export class MCPConfigService {
 
       // Write merged config
       const content = JSON.stringify(claudeConfig, null, 2);
+      // Mark this write so we suppress the file watcher event for our own change
+      this.markRecentWrite(this.userConfigPath);
       await fs.writeFile(this.userConfigPath, content, 'utf8');
 
       logger.mcp.info('User MCP config saved to ~/.claude.json');
@@ -315,6 +356,8 @@ export class MCPConfigService {
     try {
       // 1. Write to .mcp.json in workspace root
       const content = JSON.stringify(config, null, 2);
+      // Mark this write so we suppress the file watcher event for our own change
+      this.markRecentWrite(mcpJsonPath);
       await fs.writeFile(mcpJsonPath, content, 'utf8');
       logger.mcp.info('Workspace MCP config saved:', mcpJsonPath);
 
@@ -350,6 +393,8 @@ export class MCPConfigService {
 
         // Write back to ~/.claude.json
         const claudeContent = JSON.stringify(claudeConfig, null, 2);
+        // Mark this write so we suppress the file watcher event for our own change
+        this.markRecentWrite(this.userConfigPath);
         await fs.writeFile(this.userConfigPath, claudeContent, 'utf8');
         logger.mcp.info('Updated workspace MCP config in ~/.claude.json projects section');
       } catch (error) {
@@ -398,7 +443,12 @@ export class MCPConfigService {
       this.userConfigWatcher = watch(this.userConfigPath, (eventType) => {
         if (eventType === 'change') {
           this.debouncedNotify('user-config', () => {
-            logger.mcp.info('[MCPConfigService] User config file changed');
+            // Check if this change was caused by our own write
+            if (this.shouldSuppressChangeEvent(this.userConfigPath)) {
+              return;
+            }
+
+            logger.mcp.info('[MCPConfigService] User config file changed (external)');
 
             // Notify about user-level config change
             this.notifyChange('user');
@@ -447,7 +497,12 @@ export class MCPConfigService {
       const fileWatcher = watch(mcpJsonPath, (eventType) => {
         if (eventType === 'change') {
           this.debouncedNotify(`workspace-${workspacePath}`, () => {
-            logger.mcp.info('[MCPConfigService] Workspace config changed:', workspacePath);
+            // Check if this change was caused by our own write
+            if (this.shouldSuppressChangeEvent(mcpJsonPath)) {
+              return;
+            }
+
+            logger.mcp.info('[MCPConfigService] Workspace config changed (external):', workspacePath);
             this.notifyChange('workspace', workspacePath);
           });
         }
@@ -472,7 +527,12 @@ export class MCPConfigService {
       const dirWatcher = watch(workspacePath, (eventType, filename) => {
         if (filename === '.mcp.json' && (eventType === 'rename' || eventType === 'change')) {
           this.debouncedNotify(`workspace-dir-${workspacePath}`, () => {
-            logger.mcp.info('[MCPConfigService] Workspace .mcp.json created/changed:', workspacePath);
+            // Check if this change was caused by our own write
+            if (this.shouldSuppressChangeEvent(mcpJsonPath)) {
+              return;
+            }
+
+            logger.mcp.info('[MCPConfigService] Workspace .mcp.json created/changed (external):', workspacePath);
 
             // If we weren't watching the file yet, start watching it now
             if (!this.workspaceWatchers.has(workspacePath)) {
@@ -548,6 +608,34 @@ export class MCPConfigService {
         logger.mcp.error('[MCPConfigService] Error in change callback:', error);
       }
     });
+  }
+
+  /**
+   * Mark that we just wrote to a config file.
+   * This allows us to suppress file watcher events for our own writes.
+   */
+  private markRecentWrite(filePath: string): void {
+    this.recentWrites.set(filePath, Date.now());
+    // Clean up old entries after suppression period
+    setTimeout(() => {
+      this.recentWrites.delete(filePath);
+    }, this.WRITE_SUPPRESSION_MS + 100);
+  }
+
+  /**
+   * Check if a file change event should be suppressed because we recently wrote to it.
+   */
+  private shouldSuppressChangeEvent(filePath: string): boolean {
+    const lastWrite = this.recentWrites.get(filePath);
+    if (!lastWrite) {
+      return false;
+    }
+    const elapsed = Date.now() - lastWrite;
+    const shouldSuppress = elapsed < this.WRITE_SUPPRESSION_MS;
+    if (shouldSuppress) {
+      logger.mcp.debug(`[MCPConfigService] Suppressing change event for ${filePath} (our own write ${elapsed}ms ago)`);
+    }
+    return shouldSuppress;
   }
 
   /**

@@ -21,9 +21,12 @@ The migration happens automatically when Nimbalyst starts:
 
 1. **First Read**: When `MCPConfigService.readUserMCPConfig()` is called
 2. **Check Primary**: Looks for `mcpServers` in `~/.claude.json`
-3. **Check Legacy**: If empty or missing, checks `~/.config/claude/mcp.json`
+3. **Check Legacy**: If `mcpServers` key doesn't exist, checks `~/.config/claude/mcp.json`
 4. **Migrate**: If legacy config has servers, merges them into `~/.claude.json`
-5. **Preserve**: Keeps all existing Claude Code settings in `~/.claude.json`
+5. **Cleanup**: Deletes the legacy file after successful migration
+6. **Preserve**: Keeps all existing Claude Code settings in `~/.claude.json`
+
+**Important**: The legacy location was Nimbalyst-only (never used by Claude Code CLI). After migration, the legacy file is deleted to prevent it from interfering with future reads (e.g., when the user intentionally deletes all servers).
 
 ## File Structure
 
@@ -66,8 +69,9 @@ The migration happens automatically when Nimbalyst starts:
 The `claude mcp list` command now correctly reads MCP servers configured in Nimbalyst, and vice versa. Both applications share the same `~/.claude.json` file.
 
 ### Backward Compatibility
-- Nimbalyst still reads from legacy location if `~/.claude.json` is empty
-- Migration is non-destructive - legacy file is not deleted
+- Nimbalyst reads from legacy location only if `mcpServers` key doesn't exist in `~/.claude.json`
+- After successful migration, the legacy file is deleted to prevent conflicts
+- An empty `mcpServers: {}` is respected as a valid user choice (no re-migration)
 - All writes go to `~/.claude.json` going forward
 
 ## Testing
@@ -106,7 +110,11 @@ This checks:
 - Reads from legacy location
 - Merges into existing `~/.claude.json`
 - Preserves all other Claude Code settings
-- Non-destructive - doesn't delete legacy file
+- Deletes legacy file after successful migration
+
+**deleteLegacyConfig()** (private):
+- Deletes the legacy config file
+- Attempts to remove empty parent directory
 
 ### Type Definitions
 
@@ -122,9 +130,6 @@ interface ClaudeConfig {
 
 ### Project-Specific Local Scope
 The `claude` CLI also supports a project-specific local scope in `~/.claude.json` → `projects["/absolute/path"]` → `mcpServers`. This is not yet implemented in Nimbalyst but could be added in the future.
-
-### Empty mcpServers Override
-If a user has an empty `mcpServers: {}` in their `~/.claude.json` (from the CLI), it will block reading from the legacy location. The migration logic handles this case.
 
 ## References
 
