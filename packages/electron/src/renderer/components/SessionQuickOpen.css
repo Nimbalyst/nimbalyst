@@ -127,6 +127,14 @@
   white-space: nowrap;
 }
 
+.session-quick-open-item-right {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
 .session-quick-open-badge {
   flex-shrink: 0;
   font-size: 10px;
@@ -140,6 +148,56 @@
 .session-quick-open-badge.workstream-badge {
   background: var(--accent-primary, #60a5fa);
   color: white;
+}
+
+.session-quick-open-badge.uncommitted {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--warning-color);
+}
+
+.session-quick-open-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  color: var(--primary-color);
+}
+
+.session-quick-open-status.processing {
+  opacity: 0.8;
+}
+
+.session-quick-open-status.processing .material-symbols-outlined {
+  animation: session-quick-open-spin 1s linear infinite;
+}
+
+@keyframes session-quick-open-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.session-quick-open-status.unread {
+  opacity: 1;
+}
+
+.session-quick-open-status.pending-prompt {
+  color: var(--warning-color, #f59e0b);
+  opacity: 1;
+  animation: session-quick-open-pulse 2s ease-in-out infinite;
+}
+
+@keyframes session-quick-open-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
 .session-quick-open-item-meta {

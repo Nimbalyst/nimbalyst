@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { ProviderIcon } from '@nimbalyst/runtime';
+import React, { useState, useEffect, useRef, useMemo, memo } from 'react';
+import { useAtomValue } from 'jotai';
+import { ProviderIcon, MaterialSymbol } from '@nimbalyst/runtime';
 import { getRelativeTimeString } from '../utils/dateFormatting';
+import { sessionOrChildProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom } from '../store';
 import './SessionQuickOpen.css';
 
 interface SessionItem {
@@ -12,7 +14,45 @@ interface SessionItem {
   model?: string;
   messageCount: number;
   parentSessionId?: string | null;
+  uncommittedCount?: number;
 }
+
+/**
+ * Status indicator that shows processing, pending prompt, or unread status.
+ * Only re-renders when this session's state changes.
+ */
+const SessionStatusIndicator = memo<{ sessionId: string }>(({ sessionId }) => {
+  const isProcessing = useAtomValue(sessionOrChildProcessingAtom(sessionId));
+  const hasPendingPrompt = useAtomValue(sessionPendingPromptAtom(sessionId));
+  const hasUnread = useAtomValue(sessionUnreadAtom(sessionId));
+
+  // Priority: processing > pending prompt > unread
+  if (isProcessing) {
+    return (
+      <div className="session-quick-open-status processing" title="Processing...">
+        <MaterialSymbol icon="progress_activity" size={14} />
+      </div>
+    );
+  }
+
+  if (hasPendingPrompt) {
+    return (
+      <div className="session-quick-open-status pending-prompt" title="Waiting for your response">
+        <MaterialSymbol icon="help" size={14} />
+      </div>
+    );
+  }
+
+  if (hasUnread) {
+    return (
+      <div className="session-quick-open-status unread" title="Unread response">
+        <MaterialSymbol icon="circle" size={8} fill />
+      </div>
+    );
+  }
+
+  return null;
+});
 
 interface SessionQuickOpenProps {
   isOpen: boolean;
@@ -198,6 +238,14 @@ export const SessionQuickOpen: React.FC<SessionQuickOpenProps> = ({
                     <div className="session-quick-open-item-meta">
                       {getRelativeTimeString(session.updatedAt)}
                     </div>
+                  </div>
+                  <div className="session-quick-open-item-right">
+                    {session.uncommittedCount !== undefined && session.uncommittedCount > 0 && (
+                      <span className="session-quick-open-badge uncommitted" title={`${session.uncommittedCount} uncommitted change${session.uncommittedCount !== 1 ? 's' : ''}`}>
+                        {session.uncommittedCount}
+                      </span>
+                    )}
+                    <SessionStatusIndicator sessionId={session.id} />
                   </div>
                 </li>
               ))}
