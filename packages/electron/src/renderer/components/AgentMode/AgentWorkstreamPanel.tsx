@@ -27,8 +27,10 @@ import {
   workstreamSessionsAtom,
   workstreamTitleAtom,
   workstreamProcessingAtom,
-  sessionDataAtom,
   sessionArchivedAtom,
+  sessionDataAtom,
+  sessionParentIdDerivedAtom,
+  sessionWorktreeIdAtom,
   loadSessionChildrenAtom,
   loadSessionDataAtom,
   type WorkstreamType,
@@ -184,12 +186,13 @@ export const AgentWorkstreamPanel: React.FC<AgentWorkstreamPanelProps> = React.m
 
   // Worktree state - resolve worktree path if this is a worktree session
   const [worktreePath, setWorktreePath] = useState<string | null>(null);
-  const sessionData = useAtomValue(sessionDataAtom(workstreamId));
+  const sessionParentId = useAtomValue(sessionParentIdDerivedAtom(workstreamId));
+  const sessionWorktreeId = useAtomValue(sessionWorktreeIdAtom(workstreamId));
 
   // Debug: log when activeSessionId changes
-  useEffect(() => {
-    console.log(`[AgentWorkstreamPanel] activeSessionId changed for ${workstreamId}:`, activeSessionId);
-  }, [workstreamId, activeSessionId]);
+  // useEffect(() => {
+  //   console.log(`[AgentWorkstreamPanel] activeSessionId changed for ${workstreamId}:`, activeSessionId);
+  // }, [workstreamId, activeSessionId]);
 
   // Layout state (persisted via workstreamStateAtom)
   const layoutMode = useAtomValue(workstreamLayoutModeAtom(workstreamId));
@@ -212,28 +215,29 @@ export const AgentWorkstreamPanel: React.FC<AgentWorkstreamPanelProps> = React.m
     if (!workstreamId || !workspacePath) return;
 
     // Load session data if not already loaded
-    if (!sessionData) {
-      console.log('[AgentWorkstreamPanel] Loading session data for:', workstreamId);
+    // Check if we have the minimal data we need (parentId and worktreeId)
+    if (sessionParentId === undefined && sessionWorktreeId === undefined) {
+      // console.log('[AgentWorkstreamPanel] Loading session data for:', workstreamId);
       loadSessionData({ sessionId: workstreamId, workspacePath });
     }
-  }, [workstreamId, workspacePath, sessionData, loadSessionData]);
+  }, [workstreamId, workspacePath, sessionParentId, sessionWorktreeId, loadSessionData]);
 
   useEffect(() => {
-    console.log('[AgentWorkstreamPanel] Children effect - workstreamId:', workstreamId, 'sessionData:', !!sessionData, 'parentSessionId:', sessionData?.parentSessionId);
-    if (!workstreamId || !workspacePath || !sessionData) return;
+    // console.log('[AgentWorkstreamPanel] Children effect - workstreamId:', workstreamId, 'sessionParentId:', sessionParentId);
+    if (!workstreamId || !workspacePath || sessionParentId === undefined) return;
 
     // Load child sessions for this workstream
     // This populates sessionChildrenAtom which workstreamSessionsAtom depends on
-    if (!sessionData.parentSessionId) {
+    if (!sessionParentId) {
       // This is a root session - load its children
-      console.log('[AgentWorkstreamPanel] Loading children for root session:', workstreamId);
+      // console.log('[AgentWorkstreamPanel] Loading children for root session:', workstreamId);
       loadSessionChildren({ parentSessionId: workstreamId, workspacePath });
     }
-  }, [workstreamId, workspacePath, sessionData, loadSessionChildren]);
+  }, [workstreamId, workspacePath, sessionParentId, loadSessionChildren]);
 
   // Resolve worktree path if this is a worktree session
   useEffect(() => {
-    if (!sessionData?.worktreeId) {
+    if (!sessionWorktreeId) {
       setWorktreePath(null);
       return;
     }
@@ -241,10 +245,10 @@ export const AgentWorkstreamPanel: React.FC<AgentWorkstreamPanelProps> = React.m
     // Query worktree path via IPC
     (async () => {
       try {
-        const result = await window.electronAPI.invoke('worktree:get', sessionData.worktreeId);
+        const result = await window.electronAPI.invoke('worktree:get', sessionWorktreeId);
         if (result?.success && result.worktree) {
           setWorktreePath(result.worktree.path);
-          console.log('[AgentWorkstreamPanel] Resolved worktree path:', result.worktree.path);
+          // console.log('[AgentWorkstreamPanel] Resolved worktree path:', result.worktree.path);
         } else {
           console.error('[AgentWorkstreamPanel] Failed to resolve worktree path:', result?.error);
           setWorktreePath(null);
@@ -254,7 +258,7 @@ export const AgentWorkstreamPanel: React.FC<AgentWorkstreamPanelProps> = React.m
         setWorktreePath(null);
       }
     })();
-  }, [sessionData?.worktreeId]);
+  }, [sessionWorktreeId]);
 
   // Local state for sidebar width and drag states
   const [sidebarWidth, setSidebarWidth] = useState(256);
@@ -271,7 +275,7 @@ export const AgentWorkstreamPanel: React.FC<AgentWorkstreamPanelProps> = React.m
     ? activeSessionId
     : sessions[0] || null;
 
-  console.log('[AgentWorkstreamPanel] Render - workstreamId:', workstreamId, 'sessions:', sessions, 'activeSessionId:', activeSessionId, 'effectiveActiveSessionId:', effectiveActiveSessionId);
+  // console.log('[AgentWorkstreamPanel] Render - workstreamId:', workstreamId, 'sessions:', sessions, 'activeSessionId:', activeSessionId, 'effectiveActiveSessionId:', effectiveActiveSessionId);
 
   const handleSessionSelect = useCallback((sessionId: string) => {
     setActiveSession({ workstreamId, childId: sessionId });

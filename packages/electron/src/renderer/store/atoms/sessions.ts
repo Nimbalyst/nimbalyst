@@ -156,6 +156,22 @@ export const sessionModeAtom = atomFamily((_sessionId: string) =>
 );
 
 /**
+ * Derived atom for session parent ID.
+ * Returns only the parentSessionId field, avoiding rerenders when other fields change.
+ */
+export const sessionParentIdDerivedAtom = atomFamily((sessionId: string) =>
+  atom((get) => get(sessionDataAtom(sessionId))?.parentSessionId ?? null)
+);
+
+/**
+ * Derived atom for session worktree ID.
+ * Returns only the worktreeId field, avoiding rerenders when other fields change.
+ */
+export const sessionWorktreeIdAtom = atomFamily((sessionId: string) =>
+  atom((get) => get(sessionDataAtom(sessionId))?.worktreeId ?? null)
+);
+
+/**
  * Per-session current model ID.
  */
 export const sessionModelAtom = atomFamily((_sessionId: string) =>
@@ -301,18 +317,18 @@ export const sessionParentIdAtom = atomFamily((_sessionId: string) =>
 export const loadSessionChildrenAtom = atom(
   null,
   async (get, set, { parentSessionId, workspacePath }: { parentSessionId: string; workspacePath: string }) => {
-    console.log('[loadSessionChildrenAtom] Called with:', { parentSessionId, workspacePath });
+    // console.log('[loadSessionChildrenAtom] Called with:', { parentSessionId, workspacePath });
     if (!parentSessionId || !workspacePath || !window.electronAPI) {
-      console.log('[loadSessionChildrenAtom] Early return - missing params');
+      // console.log('[loadSessionChildrenAtom] Early return - missing params');
       return [];
     }
 
     try {
       const result = await window.electronAPI.invoke('sessions:list-children', parentSessionId, workspacePath);
-      console.log('[loadSessionChildrenAtom] IPC result:', result);
+      // console.log('[loadSessionChildrenAtom] IPC result:', result);
       if (result.success && Array.isArray(result.children)) {
         const childIds = result.children.map((c: any) => c.id);
-        console.log('[loadSessionChildrenAtom] Setting children:', childIds);
+        // console.log('[loadSessionChildrenAtom] Setting children:', childIds);
         set(sessionChildrenAtom(parentSessionId), childIds);
 
         // Set parent ID for each child and load their session data
@@ -327,8 +343,8 @@ export const loadSessionChildrenAtom = atom(
         // This is critical for workstreamHasChildrenAtom to work
         const currentState = store.get(workstreamStateAtom(parentSessionId));
         const currentActive = currentState.activeChildId;
-        console.log('[loadSessionChildrenAtom] Current workstream state:', currentState);
-        console.log('[loadSessionChildrenAtom] Current active child:', currentActive, 'childIds:', childIds);
+        // console.log('[loadSessionChildrenAtom] Current workstream state:', currentState);
+        // console.log('[loadSessionChildrenAtom] Current active child:', currentActive, 'childIds:', childIds);
 
         // Determine the active child:
         // - If has children: use current active if valid, else first child
@@ -336,7 +352,7 @@ export const loadSessionChildrenAtom = atom(
         const newActiveChild = childIds.length > 0
           ? (currentActive && childIds.includes(currentActive) ? currentActive : childIds[0])
           : parentSessionId;
-        console.log('[loadSessionChildrenAtom] Setting activeChildId to:', newActiveChild);
+        // console.log('[loadSessionChildrenAtom] Setting activeChildId to:', newActiveChild);
 
         set(workstreamStateAtom(parentSessionId), {
           type: childIds.length > 0 ? 'workstream' : 'single',
@@ -1294,11 +1310,11 @@ export const workstreamSessionsAtom = atomFamily((workstreamId: string) =>
   atom((get) => {
     // Check if this is a parent with children already loaded
     const children = get(sessionChildrenAtom(workstreamId));
-    console.log('[workstreamSessionsAtom]', workstreamId, 'children:', children);
+    // console.log('[workstreamSessionsAtom]', workstreamId, 'children:', children);
     if (children.length > 0) {
       // This is a workstream parent - only return children
       // The parent is a structural container, not a displayable session
-      console.log('[workstreamSessionsAtom]', workstreamId, 'returning children:', children);
+      // console.log('[workstreamSessionsAtom]', workstreamId, 'returning children:', children);
       return children;
     }
 
@@ -1314,26 +1330,26 @@ export const workstreamSessionsAtom = atomFamily((workstreamId: string) =>
         .map(s => s.id);
       // If no sessions found in list (might not be populated yet), at least include self
       if (worktreeSessions.length === 0) {
-        console.log('[workstreamSessionsAtom]', workstreamId, 'worktree session - returning self');
+        // console.log('[workstreamSessionsAtom]', workstreamId, 'worktree session - returning self');
         return [workstreamId];
       }
-      console.log('[workstreamSessionsAtom]', workstreamId, 'returning worktree sessions:', worktreeSessions);
+      // console.log('[workstreamSessionsAtom]', workstreamId, 'returning worktree sessions:', worktreeSessions);
       return worktreeSessions;
     }
 
     // Check if this is a workstream root that hasn't had children loaded yet
     // Look up childCount from the session list (more reliable than metadata)
     const sessionListItem = allSessions.find(s => s.id === workstreamId);
-    console.log('[workstreamSessionsAtom]', workstreamId, 'sessionListItem:', sessionListItem?.id, 'childCount:', sessionListItem?.childCount);
+    // console.log('[workstreamSessionsAtom]', workstreamId, 'sessionListItem:', sessionListItem?.id, 'childCount:', sessionListItem?.childCount);
     if (sessionListItem?.childCount && sessionListItem.childCount > 0) {
       // This is a workstream parent waiting for children to load
       // Return empty array - children will be loaded and this will re-derive
-      console.log('[workstreamSessionsAtom]', workstreamId, 'returning empty (waiting for children)');
+      // console.log('[workstreamSessionsAtom]', workstreamId, 'returning empty (waiting for children)');
       return [];
     }
 
     // Single session with no children and no worktree
-    console.log('[workstreamSessionsAtom]', workstreamId, 'returning self as single session');
+    // console.log('[workstreamSessionsAtom]', workstreamId, 'returning self as single session');
     return [workstreamId];
   })
 );
