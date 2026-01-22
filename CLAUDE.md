@@ -457,20 +457,18 @@ When working on extensions in `packages/extensions/`:
 
 Agents have access to comprehensive logging tools. **Never ask users to copy-paste logs** - use these tools instead:
 
-1. **extension_get_logs** - Recent renderer console output (all sources, not just extensions)
-2. **get_main_process_logs** - Main process log file (file system, IPC, AI providers)
-3. **get_renderer_debug_logs** - Development mode debug log (historical renderer logs, persists across restarts)
+1. **get\_main\_process\_logs** - Main process log file (file system, IPC, AI providers)
+2. **get\_renderer\_debug\_logs** - Renderer debug log file (UI errors, React components, console output)
 
 **Debugging workflow:**
-1. Check recent renderer logs: `extension_get_logs(lastSeconds: 60, logLevel: "error")`
+1. Check recent renderer logs: `get_renderer_debug_logs(lastLines: 100, logLevel: "error")`
 2. Check main process: `get_main_process_logs(component: "FILE_WATCHER", logLevel: "error")`
-3. Search for specific errors: `get_renderer_debug_logs(searchTerm: "TypeError")`
+3. Search for specific errors: `get_renderer_debug_logs(searchTerm: "TypeError", lastLines: 200)`
 4. Investigate previous session crash: `get_renderer_debug_logs(session: 1, logLevel: "error")`
 
 **When to use each tool:**
-- **extension_get_logs**: Recent renderer errors, React component issues, extension debugging (ring buffer, last 1000 entries)
-- **get_main_process_logs**: File watcher issues, IPC errors, AI provider failures, database errors (persisted log file)
-- **get_renderer_debug_logs**: Historical debugging, crash investigation, logs from previous app sessions (dev mode only)
+- **get\_main\_process\_logs**: File watcher issues, IPC errors, AI provider failures, database errors (persisted log file)
+- **get\_renderer\_debug\_logs**: UI errors, React component issues, console output, crash investigation (dev mode only, persists across restarts)
 
 ## Testing Guidelines
 
@@ -481,7 +479,7 @@ Agents have access to comprehensive logging tools. **Never ask users to copy-pas
 
 ## Walkthrough Guides & Help Content
 
-The application includes a walkthrough guide system for feature discovery and contextual help. See [WALKTHROUGHS.md](docs/WALKTHROUGHS.md) for complete documentation.
+The application includes a walkthrough guide system for feature discovery and contextual help. See [WALKTHROUGHS.md](./docs/WALKTHROUGHS.md) for complete documentation.
 
 ### Key Concepts
 
