@@ -658,6 +658,54 @@ export async function registerSessionHandlers() {
             return { success: false, error: String(error) };
         }
     });
+
+    // List recent user prompts for prompt history quick-open
+    safeHandle('messages:list-user-prompts', async (event, workspacePath: string, limit: number = 2000) => {
+        try {
+            const { database } = await import('../database/PGLiteDatabaseWorker');
+
+            const { rows } = await database.query<{
+                id: string;
+                session_id: string;
+                content: string;
+                created_at: Date;
+                session_title: string;
+                provider: string;
+                parent_session_id: string | null;
+            }>(
+                `SELECT
+                    m.id,
+                    m.session_id,
+                    m.content,
+                    m.created_at,
+                    s.title as session_title,
+                    s.provider,
+                    s.parent_session_id
+                 FROM ai_agent_messages m
+                 JOIN ai_sessions s ON m.session_id = s.id
+                 WHERE m.direction = 'input'
+                   AND s.workspace_id = $1
+                 ORDER BY m.created_at DESC
+                 LIMIT $2`,
+                [workspacePath, limit]
+            );
+
+            const prompts = rows.map(row => ({
+                id: row.id,
+                sessionId: row.session_id,
+                content: row.content,
+                createdAt: row.created_at instanceof Date ? row.created_at.getTime() : row.created_at,
+                sessionTitle: row.session_title || 'Untitled Session',
+                provider: row.provider,
+                parentSessionId: row.parent_session_id,
+            }));
+
+            return { success: true, prompts };
+        } catch (error) {
+            console.error('[SessionHandlers] Failed to list user prompts:', error);
+            return { success: false, error: String(error), prompts: [] };
+        }
+    });
 }
 
 export { sessionManager };
