@@ -587,6 +587,7 @@ import {
   }) => {
     const menuRef = useRef<HTMLDivElement>(null);
     const [position, setPosition] = useState<PositionResult | null>(null);
+    const [isMeasured, setIsMeasured] = useState(false);
     // Track whether mouse interaction is enabled.
     // This prevents auto-selection when the menu opens under the cursor.
     const [mouseInteractionEnabled, setMouseInteractionEnabled] = useState(false);
@@ -670,6 +671,7 @@ import {
             } else {
               setPosition(newPosition);
             }
+            setIsMeasured(true);
           }
         }, 0);
 
@@ -678,7 +680,8 @@ import {
     }, [resolution, maxHeight, minWidth, maxWidth, options, anchorElem]);
 
     // Don't render until position is calculated
-    if (!position) {
+    // Render off-screen for measurement only, but make it truly invisible
+    if (!isMeasured) {
       return (
         <div
           ref={menuRef}
@@ -688,6 +691,7 @@ import {
             top: -9999,
             left: -9999,
             visibility: 'hidden',
+            pointerEvents: 'none',
             minWidth: `${minWidth}px`,
             maxWidth: `${maxWidth}px`,
             maxHeight: `${maxHeight}px`,
@@ -713,7 +717,7 @@ import {
               sectionNames.map(sectionName => {
                 const sectionOptions = groupedOptions[sectionName];
                 if (!sectionOptions || sectionOptions.length === 0) return null;
-                
+
                 return (
                   <div key={sectionName} className="typeahead-section">
                     {sectionName !== '_default' && (
@@ -778,6 +782,11 @@ import {
           )}
         </div>
       );
+    }
+
+    // Safety check: if measured but no position, don't render
+    if (!position) {
+      return null;
     }
 
     return (
