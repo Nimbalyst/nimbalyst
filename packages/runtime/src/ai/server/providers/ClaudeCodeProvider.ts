@@ -923,6 +923,21 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
                   if (!toolName) {
                   } else if (isMcpTool) {
+                    // MCP tools are handled by the SDK, but we need to log the tool_use for reconstruction
+                    // The result will come later in a tool_result block
+                    if (sessionId) {
+                      this.logAgentMessage(sessionId, 'claude-code', 'output', JSON.stringify({
+                        type: 'assistant',
+                        message: {
+                          content: [{
+                            type: 'tool_use',
+                            id: toolId,
+                            name: toolName,
+                            input: toolArgs
+                          }]
+                        }
+                      }));
+                    }
                   } else if (isSdkNativeTool) {
                     // SDK executes these tools itself, result will come in a tool_result block
                   } else if (this.toolHandler) {
@@ -1082,6 +1097,22 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             let executionResult: any | undefined;
 
             if (isMcpTool) {
+              // MCP tools are handled by the SDK, but we need to log the tool_use for reconstruction
+              // The result will come later in a tool_result block
+              if (sessionId) {
+                const mcpToolId = toolChunk.id || `tool-${toolCallCount}`;
+                this.logAgentMessage(sessionId, 'claude-code', 'output', JSON.stringify({
+                  type: 'assistant',
+                  message: {
+                    content: [{
+                      type: 'tool_use',
+                      id: mcpToolId,
+                      name: toolName,
+                      input: toolArgs
+                    }]
+                  }
+                }));
+              }
             } else if (isSdkNativeTool) {
               // SDK executes these tools itself, we just observe them
             } else if (this.toolHandler) {

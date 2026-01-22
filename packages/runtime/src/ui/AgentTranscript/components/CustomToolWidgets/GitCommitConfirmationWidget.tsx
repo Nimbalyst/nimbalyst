@@ -571,18 +571,18 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
     );
   }
 
-  // If there's no pending proposal and no result, we're in a race condition state
-  // (e.g., after HMR when the module-level Map was cleared but tool result isn't populated yet)
-  // Show a "Response pending" state rather than the interactive UI
+  // If there's no pending proposal and no result, the tool result wasn't persisted properly
+  // or hasn't been loaded yet. Don't show the interactive UI (user can't respond anyway).
+  // This matches AskUserQuestionWidget behavior which returns null when not completed.
   if (!pendingProposal) {
+    // Return a minimal "completed" state since the user already responded
+    // (we just can't tell if it was committed or cancelled)
     return (
-      <div className="git-commit-widget git-commit-widget--pending">
+      <div className="git-commit-widget git-commit-widget--cancelled">
         <div className="git-commit-widget__header">
-          <MaterialSymbol icon="commit" size={16} className="git-commit-widget__icon--primary" />
+          <MaterialSymbol icon="commit" size={16} />
           <span className="git-commit-widget__title">Commit Proposal</span>
-          <span className="git-commit-widget__status git-commit-widget__status--waiting">
-            Response pending...
-          </span>
+          <span className="git-commit-widget__status">Completed</span>
         </div>
       </div>
     );
