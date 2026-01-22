@@ -604,8 +604,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // Set up environment variables for the SDK
       // If user has configured a claude-code API key, pass it via environment
       const env: any = {
-        ...process.env
-        // Note: MCP is enabled when we have MCP servers configured (like session naming)
+        ...process.env,
+        // Enable MCP tool search when MCP tools exceed 10% of context (same as CLI default)
+        // Options: 'auto' (10%), 'auto:N' (custom N%), 'true' (always), 'false' (never)
+        ENABLE_TOOL_SEARCH: 'auto:10'
       };
 
       if (this.config.apiKey) {
