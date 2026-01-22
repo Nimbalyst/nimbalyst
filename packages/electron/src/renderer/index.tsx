@@ -24,6 +24,8 @@ import {
   initAIDebugSettings,
   aiProviderSettingsAtom,
   initAIProviderSettings,
+  agentModeSettingsAtom,
+  initAgentModeSettings,
 } from './store/atoms/appSettings';
 
 // console.log('[RENDERER] Imports complete at', new Date().toISOString());
@@ -55,6 +57,9 @@ Promise.all([
   }),
   initAIProviderSettings().then((settings) => {
     store.set(aiProviderSettingsAtom, settings);
+  }),
+  initAgentModeSettings().then((settings) => {
+    store.set(agentModeSettingsAtom, settings);
   }),
 ]).catch(() => {
   // Ignore errors - settings will use defaults
@@ -107,6 +112,12 @@ const posthogClient = posthog.init(
 posthog.onSessionId(async (sessionId: string, windowId, changeReason) => {
   window.electronAPI.analytics?.setSessionId(sessionId);
 })
+
+// Set up IPC listener for queued prompt claimed events
+// This forwards the IPC message to a DOM CustomEvent that SessionTranscript listens for
+window.electronAPI.on('ai:promptClaimed', (data: { sessionId: string; promptId: string }) => {
+  window.dispatchEvent(new CustomEvent('ai:promptClaimed', { detail: data }));
+});
 
 root.render(
   <React.StrictMode>

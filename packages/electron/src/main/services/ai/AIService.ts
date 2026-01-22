@@ -2282,7 +2282,49 @@ export class AIService {
           });
         }
 
-        // Queue processing is handled by the renderer (AgenticPanel) to keep SDK instantiation in one place
+        // TESTING: Queue processing from main process instead of renderer
+        // OLD: Queue processing is handled by the renderer (AgenticPanel) to keep SDK instantiation in one place
+        try {
+          const { getQueuedPromptsStore } = await import('../RepositoryManager');
+          const queueStore = getQueuedPromptsStore();
+          const pendingPrompts = await queueStore.listPending(session.id);
+
+          if (pendingPrompts.length > 0) {
+            const nextPrompt = pendingPrompts[0];
+            logger.main.info(`[AIService] Processing next queued prompt from main process: ${nextPrompt.id} for session ${session.id}`);
+
+            // Claim the prompt atomically
+            const claimed = await queueStore.claim(nextPrompt.id);
+            if (claimed) {
+              // Notify renderer that prompt was claimed (so UI removes it from queue list)
+              event.sender.send('ai:promptClaimed', {
+                sessionId: session.id,
+                promptId: claimed.id,
+              });
+
+              // Recursively call sendMessage with the queued prompt
+              const docContext = {
+                ...claimed.documentContext,
+                queuedPromptId: claimed.id,
+                attachments: claimed.attachments,
+              };
+
+              // Use setImmediate to avoid stack overflow and let this response complete first
+              setImmediate(async () => {
+                try {
+                  await this.sendMessageHandler!(event, claimed.prompt, docContext as any, session.id, workspacePath);
+                  // Mark as completed
+                  await queueStore.complete(claimed.id);
+                } catch (queueError) {
+                  logger.main.error(`[AIService] Failed to process queued prompt ${claimed.id}:`, queueError);
+                  await queueStore.fail(claimed.id, queueError instanceof Error ? queueError.message : 'Unknown error');
+                }
+              });
+            }
+          }
+        } catch (queueError) {
+          logger.main.error('[AIService] Error checking queued prompts:', queueError);
+        }
 
         // Clean up queued prompt tracking
         if (queuedPromptId) {
@@ -2581,12 +2623,13 @@ export class AIService {
         logger.main.warn('[AIService] Failed to track ai_message_queued:', analyticsError);
       }
 
+      // TESTING: Commenting out renderer notification - queue processing now happens in main process
       // Notify the renderer to process the queue
       // This ensures locally-queued prompts get processed (same as mobile sync path)
-      event.sender.send('ai:queuedPromptsReceived', {
-        sessionId,
-        promptCount: 1
-      });
+      // event.sender.send('ai:queuedPromptsReceived', {
+      //   sessionId,
+      //   promptCount: 1
+      // });
 
       return {
         id: created.id,
