@@ -30,6 +30,46 @@ import { database } from '../database/initialize';
 import { findWindowByWorkspace } from '../window/WindowManager';
 
 // ============================================================================
+// File Utilities
+// ============================================================================
+
+/**
+ * Efficiently read the last N lines from a file.
+ * Reads from the end of the file in chunks to avoid loading entire file into memory.
+ */
+function tailFile(filePath: string, maxLines: number): string[] {
+  const stats = fs.statSync(filePath);
+  const fileSize = stats.size;
+
+  if (fileSize === 0) {
+    return [];
+  }
+
+  // For small files, just read the whole thing
+  if (fileSize < 1024 * 1024) { // 1MB
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const lines = content.split('\n').filter(line => line.length > 0);
+    return lines.slice(-maxLines);
+  }
+
+  // For larger files, read from the end in chunks
+  const chunkSize = Math.min(1024 * 1024, fileSize); // 1MB or file size
+  const fd = fs.openSync(filePath, 'r');
+  const buffer = Buffer.alloc(chunkSize);
+
+  try {
+    const position = Math.max(0, fileSize - chunkSize);
+    fs.readSync(fd, buffer, 0, chunkSize, position);
+
+    const content = buffer.toString('utf-8');
+    const lines = content.split('\n').filter(line => line.length > 0);
+    return lines.slice(-maxLines);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+// ============================================================================
 // Manifest Validation
 // ============================================================================
 
@@ -628,7 +668,7 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
               },
               {
                 name: 'extension_get_logs',
-                description: 'Get recent logs from extension development. Includes console output from the renderer (extension code), main process logs, and build output. Use this to debug extension issues.',
+                description: 'Get recent logs from the renderer process console output. This captures ALL console.log/error/warn/debug calls from: extension code, core application UI components, custom editors (Monaco, RevoGrid, etc.), and React component lifecycle. Use this for debugging any renderer-side issues, not just extensions.',
                 inputSchema: {
                   type: 'object',
                   properties: {
@@ -649,6 +689,10 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
                       type: 'string',
                       enum: ['renderer', 'main', 'build', 'all'],
                       description: 'Log source to filter (default: all)'
+                    },
+                    searchTerm: {
+                      type: 'string',
+                      description: 'Filter logs containing this text (case-insensitive)'
                     }
                   }
                 }
@@ -688,6 +732,62 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
                   type: 'object',
                   properties: {},
                   required: []
+                }
+              },
+              {
+                name: 'get_main_process_logs',
+                description: 'Read logs from the main process log file (Node.js side). Use this for debugging file system errors, IPC channel issues, AI provider failures, extension loading errors, and database query errors. The main log persists across sessions and contains component-scoped entries.',
+                inputSchema: {
+                  type: 'object',
+                  properties: {
+                    lastLines: {
+                      type: 'number',
+                      description: 'Number of recent lines to read (default: 100, max: 1000)'
+                    },
+                    component: {
+                      type: 'string',
+                      description: 'Filter by component name: FILE_WATCHER, WORKSPACE_WATCHER, AI_CLAUDE, AI_CLAUDE_CODE, STREAMING, EXTENSION, IPC, DATABASE, etc.'
+                    },
+                    logLevel: {
+                      type: 'string',
+                      enum: ['error', 'warn', 'info', 'debug'],
+                      description: 'Filter by minimum log level'
+                    },
+                    searchTerm: {
+                      type: 'string',
+                      description: 'Search for specific text in logs (case-insensitive)'
+                    }
+                  }
+                }
+              },
+              {
+                name: 'get_renderer_debug_logs',
+                description: 'Read the renderer debug log file (development mode only). Logs rotate on app restart, keeping last 5 sessions. Use session parameter to access previous session logs for crash investigation or historical debugging. This provides file-based access to renderer logs beyond the in-memory ring buffer.',
+                inputSchema: {
+                  type: 'object',
+                  properties: {
+                    session: {
+                      type: 'number',
+                      description: 'Which session to read: 0 = current (default), 1 = previous, 2 = two sessions ago, up to 4'
+                    },
+                    lastLines: {
+                      type: 'number',
+                      description: 'Number of recent lines to read (default: 100, max: 1000)'
+                    },
+                    windowId: {
+                      type: 'number',
+                      description: 'Filter to logs from a specific window ID'
+                    },
+                    logLevel: {
+                      type: 'string',
+                      enum: ['error', 'warn', 'info', 'debug'],
+                      description: 'Filter by log level'
+                    },
+                    searchTerm: {
+                      type: 'string',
+                      description: 'Search for specific text in logs (case-insensitive)'
+                    }
+                  }
                 }
               }
             ]
@@ -1032,18 +1132,25 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
               let lastSeconds = args?.lastSeconds as number | undefined;
               const logLevel = args?.logLevel as 'error' | 'warn' | 'info' | 'debug' | 'all' | undefined;
               const source = args?.source as 'renderer' | 'main' | 'build' | 'all' | undefined;
+              const searchTerm = args?.searchTerm as string | undefined;
 
               // Validate and cap lastSeconds
               if (lastSeconds !== undefined) {
                 lastSeconds = Math.min(Math.max(1, lastSeconds), 300);
               }
 
-              const logs = logService.getLogs({
+              let logs = logService.getLogs({
                 extensionId,
                 lastSeconds: lastSeconds || 60,
                 logLevel: logLevel || 'all',
                 source: source || 'all'
               });
+
+              // Apply searchTerm filter if provided
+              if (searchTerm) {
+                const lowerSearchTerm = searchTerm.toLowerCase();
+                logs = logs.filter(log => log.message.toLowerCase().includes(lowerSearchTerm));
+              }
 
               const stats = logService.getStats();
               const formattedLogs = logService.formatLogsForResponse(logs);
@@ -1053,10 +1160,11 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
                 extensionId ? `extension: ${extensionId}` : null,
                 `last ${lastSeconds || 60}s`,
                 logLevel && logLevel !== 'all' ? `level: ${logLevel}+` : null,
-                source && source !== 'all' ? `source: ${source}` : null
+                source && source !== 'all' ? `source: ${source}` : null,
+                searchTerm ? `search: "${searchTerm}"` : null
               ].filter(Boolean).join(', ');
 
-              const header = `Extension Development Logs (${filterDesc})\n` +
+              const header = `Renderer Console Logs (${filterDesc})\n` +
                 `Found ${logs.length} log entries (buffer: ${stats.totalEntries}/${1000})\n` +
                 `Errors: ${stats.byLevel.error}, Warnings: ${stats.byLevel.warn}, ` +
                 `Info: ${stats.byLevel.info}, Debug: ${stats.byLevel.debug}\n` +
@@ -1250,6 +1358,201 @@ async function tryCreateExtensionDevServer(port: number): Promise<any> {
                 content: [{ type: 'text', text: responseText }],
                 isError: false
               };
+            }
+
+            case 'get_main_process_logs': {
+              const { app } = await import('electron');
+              const mainLogPath = path.join(app.getPath('userData'), 'logs', 'main.log');
+
+              // Parse parameters
+              let lastLines = (args?.lastLines as number) || 100;
+              lastLines = Math.min(Math.max(1, lastLines), 1000);
+              const component = args?.component as string | undefined;
+              const logLevel = args?.logLevel as 'error' | 'warn' | 'info' | 'debug' | undefined;
+              const searchTerm = args?.searchTerm as string | undefined;
+
+              // Check if file exists
+              if (!fs.existsSync(mainLogPath)) {
+                return {
+                  content: [{ type: 'text', text: `Main process log file not found at: ${mainLogPath}` }],
+                  isError: true
+                };
+              }
+
+              try {
+                // Read and tail the file efficiently
+                const lines = tailFile(mainLogPath, lastLines * 2); // Read extra for filtering
+
+                // Filter lines
+                let filteredLines = lines;
+
+                // Filter by component (e.g., [FILE_WATCHER])
+                if (component) {
+                  const componentPattern = `[${component.toUpperCase()}]`;
+                  filteredLines = filteredLines.filter(line => line.includes(componentPattern));
+                }
+
+                // Filter by log level
+                if (logLevel) {
+                  const levelPatterns: Record<string, string[]> = {
+                    'error': ['[error]'],
+                    'warn': ['[error]', '[warn]'],
+                    'info': ['[error]', '[warn]', '[info]'],
+                    'debug': ['[error]', '[warn]', '[info]', '[debug]']
+                  };
+                  const patterns = levelPatterns[logLevel] || [];
+                  filteredLines = filteredLines.filter(line =>
+                    patterns.some(p => line.toLowerCase().includes(p))
+                  );
+                }
+
+                // Filter by search term
+                if (searchTerm) {
+                  const lowerSearch = searchTerm.toLowerCase();
+                  filteredLines = filteredLines.filter(line =>
+                    line.toLowerCase().includes(lowerSearch)
+                  );
+                }
+
+                // Take last N lines after filtering
+                filteredLines = filteredLines.slice(-lastLines);
+
+                // Build header
+                const filterDesc = [
+                  `last ${lastLines} lines`,
+                  component ? `component: ${component}` : null,
+                  logLevel ? `level: ${logLevel}+` : null,
+                  searchTerm ? `search: "${searchTerm}"` : null
+                ].filter(Boolean).join(', ');
+
+                const header = `Main Process Logs (${filterDesc})\n` +
+                  `File: ${mainLogPath}\n` +
+                  `Found ${filteredLines.length} matching lines\n` +
+                  `---\n`;
+
+                return {
+                  content: [{ type: 'text', text: header + filteredLines.join('\n') }],
+                  isError: false
+                };
+              } catch (error) {
+                const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+                return {
+                  content: [{ type: 'text', text: `Error reading main log: ${errorMsg}` }],
+                  isError: true
+                };
+              }
+            }
+
+            case 'get_renderer_debug_logs': {
+              const { app } = await import('electron');
+              const isDev = process.env.NODE_ENV === 'development' || !!process.env.ELECTRON_RENDERER_URL;
+
+              // Only available in development mode
+              if (!isDev) {
+                return {
+                  content: [{
+                    type: 'text',
+                    text: 'Renderer debug logs are only available in development mode.\n' +
+                      'In production builds, use extension_get_logs for recent renderer console output.'
+                  }],
+                  isError: true
+                };
+              }
+
+              // Parse parameters
+              const session = Math.min(Math.max(0, (args?.session as number) || 0), 4);
+              let lastLines = (args?.lastLines as number) || 100;
+              lastLines = Math.min(Math.max(1, lastLines), 1000);
+              const windowId = args?.windowId as number | undefined;
+              const logLevel = args?.logLevel as 'error' | 'warn' | 'info' | 'debug' | undefined;
+              const searchTerm = args?.searchTerm as string | undefined;
+
+              // Determine log file path based on session
+              const userData = app.getPath('userData');
+              const baseName = 'nimbalyst-debug';
+              const ext = '.log';
+              const logPath = session === 0
+                ? path.join(userData, `${baseName}${ext}`)
+                : path.join(userData, `${baseName}.${session}${ext}`);
+
+              // Check if file exists
+              if (!fs.existsSync(logPath)) {
+                const sessionDesc = session === 0 ? 'current' : `${session} session(s) ago`;
+                return {
+                  content: [{
+                    type: 'text',
+                    text: `No debug log found for session ${session} (${sessionDesc}).\n` +
+                      `File not found: ${logPath}\n\n` +
+                      `Available sessions: Check which nimbalyst-debug*.log files exist in:\n${userData}`
+                  }],
+                  isError: true
+                };
+              }
+
+              try {
+                // Read and tail the file efficiently
+                const lines = tailFile(logPath, lastLines * 2); // Read extra for filtering
+
+                // Filter lines
+                let filteredLines = lines;
+
+                // Filter by window ID (format: [Window N])
+                if (windowId !== undefined) {
+                  const windowPattern = `[Window ${windowId}]`;
+                  filteredLines = filteredLines.filter(line => line.includes(windowPattern));
+                }
+
+                // Filter by log level
+                if (logLevel) {
+                  const levelPatterns: Record<string, string[]> = {
+                    'error': ['[ERROR]'],
+                    'warn': ['[ERROR]', '[WARN]'],
+                    'info': ['[ERROR]', '[WARN]', '[INFO]'],
+                    'debug': ['[ERROR]', '[WARN]', '[INFO]', '[DEBUG]']
+                  };
+                  const patterns = levelPatterns[logLevel] || [];
+                  filteredLines = filteredLines.filter(line =>
+                    patterns.some(p => line.includes(p))
+                  );
+                }
+
+                // Filter by search term
+                if (searchTerm) {
+                  const lowerSearch = searchTerm.toLowerCase();
+                  filteredLines = filteredLines.filter(line =>
+                    line.toLowerCase().includes(lowerSearch)
+                  );
+                }
+
+                // Take last N lines after filtering
+                filteredLines = filteredLines.slice(-lastLines);
+
+                // Build header
+                const sessionDesc = session === 0 ? 'current' : `${session} session(s) ago`;
+                const filterDesc = [
+                  `session: ${sessionDesc}`,
+                  `last ${lastLines} lines`,
+                  windowId !== undefined ? `window: ${windowId}` : null,
+                  logLevel ? `level: ${logLevel}+` : null,
+                  searchTerm ? `search: "${searchTerm}"` : null
+                ].filter(Boolean).join(', ');
+
+                const header = `Renderer Debug Logs (${filterDesc})\n` +
+                  `File: ${logPath}\n` +
+                  `Found ${filteredLines.length} matching lines\n` +
+                  `---\n`;
+
+                return {
+                  content: [{ type: 'text', text: header + filteredLines.join('\n') }],
+                  isError: false
+                };
+              } catch (error) {
+                const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+                return {
+                  content: [{ type: 'text', text: `Error reading debug log: ${errorMsg}` }],
+                  isError: true
+                };
+              }
             }
 
             default:

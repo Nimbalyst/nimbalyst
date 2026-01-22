@@ -7,7 +7,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { join } from 'path';
 import * as fs from 'fs';
-import { appendFileSync, existsSync, writeFileSync } from 'fs';
+import { appendFileSync, existsSync, renameSync, unlinkSync, writeFileSync } from 'fs';
 import { createWindow, findWindowByFilePath, findWindowByWorkspace } from './window/WindowManager';
 import { loadFileIntoWindow } from './file/FileOperations';
 import { createApplicationMenu } from './menu/ApplicationMenu';
@@ -180,6 +180,47 @@ if (process.env.RUN_ONE_DEV_MODE === 'true') {
     console.log(`Dev mode enabled: Using isolated userData path: ${devUserData}`);
 }
 
+// Debug log rotation constants
+const MAX_DEBUG_LOG_SESSIONS = 5; // Keep current + 4 previous sessions
+
+/**
+ * Rotate debug logs on app startup.
+ * Each log file represents one app session, preserving crash logs intact.
+ * Files: nimbalyst-debug.log (current), .1.log (previous), .2.log, .3.log, .4.log (oldest)
+ */
+function rotateDebugLogs() {
+    const userData = app.getPath('userData');
+    const baseName = 'nimbalyst-debug';
+    const ext = '.log';
+
+    try {
+        // Delete oldest log if it exists
+        const oldestPath = join(userData, `${baseName}.${MAX_DEBUG_LOG_SESSIONS - 1}${ext}`);
+        if (existsSync(oldestPath)) {
+            unlinkSync(oldestPath);
+        }
+
+        // Shift existing logs: N-1 -> N, N-2 -> N-1, ..., 1 -> 2
+        for (let i = MAX_DEBUG_LOG_SESSIONS - 2; i >= 1; i--) {
+            const currentPath = join(userData, `${baseName}.${i}${ext}`);
+            const nextPath = join(userData, `${baseName}.${i + 1}${ext}`);
+            if (existsSync(currentPath)) {
+                renameSync(currentPath, nextPath);
+            }
+        }
+
+        // Move current log to .1
+        const currentLogPath = join(userData, `${baseName}${ext}`);
+        const firstBackupPath = join(userData, `${baseName}.1${ext}`);
+        if (existsSync(currentLogPath)) {
+            renameSync(currentLogPath, firstBackupPath);
+        }
+    } catch (error) {
+        // Log rotation is best-effort, don't fail startup
+        console.error('Failed to rotate debug logs:', error);
+    }
+}
+
 // Initialize logging
 function initializeLogging() {
     // electron-log handles main process logging
@@ -187,6 +228,11 @@ function initializeLogging() {
 
     // Always capture error logs for debugging
     const debugLogPath = join(app.getPath('userData'), 'nimbalyst-debug.log');
+
+    // Rotate logs on startup (development mode only - preserves previous session logs)
+    if (process.env.NODE_ENV !== 'production') {
+        rotateDebugLogs();
+    }
 
     // Initialize or append to log
     try {

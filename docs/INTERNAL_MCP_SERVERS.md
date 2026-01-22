@@ -20,8 +20,10 @@ Nimbalyst runs MCP servers **inside the Electron main process** to provide AI ca
   - `extension_reload` - Hot reload extension (rebuild + reinstall)
   - `extension_uninstall` - Remove extension from running instance
   - `restart_nimbalyst` - Restart the application
-  - `extension_get_logs` - Get recent logs from extension development
+  - `extension_get_logs` - Get recent logs from renderer console (all sources, not just extensions)
   - `extension_get_status` - Query extension load status and contributions
+  - `get_main_process_logs` - Read main process log file with filtering
+  - `get_renderer_debug_logs` - Read renderer debug logs (dev mode, persists across sessions)
 
 3. **Extension Development Kit MCP Server** (`extensionDevServer.ts`) - Port varies, provides:
 
@@ -695,13 +697,14 @@ The Extension Development Kit (EDK) MCP server provides tools specifically desig
 
 ### extension_get_logs
 
-Retrieve recent logs from extension development activities.
+Retrieve recent logs from the renderer process console output. This captures ALL console.log/error/warn/debug calls from extension code, core application UI components, custom editors (Monaco, RevoGrid, etc.), and React component lifecycle. Use this for debugging any renderer-side issues, not just extensions.
 
 **Parameters:**
 - `extensionId` (string, optional): Filter logs to a specific extension ID
 - `lastSeconds` (number, optional): Get logs from the last N seconds (default: 60, max: 300)
 - `logLevel` (string, optional): Minimum log level - 'error', 'warn', 'info', 'debug', or 'all' (default: 'all')
 - `source` (string, optional): Log source filter - 'renderer', 'main', 'build', or 'all' (default: 'all')
+- `searchTerm` (string, optional): Filter logs containing this text (case-insensitive)
 
 **Log Sources:**
 - `renderer`: Console output from extension code running in the renderer process
@@ -710,13 +713,87 @@ Retrieve recent logs from extension development activities.
 
 **Example Response:**
 ```
-Extension Development Logs (last 60s)
+Renderer Console Logs (last 60s)
 Found 15 log entries (buffer: 42/1000)
 Errors: 2, Warnings: 3, Info: 8, Debug: 2
 ---
 17:23:45.123 INFO  [main]      Starting build for extension: com.example.my-ext
 17:23:46.456 INFO  [build]     (com.example.my-ext) Compiling TypeScript...
 17:23:47.789 ERROR [renderer]  (com.example.my-ext) TypeError: Cannot read property 'foo' of undefined
+```
+
+**Example with search:**
+```
+extension_get_logs(searchTerm: "Monaco", logLevel: "error", lastSeconds: 120)
+```
+
+### get_main_process_logs
+
+Read logs from the main process log file (Node.js side). The main log persists across sessions and contains component-scoped entries.
+
+**When to use:**
+- File system errors (file watchers, workspace loading)
+- IPC channel issues
+- AI provider initialization failures
+- Extension loading errors
+- Database query errors
+
+**Parameters:**
+- `lastLines` (number, optional): Number of recent lines to read (default: 100, max: 1000)
+- `component` (string, optional): Filter by component name: FILE_WATCHER, WORKSPACE_WATCHER, AI_CLAUDE, AI_CLAUDE_CODE, STREAMING, EXTENSION, IPC, DATABASE, etc.
+- `logLevel` (string, optional): Filter by minimum log level (error, warn, info, debug)
+- `searchTerm` (string, optional): Search for specific text in logs (case-insensitive)
+
+**Example:**
+```
+get_main_process_logs(component: "FILE_WATCHER", logLevel: "error", lastLines: 50)
+```
+
+**Example Response:**
+```
+Main Process Logs (last 50 lines, component: FILE_WATCHER, level: error+)
+File: ~/Library/Application Support/@nimbalyst/electron/logs/main.log
+Found 3 matching lines
+---
+[2026-01-21 17:45:24.789] [error] [FILE_WATCHER] Failed to watch directory: ENOENT
+[2026-01-21 17:46:12.345] [error] [FILE_WATCHER] Watcher closed unexpectedly
+```
+
+### get_renderer_debug_logs
+
+Read the renderer debug log file (development mode only). Logs rotate on app restart, keeping last 5 sessions. Use the session parameter to access previous session logs for crash investigation or historical debugging.
+
+**When to use:**
+- UI component errors not visible in extension_get_logs ring buffer
+- Historical debugging (ring buffer only keeps last 1000 entries)
+- Multi-window debugging (filter by window ID)
+- Investigating crashes or issues from previous sessions
+- Long-running session analysis
+
+**Parameters:**
+- `session` (number, optional): Which session to read: 0 = current (default), 1 = previous, 2 = two sessions ago, up to 4
+- `lastLines` (number, optional): Number of recent lines to read (default: 100, max: 1000)
+- `windowId` (number, optional): Filter to logs from a specific window ID
+- `logLevel` (string, optional): Filter by log level (ERROR, WARN, INFO, DEBUG)
+- `searchTerm` (string, optional): Search for specific text in logs (case-insensitive)
+
+**Note:** Returns error in production builds - only available in development mode.
+
+**Examples:**
+```
+get_renderer_debug_logs(searchTerm: "Monaco", lastLines: 200)
+get_renderer_debug_logs(session: 1, searchTerm: "crash")  // Previous session's crash logs
+get_renderer_debug_logs(session: 2, logLevel: "error")    // Errors from 2 sessions ago
+```
+
+**Example Response:**
+```
+Renderer Debug Logs (session: 1 session(s) ago, last 100 lines, search: "crash")
+File: ~/Library/Application Support/@nimbalyst/electron/nimbalyst-debug.1.log
+Found 5 matching lines
+---
+[Window 1] [17:45:23] [ERROR] Uncaught exception: Application crash detected
+[Window 1] [17:45:23] [ERROR] Stack trace: TypeError at crashHandler.ts:42
 ```
 
 ### extension_get_status

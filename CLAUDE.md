@@ -453,6 +453,25 @@ When working on extensions in `packages/extensions/`:
 - Use `mcp__nimbalyst-extension-dev__extension_get_status` to verify extension state
 - **Never use manual \****`npm run build`** - always use the MCP tools for extension builds
 
+## Debugging with Log Access Tools
+
+Agents have access to comprehensive logging tools. **Never ask users to copy-paste logs** - use these tools instead:
+
+1. **extension_get_logs** - Recent renderer console output (all sources, not just extensions)
+2. **get_main_process_logs** - Main process log file (file system, IPC, AI providers)
+3. **get_renderer_debug_logs** - Development mode debug log (historical renderer logs, persists across restarts)
+
+**Debugging workflow:**
+1. Check recent renderer logs: `extension_get_logs(lastSeconds: 60, logLevel: "error")`
+2. Check main process: `get_main_process_logs(component: "FILE_WATCHER", logLevel: "error")`
+3. Search for specific errors: `get_renderer_debug_logs(searchTerm: "TypeError")`
+4. Investigate previous session crash: `get_renderer_debug_logs(session: 1, logLevel: "error")`
+
+**When to use each tool:**
+- **extension_get_logs**: Recent renderer errors, React component issues, extension debugging (ring buffer, last 1000 entries)
+- **get_main_process_logs**: File watcher issues, IPC errors, AI provider failures, database errors (persisted log file)
+- **get_renderer_debug_logs**: Historical debugging, crash investigation, logs from previous app sessions (dev mode only)
+
 ## Testing Guidelines
 
 - When implementing tests, create one test first before building the full suite
