@@ -35,8 +35,24 @@ The commit message should follow these guidelines:
     properties: {
       filesToStage: {
         type: 'array' as const,
-        items: { type: 'string' as const },
-        description: 'Array of file paths to stage for commit (relative to workspace root)',
+        items: {
+          oneOf: [
+            { type: 'string' as const },
+            {
+              type: 'object' as const,
+              properties: {
+                path: { type: 'string' as const, description: 'File path relative to workspace root' },
+                status: {
+                  type: 'string' as const,
+                  enum: ['added', 'modified', 'deleted'],
+                  description: 'Git status of the file'
+                }
+              },
+              required: ['path', 'status']
+            }
+          ]
+        },
+        description: 'Array of file paths (strings) or file objects with path and status (added/modified/deleted)',
       },
       commitMessage: {
         type: 'string' as const,

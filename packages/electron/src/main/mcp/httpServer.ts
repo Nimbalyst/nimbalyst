@@ -1849,8 +1849,9 @@ async function tryCreateServer(port: number): Promise<any> {
           case 'developer.git_commit_proposal': {
             // Git commit proposal tool - waits for user confirmation before returning
             // This allows Claude to see the final result (committed/cancelled)
+            type FileToStage = string | { path: string; status: 'added' | 'modified' | 'deleted' };
             const proposalArgs = args as {
-              filesToStage?: string[];
+              filesToStage?: FileToStage[];
               commitMessage?: string;
               reasoning?: string;
             } | undefined;
@@ -1928,6 +1929,9 @@ async function tryCreateServer(port: number): Promise<any> {
               }, GIT_COMMIT_TIMEOUT_MS);
 
               // Listen for the user's response
+              // Helper to extract file path from string or object
+              const getFilePath = (f: FileToStage) => typeof f === 'string' ? f : f.path;
+
               ipcMain.once(proposalId, (_event, result: {
                 action: 'committed' | 'cancelled';
                 commitHash?: string;
@@ -1938,7 +1942,7 @@ async function tryCreateServer(port: number): Promise<any> {
                 clearTimeout(timeout);
 
                 if (result.action === 'committed') {
-                  const filesCount = result.filesCommitted?.length || proposalArgs.filesToStage!.length;
+                  const filesCount = result.filesCommitted?.length || proposalArgs.filesToStage!.map(getFilePath).length;
                   resolve({
                     content: [
                       {

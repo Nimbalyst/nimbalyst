@@ -20,6 +20,36 @@ import type { CustomToolWidgetProps } from './index';
 import './GitCommitConfirmationWidget.css';
 
 // ============================================================
+// File Status Types
+// ============================================================
+
+type FileStatus = 'added' | 'modified' | 'deleted';
+
+interface FileWithStatus {
+  path: string;
+  status: FileStatus;
+}
+
+type FileInput = string | FileWithStatus;
+
+/**
+ * Normalize file input to extract path and status
+ */
+function normalizeFileInput(file: FileInput): FileWithStatus {
+  if (typeof file === 'string') {
+    return { path: file, status: 'modified' }; // Default to modified for backward compatibility
+  }
+  return file;
+}
+
+/**
+ * Extract just the path from a file input
+ */
+function getFilePath(file: FileInput): string {
+  return typeof file === 'string' ? file : file.path;
+}
+
+// ============================================================
 // Pending Proposals Store
 // ============================================================
 // Store pending proposals sent via IPC. The widget looks up its proposal
@@ -28,7 +58,17 @@ import './GitCommitConfirmationWidget.css';
 interface PendingProposal {
   proposalId: string;
   workspacePath: string;
-  filesToStage: string[];
+  filesToStage: string[];  // Always normalized to paths only
+  commitMessage: string;
+  reasoning?: string;
+  timestamp: number;
+}
+
+// Input type for registerPendingProposal - can have objects or strings
+interface PendingProposalInput {
+  proposalId: string;
+  workspacePath: string;
+  filesToStage: (string | { path: string; status?: string })[];
   commitMessage: string;
   reasoning?: string;
   timestamp: number;
@@ -52,8 +92,19 @@ function generateProposalKey(filesToStage: string[], commitMessage: string): str
 /**
  * Register a pending proposal from IPC.
  * Called by the renderer when it receives mcp:gitCommitProposal.
+ * Normalizes filesToStage to string paths for consistent key matching.
  */
-export function registerPendingProposal(proposal: PendingProposal): void {
+export function registerPendingProposal(input: PendingProposalInput): void {
+  // Normalize filesToStage to string paths
+  const normalizedFiles = input.filesToStage.map(f =>
+    typeof f === 'string' ? f : f.path
+  );
+
+  const proposal: PendingProposal = {
+    ...input,
+    filesToStage: normalizedFiles,
+  };
+
   const key = generateProposalKey(proposal.filesToStage, proposal.commitMessage);
   pendingProposals.set(key, proposal);
   console.log('[GitCommitWidget] Registered pending proposal:', proposal.proposalId, key);
@@ -224,7 +275,21 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
     return null;
   }
 
-  const initialFilesToStage: string[] = args.filesToStage || [];
+  // Parse files - can be strings or objects with path and status
+  const rawFiles: FileInput[] = args.filesToStage || [];
+  const filesWithStatus: FileWithStatus[] = useMemo(
+    () => rawFiles.map(normalizeFileInput),
+    [rawFiles]
+  );
+  const initialFilesToStage: string[] = useMemo(
+    () => filesWithStatus.map(f => f.path),
+    [filesWithStatus]
+  );
+  // Create a map for quick status lookup
+  const fileStatusMap = useMemo(
+    () => new Map(filesWithStatus.map(f => [f.path, f.status])),
+    [filesWithStatus]
+  );
   const initialCommitMessage: string = args.commitMessage || '';
   const reasoning: string = args.reasoning || '';
   const commitWorkspacePath = workspacePath;
@@ -272,6 +337,39 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
   // Check if we've already responded to this proposal (persists in module-level Map)
   const previousResponse = getProposalResponse(initialFilesToStage, initialCommitMessage);
   const alreadyResponded = !!previousResponse;
+
+  // Track whether we're waiting for the pending proposal to be registered
+  // This handles the race condition where the widget renders before the IPC message arrives
+  const [waitingForProposal, setWaitingForProposal] = useState(!pendingProposal && !isCompleted && !alreadyResponded);
+
+  // Effect to check for pending proposal registration
+  useEffect(() => {
+    if (pendingProposal || isCompleted || alreadyResponded) {
+      setWaitingForProposal(false);
+      return;
+    }
+
+    // Poll for pending proposal registration (IPC message may arrive shortly after render)
+    const checkInterval = setInterval(() => {
+      const proposal = getPendingProposal(initialFilesToStage, initialCommitMessage);
+      const response = getProposalResponse(initialFilesToStage, initialCommitMessage);
+      if (proposal || response) {
+        setWaitingForProposal(false);
+        clearInterval(checkInterval);
+      }
+    }, 50); // Check every 50ms
+
+    // Stop waiting after 2 seconds - if no proposal by then, it's genuinely completed
+    const timeout = setTimeout(() => {
+      setWaitingForProposal(false);
+      clearInterval(checkInterval);
+    }, 2000);
+
+    return () => {
+      clearInterval(checkInterval);
+      clearTimeout(timeout);
+    };
+  }, [pendingProposal, isCompleted, alreadyResponded, initialFilesToStage, initialCommitMessage]);
 
   // Local state for editing
   const [filesToStage, setFilesToStage] = useState<Set<string>>(new Set(initialFilesToStage));
@@ -355,20 +453,33 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
     });
   }, [filesToStage, getFilesInNode]);
 
+  // Get status label for tooltip
+  const getStatusLabel = (status: FileStatus): string => {
+    switch (status) {
+      case 'added': return 'New file';
+      case 'modified': return 'Modified';
+      case 'deleted': return 'Deleted';
+      default: return 'Modified';
+    }
+  };
+
   // Render a single file item
   const renderFile = (filePath: string) => {
     const isSelected = filesToStage.has(filePath);
     const fileName = filePath.split('/').pop() || filePath;
+    const status = fileStatusMap.get(filePath) || 'modified';
+    const statusClass = `git-commit-widget__file-name--${status}`;
     return (
       <div
         key={filePath}
         className={`git-commit-widget__file ${isSelected ? 'git-commit-widget__file--selected' : ''}`}
         onClick={() => toggleFile(filePath)}
+        title={getStatusLabel(status)}
       >
         <div className={`git-commit-widget__file-checkbox ${isSelected ? 'git-commit-widget__file-checkbox--checked' : ''}`}>
           {isSelected && <MaterialSymbol icon="check" size={12} />}
         </div>
-        <span className="git-commit-widget__file-name">{fileName}</span>
+        <span className={`git-commit-widget__file-name ${statusClass}`}>{fileName}</span>
       </div>
     );
   };
@@ -512,6 +623,21 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
 
   if (!commitWorkspacePath) {
     return null;
+  }
+
+  // If we're waiting for the pending proposal to be registered, show a loading state
+  // This MUST come before other checks to handle the race condition where widget renders
+  // before the IPC message arrives to register the proposal
+  if (waitingForProposal) {
+    return (
+      <div className="git-commit-widget">
+        <div className="git-commit-widget__header">
+          <MaterialSymbol icon="commit" size={16} className="git-commit-widget__icon--primary" />
+          <span className="git-commit-widget__title">Commit Proposal</span>
+          <span className="git-commit-widget__status">Loading...</span>
+        </div>
+      </div>
+    );
   }
 
   // Show completed/cancelled state (or if we've responded but waiting for tool result)

@@ -181,6 +181,19 @@
   line-height: 1.4;
 }
 
+/* File status colors */
+.git-commit-widget__file-name--added {
+  color: var(--success-color, #22c55e);
+}
+
+.git-commit-widget__file-name--modified {
+  color: var(--info-color, #3b82f6);
+}
+
+.git-commit-widget__file-name--deleted {
+  color: var(--error-color, #ef4444);
+}
+
 .git-commit-widget__file-path {
   font-size: 0.75rem;
   color: var(--text-tertiary);

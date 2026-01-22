@@ -24,8 +24,15 @@ export interface SessionFileEdit {
   operation: string;
 }
 
+export type FileStatus = 'added' | 'modified' | 'deleted';
+
+export interface FileToStage {
+  path: string;
+  status: FileStatus;
+}
+
 export interface CommitProposal {
-  filesToStage: string[];
+  filesToStage: (string | FileToStage)[];
   commitMessage: string;
   reasoning: string;
 }
