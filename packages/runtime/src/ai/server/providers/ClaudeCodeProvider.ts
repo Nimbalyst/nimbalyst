@@ -3324,7 +3324,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         const cwd = workspacePath || process.cwd();
 
         // Check if this Bash command affected any files
-        const affectedFiles = this.parseBashForFileOps(command, cwd);
+        const affectedFiles = parseBashForFileOps(command, cwd);
 
         if (affectedFiles.length > 0) {
           // Add delay for file watcher to detect changes from Bash operations
@@ -3333,7 +3333,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
           console.log('[BASH-FILE-OPS] PostToolUse delay complete, files should be visible to watcher:', {
             count: affectedFiles.length,
-            files: affectedFiles.map(f => path.basename(f))
+            files: affectedFiles.map((f: string) => path.basename(f))
           });
         }
 

@@ -182,7 +182,8 @@ export async function compressImage(
 
   // If still over target size, progressively reduce quality/dimensions
   if (outputBuffer.length > opts.targetSizeBytes) {
-    const result = await compressToTargetSize(image, opts.targetSizeBytes, opts.maxDimension);
+    // Cast to any to work around jimp type incompatibility between different generic instantiations
+    const result = await compressToTargetSize(image as any, opts.targetSizeBytes, opts.maxDimension);
     outputBuffer = result.buffer;
     outputMime = result.mimeType;
   }

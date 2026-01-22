@@ -302,10 +302,11 @@ export type FileLinkType = 'edited' | 'referenced' | 'read';
  * File link metadata structures for each link type
  */
 export interface EditedFileMetadata {
-  operation?: 'edit' | 'create' | 'delete' | 'rename';
+  operation?: 'edit' | 'create' | 'delete' | 'rename' | 'bash';
   linesAdded?: number;
   linesRemoved?: number;
   toolName?: string;
+  bashCommand?: string;  // For bash operations, stores the command (truncated)
 }
 
 export interface ReferencedFileMetadata {
