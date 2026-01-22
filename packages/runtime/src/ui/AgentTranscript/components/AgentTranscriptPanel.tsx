@@ -52,7 +52,7 @@ interface AgentTranscriptPanelProps {
   onGroupByDirectoryChange?: (value: boolean) => void;
 }
 
-export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
+const AgentTranscriptPanelComponent: React.FC<AgentTranscriptPanelProps> = ({
   sessionId,
   sessionData,
   todos = [],
@@ -410,3 +410,71 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
     </div>
   );
 };
+
+/**
+ * Memoized version of AgentTranscriptPanel.
+ * This prevents unnecessary re-renders when parent components re-render
+ * (e.g., SessionTranscript re-renders on every keystroke for controlled input).
+ *
+ * Custom comparison function checks if the props that affect rendering have actually changed.
+ */
+export const AgentTranscriptPanel = React.memo(
+  AgentTranscriptPanelComponent,
+  (prevProps, nextProps) => {
+    // Session ID changed - must re-render
+    if (prevProps.sessionId !== nextProps.sessionId) return false;
+
+    // Processing state changed - must re-render (affects spinner, etc.)
+    if (prevProps.isProcessing !== nextProps.isProcessing) return false;
+
+    // Archived state changed - must re-render
+    if (prevProps.isArchived !== nextProps.isArchived) return false;
+
+    // Sidebar visibility changed - must re-render
+    if (prevProps.hideSidebar !== nextProps.hideSidebar) return false;
+    if (prevProps.showFloatingActions !== nextProps.showFloatingActions) return false;
+
+    // Group by directory changed - must re-render
+    if (prevProps.groupByDirectory !== nextProps.groupByDirectory) return false;
+
+    // Workspace path changed - must re-render
+    if (prevProps.workspacePath !== nextProps.workspacePath) return false;
+
+    // Pending review files changed - must re-render
+    if (prevProps.pendingReviewFiles !== nextProps.pendingReviewFiles) return false;
+
+    // Todos changed - check array equality
+    if (prevProps.todos?.length !== nextProps.todos?.length) return false;
+    if (prevProps.todos && nextProps.todos) {
+      for (let i = 0; i < prevProps.todos.length; i++) {
+        const prev = prevProps.todos[i];
+        const next = nextProps.todos[i];
+        if (prev.status !== next.status || prev.content !== next.content || prev.activeForm !== next.activeForm) {
+          return false;
+        }
+      }
+    }
+
+    // SessionData - check critical fields only
+    const prevData = prevProps.sessionData;
+    const nextData = nextProps.sessionData;
+
+    // Messages changed - check array reference (reloadSessionData creates new array)
+    if (prevData.messages !== nextData.messages) return false;
+
+    // Provider changed - must re-render
+    if (prevData.provider !== nextData.provider) return false;
+
+    // Metadata changed - check reference
+    if (prevData.metadata !== nextData.metadata) return false;
+
+    // Document context changed - check reference
+    if (prevData.documentContext !== nextData.documentContext) return false;
+
+    // Token usage changed - check reference
+    if (prevData.tokenUsage !== nextData.tokenUsage) return false;
+
+    // All checks passed - skip re-render
+    return true;
+  }
+);

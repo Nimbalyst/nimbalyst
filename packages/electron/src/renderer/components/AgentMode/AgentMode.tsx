@@ -35,6 +35,7 @@ import {
   store,
 } from '../../store';
 import { initWorkstreamState, loadWorkstreamStates, workstreamStateAtom } from '../../store/atoms/workstreamState';
+import { initSessionStateListeners } from '../../store/sessionStateListeners';
 import './AgentMode.css';
 
 export interface AgentModeRef {
@@ -95,6 +96,12 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
     initWorkstreamState(workspacePath);
     loadWorkstreamStates(workspacePath);
   }, [workspacePath]);
+
+  // Initialize session state listeners (global, runs once)
+  useEffect(() => {
+    const cleanup = initSessionStateListeners();
+    return cleanup;
+  }, []);
 
   // Create new session
   const createNewSession = useCallback(async () => {

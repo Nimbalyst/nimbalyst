@@ -32,6 +32,9 @@ import {
   sessionDraftInputAtom,
   sessionDraftAttachmentsAtom,
   sessionDataAtom,
+  sessionMessagesAtom,
+  sessionProviderAtom,
+  sessionTokenUsageAtom,
   sessionLoadingAtom,
   sessionModeAtom,
   sessionModelAtom,
@@ -121,8 +124,11 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
 
   // ============================================================
   // Session state via Jotai atoms - component owns its own data
+  // Use derived atoms to avoid re-rendering on unrelated changes
   // ============================================================
-  const [sessionData, setSessionData] = useAtom(sessionDataAtom(sessionId));
+  const messages = useAtomValue(sessionMessagesAtom(sessionId));
+  const provider = useAtomValue(sessionProviderAtom(sessionId));
+  const tokenUsage = useAtomValue(sessionTokenUsageAtom(sessionId));
   const isDataLoading = useAtomValue(sessionLoadingAtom(sessionId));
   const [aiMode, setAiMode] = useAtom(sessionModeAtom(sessionId));
   const [currentModel, setCurrentModel] = useAtom(sessionModelAtom(sessionId));
@@ -131,6 +137,9 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   const loadSessionData = useSetAtom(loadSessionDataAtom);
   const reloadSessionData = useSetAtom(reloadSessionDataAtom);
   const updateSessionData = useSetAtom(updateSessionDataAtom);
+
+  // Still need full sessionData for certain operations (updating, checking loaded state)
+  const sessionData = useAtomValue(sessionDataAtom(sessionId));
 
   // Draft input state via Jotai atoms - only this component re-renders on typing
   const [draftInput, setDraftInput] = useAtom(sessionDraftInputAtom(sessionId));
@@ -162,15 +171,11 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   // Load session data on mount
   // ============================================================
   useEffect(() => {
-    console.log('[SessionTranscript] Load effect - sessionId:', sessionId, 'workspacePath:', workspacePath, 'hasSessionData:', !!sessionData);
     if (!sessionId || !workspacePath) return;
     if (!sessionData) {
-      console.log('[SessionTranscript] Loading session data for:', sessionId);
       loadSessionData({ sessionId, workspacePath });
     }
   }, [sessionId, workspacePath, sessionData, loadSessionData]);
-
-  console.log('[SessionTranscript] Render - sessionId:', sessionId, 'sessionData:', sessionData?.id, 'messages:', sessionData?.messages?.length);
 
   // ============================================================
   // Subscribe to IPC events for session updates
@@ -180,8 +185,9 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
 
     const handleMessageLogged = (data: { sessionId: string; direction: string }) => {
       if (data.sessionId !== sessionId) return;
+      // Reload on both input and output messages to ensure we stay in sync
+      reloadSessionData({ sessionId, workspacePath });
       if (data.direction === 'output') {
-        reloadSessionData({ sessionId, workspacePath });
         sendingRef.current = false;
       }
     };
@@ -463,7 +469,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     updateSessionData({
       sessionId,
       updates: {
-        messages: [...(sessionData.messages || []), userMessage],
+        messages: [...messages, userMessage],
       },
     });
 
@@ -661,26 +667,26 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
 
   // Last user message timestamp for mockup annotation indicator
   const lastUserMessageTimestamp = React.useMemo(() => {
-    const userMessages = sessionData?.messages?.filter(m => m.role === 'user') || [];
+    const userMessages = messages.filter(m => m.role === 'user');
     if (userMessages.length === 0) return null;
     return userMessages[userMessages.length - 1].timestamp || null;
-  }, [sessionData?.messages]);
+  }, [messages]);
 
   // Slash command suggestions for empty sessions
   const renderEmptyExtra = React.useCallback(() => {
-    if (sessionData?.provider !== 'claude-code' || (sessionData?.messages?.length ?? 0) > 0) {
+    if (provider !== 'claude-code' || messages.length > 0) {
       return null;
     }
     return (
       <SlashCommandSuggestions
-        provider={sessionData.provider}
-        hasMessages={sessionData.messages.length > 0}
+        provider={provider}
+        hasMessages={messages.length > 0}
         workspacePath={workspacePath}
         sessionId={sessionId}
         onCommandSelect={handleCommandSelect}
       />
     );
-  }, [sessionData?.provider, sessionData?.messages?.length, workspacePath, sessionId, handleCommandSelect]);
+  }, [provider, messages.length, workspacePath, sessionId, handleCommandSelect]);
 
   // Loading state
   if (!sessionData) {
@@ -699,17 +705,6 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', minHeight: 0 }}>
-      {/* File gutter at top - only in chat mode */}
-      {mode === 'chat' && (
-        <FileGutter
-          sessionId={sessionId}
-          workspacePath={workspacePath}
-          type="referenced"
-          onFileClick={handleFileClick}
-          pendingReviewFiles={pendingReviewFiles}
-        />
-      )}
-
       {/* Main transcript area */}
       <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
         <AgentTranscriptPanel
@@ -820,8 +815,8 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
         onModelChange={handleModelChange}
         sessionHasMessages={sessionHasMessages}
         currentProviderType={currentProviderType}
-        tokenUsage={sessionData.tokenUsage}
-        provider={sessionData.provider}
+        tokenUsage={tokenUsage}
+        provider={provider}
         onQueue={handleQueue}
         queueCount={queuedPrompts.length}
         currentFilePath={documentContext?.filePath}
