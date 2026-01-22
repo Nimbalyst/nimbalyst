@@ -5,6 +5,7 @@
  * worktree paths to their parent project. This ensures worktrees inherit and
  * share permissions with their parent project.
  */
+import * as path from 'path';
 import { dialog, BrowserWindow } from 'electron';
 import { getPermissionService, resolveWorkspacePathForPermissions } from '../services/PermissionService';
 import { ClaudeSettingsManager } from '../services/ClaudeSettingsManager';
@@ -57,7 +58,7 @@ export function registerPermissionHandlers(): void {
       throw new Error('workspacePath is required');
     }
 
-    const workspaceName = workspacePath.split('/').pop() || workspacePath;
+    const workspaceName = path.basename(workspacePath) || workspacePath;
 
     try {
       // Resolve worktree paths to parent project for permission lookups

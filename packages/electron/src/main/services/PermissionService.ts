@@ -9,6 +9,7 @@
  * parent project. Use resolveWorkspacePathForPermissions() to resolve paths.
  */
 
+import * as path from 'path';
 import {
   getAgentPermissions,
   saveAgentPermissions,
@@ -40,7 +41,7 @@ export async function resolveWorkspacePathForPermissions(workspacePath: string):
   const worktree = await worktreeStore.getByPath(workspacePath);
 
   if (worktree) {
-    const workspaceName = workspacePath.split('/').pop() || workspacePath;
+    const workspaceName = path.basename(workspacePath) || workspacePath;
     logger.main.info(`[PermissionService:${workspaceName}] Resolved worktree to parent project: ${worktree.projectPath}`);
     return worktree.projectPath;
   }
@@ -86,7 +87,7 @@ export class PermissionService {
   public trustWorkspace(workspacePath: string, mode: PermissionMode = 'ask'): void {
     // Resolve worktree paths to parent project so trust is shared
     const projectPath = resolveProjectPath(workspacePath);
-    const workspaceName = projectPath.split('/').pop() || projectPath;
+    const workspaceName = path.basename(projectPath) || projectPath;
     logger.main.info(`[PermissionService:${workspaceName}] Trusting workspace with mode: ${mode}`);
 
     const stored = getAgentPermissions(projectPath) || { permissionMode: null };
@@ -100,7 +101,7 @@ export class PermissionService {
   public revokeWorkspaceTrust(workspacePath: string): void {
     // Resolve worktree paths to parent project so trust is shared
     const projectPath = resolveProjectPath(workspacePath);
-    const workspaceName = projectPath.split('/').pop() || projectPath;
+    const workspaceName = path.basename(projectPath) || projectPath;
     logger.main.info(`[PermissionService:${workspaceName}] Revoking workspace trust`);
 
     const stored = getAgentPermissions(projectPath) || { permissionMode: null };
@@ -141,7 +142,7 @@ export class PermissionService {
   public setPermissionMode(workspacePath: string, mode: PermissionMode | null): void {
     // Resolve worktree paths to parent project so trust is shared
     const projectPath = resolveProjectPath(workspacePath);
-    const workspaceName = projectPath.split('/').pop() || projectPath;
+    const workspaceName = path.basename(projectPath) || projectPath;
     logger.main.info(`[PermissionService:${workspaceName}] Setting permission mode: ${mode}`);
 
     const stored = getAgentPermissions(projectPath) || { permissionMode: null };
