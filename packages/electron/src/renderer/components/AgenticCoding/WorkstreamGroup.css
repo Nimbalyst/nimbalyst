@@ -5,16 +5,12 @@
   margin-bottom: 0.25rem;
 }
 
-.workstream-group.active .workstream-group-header {
-  background: var(--surface-selected);
-}
 
 /* Header container */
 .workstream-group-header {
   display: flex;
   align-items: center;
   gap: 0;
-  background: var(--surface-tertiary);
   font-size: 0.8125rem;
   color: var(--text-primary);
   transition: background-color 0.15s ease;
@@ -290,6 +286,18 @@
   background: var(--surface-secondary);
   border-radius: 0.5rem;
   font-weight: 500;
+}
+
+.workstream-session-item-badge {
+  font-size: 0.625rem;
+  padding: 0.0625rem 0.25rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+}
+
+.workstream-session-item-badge.uncommitted {
+  color: var(--warning-color, #f59e0b);
+  background: color-mix(in srgb, var(--warning-color, #f59e0b) 15%, transparent);
 }
 
 .workstream-session-item-status {

@@ -22,6 +22,7 @@ interface SessionItem {
   hasPendingPrompt?: boolean;
   isArchived?: boolean;
   isPinned?: boolean;
+  uncommittedCount?: number; // Number of uncommitted files in this session
 }
 
 interface GitStatus {
@@ -117,6 +118,11 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
       if (!a.isPinned && b.isPinned) return 1;
       return (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt);
     });
+  }, [sessions]);
+
+  // Calculate total uncommitted count across all sessions in the workstream
+  const totalUncommittedCount = React.useMemo(() => {
+    return sessions.reduce((sum, session) => sum + (session.uncommittedCount || 0), 0);
   }, [sessions]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
@@ -310,6 +316,15 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
                   )}
                 </>
               )}
+              {/* Show total uncommitted count for workstreams */}
+              {type === 'workstream' && totalUncommittedCount > 0 && (
+                <span
+                  className="workstream-group-badge uncommitted"
+                  title={`${totalUncommittedCount} uncommitted change${totalUncommittedCount !== 1 ? 's' : ''} across all sessions`}
+                >
+                  {totalUncommittedCount} uncommitted
+                </span>
+              )}
               <span className="workstream-group-count">
                 {sessionCount} session{sessionCount !== 1 ? 's' : ''}
               </span>
@@ -430,12 +445,12 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
  * Status indicator for workstream child sessions.
  * Subscribes to Jotai atoms for real-time processing/unread/pending state.
  */
-const WorkstreamSessionStatusIndicator = memo<{ sessionId: string; messageCount?: number }>(({ sessionId, messageCount }) => {
+const WorkstreamSessionStatusIndicator = memo<{ sessionId: string; uncommittedCount?: number }>(({ sessionId, uncommittedCount }) => {
   const isProcessing = useAtomValue(sessionProcessingAtom(sessionId));
   const hasPendingPrompt = useAtomValue(sessionPendingPromptAtom(sessionId));
   const hasUnread = useAtomValue(sessionUnreadAtom(sessionId));
 
-  // Priority: processing > pending prompt > unread > message count
+  // Priority: processing > pending prompt > unread > uncommitted count
   if (isProcessing) {
     return (
       <div className="workstream-session-item-status processing" title="Processing...">
@@ -460,8 +475,15 @@ const WorkstreamSessionStatusIndicator = memo<{ sessionId: string; messageCount?
     );
   }
 
-  if (messageCount && messageCount > 0) {
-    return <span className="workstream-session-item-count">{messageCount}</span>;
+  if (uncommittedCount && uncommittedCount > 0) {
+    return (
+      <span
+        className="workstream-session-item-badge uncommitted"
+        title={`${uncommittedCount} uncommitted change${uncommittedCount !== 1 ? 's' : ''}`}
+      >
+        {uncommittedCount}
+      </span>
+    );
   }
 
   return null;
@@ -592,7 +614,7 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
         <span className="workstream-session-item-title">{displayTitle}</span>
       )}
       <div className="workstream-session-item-right">
-        <WorkstreamSessionStatusIndicator sessionId={session.id} messageCount={session.messageCount} />
+        <WorkstreamSessionStatusIndicator sessionId={session.id} uncommittedCount={session.uncommittedCount} />
       </div>
 
       {/* Context Menu */}

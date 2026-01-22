@@ -894,6 +894,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
               messageCount: c.messageCount || 0,
               isArchived: c.isArchived || false,
               isPinned: c.isPinned || false,
+              uncommittedCount: c.uncommittedCount || 0,
             }));
             setWorkstreamChildrenCache(prev => {
               const updated = new Map(prev);

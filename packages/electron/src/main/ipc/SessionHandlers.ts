@@ -292,6 +292,50 @@ export async function registerSessionHandlers() {
                 [parentSessionId, workspacePath]
             );
 
+            // Calculate uncommitted file counts per session
+            const uncommittedMap = new Map<string, number>();
+            try {
+                const simpleGit = (await import('simple-git')).default;
+                const git = simpleGit(workspacePath);
+                const status = await git.status();
+
+                // Get all currently uncommitted files
+                const uncommittedFiles = new Set([
+                    ...status.modified,
+                    ...status.created,
+                    ...status.not_added,
+                    ...status.deleted,
+                    ...status.renamed.map(r => r.to),
+                    ...status.staged
+                ]);
+
+                if (uncommittedFiles.size > 0) {
+                    // Get the session IDs we care about (children of this parent)
+                    const childSessionIds = rows.map((r: any) => r.id);
+
+                    // Get the MOST RECENT session that edited each file
+                    const { rows: sessionFiles } = await database.query<{ session_id: string; file_path: string; timestamp: string }>(
+                        `SELECT DISTINCT ON (file_path) session_id, file_path, timestamp
+                         FROM session_files
+                         WHERE workspace_id = $1 AND link_type = 'edited'
+                         ORDER BY file_path, timestamp DESC`,
+                        [workspacePath]
+                    );
+
+                    // Count uncommitted files per session (only for child sessions)
+                    sessionFiles.forEach(row => {
+                        if (childSessionIds.includes(row.session_id)) {
+                            const relativePath = row.file_path.replace(workspacePath + '/', '');
+                            if (uncommittedFiles.has(relativePath)) {
+                                uncommittedMap.set(row.session_id, (uncommittedMap.get(row.session_id) || 0) + 1);
+                            }
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error('[SessionHandlers] Failed to get uncommitted counts for children:', error);
+            }
+
             const children = rows.map((row: any) => ({
                 id: row.id,
                 title: row.title || 'Untitled Session',
@@ -301,6 +345,9 @@ export async function registerSessionHandlers() {
                 updatedAt: row.updated_at instanceof Date ? row.updated_at.getTime() : row.updated_at,
                 messageCount: parseInt(row.message_count) || 0,
                 parentSessionId: row.parent_session_id,
+                isArchived: row.is_archived || false,
+                isPinned: row.is_pinned || false,
+                uncommittedCount: uncommittedMap.get(row.id) || 0,
             }));
 
             return { success: true, children };
