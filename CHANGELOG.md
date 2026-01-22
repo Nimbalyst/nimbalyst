@@ -20,6 +20,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.51.24] - 2026-01-22
+
+
+### Added
+- Custom Bash tool widget for terminal-style display
+- MCP tool search for Claude Code sessions
+- Visual feedback for attachment processing
+- Timing instrumentation to diagnose Windows hang issues
+- PowerShell script for Windows development (crystal-run.ps1)
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Infinite render loop and UI freeze in DiffMode on Windows
+- Windows backslashes in Files sidebar filename display
+- Path module usage for cross-platform workspace detection
+- Worktree session button disabled in non-git workspaces
+- MCP config migration incorrectly restoring deleted servers
+- TypeScript errors in CI checks
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.51.23] - 2026-01-21
 
 
