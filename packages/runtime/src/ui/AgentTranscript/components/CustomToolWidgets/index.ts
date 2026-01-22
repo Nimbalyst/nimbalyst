@@ -44,6 +44,7 @@ import type { Message } from '../../../../ai/server/types';
 export { MockupScreenshotWidget } from './MockupScreenshotWidget';
 export { AskUserQuestionWidget, storeAskUserQuestionAnswers } from './AskUserQuestionWidget';
 export { VisualDisplayWidget } from './VisualDisplayWidget';
+export { BashWidget } from './BashWidget';
 
 /**
  * Props passed to custom tool widgets
@@ -75,6 +76,7 @@ export type CustomToolWidgetRegistry = Record<string, CustomToolWidgetComponent>
 import { MockupScreenshotWidget } from './MockupScreenshotWidget';
 import { AskUserQuestionWidget } from './AskUserQuestionWidget';
 import { VisualDisplayWidget } from './VisualDisplayWidget';
+import { BashWidget } from './BashWidget';
 
 /**
  * Registry of custom tool widgets
@@ -96,6 +98,9 @@ export const CUSTOM_TOOL_WIDGETS: CustomToolWidgetRegistry = {
   // Display to user tool - renders charts and image galleries inline in the transcript
   'display_to_user': VisualDisplayWidget,
   'mcp__nimbalyst__display_to_user': VisualDisplayWidget,
+
+  // Bash tool - terminal-style display for shell commands
+  'Bash': BashWidget,
 };
 
 /**

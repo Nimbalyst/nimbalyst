@@ -1,0 +1,356 @@
+/**
+ * Bash Widget Styles
+ *
+ * Terminal-style display for bash commands and output.
+ * Uses CSS variables from PlaygroundEditorTheme.css for theming support.
+ */
+
+.bash-widget {
+  border-radius: 0.375rem;
+  background-color: var(--surface-tertiary);
+  border: 1px solid var(--border-primary);
+  overflow: hidden;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', 'Droid Sans Mono', 'Source Code Pro', monospace;
+}
+
+.bash-widget--error {
+  border-color: color-mix(in srgb, var(--error-color) 40%, var(--border-primary));
+}
+
+.bash-widget--running {
+  border-color: color-mix(in srgb, var(--accent-primary) 40%, var(--border-primary));
+}
+
+/* Collapsed state - compact single-line button */
+.bash-widget--collapsed {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.375rem 0.5rem;
+  background-color: var(--surface-secondary);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  text-align: left;
+}
+
+.bash-widget--collapsed:hover {
+  background-color: var(--surface-hover);
+}
+
+.bash-widget__collapsed-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.375rem;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.bash-widget__collapsed-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  margin-top: 0.125rem;
+}
+
+.bash-widget__collapsed-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.bash-widget__collapsed-description {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-family: system-ui, -apple-system, sans-serif;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bash-widget__collapsed-command {
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bash-widget__collapsed-label {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.bash-widget__collapsed-right {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex-shrink: 0;
+  margin-left: 0.5rem;
+}
+
+.bash-widget__chevron {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+
+.bash-widget__chevron--expanded {
+  color: var(--text-tertiary);
+}
+
+/* Header */
+.bash-widget__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.375rem 0.5rem;
+  background-color: var(--surface-secondary);
+  border: none;
+  border-bottom: 1px solid var(--border-primary);
+  gap: 0.5rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  text-align: left;
+}
+
+.bash-widget__header:hover {
+  background-color: var(--surface-hover);
+}
+
+.bash-widget__header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.bash-widget__header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.bash-widget__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+}
+
+.bash-widget__title {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+/* Status indicators */
+.bash-widget__status {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.bash-widget__status--running {
+  color: var(--accent-primary);
+}
+
+.bash-widget__status--success {
+  color: var(--success-color);
+}
+
+.bash-widget__status--error {
+  color: var(--error-color);
+}
+
+.bash-widget__spinner {
+  width: 0.625rem;
+  height: 0.625rem;
+  border: 1.5px solid color-mix(in srgb, var(--accent-primary) 30%, transparent);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: bash-spin 0.7s linear infinite;
+}
+
+@keyframes bash-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Description */
+.bash-widget__description {
+  padding: 0.375rem 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  background-color: color-mix(in srgb, var(--accent-primary) 5%, var(--surface-secondary));
+  border-bottom: 1px solid var(--border-primary);
+  font-family: system-ui, -apple-system, sans-serif;
+  line-height: 1.4;
+}
+
+/* Command container */
+.bash-widget__command-container {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background-color: var(--surface-tertiary);
+}
+
+.bash-widget__command {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.375rem;
+  min-width: 0;
+}
+
+.bash-widget__prompt {
+  color: var(--success-color);
+  font-weight: 600;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.bash-widget__command-text {
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+/* Copy button */
+.bash-widget__copy {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0.25rem;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  opacity: 0.6;
+}
+
+.bash-widget__copy:hover {
+  background-color: var(--surface-hover);
+  color: var(--text-secondary);
+  opacity: 1;
+}
+
+.bash-widget__copy--copied {
+  color: var(--success-color);
+  opacity: 1;
+}
+
+/* Output container */
+.bash-widget__output-container {
+  position: relative;
+  border-top: 1px solid var(--border-primary);
+}
+
+.bash-widget__output {
+  margin: 0;
+  padding: 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  background-color: var(--surface-primary);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 20rem;
+  overflow-y: auto;
+}
+
+.bash-widget__output--error {
+  color: var(--error-color);
+}
+
+/* Expand toggle */
+.bash-widget__expand-toggle {
+  display: block;
+  width: 100%;
+  padding: 0.375rem 0.5rem;
+  background-color: var(--surface-secondary);
+  border: none;
+  border-top: 1px solid var(--border-primary);
+  color: var(--text-tertiary);
+  font-size: 0.7rem;
+  font-family: system-ui, -apple-system, sans-serif;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s ease;
+}
+
+.bash-widget__expand-toggle:hover {
+  background-color: var(--surface-hover);
+  color: var(--text-secondary);
+}
+
+/* Running indicator (dots animation) */
+.bash-widget__running-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem;
+  border-top: 1px solid var(--border-primary);
+  background-color: var(--surface-primary);
+}
+
+.bash-widget__dots {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.bash-widget__dots span {
+  width: 0.375rem;
+  height: 0.375rem;
+  background-color: var(--text-tertiary);
+  border-radius: 50%;
+  animation: bash-dot-pulse 1.4s ease-in-out infinite;
+}
+
+.bash-widget__dots span:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.bash-widget__dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.bash-widget__dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes bash-dot-pulse {
+  0%, 60%, 100% {
+    transform: scale(1);
+    opacity: 0.4;
+  }
+  30% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+}
