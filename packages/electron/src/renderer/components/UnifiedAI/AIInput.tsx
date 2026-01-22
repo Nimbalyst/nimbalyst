@@ -28,7 +28,7 @@ import {
   fileMentionOptionsAtom,
   searchFileMentionAtom,
 } from '../../store';
-import '../AIChat/AIChat.css';
+import './AIInput.css';
 
 export interface AIInputRef {
   focus: () => void;

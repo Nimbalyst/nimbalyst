@@ -2,8 +2,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAtomValue, useSetAtom } from 'jotai';
 import { CollapsibleGroup } from './CollapsibleGroup';
 import { SessionListItem } from './SessionListItem';
-import { WorktreeGroup } from './WorktreeGroup';
-import { WorktreeSingle } from './WorktreeSingle';
 import { WorkstreamGroup } from './WorkstreamGroup';
 import { ArchiveProgress } from './ArchiveProgress';
 import { IndexBuildDialog } from './IndexBuildDialog';
@@ -112,69 +110,6 @@ function generateWorkspaceColor(path: string): string {
   // Use consistent saturation and lightness for pleasant colors
   return `hsl(${hue}, 65%, 55%)`;
 }
-
-// Component to render a worktree session with async data loading
-interface WorktreeSessionItemProps {
-  session: SessionItem;
-  worktreeId: string;
-  isActive: boolean;
-  onSessionSelect: (sessionId: string) => void;
-  fetchWorktreeData: (worktreeId: string) => Promise<WorktreeWithStatus | null>;
-}
-
-const WorktreeSessionItem: React.FC<WorktreeSessionItemProps> = ({
-  session,
-  worktreeId,
-  isActive,
-  onSessionSelect,
-  fetchWorktreeData
-}) => {
-  const [worktreeData, setWorktreeData] = useState<WorktreeWithStatus | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let mounted = true;
-
-    const loadWorktreeData = async () => {
-      setLoading(true);
-      const data = await fetchWorktreeData(worktreeId);
-      if (mounted) {
-        setWorktreeData(data);
-        setLoading(false);
-      }
-    };
-
-    loadWorktreeData();
-
-    return () => {
-      mounted = false;
-    };
-  }, [worktreeId, fetchWorktreeData]);
-
-  // Show loading state or fallback if data not available
-  if (loading || !worktreeData) {
-    return (
-      <WorktreeSingle
-        session={session}
-        worktreeName={loading ? 'Loading...' : 'Unknown worktree'}
-        worktreePath=""
-        isActive={isActive}
-        onClick={() => onSessionSelect(session.id)}
-      />
-    );
-  }
-
-  return (
-    <WorktreeSingle
-      session={session}
-      worktreeName={worktreeData.name}
-      worktreePath={worktreeData.path}
-      gitStatus={worktreeData.gitStatus}
-      isActive={isActive}
-      onClick={() => onSessionSelect(session.id)}
-    />
-  );
-};
 
 const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   workspacePath,

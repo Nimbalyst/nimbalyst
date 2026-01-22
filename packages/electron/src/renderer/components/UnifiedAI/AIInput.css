@@ -1,0 +1,130 @@
+/* AIInput Component Styles */
+
+/* Input Area */
+.ai-chat-input {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid var(--border-primary);
+  background: var(--surface-secondary);
+  flex-shrink: 0;
+  position: relative;
+}
+
+/* Vertical Resize Handle for Prompt Box */
+.ai-chat-input-resize-handle {
+  position: absolute;
+  top: -3px;
+  left: 0;
+  right: 0;
+  height: 6px;
+  cursor: row-resize;
+  z-index: 10;
+}
+
+.ai-chat-input-resize-handle::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+
+.ai-chat-input-resize-handle:hover::before,
+.ai-chat-input-resize-handle.resizing::before {
+  background: var(--accent-primary);
+}
+
+.ai-chat-input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.ai-chat-input-field {
+  flex: 1;
+  min-height: 36px;
+  /* max-height is controlled via inline style for resizable prompt box */
+  padding: 8px 12px;
+  background: var(--surface-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  resize: none;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.ai-chat-input-field:focus {
+  border-color: var(--accent-primary);
+}
+
+.ai-chat-input-field:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ai-chat-input-field::placeholder {
+  color: var(--text-tertiary);
+}
+
+.ai-chat-send-button {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-primary);
+  border: none;
+  border-radius: 6px;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.ai-chat-send-button:hover:not(:disabled) {
+  background: var(--accent-primary-hover);
+  transform: scale(1.05);
+}
+
+.ai-chat-send-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ai-chat-cancel-button {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #dc2626;
+  border: none;
+  border-radius: 6px;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s;
+  animation: pulse 1.5s infinite;
+}
+
+.ai-chat-cancel-button:hover {
+  background: #b91c1c;
+  transform: scale(1.05);
+  animation: none;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}

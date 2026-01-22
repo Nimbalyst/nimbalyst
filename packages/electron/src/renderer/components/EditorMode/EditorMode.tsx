@@ -14,7 +14,7 @@ import { WorkspaceSidebar } from '../WorkspaceSidebar';
 import { WorkspaceWelcome } from '../WorkspaceWelcome';
 import { TabManager } from '../TabManager/TabManager';
 import { TabContent } from '../TabContent/TabContent';
-import { AIChat, type AIChatRef } from '../AIChat';
+import { ChatSidebar, type ChatSidebarRef } from '../ChatSidebar';
 import { NewFileDialog } from '../NewFileDialog';
 import type { NewFileType, ExtensionFileType } from '../NewFileMenu';
 import { contributionToExtensionFileType } from '../NewFileMenu';
@@ -89,8 +89,6 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   // AI Chat panel state
   const [isAIChatCollapsed, setIsAIChatCollapsed] = useState(false);
   const [aiChatWidth, setAIChatWidth] = useState<number>(350);
-  const [isAIChatStateLoaded, setIsAIChatStateLoaded] = useState(false);
-  const [currentAISessionId, setCurrentAISessionId] = useState<string | null>(null);
 
   // Track active tab for document context (AI needs to know current file)
   // Uses ref to avoid re-rendering EditorMode on every tab switch
@@ -102,7 +100,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   const getNavigationStateRef = useRef<(() => any) | null>(null);
   const isInitializedRef = useRef<boolean>(false);
   const isResizingRef = useRef<boolean>(false);
-  const aiChatRef = useRef<AIChatRef>(null);
+  const chatSidebarRef = useRef<ChatSidebarRef>(null);
   const saveTabByIdRef = useRef<((tabId: string) => Promise<void>) | null>(null);
 
   // Get tab actions from context (doesn't subscribe to state - no re-renders)
@@ -474,29 +472,14 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     });
   }, []); // No dependencies - uses refs for all mutable state
 
-  // Handle opening session in AI Chat panel
+  // Handle opening session - switches to Agent Mode since ChatSidebar manages its own single session
   const handleOpenSessionInChat = useCallback(async (sessionId: string) => {
     console.log('[EditorMode] handleOpenSessionInChat called with sessionId:', sessionId);
-    console.log('[EditorMode] isAIChatCollapsed:', isAIChatCollapsed);
-    console.log('[EditorMode] aiChatRef.current:', aiChatRef.current);
-
-    // Expand AI chat if collapsed
-    if (isAIChatCollapsed) {
-      console.log('[EditorMode] Expanding AI chat panel');
-      setIsAIChatCollapsed(false);
+    // Switch to agent mode to view the specific session
+    if (onSwitchToAgentMode) {
+      onSwitchToAgentMode(undefined, sessionId);
     }
-
-    // Wait for next tick to ensure panel is visible
-    setTimeout(async () => {
-      console.log('[EditorMode] Attempting to open session in AI chat');
-      if (aiChatRef.current) {
-        console.log('[EditorMode] Calling aiChatRef.current.openSessionInTab');
-        await aiChatRef.current.openSessionInTab(sessionId);
-      } else {
-        console.error('[EditorMode] aiChatRef.current is null!');
-      }
-    }, 100);
-  }, [isAIChatCollapsed]);
+  }, [onSwitchToAgentMode]);
 
   // Expose methods to parent via ref
   // CRITICAL: Use tabsRef.current inside closures to avoid stale closure bugs
@@ -840,7 +823,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
               setIsWorkspaceHistoryDialogOpen(true);
             }}
             onSelectedFolderChange={setSelectedFolderPath}
-            currentAISessionId={currentAISessionId}
+            currentAISessionId={null}
           />
         </div>
 
@@ -939,25 +922,16 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
 
         {/* Right sidebar - AI Chat */}
         {workspacePath && (
-          <AIChat
-            ref={aiChatRef}
+          <ChatSidebar
+            ref={chatSidebarRef}
+            workspacePath={workspacePath}
             isCollapsed={isAIChatCollapsed}
             onToggleCollapse={() => setIsAIChatCollapsed(prev => !prev)}
             width={aiChatWidth}
             onWidthChange={setAIChatWidth}
-            planningModeEnabled={true} // Default ON
-            onTogglePlanningMode={() => {}} // TODO: wire up if needed
-            workspacePath={workspacePath}
-            sessionToLoad={null}
-            onSessionLoaded={() => {}}
-            onSessionIdChange={setCurrentAISessionId}
-            onShowApiKeyError={() => {}}
             getDocumentContext={getDocumentContext}
-            onContentModeChange={onModeChange}
             onFileOpen={handleWorkspaceFileSelect}
-            onApplyEdit={(edit, prompt, aiResponse) => {
-              console.log('Edit already applied by AIChat component, updating UI state');
-            }}
+            onSwitchToAgentMode={onSwitchToAgentMode ? () => onSwitchToAgentMode() : undefined}
           />
         )}
       </div>
