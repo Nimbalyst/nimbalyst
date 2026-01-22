@@ -272,15 +272,21 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
           {/* Icon */}
           <div className="workstream-group-icon">
             {type === 'worktree' ? (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M8 21v-4a2 2 0 0 1 2-2h4"/>
-                <path d="M14 15V7"/>
-                <circle cx="8" cy="7" r="2"/>
-                <circle cx="14" cy="7" r="2"/>
-                <path d="M8 9v4a2 2 0 0 0 2 2"/>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="3" y="2" width="3" height="3" rx="0.5" stroke="currentColor" strokeWidth="1.5" fill="none"/>
+                <rect x="10" y="2" width="3" height="3" rx="0.5" stroke="currentColor" strokeWidth="1.5" fill="none"/>
+                <rect x="3" y="11" width="3" height="3" rx="0.5" stroke="currentColor" strokeWidth="1.5" fill="none"/>
+                <path d="M4.5 5v3.5a1.5 1.5 0 0 0 1.5 1.5h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                <path d="M11.5 5v5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
               </svg>
             ) : (
-              <MaterialSymbol icon="account_tree" size={16} />
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="8" cy="4" r="1.5" fill="currentColor"/>
+                <circle cx="4" cy="12" r="1.5" fill="currentColor"/>
+                <circle cx="12" cy="12" r="1.5" fill="currentColor"/>
+                <line x1="7.5" y1="5.2" x2="4.5" y2="10.8" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/>
+                <line x1="8.5" y1="5.2" x2="11.5" y2="10.8" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/>
+              </svg>
             )}
           </div>
 

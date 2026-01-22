@@ -401,12 +401,15 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
         {sessionType === 'terminal' ? (
           <MaterialSymbol icon="terminal" size={16} />
         ) : isWorkstream ? (
-          <MaterialSymbol icon="account_tree" size={16} />
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="8" cy="4" r="1.5" fill="currentColor"/>
+            <circle cx="4" cy="12" r="1.5" fill="currentColor"/>
+            <circle cx="12" cy="12" r="1.5" fill="currentColor"/>
+            <line x1="7.5" y1="5.2" x2="4.5" y2="10.8" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/>
+            <line x1="8.5" y1="5.2" x2="11.5" y2="10.8" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/>
+          </svg>
         ) : (
           <ProviderIcon provider={provider || 'claude'} size={16} />
-        )}
-        {isLoaded && !isActive && (
-          <div className="session-list-item-loaded-indicator" title="Loaded in tab" />
         )}
       </div>
       {isPinned && (
