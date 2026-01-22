@@ -38,7 +38,8 @@ const pendingProposals = new Map<string, PendingProposal>();
 
 // Track proposals that have been responded to (cancelled or committed)
 // This persists in memory to handle the timing gap between response and tool result
-const respondedProposalKeys = new Set<string>();
+// Maps proposal key to the response type ('committed' | 'cancelled')
+const respondedProposals = new Map<string, { type: 'committed' | 'cancelled'; commitHash?: string }>();
 
 /**
  * Generate a key for matching proposals based on content.
@@ -60,21 +61,26 @@ export function registerPendingProposal(proposal: PendingProposal): void {
 
 /**
  * Remove a pending proposal after it's been acted upon.
- * Also marks the key as responded to handle component re-renders.
+ * Also marks the key as responded with the response type to handle component re-renders.
  */
-export function removePendingProposal(filesToStage: string[], commitMessage: string): void {
+export function removePendingProposal(
+  filesToStage: string[],
+  commitMessage: string,
+  responseType: 'committed' | 'cancelled' = 'cancelled',
+  commitHash?: string
+): void {
   const key = generateProposalKey(filesToStage, commitMessage);
   pendingProposals.delete(key);
-  respondedProposalKeys.add(key);
-  console.log('[GitCommitWidget] Removed pending proposal and marked as responded:', key);
+  respondedProposals.set(key, { type: responseType, commitHash });
+  console.log('[GitCommitWidget] Removed pending proposal and marked as responded:', key, responseType);
 }
 
 /**
- * Check if a proposal has already been responded to.
+ * Get the response for a proposal that has already been responded to.
  */
-function hasRespondedToProposal(filesToStage: string[], commitMessage: string): boolean {
+function getProposalResponse(filesToStage: string[], commitMessage: string): { type: 'committed' | 'cancelled'; commitHash?: string } | undefined {
   const key = generateProposalKey(filesToStage, commitMessage);
-  return respondedProposalKeys.has(key);
+  return respondedProposals.get(key);
 }
 
 /**
@@ -251,8 +257,9 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
   // Re-check on every render to detect when proposal is removed
   const pendingProposal = getPendingProposal(initialFilesToStage, initialCommitMessage);
 
-  // Check if we've already responded to this proposal (persists in module-level Set)
-  const alreadyResponded = hasRespondedToProposal(initialFilesToStage, initialCommitMessage);
+  // Check if we've already responded to this proposal (persists in module-level Map)
+  const previousResponse = getProposalResponse(initialFilesToStage, initialCommitMessage);
+  const alreadyResponded = !!previousResponse;
 
   // Local state for editing
   const [filesToStage, setFilesToStage] = useState<Set<string>>(new Set(initialFilesToStage));
@@ -447,8 +454,13 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
             filesCommitted: result.success ? Array.from(filesToStage) : undefined,
             commitMessage: result.success ? commitMessage : undefined,
           });
-          // Remove from pending
-          removePendingProposal(initialFilesToStage, initialCommitMessage);
+          // Remove from pending with response type
+          removePendingProposal(
+            initialFilesToStage,
+            initialCommitMessage,
+            result.success ? 'committed' : 'cancelled',
+            result.commitHash
+          );
         }
       }
     } catch (error) {
@@ -464,7 +476,7 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
           action: 'cancelled',
           error: errorResult.error,
         });
-        removePendingProposal(initialFilesToStage, initialCommitMessage);
+        removePendingProposal(initialFilesToStage, initialCommitMessage, 'cancelled');
       }
     } finally {
       setIsCommitting(false);
@@ -482,7 +494,7 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
       window.electronAPI.sendMcpGitCommitProposalResult(pendingProposal.proposalId, {
         action: 'cancelled',
       });
-      removePendingProposal(initialFilesToStage, initialCommitMessage);
+      removePendingProposal(initialFilesToStage, initialCommitMessage, 'cancelled');
     }
   }, [pendingProposal, initialFilesToStage, initialCommitMessage, hasResponded]);
 
@@ -492,9 +504,22 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
 
   // Show completed/cancelled state (or if we've responded but waiting for tool result)
   if (displayResult || hasResponded || alreadyResponded) {
-    // If we've responded but no displayResult yet, show a "waiting for response" state
-    // This handles the case where we clicked cancel but tool result hasn't come back yet
-    const effectiveResult = displayResult || ((hasResponded || alreadyResponded) ? { success: false, error: 'Cancelled' } : null);
+    // If we've responded but no displayResult yet, use the stored response type
+    // This handles the case where we committed/cancelled but tool result hasn't come back yet
+    let effectiveResult = displayResult;
+    if (!effectiveResult && (hasResponded || alreadyResponded)) {
+      // Use the stored response from previousResponse if available
+      if (previousResponse) {
+        effectiveResult = {
+          success: previousResponse.type === 'committed',
+          commitHash: previousResponse.commitHash,
+          error: previousResponse.type === 'cancelled' ? 'Cancelled' : undefined,
+        };
+      } else {
+        // Fallback for hasResponded (localResult should be set, but just in case)
+        effectiveResult = { success: false, error: 'Cancelled' };
+      }
+    }
     if (!effectiveResult) {
       return null;
     }
@@ -546,17 +571,29 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
     );
   }
 
+  // If there's no pending proposal and no result, we're in a race condition state
+  // (e.g., after HMR when the module-level Map was cleared but tool result isn't populated yet)
+  // Show a "Response pending" state rather than the interactive UI
+  if (!pendingProposal) {
+    return (
+      <div className="git-commit-widget git-commit-widget--pending">
+        <div className="git-commit-widget__header">
+          <MaterialSymbol icon="commit" size={16} className="git-commit-widget__icon--primary" />
+          <span className="git-commit-widget__title">Commit Proposal</span>
+          <span className="git-commit-widget__status git-commit-widget__status--waiting">
+            Response pending...
+          </span>
+        </div>
+      </div>
+    );
+  }
+
   // Show interactive UI for pending proposals
   return (
     <div className="git-commit-widget">
       <div className="git-commit-widget__header">
         <MaterialSymbol icon="commit" size={16} className="git-commit-widget__icon--primary" />
         <span className="git-commit-widget__title">Commit Proposal</span>
-        {!pendingProposal && (
-          <span className="git-commit-widget__status git-commit-widget__status--waiting">
-            Waiting...
-          </span>
-        )}
       </div>
 
       <div className="git-commit-widget__body">
