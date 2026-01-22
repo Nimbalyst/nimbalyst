@@ -230,12 +230,24 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
   const commitWorkspacePath = workspacePath;
 
   // Parse the tool result to determine completion state
-  const toolResult = toolCall.result;
+  // The result can be a string or an array of content blocks [{type: 'text', text: '...'}]
+  const rawToolResult = toolCall.result;
+  const toolResult = useMemo(() => {
+    if (typeof rawToolResult === 'string') return rawToolResult;
+    if (Array.isArray(rawToolResult)) {
+      // Extract text from content blocks
+      return rawToolResult
+        .filter((block: any) => block.type === 'text' && block.text)
+        .map((block: any) => block.text)
+        .join('\n');
+    }
+    return '';
+  }, [rawToolResult]);
   const isCompleted = toolResult !== undefined && toolResult !== null && toolResult !== '';
 
   // Parse completed state from result
   const completedState = useMemo(() => {
-    if (!isCompleted || typeof toolResult !== 'string') return null;
+    if (!isCompleted || !toolResult) return null;
 
     const resultLower = toolResult.toLowerCase();
     if (resultLower.includes('committed') || resultLower.includes('commit hash')) {
