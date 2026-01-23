@@ -667,7 +667,8 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
 
       // Handle Enter to send (Shift+Enter for new line, but not when typeahead is open)
       // Allow sending when typeahead has no matching options (dropdown not visible)
-      if (e.key === 'Enter' && !e.shiftKey && !isTypeaheadVisible) {
+      // Skip if IME composition is in progress (e.g., Japanese kanji conversion)
+      if (e.key === 'Enter' && !e.shiftKey && !isTypeaheadVisible && !e.nativeEvent.isComposing) {
         e.preventDefault();
         if (value.trim() && !disabled) {
           onSend(value);

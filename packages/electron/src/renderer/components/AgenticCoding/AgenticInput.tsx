@@ -319,7 +319,8 @@ export function AgenticInput({
     }
 
     // Handle Enter to send (Shift+Enter for new line, but not when typeahead is open)
-    if (e.key === 'Enter' && !e.shiftKey && !typeaheadMatch) {
+    // Skip if IME composition is in progress (e.g., Japanese kanji conversion)
+    if (e.key === 'Enter' && !e.shiftKey && !typeaheadMatch && !e.nativeEvent.isComposing) {
       e.preventDefault();
       if (value.trim() && !disabled) {
         onSend();
