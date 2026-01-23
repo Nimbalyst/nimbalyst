@@ -826,6 +826,26 @@ export function WorkspaceSidebar({
     return () => clearTimeout(timeoutId);
   }, [fileTree, isGitRepo, loadGitFileStatuses]);
 
+  // Listen for git status changes from GitRefWatcher (staging, commits, etc.)
+  // This provides immediate updates when git operations occur from any source
+  useEffect(() => {
+    if (!isGitRepo || !workspacePath) {
+      return;
+    }
+
+    const unsubscribe = window.electronAPI?.git?.onStatusChanged?.(
+      (data: { workspacePath: string }) => {
+        if (data.workspacePath === workspacePath) {
+          loadGitFileStatuses();
+        }
+      }
+    );
+
+    return () => {
+      unsubscribe?.();
+    };
+  }, [isGitRepo, workspacePath, loadGitFileStatuses]);
+
   const aiReadPathSet = useMemo(() => new Set(sessionFileFilters.read), [sessionFileFilters.read]);
   const aiWrittenPathSet = useMemo(() => new Set(sessionFileFilters.written), [sessionFileFilters.written]);
   const gitUncommittedPathSet = useMemo(() => new Set(gitUncommittedFiles), [gitUncommittedFiles]);

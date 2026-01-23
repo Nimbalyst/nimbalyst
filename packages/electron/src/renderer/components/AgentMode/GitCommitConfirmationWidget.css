@@ -1,7 +1,7 @@
 .git-commit-widget {
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-primary);
   border-radius: 8px;
-  background: var(--background-secondary);
+  background: var(--surface-secondary);
   overflow: hidden;
   max-width: 600px;
 }
@@ -11,8 +11,8 @@
   align-items: center;
   gap: 8px;
   padding: 12px 16px;
-  background: var(--background-primary);
-  border-bottom: 1px solid var(--border-color);
+  background: var(--surface-primary);
+  border-bottom: 1px solid var(--border-primary);
   font-weight: 600;
   font-size: 13px;
 }
@@ -45,7 +45,7 @@
 
 .git-commit-widget__reasoning {
   padding: 12px;
-  background: var(--background-primary);
+  background: var(--surface-primary);
   border-radius: 6px;
   font-size: 12px;
   color: var(--text-secondary);
@@ -65,20 +65,20 @@
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background: var(--background-primary);
-  border: 1px solid var(--border-color);
+  background: var(--surface-primary);
+  border: 1px solid var(--border-primary);
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.15s;
 }
 
 .git-commit-widget__file:hover {
-  background: var(--hover-bg);
+  background: var(--surface-tertiary);
 }
 
 .git-commit-widget__file.selected {
   border-color: var(--accent-primary);
-  background: var(--accent-primary-transparent, var(--hover-bg));
+  background: var(--surface-tertiary);
 }
 
 .git-commit-widget__file input[type='checkbox'] {
@@ -103,9 +103,9 @@
 .git-commit-widget__commit-message-input {
   width: 100%;
   padding: 12px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-primary);
   border-radius: 6px;
-  background: var(--background-primary);
+  background: var(--surface-primary);
   color: var(--text-primary);
   font-size: 12px;
   font-family: var(--font-mono);
@@ -123,7 +123,7 @@
   gap: 8px;
   justify-content: flex-end;
   padding-top: 8px;
-  border-top: 1px solid var(--border-color);
+  border-top: 1px solid var(--border-primary);
 }
 
 .git-commit-widget__btn {
@@ -142,18 +142,18 @@
 }
 
 .git-commit-widget__btn--secondary {
-  background: var(--background-primary);
+  background: var(--surface-primary);
   color: var(--text-primary);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-primary);
 }
 
 .git-commit-widget__btn--secondary:hover:not(:disabled) {
-  background: var(--hover-bg);
+  background: var(--surface-tertiary);
 }
 
 .git-commit-widget__btn--primary {
   background: var(--accent-primary);
-  color: var(--background-primary);
+  color: white;
 }
 
 .git-commit-widget__btn--primary:hover:not(:disabled) {
@@ -165,7 +165,7 @@
   flex-direction: column;
   gap: 8px;
   padding: 16px;
-  background: var(--success-bg, #d4edda);
+  background: color-mix(in srgb, var(--success-color) 15%, var(--surface-primary));
   border-radius: 6px;
 }
 
@@ -190,8 +190,8 @@
 
 .git-commit-widget__error {
   padding: 16px;
-  background: var(--error-bg, #f8d7da);
-  color: var(--error-text, #721c24);
+  background: color-mix(in srgb, var(--error-color) 15%, var(--surface-primary));
+  color: var(--error-color);
   border-radius: 6px;
   font-size: 12px;
 }

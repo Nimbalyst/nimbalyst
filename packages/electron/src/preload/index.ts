@@ -796,6 +796,30 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }>,
   },
 
+  // Git operations (real-time status events)
+  git: {
+    // Listen for git status changes (staging, unstaging, etc.)
+    onStatusChanged: (callback: (data: { workspacePath: string }) => void) => {
+      const handler = (_event: any, data: { workspacePath: string }) => callback(data);
+      ipcRenderer.on('git:status-changed', handler);
+      return () => ipcRenderer.removeListener('git:status-changed', handler);
+    },
+    // Listen for new commits detected (from any source: Nimbalyst, CLI, VS Code, etc.)
+    onCommitDetected: (callback: (data: {
+      workspacePath: string;
+      commitHash: string;
+      commitMessage: string;
+      committedFiles: string[];
+    }) => void) => {
+      const handler = (_event: any, data: any) => callback(data);
+      ipcRenderer.on('git:commit-detected', handler);
+      return () => ipcRenderer.removeListener('git:commit-detected', handler);
+    },
+    // Clear git status cache (forces refresh on next query)
+    clearStatusCache: (workspacePath?: string) =>
+      ipcRenderer.invoke('git:clear-status-cache', workspacePath),
+  },
+
   // Terminal operations
   terminal: {
     createSession: (workspacePath: string, options?: { cwd?: string; worktreeId?: string; worktreePath?: string }) =>

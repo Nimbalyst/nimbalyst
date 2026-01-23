@@ -3,6 +3,7 @@ import { safeHandle } from '../utils/ipcRegistry';
 import { logger } from '../utils/logger';
 import { getWindowId, windowStates } from '../window/WindowManager';
 import { optimizedWorkspaceWatcher } from './OptimizedWorkspaceWatcher';
+import { gitRefWatcher } from './GitRefWatcher';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { readdirSync } from 'fs';
 import path from "path";
@@ -84,11 +85,18 @@ export function startWorkspaceWatcher(window: BrowserWindow, workspacePath: stri
     // Use optimized chokidar-based workspace watcher
     // logger.workspaceWatcher.info('Using OptimizedWorkspaceWatcher for:', workspacePath);
     optimizedWorkspaceWatcher.start(window, workspacePath);
+
+    // Start git ref watcher for this workspace (detects commits and staging changes)
+    gitRefWatcher.start(workspacePath).catch((error) => {
+        logger.workspaceWatcher.error('Failed to start GitRefWatcher:', error);
+    });
 }
 
 // Stop watching a workspace
 export function stopWorkspaceWatcher(windowId: number) {
     optimizedWorkspaceWatcher.stop(windowId);
+    // Note: gitRefWatcher is keyed by workspacePath, not windowId.
+    // It will be stopped when stopAllWorkspaceWatchers is called.
 }
 
 // Get workspace watcher info for debugging
@@ -117,7 +125,10 @@ export async function stopAllWorkspaceWatchers() {
     console.log('[WorkspaceWatcher] stopAllWorkspaceWatchers called');
     logger.workspaceWatcher.info('Stopping all workspace watchers');
     try {
-        await optimizedWorkspaceWatcher.stopAll();
+        await Promise.all([
+            optimizedWorkspaceWatcher.stopAll(),
+            gitRefWatcher.stopAll(),
+        ]);
         console.log('[WorkspaceWatcher] stopAll completed');
     } catch (error) {
         console.error('[WorkspaceWatcher] Error in stopAll:', error);

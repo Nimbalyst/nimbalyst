@@ -48,42 +48,74 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
     const [showHistory, setShowHistory] = useState(false);
 
     // Fetch git status
-    useEffect(() => {
+    const fetchGitStatus = useCallback(async () => {
       if (!workspacePath) return;
-
-      const fetchGitStatus = async () => {
-        try {
-          if (window.electronAPI) {
-            const status = await window.electronAPI.invoke('git:status', workspacePath);
-            setGitStatus(status as any);
-          }
-        } catch (error) {
-          console.error('[GitOperationsPanel] Failed to fetch git status:', error);
+      try {
+        if (window.electronAPI) {
+          const status = await window.electronAPI.invoke('git:status', workspacePath);
+          setGitStatus(status as any);
         }
-      };
-
-      fetchGitStatus();
-      const interval = setInterval(fetchGitStatus, 5000);
-      return () => clearInterval(interval);
+      } catch (error) {
+        console.error('[GitOperationsPanel] Failed to fetch git status:', error);
+      }
     }, [workspacePath, setGitStatus]);
 
-    // Fetch recent commits
+    // Initial fetch and listen for git:status-changed events
     useEffect(() => {
       if (!workspacePath) return;
 
-      const fetchCommits = async () => {
-        try {
-          if (window.electronAPI) {
-            const result = await window.electronAPI.invoke('git:log', workspacePath, 10);
-            setGitCommits(result as any);
+      fetchGitStatus();
+
+      // Listen for git status changes (from GitRefWatcher)
+      const unsubscribe = window.electronAPI?.git?.onStatusChanged?.(
+        (data: { workspacePath: string }) => {
+          if (data.workspacePath === workspacePath) {
+            fetchGitStatus();
           }
-        } catch (error) {
-          console.error('[GitOperationsPanel] Failed to fetch commits:', error);
         }
+      );
+
+      // Fallback polling (reduced frequency since we have events now)
+      const interval = setInterval(fetchGitStatus, 30000); // 30 seconds fallback
+
+      return () => {
+        unsubscribe?.();
+        clearInterval(interval);
       };
+    }, [workspacePath, fetchGitStatus]);
+
+    // Fetch recent commits
+    const fetchCommits = useCallback(async () => {
+      if (!workspacePath) return;
+      try {
+        if (window.electronAPI) {
+          const result = await window.electronAPI.invoke('git:log', workspacePath, 10);
+          setGitCommits(result as any);
+        }
+      } catch (error) {
+        console.error('[GitOperationsPanel] Failed to fetch commits:', error);
+      }
+    }, [workspacePath, setGitCommits]);
+
+    // Initial fetch and listen for commit detection events
+    useEffect(() => {
+      if (!workspacePath) return;
 
       fetchCommits();
-    }, [workspacePath, setGitCommits]);
+
+      // Listen for new commits (from GitRefWatcher)
+      const unsubscribe = window.electronAPI?.git?.onCommitDetected?.(
+        (data: { workspacePath: string }) => {
+          if (data.workspacePath === workspacePath) {
+            fetchCommits();
+          }
+        }
+      );
+
+      return () => {
+        unsubscribe?.();
+      };
+    }, [workspacePath, fetchCommits]);
 
     // Handle manual commit
     const handleManualCommit = useCallback(async () => {
@@ -287,7 +319,7 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
                   disabled={!hasChanges}
                 >
                   <MaterialSymbol icon="auto_awesome" size={16} />
-                  Review & Commit with AI
+                  Commit with AI
                 </button>
               </div>
             )}

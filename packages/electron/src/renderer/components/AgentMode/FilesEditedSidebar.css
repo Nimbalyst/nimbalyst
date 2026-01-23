@@ -86,8 +86,8 @@
   align-items: center;
   justify-content: space-between;
   padding: 8px 12px;
-  background-color: rgba(251, 191, 36, 0.1);
-  border-bottom: 1px solid rgba(251, 191, 36, 0.3);
+  background-color: color-mix(in srgb, var(--warning-color) 10%, var(--surface-primary));
+  border-bottom: 1px solid color-mix(in srgb, var(--warning-color) 30%, transparent);
   flex-shrink: 0;
 }
 
@@ -128,7 +128,7 @@
 }
 
 .files-edited-sidebar__keep-all-btn:hover:not(:disabled) {
-  background-color: rgba(251, 191, 36, 0.15);
+  background-color: color-mix(in srgb, var(--warning-color) 15%, transparent);
 }
 
 .files-edited-sidebar__keep-all-btn:disabled {

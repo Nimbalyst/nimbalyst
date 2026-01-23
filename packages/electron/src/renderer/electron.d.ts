@@ -424,6 +424,18 @@ interface ElectronAPI {
     getProcessInfo: () => Promise<{ startTime: number; uptimeSeconds: number }>;
   };
 
+  // Git operations (real-time status events)
+  git?: {
+    onStatusChanged?: (callback: (data: { workspacePath: string }) => void) => () => void;
+    onCommitDetected?: (callback: (data: {
+      workspacePath: string;
+      commitHash: string;
+      commitMessage: string;
+      committedFiles: string[];
+    }) => void) => () => void;
+    clearStatusCache?: (workspacePath?: string) => Promise<{ success: boolean }>;
+  };
+
   // Terminal operations
   terminal: {
     createSession: (workspacePath: string, options?: { cwd?: string; worktreeId?: string; worktreePath?: string }) => Promise<{ success: boolean; sessionId: string; error?: string }>;
