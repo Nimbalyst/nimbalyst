@@ -48,8 +48,13 @@ import {
   setWorkstreamSplitRatioAtom,
   toggleWorkstreamFilesSidebarAtom,
   loadWorkstreamState,
+  workstreamStatesLoadedAtom,
   type WorkstreamLayoutMode,
 } from '../../store/atoms/workstreamState';
+import {
+  filesEditedWidthAtom,
+  setFilesEditedWidthAtom,
+} from '../../store/atoms/agentMode';
 import './AgentWorkstreamPanel.css';
 
 export interface AgentWorkstreamPanelRef {
@@ -283,6 +288,10 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
   const setSplitRatio = useSetAtom(setWorkstreamSplitRatioAtom);
   const setLayoutMode = useSetAtom(setWorkstreamLayoutModeAtom);
 
+  // Files sidebar width (project-level state from agentMode)
+  const sidebarWidth = useAtomValue(filesEditedWidthAtom);
+  const setSidebarWidth = useSetAtom(setFilesEditedWidthAtom);
+
   // Load persisted state when workstream changes
   useEffect(() => {
     loadWorkstreamState(workstreamId);
@@ -307,29 +316,46 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
   const loadSessionData = useSetAtom(loadSessionDataAtom);
   const loadSessionChildren = useSetAtom(loadSessionChildrenAtom);
 
+  // Get session data to check if it's been loaded
+  const sessionDataLoaded = useAtomValue(sessionStoreAtom(workstreamId));
+
+  // Wait for workstream states to be loaded from disk before loading children
+  // This prevents race conditions where children load before persisted activeChildId is restored
+  const workstreamStatesLoaded = useAtomValue(workstreamStatesLoadedAtom);
+
   useEffect(() => {
     if (!workstreamId || !workspacePath) return;
 
     // Load session data if not already loaded
-    // Check if we have the minimal data we need (parentId and worktreeId)
-    if (sessionParentId === undefined && sessionWorktreeId === undefined) {
-      // console.log('[AgentWorkstreamPanel] Loading session data for:', workstreamId);
+    // sessionDataLoaded is null when no data has been fetched yet
+    if (sessionDataLoaded === null) {
+      console.log('[AgentWorkstreamPanel] Session data not loaded, fetching for:', workstreamId);
       loadSessionData({ sessionId: workstreamId, workspacePath });
     }
-  }, [workstreamId, workspacePath, sessionParentId, sessionWorktreeId, loadSessionData]);
+  }, [workstreamId, workspacePath, sessionDataLoaded, loadSessionData]);
 
   useEffect(() => {
-    // console.log('[AgentWorkstreamPanel] Children effect - workstreamId:', workstreamId, 'sessionParentId:', sessionParentId);
-    if (!workstreamId || !workspacePath || sessionParentId === undefined) return;
+    // Wait for both session data AND workstream states to be loaded before loading children
+    // This ensures persisted activeChildId is available when loadSessionChildrenAtom runs
+    if (!workstreamId || !workspacePath || sessionDataLoaded === null || !workstreamStatesLoaded) {
+      console.log('[AgentWorkstreamPanel] Children effect - waiting for:', {
+        workstreamId: !!workstreamId,
+        workspacePath: !!workspacePath,
+        sessionDataLoaded: sessionDataLoaded !== null,
+        workstreamStatesLoaded,
+      });
+      return;
+    }
 
     // Load child sessions for this workstream
     // This populates sessionChildrenAtom which workstreamSessionsAtom depends on
-    if (!sessionParentId) {
+    // sessionParentId === null means this IS a root session (not a child of another session)
+    if (sessionParentId === null) {
       // This is a root session - load its children
-      // console.log('[AgentWorkstreamPanel] Loading children for root session:', workstreamId);
+      console.log('[AgentWorkstreamPanel] Loading children for root session:', workstreamId);
       loadSessionChildren({ parentSessionId: workstreamId, workspacePath });
     }
-  }, [workstreamId, workspacePath, sessionParentId, loadSessionChildren]);
+  }, [workstreamId, workspacePath, sessionDataLoaded, sessionParentId, workstreamStatesLoaded, loadSessionChildren]);
 
   // Resolve worktree path if this is a worktree session
   useEffect(() => {
@@ -356,8 +382,7 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
     })();
   }, [sessionWorktreeId]);
 
-  // Local state for sidebar width and drag states
-  const [sidebarWidth, setSidebarWidth] = useState(256);
+  // Local state for drag states
   const [isDraggingVertical, setIsDraggingVertical] = useState(false);
   const [isDraggingSidebar, setIsDraggingSidebar] = useState(false);
 
@@ -455,7 +480,7 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const deltaX = startX - moveEvent.clientX;
-      const newWidth = Math.max(150, Math.min(startWidth + deltaX, 500));
+      const newWidth = startWidth + deltaX;
       setSidebarWidth(newWidth);
     };
 
@@ -471,7 +496,7 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
     document.addEventListener('mouseup', handleMouseUp);
     document.body.style.cursor = 'ew-resize';
     document.body.style.userSelect = 'none';
-  }, [sidebarWidth]);
+  }, [sidebarWidth, setSidebarWidth]);
 
   // Handle CMD+F routing based on focus
   // Route to editor if editor has focus, otherwise route to transcript

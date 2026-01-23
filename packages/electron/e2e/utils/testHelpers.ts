@@ -99,6 +99,12 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   sessionListItem: '.session-list-item',
   sessionListItemTitle: '.session-list-item-title',
 
+  // Workstream session tabs (child sessions within a workstream)
+  sessionTabBar: '.session-tab-bar',
+  sessionTabInWorkstream: '.session-tab',
+  sessionTabActive: '.session-tab.active',
+  sessionTabNew: '.session-tab-new',
+
   // Worktree sessions
   worktreeSingle: '.worktree-single',
   worktreeSingleActive: '.worktree-single.active',

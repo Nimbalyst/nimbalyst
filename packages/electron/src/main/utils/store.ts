@@ -281,6 +281,8 @@ export interface WorkspaceState {
   agentWorktreeSessionModes?: Record<string, 'agent' | 'files'>;
   // Diff tree view settings (file gutter grouping)
   diffTreeGroupByDirectory?: boolean;
+  // Workstream state (per-workstream UI state for agent mode)
+  workstreamStates?: Record<string, unknown>;
   lastUpdated: number;
 }
 
@@ -383,6 +385,7 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
       agentPermissions: undefined,
       agentWorktreeSessionModes: {},
       diffTreeGroupByDirectory: undefined,
+      workstreamStates: undefined,
       lastUpdated: Date.now(),
     };
   }
@@ -475,83 +478,22 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
       ? { ...raw.agentWorktreeSessionModes }
       : undefined,
     diffTreeGroupByDirectory: raw.diffTreeGroupByDirectory ?? undefined,
+    workstreamStates: raw.workstreamStates ? { ...raw.workstreamStates } : undefined,
     lastUpdated: raw.lastUpdated ?? raw.updated_at ?? Date.now(),
   };
 }
 
 /**
- * Deep clone workspace state.
+ * Deep clone workspace state using structuredClone.
  *
- * CRITICAL: ALL fields in WorkspaceState MUST be cloned here.
- * Missing fields will be dropped during save/load, corrupting state.
- * This includes both `tabs` AND `agenticTabs` - forgetting agenticTabs
- * caused a critical bug where plans couldn't be opened.
+ * This replaces the old manual cloning that required updating 3 places
+ * (interface, normalizeWorkspaceState, cloneWorkspaceState) every time
+ * a field was added - which caused silent data loss bugs.
  *
- * ⚠️  WHEN ADDING NEW FIELDS TO WorkspaceState:
- * You MUST add them here too. See normalizeWorkspaceState comment for details.
+ * structuredClone handles all fields automatically.
  */
 function cloneWorkspaceState(state: WorkspaceState): WorkspaceState {
-  return {
-    workspacePath: state.workspacePath,
-    windowState: state.windowState ? { ...state.windowState } : undefined,
-    agenticCodingWindowState: state.agenticCodingWindowState ? {
-      ...state.agenticCodingWindowState,
-      sessionHistoryLayout: state.agenticCodingWindowState.sessionHistoryLayout ? {
-        width: state.agenticCodingWindowState.sessionHistoryLayout.width,
-        collapsed: state.agenticCodingWindowState.sessionHistoryLayout.collapsed,
-        collapsedGroups: [...state.agenticCodingWindowState.sessionHistoryLayout.collapsedGroups],
-        sortOrder: state.agenticCodingWindowState.sessionHistoryLayout.sortOrder
-      } : undefined
-    } : undefined,
-    activeMode: state.activeMode,
-    sidebarWidth: state.sidebarWidth,
-    recentDocuments: [...state.recentDocuments],
-    tabs: {
-      tabs: state.tabs.tabs.map(tab => ({ ...tab })),
-      activeTabId: state.tabs.activeTabId,
-      tabOrder: [...state.tabs.tabOrder],
-      closedTabs: state.tabs.closedTabs?.map(tab => ({ ...tab })) ?? [],
-    },
-    // CRITICAL: Must clone agenticTabs to prevent state corruption
-    agenticTabs: state.agenticTabs ? {
-      tabs: state.agenticTabs.tabs.map(tab => ({ ...tab })),
-      activeTabId: state.agenticTabs.activeTabId,
-      tabOrder: [...state.agenticTabs.tabOrder],
-      closedTabs: state.agenticTabs.closedTabs?.map(tab => ({ ...tab })) ?? [],
-    } : undefined,
-    aiPanel: {
-      ...state.aiPanel,
-      promptBoxHeight: state.aiPanel.promptBoxHeight,
-    },
-    navigationHistory: state.navigationHistory ? {
-      history: [...state.navigationHistory.history],
-      currentIndex: state.navigationHistory.currentIndex
-    } : undefined,
-    trackerBottomPanel: state.trackerBottomPanel,
-    trackerBottomPanelHeight: state.trackerBottomPanelHeight,
-    onboarding: state.onboarding ? { ...state.onboarding } : undefined,
-    installedPackages: state.installedPackages ? [...state.installedPackages] : undefined,
-    fileTreeFilter: state.fileTreeFilter,
-    showFileIcons: state.showFileIcons,
-    aiProviderOverrides: state.aiProviderOverrides ? {
-      defaultProvider: state.aiProviderOverrides.defaultProvider,
-      providers: state.aiProviderOverrides.providers ? { ...state.aiProviderOverrides.providers } : undefined,
-    } : undefined,
-    extensionConfiguration: state.extensionConfiguration
-      ? Object.fromEntries(
-          Object.entries(state.extensionConfiguration).map(([extId, config]) => [
-            extId,
-            { ...config }
-          ])
-        )
-      : undefined,
-    agentPermissions: state.agentPermissions ? { permissionMode: state.agentPermissions.permissionMode } : undefined,
-    agentWorktreeSessionModes: state.agentWorktreeSessionModes
-      ? { ...state.agentWorktreeSessionModes }
-      : undefined,
-    diffTreeGroupByDirectory: state.diffTreeGroupByDirectory,
-    lastUpdated: state.lastUpdated,
-  };
+  return structuredClone(state);
 }
 
 function ensureWorkspaceState(path: string): WorkspaceState {

@@ -262,7 +262,9 @@ const persistTimers = new Map<string, ReturnType<typeof setTimeout>>();
  * Debounced to avoid excessive IPC calls during drag operations.
  */
 function schedulePersist(sessionId: string, state: SessionEditorState): void {
-  if (!currentWorkspacePath) return;
+  if (!currentWorkspacePath) {
+    throw new Error('[sessionEditors] Cannot persist - initSessionEditors not called');
+  }
 
   // Clear any existing timer for this session
   const existingTimer = persistTimers.get(sessionId);

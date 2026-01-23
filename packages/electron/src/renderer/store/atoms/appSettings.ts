@@ -759,6 +759,93 @@ export async function initAIDebugSettings(): Promise<AIDebugSettings> {
 }
 
 // ============================================================================
+// PHASE 5a: Agent Mode Settings (Default Model)
+// ============================================================================
+
+export interface AgentModeSettings {
+  /** The last model selected by the user in agent mode, used as default for new sessions */
+  defaultModel: string;
+}
+
+/**
+ * Default agent mode settings.
+ */
+const defaultAgentModeSettings: AgentModeSettings = {
+  defaultModel: 'claude-code:opus',
+};
+
+/**
+ * The main agent mode settings atom.
+ * Should be initialized from IPC on app load.
+ */
+export const agentModeSettingsAtom = atom<AgentModeSettings>(defaultAgentModeSettings);
+
+/**
+ * Debounce timer for agent mode settings persistence.
+ */
+let agentModePersistTimer: ReturnType<typeof setTimeout> | null = null;
+const AGENT_MODE_PERSIST_DEBOUNCE_MS = 500;
+
+/**
+ * Persist agent mode settings to main process.
+ */
+function scheduleAgentModePersist(settings: AgentModeSettings): void {
+  if (agentModePersistTimer) {
+    clearTimeout(agentModePersistTimer);
+  }
+  agentModePersistTimer = setTimeout(async () => {
+    agentModePersistTimer = null;
+    if (typeof window !== 'undefined' && window.electronAPI) {
+      await window.electronAPI.invoke('settings:set-default-ai-model', settings.defaultModel);
+    }
+  }, AGENT_MODE_PERSIST_DEBOUNCE_MS);
+}
+
+// === Derived read-only atoms (slices) ===
+
+/**
+ * Default model for new agent sessions.
+ */
+export const defaultAgentModelAtom = atom((get) => get(agentModeSettingsAtom).defaultModel);
+
+// === Setter atoms ===
+
+/**
+ * Set agent mode settings (partial update).
+ * Merges with existing settings and triggers persist.
+ */
+export const setAgentModeSettingsAtom = atom(
+  null,
+  (get, set, updates: Partial<AgentModeSettings>) => {
+    const current = get(agentModeSettingsAtom);
+    const newSettings = { ...current, ...updates };
+    set(agentModeSettingsAtom, newSettings);
+    scheduleAgentModePersist(newSettings);
+  }
+);
+
+/**
+ * Initialize agent mode settings from IPC.
+ * Call this once at app startup.
+ */
+export async function initAgentModeSettings(): Promise<AgentModeSettings> {
+  if (typeof window === 'undefined' || !window.electronAPI) {
+    return defaultAgentModeSettings;
+  }
+
+  try {
+    const defaultModel = await window.electronAPI.invoke('settings:get-default-ai-model');
+    return {
+      defaultModel: defaultModel || 'claude-code:sonnet',
+    };
+  } catch (error) {
+    console.error('[appSettings] Failed to load agent mode settings:', error);
+  }
+
+  return defaultAgentModeSettings;
+}
+
+// ============================================================================
 // PHASE 5b: AI Provider Settings
 // ============================================================================
 

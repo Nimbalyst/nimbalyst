@@ -194,10 +194,12 @@ export {
   agentModeLayoutAtom,
   sessionHistoryWidthAtom,
   sessionHistoryCollapsedAtom,
+  filesEditedWidthAtom,
   collapsedGroupsAtom,
   sortOrderAtom,
   setAgentModeLayoutAtom,
   setSessionHistoryWidthAtom,
+  setFilesEditedWidthAtom,
   toggleCollapsedGroupAtom,
   setCollapsedGroupsAtom,
   setSortOrderAtom,
@@ -312,6 +314,7 @@ export {
   loadWorkstreamStates,
   loadWorkstreamState,
   persistWorkstreamState,
+  workstreamStatesLoadedAtom,
 } from './atoms/workstreamState';
 
 // File mention atoms (for @ file mentions in AIInput)

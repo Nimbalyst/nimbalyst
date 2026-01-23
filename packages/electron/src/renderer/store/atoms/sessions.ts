@@ -617,7 +617,8 @@ export const createChildSessionAtom = atom(
       if (result.success && result.sessionId) {
         // Add to children list
         const children = get(sessionChildrenAtom(parentSessionId));
-        set(sessionChildrenAtom(parentSessionId), [...children, result.sessionId]);
+        const newChildren = [...children, result.sessionId];
+        set(sessionChildrenAtom(parentSessionId), newChildren);
 
         // Set parent ID for the new child
         set(sessionParentIdAtom(result.sessionId), parentSessionId);
@@ -631,6 +632,12 @@ export const createChildSessionAtom = atom(
         set(addWorkstreamChildAtom, {
           workstreamId: parentSessionId,
           childId: result.sessionId,
+        });
+
+        // Update the parent's child count in the session list so the UI updates
+        set(updateSessionFullAtom, {
+          id: parentSessionId,
+          childCount: newChildren.length,
         });
 
         return result.sessionId;
@@ -938,9 +945,14 @@ export const convertToWorkstreamAtom = atom(
 
       // Update the selected workstream to point to the new parent
       // This is critical - without it, the sidebar still shows the old session
-      set(selectedWorkstreamAtom(workspacePath), {
-        type: 'workstream' as WorkstreamType,
-        id: parentSessionId,
+      // IMPORTANT: Use setSelectedWorkstreamAtom (not selectedWorkstreamAtom directly)
+      // to ensure the selection is persisted to workspace state
+      set(setSelectedWorkstreamAtom, {
+        workspacePath,
+        selection: {
+          type: 'workstream' as WorkstreamType,
+          id: parentSessionId,
+        },
       });
 
       return parentSessionId;

@@ -341,8 +341,8 @@ export async function registerSessionHandlers() {
                 title: row.title || 'Untitled Session',
                 provider: row.provider,
                 model: row.model,
-                createdAt: row.created_at instanceof Date ? row.created_at.getTime() : row.created_at,
-                updatedAt: row.updated_at instanceof Date ? row.updated_at.getTime() : row.updated_at,
+                createdAt: row.created_at instanceof Date ? row.created_at.getTime() : new Date(row.created_at).getTime(),
+                updatedAt: row.updated_at instanceof Date ? row.updated_at.getTime() : new Date(row.updated_at).getTime(),
                 messageCount: parseInt(row.message_count) || 0,
                 parentSessionId: row.parent_session_id,
                 isArchived: row.is_archived || false,
@@ -731,6 +731,7 @@ export async function registerSessionHandlers() {
                  FROM ai_agent_messages m
                  JOIN ai_sessions s ON m.session_id = s.id
                  WHERE m.direction = 'input'
+                   AND (m.hidden = FALSE OR m.hidden IS NULL)
                    AND s.workspace_id = $1
                  ORDER BY m.created_at DESC
                  LIMIT $2`,

@@ -117,6 +117,13 @@ function createDefaultState(id: string): WorkstreamState {
  */
 const workstreamStatesAtom = atom<Map<string, WorkstreamState>>(new Map());
 
+/**
+ * Flag indicating whether workspace workstream states have been loaded from disk.
+ * Used to prevent race conditions where loadSessionChildrenAtom runs before
+ * persisted state is restored.
+ */
+export const workstreamStatesLoadedAtom = atom<boolean>(false);
+
 // ============================================================
 // Per-Workstream State Atom
 // ============================================================
@@ -154,6 +161,7 @@ export const workstreamStateAtom = atomFamily((workstreamId: string) =>
       const map = new Map(get(workstreamStatesAtom));
       const current = map.get(workstreamId) ?? createDefaultState(workstreamId);
       const updated = { ...current, ...update };
+      console.log(`[workstreamState] Updating workstream ${workstreamId}:`, JSON.stringify(update), '→', JSON.stringify(updated));
       map.set(workstreamId, updated);
       set(workstreamStatesAtom, map);
 
@@ -438,7 +446,9 @@ const persistTimers = new Map<string, ReturnType<typeof setTimeout>>();
  * Debounced to avoid excessive IPC calls during drag operations.
  */
 function schedulePersist(workstreamId: string): void {
-  if (!currentWorkspacePath) return;
+  if (!currentWorkspacePath) {
+    throw new Error('[workstreamState] Cannot persist - initWorkstreamState not called');
+  }
 
   // Clear any existing timer for this workstream
   const existingTimer = persistTimers.get(workstreamId);
@@ -452,6 +462,7 @@ function schedulePersist(workstreamId: string): void {
 
     try {
       const state = store.get(workstreamStateAtom(workstreamId));
+      console.log(`[workstreamState] Persisting workstream ${workstreamId}:`, JSON.stringify(state));
       const workspaceState = await window.electronAPI.invoke(
         'workspace:get-state',
         currentWorkspacePath!
@@ -459,12 +470,13 @@ function schedulePersist(workstreamId: string): void {
 
       const existingStates = workspaceState?.workstreamStates ?? {};
 
-      await window.electronAPI.invoke('workspace:update-state', currentWorkspacePath!, {
+      const result = await window.electronAPI.invoke('workspace:update-state', currentWorkspacePath!, {
         workstreamStates: {
           ...existingStates,
           [workstreamId]: state,
         },
       });
+      console.log(`[workstreamState] Persist complete for ${workstreamId}, result:`, result);
     } catch (err) {
       console.error('[workstreamState] Failed to persist state:', err);
     }
@@ -494,7 +506,9 @@ export async function loadWorkstreamStates(workspacePath: string): Promise<void>
 
   try {
     const workspaceState = await window.electronAPI.invoke('workspace:get-state', workspacePath);
+    console.log('[workstreamState] Full workspace state:', JSON.stringify(workspaceState, null, 2));
     const saved = workspaceState?.workstreamStates ?? {};
+    console.log('[workstreamState] workstreamStates field:', JSON.stringify(saved, null, 2));
 
     const map = new Map<string, WorkstreamState>();
     for (const [id, state] of Object.entries(saved)) {
@@ -502,10 +516,13 @@ export async function loadWorkstreamStates(workspacePath: string): Promise<void>
       console.log('[workstreamState] Restored state for', id, ':', state);
     }
     store.set(workstreamStatesAtom, map);
+    store.set(workstreamStatesLoadedAtom, true);
 
     console.log('[workstreamState] Loaded states for', map.size, 'workstreams');
   } catch (err) {
     console.error('[workstreamState] Failed to load states:', err);
+    // Still mark as loaded so UI doesn't hang
+    store.set(workstreamStatesLoadedAtom, true);
   }
 }
 

@@ -28,6 +28,38 @@ import {
 import { loadFileIntoWindow } from '../file/FileOperations';
 import { safeHandle, safeOn } from '../utils/ipcRegistry';
 
+/**
+ * Deep merge utility for workspace state updates.
+ * Recursively merges objects, replacing primitives and arrays.
+ *
+ * @param target - The target object to merge into
+ * @param source - The source object to merge from
+ */
+function deepMerge(target: any, source: any): void {
+    console.log('[WorkspaceHandlers] deepMerge called with source:', JSON.stringify(source).substring(0, 300));
+    for (const key in source) {
+        if (source.hasOwnProperty(key)) {
+            const sourceValue = source[key];
+            const targetValue = target[key];
+
+            // If both are plain objects, merge recursively
+            if (
+                sourceValue &&
+                typeof sourceValue === 'object' &&
+                !Array.isArray(sourceValue) &&
+                targetValue &&
+                typeof targetValue === 'object' &&
+                !Array.isArray(targetValue)
+            ) {
+                deepMerge(targetValue, sourceValue);
+            } else {
+                // Otherwise, replace the value (primitives, arrays, null, etc.)
+                target[key] = sourceValue;
+            }
+        }
+    }
+}
+
 // Helper function to get file type from extension
 function getFileType(filePath: string): string {
     const lowerPath = filePath.toLowerCase();
@@ -585,10 +617,10 @@ export function registerWorkspaceHandlers() {
         return getWorkspaceState(workspacePath);
     });
 
-    // Update workspace state - takes partial update, merges atomically
+    // Update workspace state - takes partial update, merges atomically with deep merge
     safeHandle('workspace:update-state', async (event, workspacePath: string, updates: any) => {
         return updateWorkspaceState(workspacePath, (state) => {
-            Object.assign(state, updates);
+            deepMerge(state, updates);
         });
     });
 

@@ -29,6 +29,8 @@ export interface AgentModeLayout {
   sessionHistoryWidth: number;
   /** Whether session history is collapsed (always false in agent mode) */
   sessionHistoryCollapsed: boolean;
+  /** Width of the files edited sidebar in pixels */
+  filesEditedWidth: number;
   /** Array of collapsed group keys (time groups like 'today', 'yesterday') */
   collapsedGroups: string[];
   /** Sort order for sessions */
@@ -42,6 +44,7 @@ export interface AgentModeLayout {
 const DEFAULT_LAYOUT: AgentModeLayout = {
   sessionHistoryWidth: 240,
   sessionHistoryCollapsed: false,
+  filesEditedWidth: 256,
   collapsedGroups: [],
   sortOrder: 'updated',
 };
@@ -53,7 +56,8 @@ const DEFAULT_LAYOUT: AgentModeLayout = {
 export const agentModeLayoutAtom = atom<AgentModeLayout>(DEFAULT_LAYOUT);
 
 // Track workspace path for persistence
-const agentModeWorkspaceAtom = atom<string | null>(null);
+// IMPORTANT: Use module-level variable, not atom, so it persists across HMR
+let currentWorkspacePath: string | null = null;
 
 // ============================================================
 // Derived Atoms (read-only slices)
@@ -67,6 +71,11 @@ export const sessionHistoryWidthAtom = atom(
 /** Whether session history is collapsed */
 export const sessionHistoryCollapsedAtom = atom(
   (get) => get(agentModeLayoutAtom).sessionHistoryCollapsed
+);
+
+/** Files edited sidebar width */
+export const filesEditedWidthAtom = atom(
+  (get) => get(agentModeLayoutAtom).filesEditedWidth
 );
 
 /** Collapsed group keys */
@@ -92,7 +101,7 @@ function schedulePersist(workspacePath: string, layout: AgentModeLayout): void {
 
   persistTimer = setTimeout(async () => {
     try {
-      await window.electronAPI.invoke('workspace:update-state', workspacePath, {
+      const state = {
         agenticCodingWindowState: {
           sessionHistoryLayout: {
             width: layout.sessionHistoryWidth,
@@ -101,8 +110,12 @@ function schedulePersist(workspacePath: string, layout: AgentModeLayout): void {
             collapsedGroups: layout.collapsedGroups,
             sortOrder: layout.sortOrder,
           },
+          filesEditedWidth: layout.filesEditedWidth,
         },
-      });
+      };
+      console.log('[agentMode] Persisting layout:', JSON.stringify(state, null, 2));
+      const result = await window.electronAPI.invoke('workspace:update-state', workspacePath, state);
+      console.log('[agentMode] Persist result:', result);
     } catch (err) {
       console.error('[agentMode] Failed to persist layout:', err);
     }
@@ -130,11 +143,12 @@ export const setAgentModeLayoutAtom = atom(
 
     set(agentModeLayoutAtom, newLayout);
 
-    // Schedule persistence
-    const workspacePath = get(agentModeWorkspaceAtom);
-    if (workspacePath) {
-      schedulePersist(workspacePath, newLayout);
+    // Schedule persistence - use module-level workspace path
+    if (!currentWorkspacePath) {
+      throw new Error('[agentMode] Cannot persist layout - initAgentModeLayout not called');
     }
+    console.log('[agentMode] setAgentModeLayoutAtom - workspacePath:', currentWorkspacePath, 'updates:', updates);
+    schedulePersist(currentWorkspacePath, newLayout);
   }
 );
 
@@ -145,6 +159,18 @@ export const setSessionHistoryWidthAtom = atom(
   null,
   (get, set, width: number) => {
     set(setAgentModeLayoutAtom, { sessionHistoryWidth: width });
+  }
+);
+
+/**
+ * Set files edited sidebar width.
+ */
+export const setFilesEditedWidthAtom = atom(
+  null,
+  (get, set, width: number) => {
+    // Clamp width between 150 and 500 pixels
+    const clampedWidth = Math.max(150, Math.min(500, width));
+    set(setAgentModeLayoutAtom, { filesEditedWidth: clampedWidth });
   }
 );
 
@@ -193,7 +219,8 @@ export const setSortOrderAtom = atom(
  * Restores layout settings and selected workstream.
  */
 export async function initAgentModeLayout(workspacePath: string): Promise<void> {
-  store.set(agentModeWorkspaceAtom, workspacePath);
+  console.log('[agentMode] initAgentModeLayout called with workspacePath:', workspacePath);
+  currentWorkspacePath = workspacePath;
 
   try {
     const workspaceState = await window.electronAPI.invoke(
@@ -201,16 +228,22 @@ export async function initAgentModeLayout(workspacePath: string): Promise<void> 
       workspacePath
     );
     const result = workspaceState?.agenticCodingWindowState;
+    console.log('[agentMode] Full workspace state:', JSON.stringify(result, null, 2));
 
     if (result?.sessionHistoryLayout) {
       const layout = result.sessionHistoryLayout;
-      store.set(agentModeLayoutAtom, {
+      const restoredLayout = {
         sessionHistoryWidth: layout.width ?? DEFAULT_LAYOUT.sessionHistoryWidth,
         // CRITICAL: Never collapse SessionHistory in agent mode
         sessionHistoryCollapsed: false,
+        filesEditedWidth: result.filesEditedWidth ?? DEFAULT_LAYOUT.filesEditedWidth,
         collapsedGroups: layout.collapsedGroups ?? DEFAULT_LAYOUT.collapsedGroups,
         sortOrder: layout.sortOrder ?? DEFAULT_LAYOUT.sortOrder,
-      });
+      };
+      console.log('[agentMode] Restored layout:', restoredLayout);
+      store.set(agentModeLayoutAtom, restoredLayout);
+    } else {
+      console.log('[agentMode] No saved layout found, using defaults');
     }
 
     // Restore selected workstream if saved
