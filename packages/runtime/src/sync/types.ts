@@ -228,6 +228,13 @@ export interface SyncProvider {
    * Used by mobile to receive settings from desktop.
    */
   onSettingsSync?(callback: (settings: SyncedSettings) => void): () => void;
+
+  /**
+   * Attempt to reconnect the index connection.
+   * Called when network connectivity is restored after being offline.
+   * Safe to call even if already connected (will no-op).
+   */
+  reconnectIndex?(): Promise<void>;
 }
 
 /** Session data for bulk index sync */

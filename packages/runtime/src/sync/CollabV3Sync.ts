@@ -2438,6 +2438,23 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         console.error('[CollabV3] Failed to send mobile push message:', error);
       }
     },
+
+    /** Attempt to reconnect the index connection when network becomes available */
+    async reconnectIndex(): Promise<void> {
+      // Already connected, nothing to do
+      if (indexWs && indexConnected) {
+        console.log('[CollabV3] reconnectIndex called but already connected');
+        return;
+      }
+
+      console.log('[CollabV3] Network available, attempting to reconnect index...');
+      try {
+        await connectToIndex();
+        console.log('[CollabV3] Successfully reconnected to index after network restoration');
+      } catch (err) {
+        console.error('[CollabV3] Failed to reconnect to index:', err);
+      }
+    },
   };
 
   return provider;

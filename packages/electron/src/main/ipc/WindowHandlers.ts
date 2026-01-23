@@ -7,7 +7,7 @@ import { basename, join } from 'path';
 import { getFolderContents } from '../utils/FileTree';
 import { writeFileSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
-import { reportDesktopActivity, setWindowFocused, setScreenLocked, setIdleThresholdMs } from '../services/SyncManager';
+import { reportDesktopActivity, setWindowFocused, setScreenLocked, setIdleThresholdMs, attemptReconnect } from '../services/SyncManager';
 
 export function registerWindowHandlers() {
     // Get initial window state
@@ -236,6 +236,20 @@ export function registerWindowHandlers() {
 
     powerMonitor.on('unlock-screen', () => {
         setScreenLocked(false);
+        // Attempt to reconnect sync when screen is unlocked (user is back)
+        attemptReconnect().catch(() => {
+            // Errors are logged in attemptReconnect
+        });
+    });
+
+    // Attempt to reconnect sync when system resumes from sleep/suspend
+    powerMonitor.on('resume', () => {
+        // Small delay to allow network to stabilize after resume
+        setTimeout(() => {
+            attemptReconnect().catch(() => {
+                // Errors are logged in attemptReconnect
+            });
+        }, 2000);
     });
 
     // IPC handler to set idle threshold for testing

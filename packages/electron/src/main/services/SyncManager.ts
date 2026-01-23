@@ -822,3 +822,40 @@ export async function syncSettingsToMobile(openaiApiKey?: string): Promise<void>
     logger.main.error('[SyncManager] Failed to sync settings:', error);
   }
 }
+
+// ============================================================================
+// Network Reconnection
+// ============================================================================
+
+/**
+ * Attempt to reconnect the sync connection when network becomes available.
+ * Called by the main process when powerMonitor detects resume or network change.
+ */
+export async function attemptReconnect(): Promise<void> {
+  const provider = state.provider;
+  if (!provider) {
+    logger.main.debug('[SyncManager] Cannot attempt reconnect - provider not initialized');
+    return;
+  }
+
+  if (!provider.reconnectIndex) {
+    logger.main.debug('[SyncManager] Provider does not support reconnectIndex');
+    return;
+  }
+
+  logger.main.info('[SyncManager] Network change detected, attempting to reconnect sync...');
+  try {
+    await provider.reconnectIndex();
+    updateSyncStatus({ connected: true, error: null });
+    logger.main.info('[SyncManager] Successfully reconnected after network change');
+
+    // Trigger incremental sync after reconnecting to catch up on any missed changes
+    setTimeout(() => {
+      triggerIncrementalSync().catch(err => {
+        logger.main.warn('[SyncManager] Failed to sync after reconnect:', err);
+      });
+    }, 1000);
+  } catch (error) {
+    logger.main.warn('[SyncManager] Failed to reconnect after network change:', error);
+  }
+}
