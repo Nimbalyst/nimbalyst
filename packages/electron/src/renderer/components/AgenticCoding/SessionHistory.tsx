@@ -15,6 +15,7 @@ import {
   refreshSessionListAtom,
   updateSessionStoreAtom,
   removeSessionFullAtom,
+  sessionRegistryAtom,
   type SessionListItem as SessionListItemType,
 } from '../../store';
 import './SessionHistory.css';
@@ -150,6 +151,14 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   const refreshSessions = useSetAtom(refreshSessionListAtom);
   const updateSessionStore = useSetAtom(updateSessionStoreAtom);
   const removeSessionFromAtom = useSetAtom(removeSessionFullAtom);
+
+  // Get the session registry to look up parent session IDs
+  const sessionRegistry = useAtomValue(sessionRegistryAtom);
+
+  // Get the parent session ID of the active session (if it's a child)
+  const activeSessionParentId = activeSessionId
+    ? sessionRegistry.get(activeSessionId)?.parentSessionId ?? null
+    : null;
 
   // Convert atom sessions to local SessionItem format
   // Note: isProcessing, hasUnread, hasPendingPrompt are no longer set here
@@ -1588,6 +1597,11 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                       const session = item.session;
                       const isWorkstreamExpanded = !collapsedGroups.includes(`workstream:${session.id}`);
 
+                      // Check if this workstream is active: either the parent itself is active,
+                      // or the active session's parent ID matches this workstream
+                      const isWorkstreamActive = session.id === activeSessionId ||
+                                                 (activeSessionParentId === session.id);
+
                       return (
                         <WorkstreamGroup
                           key={`workstream-${session.id}`}
@@ -1595,7 +1609,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                           id={session.id}
                           title={session.title || 'Untitled Workstream'}
                           isExpanded={isWorkstreamExpanded}
-                          isActive={session.id === activeSessionId || item.sessions.some(s => s.id === activeSessionId)}
+                          isActive={isWorkstreamActive}
                           onToggle={() => handleToggleGroup(`workstream:${session.id}`)}
                           onSelect={() => onSessionSelect(session.id)}
                           sessions={item.sessions}
