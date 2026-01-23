@@ -43,8 +43,11 @@ import {
   loadSessionDataAtom,
   reloadSessionDataAtom,
   updateSessionStoreAtom,
+  navigateSessionHistoryAtom,
+  resetSessionHistoryAtom,
 } from '../../store';
 import { usePostHog } from 'posthog-js/react';
+import { setAgentModeSettingsAtom } from '../../store/atoms/appSettings';
 
 interface Todo {
   status: 'pending' | 'in_progress' | 'completed';
@@ -69,9 +72,6 @@ export interface SessionTranscriptProps {
   // Click handlers
   onFileClick?: (filePath: string) => void;
   onTodoClick?: (todo: TodoItem) => void;
-
-  // History navigation (up/down arrow in input)
-  onNavigateHistory?: (sessionId: string, direction: 'up' | 'down') => void;
 
   // Archive callbacks
   onCloseAndArchive?: (sessionId: string) => void;
@@ -114,7 +114,6 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   hideSidebar = false,
   onFileClick,
   onTodoClick,
-  onNavigateHistory,
   onCloseAndArchive,
   onSessionTitleChanged,
   documentContext,
@@ -145,6 +144,10 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   const [draftInput, setDraftInput] = useAtom(sessionDraftInputAtom(sessionId));
   const [draftAttachments, setDraftAttachments] = useAtom(sessionDraftAttachmentsAtom(sessionId));
 
+  // Prompt history navigation via Jotai atoms
+  const navigateHistory = useSetAtom(navigateSessionHistoryAtom);
+  const resetHistory = useSetAtom(resetSessionHistoryAtom);
+
   // Local state
   const [todos, setTodos] = useState<Todo[]>([]);
   const [queuedPrompts, setQueuedPrompts] = useState<any[]>([]);
@@ -159,6 +162,9 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   // Diff tree grouping state
   const [groupByDirectory] = useAtom(diffTreeGroupByDirectoryAtom);
   const setDiffTreeGroupByDirectory = useSetAtom(setDiffTreeGroupByDirectoryAtom);
+
+  // Agent mode settings (for persisting default model)
+  const setAgentModeSettings = useSetAtom(setAgentModeSettingsAtom);
 
   const setGroupByDirectory = useCallback((value: boolean) => {
     if (workspacePath) {
@@ -465,6 +471,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
 
     setDraftInput('');
     setDraftAttachments([]);
+    resetHistory(sessionId); // Reset prompt history navigation
     // Optimistically set processing state - will be confirmed by session:started event
     setIsProcessing(true);
 
@@ -495,7 +502,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       console.error('[SessionTranscript] Failed to send message:', error);
       setIsProcessing(false);
     }
-  }, [sessionId, sessionData, draftInput, draftAttachments, isLoading, documentContext, aiMode, workspacePath, setDraftInput, setDraftAttachments, updateSessionStore, handleQueue, setIsProcessing]);
+  }, [sessionId, sessionData, draftInput, draftAttachments, isLoading, documentContext, aiMode, workspacePath, setDraftInput, setDraftAttachments, resetHistory, updateSessionStore, handleQueue, setIsProcessing, messages]);
 
   const handleCancel = useCallback(async () => {
     try {
@@ -547,8 +554,8 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   }, [onTodoClick]);
 
   const handleNavigateHistory = useCallback((direction: 'up' | 'down') => {
-    onNavigateHistory?.(sessionId, direction);
-  }, [sessionId, onNavigateHistory]);
+    navigateHistory({ sessionId, direction });
+  }, [sessionId, navigateHistory]);
 
   const handleCancelQueuedPrompt = useCallback(async (id: string) => {
     try {
@@ -600,12 +607,14 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
 
   const handleModelChange = useCallback(async (modelId: string) => {
     setCurrentModel(modelId);
+    // Save as the default model for new sessions
+    setAgentModeSettings({ defaultModel: modelId });
     try {
       await window.electronAPI.invoke('sessions:update-metadata', sessionId, { model: modelId });
     } catch (error) {
       console.error('[SessionTranscript] Failed to update model:', error);
     }
-  }, [sessionId, setCurrentModel]);
+  }, [sessionId, setCurrentModel, setAgentModeSettings]);
 
   const handleCommandSelect = useCallback((command: string) => {
     setDraftInput(command);

@@ -159,6 +159,93 @@ export const sessionDraftAttachmentsAtom = atomFamily((_sessionId: string) =>
 );
 
 // ============================================================
+// Per-session prompt history navigation
+// Allows arrow key navigation through previous user prompts.
+// ============================================================
+
+/**
+ * Per-session history index for prompt navigation.
+ * -1 means at current input (default), 0+ means navigating through history.
+ */
+export const sessionHistoryIndexAtom = atomFamily((_sessionId: string) =>
+  atom<number>(-1)
+);
+
+/**
+ * Per-session temporary input storage.
+ * Stores the current draft when user navigates away to history.
+ * Restored when they return to index -1.
+ */
+export const sessionTempInputAtom = atomFamily((_sessionId: string) =>
+  atom<string>('')
+);
+
+/**
+ * Navigate through prompt history for a session.
+ * Uses messages from sessionStoreAtom to find user prompts.
+ */
+export const navigateSessionHistoryAtom = atom(
+  null,
+  (get, set, params: { sessionId: string; direction: 'up' | 'down' }) => {
+    const { sessionId, direction } = params;
+
+    // Get session data to access user messages
+    const sessionData = get(sessionStoreAtom(sessionId));
+    if (!sessionData?.messages) return;
+
+    const userMessages = sessionData.messages.filter(m => m.role === 'user');
+    if (userMessages.length === 0) return;
+
+    const currentIndex = get(sessionHistoryIndexAtom(sessionId));
+    const draftInput = get(sessionDraftInputAtom(sessionId));
+    let newIndex = currentIndex;
+
+    if (direction === 'up') {
+      // Going back in history
+      if (currentIndex === -1) {
+        // First time pressing up, save current input
+        set(sessionTempInputAtom(sessionId), draftInput);
+        newIndex = userMessages.length - 1;
+      } else if (currentIndex > 0) {
+        newIndex = currentIndex - 1;
+      }
+      // else: already at oldest message, do nothing
+    } else {
+      // Going forward in history
+      if (currentIndex === -1) {
+        // Already at current input, do nothing
+        return;
+      } else if (currentIndex < userMessages.length - 1) {
+        newIndex = currentIndex + 1;
+      } else if (currentIndex === userMessages.length - 1) {
+        // Return to current input
+        const tempInput = get(sessionTempInputAtom(sessionId));
+        set(sessionDraftInputAtom(sessionId), tempInput);
+        set(sessionHistoryIndexAtom(sessionId), -1);
+        return;
+      }
+    }
+
+    if (newIndex >= 0 && newIndex < userMessages.length) {
+      set(sessionHistoryIndexAtom(sessionId), newIndex);
+      set(sessionDraftInputAtom(sessionId), userMessages[newIndex].content);
+    }
+  }
+);
+
+/**
+ * Reset prompt history state when a message is sent.
+ * Called when user sends a message to clear navigation state.
+ */
+export const resetSessionHistoryAtom = atom(
+  null,
+  (get, set, sessionId: string) => {
+    set(sessionHistoryIndexAtom(sessionId), -1);
+    set(sessionTempInputAtom(sessionId), '');
+  }
+);
+
+// ============================================================
 // Per-session full data state
 // AISessionView subscribes to this and loads/manages its own data.
 // This eliminates the need for AgenticPanel to hold session state.
@@ -544,32 +631,6 @@ export const createChildSessionAtom = atom(
         set(addWorkstreamChildAtom, {
           workstreamId: parentSessionId,
           childId: result.sessionId,
-        });
-
-        // Add the new child to the session registry so it appears immediately in the UI
-        // This is critical - without it, SessionHistory won't show the new child until refreshed
-        const now = Date.now();
-        set(addSessionFullAtom, {
-          id: result.sessionId,
-          name: result.title || 'Untitled Session',
-          title: result.title || 'Untitled Session',
-          provider: provider || 'claude-code',
-          createdAt: now,
-          updatedAt: now,
-          projectPath: workspacePath,
-          messageCount: 0,
-          isArchived: false,
-          isPinned: false,
-          worktreeId,
-          parentSessionId,
-          childCount: 0,
-          uncommittedCount: 0,
-        });
-
-        // Update parent's childCount in registry
-        set(updateSessionFullAtom, {
-          id: parentSessionId,
-          childCount: children.length + 1,
         });
 
         return result.sessionId;
