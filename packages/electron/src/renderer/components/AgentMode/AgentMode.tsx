@@ -11,11 +11,12 @@
  * the massive re-renders caused by holding sessionTabs[] in useState.
  */
 
-import React, { forwardRef, useImperativeHandle, useEffect, useCallback } from 'react';
-import { useAtomValue, useSetAtom } from 'jotai';
+import React, { forwardRef, useImperativeHandle, useEffect, useCallback, useMemo, useRef } from 'react';
+import { atom, useAtomValue, useSetAtom } from 'jotai';
+import { defaultAgentModelAtom } from '../../store/atoms/appSettings';
 import { ResizablePanel } from '../AgenticCoding/ResizablePanel';
 import { SessionHistory } from '../AgenticCoding/SessionHistory';
-import { AgentWorkstreamPanel } from './AgentWorkstreamPanel';
+import { AgentWorkstreamPanel, type AgentWorkstreamPanelRef } from './AgentWorkstreamPanel';
 import {
   selectedWorkstreamAtom,
   setSelectedWorkstreamAtom,
@@ -38,7 +39,7 @@ import {
   updateSessionStoreAtom,
 } from '../../store';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
-import { initWorkstreamState, loadWorkstreamStates, workstreamStateAtom } from '../../store/atoms/workstreamState';
+import { initWorkstreamState, loadWorkstreamStates, workstreamStateAtom, workstreamActiveChildAtom } from '../../store/atoms/workstreamState';
 import { initSessionStateListeners } from '../../store/sessionStateListeners';
 import './AgentMode.css';
 
@@ -75,6 +76,9 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
   onFileOpen,
   onOpenQuickSearch,
 }, ref) {
+  // Ref to the workstream panel for closing tabs
+  const workstreamPanelRef = useRef<AgentWorkstreamPanelRef>(null);
+
   // Layout state from atoms
   const historyWidth = useAtomValue(sessionHistoryWidthAtom);
   const historyCollapsed = useAtomValue(sessionHistoryCollapsedAtom);
@@ -90,6 +94,19 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
   const setCollapsedGroups = useSetAtom(setCollapsedGroupsAtom);
   const setSortOrder = useSetAtom(setSortOrderAtom);
   const addSession = useSetAtom(addSessionFullAtom);
+
+  // Default model for new sessions (user's last selected model)
+  const defaultModel = useAtomValue(defaultAgentModelAtom);
+
+  // Get the active child session ID if the selected workstream has one
+  const activeChildAtom = useMemo(
+    () => selectedWorkstream ? workstreamActiveChildAtom(selectedWorkstream.id) : atom(null),
+    [selectedWorkstream?.id]
+  );
+  const activeChildId = useAtomValue(activeChildAtom);
+
+  // The actual active session is either the active child OR the workstream parent
+  const actualActiveSessionId = activeChildId || selectedWorkstream?.id || null;
 
   // Initialize on mount
   useEffect(() => {
@@ -117,7 +134,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
         session: {
           id: sessionId,
           provider: 'claude-code',
-          model: 'claude-code:sonnet',
+          model: defaultModel,
           title: 'New Session',
         },
         workspaceId: workspacePath,
@@ -132,7 +149,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
           createdAt: Date.now(),
           updatedAt: Date.now(),
           provider: 'claude-code',
-          model: 'claude-code:sonnet',
+          model: defaultModel,
           sessionType: 'coding',
           messageCount: 0,
           projectPath: workspacePath,
@@ -147,7 +164,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
     } catch (error) {
       console.error('[AgentMode] Failed to create session:', error);
     }
-  }, [workspacePath, addSession, setSelectedWorkstream]);
+  }, [workspacePath, addSession, setSelectedWorkstream, defaultModel]);
 
   // Create new worktree session
   const createNewWorktreeSession = useCallback(async () => {
@@ -168,7 +185,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
         session: {
           id: sessionId,
           provider: 'claude-code',
-          model: 'claude-code:sonnet',
+          model: defaultModel,
           title: `Worktree: ${worktree.name}`,
           worktreeId: worktree.id,
         },
@@ -184,7 +201,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
           createdAt: Date.now(),
           updatedAt: Date.now(),
           provider: 'claude-code',
-          model: 'claude-code:sonnet',
+          model: defaultModel,
           sessionType: 'coding',
           messageCount: 0,
           projectPath: workspacePath,
@@ -206,7 +223,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
     } catch (error) {
       console.error('[AgentMode] Failed to create worktree session:', error);
     }
-  }, [workspacePath, addSession, setSelectedWorkstream]);
+  }, [workspacePath, addSession, setSelectedWorkstream, defaultModel]);
 
   // Open session by ID
   const openSessionInTab = useCallback(async (sessionId: string) => {
@@ -411,8 +428,8 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
     createNewSession,
     openSessionInTab,
     closeActiveTab: () => {
-      // TODO: Implement when we have tab management
-      setSelectedWorkstream({ workspacePath, selection: null });
+      // Route to workstream panel - it will only close editor tabs if they have focus
+      workstreamPanelRef.current?.closeActiveTab();
     },
     reopenLastClosedSession: () => {
       // TODO: Implement closed session stack
@@ -428,6 +445,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
   // Content for the right side
   const rightContent = selectedWorkstream ? (
     <AgentWorkstreamPanel
+      ref={workstreamPanelRef}
       workspacePath={workspacePath}
       workstreamId={selectedWorkstream.id}
       workstreamType={selectedWorkstream.type}
@@ -446,7 +464,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
   const leftContent = (
     <SessionHistory
       workspacePath={workspacePath}
-      activeSessionId={selectedWorkstream?.id || null}
+      activeSessionId={actualActiveSessionId}
       onSessionSelect={handleSessionSelect}
       onChildSessionSelect={handleChildSessionSelect}
       onSessionDelete={handleSessionDelete}

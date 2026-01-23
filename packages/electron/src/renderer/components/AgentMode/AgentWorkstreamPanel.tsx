@@ -16,7 +16,7 @@
  * Clicking a file in any session's sidebar opens it in the workstream editor tabs.
  */
 
-import React, { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import React, { useCallback, useEffect, useRef, useState, useImperativeHandle, type KeyboardEvent } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { ProviderIcon, MaterialSymbol } from '@nimbalyst/runtime';
 import { WorkstreamEditorTabs, type WorkstreamEditorTabsRef } from './WorkstreamEditorTabs';
@@ -51,6 +51,10 @@ import {
   type WorkstreamLayoutMode,
 } from '../../store/atoms/workstreamState';
 import './AgentWorkstreamPanel.css';
+
+export interface AgentWorkstreamPanelRef {
+  closeActiveTab: () => void;
+}
 
 export interface AgentWorkstreamPanelProps {
   workspacePath: string;
@@ -246,12 +250,12 @@ WorkstreamHeader.displayName = 'WorkstreamHeader';
  *
  * File clicks open in the workstream-level editor tabs, not per-session.
  */
-export const AgentWorkstreamPanel: React.FC<AgentWorkstreamPanelProps> = React.memo(({
+export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamPanelRef, AgentWorkstreamPanelProps>(({
   workspacePath,
   workstreamId,
   workstreamType,
   onFileOpen,
-}) => {
+}, ref) => {
   // Ref to the workstream editor tabs for opening files
   const editorTabsRef = useRef<WorkstreamEditorTabsRef>(null);
 
@@ -274,13 +278,29 @@ export const AgentWorkstreamPanel: React.FC<AgentWorkstreamPanelProps> = React.m
   const layoutMode = useAtomValue(workstreamLayoutModeAtom(workstreamId));
   const sidebarVisible = useAtomValue(workstreamFilesSidebarVisibleAtom(workstreamId));
   const splitRatio = useAtomValue(workstreamSplitRatioAtom(workstreamId));
+  const hasTabs = useAtomValue(workstreamHasOpenFilesAtom(workstreamId));
   const toggleSidebar = useSetAtom(toggleWorkstreamFilesSidebarAtom);
   const setSplitRatio = useSetAtom(setWorkstreamSplitRatioAtom);
+  const setLayoutMode = useSetAtom(setWorkstreamLayoutModeAtom);
 
   // Load persisted state when workstream changes
   useEffect(() => {
     loadWorkstreamState(workstreamId);
   }, [workstreamId]);
+
+  // Auto-collapse editor area when last tab is closed
+  // Use a ref to track if we just opened a file to prevent immediate collapse
+  const justOpenedFileRef = useRef(false);
+
+  useEffect(() => {
+    // If we're in editor or split mode and there are no tabs, switch to transcript mode
+    // But don't collapse if we just opened a file (wait for it to actually open)
+    if (!hasTabs && (layoutMode === 'editor' || layoutMode === 'split') && !justOpenedFileRef.current) {
+      setLayoutMode({ workstreamId, mode: 'transcript' });
+    }
+    // Reset the flag after each check
+    justOpenedFileRef.current = false;
+  }, [hasTabs, layoutMode, workstreamId, setLayoutMode]);
 
   // Load session data and children when workstream changes
   // This is critical for workstreams with child sessions to work properly
@@ -359,13 +379,14 @@ export const AgentWorkstreamPanel: React.FC<AgentWorkstreamPanelProps> = React.m
   const pendingFileOpenRef = useRef<string | null>(null);
 
   // File clicks open in the workstream editor tabs
-  const setLayoutMode = useSetAtom(setWorkstreamLayoutModeAtom);
   const handleFileClick = useCallback((filePath: string) => {
     if (editorTabsRef.current) {
       // Editor is mounted, open the file directly
       editorTabsRef.current.openFile(filePath);
     } else {
       // Editor not mounted (transcript mode), switch to split and queue file open
+      // Set flag to prevent auto-collapse during this transition
+      justOpenedFileRef.current = true;
       pendingFileOpenRef.current = filePath;
       setLayoutMode({ workstreamId, mode: 'split' });
     }
@@ -375,13 +396,17 @@ export const AgentWorkstreamPanel: React.FC<AgentWorkstreamPanelProps> = React.m
     toggleSidebar(workstreamId);
   }, [workstreamId, toggleSidebar]);
 
+  // Determine what to show based on layout mode
+  const showEditorTabs = layoutMode === 'split' || layoutMode === 'editor';
+  const showSessionTabs = layoutMode === 'split' || layoutMode === 'transcript';
+
   // Open pending file once editor mounts after layout mode change
   useEffect(() => {
-    if (pendingFileOpenRef.current && editorTabsRef.current) {
+    if (pendingFileOpenRef.current && showEditorTabs && editorTabsRef.current) {
       editorTabsRef.current.openFile(pendingFileOpenRef.current);
       pendingFileOpenRef.current = null;
     }
-  }, [layoutMode]); // Re-run when layout mode changes (editor becomes mounted)
+  }, [showEditorTabs]); // Re-run when editor becomes visible
 
   // Vertical resizer (between editor and session) - uses split ratio like AISessionView
   const handleVerticalResizeStart = useCallback((e: React.MouseEvent) => {
@@ -532,9 +557,20 @@ export const AgentWorkstreamPanel: React.FC<AgentWorkstreamPanelProps> = React.m
     };
   }, [activeSessionId]);
 
-  // Determine what to show based on layout mode
-  const showEditorTabs = layoutMode === 'split' || layoutMode === 'editor';
-  const showSessionTabs = layoutMode === 'split' || layoutMode === 'transcript';
+  // Expose ref methods
+  useImperativeHandle(ref, () => ({
+    closeActiveTab: () => {
+      // Only close editor tabs if the editor area has focus
+      const activeElement = document.activeElement;
+      const editorHasFocus = editorAreaRef.current?.contains(activeElement);
+
+      if (editorHasFocus && editorTabsRef.current) {
+        // Close the active editor tab
+        editorTabsRef.current.closeActiveTab();
+      }
+      // If transcript has focus, do nothing - we don't want to close AI sessions with CMD+W
+    }
+  }), []);
 
   return (
     <div className="agent-workstream-panel">
@@ -609,6 +645,6 @@ export const AgentWorkstreamPanel: React.FC<AgentWorkstreamPanelProps> = React.m
       )}
     </div>
   );
-});
+}));
 
 AgentWorkstreamPanel.displayName = 'AgentWorkstreamPanel';

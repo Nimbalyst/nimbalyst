@@ -184,6 +184,7 @@ export interface WorkstreamEditorTabsRef {
   openFile: (filePath: string) => void;
   hasTabs: () => boolean;
   getActiveFilePath: () => string | null;
+  closeActiveTab: () => void;
 }
 
 interface WorkstreamEditorTabsProps {
@@ -305,6 +306,11 @@ const WorkstreamEditorTabsInner = forwardRef<WorkstreamEditorTabsRef, Workstream
           const activeTab = tabs.find((t) => t.id === activeTabId);
           return activeTab?.filePath || null;
         },
+        closeActiveTab: () => {
+          if (activeTabId) {
+            tabsActions.removeTab(activeTabId);
+          }
+        },
       }),
       [tabs, activeTabId, tabsActions]
     );
@@ -361,6 +367,7 @@ export const WorkstreamEditorTabs = forwardRef<WorkstreamEditorTabsRef, Workstre
       openFile: (filePath: string) => innerRef.current?.openFile(filePath),
       hasTabs: () => innerRef.current?.hasTabs() ?? false,
       getActiveFilePath: () => innerRef.current?.getActiveFilePath() ?? null,
+      closeActiveTab: () => innerRef.current?.closeActiveTab(),
     }), []);
 
     return (
