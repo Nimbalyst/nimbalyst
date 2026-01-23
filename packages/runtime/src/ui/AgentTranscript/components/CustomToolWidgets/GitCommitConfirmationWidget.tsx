@@ -677,6 +677,15 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
       );
     }
 
+    // Format the commit timestamp
+    const commitTimestamp = new Date().toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+
     return (
       <div className={`git-commit-widget ${result.success ? 'git-commit-widget--success' : 'git-commit-widget--error'}`}>
         <div className="git-commit-widget__header">
@@ -696,9 +705,25 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
         </div>
         {result.success ? (
           <div className="git-commit-widget__success-summary">
-            <div className="git-commit-widget__success-message">{commitMessage.split('\n')[0]}</div>
-            <div className="git-commit-widget__success-files">
-              {filesToStage.size} file{filesToStage.size !== 1 ? 's' : ''} committed
+            <div className="git-commit-widget__success-timestamp">{commitTimestamp}</div>
+            <div className="git-commit-widget__success-message-full">{commitMessage}</div>
+            <div className="git-commit-widget__success-files-section">
+              <div className="git-commit-widget__success-files-header">
+                {filesToStage.size} file{filesToStage.size !== 1 ? 's' : ''} committed
+              </div>
+              <div className="git-commit-widget__success-files-list">
+                {Array.from(filesToStage).map((filePath) => {
+                  const fileName = filePath.split('/').pop() || filePath;
+                  const status = fileStatusMap.get(filePath) || 'modified';
+                  return (
+                    <div key={filePath} className="git-commit-widget__success-file" title={filePath}>
+                      <span className={`git-commit-widget__success-file-name git-commit-widget__file-name--${status}`}>
+                        {fileName}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         ) : (
