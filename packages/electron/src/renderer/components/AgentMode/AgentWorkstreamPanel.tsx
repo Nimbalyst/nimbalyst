@@ -90,7 +90,7 @@ const WorkstreamHeader: React.FC<{
 
   // Inline editing state
   const [isEditing, setIsEditing] = useState(false);
-  const [editValue, setEditValue] = useState(title);
+  const [editValue, setEditValue] = useState(title ?? '');
   const inputRef = useRef<HTMLInputElement>(null);
 
   // A workstream has children if there are multiple sessions
@@ -113,12 +113,12 @@ const WorkstreamHeader: React.FC<{
   // Update edit value when title changes externally
   useEffect(() => {
     if (!isEditing) {
-      setEditValue(title);
+      setEditValue(title ?? '');
     }
   }, [title, isEditing]);
 
   const handleTitleClick = useCallback(() => {
-    setEditValue(title);
+    setEditValue(title ?? '');
     setIsEditing(true);
   }, [title]);
 
@@ -148,7 +148,7 @@ const WorkstreamHeader: React.FC<{
       handleRenameSubmit();
     } else if (e.key === 'Escape') {
       e.preventDefault();
-      setEditValue(title);
+      setEditValue(title ?? '');
       setIsEditing(false);
     }
   }, [handleRenameSubmit, title]);
@@ -352,7 +352,7 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
     // sessionParentId === null means this IS a root session (not a child of another session)
     if (sessionParentId === null) {
       // This is a root session - load its children
-      console.log('[AgentWorkstreamPanel] Loading children for root session:', workstreamId);
+      // console.log('[AgentWorkstreamPanel] Loading children for root session:', workstreamId);
       loadSessionChildren({ parentSessionId: workstreamId, workspacePath });
     }
   }, [workstreamId, workspacePath, sessionDataLoaded, sessionParentId, workstreamStatesLoaded, loadSessionChildren]);
