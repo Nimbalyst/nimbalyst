@@ -754,6 +754,60 @@ export async function registerSessionHandlers() {
             return { success: false, error: String(error), prompts: [] };
         }
     });
+
+    // Get uncommitted file counts per session (lightweight, for updating after git commits)
+    // Returns counts for ALL sessions that have edited files, including 0 for fully committed sessions
+    safeHandle('sessions:get-uncommitted-counts', async (event, workspacePath: string) => {
+        try {
+            const simpleGit = (await import('simple-git')).default;
+            const git = simpleGit(workspacePath);
+            const status = await git.status();
+
+            // Get all currently uncommitted files
+            const uncommittedFiles = new Set([
+                ...status.modified,
+                ...status.created,
+                ...status.not_added,
+                ...status.deleted,
+                ...status.renamed.map(r => r.to),
+                ...status.staged
+            ]);
+
+            const { database } = await import('../database/PGLiteDatabaseWorker');
+
+            // Get the MOST RECENT session that edited each file
+            const { rows: sessionFiles } = await database.query<{ session_id: string; file_path: string }>(
+                `SELECT DISTINCT ON (file_path) session_id, file_path
+                 FROM session_files
+                 WHERE workspace_id = $1 AND link_type = 'edited'
+                 ORDER BY file_path, timestamp DESC`,
+                [workspacePath]
+            );
+
+            // Initialize counts for all sessions that have edited files (start at 0)
+            const counts: Record<string, number> = {};
+            const sessionsWithEdits = new Set<string>();
+            sessionFiles.forEach(row => {
+                sessionsWithEdits.add(row.session_id);
+                if (!counts[row.session_id]) {
+                    counts[row.session_id] = 0;
+                }
+            });
+
+            // Count uncommitted files per session
+            sessionFiles.forEach(row => {
+                const relativePath = row.file_path.replace(workspacePath + '/', '');
+                if (uncommittedFiles.has(relativePath)) {
+                    counts[row.session_id] = (counts[row.session_id] || 0) + 1;
+                }
+            });
+
+            return { success: true, counts };
+        } catch (error) {
+            console.error('[SessionHandlers] Failed to get uncommitted counts:', error);
+            return { success: false, error: String(error), counts: {} };
+        }
+    });
 }
 
 export { sessionManager };
