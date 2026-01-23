@@ -160,6 +160,44 @@ if (!window) {
 
 **Rule of thumb:** If you're adding code to "handle" missing required data, you're probably hiding a bug. Throw instead.
 
+### Workspace State Persistence
+
+**CRITICAL: Use deep merge for all nested workspace state updates.**
+
+The `workspace:update-state` IPC handler uses a **deep merge** function (not shallow `Object.assign`), which recursively merges nested objects. This allows multiple modules to safely update different fields in nested structures without overwriting each other.
+
+**Pattern for workspace state updates:**
+```typescript
+// GOOD: Deep merge preserves other fields automatically
+await window.electronAPI.invoke('workspace:update-state', workspacePath, {
+  agenticCodingWindowState: {
+    sessionHistoryLayout: { width: 300 }  // Other fields preserved
+  }
+});
+
+// NO NEED for manual read-modify-write - deep merge handles it
+```
+
+**Backend implementation** (`WorkspaceHandlers.ts`):
+```typescript
+safeHandle('workspace:update-state', async (event, workspacePath: string, updates: any) => {
+    return updateWorkspaceState(workspacePath, (state) => {
+        deepMerge(state, updates);  // Recursively merges nested objects
+    });
+});
+```
+
+**When to use:**
+- Updating any nested workspace state structure
+- Multiple modules writing to the same parent object (e.g., `agenticCodingWindowState`)
+- Adding new fields to existing state without knowing what else is there
+
+**Benefits:**
+- No manual read-modify-write needed
+- Can't forget to merge and lose data
+- Single source of truth for merge logic
+- Works for arbitrarily nested structures
+
 ### React State Architecture
 
 **CRITICAL: Do NOT "lift state up" for complex applications.**

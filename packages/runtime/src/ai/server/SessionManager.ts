@@ -741,12 +741,12 @@ export class SessionManager {
         agentMessages = [...parentMessages, ...agentMessages];
       }
 
-      console.log('[SessionManager] Loaded branch session with parent messages:', {
-        parentSessionId: session.parentSessionId,
-        parentMessageCount: parentMessages.length,
-        branchMessageCount,
-        totalMessageCount: agentMessages.length,
-      });
+      // console.log('[SessionManager] Loaded branch session with parent messages:', {
+      //   branchedFromProviderSessionId: session.branchedFromProviderSessionId,
+      //   parentMessageCount: parentMessages.length,
+      //   branchMessageCount,
+      //   totalMessageCount: agentMessages.length,
+      // });
     }
 
     // Transform raw messages into UI format
