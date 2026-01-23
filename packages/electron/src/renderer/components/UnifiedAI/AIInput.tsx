@@ -143,6 +143,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
     const [slashCommandOptions, setSlashCommandOptions] = useState<TypeaheadOption[]>([]);
     const [allSlashCommands, setAllSlashCommands] = useState<any[]>([]);
     const [dragActive, setDragActive] = useState(false);
+    const [isFocused, setIsFocused] = useState(false);
 
     // Track attachments that are being processed (e.g., compressed)
     const [processingAttachments, setProcessingAttachments] = useState<Array<{ id: string; filename: string }>>([]);
@@ -1014,6 +1015,8 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
             placeholder={placeholder}
             disabled={disabled}
             rows={1}
@@ -1062,8 +1065,8 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
           )}
         </div>
 
-        {/* Typeahead for file mentions and slash commands */}
-        {typeaheadMatch && (
+        {/* Typeahead for file mentions and slash commands - only show if focused */}
+        {isFocused && typeaheadMatch && (
           (typeaheadMatch.trigger === '@' && fileMentionOptions.length > 0) ||
           (typeaheadMatch.trigger === '/' && slashCommandOptions.length > 0)
         ) && (
