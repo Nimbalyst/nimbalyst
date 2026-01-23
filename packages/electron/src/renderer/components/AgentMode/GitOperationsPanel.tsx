@@ -67,6 +67,7 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
       fetchGitStatus();
 
       // Listen for git status changes (from GitRefWatcher)
+      // No polling needed - GitRefWatcher provides immediate updates
       const unsubscribe = window.electronAPI?.git?.onStatusChanged?.(
         (data: { workspacePath: string }) => {
           if (data.workspacePath === workspacePath) {
@@ -75,12 +76,8 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
         }
       );
 
-      // Fallback polling (reduced frequency since we have events now)
-      const interval = setInterval(fetchGitStatus, 30000); // 30 seconds fallback
-
       return () => {
         unsubscribe?.();
-        clearInterval(interval);
       };
     }, [workspacePath, fetchGitStatus]);
 
