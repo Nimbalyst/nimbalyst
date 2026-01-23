@@ -2,13 +2,29 @@
  * TerminalHandlers - IPC handlers for terminal operations
  *
  * Provides the bridge between renderer process and TerminalSessionManager.
+ * Terminals are stored in a dedicated terminal store (not the AI sessions database).
  */
 
 import { getTerminalSessionManager } from '../services/TerminalSessionManager';
 import { safeHandle } from '../utils/ipcRegistry';
-import { AISessionsRepository } from '@nimbalyst/runtime';
 import { ulid } from 'ulid';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
+import {
+  createTerminalInstance,
+  deleteTerminalInstance,
+  getTerminalInstance,
+  listTerminals,
+  setActiveTerminal,
+  getActiveTerminalId,
+  setTabOrder,
+  getWorkspaceTerminalState,
+  getTerminalPanelState,
+  updateTerminalPanelState,
+  setTerminalPanelVisible,
+  setTerminalPanelHeight,
+  updateTerminalInstance,
+  type TerminalInstance,
+} from '../utils/terminalStore';
 
 // Track if handlers are registered
 let handlersRegistered = false;
@@ -23,8 +39,71 @@ export function registerTerminalHandlers(): void {
   const manager = getTerminalSessionManager();
 
   /**
-   * Create a new terminal session
-   * Creates both the database session and the PTY process
+   * Create a new terminal
+   * Creates both the store entry and the PTY process
+   */
+  safeHandle(
+    'terminal:create',
+    async (
+      _event,
+      payload: {
+        workspacePath: string;
+        cwd?: string;
+        worktreeId?: string;
+        title?: string;
+      }
+    ) => {
+      try {
+        const terminalId = ulid();
+        const terminalCwd = payload.cwd || payload.workspacePath;
+        const now = Date.now();
+
+        // Create PTY process first to get shell info
+        await manager.createTerminal(terminalId, {
+          cwd: terminalCwd,
+          workspacePath: payload.workspacePath,
+        });
+
+        const terminalInfo = manager.getTerminalInfo(terminalId);
+
+        // Create terminal instance in store
+        const instance: TerminalInstance = {
+          id: terminalId,
+          title: payload.title || 'Terminal',
+          shellName: terminalInfo?.shell.name || 'unknown',
+          shellPath: terminalInfo?.shell.path || '',
+          cwd: terminalInfo?.cwd || terminalCwd,
+          worktreeId: payload.worktreeId,
+          createdAt: now,
+          lastActiveAt: now,
+          historyFile: terminalInfo?.historyFile,
+        };
+
+        createTerminalInstance(payload.workspacePath, instance);
+
+        console.log(`[TerminalHandlers] Created terminal ${terminalId}`);
+
+        // Track terminal creation
+        AnalyticsService.getInstance().sendEvent('terminal_created', {
+          shell: terminalInfo?.shell.name || 'unknown',
+        });
+
+        return {
+          success: true,
+          terminalId,
+          shell: terminalInfo?.shell,
+          instance,
+        };
+      } catch (error) {
+        console.error('[TerminalHandlers] Error creating terminal:', error);
+        return { success: false, error: String(error) };
+      }
+    }
+  );
+
+  /**
+   * Legacy handler for backward compatibility
+   * @deprecated Use terminal:create instead
    */
   safeHandle(
     'terminal:create-session',
@@ -37,55 +116,43 @@ export function registerTerminalHandlers(): void {
         worktreePath?: string;
       }
     ) => {
+      // Redirect to new handler
+      const terminalId = ulid();
+      const terminalCwd = payload.worktreePath || payload.cwd || payload.workspacePath;
+      const now = Date.now();
+
       try {
-        const sessionId = ulid();
-
-        // For worktree terminals, use the worktree path as cwd
-        const terminalCwd = payload.worktreePath || payload.cwd || payload.workspacePath;
-
-        // Create session in database
-        await AISessionsRepository.create({
-          id: sessionId,
-          provider: 'terminal',
-          title: 'Terminal',
-          workspaceId: payload.workspacePath,
-          sessionType: 'terminal',
-          worktreeId: payload.worktreeId,
-          worktreePath: payload.worktreePath,
-        });
-
-        // Create PTY process
-        await manager.createTerminal(sessionId, {
+        await manager.createTerminal(terminalId, {
           cwd: terminalCwd,
+          workspacePath: payload.workspacePath,
         });
 
-        const terminalInfo = manager.getTerminalInfo(sessionId);
+        const terminalInfo = manager.getTerminalInfo(terminalId);
 
-        // Update session with terminal metadata
-        const scrollbackBuffer = manager.getScrollbackBuffer(sessionId) || undefined;
-        await AISessionsRepository.updateMetadata(sessionId, {
-          metadata: {
-            terminal: {
-              shell: terminalInfo?.shell.name || 'unknown',
-              shellPath: terminalInfo?.shell.path || '',
-              cwd: terminalInfo?.cwd || terminalCwd,
-              historyFile: terminalInfo?.historyFile || '',
-              scrollback: scrollbackBuffer,
-              scrollbackUpdatedAt: scrollbackBuffer ? Date.now() : undefined,
-            },
-          },
-        });
+        // Create terminal instance in store
+        const instance: TerminalInstance = {
+          id: terminalId,
+          title: 'Terminal',
+          shellName: terminalInfo?.shell.name || 'unknown',
+          shellPath: terminalInfo?.shell.path || '',
+          cwd: terminalInfo?.cwd || terminalCwd,
+          worktreeId: payload.worktreeId,
+          createdAt: now,
+          lastActiveAt: now,
+          historyFile: terminalInfo?.historyFile,
+        };
 
-        console.log(`[TerminalHandlers] Created terminal session ${sessionId}`);
+        createTerminalInstance(payload.workspacePath, instance);
 
-        // Track terminal session creation
-        AnalyticsService.getInstance().sendEvent('terminal_session_created', {
+        console.log(`[TerminalHandlers] Created terminal session ${terminalId} (legacy)`);
+
+        AnalyticsService.getInstance().sendEvent('terminal_created', {
           shell: terminalInfo?.shell.name || 'unknown',
         });
 
         return {
           success: true,
-          sessionId,
+          sessionId: terminalId,
           shell: terminalInfo?.shell,
         };
       } catch (error) {
@@ -96,15 +163,16 @@ export function registerTerminalHandlers(): void {
   );
 
   /**
-   * Initialize PTY for an existing session
-   * Used when reopening a terminal session
+   * Initialize PTY for an existing terminal
+   * Used when reopening a terminal tab
    */
   safeHandle(
     'terminal:initialize',
     async (
       _event,
-      sessionId: string,
+      terminalId: string,
       options: {
+        workspacePath: string;
         cwd?: string;
         cols?: number;
         rows?: number;
@@ -112,12 +180,20 @@ export function registerTerminalHandlers(): void {
     ) => {
       try {
         // Check if already active
-        if (manager.isTerminalActive(sessionId)) {
+        if (manager.isTerminalActive(terminalId)) {
           return { success: true, alreadyActive: true };
         }
 
-        // Create PTY process
-        await manager.createTerminal(sessionId, options);
+        // Create PTY process with workspace context
+        await manager.createTerminal(terminalId, {
+          ...options,
+          workspacePath: options.workspacePath,
+        });
+
+        // Update last active timestamp
+        updateTerminalInstance(options.workspacePath, terminalId, {
+          lastActiveAt: Date.now(),
+        });
 
         return { success: true };
       } catch (error) {
@@ -174,10 +250,148 @@ export function registerTerminalHandlers(): void {
   });
 
   /**
-   * Get terminal info
+   * Get terminal info (PTY info)
    */
-  safeHandle('terminal:get-info', async (_event, sessionId: string) => {
-    return manager.getTerminalInfo(sessionId);
+  safeHandle('terminal:get-info', async (_event, terminalId: string) => {
+    return manager.getTerminalInfo(terminalId);
+  });
+
+  // =========================================================================
+  // Terminal Store Operations
+  // =========================================================================
+
+  /**
+   * List all terminals for a workspace
+   */
+  safeHandle(
+    'terminal:list',
+    async (_event, workspacePath: string) => {
+      return listTerminals(workspacePath);
+    }
+  );
+
+  /**
+   * Get a single terminal instance
+   */
+  safeHandle(
+    'terminal:get',
+    async (_event, workspacePath: string, terminalId: string) => {
+      return getTerminalInstance(workspacePath, terminalId);
+    }
+  );
+
+  /**
+   * Update terminal metadata (title, etc.)
+   */
+  safeHandle(
+    'terminal:update',
+    async (
+      _event,
+      workspacePath: string,
+      terminalId: string,
+      updates: Partial<Omit<TerminalInstance, 'id' | 'createdAt'>>
+    ) => {
+      const updated = updateTerminalInstance(workspacePath, terminalId, {
+        ...updates,
+        lastActiveAt: Date.now(),
+      });
+      return { success: !!updated, terminal: updated };
+    }
+  );
+
+  /**
+   * Delete a terminal (also destroys PTY if active)
+   */
+  safeHandle(
+    'terminal:delete',
+    async (_event, workspacePath: string, terminalId: string) => {
+      // Destroy PTY if active
+      if (manager.isTerminalActive(terminalId)) {
+        await manager.destroyTerminal(terminalId);
+      }
+      // Delete from store (also deletes scrollback file)
+      deleteTerminalInstance(workspacePath, terminalId);
+      return { success: true };
+    }
+  );
+
+  /**
+   * Set active terminal
+   */
+  safeHandle(
+    'terminal:set-active',
+    async (_event, workspacePath: string, terminalId: string | undefined) => {
+      setActiveTerminal(workspacePath, terminalId);
+      return { success: true };
+    }
+  );
+
+  /**
+   * Get active terminal ID
+   */
+  safeHandle(
+    'terminal:get-active',
+    async (_event, workspacePath: string) => {
+      return getActiveTerminalId(workspacePath);
+    }
+  );
+
+  /**
+   * Update tab order
+   */
+  safeHandle(
+    'terminal:set-tab-order',
+    async (_event, workspacePath: string, tabOrder: string[]) => {
+      setTabOrder(workspacePath, tabOrder);
+      return { success: true };
+    }
+  );
+
+  /**
+   * Get workspace terminal state (all terminals + active + tab order)
+   */
+  safeHandle(
+    'terminal:get-workspace-state',
+    async (_event, workspacePath: string) => {
+      return getWorkspaceTerminalState(workspacePath);
+    }
+  );
+
+  // =========================================================================
+  // Panel State Operations
+  // =========================================================================
+
+  /**
+   * Get terminal panel state (height, visibility)
+   */
+  safeHandle('terminal:get-panel-state', async () => {
+    return getTerminalPanelState();
+  });
+
+  /**
+   * Update terminal panel state
+   */
+  safeHandle(
+    'terminal:update-panel-state',
+    async (_event, updates: { panelHeight?: number; panelVisible?: boolean }) => {
+      return updateTerminalPanelState(updates);
+    }
+  );
+
+  /**
+   * Set panel visibility
+   */
+  safeHandle('terminal:set-panel-visible', async (_event, visible: boolean) => {
+    setTerminalPanelVisible(visible);
+    return { success: true };
+  });
+
+  /**
+   * Set panel height
+   */
+  safeHandle('terminal:set-panel-height', async (_event, height: number) => {
+    setTerminalPanelHeight(height);
+    return { success: true };
   });
 
   console.log('[TerminalHandlers] Registered');

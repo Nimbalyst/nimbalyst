@@ -822,22 +822,53 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Terminal operations
   terminal: {
-    createSession: (workspacePath: string, options?: { cwd?: string; worktreeId?: string; worktreePath?: string }) =>
-      ipcRenderer.invoke('terminal:create-session', { workspacePath, ...options }),
-    initialize: (sessionId: string, options?: { cwd?: string; cols?: number; rows?: number }) =>
-      ipcRenderer.invoke('terminal:initialize', sessionId, options || {}),
-    isActive: (sessionId: string) =>
-      ipcRenderer.invoke('terminal:is-active', sessionId),
-    write: (sessionId: string, data: string) =>
-      ipcRenderer.invoke('terminal:write', sessionId, data),
-    resize: (sessionId: string, cols: number, rows: number) =>
-      ipcRenderer.invoke('terminal:resize', sessionId, cols, rows),
-    getScrollback: (sessionId: string) =>
-      ipcRenderer.invoke('terminal:get-scrollback', sessionId),
-    destroy: (sessionId: string) =>
-      ipcRenderer.invoke('terminal:destroy', sessionId),
-    getInfo: (sessionId: string) =>
-      ipcRenderer.invoke('terminal:get-info', sessionId),
+    // New terminal store API
+    create: (workspacePath: string, options?: { cwd?: string; worktreeId?: string; title?: string }) =>
+      ipcRenderer.invoke('terminal:create', { workspacePath, ...options }),
+    list: (workspacePath: string) =>
+      ipcRenderer.invoke('terminal:list', workspacePath),
+    get: (workspacePath: string, terminalId: string) =>
+      ipcRenderer.invoke('terminal:get', workspacePath, terminalId),
+    update: (workspacePath: string, terminalId: string, updates: { title?: string; cwd?: string }) =>
+      ipcRenderer.invoke('terminal:update', workspacePath, terminalId, updates),
+    delete: (workspacePath: string, terminalId: string) =>
+      ipcRenderer.invoke('terminal:delete', workspacePath, terminalId),
+    setActive: (workspacePath: string, terminalId: string | undefined) =>
+      ipcRenderer.invoke('terminal:set-active', workspacePath, terminalId),
+    getActive: (workspacePath: string) =>
+      ipcRenderer.invoke('terminal:get-active', workspacePath),
+    setTabOrder: (workspacePath: string, tabOrder: string[]) =>
+      ipcRenderer.invoke('terminal:set-tab-order', workspacePath, tabOrder),
+    getWorkspaceState: (workspacePath: string) =>
+      ipcRenderer.invoke('terminal:get-workspace-state', workspacePath),
+
+    // Panel state
+    getPanelState: () =>
+      ipcRenderer.invoke('terminal:get-panel-state'),
+    updatePanelState: (updates: { panelHeight?: number; panelVisible?: boolean }) =>
+      ipcRenderer.invoke('terminal:update-panel-state', updates),
+    setPanelVisible: (visible: boolean) =>
+      ipcRenderer.invoke('terminal:set-panel-visible', visible),
+    setPanelHeight: (height: number) =>
+      ipcRenderer.invoke('terminal:set-panel-height', height),
+
+    // PTY operations
+    initialize: (terminalId: string, options: { workspacePath: string; cwd?: string; cols?: number; rows?: number }) =>
+      ipcRenderer.invoke('terminal:initialize', terminalId, options),
+    isActive: (terminalId: string) =>
+      ipcRenderer.invoke('terminal:is-active', terminalId),
+    write: (terminalId: string, data: string) =>
+      ipcRenderer.invoke('terminal:write', terminalId, data),
+    resize: (terminalId: string, cols: number, rows: number) =>
+      ipcRenderer.invoke('terminal:resize', terminalId, cols, rows),
+    getScrollback: (terminalId: string) =>
+      ipcRenderer.invoke('terminal:get-scrollback', terminalId),
+    destroy: (terminalId: string) =>
+      ipcRenderer.invoke('terminal:destroy', terminalId),
+    getInfo: (terminalId: string) =>
+      ipcRenderer.invoke('terminal:get-info', terminalId),
+
+    // Events
     onOutput: (callback: (data: { sessionId: string; data: string }) => void) => {
       const handler = (_event: any, data: any) => callback(data);
       ipcRenderer.on('terminal:output', handler);
@@ -848,6 +879,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('terminal:exited', handler);
       return () => ipcRenderer.removeListener('terminal:exited', handler);
     },
+
+    // Legacy API (deprecated, for backward compatibility)
+    /** @deprecated Use terminal.create instead */
+    createSession: (workspacePath: string, options?: { cwd?: string; worktreeId?: string; worktreePath?: string }) =>
+      ipcRenderer.invoke('terminal:create-session', { workspacePath, ...options }),
   },
 
   // Generic IPC methods for services that need them

@@ -438,16 +438,70 @@ interface ElectronAPI {
 
   // Terminal operations
   terminal: {
-    createSession: (workspacePath: string, options?: { cwd?: string; worktreeId?: string; worktreePath?: string }) => Promise<{ success: boolean; sessionId: string; error?: string }>;
-    initialize: (sessionId: string, options?: { cwd?: string; cols?: number; rows?: number }) => Promise<{ success: boolean; alreadyActive?: boolean; error?: string }>;
-    isActive: (sessionId: string) => Promise<boolean>;
-    write: (sessionId: string, data: string) => Promise<void>;
-    resize: (sessionId: string, cols: number, rows: number) => Promise<void>;
-    getScrollback: (sessionId: string) => Promise<string>;
-    destroy: (sessionId: string) => Promise<void>;
-    getInfo: (sessionId: string) => Promise<any>;
+    // Terminal instance types
+    TerminalInstance: {
+      id: string;
+      title: string;
+      shellName: string;
+      shellPath: string;
+      cwd: string;
+      worktreeId?: string;
+      createdAt: number;
+      lastActiveAt: number;
+      historyFile?: string;
+    };
+    WorkspaceTerminalState: {
+      terminals: Record<string, ElectronAPI['terminal']['TerminalInstance']>;
+      activeTerminalId?: string;
+      tabOrder: string[];
+    };
+    TerminalPanelState: {
+      panelHeight: number;
+      panelVisible: boolean;
+    };
+
+    // New terminal store API
+    create: (workspacePath: string, options?: { cwd?: string; worktreeId?: string; title?: string }) => Promise<{
+      success: boolean;
+      terminalId?: string;
+      shell?: { name: string; path: string };
+      instance?: ElectronAPI['terminal']['TerminalInstance'];
+      error?: string;
+    }>;
+    list: (workspacePath: string) => Promise<ElectronAPI['terminal']['TerminalInstance'][]>;
+    get: (workspacePath: string, terminalId: string) => Promise<ElectronAPI['terminal']['TerminalInstance'] | undefined>;
+    update: (workspacePath: string, terminalId: string, updates: { title?: string; cwd?: string }) => Promise<{
+      success: boolean;
+      terminal?: ElectronAPI['terminal']['TerminalInstance'];
+    }>;
+    delete: (workspacePath: string, terminalId: string) => Promise<{ success: boolean }>;
+    setActive: (workspacePath: string, terminalId: string | undefined) => Promise<{ success: boolean }>;
+    getActive: (workspacePath: string) => Promise<string | undefined>;
+    setTabOrder: (workspacePath: string, tabOrder: string[]) => Promise<{ success: boolean }>;
+    getWorkspaceState: (workspacePath: string) => Promise<ElectronAPI['terminal']['WorkspaceTerminalState']>;
+
+    // Panel state
+    getPanelState: () => Promise<ElectronAPI['terminal']['TerminalPanelState']>;
+    updatePanelState: (updates: { panelHeight?: number; panelVisible?: boolean }) => Promise<ElectronAPI['terminal']['TerminalPanelState']>;
+    setPanelVisible: (visible: boolean) => Promise<{ success: boolean }>;
+    setPanelHeight: (height: number) => Promise<{ success: boolean }>;
+
+    // PTY operations
+    initialize: (terminalId: string, options: { workspacePath: string; cwd?: string; cols?: number; rows?: number }) => Promise<{ success: boolean; alreadyActive?: boolean; error?: string }>;
+    isActive: (terminalId: string) => Promise<boolean>;
+    write: (terminalId: string, data: string) => Promise<void>;
+    resize: (terminalId: string, cols: number, rows: number) => Promise<void>;
+    getScrollback: (terminalId: string) => Promise<string>;
+    destroy: (terminalId: string) => Promise<void>;
+    getInfo: (terminalId: string) => Promise<any>;
+
+    // Events
     onOutput: (callback: (data: { sessionId: string; data: string }) => void) => () => void;
     onExited: (callback: (data: { sessionId: string; exitCode: number }) => void) => () => void;
+
+    // Legacy API (deprecated)
+    /** @deprecated Use terminal.create instead */
+    createSession: (workspacePath: string, options?: { cwd?: string; worktreeId?: string; worktreePath?: string }) => Promise<{ success: boolean; sessionId: string; error?: string }>;
   };
 
   // Worktree operations

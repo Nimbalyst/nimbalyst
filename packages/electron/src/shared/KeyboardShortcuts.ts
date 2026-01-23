@@ -45,6 +45,7 @@ export const KeyboardShortcuts = {
     // Panels
     toggleAIChat: 'Cmd+Shift+A',
     toggleBottomPanel: 'Cmd+J',
+    toggleTerminalPanel: 'Ctrl+`',
     toggleSidebar: 'Cmd+B',
 
     // Navigation

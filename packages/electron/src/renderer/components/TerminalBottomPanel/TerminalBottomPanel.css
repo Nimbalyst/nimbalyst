@@ -1,0 +1,235 @@
+/* Terminal Bottom Panel Styles */
+
+.terminal-bottom-panel-container {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 2px solid var(--border-primary);
+}
+
+.terminal-bottom-panel-resize-handle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  cursor: ns-resize;
+  z-index: 10;
+  background: transparent;
+}
+
+.terminal-bottom-panel-resize-handle:hover {
+  background: var(--primary-color);
+}
+
+.terminal-bottom-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--surface-primary);
+  overflow: hidden;
+}
+
+.terminal-bottom-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 32px;
+  padding: 0 6px;
+  background: var(--surface-secondary);
+  border-bottom: 1px solid var(--border-primary);
+  flex-shrink: 0;
+}
+
+.terminal-bottom-panel-tabs {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  overflow-x: auto;
+  flex: 1;
+  min-width: 0;
+}
+
+.terminal-bottom-panel-tabs::-webkit-scrollbar {
+  height: 4px;
+}
+
+.terminal-bottom-panel-tabs::-webkit-scrollbar-thumb {
+  background: var(--surface-tertiary);
+  border-radius: 2px;
+}
+
+.terminal-bottom-panel-new-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.terminal-bottom-panel-new-tab:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.terminal-bottom-panel-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 4px;
+  margin-left: 8px;
+  flex-shrink: 0;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.terminal-bottom-panel-close:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.terminal-bottom-panel-content {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.terminal-bottom-panel-terminal {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.terminal-bottom-panel-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.terminal-bottom-panel-empty button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.terminal-bottom-panel-empty button:hover {
+  background: var(--surface-tertiary);
+  border-color: var(--primary-color);
+}
+
+/* Terminal Tab Styles */
+
+.terminal-tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  white-space: nowrap;
+  max-width: 200px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.terminal-tab:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.terminal-tab.active {
+  background: var(--surface-primary);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.terminal-tab-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.terminal-tab-cwd {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.terminal-tab.active .terminal-tab-cwd {
+  color: var(--text-secondary);
+}
+
+.terminal-tab-worktree-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px;
+  background: var(--primary-color-alpha);
+  border-radius: 3px;
+  color: var(--primary-color);
+  flex-shrink: 0;
+}
+
+.terminal-tab-close {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: 3px;
+  flex-shrink: 0;
+  margin-left: 2px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.terminal-tab:hover .terminal-tab-close {
+  display: flex;
+}
+
+.terminal-tab-close:hover {
+  background: var(--surface-tertiary);
+  color: var(--text-primary);
+}

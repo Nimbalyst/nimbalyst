@@ -13,9 +13,14 @@ import '@xterm/xterm/css/xterm.css';
 // Type for terminal API is defined in electron.d.ts
 
 export interface TerminalPanelProps {
-  sessionId: string;
+  /** Terminal ID (ULID) */
+  terminalId: string;
+  /** Workspace path for store lookups */
   workspacePath: string;
+  /** Whether this terminal tab is currently active/visible */
   isActive: boolean;
+  /** Optional callback when terminal exits */
+  onExit?: (exitCode: number) => void;
 }
 
 // Get terminal theme colors from CSS variables
@@ -52,10 +57,13 @@ function getTerminalTheme(): any {
 }
 
 export const TerminalPanel: React.FC<TerminalPanelProps> = ({
-  sessionId,
+  terminalId,
   workspacePath,
   isActive,
+  onExit,
 }) => {
+  // Support legacy sessionId prop name
+  const sessionId = terminalId;
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -71,14 +79,15 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
     setInitError(null);
 
     try {
-      await window.electronAPI.terminal.initialize(sessionId, {
+      await window.electronAPI.terminal.initialize(terminalId, {
+        workspacePath,
         cwd: workspacePath,
       });
     } catch (error) {
       console.error('[TerminalPanel] Failed to restart terminal:', error);
       setInitError(error instanceof Error ? error.message : 'Failed to restart terminal');
     }
-  }, [sessionId, workspacePath]);
+  }, [terminalId, workspacePath]);
 
   // Initialize terminal
   useEffect(() => {
@@ -95,7 +104,8 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
     const initTerminal = async () => {
       try {
         // Initialize PTY if not already active (with timeout)
-        const initPromise = window.electronAPI.terminal.initialize(sessionId, {
+        const initPromise = window.electronAPI.terminal.initialize(terminalId, {
+          workspacePath,
           cwd: workspacePath,
         });
 
@@ -166,9 +176,10 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
 
           // Listen for PTY exit
           unsubscribeExited = window.electronAPI.terminal.onExited((data) => {
-            if (data.sessionId === sessionId && !disposed) {
+            if (data.sessionId === terminalId && !disposed) {
               setHasExited(true);
               setExitCode(data.exitCode);
+              onExit?.(data.exitCode);
             }
           });
 
@@ -222,7 +233,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
       xtermRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [sessionId, workspacePath, isActive, hasExited, handleRestart]);
+  }, [terminalId, workspacePath, isActive, hasExited, handleRestart, onExit]);
 
   // Focus terminal when becoming active
   useEffect(() => {

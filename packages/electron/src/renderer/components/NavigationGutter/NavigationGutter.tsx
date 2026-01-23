@@ -37,7 +37,9 @@ interface NavigationGutterProps {
   onToggleBugsPanel?: () => void;
   onToggleTasksPanel?: () => void;
   onToggleIdeasPanel?: () => void;
+  onToggleTerminalPanel?: () => void;
   bottomPanel?: TrackerBottomPanelType | null;
+  terminalPanelVisible?: boolean;
   workspacePath?: string | null;
   /** Currently active extension panel ID */
   activeExtensionPanel?: string | null;
@@ -66,7 +68,9 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
   onToggleBugsPanel,
   onToggleTasksPanel,
   onToggleIdeasPanel,
+  onToggleTerminalPanel,
   bottomPanel,
+  terminalPanelVisible,
   workspacePath,
   activeExtensionPanel,
   onExtensionPanelChange,
@@ -102,6 +106,12 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
 
   // Bottom panel buttons - positioned above settings
   const bottomPanelButtons: NavButton[] = [
+    {
+      id: 'terminal',
+      icon: 'terminal',
+      label: 'Terminal (Ctrl+`)',
+      onClick: onToggleTerminalPanel,
+    },
     {
       id: 'plan',
       icon: 'edit_note',
@@ -301,17 +311,23 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
 
       {/* Bottom Panel Toggles - Above Settings */}
       <div className="nav-section nav-bottom-panels">
-        {bottomPanelButtons.map((button) => (
-          <button
-            key={button.id}
-            className={`nav-button ${bottomPanel === button.id ? 'active' : ''}`}
-            onClick={() => handleButtonClick(button)}
-            title={button.label}
-            aria-label={button.label}
-          >
-            <MaterialSymbol icon={button.icon} size={20} fill={bottomPanel === button.id} />
-          </button>
-        ))}
+        {bottomPanelButtons.map((button) => {
+          const isActive = button.id === 'terminal'
+            ? terminalPanelVisible
+            : bottomPanel === button.id;
+          return (
+            <button
+              key={button.id}
+              className={`nav-button ${isActive ? 'active' : ''}`}
+              onClick={() => handleButtonClick(button)}
+              title={button.label}
+              aria-label={button.label}
+              data-testid={`${button.id}-panel-button`}
+            >
+              <MaterialSymbol icon={button.icon} size={20} fill={isActive} />
+            </button>
+          );
+        })}
       </div>
 
 

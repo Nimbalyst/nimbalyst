@@ -54,6 +54,7 @@ import {
   clearSettingsNavigationAtom,
 } from './store';
 import { TrackerBottomPanel, TrackerBottomPanelType } from './components/TrackerBottomPanel/TrackerBottomPanel.tsx';
+import { TerminalBottomPanel } from './components/TerminalBottomPanel';
 import { registerDocumentLinkPlugin } from './plugins/registerDocumentLinkPlugin';
 import { registerAIChatPlugin } from './plugins/registerAIChatPlugin';
 import { registerTrackerPlugin } from './plugins/registerTrackerPlugin';
@@ -360,6 +361,10 @@ export default function App() {
   const [bottomPanel, setBottomPanel] = useState<TrackerBottomPanelType | null>(null);
   const [bottomPanelHeight, setBottomPanelHeight] = useState<number>(300);
 
+  // Terminal bottom panel state
+  const [terminalPanelVisible, setTerminalPanelVisible] = useState<boolean>(false);
+  const [terminalPanelHeight, setTerminalPanelHeight] = useState<number>(300);
+
   // Agent panel plan reference (for launching from plan status)
   const [agentPlanReference, setAgentPlanReference] = useState<string | null>(null);
 
@@ -567,6 +572,28 @@ export default function App() {
       })
       .catch(error => {
         console.error('[TrackerBottomPanel] Failed to load bottom panel state:', error);
+      });
+  }, [workspacePath]);
+
+  // Load terminal panel state from terminal store
+  useEffect(() => {
+    if (!workspacePath || !window.electronAPI?.terminal?.getPanelState) return;
+
+    window.electronAPI.terminal.getPanelState()
+      .then(state => {
+        if (state?.panelVisible !== undefined) {
+          setTerminalPanelVisible(state.panelVisible);
+          // If terminal panel is visible, close tracker panel (mutually exclusive)
+          if (state.panelVisible) {
+            setBottomPanel(null);
+          }
+        }
+        if (state?.panelHeight !== undefined) {
+          setTerminalPanelHeight(state.panelHeight);
+        }
+      })
+      .catch(error => {
+        console.error('[TerminalBottomPanel] Failed to load terminal panel state:', error);
       });
   }, [workspacePath]);
 
@@ -1186,21 +1213,34 @@ export default function App() {
           editorModeRef.current.openHistoryDialog();
         }
       }
-      // Bottom panel keyboard shortcuts
+      // Bottom panel keyboard shortcuts (mutually exclusive)
       // Cmd+Shift+P for Plans panel
       if (workspaceMode && (e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'p') {
         e.preventDefault();
         setBottomPanel(prev => prev === 'plan' ? null : 'plan');
+        setTerminalPanelVisible(false);
       }
       // Cmd+Shift+B for Bugs panel
       if (workspaceMode && (e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'b') {
         e.preventDefault();
         setBottomPanel(prev => prev === 'bug' ? null : 'bug');
+        setTerminalPanelVisible(false);
       }
       // Cmd+Shift+K for Tasks panel
       if (workspaceMode && (e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'k') {
         e.preventDefault();
         setBottomPanel(prev => prev === 'task' ? null : 'task');
+        setTerminalPanelVisible(false);
+      }
+      // Cmd+` (macOS) or Ctrl+` (Windows/Linux) for Terminal panel
+      if (workspaceMode && e.code === 'Backquote' && !e.shiftKey && !e.altKey &&
+          (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        e.stopPropagation();
+        setTerminalPanelVisible(prev => {
+          if (!prev) setBottomPanel(null); // Close tracker when opening terminal
+          return !prev;
+        });
       }
     };
 
@@ -1602,17 +1642,28 @@ export default function App() {
         }}
         onTogglePlansPanel={() => {
           setBottomPanel(prev => prev === 'plan' ? null : 'plan');
+          setTerminalPanelVisible(false); // Close terminal when opening tracker
         }}
         bottomPanel={bottomPanel as any}
         onToggleBugsPanel={() => {
           setBottomPanel(prev => prev === 'bug' ? null : 'bug');
+          setTerminalPanelVisible(false); // Close terminal when opening tracker
         }}
         onToggleTasksPanel={() => {
           setBottomPanel(prev => prev === 'task' ? null : 'task');
+          setTerminalPanelVisible(false); // Close terminal when opening tracker
         }}
         onToggleIdeasPanel={() => {
           setBottomPanel(prev => prev === 'idea' ? null : 'idea');
+          setTerminalPanelVisible(false); // Close terminal when opening tracker
         }}
+        onToggleTerminalPanel={() => {
+          setTerminalPanelVisible(prev => !prev);
+          if (!terminalPanelVisible) {
+            setBottomPanel(null); // Close tracker when opening terminal
+          }
+        }}
+        terminalPanelVisible={terminalPanelVisible}
         workspacePath={workspacePath}
         onOpenSettings={() => {
           setActiveMode('settings');
@@ -1818,7 +1869,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* Bottom: Bottom Panel - spans width after nav gutter */}
+        {/* Bottom: Tracker Bottom Panel - spans width after nav gutter */}
         {bottomPanel && (
           <TrackerBottomPanel
             activePanel={bottomPanel}
@@ -1826,6 +1877,17 @@ export default function App() {
             height={bottomPanelHeight}
             onHeightChange={setBottomPanelHeight}
             onSwitchToFilesMode={() => setActiveMode('files')}
+          />
+        )}
+
+        {/* Bottom: Terminal Bottom Panel - spans width after nav gutter */}
+        {workspacePath && (
+          <TerminalBottomPanel
+            workspacePath={workspacePath}
+            visible={terminalPanelVisible}
+            onVisibilityChange={setTerminalPanelVisible}
+            height={terminalPanelHeight}
+            onHeightChange={setTerminalPanelHeight}
           />
         )}
       </div>

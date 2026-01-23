@@ -37,8 +37,13 @@ function loadNodePty(): typeof import('node-pty') {
 const pty = loadNodePty();
 import { promises as fs } from 'fs';
 import os from 'os';
-import { AISessionsRepository } from '@nimbalyst/runtime';
 import { ShellDetector, type ShellInfo } from './ShellDetector';
+import {
+  getTerminalInstance,
+  updateTerminalInstance,
+  readScrollback,
+  writeScrollback,
+} from '../utils/terminalStore';
 
 // Maximum scrollback buffer size (500KB)
 const MAX_SCROLLBACK_SIZE = 500 * 1024;
@@ -71,6 +76,8 @@ export interface TerminalOptions {
   shell?: ShellInfo;
   cols?: number;
   rows?: number;
+  /** Workspace path for store lookups */
+  workspacePath?: string;
 }
 
 export interface TerminalProcess {
@@ -86,6 +93,8 @@ export interface TerminalProcess {
   isPersisting?: boolean;
   hasPendingPersist?: boolean;
   pendingForcePersist?: boolean;
+  /** Workspace path for store lookups */
+  workspacePath?: string;
 }
 
 interface ShellBootstrapConfig {
@@ -142,31 +151,45 @@ export class TerminalSessionManager {
     return historyPath;
   }
 
-  private async loadStoredTerminalMetadata(sessionId: string): Promise<TerminalMetadata | null> {
+  /**
+   * Load stored terminal metadata from the terminal store
+   * @param terminalId Terminal ID
+   * @param workspacePath Workspace path (required for store lookup)
+   */
+  private async loadStoredTerminalMetadata(terminalId: string, workspacePath?: string): Promise<TerminalMetadata | null> {
     try {
-      const session = await AISessionsRepository.get(sessionId);
-      const metadata = (session?.metadata as { terminal?: TerminalMetadata } | undefined)?.terminal;
-      if (!metadata) {
+      // If no workspace path provided, we can't look up the terminal
+      if (!workspacePath) {
         return null;
       }
 
+      const instance = getTerminalInstance(workspacePath, terminalId);
+      if (!instance) {
+        return null;
+      }
+
+      // Load scrollback from file
+      const scrollback = await readScrollback(terminalId);
+
       return {
-        shell: typeof metadata.shell === 'string' ? metadata.shell : undefined,
-        shellPath: typeof metadata.shellPath === 'string' ? metadata.shellPath : undefined,
-        cwd: typeof metadata.cwd === 'string' ? metadata.cwd : undefined,
-        historyFile: typeof metadata.historyFile === 'string' ? metadata.historyFile : undefined,
-        scrollback: typeof metadata.scrollback === 'string' ? metadata.scrollback : undefined,
-        scrollbackUpdatedAt: typeof metadata.scrollbackUpdatedAt === 'number' ? metadata.scrollbackUpdatedAt : undefined,
+        shell: instance.shellName,
+        shellPath: instance.shellPath,
+        cwd: instance.cwd,
+        historyFile: instance.historyFile,
+        scrollback: scrollback ?? undefined,
+        scrollbackUpdatedAt: instance.lastActiveAt,
       };
     } catch (error) {
-      console.error(`[TerminalSessionManager] Failed to load stored metadata for ${sessionId}:`, error);
+      console.error(`[TerminalSessionManager] Failed to load stored metadata for ${terminalId}:`, error);
       return null;
     }
   }
 
-  async getStoredScrollback(sessionId: string): Promise<string | null> {
-    const metadata = await this.loadStoredTerminalMetadata(sessionId);
-    return metadata?.scrollback ?? null;
+  /**
+   * Get stored scrollback from file
+   */
+  async getStoredScrollback(terminalId: string): Promise<string | null> {
+    return readScrollback(terminalId);
   }
 
   private scheduleScrollbackPersist(sessionId: string): void {
@@ -192,7 +215,10 @@ export class TerminalSessionManager {
     }
   }
 
-  private async persistTerminalState(sessionId: string, terminal: TerminalProcess, options: { force?: boolean } = {}): Promise<void> {
+  /**
+   * Persist terminal state to the terminal store and scrollback file
+   */
+  private async persistTerminalState(terminalId: string, terminal: TerminalProcess, options: { force?: boolean } = {}): Promise<void> {
     const previous = terminal.metadata ?? {};
     const scrollback = terminal.scrollbackBuffer;
     const metadata: TerminalMetadata = {
@@ -204,28 +230,40 @@ export class TerminalSessionManager {
       scrollbackUpdatedAt: options.force || previous.scrollback !== scrollback ? Date.now() : previous.scrollbackUpdatedAt,
     };
 
-    const changed =
+    const metadataChanged =
       options.force ||
       previous.shell !== metadata.shell ||
       previous.shellPath !== metadata.shellPath ||
       previous.cwd !== metadata.cwd ||
-      previous.historyFile !== metadata.historyFile ||
-      previous.scrollback !== metadata.scrollback;
+      previous.historyFile !== metadata.historyFile;
 
-    if (!changed) {
+    const scrollbackChanged = previous.scrollback !== metadata.scrollback;
+
+    if (!metadataChanged && !scrollbackChanged) {
       return;
     }
 
     terminal.metadata = metadata;
 
     try {
-      await AISessionsRepository.updateMetadata(sessionId, {
-        metadata: {
-          terminal: metadata,
-        },
-      });
+      // Persist scrollback to file if changed
+      if (scrollbackChanged) {
+        await writeScrollback(terminalId, scrollback);
+      }
+
+      // Update terminal instance metadata if we have workspace context
+      // Note: The workspace path is stored in the TerminalProcess for new architecture
+      if (terminal.workspacePath) {
+        updateTerminalInstance(terminal.workspacePath, terminalId, {
+          shellName: terminal.shell.name,
+          shellPath: terminal.shell.path,
+          cwd: terminal.cwd,
+          historyFile: terminal.historyFile,
+          lastActiveAt: Date.now(),
+        });
+      }
     } catch (error) {
-      console.error(`[TerminalSessionManager] Failed to update terminal metadata for ${sessionId}:`, error);
+      console.error(`[TerminalSessionManager] Failed to update terminal state for ${terminalId}:`, error);
     }
   }
 
@@ -480,15 +518,18 @@ export class TerminalSessionManager {
 
   /**
    * Create a new terminal for a session
+   * @param terminalId Unique terminal identifier
+   * @param options Terminal options including workspacePath for store lookups
    */
-  async createTerminal(sessionId: string, options: TerminalOptions = {}): Promise<void> {
+  async createTerminal(terminalId: string, options: TerminalOptions = {}): Promise<void> {
     // If terminal already exists, just return
-    if (this.terminals.has(sessionId)) {
-      console.log(`[TerminalSessionManager] Terminal ${sessionId} already exists`);
+    if (this.terminals.has(terminalId)) {
+      console.log(`[TerminalSessionManager] Terminal ${terminalId} already exists`);
       return;
     }
 
-    const storedMetadata = await this.loadStoredTerminalMetadata(sessionId);
+    // Load stored metadata from terminal store (requires workspacePath)
+    const storedMetadata = await this.loadStoredTerminalMetadata(terminalId, options.workspacePath);
 
     // Get shell info
     const shell = options.shell || ShellDetector.getDefaultShell();
@@ -497,13 +538,13 @@ export class TerminalSessionManager {
     const cwd = storedMetadata?.cwd || options.cwd || process.cwd();
     const cols = options.cols || 80;
     const rows = options.rows || 30;
-    const historyFile = await this.ensureHistoryFile(sessionId, storedMetadata?.historyFile);
+    const historyFile = await this.ensureHistoryFile(terminalId, storedMetadata?.historyFile);
     let scrollbackBuffer = storedMetadata?.scrollback || '';
     if (scrollbackBuffer.length > MAX_SCROLLBACK_SIZE) {
       scrollbackBuffer = scrollbackBuffer.slice(-MAX_SCROLLBACK_SIZE);
     }
 
-    const bootstrapConfig = await this.prepareShellBootstrap(sessionId, shell, historyFile);
+    const bootstrapConfig = await this.prepareShellBootstrap(terminalId, shell, historyFile);
     const spawnArgs = bootstrapConfig?.args || shell.args;
     const spawnEnv: NodeJS.ProcessEnv = {
       ...process.env,
@@ -526,7 +567,7 @@ export class TerminalSessionManager {
     );
 
     // Log detailed spawn info for debugging - helpful when diagnosing shell errors
-    console.log(`[TerminalSessionManager] Creating terminal ${sessionId}:`, {
+    console.log(`[TerminalSessionManager] Creating terminal ${terminalId}:`, {
       shell: shell.path,
       shellName: shell.name,
       originalArgs: JSON.stringify(spawnArgs),
@@ -546,7 +587,7 @@ export class TerminalSessionManager {
 
     const terminalProcess: TerminalProcess = {
       pty: ptyProcess,
-      sessionId,
+      sessionId: terminalId,
       scrollbackBuffer,
       cwd,
       shell,
@@ -557,6 +598,7 @@ export class TerminalSessionManager {
       isPersisting: false,
       hasPendingPersist: false,
       pendingForcePersist: false,
+      workspacePath: options.workspacePath,
     };
 
     // Handle output from PTY
@@ -573,36 +615,36 @@ export class TerminalSessionManager {
         terminalProcess.cwd = newCwd;
       }
 
-      this.scheduleScrollbackPersist(sessionId);
+      this.scheduleScrollbackPersist(terminalId);
 
       // Send to all windows
       this.broadcastToWindows('terminal:output', {
-        sessionId,
+        sessionId: terminalId,
         data,
       });
     });
 
     // Handle PTY exit
     ptyProcess.onExit(async ({ exitCode }) => {
-      console.log(`[TerminalSessionManager] Terminal ${sessionId} exited with code ${exitCode}`);
+      console.log(`[TerminalSessionManager] Terminal ${terminalId} exited with code ${exitCode}`);
 
-      this.clearScrollbackTimer(sessionId);
-      await this.persistScrollback(sessionId, { force: true });
+      this.clearScrollbackTimer(terminalId);
+      await this.persistScrollback(terminalId, { force: true });
 
       // Send exit event to all windows
       this.broadcastToWindows('terminal:exited', {
-        sessionId,
+        sessionId: terminalId,
         exitCode,
       });
 
       // Remove from map
-      this.terminals.delete(sessionId);
+      this.terminals.delete(terminalId);
     });
 
     // Persist initial state before adding to map to avoid race with quick exit
-    await this.persistTerminalState(sessionId, terminalProcess, { force: true });
+    await this.persistTerminalState(terminalId, terminalProcess, { force: true });
 
-    this.terminals.set(sessionId, terminalProcess);
+    this.terminals.set(terminalId, terminalProcess);
   }
 
   /**
