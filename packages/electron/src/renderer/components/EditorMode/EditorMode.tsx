@@ -475,11 +475,15 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   // Handle opening session - switches to Agent Mode since ChatSidebar manages its own single session
   const handleOpenSessionInChat = useCallback(async (sessionId: string) => {
     console.log('[EditorMode] handleOpenSessionInChat called with sessionId:', sessionId);
-    // Switch to agent mode to view the specific session
-    if (onSwitchToAgentMode) {
-      onSwitchToAgentMode(undefined, sessionId);
+    // Load the session in the chat sidebar and expand it
+    if (chatSidebarRef.current) {
+      chatSidebarRef.current.loadSession(sessionId);
+      // Expand the chat panel if it's collapsed
+      if (isAIChatCollapsed) {
+        setIsAIChatCollapsed(false);
+      }
     }
-  }, [onSwitchToAgentMode]);
+  }, [isAIChatCollapsed]);
 
   // Expose methods to parent via ref
   // CRITICAL: Use tabsRef.current inside closures to avoid stale closure bugs

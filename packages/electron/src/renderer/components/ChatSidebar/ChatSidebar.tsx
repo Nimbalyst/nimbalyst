@@ -20,6 +20,7 @@ import './ChatSidebar.css';
 
 export interface ChatSidebarRef {
   focusInput: () => void;
+  loadSession: (sessionId: string) => void;
 }
 
 export interface ChatSidebarProps {
@@ -84,10 +85,13 @@ export const ChatSidebar = forwardRef<ChatSidebarRef, ChatSidebarProps>(({
     }));
   }, [sessionList]);
 
-  // Expose focusInput through ref
+  // Expose methods through ref
   useImperativeHandle(ref, () => ({
     focusInput: () => {
       transcriptRef.current?.focusInput();
+    },
+    loadSession: (id: string) => {
+      setSessionId(id);
     },
   }), []);
 
