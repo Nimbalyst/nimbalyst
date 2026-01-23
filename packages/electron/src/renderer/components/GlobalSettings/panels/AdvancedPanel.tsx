@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAtom } from 'jotai';
+import { usePostHog } from 'posthog-js/react';
 import {
   advancedSettingsAtom,
   setAdvancedSettingsAtom,
@@ -13,9 +14,11 @@ import { ALPHA_FEATURES, areAllAlphaFeaturesEnabled, enableAllAlphaFeatures, dis
 /**
  * AdvancedPanel - Self-contained settings panel for advanced options.
  *
- * All settings subscribe directly to Jotai atoms - no props needed.
+ * All settings subscribe directly to Jotai atoms or load via IPC.
+ * Developer mode is a global app setting.
  */
 export function AdvancedPanel() {
+  const posthog = usePostHog();
   // App-level advanced settings from Jotai atoms
   const [settings] = useAtom(advancedSettingsAtom);
   const [, updateSettings] = useAtom(setAdvancedSettingsAtom);
@@ -25,6 +28,51 @@ export function AdvancedPanel() {
   const [aiDebugSettings] = useAtom(aiDebugSettingsAtom);
   const [, updateAIDebugSettings] = useAtom(setAIDebugSettingsAtom);
   const { showToolCalls, aiDebugLogging, showPromptAdditions } = aiDebugSettings;
+
+  // Developer mode - global app setting
+  const [developerMode, setDeveloperMode] = useState<boolean>(false);
+  const [developerModeLoading, setDeveloperModeLoading] = useState(true);
+
+  // Load developer mode from app settings
+  useEffect(() => {
+    const loadDeveloperMode = async () => {
+      try {
+        const enabled = await window.electronAPI.invoke('developer-mode:get');
+        setDeveloperMode(enabled ?? false);
+      } catch (error) {
+        console.error('Failed to load developer mode:', error);
+      } finally {
+        setDeveloperModeLoading(false);
+      }
+    };
+
+    loadDeveloperMode();
+  }, []);
+
+  // Handle developer mode change
+  const handleDeveloperModeChange = async (enabled: boolean) => {
+    setDeveloperMode(enabled);
+
+    try {
+      await window.electronAPI.invoke('developer-mode:set', enabled);
+
+      // Track mode change in PostHog
+      if (posthog) {
+        posthog.capture('developer_mode_changed', {
+          developer_mode: enabled,
+          source: 'settings',
+          is_initial: false,
+        });
+
+        // Update person property
+        posthog.people.set({ developer_mode: enabled });
+      }
+    } catch (error) {
+      console.error('Failed to save developer mode:', error);
+      // Revert on error
+      setDeveloperMode(!enabled);
+    }
+  };
 
   const {
     releaseChannel,
@@ -59,6 +107,162 @@ export function AdvancedPanel() {
           Advanced configuration options for AI features.
         </p>
       </div>
+
+      {/* Application Mode - Always shown at the top */}
+      <div className="provider-panel-section">
+          <h4 className="provider-panel-section-title">Application Mode</h4>
+          <p className="provider-panel-hint">
+            Choose between a simplified experience or full developer features for this project.
+          </p>
+
+          <div className="mode-selection" style={{ display: 'flex', flexDirection: 'row', gap: '16px', marginTop: '12px' }}>
+            <label
+              className={`mode-option ${!developerMode ? 'selected' : ''}`}
+              onClick={() => !developerModeLoading && handleDeveloperModeChange(false)}
+              style={{
+                display: 'flex',
+                flex: 1,
+                alignItems: 'flex-start',
+                padding: 0,
+                background: !developerMode ? 'var(--surface-hover)' : 'var(--surface-secondary)',
+                border: `2px solid ${!developerMode ? 'var(--primary-color)' : 'var(--border-primary)'}`,
+                borderRadius: '12px',
+                cursor: developerModeLoading ? 'wait' : 'pointer',
+                transition: 'all 0.15s ease',
+                position: 'relative',
+                boxShadow: !developerMode ? '0 0 0 3px rgba(88, 166, 255, 0.15)' : 'none',
+                opacity: developerModeLoading ? 0.6 : 1,
+              }}
+            >
+              <input
+                type="radio"
+                name="mode"
+                checked={!developerMode}
+                onChange={() => handleDeveloperModeChange(false)}
+                disabled={developerModeLoading}
+                style={{
+                  position: 'absolute',
+                  top: '12px',
+                  right: '12px',
+                  margin: 0,
+                  cursor: 'pointer',
+                  width: '18px',
+                  height: '18px',
+                  accentColor: 'var(--primary-color)',
+                }}
+              />
+              <div style={{
+                padding: '16px',
+                width: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                textAlign: 'center',
+              }}>
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '8px',
+                  marginBottom: '8px',
+                }}>
+                  <span className="material-symbols-outlined" style={{
+                    fontSize: '32px',
+                    color: 'var(--primary-color)',
+                  }}>
+                    edit_note
+                  </span>
+                  <span style={{
+                    fontSize: '16px',
+                    fontWeight: 600,
+                    color: 'var(--text-primary)',
+                  }}>Standard Mode</span>
+                </div>
+                <p style={{
+                  margin: 0,
+                  fontSize: '13px',
+                  color: 'var(--text-secondary)',
+                  lineHeight: 1.4,
+                }}>
+                  Simplified interface focused on writing, editing, and AI assistance
+                </p>
+              </div>
+            </label>
+
+            <label
+              className={`mode-option ${developerMode ? 'selected' : ''}`}
+              onClick={() => !developerModeLoading && handleDeveloperModeChange(true)}
+              style={{
+                display: 'flex',
+                flex: 1,
+                alignItems: 'flex-start',
+                padding: 0,
+                background: developerMode ? 'var(--surface-hover)' : 'var(--surface-secondary)',
+                border: `2px solid ${developerMode ? 'var(--primary-color)' : 'var(--border-primary)'}`,
+                borderRadius: '12px',
+                cursor: developerModeLoading ? 'wait' : 'pointer',
+                transition: 'all 0.15s ease',
+                position: 'relative',
+                boxShadow: developerMode ? '0 0 0 3px rgba(88, 166, 255, 0.15)' : 'none',
+                opacity: developerModeLoading ? 0.6 : 1,
+              }}
+            >
+              <input
+                type="radio"
+                name="mode"
+                checked={developerMode}
+                onChange={() => handleDeveloperModeChange(true)}
+                disabled={developerModeLoading}
+                style={{
+                  position: 'absolute',
+                  top: '12px',
+                  right: '12px',
+                  margin: 0,
+                  cursor: 'pointer',
+                  width: '18px',
+                  height: '18px',
+                  accentColor: 'var(--primary-color)',
+                }}
+              />
+              <div style={{
+                padding: '16px',
+                width: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                textAlign: 'center',
+              }}>
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '8px',
+                  marginBottom: '8px',
+                }}>
+                  <span className="material-symbols-outlined" style={{
+                    fontSize: '32px',
+                    color: 'var(--primary-color)',
+                  }}>
+                    terminal
+                  </span>
+                  <span style={{
+                    fontSize: '16px',
+                    fontWeight: 600,
+                    color: 'var(--text-primary)',
+                  }}>Developer Mode</span>
+                </div>
+                <p style={{
+                  margin: 0,
+                  fontSize: '13px',
+                  color: 'var(--text-secondary)',
+                  lineHeight: 1.4,
+                }}>
+                  Full development environment with git worktrees, terminal access, development specific features
+                </p>
+              </div>
+            </label>
+          </div>
+        </div>
 
       {showReleaseChannel && (
         <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">

@@ -483,7 +483,7 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
       case 'lmstudio':
         return wrapWithOverride('lmstudio', 'LM Studio', <LMStudioPanel {...commonProps} />);
       case 'advanced':
-        // AdvancedPanel is now self-contained - uses Jotai atoms directly
+        // AdvancedPanel is self-contained - uses Jotai atoms and IPC directly
         return <AdvancedPanel />;
       case 'notifications':
         // NotificationsPanel is now self-contained - uses Jotai atoms directly

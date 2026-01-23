@@ -29,8 +29,7 @@ import { ErrorDialog } from './components/ErrorDialog/ErrorDialog';
 import { ErrorToastContainer } from './components/ErrorToast/ErrorToast';
 import { ApiKeyDialog } from './components/ApiKeyDialog';
 import { ProjectSelectionDialog } from './components/ProjectSelectionDialog/ProjectSelectionDialog';
-import { OnboardingDialog } from './components/OnboardingDialog/OnboardingDialog';
-import { FeatureWalkthrough } from './components/FeatureWalkthrough/FeatureWalkthrough';
+import { UnifiedOnboarding, type OnboardingData } from './components/UnifiedOnboarding/UnifiedOnboarding';
 import { WorkspaceManager } from './components/WorkspaceManager/WorkspaceManager.tsx';
 import { AIUsageReport } from './components/AIUsageReport';
 import { DatabaseBrowser } from './components/DatabaseBrowser/DatabaseBrowser';
@@ -295,11 +294,10 @@ export default function App() {
     suggestedWorkspace?: string;
   } | null>(null);
 
-  // Onboarding dialog state
-  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
-
-  // Feature walkthrough state (shown on first launch)
-  const [isFeatureWalkthroughOpen, setIsFeatureWalkthroughOpen] = useState(false);
+  // Unified onboarding state (combines old onboarding + feature walkthrough)
+  const [isUnifiedOnboardingOpen, setIsUnifiedOnboardingOpen] = useState(false);
+  // Forced user mode for testing from developer menu (null = auto-detect)
+  const [onboardingForcedMode, setOnboardingForcedMode] = useState<'new' | 'existing' | null>(null);
 
   // Claude commands install toast state
   const [showCommandsToast, setShowCommandsToast] = useState(false);
@@ -368,11 +366,15 @@ export default function App() {
   const [agentPlanReference, setAgentPlanReference] = useState<string | null>(null);
 
   // Check for first-time user after initialization completes
+  // Check for unified onboarding on first launch
+  // Set to true to force the onboarding to display (for development/testing)
+  const FORCE_UNIFIED_ONBOARDING = false;
+
   useEffect(() => {
     // Only check after initialization is complete
     if (isInitializing) return;
 
-    const checkOnboarding = async () => {
+    const checkUnifiedOnboarding = async () => {
       // Skip in Playwright tests
       if ((window as any).PLAYWRIGHT) {
         return;
@@ -383,132 +385,134 @@ export default function App() {
         return;
       }
 
-      // Small delay to let other windows start up first
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      // Recheck after delay - another window might have already shown it
-      const state = await window.electronAPI.invoke('onboarding:get');
-
-      // Don't show if user has completed or permanently skipped
-      if (state.onboardingCompleted || state.userRole) {
+      // Force display if flag is set (for development/testing)
+      if (FORCE_UNIFIED_ONBOARDING) {
+        setIsUnifiedOnboardingOpen(true);
         return;
       }
 
-      // Check if we should wait before prompting again
-      if (state.onboardingNextPrompt) {
-        const now = Date.now();
-        if (now < state.onboardingNextPrompt) {
-          // Not time to show again yet
-          return;
-        }
+      // Small delay to let other windows start up first
+      await new Promise(resolve => setTimeout(resolve, 100));
 
-        // Time has passed, clear the timestamp
-        await window.electronAPI.invoke('onboarding:update', { onboardingNextPrompt: undefined });
+      // Check if unified onboarding has been completed
+      const state = await window.electronAPI.invoke('onboarding:get');
+
+      // Only check the new unified onboarding flag - ignore old onboarding flags
+      // This ensures ALL users see the new unified flow, even if they completed old onboarding
+      if (state.unifiedOnboardingCompleted) {
+        return;
       }
 
-      // Show onboarding dialog
-      setIsOnboardingOpen(true);
+      // Show unified onboarding
+      setIsUnifiedOnboardingOpen(true);
     };
 
-    checkOnboarding();
+    checkUnifiedOnboarding();
   }, [isInitializing, workspaceMode]);
 
-  // Handle onboarding completion
-  const handleOnboardingComplete = useCallback(async (role: string | null, customRole: string | null, email: string | null) => {
-    const roleToStore = customRole || role || undefined;
+  // Handle unified onboarding completion
+  const handleUnifiedOnboardingComplete = useCallback(async (data: OnboardingData) => {
+    const roleToStore = data.customRole || data.role || undefined;
 
-    // Store onboarding data in electron-store
+    // Store onboarding data in electron-store (app settings)
     await window.electronAPI.invoke('onboarding:update', {
       userRole: roleToStore,
-      userEmail: email || undefined,
-      onboardingCompleted: true
+      userEmail: data.email || undefined,
+      referralSource: data.referralSource || undefined,
+      unifiedOnboardingCompleted: true,
+      onboardingCompleted: true // Keep for backward compatibility
     });
 
-    // Associate email with user in PostHog if provided
-    if (email && posthog) {
-      posthog.people.set({ email });
-    }
+    // Store developer mode globally in app settings
+    await window.electronAPI.invoke('developer-mode:set', data.developerMode);
 
-    // Track onboarding completion event
     if (posthog) {
-      posthog.capture('onboarding_completed', {
-        user_role: role || undefined,
-        custom_role_provided: !!customRole,
-        custom_role_text: customRole || undefined,
-        email_provided: !!email,
+      // Set person properties (persist to user profile)
+      const personProperties: Record<string, string | boolean> = {
+        developer_mode: data.developerMode,
+      };
+      if (data.email) {
+        personProperties.email = data.email;
+      }
+      if (data.role) {
+        personProperties.user_role = data.customRole || data.role;
+      }
+      if (data.referralSource) {
+        personProperties.referral_source = data.referralSource;
+      }
+      posthog.people.set(personProperties);
+
+      // Submit survey response (role and referral source)
+      // Survey ID: 019becdc-8139-0000-0946-e76c18c36ef7 (Onboarding Profile Survey)
+      const surveyId = '019becdc-8139-0000-0946-e76c18c36ef7';
+      if (data.role || data.referralSource) {
+        const surveyPayload: Record<string, string> = {
+          $survey_id: surveyId,
+          $survey_name: 'Onboarding Profile Survey',
+        };
+        // Map role value to survey choice label
+        const roleLabels: Record<string, string> = {
+          developer: 'Software Developer',
+          product_manager: 'Product Manager',
+          designer: 'Designer',
+          writer: 'Writer / Content',
+          researcher: 'Researcher',
+          marketing: 'Marketing',
+          sales: 'Sales',
+          finance: 'Finance',
+          student: 'Student',
+          hobbyist: 'Hobbyist / Personal Use',
+          other: 'Other',
+        };
+        // Map referral value to survey choice label
+        const referralLabels: Record<string, string> = {
+          search: 'Search',
+          social: 'Social Media',
+          friend: 'Friend',
+          ai: 'AI',
+          ad: 'Ad',
+          other: 'Other',
+        };
+
+        if (data.role) {
+          surveyPayload['$survey_response'] = data.customRole || roleLabels[data.role] || data.role;
+        }
+        if (data.referralSource) {
+          // Handle social:Platform format
+          const referralKey = data.referralSource.startsWith('social:') ? 'social' : data.referralSource;
+          surveyPayload['$survey_response_1'] = referralLabels[referralKey] || data.referralSource;
+        }
+        posthog.capture('survey sent', surveyPayload);
+      }
+
+      // Track mode selection event (initial)
+      posthog.capture('developer_mode_changed', {
+        developer_mode: data.developerMode,
+        source: 'onboarding',
+        is_initial: true,
       });
     }
 
     // Close the dialog
-    setIsOnboardingOpen(false);
-  }, [posthog]);
+    setIsUnifiedOnboardingOpen(false);
+  }, [posthog, workspacePath]);
 
-  // Handle onboarding skip
-  const handleOnboardingSkip = useCallback(async () => {
+  // Handle unified onboarding skip
+  const handleUnifiedOnboardingSkip = useCallback(async () => {
     // Mark as completed to prevent re-showing
     await window.electronAPI.invoke('onboarding:update', {
-      onboardingCompleted: true
+      unifiedOnboardingCompleted: true,
+      onboardingCompleted: true // Keep for backward compatibility
     });
 
     // Track skip event
     if (posthog) {
-      posthog.capture('onboarding_skipped');
+      posthog.capture('unified_onboarding_skipped');
     }
 
     // Close the dialog
-    setIsOnboardingOpen(false);
+    setIsUnifiedOnboardingOpen(false);
   }, [posthog]);
-
-  // Check for feature walkthrough on first launch
-  // Set to true to force the walkthrough to display (for development/testing)
-  const FORCE_FEATURE_WALKTHROUGH = false;
-
-  useEffect(() => {
-    // Only check after initialization is complete
-    if (isInitializing) return;
-
-    // Skip in Playwright tests
-    if ((window as any).PLAYWRIGHT) {
-      return;
-    }
-
-    // Only show in workspace mode windows
-    if (!workspaceMode) {
-      return;
-    }
-
-    const checkFeatureWalkthrough = async () => {
-      // Force display if flag is set (for development/testing)
-      if (FORCE_FEATURE_WALKTHROUGH) {
-        setIsFeatureWalkthroughOpen(true);
-        return;
-      }
-
-      // Check if walkthrough has been completed
-      const isCompleted = await window.electronAPI.invoke('feature-walkthrough:is-completed');
-      if (!isCompleted) {
-        setIsFeatureWalkthroughOpen(true);
-      }
-    };
-
-    checkFeatureWalkthrough();
-  }, [isInitializing, workspaceMode]);
-
-  // Handle feature walkthrough completion
-  const handleFeatureWalkthroughComplete = useCallback(async () => {
-    // Mark as completed in settings
-    // PostHog event is sent from the FeatureWalkthrough component with timing data
-    await window.electronAPI.invoke('feature-walkthrough:set-completed', true);
-    setIsFeatureWalkthroughOpen(false);
-  }, []);
-
-  // Handle feature walkthrough skip
-  const handleFeatureWalkthroughSkip = useCallback(async () => {
-    // Mark as completed even when skipped (so it doesn't show again)
-    // PostHog event is sent from the FeatureWalkthrough component with timing data
-    await window.electronAPI.invoke('feature-walkthrough:set-completed', true);
-    setIsFeatureWalkthroughOpen(false);
-  }, []);
 
   // Load custom trackers when workspace is available
   useEffect(() => {
@@ -991,7 +995,7 @@ export default function App() {
     if (navigator.platform !== 'Win32') return;
 
     // Wait for feature walkthrough and onboarding to be closed first
-    if (isFeatureWalkthroughOpen || isOnboardingOpen) return;
+    if (isUnifiedOnboardingOpen) return;
 
     const checkWindowsWarning = async () => {
       try {
@@ -1016,35 +1020,27 @@ export default function App() {
     // Small delay to ensure smooth transition after other dialogs
     const timeout = setTimeout(checkWindowsWarning, 500);
     return () => clearTimeout(timeout);
-  }, [isInitializing, workspaceMode, isFeatureWalkthroughOpen, isOnboardingOpen]);
+  }, [isInitializing, workspaceMode, isUnifiedOnboardingOpen]);
 
-  // Listen for show-feature-walkthrough IPC event (from Developer menu)
+  // Listen for show-unified-onboarding IPC event (from Developer menu)
   useEffect(() => {
     if (!window.electronAPI?.on) return;
 
-    const handleShowFeatureWalkthrough = () => {
-      setIsFeatureWalkthroughOpen(true);
+    const handleShowUnifiedOnboarding = (options?: { forceNewUser?: boolean; forceExistingUser?: boolean }) => {
+      if (options?.forceNewUser) {
+        setOnboardingForcedMode('new');
+      } else if (options?.forceExistingUser) {
+        setOnboardingForcedMode('existing');
+      } else {
+        setOnboardingForcedMode(null);
+      }
+      setIsUnifiedOnboardingOpen(true);
     };
 
-    window.electronAPI.on('show-feature-walkthrough', handleShowFeatureWalkthrough);
+    window.electronAPI.on('show-unified-onboarding', handleShowUnifiedOnboarding);
 
     return () => {
-      window.electronAPI.off?.('show-feature-walkthrough', handleShowFeatureWalkthrough);
-    };
-  }, []);
-
-  // Listen for show-onboarding-dialog IPC event (from Developer menu)
-  useEffect(() => {
-    if (!window.electronAPI?.on) return;
-
-    const handleShowOnboardingDialog = () => {
-      setIsOnboardingOpen(true);
-    };
-
-    window.electronAPI.on('show-onboarding-dialog', handleShowOnboardingDialog);
-
-    return () => {
-      window.electronAPI.off?.('show-onboarding-dialog', handleShowOnboardingDialog);
+      window.electronAPI.off?.('show-unified-onboarding', handleShowUnifiedOnboarding);
     };
   }, []);
 
@@ -1103,7 +1099,7 @@ export default function App() {
       if ((window as any).PLAYWRIGHT) return;
 
       // Wait for other dialogs to close first
-      if (isFeatureWalkthroughOpen || isOnboardingOpen || isWindowsClaudeCodeWarningOpen) return;
+      if (isUnifiedOnboardingOpen || isWindowsClaudeCodeWarningOpen) return;
 
       try {
         const needsInstall = await OnboardingService.needsCommandInstallation(workspacePath);
@@ -1120,7 +1116,7 @@ export default function App() {
     // Small delay to ensure smooth transition after other dialogs
     const timeout = setTimeout(checkCommands, 500);
     return () => clearTimeout(timeout);
-  }, [workspacePath, workspaceMode, isFeatureWalkthroughOpen, isOnboardingOpen, isWindowsClaudeCodeWarningOpen]);
+  }, [workspacePath, workspaceMode, isUnifiedOnboardingOpen, isWindowsClaudeCodeWarningOpen]);
 
   // Reset commands check when workspace changes
   useEffect(() => {
@@ -1989,15 +1985,11 @@ export default function App() {
           setActiveMode('settings');
         }}
       />
-      <OnboardingDialog
-        isOpen={isOnboardingOpen}
-        onComplete={handleOnboardingComplete}
-        onSkip={handleOnboardingSkip}
-      />
-      <FeatureWalkthrough
-        isOpen={isFeatureWalkthroughOpen}
-        onComplete={handleFeatureWalkthroughComplete}
-        onSkip={handleFeatureWalkthroughSkip}
+      <UnifiedOnboarding
+        isOpen={isUnifiedOnboardingOpen}
+        onComplete={handleUnifiedOnboardingComplete}
+        onSkip={handleUnifiedOnboardingSkip}
+        forcedMode={onboardingForcedMode}
       />
       {showCommandsToast && workspacePath && (
         <ClaudeCommandsToast

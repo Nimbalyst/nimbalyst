@@ -266,6 +266,17 @@ export function registerSettingsHandlers() {
         updateOnboardingState(state);
     });
 
+    // Developer mode (global app setting)
+    safeHandle('developer-mode:get', async () => {
+        const { isDeveloperMode } = await import('../utils/store');
+        return isDeveloperMode();
+    });
+
+    safeHandle('developer-mode:set', async (_event, enabled: boolean) => {
+        const { setDeveloperMode } = await import('../utils/store');
+        setDeveloperMode(enabled);
+    });
+
     // Feature walkthrough state (shown on first launch)
     safeHandle('feature-walkthrough:is-completed', async () => {
         const { isFeatureWalkthroughCompleted } = await import('../utils/store');

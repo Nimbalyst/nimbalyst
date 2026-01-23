@@ -238,6 +238,41 @@ analyticsService.sendEvent('window_closed', {
 });
 ```
 
+### Setting Person Properties
+
+Use `posthog.people.set()` to attach properties to a user's profile. These persist across sessions and can be used for segmentation.
+
+```typescript
+// In renderer process
+const posthog = usePostHog();
+
+// Set person properties (these persist to user profile)
+posthog?.people.set({
+  developer_mode: true,
+  user_role: 'Software Developer',
+});
+```
+
+**Guidelines for person properties:**
+
+1. **Use for user-level attributes**: Things that describe the user, not individual actions
+2. **Document in POSTHOG_EVENTS.md**: Add new properties to the "Person Properties" table
+3. **Prefer set over set_once**: Use `$set_once` only for properties that should never change (like `is_dev_user`)
+4. **Keep values categorical**: Use strings or booleans, not raw numbers
+
+### Submitting Survey Responses
+
+For API-type surveys (programmatic submission), use the `survey sent` event:
+
+```typescript
+posthog?.capture('survey sent', {
+  $survey_id: 'your-survey-id',
+  $survey_name: 'Survey Name',
+  $survey_response: 'Answer to first question',
+  $survey_response_1: 'Answer to second question',  // 0-indexed after first
+});
+```
+
 ### Tracking Known Errors
 
 Use the `known_error` event to track recognized error conditions that we want to monitor. This provides a single event type for all known errors, with an `errorId` property to distinguish between them.

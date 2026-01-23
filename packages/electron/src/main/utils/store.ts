@@ -56,7 +56,11 @@ interface AppStoreSchema {
   // User onboarding
   userRole?: string; // The user's selected role (or 'skipped' if permanently dismissed)
   userEmail?: string; // Optional email provided during onboarding
+  referralSource?: string; // Where user heard about Nimbalyst
   onboardingNextPrompt?: number; // Timestamp for when to show onboarding again (if deferred)
+  unifiedOnboardingCompleted?: boolean; // Unified 3-step onboarding completed (separate from old onboarding)
+  // Developer mode - enables git worktrees, terminal, and dev-specific features
+  developerMode?: boolean;
   // Custom Editors
   mockupLMEnabled?: boolean; // Enable MockupLM custom editor
   // First launch Claude Code installation detection (only checked once ever)
@@ -893,16 +897,20 @@ export function setReleaseChannel(channel: ReleaseChannel): void {
 export interface OnboardingState {
   userRole?: string;
   userEmail?: string;
+  referralSource?: string;
   onboardingNextPrompt?: number;
   onboardingCompleted?: boolean;
+  unifiedOnboardingCompleted?: boolean;
 }
 
 export function getOnboardingState(): OnboardingState {
   return {
     userRole: getAppStore().get('userRole'),
     userEmail: getAppStore().get('userEmail'),
+    referralSource: getAppStore().get('referralSource'),
     onboardingNextPrompt: getAppStore().get('onboardingNextPrompt'),
-    onboardingCompleted: getAppStore().get('onboardingCompleted')
+    onboardingCompleted: getAppStore().get('onboardingCompleted'),
+    unifiedOnboardingCompleted: getAppStore().get('unifiedOnboardingCompleted')
   };
 }
 
@@ -913,12 +921,27 @@ export function updateOnboardingState(state: Partial<OnboardingState>): void {
   if (state.userEmail !== undefined) {
     getAppStore().set('userEmail', state.userEmail);
   }
+  if (state.referralSource !== undefined) {
+    getAppStore().set('referralSource', state.referralSource);
+  }
   if (state.onboardingNextPrompt !== undefined) {
     getAppStore().set('onboardingNextPrompt', state.onboardingNextPrompt);
   }
   if (state.onboardingCompleted !== undefined) {
     getAppStore().set('onboardingCompleted', state.onboardingCompleted);
   }
+  if (state.unifiedOnboardingCompleted !== undefined) {
+    getAppStore().set('unifiedOnboardingCompleted', state.unifiedOnboardingCompleted);
+  }
+}
+
+// Developer Mode Settings
+export function isDeveloperMode(): boolean {
+  return getAppStore().get('developerMode', false);
+}
+
+export function setDeveloperMode(enabled: boolean): void {
+  getAppStore().set('developerMode', enabled);
 }
 
 // Default AI Model Settings

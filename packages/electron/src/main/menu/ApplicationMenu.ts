@@ -1218,20 +1218,20 @@ export async function createApplicationMenu() {
                     label: 'Show Dialogs',
                     submenu: [
                         {
-                            label: 'Show Onboarding',
+                            label: 'Show Onboarding (New User)',
                             click: async () => {
                                 const focused = getFocusedWindow();
                                 if (focused) {
-                                    focused.webContents.send('show-feature-walkthrough');
+                                    focused.webContents.send('show-unified-onboarding', { forceNewUser: true });
                                 }
                             }
                         },
                         {
-                            label: 'Show Collection Form',
+                            label: 'Show Onboarding (Existing User)',
                             click: async () => {
                                 const focused = getFocusedWindow();
                                 if (focused) {
-                                    focused.webContents.send('show-onboarding-dialog');
+                                    focused.webContents.send('show-unified-onboarding', { forceExistingUser: true });
                                 }
                             }
                         },

@@ -217,10 +217,12 @@ The `known_error` event uses an `errorId` property to identify specific error co
 
 | Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |
 | --- | --- | --- | --- | --- | --- |
-| `feature_walkthrough_completed` | `FeatureWalkthrough.tsx:76, 102` | User completes or skips the feature walkthrough | `total_time_ms`<br/>`slide_times` (object with editor/agent/mockup keys)<br/>`skipped` (boolean)<br/>`skipped_at_slide` (editor/agent/mockup, only if skipped) | v0.45.25 (2025-11-14) |  |
-| `onboarding_completed` | `App.tsx:312` | User completes the role/email onboarding dialog | `user_role`<br/>`custom_role_provided`<br/>`custom_role_text`<br/>`email_provided` | v0.45.25 (2025-11-14) |  |
-| `onboarding_deferred` | `App.tsx:330` | User clicks "Ask me later" on onboarding dialog | None | v0.45.25 (2025-11-14) |  |
-| `onboarding_skipped` | `App.tsx:341` | User clicks "Never ask again" on onboarding dialog | None | v0.45.25 (2025-11-14) |  |
+| `developer_mode_changed` | `App.tsx`<br/>`AdvancedPanel.tsx` | User changes developer mode setting (initial or subsequent) | `developer_mode` (boolean)<br/>`source` (onboarding/settings)<br/>`is_initial` (boolean) | (pending release) |  |
+| `unified_onboarding_skipped` | `App.tsx` | User skips the unified onboarding flow | None | (pending release) | Replaces `onboarding_skipped` |
+| ~~`feature_walkthrough_completed`~~ | ~~`FeatureWalkthrough.tsx`~~ | ~~User completes or skips the feature walkthrough~~ | ~~`total_time_ms`<br/>`slide_times` (object with editor/mockup/agent keys)<br/>`skipped` (boolean)<br/>`skipped_at_slide` (editor/mockup/agent, only if skipped)~~ | v0.45.25 (2025-11-14) | **DEPRECATED**: No longer sent; walkthrough slides removed in unified onboarding |
+| ~~`onboarding_completed`~~ | ~~`OnboardingDialog.tsx`~~ | ~~User completes the role/email onboarding dialog~~ | ~~`user_role`<br/>`custom_role_provided`<br/>`custom_role_text`<br/>`email_provided`~~ | v0.45.25 (2025-11-14) | **DEPRECATED**: Replaced by `unified_onboarding_completed` |
+| ~~`onboarding_deferred`~~ | ~~`App.tsx`~~ | ~~User clicks "Ask me later" on onboarding dialog~~ | ~~None~~ | v0.45.25 (2025-11-14) | **DEPRECATED**: Removed in unified onboarding |
+| ~~`onboarding_skipped`~~ | ~~`App.tsx`~~ | ~~User clicks "Never ask again" on onboarding dialog~~ | ~~None~~ | v0.45.25 (2025-11-14) | **DEPRECATED**: Replaced by `unified_onboarding_skipped` |
 | `claude_commands_toast_shown` | `App.tsx:894` | Claude commands install toast is displayed | None | v0.47.2 (2025-12-10) |  |
 | `claude_commands_toast_install_all` | `App.tsx:1654` | User clicks "Install All" on commands toast | None | v0.47.2 (2025-12-10) |  |
 | `claude_commands_toast_settings` | `App.tsx:1663` | User clicks "Settings" on commands toast | None | v0.47.2 (2025-12-10) |  |
@@ -232,7 +234,7 @@ The `known_error` event uses an `errorId` property to identify specific error co
 | --- | --- | --- | --- | --- | --- |
 | `survey shown` | `PostHogSurvey.tsx:85` | PostHog API survey is displayed to user | `$survey_id`<br/>`$survey_name` | (pending release) |  |
 | `survey dismissed` | `PostHogSurvey.tsx:95` | User dismisses survey without submitting | `$survey_id`<br/>`$survey_name` | (pending release) |  |
-| `survey sent` | `PostHogSurvey.tsx:122` | User submits survey response | `$survey_id`<br/>`$survey_name`<br/>`$survey_response` (single question)<br/>`$survey_response_N` (multi-question) | (pending release) |  |
+| `survey sent` | `PostHogSurvey.tsx:122`<br/>`App.tsx` | User submits survey response | `$survey_id`<br/>`$survey_name`<br/>`$survey_response` (single question)<br/>`$survey_response_N` (multi-question) | (pending release) | (pending release): Added programmatic submission from onboarding for "Onboarding Profile Survey" (019becdc-8139-0000-0946-e76c18c36ef7) |
 
 ### Permissions
 
@@ -298,6 +300,28 @@ Events from the iOS companion app. These events share the same PostHog project a
 - **Permissions**: 4 events
 - **Voice Mode**: 3 events
 - **System/Infrastructure**: 11 events
+
+## Person Properties
+
+Person properties are attached to user profiles in PostHog via `posthog.people.set()`. These persist across sessions and allow segmentation and filtering.
+
+| Property | Type | Set By | Description |
+| --- | --- | --- | --- |
+| `email` | `string` | `App.tsx` (onboarding) | User's email address (if provided during onboarding) |
+| `user_role` | `string` | `App.tsx` (onboarding) | User's role (e.g., "Software Developer", "Designer") |
+| `referral_source` | `string` | `App.tsx` (onboarding) | How user heard about Nimbalyst (e.g., "Search", "Social Media") |
+| `developer_mode` | `boolean` | `App.tsx` (onboarding)<br/>`AdvancedPanel.tsx` (settings) | Whether developer mode is enabled |
+| `is_dev_user` | `boolean` | `AnalyticsService.ts` | Set via `$set_once` - true for development/non-official builds |
+| `is_dev_install` | `boolean` | `AnalyticsService.ts` | Set via `$set_once` - true if installed from dev build |
+| `nimbalyst_mobile_version` | `string` | Mobile `main.tsx` | Mobile app version (iOS/Android) |
+
+## Surveys
+
+Surveys are configured in PostHog and can be either popover (shown in-app) or API (programmatically submitted).
+
+| Survey ID | Name | Type | Questions | Submitted From |
+| --- | --- | --- | --- | --- |
+| `019becdc-8139-0000-0946-e76c18c36ef7` | Onboarding Profile Survey | API | 1. What best describes your role?<br/>2. How did you hear about Nimbalyst? | `App.tsx` (onboarding completion) |
 
 ## Privacy Requirements
 
