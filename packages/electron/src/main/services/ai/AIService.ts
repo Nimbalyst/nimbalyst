@@ -2623,13 +2623,12 @@ export class AIService {
         logger.main.warn('[AIService] Failed to track ai_message_queued:', analyticsError);
       }
 
-      // TESTING: Commenting out renderer notification - queue processing now happens in main process
-      // Notify the renderer to process the queue
-      // This ensures locally-queued prompts get processed (same as mobile sync path)
-      // event.sender.send('ai:queuedPromptsReceived', {
-      //   sessionId,
-      //   promptCount: 1
-      // });
+      // Notify the renderer to update the queue list UI
+      // This ensures locally-queued prompts are visible (same as mobile sync path)
+      event.sender.send('ai:queuedPromptsReceived', {
+        sessionId,
+        promptCount: 1
+      });
 
       return {
         id: created.id,
@@ -2650,6 +2649,59 @@ export class AIService {
       await queueStore.delete(promptId);
       logger.main.info(`[AIService] deleteQueuedPrompt: deleted ${promptId}`);
       return { success: true };
+    });
+
+    // Trigger queue processing for a session (e.g., when voice command queued while AI is idle)
+    safeHandle('ai:triggerQueueProcessing', async (
+      event,
+      sessionId: string,
+      workspacePath: string
+    ) => {
+      const { getQueuedPromptsStore } = await import('../RepositoryManager');
+      const queueStore = getQueuedPromptsStore();
+      const pendingPrompts = await queueStore.listPending(sessionId);
+
+      if (pendingPrompts.length === 0) {
+        logger.main.info(`[AIService] triggerQueueProcessing: no pending prompts for session ${sessionId}`);
+        return { processed: false };
+      }
+
+      const nextPrompt = pendingPrompts[0];
+      logger.main.info(`[AIService] triggerQueueProcessing: processing prompt ${nextPrompt.id} for session ${sessionId}`);
+
+      // Claim the prompt atomically
+      const claimed = await queueStore.claim(nextPrompt.id);
+      if (!claimed) {
+        logger.main.info(`[AIService] triggerQueueProcessing: prompt ${nextPrompt.id} already claimed`);
+        return { processed: false };
+      }
+
+      // Notify renderer that prompt was claimed (so UI removes it from queue list)
+      event.sender.send('ai:promptClaimed', {
+        sessionId,
+        promptId: claimed.id,
+      });
+
+      // Build document context for the queued prompt
+      const docContext = {
+        ...claimed.documentContext,
+        queuedPromptId: claimed.id,
+        attachments: claimed.attachments,
+      };
+
+      // Process the prompt via sendMessage
+      setImmediate(async () => {
+        try {
+          await this.sendMessageHandler!(event, claimed.prompt, docContext as any, sessionId, workspacePath);
+          // Mark as completed
+          await queueStore.complete(claimed.id);
+        } catch (queueError) {
+          logger.main.error(`[AIService] Failed to process queued prompt ${claimed.id}:`, queueError);
+          await queueStore.fail(claimed.id, queueError instanceof Error ? queueError.message : 'Unknown error');
+        }
+      });
+
+      return { processed: true };
     });
 
     // Save draft input

@@ -353,12 +353,22 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   }, [isLoading, loadQueuedPrompts]);
 
   useEffect(() => {
-    const handleQueuedPromptsReceived = (data: { sessionId: string }) => {
-      if (data.sessionId === sessionId) loadQueuedPrompts();
+    const handleQueuedPromptsReceived = async (data: { sessionId: string }) => {
+      if (data.sessionId === sessionId) {
+        loadQueuedPrompts();
+        // If AI is idle, trigger queue processing immediately
+        if (!isLoading && workspacePath) {
+          try {
+            await window.electronAPI.invoke('ai:triggerQueueProcessing', sessionId, workspacePath);
+          } catch (error) {
+            console.error('[SessionTranscript] Failed to trigger queue processing:', error);
+          }
+        }
+      }
     };
     const cleanup = window.electronAPI.on('ai:queuedPromptsReceived', handleQueuedPromptsReceived);
     return () => { cleanup?.(); };
-  }, [sessionId, loadQueuedPrompts]);
+  }, [sessionId, loadQueuedPrompts, isLoading, workspacePath]);
 
   useEffect(() => {
     const handlePromptClaimed = (event: CustomEvent<{ sessionId: string; promptId: string }>) => {
