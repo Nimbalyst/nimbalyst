@@ -611,9 +611,29 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         ENABLE_TOOL_SEARCH: 'auto:10'
       };
 
-      if (this.config.apiKey) {
-        env.ANTHROPIC_API_KEY = this.config.apiKey;
+      // Configure environment variables based on provider type
+      const claudeCodeProvider = this.config.claudeCodeProvider || 'anthropic';
+
+      if (claudeCodeProvider === 'custom') {
+        // Custom provider - apply user-defined environment variables
+        // This supports Bedrock, Vertex AI, z.ai, and any other custom configuration
+        const customEnvVars = this.config.customEnvVars as Record<string, string> | undefined;
+        if (customEnvVars && typeof customEnvVars === 'object') {
+          for (const [key, value] of Object.entries(customEnvVars)) {
+            if (typeof value === 'string' && value.trim() !== '') {
+              env[key] = value;
+            }
+          }
+        }
       } else {
+        // Standard Anthropic API - use OAuth unless explicit API key configured
+        if (this.config.apiKey) {
+          env.ANTHROPIC_API_KEY = this.config.apiKey;
+        } else {
+          // Remove any ANTHROPIC_API_KEY from environment to force OAuth
+          // (user may have this set in their shell for other tools)
+          delete env.ANTHROPIC_API_KEY;
+        }
       }
 
       // In production, we need to spawn claude-code differently

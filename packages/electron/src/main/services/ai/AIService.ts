@@ -478,21 +478,9 @@ export class AIService {
   }
 
   private initializeApiKeys() {
-    // Delay initialization to avoid accessing store before app is ready
-    process.nextTick(() => {
-      try {
-        // Check if we have API key stored
-        const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
-
-        // If we have an env variable and no stored key, save it
-        if (process.env.ANTHROPIC_API_KEY && !apiKeys['anthropic']) {
-          apiKeys['anthropic'] = process.env.ANTHROPIC_API_KEY;
-          this.getSettingsStore().set('apiKeys', apiKeys);
-        }
-      } catch (error) {
-        console.error('[AIService] Error initializing API keys:', error);
-      }
-    });
+    // Environment variables (ANTHROPIC_API_KEY, OPENAI_API_KEY) are used as fallback
+    // when reading API keys, but NOT automatically saved to settings.
+    // This allows users to have env vars for other tools without polluting Nimbalyst settings.
   }
 
   /**
@@ -1232,11 +1220,33 @@ export class AIService {
         initConfig.baseUrl = lmstudioSettings.baseUrl || storedApiKeys['lmstudio_url'] || 'http://127.0.0.1:8234';
       }
 
-      // Pass through allowedTools setting for Claude Code if configured
+      // Pass through Claude Code provider settings
       if (provider === 'claude-code') {
         const providerSettings = this.getSettingsStore().get('providerSettings', {}) as any;
-        if (providerSettings?.['claude-code']?.allowedTools) {
-          initConfig.allowedTools = providerSettings['claude-code'].allowedTools;
+        const claudeCodeSettings = providerSettings?.['claude-code'] || {};
+        const storedApiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
+
+        // Pass allowed tools if configured
+        if (claudeCodeSettings.allowedTools) {
+          initConfig.allowedTools = claudeCodeSettings.allowedTools;
+        }
+
+        // Get the provider type (anthropic or custom)
+        const claudeCodeProvider = claudeCodeSettings.claudeCodeProvider || 'anthropic';
+        initConfig.claudeCodeProvider = claudeCodeProvider;
+
+        if (claudeCodeProvider === 'anthropic') {
+          // For Anthropic provider, check if API key auth is being used
+          const authMethod = claudeCodeSettings.authMethod || 'login';
+          if (authMethod === 'api-key' && storedApiKeys['claude-code']) {
+            initConfig.apiKey = storedApiKeys['claude-code'];
+          }
+          // Otherwise, Claude Code SDK will use OAuth (login)
+        } else if (claudeCodeProvider === 'custom') {
+          // For custom provider, pass through custom environment variables
+          if (claudeCodeSettings.customEnvVars && typeof claudeCodeSettings.customEnvVars === 'object') {
+            initConfig.customEnvVars = { ...claudeCodeSettings.customEnvVars };
+          }
         }
       }
 
@@ -3003,13 +3013,26 @@ export class AIService {
       if (settings.apiKeys) {
         // Only update changed API keys
         const currentKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
+        const providerSettings = settings.providerSettings || this.getSettingsStore().get('providerSettings', {}) as any;
+        const claudeCodeSettings = providerSettings?.['claude-code'] || {};
+        const authMethod = claudeCodeSettings.authMethod || 'login';
 
-        // Save Anthropic key
+        // Save Anthropic key - ONLY if not using OAuth login
         if (settings.apiKeys.anthropic !== undefined) {
           const key = settings.apiKeys.anthropic;
-          if (key && key !== this.maskApiKey(currentKeys['anthropic'] || '')) {
+
+          // Don't save if empty string (user clearing the key)
+          if (key === '' || key === null) {
+            delete currentKeys['anthropic'];
+          } else if (key && key !== this.maskApiKey(currentKeys['anthropic'] || '')) {
             currentKeys['anthropic'] = key as string;
           }
+        }
+
+        // If using OAuth login, remove anthropic key if it exists
+        // (it may have been saved from shell environment variable previously)
+        if (authMethod === 'login' && currentKeys['anthropic']) {
+          delete currentKeys['anthropic'];
         }
 
         // Save OpenAI key
@@ -3029,6 +3052,31 @@ export class AIService {
         // Save LMStudio URL
         if (settings.apiKeys.lmstudio_url !== undefined) {
           currentKeys['lmstudio_url'] = settings.apiKeys.lmstudio_url as string;
+        }
+
+        // Save Claude Code API key (used for GLM and other alternative providers)
+        if (settings.apiKeys['claude-code'] !== undefined) {
+          const key = settings.apiKeys['claude-code'];
+          const claudeCodeProvider = claudeCodeSettings.claudeCodeProvider || 'anthropic';
+
+          // Don't save if empty string (user clearing the key)
+          if (key === '' || key === null) {
+            delete currentKeys['claude-code'];
+          } else if (claudeCodeProvider === 'custom') {
+            // Custom provider (GLM, etc.) - always save the key
+            if (key && key !== this.maskApiKey(currentKeys['claude-code'] || '')) {
+              currentKeys['claude-code'] = key as string;
+            }
+          } else if (claudeCodeProvider === 'anthropic') {
+            // Anthropic provider - respect auth method
+            if (authMethod === 'api-key' && key && key !== this.maskApiKey(currentKeys['claude-code'] || '')) {
+              // Only save if using api-key auth method
+              currentKeys['claude-code'] = key as string;
+            } else if (authMethod === 'login') {
+              // Using OAuth - remove any stored API key
+              delete currentKeys['claude-code'];
+            }
+          }
         }
 
         this.getSettingsStore().set('apiKeys', currentKeys);
@@ -3123,32 +3171,91 @@ export class AIService {
           testProvider.destroy();
         }
 
-        // For Claude Code, just verify the API key works with the regular Claude API
+        // For Claude Code, test based on the selected provider
         if (provider === 'claude-code') {
-          console.log('[AIService] testConnection - Testing Claude Code provider');
+          const providerSettings = this.getSettingsStore().get('providerSettings', {}) as any;
+          const claudeCodeSettings = providerSettings['claude-code'] || {};
+          const claudeCodeProvider = claudeCodeSettings.claudeCodeProvider || 'anthropic';
 
-          // Test using the regular Claude API to verify the key
-          const testProvider = new (await import('@nimbalyst/runtime/ai/server/providers/ClaudeProvider')).ClaudeProvider();
-          const config: any = {
-            apiKey,
-            model: 'claude-3-5-sonnet-20241022'
-          };
+          console.log('[AIService] testConnection - Testing Claude Code provider:', claudeCodeProvider);
 
-          await testProvider.initialize(config);
+          if (claudeCodeProvider === 'glm') {
+            // GLM uses Anthropic-compatible API at a different endpoint
+            const glmRegion = claudeCodeSettings.glmRegion || 'international';
+            const glmBaseUrl = glmRegion === 'china'
+              ? 'https://open.bigmodel.cn/api/anthropic'
+              : 'https://api.z.ai/api/anthropic';
+            const baseUrl = claudeCodeSettings.baseUrl || glmBaseUrl;
 
-          // Quick test message
-          const response = testProvider.sendMessage('Say "Hello" in one word');
-          for await (const chunk of response) {
-            if (!chunk) continue;
-            if (chunk.type === 'error') {
-              throw new Error(chunk.error || 'Unknown error');
+            if (!apiKey) {
+              return { success: false, error: 'GLM API key not configured' };
             }
-            // Exit after first response
-            if (chunk.type === 'text') {
-              break;
+
+            // Test using the Claude API with GLM's endpoint
+            const testProvider = new (await import('@nimbalyst/runtime/ai/server/providers/ClaudeProvider')).ClaudeProvider();
+            const config: any = {
+              apiKey,
+              baseUrl,
+              model: 'claude-sonnet-4-20250514'  // GLM's Anthropic-compatible endpoint
+            };
+
+            await testProvider.initialize(config);
+
+            // Quick test message
+            const response = testProvider.sendMessage('Say "Hello" in one word');
+            for await (const chunk of response) {
+              if (!chunk) continue;
+              if (chunk.type === 'error') {
+                throw new Error(chunk.error || 'Unknown error');
+              }
+              // Exit after first response
+              if (chunk.type === 'text') {
+                break;
+              }
             }
+            testProvider.destroy();
+          } else if (claudeCodeProvider === 'bedrock') {
+            // Bedrock uses AWS credentials, not API key - just verify settings are present
+            const awsRegion = claudeCodeSettings.awsRegion;
+            if (!awsRegion) {
+              return { success: false, error: 'AWS region not configured for Bedrock' };
+            }
+            // AWS credentials are checked at runtime by the SDK
+            console.log('[AIService] Bedrock provider configured with region:', awsRegion);
+          } else if (claudeCodeProvider === 'vertex') {
+            // Vertex uses GCP credentials
+            const vertexProjectId = claudeCodeSettings.vertexProjectId;
+            if (!vertexProjectId) {
+              return { success: false, error: 'Vertex AI project ID not configured' };
+            }
+            console.log('[AIService] Vertex AI provider configured with project:', vertexProjectId);
+          } else if (claudeCodeProvider === 'foundry') {
+            // Foundry uses its own auth mechanism
+            console.log('[AIService] Microsoft Foundry provider configured');
+          } else {
+            // Default Anthropic provider - test using the regular Claude API to verify the key
+            const testProvider = new (await import('@nimbalyst/runtime/ai/server/providers/ClaudeProvider')).ClaudeProvider();
+            const config: any = {
+              apiKey,
+              model: 'claude-3-5-sonnet-20241022'
+            };
+
+            await testProvider.initialize(config);
+
+            // Quick test message
+            const response = testProvider.sendMessage('Say "Hello" in one word');
+            for await (const chunk of response) {
+              if (!chunk) continue;
+              if (chunk.type === 'error') {
+                throw new Error(chunk.error || 'Unknown error');
+              }
+              // Exit after first response
+              if (chunk.type === 'text') {
+                break;
+              }
+            }
+            testProvider.destroy();
           }
-          testProvider.destroy();
         }
 
         // For LMStudio, test the endpoint

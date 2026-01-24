@@ -865,7 +865,187 @@ export interface ProviderConfig {
   updateAvailable?: boolean;
   installStatus?: 'not-installed' | 'installing' | 'installed' | 'error';
   authMethod?: string;
+  // Claude Code provider-specific settings
+  claudeCodeProvider?: ClaudeCodeProviderType;
+  // Selected template ID for custom provider (e.g., 'bedrock', 'vertex', 'zai', 'custom')
+  selectedTemplateId?: string;
+  // Custom provider environment variables (when claudeCodeProvider === 'custom')
+  customEnvVars?: Record<string, string>;
 }
+
+/**
+ * Claude Code provider type - either official Anthropic or custom with env vars.
+ */
+export type ClaudeCodeProviderType = 'anthropic' | 'custom';
+
+/**
+ * Environment variable template for custom Claude Code providers.
+ */
+export interface ClaudeCodeEnvVarTemplate {
+  id: string;
+  name: string;
+  description: string;
+  docsUrl?: string;
+  envVars: ClaudeCodeEnvVarDefinition[];
+}
+
+/**
+ * Single environment variable definition in a template.
+ */
+export interface ClaudeCodeEnvVarDefinition {
+  key: string;
+  label: string;
+  description?: string;
+  placeholder?: string;
+  required?: boolean;
+  secret?: boolean;  // If true, show as password field
+  defaultValue?: string;
+}
+
+/**
+ * Predefined templates for common Claude Code providers.
+ * These help users set up the correct environment variables.
+ */
+export const CLAUDE_CODE_ENV_VAR_TEMPLATES: ClaudeCodeEnvVarTemplate[] = [
+  {
+    id: 'bedrock',
+    name: 'Amazon Bedrock',
+    description: 'Use Claude via AWS Bedrock. Requires AWS credentials in your environment.',
+    docsUrl: 'https://code.claude.com/docs/en/amazon-bedrock',
+    envVars: [
+      {
+        key: 'CLAUDE_CODE_USE_BEDROCK',
+        label: 'Enable Bedrock',
+        description: 'Set to 1 to enable Bedrock mode',
+        defaultValue: '1',
+        required: true,
+      },
+      {
+        key: 'AWS_REGION',
+        label: 'AWS Region',
+        description: 'AWS region where Claude is available (e.g., us-east-1, us-west-2). Note: Claude Code does not read from .aws config.',
+        placeholder: 'us-east-1',
+        required: true,
+      },
+      {
+        key: 'AWS_PROFILE',
+        label: 'AWS Profile (Optional)',
+        description: 'AWS credentials profile name. Leave empty to use default credentials.',
+        placeholder: 'default',
+      },
+      {
+        key: 'ANTHROPIC_BEDROCK_BASE_URL',
+        label: 'Custom Endpoint (Optional)',
+        description: 'For LLM gateways or proxies',
+        placeholder: 'https://your-gateway.example.com',
+      },
+      {
+        key: 'CLAUDE_CODE_SKIP_BEDROCK_AUTH',
+        label: 'Skip Auth (Optional)',
+        description: 'Set to 1 if your gateway handles AWS authentication',
+        placeholder: '1',
+      },
+    ],
+  },
+  {
+    id: 'vertex',
+    name: 'Google Vertex AI',
+    description: 'Use Claude via Google Cloud Vertex AI. Requires gcloud authentication (run: gcloud auth application-default login).',
+    docsUrl: 'https://code.claude.com/docs/en/google-vertex-ai',
+    envVars: [
+      {
+        key: 'CLAUDE_CODE_USE_VERTEX',
+        label: 'Enable Vertex AI',
+        description: 'Set to 1 to enable Vertex AI mode',
+        defaultValue: '1',
+        required: true,
+      },
+      {
+        key: 'ANTHROPIC_VERTEX_PROJECT_ID',
+        label: 'Google Cloud Project ID',
+        description: 'Your Google Cloud project ID',
+        placeholder: 'your-project-id',
+        required: true,
+      },
+      {
+        key: 'CLOUD_ML_REGION',
+        label: 'Region',
+        description: 'Google Cloud region (e.g., us-east5, europe-west1, or global)',
+        placeholder: 'us-east5',
+        required: true,
+      },
+      {
+        key: 'ANTHROPIC_VERTEX_BASE_URL',
+        label: 'Custom Endpoint (Optional)',
+        description: 'For LLM gateways or proxies',
+        placeholder: 'https://your-gateway.example.com',
+      },
+      {
+        key: 'CLAUDE_CODE_SKIP_VERTEX_AUTH',
+        label: 'Skip Auth (Optional)',
+        description: 'Set to 1 if your gateway handles GCP authentication',
+        placeholder: '1',
+      },
+    ],
+  },
+  {
+    id: 'zai',
+    name: 'z.ai (GLM)',
+    description: 'Use GLM-4.7 from ZhipuAI via Anthropic-compatible API. Starting at $3/month.',
+    docsUrl: 'https://docs.z.ai/scenario-example/develop-tools/claude',
+    envVars: [
+      {
+        key: 'ANTHROPIC_BASE_URL',
+        label: 'API Base URL',
+        description: 'Use api.z.ai for international or open.bigmodel.cn for China',
+        defaultValue: 'https://api.z.ai/api/anthropic',
+        required: true,
+      },
+      {
+        key: 'ANTHROPIC_AUTH_TOKEN',
+        label: 'GLM API Key',
+        description: 'Your GLM API key from the z.ai dashboard',
+        placeholder: 'Enter your GLM API key',
+        required: true,
+        secret: true,
+      },
+      {
+        key: 'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+        label: 'Haiku Model',
+        description: 'Model to use for Haiku requests',
+        defaultValue: 'glm-4.5-air',
+        required: true,
+      },
+      {
+        key: 'ANTHROPIC_DEFAULT_SONNET_MODEL',
+        label: 'Sonnet Model',
+        description: 'Model to use for Sonnet requests',
+        defaultValue: 'glm-4.7',
+        required: true,
+      },
+      {
+        key: 'ANTHROPIC_DEFAULT_OPUS_MODEL',
+        label: 'Opus Model',
+        description: 'Model to use for Opus requests',
+        defaultValue: 'glm-4.7',
+        required: true,
+      },
+      {
+        key: 'API_TIMEOUT_MS',
+        label: 'API Timeout',
+        description: 'Request timeout in milliseconds',
+        defaultValue: '3000000',
+        required: true,
+      },
+    ],
+  },
+  {
+    id: 'custom',
+    name: 'Custom Configuration',
+    description: 'Manually configure environment variables for any provider.',
+    envVars: [],
+  },
+];
 
 /**
  * Model definition for available models.
