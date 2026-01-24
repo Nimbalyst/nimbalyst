@@ -1750,6 +1750,7 @@ export const SessionHistory = React.memo(SessionHistoryComponent, (prevProps, ne
   if (prevProps.refreshTrigger !== nextProps.refreshTrigger) return false;
   if (prevProps.sortOrder !== nextProps.sortOrder) return false;
   if (prevProps.mode !== nextProps.mode) return false;
+  if (prevProps.isGitRepo !== nextProps.isGitRepo) return false;
 
   // Compare arrays by value
   if (!arraysEqual(prevProps.loadedSessionIds ?? [], nextProps.loadedSessionIds ?? [])) return false;

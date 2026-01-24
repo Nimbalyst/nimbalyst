@@ -11,7 +11,7 @@
  * the massive re-renders caused by holding sessionTabs[] in useState.
  */
 
-import React, { forwardRef, useImperativeHandle, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { forwardRef, useImperativeHandle, useEffect, useCallback, useMemo, useRef, useState } from 'react';
 import { atom, useAtomValue, useSetAtom } from 'jotai';
 import { defaultAgentModelAtom } from '../../store/atoms/appSettings';
 import { ResizablePanel } from '../AgenticCoding/ResizablePanel';
@@ -67,7 +67,8 @@ export interface AgentModeProps {
  * - Left sidebar: WorkstreamList (session/workstream list)
  * - Right side: AgentWorkstreamPanel (selected workstream)
  *
- * This component has NO useState. All state comes from atoms.
+ * Most state comes from atoms. The isGitRepo state is local since it's
+ * only needed for the SessionHistory component's worktree button.
  */
 export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function AgentMode({
   workspacePath,
@@ -78,6 +79,9 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
 }, ref) {
   // Ref to the workstream panel for closing tabs
   const workstreamPanelRef = useRef<AgentWorkstreamPanelRef>(null);
+
+  // Git repo status for worktree feature
+  const [isGitRepo, setIsGitRepo] = useState(false);
 
   // Layout state from atoms
   const historyWidth = useAtomValue(sessionHistoryWidthAtom);
@@ -123,6 +127,26 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
     const cleanup = initSessionStateListeners();
     return cleanup;
   }, []);
+
+  // Check if workspace is a git repository (needed for worktree feature)
+  useEffect(() => {
+    if (!workspacePath || !window.electronAPI?.invoke) {
+      setIsGitRepo(false);
+      return;
+    }
+
+    window.electronAPI.invoke('git:is-repo', workspacePath)
+      .then(result => {
+        if (result?.success) {
+          setIsGitRepo(result.isRepo);
+        } else {
+          setIsGitRepo(false);
+        }
+      })
+      .catch(() => {
+        setIsGitRepo(false);
+      });
+  }, [workspacePath]);
 
   // Create new session
   const createNewSession = useCallback(async () => {
@@ -473,6 +497,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
       onSessionBranch={handleSessionBranch}
       onNewSession={createNewSession}
       onNewWorktreeSession={createNewWorktreeSession}
+      isGitRepo={isGitRepo}
       collapsedGroups={collapsedGroups}
       onCollapsedGroupsChange={(groups) => setCollapsedGroups(groups)}
       sortOrder={sortOrder}
