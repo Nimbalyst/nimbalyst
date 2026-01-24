@@ -58,6 +58,7 @@ function getFilePath(file: FileInput): string {
 interface PendingProposal {
   proposalId: string;
   workspacePath: string;
+  sessionId: string;  // Required: proposals must be scoped to a specific session
   filesToStage: string[];  // Always normalized to paths only
   commitMessage: string;
   reasoning?: string;
@@ -68,6 +69,7 @@ interface PendingProposal {
 interface PendingProposalInput {
   proposalId: string;
   workspacePath: string;
+  sessionId: string;  // Required: proposals must be scoped to a specific session
   filesToStage: (string | { path: string; status?: string })[];
   commitMessage: string;
   reasoning?: string;
@@ -82,11 +84,12 @@ const pendingProposals = new Map<string, PendingProposal>();
 const respondedProposals = new Map<string, { type: 'committed' | 'cancelled'; commitHash?: string }>();
 
 /**
- * Generate a key for matching proposals based on content.
+ * Generate a key for matching proposals based on content and session.
+ * Including sessionId ensures proposals from different sessions don't collide.
  */
-function generateProposalKey(filesToStage: string[], commitMessage: string): string {
+function generateProposalKey(sessionId: string, filesToStage: string[], commitMessage: string): string {
   const filesKey = [...filesToStage].sort().join('|');
-  return `${filesKey}::${commitMessage.trim().slice(0, 100)}`;
+  return `${sessionId}::${filesKey}::${commitMessage.trim().slice(0, 100)}`;
 }
 
 /**
@@ -105,9 +108,9 @@ export function registerPendingProposal(input: PendingProposalInput): void {
     filesToStage: normalizedFiles,
   };
 
-  const key = generateProposalKey(proposal.filesToStage, proposal.commitMessage);
+  const key = generateProposalKey(proposal.sessionId, proposal.filesToStage, proposal.commitMessage);
   pendingProposals.set(key, proposal);
-  console.log('[GitCommitWidget] Registered pending proposal:', proposal.proposalId, key);
+  console.log('[GitCommitWidget] Registered pending proposal:', proposal.proposalId, 'sessionId:', proposal.sessionId, 'key:', key);
 }
 
 /**
@@ -115,12 +118,13 @@ export function registerPendingProposal(input: PendingProposalInput): void {
  * Also marks the key as responded with the response type to handle component re-renders.
  */
 export function removePendingProposal(
+  sessionId: string,
   filesToStage: string[],
   commitMessage: string,
   responseType: 'committed' | 'cancelled' = 'cancelled',
   commitHash?: string
 ): void {
-  const key = generateProposalKey(filesToStage, commitMessage);
+  const key = generateProposalKey(sessionId, filesToStage, commitMessage);
   pendingProposals.delete(key);
   respondedProposals.set(key, { type: responseType, commitHash });
   console.log('[GitCommitWidget] Removed pending proposal and marked as responded:', key, responseType);
@@ -129,16 +133,16 @@ export function removePendingProposal(
 /**
  * Get the response for a proposal that has already been responded to.
  */
-function getProposalResponse(filesToStage: string[], commitMessage: string): { type: 'committed' | 'cancelled'; commitHash?: string } | undefined {
-  const key = generateProposalKey(filesToStage, commitMessage);
+function getProposalResponse(sessionId: string, filesToStage: string[], commitMessage: string): { type: 'committed' | 'cancelled'; commitHash?: string } | undefined {
+  const key = generateProposalKey(sessionId, filesToStage, commitMessage);
   return respondedProposals.get(key);
 }
 
 /**
  * Get pending proposal matching the given arguments.
  */
-function getPendingProposal(filesToStage: string[], commitMessage: string): PendingProposal | undefined {
-  const key = generateProposalKey(filesToStage, commitMessage);
+function getPendingProposal(sessionId: string, filesToStage: string[], commitMessage: string): PendingProposal | undefined {
+  const key = generateProposalKey(sessionId, filesToStage, commitMessage);
   return pendingProposals.get(key);
 }
 
@@ -262,6 +266,7 @@ function getAllFolderPaths(node: DirectoryNode, paths: string[] = []): string[] 
 export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
   message,
   workspacePath,
+  sessionId,
 }) => {
   // Extract data from tool call
   const toolCall = message.toolCall;
@@ -332,10 +337,11 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
 
   // Look up pending proposal to get the proposalId for sending response
   // Re-check on every render to detect when proposal is removed
-  const pendingProposal = getPendingProposal(initialFilesToStage, initialCommitMessage);
+  // Uses sessionId to ensure we only match proposals from THIS session
+  const pendingProposal = getPendingProposal(sessionId, initialFilesToStage, initialCommitMessage);
 
   // Check if we've already responded to this proposal (persists in module-level Map)
-  const previousResponse = getProposalResponse(initialFilesToStage, initialCommitMessage);
+  const previousResponse = getProposalResponse(sessionId, initialFilesToStage, initialCommitMessage);
   const alreadyResponded = !!previousResponse;
 
   // Track whether we're waiting for the pending proposal to be registered
@@ -351,8 +357,8 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
 
     // Poll for pending proposal registration (IPC message may arrive shortly after render)
     const checkInterval = setInterval(() => {
-      const proposal = getPendingProposal(initialFilesToStage, initialCommitMessage);
-      const response = getProposalResponse(initialFilesToStage, initialCommitMessage);
+      const proposal = getPendingProposal(sessionId, initialFilesToStage, initialCommitMessage);
+      const response = getProposalResponse(sessionId, initialFilesToStage, initialCommitMessage);
       if (proposal || response) {
         setWaitingForProposal(false);
         clearInterval(checkInterval);
@@ -369,7 +375,7 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
       clearInterval(checkInterval);
       clearTimeout(timeout);
     };
-  }, [pendingProposal, isCompleted, alreadyResponded, initialFilesToStage, initialCommitMessage]);
+  }, [sessionId, pendingProposal, isCompleted, alreadyResponded, initialFilesToStage, initialCommitMessage]);
 
   // Local state for editing
   const [filesToStage, setFilesToStage] = useState<Set<string>>(new Set(initialFilesToStage));
@@ -578,8 +584,9 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
             filesCommitted: result.success ? Array.from(filesToStage) : undefined,
             commitMessage: result.success ? commitMessage : undefined,
           });
-          // Remove from pending with response type
+          // Remove from pending with response type (now session-scoped)
           removePendingProposal(
+            sessionId,
             initialFilesToStage,
             initialCommitMessage,
             result.success ? 'committed' : 'cancelled',
@@ -600,12 +607,12 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
           action: 'cancelled',
           error: errorResult.error,
         });
-        removePendingProposal(initialFilesToStage, initialCommitMessage, 'cancelled');
+        removePendingProposal(sessionId, initialFilesToStage, initialCommitMessage, 'cancelled');
       }
     } finally {
       setIsCommitting(false);
     }
-  }, [commitWorkspacePath, filesToStage, commitMessage, pendingProposal, initialFilesToStage, initialCommitMessage]);
+  }, [sessionId, commitWorkspacePath, filesToStage, commitMessage, pendingProposal, initialFilesToStage, initialCommitMessage]);
 
   const handleCancel = useCallback(() => {
     if (hasResponded) return; // Prevent double-response
@@ -618,9 +625,9 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
       window.electronAPI.sendMcpGitCommitProposalResult(pendingProposal.proposalId, {
         action: 'cancelled',
       });
-      removePendingProposal(initialFilesToStage, initialCommitMessage, 'cancelled');
+      removePendingProposal(sessionId, initialFilesToStage, initialCommitMessage, 'cancelled');
     }
-  }, [pendingProposal, initialFilesToStage, initialCommitMessage, hasResponded]);
+  }, [sessionId, pendingProposal, initialFilesToStage, initialCommitMessage, hasResponded]);
 
   if (!commitWorkspacePath) {
     return null;

@@ -519,6 +519,7 @@ export const RichTranscriptView = React.forwardRef<
             isExpanded={isExpanded}
             onToggle={() => toggleToolExpand(toolId)}
             workspacePath={workspacePath}
+            sessionId={sessionId}
             readFile={readFile}
           />
         </div>

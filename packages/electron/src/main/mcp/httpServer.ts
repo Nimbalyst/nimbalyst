@@ -1970,9 +1970,11 @@ async function tryCreateServer(port: number): Promise<any> {
               });
 
               // Send the proposal to the renderer
+              // IMPORTANT: sessionId is required to properly scope proposals when multiple sessions are running
               commitWindow.webContents.send('mcp:gitCommitProposal', {
                 proposalId,
                 workspacePath,
+                sessionId: sessionId || 'unknown',  // Must include sessionId for proper scoping
                 filesToStage: proposalArgs.filesToStage,
                 commitMessage: proposalArgs.commitMessage,
                 reasoning: proposalArgs.reasoning,
