@@ -1249,6 +1249,17 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [workspaceMode, activeMode]);
 
+  // Listen for terminal:show events (from worktree terminal button)
+  useEffect(() => {
+    const handleTerminalShow = () => {
+      setTerminalPanelVisible(true);
+      setBottomPanel(null); // Close tracker when opening terminal
+    };
+
+    window.addEventListener('terminal:show', handleTerminalShow);
+    return () => window.removeEventListener('terminal:show', handleTerminalShow);
+  }, []);
+
   // Save AI Chat state when it changes (but only after initial load)
   useEffect(() => {
     if (!workspacePath || !workspaceMode || !isAIChatStateLoaded) return;

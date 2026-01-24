@@ -175,10 +175,8 @@ export function createTerminalInstance(
     if (!state.tabOrder.includes(terminal.id)) {
       state.tabOrder.push(terminal.id);
     }
-    // Set as active if no active terminal
-    if (!state.activeTerminalId) {
-      state.activeTerminalId = terminal.id;
-    }
+    // Always set the newly created terminal as active
+    state.activeTerminalId = terminal.id;
   }).terminals[terminal.id];
 }
 

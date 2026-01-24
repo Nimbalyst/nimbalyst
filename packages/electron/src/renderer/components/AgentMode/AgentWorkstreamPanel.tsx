@@ -74,10 +74,14 @@ export interface AgentWorkstreamPanelProps {
  */
 const WorkstreamHeader: React.FC<{
   workstreamId: string;
+  workspacePath: string;
+  worktreeId?: string | null;
+  worktreePath?: string | null;
   onToggleSidebar: () => void;
   sidebarVisible: boolean;
   onArchiveStatusChange?: () => void;
-}> = React.memo(({ workstreamId, onToggleSidebar, sidebarVisible, onArchiveStatusChange }) => {
+  onOpenTerminal?: () => void;
+}> = React.memo(({ workstreamId, workspacePath, worktreeId, worktreePath, onToggleSidebar, sidebarVisible, onArchiveStatusChange, onOpenTerminal }) => {
   const title = useAtomValue(workstreamTitleAtom(workstreamId));
   const isProcessing = useAtomValue(workstreamProcessingAtom(workstreamId));
   const sessionData = useAtomValue(sessionStoreAtom(workstreamId));
@@ -224,6 +228,17 @@ const WorkstreamHeader: React.FC<{
           hasTabs={hasTabs}
           onModeChange={handleLayoutChange}
         />
+
+        {/* New Terminal button - only show for worktree sessions */}
+        {worktreeId && onOpenTerminal && (
+          <button
+            className="workstream-sidebar-toggle layout-control-btn"
+            onClick={onOpenTerminal}
+            title="Open terminal in worktree"
+          >
+            <MaterialSymbol icon="terminal" size={16} />
+          </button>
+        )}
 
         {/* Archive/Unarchive button */}
         <button
@@ -421,6 +436,31 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
     toggleSidebar(workstreamId);
   }, [workstreamId, toggleSidebar]);
 
+  // Open a terminal in the worktree directory
+  const handleOpenTerminal = useCallback(async () => {
+    if (!sessionWorktreeId || !worktreePath) return;
+
+    try {
+      // Create terminal with worktree association
+      const result = await window.electronAPI.terminal.create(workspacePath, {
+        cwd: worktreePath,
+        worktreeId: sessionWorktreeId,
+        title: `Terminal (${worktreePath.split('/').pop()})`,
+      });
+
+      if (result.success && result.terminalId) {
+        // Dispatch event to notify TerminalBottomPanel about the new terminal
+        window.dispatchEvent(new CustomEvent('terminal:created', {
+          detail: { terminalId: result.terminalId }
+        }));
+        // Dispatch event to notify App.tsx to show terminal panel
+        window.dispatchEvent(new CustomEvent('terminal:show'));
+      }
+    } catch (error) {
+      console.error('[AgentWorkstreamPanel] Failed to create terminal:', error);
+    }
+  }, [workspacePath, sessionWorktreeId, worktreePath]);
+
   // Determine what to show based on layout mode
   const showEditorTabs = layoutMode === 'split' || layoutMode === 'editor';
   const showSessionTabs = layoutMode === 'split' || layoutMode === 'transcript';
@@ -603,8 +643,12 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
       <div className="agent-workstream-panel-main">
         <WorkstreamHeader
           workstreamId={workstreamId}
+          workspacePath={workspacePath}
+          worktreeId={sessionWorktreeId}
+          worktreePath={worktreePath}
           onToggleSidebar={handleToggleSidebar}
           sidebarVisible={sidebarVisible}
+          onOpenTerminal={sessionWorktreeId ? handleOpenTerminal : undefined}
         />
 
         <div ref={contentRef} className="agent-workstream-panel-content">

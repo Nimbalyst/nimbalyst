@@ -74,8 +74,20 @@ export const TerminalBottomPanel: React.FC<TerminalBottomPanelProps> = ({
 
     loadTerminals();
 
+    // Listen for external terminal creation (e.g., from worktree button)
+    const handleTerminalCreated = (event: Event) => {
+      const customEvent = event as CustomEvent<{ terminalId: string }>;
+      if (customEvent.detail?.terminalId) {
+        // Reload terminals to get the new one
+        loadTerminals();
+      }
+    };
+
+    window.addEventListener('terminal:created', handleTerminalCreated);
+
     return () => {
       mounted = false;
+      window.removeEventListener('terminal:created', handleTerminalCreated);
     };
   }, [workspacePath]);
 
