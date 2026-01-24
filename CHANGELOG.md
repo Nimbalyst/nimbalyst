@@ -20,6 +20,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.1] - 2026-01-23
+
+
+### Added
+- Update session uncommitted badges on git commit
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Prevent state bleeding between concurrent AI sessions
+- Skip unnecessary database lookups for non-worktree paths
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.52.0] - 2026-01-23
 
 
