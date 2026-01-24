@@ -418,7 +418,7 @@ function scheduleAdvancedPersist(
           await window.electronAPI.invoke('app-settings:set', 'maxHeapSizeMB', settings.maxHeapSizeMB);
           break;
         case 'alphaFeatures':
-          await window.electronAPI.invoke('app-settings:set', 'alphaFeatures', settings.alphaFeatures);
+          await window.electronAPI.invoke('alpha-features:set', settings.alphaFeatures);
           break;
         // walkthroughsViewedCount and walkthroughsTotalCount are read-only from main process
       }
