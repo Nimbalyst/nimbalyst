@@ -6,7 +6,7 @@ import { logger } from './logger';
 import type { OnboardingConfig } from '../../shared/types/workspace';
 import { DEFAULT_ONBOARDING_CONFIG } from '../../shared/types/workspace';
 import type { InstalledPackage } from '../../shared/toolPackages';
-import { AlphaFeatureTag } from '../../shared/alphaFeatures';
+import { AlphaFeatureTag, getDefaultAlphaFeatures, enableAllAlphaFeatures, ALPHA_FEATURES } from '../../shared/alphaFeatures';
 
 export type AppTheme = 'dark' | 'light' | 'system' | 'auto' | 'crystal-dark';
 export type { SessionState, SessionWindow } from '../types';
@@ -1392,17 +1392,14 @@ export function getAlphaFeatures(): Record<AlphaFeatureTag, boolean> {
   if (!stored) {
     // Legacy alpha users get all features enabled, new users get none
     if (isLegacyAlphaUser) {
-      const { enableAllAlphaFeatures } = require('../../shared/alphaFeatures');
       logger.store.info('[getAlphaFeatures] Legacy alpha user detected, enabling all features');
       return enableAllAlphaFeatures();
     }
     // Return all features disabled
-    const { getDefaultAlphaFeatures } = require('../../shared/alphaFeatures');
     return getDefaultAlphaFeatures();
   }
 
   // Merge stored values with defaults to handle new features added after initial storage
-  const { getDefaultAlphaFeatures, ALPHA_FEATURES } = require('../../shared/alphaFeatures');
   const defaults = getDefaultAlphaFeatures();
 
   // Ensure all registered features exist in stored object (for new features added later)
