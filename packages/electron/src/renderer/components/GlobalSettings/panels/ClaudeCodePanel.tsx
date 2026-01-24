@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useAtom } from 'jotai';
-import { releaseChannelAtom, CLAUDE_CODE_ENV_VAR_TEMPLATES, ClaudeCodeEnvVarTemplate, ClaudeCodeProviderType } from '../../../store/atoms/appSettings';
+import { useAtom, useAtomValue } from 'jotai';
+import { releaseChannelAtom, CLAUDE_CODE_ENV_VAR_TEMPLATES, ClaudeCodeEnvVarTemplate, ClaudeCodeProviderType, alphaClaudeCodeCustomProviderAtom } from '../../../store/atoms/appSettings';
 import { ProviderConfig, Model } from '../../Settings/SettingsView';
 // Import the actual SDK package.json to get the exact installed version
 // @ts-ignore - importing json
@@ -102,6 +102,9 @@ export function ClaudeCodePanel({
   // Check if alpha features should be shown
   const [releaseChannel] = useAtom(releaseChannelAtom);
   const showAlphaFeatures = releaseChannel === 'alpha';
+
+  // Check if custom provider alpha feature is enabled
+  const customProviderEnabled = useAtomValue(alphaClaudeCodeCustomProviderAtom);
 
   // Detect Windows platform using navigator.platform (client-side, no IPC needed)
   const isWindowsPlatform = navigator.platform === 'Win32';
@@ -386,7 +389,7 @@ export function ClaudeCodePanel({
       {config.enabled && isClaudeCodeWindowsReady() && (
         <>
               {/* Provider Selection (Alpha) */}
-              {showAlphaFeatures && (
+              {showAlphaFeatures && customProviderEnabled && (
                 <div className="provider-panel-section">
                   <h4 className="provider-panel-section-title">API Provider</h4>
                   <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '12px', lineHeight: '1.4' }}>
@@ -451,7 +454,7 @@ export function ClaudeCodePanel({
 
               {/* Anthropic Provider Configuration */}
               {/* Show when: anthropic is selected, OR alpha features are off (non-alpha users always see this) */}
-              {(providerType === 'anthropic' || !showAlphaFeatures) && (
+              {(providerType === 'anthropic' || !showAlphaFeatures || !customProviderEnabled) && (
                 <div className="provider-panel-section">
                   <h4 className="provider-panel-section-title">Authentication</h4>
                   <div className="api-key-section">
@@ -742,7 +745,7 @@ export function ClaudeCodePanel({
               )}
 
               {/* Custom Provider Configuration */}
-              {providerType === 'custom' && showAlphaFeatures && (
+              {providerType === 'custom' && showAlphaFeatures && customProviderEnabled && (
                 <div className="provider-panel-section">
                   <h4 className="provider-panel-section-title">Custom Provider Configuration</h4>
 

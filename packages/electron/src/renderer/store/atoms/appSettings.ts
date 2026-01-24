@@ -17,6 +17,7 @@
 
 import { atom } from 'jotai';
 import posthog from 'posthog-js';
+import { AlphaFeatureTag } from '../../../shared/alphaFeatures';
 
 // Voice type - all available OpenAI Realtime voices
 export type VoiceId = 'alloy' | 'ash' | 'ballad' | 'coral' | 'echo' | 'sage' | 'shimmer' | 'verse' | 'marin' | 'cedar';
@@ -346,6 +347,9 @@ export interface AdvancedSettings {
   walkthroughsTotalCount: number;
   // V8 heap memory limit in MB (default: 4096). Requires restart to take effect.
   maxHeapSizeMB: number;
+  // Alpha feature flags - individual control over alpha features
+  // Uses Record<AlphaFeatureTag, boolean> for dynamic feature registration
+  alphaFeatures: Record<AlphaFeatureTag, boolean>;
 }
 
 /**
@@ -359,6 +363,12 @@ const defaultAdvancedSettings: AdvancedSettings = {
   walkthroughsViewedCount: 0,
   walkthroughsTotalCount: 0,
   maxHeapSizeMB: 4096,
+  alphaFeatures: {
+    sync: false,
+    'voice-mode': false,
+    'claude-plugins': false,
+    'claude-code-custom-provider': false,
+  } as Record<AlphaFeatureTag, boolean>,
 };
 
 /**
@@ -406,6 +416,9 @@ function scheduleAdvancedPersist(
           break;
         case 'maxHeapSizeMB':
           await window.electronAPI.invoke('app-settings:set', 'maxHeapSizeMB', settings.maxHeapSizeMB);
+          break;
+        case 'alphaFeatures':
+          await window.electronAPI.invoke('app-settings:set', 'alphaFeatures', settings.alphaFeatures);
           break;
         // walkthroughsViewedCount and walkthroughsTotalCount are read-only from main process
       }
@@ -458,6 +471,55 @@ export const walkthroughsTotalCountAtom = atom(
 );
 
 /**
+ * Check if a specific alpha feature is enabled by tag.
+ * This is the recommended way to check feature availability.
+ *
+ * This is an atom family pattern: a function that returns atoms dynamically.
+ * Each call with a unique tag creates a new derived atom that reads from
+ * the parent advancedSettingsAtom. This pattern is useful when you need
+ * multiple similar atoms that differ only by a key/parameter.
+ *
+ * Why use a function instead of declaring atoms directly:
+ * - The registry can grow over time (new features added)
+ * - Type safety: AlphaFeatureTag is derived from the registry
+ * - Avoids manually declaring 20+ individual atoms
+ * - Each unique tag gets its own reactive atom instance
+ *
+ * @example
+ * ```ts
+ * const isSyncEnabled = useAtomValue(alphaFeatureEnabledAtom('sync'));
+ * if (isSyncEnabled) {
+ *   // Show sync feature
+ * }
+ * ```
+ */
+export function alphaFeatureEnabledAtom(tag: AlphaFeatureTag) {
+  return atom(
+    (get) => get(advancedSettingsAtom).alphaFeatures[tag] ?? false
+  );
+}
+
+/**
+ * Alpha feature: Sync enabled (convenience atom)
+ */
+export const alphaSyncEnabledAtom = alphaFeatureEnabledAtom('sync');
+
+/**
+ * Alpha feature: Voice mode enabled (convenience atom)
+ */
+export const alphaVoiceModeEnabledAtom = alphaFeatureEnabledAtom('voice-mode');
+
+/**
+ * Alpha feature: Claude plugins enabled (convenience atom)
+ */
+export const alphaClaudePluginsEnabledAtom = alphaFeatureEnabledAtom('claude-plugins');
+
+/**
+ * Alpha feature: Claude Code custom provider enabled (convenience atom)
+ */
+export const alphaClaudeCodeCustomProviderAtom = alphaFeatureEnabledAtom('claude-code-custom-provider');
+
+/**
  * V8 heap memory limit in MB.
  */
 export const maxHeapSizeMBAtom = atom(
@@ -508,13 +570,14 @@ export async function initAdvancedSettings(): Promise<AdvancedSettings> {
   }
 
   try {
-    const [channel, analyticsEnabled, extensionDevToolsEnabled, walkthroughState, maxHeapSizeMB] =
+    const [channel, analyticsEnabled, extensionDevToolsEnabled, walkthroughState, maxHeapSizeMB, alphaFeatures] =
       await Promise.all([
         window.electronAPI.invoke('release-channel:get'),
         window.electronAPI.invoke('analytics:is-enabled'),
         window.electronAPI.extensionDevTools.isEnabled(),
         window.electronAPI.invoke('walkthroughs:get-state'),
         window.electronAPI.invoke('app-settings:get', 'maxHeapSizeMB'),
+        window.electronAPI.invoke('alpha-features:get'),
       ]);
 
     // Calculate viewed count (completed + dismissed)
@@ -530,6 +593,7 @@ export async function initAdvancedSettings(): Promise<AdvancedSettings> {
       walkthroughsViewedCount,
       walkthroughsTotalCount,
       maxHeapSizeMB: maxHeapSizeMB ?? 4096,
+      alphaFeatures: alphaFeatures ?? defaultAdvancedSettings.alphaFeatures,
     };
   } catch (error) {
     console.error('[appSettings] Failed to load advanced settings:', error);

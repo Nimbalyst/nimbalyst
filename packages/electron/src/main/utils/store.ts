@@ -6,6 +6,7 @@ import { logger } from './logger';
 import type { OnboardingConfig } from '../../shared/types/workspace';
 import { DEFAULT_ONBOARDING_CONFIG } from '../../shared/types/workspace';
 import type { InstalledPackage } from '../../shared/toolPackages';
+import { AlphaFeatureTag } from '../../shared/alphaFeatures';
 
 export type AppTheme = 'dark' | 'light' | 'system' | 'auto' | 'crystal-dark';
 export type { SessionState, SessionWindow } from '../types';
@@ -101,6 +102,9 @@ interface AppStoreSchema {
   // Advanced: V8 heap memory limit in MB (default: 4096 = 4GB)
   // Increase if you experience OOM crashes with large sessions
   maxHeapSizeMB?: number;
+  // Alpha feature flags - individual control over alpha features
+  // Uses Record<AlphaFeatureTag, boolean> for dynamic feature registration
+  alphaFeatures?: Record<AlphaFeatureTag, boolean>;
 }
 
 /**
@@ -1365,5 +1369,60 @@ export function setMaxHeapSizeMB(sizeMB: number | undefined): void {
   } else {
     getAppStore().delete('maxHeapSizeMB');
   }
+}
+
+// Alpha Feature Flags
+// Individual control over alpha features when alpha channel is enabled
+// Uses dynamic registration from alphaFeatures registry
+
+/**
+ * Get the alpha feature flags.
+ * Returns all feature flags with defaults for any missing values.
+ *
+ * Legacy behavior: If user was on alpha channel before individual feature flags
+ * were implemented, enable all features by default to maintain their experience.
+ */
+export function getAlphaFeatures(): Record<AlphaFeatureTag, boolean> {
+  const stored = getAppStore().get('alphaFeatures');
+  const releaseChannel = getReleaseChannel();
+
+  // Check if this is a legacy alpha user (alpha channel but no feature flags set)
+  const isLegacyAlphaUser = !stored && releaseChannel === 'alpha';
+
+  if (!stored) {
+    // Legacy alpha users get all features enabled, new users get none
+    if (isLegacyAlphaUser) {
+      const { enableAllAlphaFeatures } = require('../../shared/alphaFeatures');
+      logger.store.info('[getAlphaFeatures] Legacy alpha user detected, enabling all features');
+      return enableAllAlphaFeatures();
+    }
+    // Return all features disabled
+    const { getDefaultAlphaFeatures } = require('../../shared/alphaFeatures');
+    return getDefaultAlphaFeatures();
+  }
+
+  // Merge stored values with defaults to handle new features added after initial storage
+  const { getDefaultAlphaFeatures, ALPHA_FEATURES } = require('../../shared/alphaFeatures');
+  const defaults = getDefaultAlphaFeatures();
+
+  // Ensure all registered features exist in stored object (for new features added later)
+  for (const feature of ALPHA_FEATURES) {
+    if (!(feature.tag in stored)) {
+      stored[feature.tag] = defaults[feature.tag];
+    }
+  }
+
+  return stored;
+}
+
+/**
+ * Set the alpha feature flags.
+ * @param features Object containing feature flags (partial updates supported)
+ */
+export function setAlphaFeatures(features: Record<AlphaFeatureTag, boolean>): void {
+  // Merge with existing features to preserve other settings
+  const current = getAlphaFeatures();
+  const merged = { ...current, ...features };
+  getAppStore().set('alphaFeatures', merged);
 }
 

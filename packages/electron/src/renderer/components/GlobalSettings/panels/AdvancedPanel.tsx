@@ -8,6 +8,7 @@ import {
   setAIDebugSettingsAtom,
   type ReleaseChannel,
 } from '../../../store/atoms/appSettings';
+import { ALPHA_FEATURES, areAllAlphaFeaturesEnabled, enableAllAlphaFeatures, disableAllAlphaFeatures } from '../../../../shared/alphaFeatures';
 
 /**
  * AdvancedPanel - Self-contained settings panel for advanced options.
@@ -33,6 +34,7 @@ export function AdvancedPanel() {
     walkthroughsViewedCount,
     walkthroughsTotalCount,
     maxHeapSizeMB,
+    alphaFeatures,
   } = settings;
   const isDevelopment = import.meta.env.DEV;
   const [showReleaseChannel, setShowReleaseChannel] = useState(false);
@@ -84,6 +86,57 @@ export function AdvancedPanel() {
               <option value="alpha">Alpha (Internal Testing)</option>
             </select>
           </div>
+
+          {releaseChannel === 'alpha' && (
+            <>
+              <div style={{ marginTop: '16px', padding: '12px', background: 'var(--surface-secondary)', borderRadius: '6px', border: '1px solid var(--border-primary)' }}>
+                {/* "All Alpha Features" master toggle */}
+                <div className="setting-item" style={{ marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px solid var(--border-primary)' }}>
+                  <label className="setting-label">
+                    <input
+                      type="checkbox"
+                      checked={areAllAlphaFeaturesEnabled(alphaFeatures)}
+                      onChange={(e) => {
+                        const newFeatures = e.target.checked ? enableAllAlphaFeatures() : disableAllAlphaFeatures();
+                        updateSettings({ alphaFeatures: newFeatures });
+                      }}
+                      className="setting-checkbox"
+                    />
+                    <div className="setting-text">
+                      <span className="setting-name">All Alpha Features</span>
+                      <span className="setting-description">
+                        Enable all alpha features at once. Individual features can still be toggled below.
+                      </span>
+                    </div>
+                  </label>
+                </div>
+
+                {ALPHA_FEATURES.map((feature) => (
+                  <div key={feature.tag} className="setting-item" style={{ opacity: areAllAlphaFeaturesEnabled(alphaFeatures) ? '0.6' : '1', pointerEvents: areAllAlphaFeaturesEnabled(alphaFeatures) ? 'none' : 'auto' }}>
+                    <label className="setting-label">
+                      <input
+                        type="checkbox"
+                        checked={alphaFeatures[feature.tag] ?? false}
+                        onChange={(e) => updateSettings({ alphaFeatures: { ...alphaFeatures, [feature.tag]: e.target.checked } })}
+                        className="setting-checkbox"
+                        disabled={areAllAlphaFeaturesEnabled(alphaFeatures)}
+                      />
+                      <div className="setting-text">
+                        <span className="setting-name">{feature.name}</span>
+                        <span className="setting-description">
+                          {feature.description}
+                        </span>
+                      </div>
+                    </label>
+                  </div>
+                ))}
+              </div>
+
+              <p style={{ marginTop: '12px', padding: '8px', fontSize: '13px', color: 'var(--color-danger)', background: 'var(--surface-secondary)', borderRadius: '4px', border: '1px solid var(--border-primary)' }}>
+                You may need to restart Nimbalyst for these changes to take effect.
+              </p>
+            </>
+          )}
         </div>
       )}
 

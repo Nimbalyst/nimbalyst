@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useAtomValue } from 'jotai';
 import { MaterialSymbol, getProviderIcon } from '@nimbalyst/runtime';
 import { releaseChannelAtom } from '../../store/atoms/appSettings';
+import { useAlphaFeatures } from '../../hooks/useAlphaFeature';
 
 export type SettingsCategory =
   | 'tool-packages'
@@ -58,8 +59,10 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
   isProduction = import.meta.env.PROD,
   scope = 'user',
 }) => {
-  // Get release channel from Jotai atom instead of props
+  // Get release channel and alpha feature flags from Jotai atoms
   const releaseChannel = useAtomValue(releaseChannelAtom);
+  const alphaFeatures = useAlphaFeatures(['sync', 'voice-mode', 'claude-plugins']);
+
   const getStatusDot = (providerId: string): 'success' | 'warning' | 'error' | undefined => {
     const status = providerStatus[providerId];
     if (!status) return undefined;
@@ -76,7 +79,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
           id: 'sync',
           name: 'Account & Sync',
           icon: <MaterialSymbol icon="account_circle" size={16} />,
-          hidden: releaseChannel !== 'alpha', // Only visible to alpha users
+          hidden: !alphaFeatures.sync, // Only visible when feature is enabled
         },
         {
           id: 'notifications',
@@ -87,7 +90,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
           id: 'voice-mode',
           name: 'Voice Mode',
           icon: <MaterialSymbol icon="mic" size={16} />,
-          hidden: releaseChannel !== 'alpha', // Only visible to alpha users
+          hidden: !alphaFeatures['voice-mode'], // Only visible when feature is enabled
         },
         {
           id: 'advanced',
@@ -175,7 +178,7 @@ Best for quick edits and tasks that do not require multi-file operations.`,
           id: 'claude-plugins',
           name: 'Claude Plugins',
           icon: <MaterialSymbol icon="widgets" size={16} />,
-          hidden: releaseChannel !== 'alpha',
+          hidden: !alphaFeatures['claude-plugins'],
         },
         {
           id: 'mcp-servers',

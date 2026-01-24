@@ -32,6 +32,7 @@ import {
   type ProviderConfig,
   type AIModel,
 } from '../../store/atoms/appSettings';
+import { useAlphaFeature } from '../../hooks/useAlphaFeature';
 
 // Re-export ProviderConfig for backward compatibility
 export type { ProviderConfig } from '../../store/atoms/appSettings';
@@ -70,6 +71,7 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
 
   // Release channel from atom (Phase 3)
   const releaseChannel = useAtomValue(releaseChannelAtom);
+  const alphaSyncEnabled = useAlphaFeature('sync');
 
   // Destructure for easier access (these update when atom updates)
   const { providers, apiKeys, availableModels } = aiProviderSettings;
@@ -183,8 +185,8 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
     // - Sync config - Phase 4
     // - Voice mode settings - Phase 7
 
-    // Set default category for alpha users (using atom value)
-    if (releaseChannel === 'alpha' && !initialCategory) {
+    // Set default category for alpha users with sync enabled (using atom values)
+    if (releaseChannel === 'alpha' && alphaSyncEnabled && !initialCategory) {
       setSelectedCategory('sync');
     }
 
