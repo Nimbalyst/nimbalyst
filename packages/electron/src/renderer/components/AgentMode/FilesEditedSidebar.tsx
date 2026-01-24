@@ -98,6 +98,11 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
       return;
     }
 
+    // Track if this effect is still current to prevent stale updates
+    let isCurrent = true;
+    // Capture workstreamId at effect start to verify on completion
+    const effectWorkstreamId = workstreamId;
+
     const fetchFileEdits = async () => {
       try {
         if (typeof window !== 'undefined' && window.electronAPI) {
@@ -126,14 +131,24 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
             })
           );
 
-          setAllFileEdits(allEdits);
+          // Only update state if this effect is still current (workstream hasn't changed)
+          if (isCurrent) {
+            setAllFileEdits(allEdits);
+          }
         }
       } catch (error) {
-        console.error('[FilesEditedSidebar] Failed to fetch file edits:', error);
+        // Only log errors if this effect is still current
+        if (isCurrent) {
+          console.error('[FilesEditedSidebar] Failed to fetch file edits:', error);
+        }
       }
     };
 
     fetchFileEdits();
+
+    return () => {
+      isCurrent = false;
+    };
   }, [workstreamId, workspacePath, workstreamSessions]);
 
   // Listen for file tracking updates from any session in the workstream
@@ -142,9 +157,14 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
       return;
     }
 
+    // Track if this effect is still current to prevent stale updates
+    let isCurrent = true;
+    // Capture workstreamSessions at effect start for consistent filtering
+    const effectWorkstreamSessions = workstreamSessions;
+
     const handleFileUpdate = async (updatedSessionId: string) => {
       // Check if the update is from any session in our workstream
-      if (workstreamSessions.includes(updatedSessionId)) {
+      if (effectWorkstreamSessions.includes(updatedSessionId)) {
         try {
           // Re-fetch just the updated session's files
           const result = await window.electronAPI.invoke(
@@ -152,7 +172,8 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
             updatedSessionId,
             'edited'
           );
-          if (result.success && result.files) {
+          // Only update state if this effect is still current
+          if (isCurrent && result.success && result.files) {
             const newEdits: FileEditWithSession[] = result.files.map((f: any) => ({
               filePath: f.filePath,
               linkType: 'edited' as const,
@@ -170,7 +191,9 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
             });
           }
         } catch (error) {
-          console.error('[FilesEditedSidebar] Failed to refresh file edits:', error);
+          if (isCurrent) {
+            console.error('[FilesEditedSidebar] Failed to refresh file edits:', error);
+          }
         }
       }
     };
@@ -178,6 +201,7 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
     window.electronAPI.on('session-files:updated', handleFileUpdate);
 
     return () => {
+      isCurrent = false;
       if (window.electronAPI?.off) {
         window.electronAPI.off('session-files:updated', handleFileUpdate);
       }
@@ -190,6 +214,9 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
       setPendingReviewFiles(new Set());
       return;
     }
+
+    // Track if this effect is still current to prevent stale updates
+    let isCurrent = true;
 
     const fetchPendingReviewFiles = async () => {
       try {
@@ -208,14 +235,23 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
             })
           );
 
-          setPendingReviewFiles(allPendingFiles);
+          // Only update state if this effect is still current
+          if (isCurrent) {
+            setPendingReviewFiles(allPendingFiles);
+          }
         }
       } catch (error) {
-        console.error('[FilesEditedSidebar] Failed to fetch pending review files:', error);
+        if (isCurrent) {
+          console.error('[FilesEditedSidebar] Failed to fetch pending review files:', error);
+        }
       }
     };
 
     fetchPendingReviewFiles();
+
+    return () => {
+      isCurrent = false;
+    };
   }, [workstreamId, workspacePath, workstreamSessions]);
 
   // Listen for pending diff updates
@@ -224,24 +260,35 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
       return;
     }
 
+    // Track if this effect is still current to prevent stale updates
+    let isCurrent = true;
+    // Capture dependencies at effect start for consistent use in async handler
+    const effectWorkspacePath = workspacePath;
+    const effectWorkstreamSessions = workstreamSessions;
+
     const handlePendingDiffUpdate = async () => {
       try {
         const allPendingFiles = new Set<string>();
 
         await Promise.all(
-          workstreamSessions.map(async (sessionId) => {
+          effectWorkstreamSessions.map(async (sessionId) => {
             const pendingFiles: string[] = await window.electronAPI.invoke(
               'history:get-pending-files-for-session',
-              workspacePath,
+              effectWorkspacePath,
               sessionId
             );
             pendingFiles.forEach(f => allPendingFiles.add(f));
           })
         );
 
-        setPendingReviewFiles(allPendingFiles);
+        // Only update state if this effect is still current
+        if (isCurrent) {
+          setPendingReviewFiles(allPendingFiles);
+        }
       } catch (error) {
-        console.error('[FilesEditedSidebar] Failed to refresh pending review files:', error);
+        if (isCurrent) {
+          console.error('[FilesEditedSidebar] Failed to refresh pending review files:', error);
+        }
       }
     };
 
@@ -249,6 +296,7 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
     window.electronAPI.on('history:pending-count-changed', handlePendingDiffUpdate);
 
     return () => {
+      isCurrent = false;
       if (window.electronAPI?.off) {
         window.electronAPI.off('history:pending-count-changed', handlePendingDiffUpdate);
       }

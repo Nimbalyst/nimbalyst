@@ -20,6 +20,92 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.1] - 2026-01-23
+
+
+### Added
+- Update session uncommitted badges on git commit
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Prevent state bleeding between concurrent AI sessions
+- Skip unnecessary database lookups for non-worktree paths
+
+### Removed
+<!-- Removed features go here -->
+
+## [0.52.0] - 2026-01-23
+
+
+### Added
+- Terminal bottom panel with dedicated storage for terminal sessions
+- Full commit details display in git commit widget (expanded commit info)
+- Auto-reconnect sync when network becomes available
+- Auto-approve pending reviews on git commit
+- Show uncommitted files count on workstream session items
+- Inline session renaming with improved session state management
+- Track Bash command file edits in session files and local history
+- File status colors in git commit widget
+- Prompt history quick-open dialog
+- Comprehensive log access tools for AI agents
+- Interactive git commit proposals with directory tree file picker
+- Session status indicators to quick open dialog
+- AI sessions now organize into workstreams for multi-file work
+- Image generation extension with Google Imagen API
+- Agent mode sessions now manage their own document context
+- Agent mode sessions now have embedded editor tabs
+- Custom editors can register menu items in header bar
+
+### Changed
+- Git status now uses event-driven updates instead of polling
+- Simplified normalizeWorkspaceState with deepMerge pattern
+- Improved session list icon system and alignment
+- Files Edited sidebar now shows only edited files
+- Deprecated React state-based AI session components removed
+- Extension get_logs disabled in favor of file-based log tools
+- Performance monitoring interval increased from 5 seconds to 10 seconds
+- Reduced verbose dev console logging
+
+### Fixed
+- Persist workstream selection and child sessions across reload
+- Chat button now opens sessions in Files mode instead of Agent mode
+- TypeScript configuration excludes collabv3 and electron/release from root
+- Restore prompt history navigation with up/down arrows
+- Voice commands now execute when AI is idle
+- Workstream headers now highlight when child session is active
+- Slash command typeahead no longer shows duplicate menus
+- Keyboard shortcuts now route to focused component in agent mode
+- Session timestamps now display correctly in workstream list
+- Queued prompts now auto-execute when AI finishes responding
+- Workstream child sessions show timestamps and affect sort order
+- Render single typeahead menu element to prevent duplicates
+- Workstream session selection and new session content bugs
+- Workstream child sessions appear and update immediately
+- Inherit session name when converting to workstream
+- Unify session state into single registry to fix sync bugs
+- Route git commit requests to active session instead of workstream
+- Prevent duplicate typeahead menu rendering during position calculation
+- TypeScript compilation errors resolved
+- Route CMD+F to focused component in agent workstream panel
+- Wire up compact button to send /compact command
+- Prevent AgentWorkstreamPanel rerenders on message updates
+- Prevent ChatSidebar from creating duplicate sessions on mount
+- Correct indentation for files inside folders in git commit widget
+- Parse array-format tool results in git commit widget
+- Restore AI session processing indicators and optimize transcript rendering
+- Persist MCP tool calls so git commit widget shows correct state after HMR
+- Git commit widget correctly shows success/cancelled state after HMR
+- Remove stale session processing state initialization
+- Sessions no longer incorrectly show as running after errors
+- Files Edited sidebar now shows Keep All for pending changes
+- Shrink agent session header and improve dark mode icon visibility
+- iPad split view session list no longer overlaps status bar
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.51.24] - 2026-01-22
 
 

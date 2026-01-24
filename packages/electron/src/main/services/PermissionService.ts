@@ -17,7 +17,7 @@ import {
 import { logger } from '../utils/logger';
 import { getDatabase } from '../database/initialize';
 import { createWorktreeStore } from './WorktreeStore';
-import { resolveProjectPath } from '../utils/workspaceDetection';
+import { resolveProjectPath, isWorktreePath } from '../utils/workspaceDetection';
 
 type PermissionMode = 'ask' | 'allow-all' | 'bypass-all';
 
@@ -32,6 +32,11 @@ type PermissionMode = 'ask' | 'allow-all' | 'bypass-all';
  * @returns The parent project path for worktrees, or the original path for regular workspaces
  */
 export async function resolveWorkspacePathForPermissions(workspacePath: string): Promise<string> {
+  // Fast path: if the path doesn't match worktree naming pattern, skip database lookup
+  if (!isWorktreePath(workspacePath)) {
+    return workspacePath;
+  }
+
   const db = getDatabase();
   if (!db) {
     throw new Error('Database not initialized - cannot resolve worktree path for permissions');
@@ -46,8 +51,8 @@ export async function resolveWorkspacePathForPermissions(workspacePath: string):
     return worktree.projectPath;
   }
 
-  // Not a worktree, return original path
-  return workspacePath;
+  // Path looks like a worktree but not in database - use pattern-based resolution as fallback
+  return resolveProjectPath(workspacePath);
 }
 
 /**

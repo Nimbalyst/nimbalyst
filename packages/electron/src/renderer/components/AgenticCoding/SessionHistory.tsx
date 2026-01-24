@@ -318,6 +318,53 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     loadAllSessions();
   }, [loadAllSessions, refreshTrigger, showArchived]);
 
+  // Update uncommittedCount for affected sessions when commits are detected
+  // This is more efficient than refreshing all sessions
+  useEffect(() => {
+    if (!workspacePath) return;
+
+    const unsubscribe = window.electronAPI?.git?.onCommitDetected?.(
+      async (data: { workspacePath: string; committedFiles: string[] }) => {
+        if (data.workspacePath !== workspacePath) return;
+
+        // Find which sessions owned the committed files and get their new counts
+        try {
+          const result = await window.electronAPI.invoke(
+            'sessions:get-uncommitted-counts',
+            workspacePath
+          );
+          if (result.success && result.counts) {
+            const counts = result.counts as Record<string, number>;
+
+            // Update session atoms with new counts (for root sessions)
+            for (const [sessionId, count] of Object.entries(counts)) {
+              updateSessionStore({ sessionId, updates: { uncommittedCount: count } });
+            }
+
+            // Also update workstream children cache
+            setWorkstreamChildrenCache(prev => {
+              const updated = new Map(prev);
+              for (const [parentId, children] of prev.entries()) {
+                const updatedChildren = children.map(child => ({
+                  ...child,
+                  uncommittedCount: counts[child.id] ?? child.uncommittedCount ?? 0,
+                }));
+                updated.set(parentId, updatedChildren);
+              }
+              return updated;
+            });
+          }
+        } catch (error) {
+          console.error('[SessionHistory] Failed to update uncommitted counts:', error);
+        }
+      }
+    );
+
+    return () => {
+      unsubscribe?.();
+    };
+  }, [workspacePath, updateSessionStore]);
+
   // Client-side title filtering (instant, no database query)
   useEffect(() => {
     // Reset content search trigger when query changes
@@ -1703,6 +1750,7 @@ export const SessionHistory = React.memo(SessionHistoryComponent, (prevProps, ne
   if (prevProps.refreshTrigger !== nextProps.refreshTrigger) return false;
   if (prevProps.sortOrder !== nextProps.sortOrder) return false;
   if (prevProps.mode !== nextProps.mode) return false;
+  if (prevProps.isGitRepo !== nextProps.isGitRepo) return false;
 
   // Compare arrays by value
   if (!arraysEqual(prevProps.loadedSessionIds ?? [], nextProps.loadedSessionIds ?? [])) return false;

@@ -157,6 +157,7 @@ export const BashWidget: React.FC<CustomToolWidgetProps> = ({ message, isExpande
       const timer = setTimeout(() => setCopied(false), 2000);
       return () => clearTimeout(timer);
     }
+    return undefined;
   }, [copied]);
 
   const handleCopyCommand = useCallback(async () => {

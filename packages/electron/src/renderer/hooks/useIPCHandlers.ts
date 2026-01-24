@@ -751,11 +751,12 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       cleanupFns.push((window.electronAPI as any).onMcpGitCommitProposal((data: {
         proposalId: string;
         workspacePath: string;
+        sessionId: string;  // Required for proper session scoping
         filesToStage: string[];
         commitMessage: string;
         reasoning?: string;
       }) => {
-        console.log('[MCP] Git commit proposal received:', data.proposalId);
+        console.log('[MCP] Git commit proposal received:', data.proposalId, 'sessionId:', data.sessionId);
         // Dynamically import to avoid circular deps
         import('@nimbalyst/runtime').then(({ registerPendingGitCommitProposal }) => {
           if (registerPendingGitCommitProposal) {

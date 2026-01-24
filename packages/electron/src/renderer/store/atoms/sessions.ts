@@ -283,6 +283,14 @@ export const sessionStoreAtom = atomFamily((_sessionId: string) =>
 export const sessionDataAtom = sessionStoreAtom;
 
 /**
+ * Extended session update fields.
+ * Includes SessionData fields plus electron-specific metadata fields.
+ */
+interface SessionUpdateFields extends Partial<SessionData> {
+  uncommittedCount?: number;  // From SessionMeta, not in SessionData
+}
+
+/**
  * Unified session update atom.
  * SINGLE update point for all session metadata changes.
  * Automatically syncs both sessionStoreAtom and sessionRegistryAtom.
@@ -291,7 +299,7 @@ export const sessionDataAtom = sessionStoreAtom;
  */
 export const updateSessionStoreAtom = atom(
   null,
-  (get, set, update: { sessionId: string; updates: Partial<SessionData> }) => {
+  (get, set, update: { sessionId: string; updates: SessionUpdateFields }) => {
     const { sessionId, updates } = update;
 
     // 1. Update full session data if loaded
@@ -315,6 +323,7 @@ export const updateSessionStoreAtom = atom(
         ...(updates.worktreeId !== undefined && { worktreeId: updates.worktreeId }),
         ...(updates.provider !== undefined && { provider: updates.provider }),
         ...(updates.sessionType !== undefined && { sessionType: updates.sessionType }),
+        ...(updates.uncommittedCount !== undefined && { uncommittedCount: updates.uncommittedCount }),
         // Note: messageCount is not in SessionData, only in SessionListItem
         // It gets updated via updateSessionFullAtom for now (Phase 1 backward compat)
       });

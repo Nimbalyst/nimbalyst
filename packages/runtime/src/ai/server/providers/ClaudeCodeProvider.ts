@@ -3471,7 +3471,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       documentContext
     });
 
-    console.log('[CLAUDE-CODE] Built system prompt - length:', prompt.length, 'characters');
+    // console.log('[CLAUDE-CODE] Built system prompt - length:', prompt.length, 'characters');
     return prompt;
   }
 

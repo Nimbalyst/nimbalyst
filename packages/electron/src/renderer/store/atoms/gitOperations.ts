@@ -108,6 +108,7 @@ export const clearStagingAtom = atom(null, (get, set) => {
 export interface PendingGitCommitProposal {
   proposalId: string;
   workspacePath: string;
+  sessionId: string;  // Required: proposals must be scoped to a specific session
   filesToStage: string[];
   commitMessage: string;
   reasoning?: string;

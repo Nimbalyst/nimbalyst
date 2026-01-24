@@ -36,7 +36,7 @@ import { safeHandle, safeOn } from '../utils/ipcRegistry';
  * @param source - The source object to merge from
  */
 function deepMerge(target: any, source: any): void {
-    console.log('[WorkspaceHandlers] deepMerge called with source:', JSON.stringify(source).substring(0, 300));
+    // console.log('[WorkspaceHandlers] deepMerge called with source:', JSON.stringify(source).substring(0, 300));
     for (const key in source) {
         if (source.hasOwnProperty(key)) {
             const sourceValue = source[key];

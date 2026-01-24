@@ -161,7 +161,7 @@ export const workstreamStateAtom = atomFamily((workstreamId: string) =>
       const map = new Map(get(workstreamStatesAtom));
       const current = map.get(workstreamId) ?? createDefaultState(workstreamId);
       const updated = { ...current, ...update };
-      console.log(`[workstreamState] Updating workstream ${workstreamId}:`, JSON.stringify(update), '→', JSON.stringify(updated));
+      // console.log(`[workstreamState] Updating workstream ${workstreamId}:`, JSON.stringify(update), '→', JSON.stringify(updated));
       map.set(workstreamId, updated);
       set(workstreamStatesAtom, map);
 
@@ -462,7 +462,7 @@ function schedulePersist(workstreamId: string): void {
 
     try {
       const state = store.get(workstreamStateAtom(workstreamId));
-      console.log(`[workstreamState] Persisting workstream ${workstreamId}:`, JSON.stringify(state));
+      // console.log(`[workstreamState] Persisting workstream ${workstreamId}:`, JSON.stringify(state));
       const workspaceState = await window.electronAPI.invoke(
         'workspace:get-state',
         currentWorkspacePath!
