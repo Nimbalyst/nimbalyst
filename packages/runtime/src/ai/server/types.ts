@@ -84,6 +84,18 @@ export interface Message {
 
 export type AIProviderType = 'claude' | 'claude-code' | 'openai' | 'openai-codex' | 'lmstudio';
 
+/**
+ * List of all valid AI provider types as a runtime array.
+ * Keep in sync with AIProviderType.
+ */
+export const AI_PROVIDER_TYPES: readonly AIProviderType[] = ['claude', 'claude-code', 'openai', 'openai-codex', 'lmstudio'] as const;
+
+/**
+ * Claude Code uses simplified variant names (opus, sonnet, haiku) instead of full model IDs.
+ * These are ONLY valid for the claude-code provider.
+ */
+export const CLAUDE_CODE_VARIANTS = ['opus', 'sonnet', 'haiku'] as const;
+
 export interface AIModel {
   id: string;           // e.g., 'gpt-4', 'claude-3-5-sonnet-20241022'
   name: string;         // e.g., 'GPT-4', 'Claude 3.5 Sonnet'
