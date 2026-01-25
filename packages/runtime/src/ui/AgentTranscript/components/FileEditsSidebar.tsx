@@ -1,7 +1,6 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import type { FileEditSummary } from '../types';
 import { MaterialSymbol } from '../../icons/MaterialSymbol';
-import './FileEditsSidebar.css';
 
 interface FileEditsSidebarProps {
   fileEdits: FileEditSummary[];
@@ -289,26 +288,22 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
   }, [hideControls, expandAll, collapseAll]);
 
   const getOperationIcon = (operation: string) => {
-    switch (operation) {
-      case 'create':
-        return (
-          <MaterialSymbol icon="add" size={14} className="file-edits-sidebar__icon file-edits-sidebar__icon--create" />
-        );
-      case 'edit':
-        return (
-          <MaterialSymbol icon="edit" size={14} className="file-edits-sidebar__icon file-edits-sidebar__icon--edit" />
-        );
-      case 'delete':
-        return (
-          <MaterialSymbol icon="delete" size={14} className="file-edits-sidebar__icon file-edits-sidebar__icon--delete" />
-        );
-      case 'rename':
-        return (
-          <MaterialSymbol icon="drive_file_rename_outline" size={14} className="file-edits-sidebar__icon file-edits-sidebar__icon--rename" />
-        );
-      default:
-        return null;
-    }
+    const iconClasses: Record<string, string> = {
+      create: 'text-[var(--nim-success)]',
+      edit: 'text-[var(--nim-primary)]',
+      delete: 'text-[var(--nim-error)]',
+      rename: 'text-[var(--nim-warning)]'
+    };
+    const iconNames: Record<string, string> = {
+      create: 'add',
+      edit: 'edit',
+      delete: 'delete',
+      rename: 'drive_file_rename_outline'
+    };
+    if (!iconNames[operation]) return null;
+    return (
+      <MaterialSymbol icon={iconNames[operation]} size={14} className={`file-edits-sidebar__icon w-3.5 h-3.5 ${iconClasses[operation] || ''}`} />
+    );
   };
 
   const formatFileName = (filePath: string) => {
@@ -333,11 +328,16 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
       unchanged: ''
     }[status.status];
 
-    const statusClassName = `file-edits-sidebar__git-status file-edits-sidebar__git-status--${status.status}`;
+    const statusBgColors: Record<string, string> = {
+      modified: 'bg-[var(--nim-warning)]',
+      staged: 'bg-[var(--nim-success)]',
+      untracked: 'bg-[var(--nim-text-faint)]',
+      deleted: 'bg-[var(--nim-error)]'
+    };
 
     return (
       <span
-        className={statusClassName}
+        className={`file-edits-sidebar__git-status inline-flex items-center justify-center w-3.5 h-3.5 text-[0.65rem] font-semibold rounded-sm shrink-0 text-white ${statusBgColors[status.status] || ''} ${status.status === 'untracked' ? 'text-[var(--nim-bg)]' : ''}`}
         title={`Git status: ${status.status}`}
       >
         {statusChar}
@@ -351,35 +351,35 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
       <button
         key={filePath}
         onClick={() => onFileClick?.(filePath)}
-        className={`file-edits-sidebar__file ${hasPendingReview ? 'file-edits-sidebar__file--pending' : ''}`}
+        className={`file-edits-sidebar__file w-full text-left px-2 py-1 rounded border border-transparent transition-all bg-transparent hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-border)] ${hasPendingReview ? 'bg-[rgba(251,191,36,0.08)] border-[rgba(251,191,36,0.2)] hover:bg-[rgba(251,191,36,0.12)] hover:border-[rgba(251,191,36,0.3)]' : ''}`}
       >
-        <div className="file-edits-sidebar__file-content">
+        <div className="file-edits-sidebar__file-content flex items-center gap-1.5">
           {hasPendingReview && (
             <MaterialSymbol
               icon="rate_review"
               size={14}
-              className="file-edits-sidebar__pending-icon"
+              className="file-edits-sidebar__pending-icon text-[var(--nim-warning)] shrink-0"
               title="Pending review"
             />
           )}
           {operation && (
-            <div className="file-edits-sidebar__file-operation-icon">
+            <div className="file-edits-sidebar__file-operation-icon shrink-0">
               {getOperationIcon(operation)}
             </div>
           )}
           {renderGitStatus(filePath)}
-          <div className="file-edits-sidebar__file-info">
-            <div className="file-edits-sidebar__file-name" title={getRelativePath(filePath)}>
+          <div className="file-edits-sidebar__file-info flex-1 min-w-0">
+            <div className="file-edits-sidebar__file-name text-[0.8125rem] text-[var(--nim-text)] font-medium overflow-hidden text-ellipsis whitespace-nowrap" title={getRelativePath(filePath)}>
               {formatFileName(filePath)}
             </div>
           </div>
           {(totalAdded > 0 || totalRemoved > 0) && (
-            <div className="file-edits-sidebar__file-stats">
+            <div className="file-edits-sidebar__file-stats flex items-center gap-1 text-[0.6875rem] shrink-0">
               {totalAdded > 0 && (
-                <span className="file-edits-sidebar__file-stats-added">+{totalAdded}</span>
+                <span className="file-edits-sidebar__file-stats-added text-[var(--nim-success)]">+{totalAdded}</span>
               )}
               {totalRemoved > 0 && (
-                <span className="file-edits-sidebar__file-stats-removed">-{totalRemoved}</span>
+                <span className="file-edits-sidebar__file-stats-removed text-[var(--nim-error)]">-{totalRemoved}</span>
               )}
             </div>
           )}
@@ -393,29 +393,29 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
     const hasContent = node.files.length > 0 || node.subdirectories.size > 0;
 
     return (
-      <div key={node.path || 'root'} className="file-edits-sidebar__directory-node">
+      <div key={node.path || 'root'} className="file-edits-sidebar__directory-node mb-0.5">
         {node.displayPath && (
           <button
             onClick={() => toggleFolder(node.path)}
-            className="file-edits-sidebar__directory-header"
+            className="file-edits-sidebar__directory-header w-full flex items-center gap-1 px-2 py-1 text-[0.8125rem] font-medium text-[var(--nim-text-muted)] bg-transparent border border-transparent rounded transition-all cursor-pointer text-left hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]"
           >
             <MaterialSymbol
               icon={isExpanded ? "expand_more" : "chevron_right"}
               size={16}
-              className="file-edits-sidebar__directory-chevron"
+              className="file-edits-sidebar__directory-chevron shrink-0 transition-transform text-[var(--nim-text-faint)]"
             />
             <MaterialSymbol
               icon={isExpanded ? "folder_open" : "folder"}
               size={16}
-              className="file-edits-sidebar__directory-icon"
+              className="file-edits-sidebar__directory-icon shrink-0 text-[var(--nim-text-muted)]"
             />
-            <span className="file-edits-sidebar__directory-path">{node.displayPath}</span>
-            <span className="file-edits-sidebar__directory-count">{node.fileCount}</span>
+            <span className="file-edits-sidebar__directory-path flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{node.displayPath}</span>
+            <span className="file-edits-sidebar__directory-count shrink-0 px-1 py-0.5 bg-[var(--nim-bg-tertiary)] rounded text-[9px] text-[var(--nim-text-faint)]">{node.fileCount}</span>
           </button>
         )}
 
         {(isExpanded || !node.displayPath) && hasContent && (
-          <div className={node.displayPath ? "file-edits-sidebar__directory-children" : undefined}>
+          <div className={node.displayPath ? "file-edits-sidebar__directory-children mt-0.5 pl-4" : undefined}>
             {/* Render subdirectories first */}
             {Array.from(node.subdirectories.values()).map(subdir =>
               renderDirectoryNode(subdir)
@@ -430,12 +430,12 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
   };
 
   return (
-    <div className="file-edits-sidebar">
+    <div className="file-edits-sidebar flex flex-col h-full bg-[var(--nim-bg-secondary)]">
       {!hideControls && editedFiles.length > 0 && (
-        <div className="file-edits-sidebar__controls">
+        <div className="file-edits-sidebar__controls flex items-center gap-1 p-2 border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)]">
           <button
             onClick={() => setGroupByDirectory(!groupByDirectory)}
-            className={`file-edits-sidebar__control-button ${groupByDirectory ? 'file-edits-sidebar__control-button--active' : ''}`}
+            className={`file-edits-sidebar__control-button flex items-center justify-center w-7 h-7 p-0 border border-[var(--nim-border)] rounded bg-[var(--nim-bg)] text-[var(--nim-text-muted)] cursor-pointer transition-all hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)] disabled:opacity-40 disabled:cursor-not-allowed ${groupByDirectory ? 'bg-[var(--nim-primary)] text-white border-[var(--nim-primary)]' : ''}`}
             title="Group by directory"
           >
             <MaterialSymbol icon="folder" size={18} />
@@ -443,7 +443,7 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
           <button
             onClick={expandAll}
             disabled={!groupByDirectory}
-            className="file-edits-sidebar__control-button"
+            className="file-edits-sidebar__control-button flex items-center justify-center w-7 h-7 p-0 border border-[var(--nim-border)] rounded bg-[var(--nim-bg)] text-[var(--nim-text-muted)] cursor-pointer transition-all hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)] disabled:opacity-40 disabled:cursor-not-allowed"
             title="Expand all"
           >
             <MaterialSymbol icon="unfold_more" size={18} />
@@ -451,16 +451,16 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
           <button
             onClick={collapseAll}
             disabled={!groupByDirectory}
-            className="file-edits-sidebar__control-button"
+            className="file-edits-sidebar__control-button flex items-center justify-center w-7 h-7 p-0 border border-[var(--nim-border)] rounded bg-[var(--nim-bg)] text-[var(--nim-text-muted)] cursor-pointer transition-all hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)] disabled:opacity-40 disabled:cursor-not-allowed"
             title="Collapse all"
           >
             <MaterialSymbol icon="unfold_less" size={18} />
           </button>
         </div>
       )}
-      <div className="file-edits-sidebar__files">
+      <div className="file-edits-sidebar__files flex-1 overflow-y-auto p-1">
         {editedFiles.length === 0 ? (
-          <div className="file-edits-sidebar__empty">
+          <div className="file-edits-sidebar__empty p-4 text-[var(--nim-text-faint)] text-sm text-center">
             No files edited yet
           </div>
         ) : groupByDirectory ? (

@@ -13,7 +13,6 @@
 
 import React, { useEffect, useState } from 'react';
 import type { CustomToolWidgetProps } from './index';
-import './AskUserQuestionWidget.css';
 
 /**
  * Global store for AskUserQuestion answers.
@@ -179,20 +178,20 @@ export const AskUserQuestionWidget: React.FC<CustomToolWidgetProps> = ({
   const statusText = isCancelled ? 'Question Cancelled' : 'Questions Answered';
 
   return (
-    <div className={`ask-user-question-widget ${isCompleted ? 'ask-user-question-widget--submitted' : ''}`}>
-      <div className="ask-user-question-widget__header">
-        <div className="ask-user-question-widget__icon">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <div className={`ask-user-question-widget rounded-lg bg-nim-secondary border border-nim overflow-hidden ${isCompleted ? 'opacity-85' : ''}`}>
+      <div className="flex items-center gap-2 py-3 px-4 border-b border-nim bg-nim-tertiary">
+        <div className="w-5 h-5 text-nim-primary shrink-0">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
             <path d="M8 14A6 6 0 1 0 8 2a6 6 0 0 0 0 12z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             <path d="M6.06 6a2 2 0 0 1 3.88.67c0 1.33-2 2-2 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             <path d="M8 11h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </div>
-        <span className="ask-user-question-widget__title">
+        <span className="text-sm font-semibold text-nim flex-1">
           {statusText}
         </span>
         {isCompleted && !isCancelled && (
-          <span className="ask-user-question-widget__status">
+          <span className="flex items-center gap-1 text-xs font-medium text-nim-success py-1 px-2 bg-[color-mix(in_srgb,var(--nim-success)_12%,transparent)] rounded-full">
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M10 3L4.5 8.5L2 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
@@ -200,7 +199,7 @@ export const AskUserQuestionWidget: React.FC<CustomToolWidgetProps> = ({
           </span>
         )}
         {isCancelled && (
-          <span className="ask-user-question-widget__status ask-user-question-widget__status--cancelled">
+          <span className="flex items-center gap-1 text-xs font-medium text-nim-muted py-1 px-2 bg-nim-tertiary rounded-full">
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M9 3L3 9M3 3l6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
@@ -209,41 +208,49 @@ export const AskUserQuestionWidget: React.FC<CustomToolWidgetProps> = ({
         )}
       </div>
 
-      <div className="ask-user-question-widget__questions">
+      <div className="p-3 flex flex-col gap-3">
         {questions.map((question, qIndex) => {
           const answer = answers[question.question];
 
           return (
-            <div key={qIndex} className="ask-user-question-widget__question-card">
-              <div className="ask-user-question-widget__question-header">
-                <span className="ask-user-question-widget__question-chip">{question.header}</span>
+            <div key={qIndex} className="bg-nim border border-nim rounded-md p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-[0.6875rem] font-semibold uppercase tracking-wide text-nim-primary bg-[color-mix(in_srgb,var(--nim-primary)_12%,transparent)] py-0.5 px-2 rounded-full">{question.header}</span>
                 {question.multiSelect && (
-                  <span className="ask-user-question-widget__multi-select-hint">Multiple selection</span>
+                  <span className="text-[0.6875rem] text-nim-faint italic">Multiple selection</span>
                 )}
               </div>
-              <div className="ask-user-question-widget__question-text">
+              <div className="text-sm text-nim leading-normal mb-3">
                 {question.question}
               </div>
-              <div className="ask-user-question-widget__options">
+              <div className="flex flex-col gap-1.5">
                 {question.options.map((option, oIndex) => {
                   const isSelected = isOptionSelected(answer, option.label, question.multiSelect);
 
                   return (
                     <div
                       key={oIndex}
-                      className={`ask-user-question-widget__option ${isSelected ? 'ask-user-question-widget__option--selected' : ''}`}
+                      className={`flex items-start gap-2 py-2 px-2.5 rounded border transition-all duration-150 cursor-default ${
+                        isSelected
+                          ? 'border-nim-primary bg-[color-mix(in_srgb,var(--nim-primary)_8%,var(--nim-bg-secondary))]'
+                          : 'border-nim bg-nim-secondary'
+                      }`}
                     >
-                      <div className={`ask-user-question-widget__option-indicator ${isSelected ? 'ask-user-question-widget__option-indicator--selected' : ''}`}>
+                      <div className={`w-4 h-4 mt-0.5 shrink-0 border rounded-sm flex items-center justify-center ${
+                        isSelected
+                          ? 'bg-nim-primary border-nim-primary text-white'
+                          : 'bg-nim border-nim text-nim-primary'
+                      }`}>
                         {isSelected && (
                           <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M8.5 2.5L3.75 7.25L1.5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                           </svg>
                         )}
                       </div>
-                      <div className="ask-user-question-widget__option-content">
-                        <span className="ask-user-question-widget__option-label">{option.label}</span>
+                      <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                        <span className="text-[0.8125rem] font-medium text-nim leading-snug">{option.label}</span>
                         {option.description && (
-                          <span className="ask-user-question-widget__option-description">{option.description}</span>
+                          <span className="text-xs text-nim-muted leading-snug">{option.description}</span>
                         )}
                       </div>
                     </div>
@@ -252,7 +259,7 @@ export const AskUserQuestionWidget: React.FC<CustomToolWidgetProps> = ({
               </div>
               {/* Show selected answer summary if answered */}
               {answer && (
-                <div className="ask-user-question-widget__answer-summary">
+                <div className="mt-2 pt-2 border-t border-nim text-xs text-nim-muted italic">
                   Selected: {answer}
                 </div>
               )}

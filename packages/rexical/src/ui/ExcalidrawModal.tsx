@@ -14,8 +14,6 @@ import type {
 } from '@excalidraw/excalidraw/types';
 import type {JSX} from 'react';
 
-import './ExcalidrawModal.css';
-
 import {Excalidraw} from '@excalidraw/excalidraw';
 import {isDOMNode} from 'lexical';
 import {ReactPortal, useEffect, useLayoutEffect, useRef, useState} from 'react';
@@ -168,7 +166,7 @@ export default function ExcalidrawModal({
         }}
         closeOnClickOutside={false}>
         Are you sure you want to discard the changes?
-        <div className="ExcalidrawModal__discardModal">
+        <div className="ExcalidrawModal__discardModal mt-[60px] text-center">
           <Button
             onClick={() => {
               setDiscardModalOpen(false);
@@ -201,15 +199,16 @@ export default function ExcalidrawModal({
   };
 
   const {theme} = useTheme();
+  const isDark = theme === 'dark';
 
   return createPortal(
-    <div className="ExcalidrawModal__overlay" role="dialog">
+    <div className="ExcalidrawModal__overlay flex items-center fixed flex-col inset-0 z-[100] bg-black/60" role="dialog">
       <div
-        className={`ExcalidrawModal__modal ${theme === 'dark' ? 'dark-theme' : ''}`}
+        className={`ExcalidrawModal__modal relative z-10 top-[50px] w-auto left-0 flex justify-center items-center rounded-lg ${isDark ? 'bg-[#333]' : 'bg-[#eee]'}`}
         ref={excaliDrawModelRef}
-        style={{backgroundColor: theme === 'dark' ? '#333' : '#fff'}}
+        style={{backgroundColor: isDark ? '#333' : '#fff'}}
         tabIndex={-1}>
-        <div className="ExcalidrawModal__row">
+        <div className="ExcalidrawModal__row relative p-[40px_5px_5px] w-[70vw] h-[70vh] rounded-lg shadow-[0_12px_28px_0_rgba(0,0,0,0.2),0_2px_4px_0_rgba(0,0,0,0.1),inset_0_0_0_1px_rgba(255,255,255,0.5)] [&>div]:rounded-[5px]">
           {discardModalOpen && <ShowDiscardDialog />}
           <Excalidraw
             onChange={onChange}
@@ -221,11 +220,11 @@ export default function ExcalidrawModal({
             }}
             theme={theme.includes('dark') ? 'dark' : 'light'}
           />
-          <div className="ExcalidrawModal__actions">
+          <div className="ExcalidrawModal__actions text-end absolute right-[5px] top-[5px] z-[1]">
             {/*<button className="action-button" onClick={discard}>*/}
             {/*  Discard*/}
             {/*</button>*/}
-            <button className="action-button" onClick={save}>
+            <button className={`action-button rounded-[5px] ${isDark ? 'bg-[#333] text-white' : 'bg-white'}`} onClick={save}>
               Close
             </button>
           </div>

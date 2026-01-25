@@ -1,7 +1,7 @@
 import React from 'react';
 import type { ChatAttachment } from '@nimbalyst/runtime';
 import { AttachmentPreview, ProcessingAttachmentPreview } from './AttachmentPreview';
-import './AttachmentPreview.css';
+// import './AttachmentPreview.css';
 
 export interface ProcessingAttachment {
   id: string;

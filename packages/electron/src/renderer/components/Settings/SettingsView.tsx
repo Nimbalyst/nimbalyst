@@ -3,7 +3,6 @@ import { useAtom, useAtomValue } from 'jotai';
 import { usePostHog } from 'posthog-js/react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import { SettingsSidebar, type SettingsCategory } from './SettingsSidebar';
-import './SettingsView.css';
 
 // Import provider panels from GlobalSettings
 import { ClaudePanel } from '../GlobalSettings/panels/ClaudePanel';
@@ -501,13 +500,13 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
         return (
           <>
             {hasWorkspaceMcpServers && scope === 'user' && (
-              <div className="settings-project-indicator">
+              <div className="settings-project-indicator flex items-start gap-3 py-3 px-4 mb-6 bg-[rgba(59,130,246,0.1)] border border-[rgba(59,130,246,0.3)] rounded-lg text-[var(--nim-text)] [&_.material-symbols-outlined]:text-[var(--nim-info)] [&_.material-symbols-outlined]:shrink-0 [&_.material-symbols-outlined]:mt-0.5">
                 <MaterialSymbol icon="info" size={20} />
-                <div className="settings-project-indicator-text">
-                  <strong>
+                <div className="settings-project-indicator-text flex flex-col gap-1">
+                  <strong className="text-sm font-semibold text-[var(--nim-text)]">
                     There {workspaceMcpServerCount === 1 ? 'is' : 'are'} {workspaceMcpServerCount} additional MCP {workspaceMcpServerCount === 1 ? 'server' : 'servers'} configured just for this project.
                   </strong>
-                  <span>Switch to the Project tab above to view or edit project-specific MCP servers.</span>
+                  <span className="text-[13px] text-[var(--nim-text-muted)] leading-[1.4]">Switch to the Project tab above to view or edit project-specific MCP servers.</span>
                 </div>
               </div>
             )}
@@ -546,23 +545,29 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
   };
 
   return (
-    <div className="settings-view">
+    <div className="settings-view flex flex-col h-full bg-[var(--nim-bg)] text-[var(--nim-text)]">
       {/* Settings Header */}
-      <header className="settings-view-header">
-        <span className="settings-view-title">Settings</span>
+      <header className="settings-view-header h-[52px] bg-[var(--nim-bg-secondary)] border-b border-[var(--nim-border)] flex items-center px-5 gap-4 shrink-0">
+        <h1 className="settings-view-title text-base font-semibold text-[var(--nim-text)] m-0">Settings</h1>
 
-
-
-        <div className="settings-scope-container">
-          <div className="settings-scope-tabs">
+        <div className="settings-scope-container flex items-center gap-3">
+          <div className="settings-scope-tabs flex bg-[var(--nim-bg-tertiary)] p-1 rounded-lg">
             <button
-              className={`settings-scope-tab ${scope === 'user' ? 'active' : ''}`}
+              className={`settings-scope-tab py-1.5 px-4 rounded-md text-xs font-medium cursor-pointer transition-all duration-150 border-none ${
+                scope === 'user'
+                  ? 'bg-[var(--nim-primary)] text-white shadow-sm'
+                  : 'bg-transparent text-[var(--nim-text-muted)] hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]'
+              }`}
               onClick={() => handleScopeChange('user')}
             >
               User
             </button>
             <button
-              className={`settings-scope-tab ${scope === 'project' ? 'active' : ''}`}
+              className={`settings-scope-tab py-1.5 px-4 rounded-md text-xs font-medium cursor-pointer transition-all duration-150 border-none disabled:opacity-50 disabled:cursor-not-allowed ${
+                scope === 'project'
+                  ? 'bg-[var(--nim-primary)] text-white shadow-sm'
+                  : 'bg-transparent text-[var(--nim-text-muted)] hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]'
+              }`}
               onClick={() => handleScopeChange('project')}
               disabled={!workspacePath}
               title={!workspacePath ? 'Open a project to access project settings' : undefined}
@@ -570,22 +575,27 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
               Project
             </button>
           </div>
-          <span className="settings-scope-hint">
+          <span className="settings-scope-hint text-[13px] text-[var(--nim-text-muted)]">
             {scope === 'user'
               ? 'These settings apply to all projects'
-              : `These settings apply only for ${workspaceName || 'this project'}`}
+              : `Settings for ${workspaceName || 'this project'}`}
           </span>
         </div>
 
-
-        <span className={`settings-save-status ${saveStatus}`}>
+        <span className="flex-1" />
+        <span className={`settings-save-status text-xs min-w-[60px] ${
+          saveStatus === 'saving' ? 'text-[var(--nim-text-muted)]' :
+          saveStatus === 'saved' ? 'text-[var(--nim-success)]' :
+          saveStatus === 'error' ? 'text-[var(--nim-error)]' :
+          'text-[var(--nim-text-faint)]'
+        }`}>
           {saveStatus === 'saving' && 'Saving...'}
           {saveStatus === 'saved' && 'Saved'}
           {saveStatus === 'error' && 'Error saving'}
         </span>
       </header>
 
-      <div className="settings-view-body">
+      <div className="settings-view-body flex flex-1 overflow-hidden relative min-h-0">
         <SettingsSidebar
           selectedCategory={selectedCategory}
           onSelectCategory={setSelectedCategory}
@@ -596,8 +606,10 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
           // releaseChannel now comes from Jotai atom in SettingsSidebar
         />
 
-        <main className="settings-view-main">
-          {renderPanel()}
+        <main className="settings-view-main flex-1 overflow-y-auto p-6 bg-[var(--nim-bg)] relative z-0">
+          <div className="settings-panel-container max-w-[800px]">
+            {renderPanel()}
+          </div>
         </main>
       </div>
     </div>

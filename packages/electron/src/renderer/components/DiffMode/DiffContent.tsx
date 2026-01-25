@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import './DiffContent.css';
 
 interface DiffContentProps {
   worktreePath: string;
@@ -119,7 +118,7 @@ export function DiffContent({ worktreePath, filePath }: DiffContentProps) {
 
   if (isLoading) {
     return (
-      <div className="diff-content diff-content--loading">
+      <div className="diff-content diff-content--loading flex flex-1 flex-col items-center justify-center text-sm text-[var(--nim-text-muted)] bg-[var(--nim-bg)]">
         <p>Loading diff...</p>
       </div>
     );
@@ -127,7 +126,7 @@ export function DiffContent({ worktreePath, filePath }: DiffContentProps) {
 
   if (error) {
     return (
-      <div className="diff-content diff-content--error">
+      <div className="diff-content diff-content--error flex flex-1 flex-col items-center justify-center text-sm text-[var(--nim-error)] bg-[var(--nim-bg)]">
         <p>{error}</p>
       </div>
     );
@@ -135,36 +134,80 @@ export function DiffContent({ worktreePath, filePath }: DiffContentProps) {
 
   if (diffLines.length === 0) {
     return (
-      <div className="diff-content diff-content--empty">
+      <div className="diff-content diff-content--empty flex flex-1 flex-col items-center justify-center text-sm text-[var(--nim-text-muted)] bg-[var(--nim-bg)]">
         <p>No changes in this file</p>
       </div>
     );
   }
 
+  const getLineClasses = (type: DiffLine['type']) => {
+    const baseClasses = 'diff-line min-h-5';
+    switch (type) {
+      case 'header':
+        return `${baseClasses} diff-line--header bg-[var(--nim-bg-secondary)] text-[var(--nim-text-faint)]`;
+      case 'hunk':
+        return `${baseClasses} diff-line--hunk bg-[var(--nim-info-light)] text-[var(--nim-info)]`;
+      case 'addition':
+        return `${baseClasses} diff-line--addition bg-[var(--nim-success-light)]`;
+      case 'deletion':
+        return `${baseClasses} diff-line--deletion bg-[var(--nim-error-light)]`;
+      case 'context':
+        return `${baseClasses} diff-line--context bg-transparent`;
+      default:
+        return baseClasses;
+    }
+  };
+
+  const getMarkerClasses = (type: DiffLine['type']) => {
+    const baseClasses = 'diff-line-marker w-5 min-w-5 px-1 text-center select-none align-top';
+    switch (type) {
+      case 'addition':
+        return `${baseClasses} text-[var(--nim-success)]`;
+      case 'deletion':
+        return `${baseClasses} text-[var(--nim-error)]`;
+      case 'hunk':
+        return `${baseClasses} text-[var(--nim-info)]`;
+      default:
+        return `${baseClasses} text-[var(--nim-text-muted)]`;
+    }
+  };
+
+  const getContentClasses = (type: DiffLine['type']) => {
+    const baseClasses = 'diff-line-content px-2 whitespace-pre-wrap break-all';
+    switch (type) {
+      case 'addition':
+        return `${baseClasses} text-[var(--nim-success)]`;
+      case 'deletion':
+        return `${baseClasses} text-[var(--nim-error)]`;
+      default:
+        return baseClasses;
+    }
+  };
+
   return (
-    <div className="diff-content">
-      <div className="diff-content-scroll">
-        <table className="diff-table">
+    <div className="diff-content flex flex-1 flex-col bg-[var(--nim-bg)]">
+      <div className="diff-content-scroll flex-1 overflow-auto">
+        <table className="diff-table w-full border-collapse font-mono text-[0.8125rem] leading-normal">
           <tbody>
             {diffLines.map((line, index) => (
-              <tr key={index} className={`diff-line diff-line--${line.type}`}>
-                <td className="diff-line-number diff-line-number--old">
+              <tr key={index} className={getLineClasses(line.type)}>
+                <td className="diff-line-number diff-line-number--old w-12 min-w-12 px-2 text-right select-none align-top bg-[var(--nim-bg-secondary)] text-[var(--nim-text-faint)]">
                   {line.type === 'deletion' || line.type === 'context'
                     ? line.oldLineNumber
                     : ''}
                 </td>
-                <td className="diff-line-number diff-line-number--new">
+                <td className="diff-line-number diff-line-number--new w-12 min-w-12 px-2 text-right select-none align-top bg-[var(--nim-bg-secondary)] text-[var(--nim-text-faint)] border-r border-[var(--nim-border)]">
                   {line.type === 'addition' || line.type === 'context'
                     ? line.newLineNumber
                     : ''}
                 </td>
-                <td className="diff-line-marker">
+                <td className={getMarkerClasses(line.type)}>
                   {line.type === 'addition' ? '+' :
                    line.type === 'deletion' ? '-' :
                    line.type === 'hunk' ? '@@' : ''}
                 </td>
-                <td className="diff-line-content">
-                  <pre>{line.content}</pre>
+                <td className={getContentClasses(line.type)}>
+                  <pre className="m-0 p-0 font-inherit text-inherit leading-inherit whitespace-pre-wrap break-all">{line.content}</pre>
                 </td>
               </tr>
             ))}

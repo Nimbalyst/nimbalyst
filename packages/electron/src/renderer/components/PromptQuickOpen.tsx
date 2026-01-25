@@ -3,7 +3,6 @@ import { useAtomValue } from 'jotai';
 import { ProviderIcon, MaterialSymbol } from '@nimbalyst/runtime';
 import { getRelativeTimeString } from '../utils/dateFormatting';
 import { sessionOrChildProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom } from '../store';
-import './PromptQuickOpen.css';
 
 interface PromptItem {
   id: string;
@@ -27,15 +26,21 @@ const PromptStatusIndicator = memo<{ sessionId: string }>(({ sessionId }) => {
   // Priority: processing > pending prompt > unread
   if (isProcessing) {
     return (
-      <div className="prompt-quick-open-status processing" title="Processing...">
-        <MaterialSymbol icon="progress_activity" size={14} />
+      <div
+        className="prompt-quick-open-status processing flex items-center justify-center w-5 h-5 text-[var(--nim-primary)] opacity-80"
+        title="Processing..."
+      >
+        <MaterialSymbol icon="progress_activity" size={14} className="animate-spin" />
       </div>
     );
   }
 
   if (hasPendingPrompt) {
     return (
-      <div className="prompt-quick-open-status pending-prompt" title="Waiting for your response">
+      <div
+        className="prompt-quick-open-status pending-prompt flex items-center justify-center w-5 h-5 text-[var(--nim-warning)] animate-pulse"
+        title="Waiting for your response"
+      >
         <MaterialSymbol icon="help" size={14} />
       </div>
     );
@@ -43,7 +48,10 @@ const PromptStatusIndicator = memo<{ sessionId: string }>(({ sessionId }) => {
 
   if (hasUnread) {
     return (
-      <div className="prompt-quick-open-status unread" title="Unread response">
+      <div
+        className="prompt-quick-open-status unread flex items-center justify-center w-5 h-5 text-[var(--nim-primary)]"
+        title="Unread response"
+      >
         <MaterialSymbol icon="circle" size={8} fill />
       </div>
     );
@@ -216,31 +224,34 @@ export const PromptQuickOpen: React.FC<PromptQuickOpenProps> = ({
 
   return (
     <>
-      <div className="prompt-quick-open-backdrop" onClick={onClose} />
-      <div className="prompt-quick-open-modal">
-        <div className="prompt-quick-open-header">
+      <div
+        className="prompt-quick-open-backdrop nim-overlay z-[99998]"
+        onClick={onClose}
+      />
+      <div className="prompt-quick-open-modal fixed top-[20%] left-1/2 -translate-x-1/2 w-[90%] max-w-[700px] max-h-[60vh] flex flex-col overflow-hidden rounded-lg z-[99999] bg-[var(--nim-bg)] border border-[var(--nim-border)] shadow-[0_20px_60px_rgba(0,0,0,0.3)]">
+        <div className="prompt-quick-open-header p-3 border-b border-[var(--nim-border)] relative">
           <input
             ref={searchInputRef}
             type="text"
-            className="prompt-quick-open-search"
+            className="prompt-quick-open-search nim-input w-full text-base"
             placeholder="Search your prompts..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
 
-        <div className="prompt-quick-open-results">
+        <div className="prompt-quick-open-results flex-1 overflow-y-auto min-h-[200px]">
           {displayPrompts.length === 0 ? (
-            <div className="prompt-quick-open-empty">
+            <div className="prompt-quick-open-empty p-10 text-center text-[var(--nim-text-faint)]">
               {searchQuery ? 'No prompts found' : 'No recent prompts'}
             </div>
           ) : (
-            <ul className="prompt-quick-open-list" ref={resultsListRef}>
+            <ul className="prompt-quick-open-list list-none m-0 p-0" ref={resultsListRef}>
               {displayPrompts.map((prompt, index) => (
                 <li
                   key={prompt.id}
-                  className={`prompt-quick-open-item ${
-                    index === selectedIndex ? 'selected' : ''
+                  className={`prompt-quick-open-item py-3 px-4 cursor-pointer border-l-[3px] border-transparent transition-all duration-100 flex items-start gap-3 hover:bg-[var(--nim-bg-hover)] ${
+                    index === selectedIndex ? 'selected bg-[rgba(0,122,255,0.1)] !border-l-[#007aff]' : ''
                   }`}
                   onClick={() => handlePromptSelect(prompt.sessionId)}
                   onMouseEnter={() => {
@@ -249,28 +260,28 @@ export const PromptQuickOpen: React.FC<PromptQuickOpenProps> = ({
                     }
                   }}
                 >
-                  <div className="prompt-quick-open-item-icon">
+                  <div className="prompt-quick-open-item-icon shrink-0 flex items-center justify-center pt-0.5 text-[var(--nim-text-muted)]">
                     <ProviderIcon provider={prompt.provider || 'claude'} size={16} />
                   </div>
-                  <div className="prompt-quick-open-item-content">
-                    <div className="prompt-quick-open-item-text">
+                  <div className="prompt-quick-open-item-content flex-1 min-w-0">
+                    <div className="prompt-quick-open-item-text text-sm text-[var(--nim-text)] leading-[1.4] mb-1 overflow-hidden text-ellipsis line-clamp-2">
                       {truncatePrompt(prompt.content)}
                     </div>
-                    <div className="prompt-quick-open-item-meta">
-                      <span className="prompt-quick-open-session-title">
+                    <div className="prompt-quick-open-item-meta text-xs text-[var(--nim-text-faint)] flex items-center gap-2">
+                      <span className="prompt-quick-open-session-title flex items-center gap-1.5 overflow-hidden text-ellipsis whitespace-nowrap">
                         {prompt.sessionTitle}
                         {prompt.parentSessionId && (
-                          <span className="prompt-quick-open-badge workstream-badge">
+                          <span className="prompt-quick-open-badge workstream-badge shrink-0 text-[10px] py-0.5 px-1.5 bg-[var(--nim-primary)] text-white rounded font-semibold">
                             In Workstream
                           </span>
                         )}
                       </span>
-                      <span className="prompt-quick-open-time">
+                      <span className="prompt-quick-open-time shrink-0 ml-auto">
                         {getRelativeTimeString(prompt.createdAt)}
                       </span>
                     </div>
                   </div>
-                  <div className="prompt-quick-open-item-right">
+                  <div className="prompt-quick-open-item-right shrink-0 flex items-center gap-1.5 ml-auto">
                     <PromptStatusIndicator sessionId={prompt.sessionId} />
                   </div>
                 </li>
@@ -279,15 +290,15 @@ export const PromptQuickOpen: React.FC<PromptQuickOpenProps> = ({
           )}
         </div>
 
-        <div className="prompt-quick-open-footer">
-          <span className="prompt-quick-open-hint">
-            <kbd>Up/Down</kbd> Navigate
+        <div className="prompt-quick-open-footer py-2 px-4 border-t border-[var(--nim-border)] flex gap-4 bg-[var(--nim-bg-secondary)]">
+          <span className="prompt-quick-open-hint text-[11px] text-[var(--nim-text-faint)] flex items-center gap-1">
+            <kbd className="py-0.5 px-1.5 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded font-mono text-[10px] text-[var(--nim-text)]">Up/Down</kbd> Navigate
           </span>
-          <span className="prompt-quick-open-hint">
-            <kbd>Enter</kbd> Open
+          <span className="prompt-quick-open-hint text-[11px] text-[var(--nim-text-faint)] flex items-center gap-1">
+            <kbd className="py-0.5 px-1.5 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded font-mono text-[10px] text-[var(--nim-text)]">Enter</kbd> Open
           </span>
-          <span className="prompt-quick-open-hint">
-            <kbd>Esc</kbd> Close
+          <span className="prompt-quick-open-hint text-[11px] text-[var(--nim-text-faint)] flex items-center gap-1">
+            <kbd className="py-0.5 px-1.5 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded font-mono text-[10px] text-[var(--nim-text)]">Esc</kbd> Close
           </span>
         </div>
       </div>

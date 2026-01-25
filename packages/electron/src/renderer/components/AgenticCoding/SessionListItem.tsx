@@ -3,7 +3,6 @@ import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
 import { sessionOrChildProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom, reparentSessionAtom, refreshSessionListAtom } from '../../store';
-import './SessionListItem.css';
 
 /**
  * Combined status indicator that subscribes to this session's state atoms.
@@ -19,15 +18,15 @@ const SessionStatusIndicator = memo<{ sessionId: string; messageCount?: number }
   // Priority: processing > pending prompt > unread > message count
   if (isProcessing) {
     return (
-      <div className="session-list-item-status processing" title="Processing...">
-        <MaterialSymbol icon="progress_activity" size={14} />
+      <div className="session-list-item-status processing flex items-center justify-center w-5 h-5 text-[var(--nim-primary)] opacity-80" title="Processing...">
+        <MaterialSymbol icon="progress_activity" size={14} className="animate-spin" />
       </div>
     );
   }
 
   if (hasPendingPrompt) {
     return (
-      <div className="session-list-item-status pending-prompt" title="Waiting for your response">
+      <div className="session-list-item-status pending-prompt flex items-center justify-center w-5 h-5 text-[var(--nim-warning)] animate-pulse" title="Waiting for your response">
         <MaterialSymbol icon="help" size={14} />
       </div>
     );
@@ -35,7 +34,7 @@ const SessionStatusIndicator = memo<{ sessionId: string; messageCount?: number }
 
   if (hasUnread) {
     return (
-      <div className="session-list-item-status unread" title="Unread response">
+      <div className="session-list-item-status unread flex items-center justify-center w-5 h-5 text-[var(--nim-primary)]" title="Unread response">
         <MaterialSymbol icon="circle" size={8} fill />
       </div>
     );
@@ -375,7 +374,18 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
   return (
     <div
         id={"session-list-item-" + id}
-      className={`session-list-item ${isActive ? 'active' : ''} ${isLoaded ? 'loaded' : ''} ${isArchived ? 'archived' : ''} ${isSelected ? 'selected' : ''} ${isPinned ? 'pinned' : ''} ${isDragging ? 'dragging' : ''} ${isValidDropTarget ? 'drop-target-valid' : ''}`}
+      className={`session-list-item relative flex items-start gap-2.5 py-2.5 px-3 pl-8 cursor-pointer rounded mx-2 transition-[background-color,opacity] duration-150 select-none
+        hover:bg-[var(--nim-bg-hover)]
+        focus:outline-2 focus:outline-[var(--nim-border-focus)] focus:-outline-offset-2
+        ${isActive ? 'active bg-[var(--nim-bg-selected)]' : ''}
+        ${isLoaded ? 'loaded' : ''}
+        ${isArchived ? 'archived opacity-60 hover:opacity-80' : ''}
+        ${isSelected ? 'selected bg-[var(--nim-bg-selected)]' : ''}
+        ${isPinned ? 'pinned' : ''}
+        ${isDragging ? 'dragging opacity-50 cursor-grabbing' : ''}
+        ${isValidDropTarget ? 'drop-target-valid bg-[rgba(83,89,93,0.4)] border-2 border-dashed border-[var(--nim-primary)]' : ''}
+        ${isDraggable ? 'cursor-grab' : ''}
+      `}
       onClick={onClick}
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => { setIsHovering(false); setShowContextMenu(false); }}
@@ -397,7 +407,7 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
       aria-label={`Session: ${truncatedTitle}, ${timestampLabel} ${relativeTime}${isLoaded ? ' (loaded in tab)' : ''}${isArchived ? ' (archived)' : ''}`}
       aria-current={isActive ? 'page' : undefined}
     >
-      <div className={`session-list-item-icon ${sessionType === 'terminal' ? 'terminal-icon' : ''} ${isWorkstream ? 'workstream-icon' : ''}`}>
+      <div className={`session-list-item-icon shrink-0 mt-0.5 text-[var(--nim-text-muted)] flex items-center relative ${isActive ? '[&]:text-[var(--nim-primary)] [&_svg]:text-[var(--nim-primary)]' : '[&_svg]:text-[var(--nim-text-muted)]'} ${sessionType === 'terminal' ? 'terminal-icon' : ''} ${isWorkstream ? 'workstream-icon' : ''}`}>
         {sessionType === 'terminal' ? (
           <MaterialSymbol icon="terminal" size={16} />
         ) : isWorkstream ? (
@@ -413,17 +423,17 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
         )}
       </div>
       {isPinned && (
-        <MaterialSymbol icon="push_pin" size={12} className="session-list-item-pin-icon" />
+        <MaterialSymbol icon="push_pin" size={12} className={`session-list-item-pin-icon shrink-0 -ml-1 opacity-70 ${isActive ? 'text-[var(--nim-primary)] opacity-80' : 'text-[var(--nim-text-faint)]'}`} />
       )}
       {branchedAt && (
-        <MaterialSymbol icon="fork_right" size={12} className="session-list-item-branch-icon" title="Branched conversation" />
+        <MaterialSymbol icon="fork_right" size={12} className={`session-list-item-branch-icon shrink-0 -ml-1 opacity-60 ${isActive ? 'text-[var(--nim-primary)] opacity-70' : 'text-[var(--nim-text-faint)]'}`} title="Branched conversation" />
       )}
-      <div className="session-list-item-content">
+      <div className="session-list-item-content flex-1 min-w-0 overflow-hidden">
         {isRenaming ? (
           <input
             ref={renameInputRef}
             type="text"
-            className="session-list-item-rename-input"
+            className="session-list-item-rename-input w-full px-2 py-1 text-[0.8125rem] font-medium border border-[var(--nim-primary)] rounded bg-[var(--nim-bg)] text-[var(--nim-text)] outline-none box-border"
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
             onKeyDown={handleRenameKeyDown}
@@ -432,24 +442,27 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
           />
         ) : (
           <>
-            <div className="session-list-item-title">{truncatedTitle}</div>
-            <div className="session-list-item-meta">
-              <span className="session-list-item-datetime" title={fullDateTime}>{relativeTime}</span>
-              {displayModel && <span className="session-list-item-model">{displayModel}</span>}
+            <div className={`session-list-item-title text-[0.8125rem] text-[var(--nim-text)] font-medium overflow-hidden text-ellipsis whitespace-nowrap mb-0.5 transition-colors duration-150 ${isActive ? 'font-semibold' : ''} ${isArchived ? 'text-[var(--nim-text-faint)]' : ''}`}>{truncatedTitle}</div>
+            <div className="session-list-item-meta flex gap-1.5 text-[0.6875rem] text-[var(--nim-text-faint)] items-center mt-0.5">
+              <span className="session-list-item-datetime text-[0.6875rem] text-[var(--nim-text-faint)] whitespace-nowrap transition-colors duration-150" title={fullDateTime}>{relativeTime}</span>
+              {displayModel && <span className="session-list-item-model overflow-hidden text-ellipsis whitespace-nowrap">{displayModel}</span>}
             </div>
           </>
         )}
       </div>
-      <div className="session-list-item-right">
+      <div className="session-list-item-right shrink-0 flex items-center gap-1.5 ml-auto">
         {uncommittedCount !== undefined && uncommittedCount > 0 && (
-          <span className="session-list-item-badge uncommitted" title={`${uncommittedCount} uncommitted change${uncommittedCount !== 1 ? 's' : ''}`}>
+          <span className="session-list-item-badge uncommitted text-[0.6875rem] px-1.5 py-0.5 rounded-xl font-semibold whitespace-nowrap bg-[rgba(245,158,11,0.15)] text-[var(--nim-warning)]" title={`${uncommittedCount} uncommitted change${uncommittedCount !== 1 ? 's' : ''}`}>
             {uncommittedCount}
           </span>
         )}
         <SessionStatusIndicator sessionId={id} messageCount={messageCount} />
         {(onArchive || onUnarchive) && (
           <button
-            className={`session-list-item-archive ${isHovering ? 'visible' : ''}`}
+            className={`session-list-item-archive shrink-0 flex items-center justify-center w-5 h-5 p-0 bg-transparent border-none rounded text-[var(--nim-text-faint)] cursor-pointer transition-all duration-150 focus:outline-2 focus:outline-[var(--nim-border-focus)] focus:outline-offset-1
+              ${isHovering ? 'visible opacity-70 pointer-events-auto hover:bg-[var(--nim-bg-tertiary)] hover:text-[var(--nim-text)] hover:opacity-100' : 'opacity-0 pointer-events-none'}
+              disabled:cursor-default disabled:opacity-0 disabled:pointer-events-none
+            `}
             onClick={handleArchiveToggle}
             aria-label={isArchived ? `Unarchive ${isWorkstream ? 'workstream' : 'session'}` : `Archive ${isWorkstream ? 'workstream' : 'session'}`}
             title={isArchived ? `Unarchive ${isWorkstream ? 'workstream' : 'session'}` : `Archive ${isWorkstream ? 'workstream' : 'session'}`}
@@ -467,7 +480,7 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
       {showContextMenu && (
         <div
           ref={contextMenuRef}
-          className="session-list-item-context-menu"
+          className="session-list-item-context-menu fixed z-[1000] min-w-[140px] p-1 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)]"
           style={{
             left: (adjustedContextMenuPosition || contextMenuPosition).x,
             top: (adjustedContextMenuPosition || contextMenuPosition).y
@@ -476,7 +489,7 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
         >
           {onRename && (
             <button
-              className="session-list-item-context-menu-item"
+              className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
               onClick={handleRenameClick}
             >
               <MaterialSymbol icon="edit" size={14} />
@@ -485,7 +498,7 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
           )}
           {onPinToggle && (
             <button
-              className="session-list-item-context-menu-item"
+              className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
               onClick={handlePinToggle}
             >
               <MaterialSymbol icon="push_pin" size={14} />
@@ -494,7 +507,7 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
           )}
           {onBranch && (
             <button
-              className="session-list-item-context-menu-item"
+              className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
               onClick={handleBranch}
             >
               <MaterialSymbol icon="fork_right" size={14} />
@@ -502,7 +515,7 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
             </button>
           )}
           <button
-            className="session-list-item-context-menu-item"
+            className="session-list-item-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
             onClick={handleArchiveToggle}
           >
             {isArchived ? (
@@ -519,7 +532,7 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
           </button>
           {onDelete && (
             <button
-              className="session-list-item-context-menu-item destructive"
+              className="session-list-item-context-menu-item destructive flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-error)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-error)] hover:text-white [&_svg]:shrink-0"
               onClick={handleDelete}
             >
               <MaterialSymbol icon="delete" size={14} />

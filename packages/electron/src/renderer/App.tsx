@@ -86,7 +86,6 @@ import {
 import { setStorageBackend } from '@nimbalyst/runtime';
 import { extensionPanelAIContextAtom } from './store/atoms/extensionPanels';
 import { setDiffTreeGroupByDirectoryAtom } from './store/atoms/projectState';
-import './WorkspaceWelcome.css';
 
 logger.ui.info('App.tsx loading');
 logger.ui.info('About to import StravuEditor');

@@ -30,15 +30,15 @@ export function Toolbar({ totalPages, scale, fitToWidth, onScaleChange, onFitToW
   };
 
   return (
-    <div className="pdf-toolbar">
-      <div className="pdf-toolbar-content">
-        <div className="pdf-info">
+    <div className="bg-nim border-b border-nim px-4 py-2 shrink-0">
+      <div className="flex items-center justify-between max-w-[1200px] mx-auto">
+        <div className="text-sm text-nim-muted">
           <span>{totalPages} pages</span>
         </div>
 
-        <div className="pdf-zoom-controls">
+        <div className="flex items-center gap-3">
           <button
-            className={`pdf-toolbar-button pdf-fit-button ${fitToWidth ? 'active' : ''}`}
+            className={`px-3 py-1 rounded cursor-pointer text-base font-semibold transition-all border border-nim ${fitToWidth ? 'bg-[var(--nim-primary)] text-white border-[var(--nim-primary)] hover:opacity-90' : 'bg-nim-tertiary text-nim hover:bg-nim-hover'}`}
             onClick={onFitToWidthToggle}
             title="Fit to Width"
           >
@@ -46,7 +46,7 @@ export function Toolbar({ totalPages, scale, fitToWidth, onScaleChange, onFitToW
           </button>
 
           <button
-            className="pdf-toolbar-button"
+            className="bg-nim-tertiary border border-nim text-nim px-3 py-1 rounded cursor-pointer text-base font-semibold transition-all hover:bg-nim-hover disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={handleZoomOut}
             disabled={scale <= ZOOM_LEVELS[0]}
             title="Zoom Out (Cmd+-)"
@@ -54,12 +54,16 @@ export function Toolbar({ totalPages, scale, fitToWidth, onScaleChange, onFitToW
             -
           </button>
 
-          <span className="pdf-zoom-level" onClick={handleZoomReset} title="Click to reset zoom">
+          <span
+            className="min-w-[50px] text-center text-sm font-medium cursor-pointer select-none hover:text-[var(--nim-primary)]"
+            onClick={handleZoomReset}
+            title="Click to reset zoom"
+          >
             {currentZoomPercent}%
           </span>
 
           <button
-            className="pdf-toolbar-button"
+            className="bg-nim-tertiary border border-nim text-nim px-3 py-1 rounded cursor-pointer text-base font-semibold transition-all hover:bg-nim-hover disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={handleZoomIn}
             disabled={scale >= ZOOM_LEVELS[ZOOM_LEVELS.length - 1]}
             title="Zoom In (Cmd++)"

@@ -11,7 +11,6 @@
 
 import React, { useState, useCallback } from 'react';
 import { errorNotificationService } from '../../../services/ErrorNotificationService';
-import './MemoryPrompt.css';
 
 export type MemoryTarget = 'user' | 'project';
 
@@ -46,34 +45,34 @@ export function MemoryPromptIndicator({
   }, [target, onTargetChange]);
 
   return (
-    <div className="memory-prompt-indicator">
-      <div className="memory-prompt-left">
-        <div className="memory-prompt-icon">
+    <div className="memory-prompt-indicator flex items-center justify-between gap-2 px-2.5 py-1.5 mb-2 rounded-md border border-[var(--nim-primary)] bg-[var(--nim-bg-secondary)]">
+      <div className="memory-prompt-left flex items-center gap-2">
+        <div className="memory-prompt-icon flex items-center justify-center text-[var(--nim-primary)]">
           <MemoryIcon />
         </div>
-        <span className="memory-prompt-label">
+        <span className="memory-prompt-label text-xs text-[var(--nim-text-muted)]">
           {isSaving ? 'Saving...' : 'Adding to memory'}
         </span>
         <button
-          className="memory-prompt-target-button"
+          className="memory-prompt-target-button nim-btn-secondary gap-1 px-2 py-1 text-xs font-medium"
           onClick={toggleTarget}
           disabled={isSaving}
           title="Use arrow keys to switch"
         >
-          <span className="memory-target-name">
+          <span className="memory-target-name text-[var(--nim-primary)]">
             {target === 'user' ? 'User Memory' : 'Project Memory'}
           </span>
-          <span className="memory-target-hint">
+          <span className="memory-target-hint flex items-center text-[var(--nim-text-faint)]">
             <ArrowsIcon />
           </span>
         </button>
       </div>
-      <div className="memory-prompt-shortcuts">
-        <kbd>Enter</kbd> to save
-        <span className="memory-shortcut-separator">&middot;</span>
-        <kbd>&uarr;</kbd><kbd>&darr;</kbd> to switch target
-        <span className="memory-shortcut-separator">&middot;</span>
-        <kbd>Esc</kbd> to cancel
+      <div className="memory-prompt-shortcuts flex items-center gap-1 text-[11px] text-[var(--nim-text-faint)]">
+        <kbd className="inline-block px-1.5 py-0.5 font-inherit text-[10px] bg-[var(--nim-bg-tertiary)] border border-[var(--nim-border)] rounded">Enter</kbd> to save
+        <span className="memory-shortcut-separator mx-1 text-[var(--nim-text-faint)]">&middot;</span>
+        <kbd className="inline-block px-1.5 py-0.5 font-inherit text-[10px] bg-[var(--nim-bg-tertiary)] border border-[var(--nim-border)] rounded">&uarr;</kbd><kbd className="inline-block px-1.5 py-0.5 font-inherit text-[10px] bg-[var(--nim-bg-tertiary)] border border-[var(--nim-border)] rounded">&darr;</kbd> to switch target
+        <span className="memory-shortcut-separator mx-1 text-[var(--nim-text-faint)]">&middot;</span>
+        <kbd className="inline-block px-1.5 py-0.5 font-inherit text-[10px] bg-[var(--nim-bg-tertiary)] border border-[var(--nim-border)] rounded">Esc</kbd> to cancel
       </div>
     </div>
   );
@@ -93,7 +92,7 @@ export function MemorySaveButton({
 }) {
   return (
     <button
-      className="memory-save-button"
+      className="memory-save-button flex items-center justify-center w-9 h-9 p-0 rounded-md border-none cursor-pointer text-white shrink-0 transition-all duration-150 bg-[var(--nim-primary)] hover:enabled:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
       onClick={onSave}
       disabled={disabled || isSaving}
       title="Save to memory (Enter)"
@@ -248,7 +247,7 @@ function SaveIcon() {
 
 function SpinnerIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="memory-spinner">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="memory-spinner animate-spin">
       <path
         d="M8 2V4"
         stroke="currentColor"

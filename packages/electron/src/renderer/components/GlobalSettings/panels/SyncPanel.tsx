@@ -449,18 +449,18 @@ export function SyncPanel() {
     : projects.length;
 
   return (
-    <div className="provider-panel">
-      <div className="provider-panel-header">
-        <h3 className="provider-panel-title">Account & Sync</h3>
-        <p className="provider-panel-description">
+    <div className="provider-panel flex flex-col">
+      <div className="provider-panel-header mb-6 pb-4 border-b border-[var(--nim-border)]">
+        <h3 className="provider-panel-title text-xl font-semibold leading-tight mb-2 text-[var(--nim-text)]">Account & Sync</h3>
+        <p className="provider-panel-description text-sm leading-relaxed text-[var(--nim-text-muted)]">
           Sign in to sync AI sessions across devices with end-to-end encryption.
         </p>
       </div>
 
       {/* Environment Toggle - Dev Only */}
       {isDevelopment && (
-        <div className="provider-panel-section">
-          <h4 className="provider-panel-section-title">Environment (Dev Only)</h4>
+        <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+          <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Environment (Dev Only)</h4>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button
               onClick={() => handleEnvironmentSwitch('development')}
@@ -504,8 +504,8 @@ export function SyncPanel() {
       )}
 
       {/* Account Section */}
-      <div className="provider-panel-section">
-        <h4 className="provider-panel-section-title">Account</h4>
+      <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+        <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Account</h4>
 
         {stytchAuth.isAuthenticated && stytchAuth.user ? (
           <div style={{
@@ -753,20 +753,20 @@ export function SyncPanel() {
       </div>
 
       {/* Sync Settings */}
-      <div className="provider-panel-section">
-        <h4 className="provider-panel-section-title">Sync Settings</h4>
+      <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+        <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Sync Settings</h4>
 
-        <div className="setting-item">
-          <label className="setting-label">
+        <div className="setting-item py-3">
+          <label className="setting-label flex items-start gap-3 cursor-pointer">
             <input
               type="checkbox"
               checked={config.enabled}
               onChange={(e) => handleFieldChange('enabled', e.target.checked)}
-              className="setting-checkbox"
+              className="setting-checkbox w-4 h-4 mt-0.5 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
             />
-            <div className="setting-text">
-              <span className="setting-name">Enable Session Sync</span>
-              <span className="setting-description">
+            <div className="setting-text flex flex-col gap-0.5">
+              <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Enable Session Sync</span>
+              <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
                 Sync AI sessions to other devices connected to the same server.
               </span>
             </div>
@@ -774,10 +774,10 @@ export function SyncPanel() {
         </div>
 
         {config.enabled && (
-          <div className="setting-item" style={{ marginTop: '12px' }}>
-            <div className="setting-text" style={{ marginBottom: '8px' }}>
-              <span className="setting-name">Idle Timeout</span>
-              <span className="setting-description">
+          <div className="setting-item py-3 mt-3">
+            <div className="setting-text flex flex-col gap-0.5 mb-2">
+              <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Idle Timeout</span>
+              <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
                 Minutes of inactivity before mobile push notifications are sent.
               </span>
             </div>
@@ -809,9 +809,9 @@ export function SyncPanel() {
       {config.enabled && (
         <>
           {/* Projects */}
-          <div className="provider-panel-section">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <h4 className="provider-panel-section-title" style={{ margin: 0 }}>Projects</h4>
+          <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+            <div className="flex items-center justify-between">
+              <h4 className="provider-panel-section-title text-base font-semibold text-[var(--nim-text)] m-0">Projects</h4>
               <button
                 onClick={() => setShowProjectPicker(true)}
                 style={{
@@ -827,15 +827,15 @@ export function SyncPanel() {
                 {enabledProjectCount} of {projects.length} enabled
               </button>
             </div>
-            <p className="provider-panel-hint" style={{ marginTop: '4px' }}>
+            <p className="text-sm leading-relaxed text-[var(--nim-text-muted)] mt-1">
               Choose which projects sync their AI sessions.
             </p>
           </div>
 
           {/* Get the Mobile App - only show when authenticated */}
           {stytchAuth.isAuthenticated && (
-            <div className="provider-panel-section">
-              <h4 className="provider-panel-section-title">Get the Mobile App</h4>
+            <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+              <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Get the Mobile App</h4>
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -895,8 +895,8 @@ export function SyncPanel() {
 
           {/* Mobile Pairing - only show when authenticated */}
           {stytchAuth.isAuthenticated ? (
-            <div className="provider-panel-section">
-              <h4 className="provider-panel-section-title">Mobile Device</h4>
+            <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+              <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Mobile Device</h4>
               <button
                 className="pair-device-button"
                 onClick={() => setShowQRModal(true)}
@@ -948,8 +948,8 @@ export function SyncPanel() {
               </div>
             </div>
           ) : (
-            <div className="provider-panel-section">
-              <h4 className="provider-panel-section-title">Mobile Device</h4>
+            <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+              <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Mobile Device</h4>
               <div style={{
                 padding: '16px',
                 background: 'var(--surface-secondary)',
@@ -969,8 +969,8 @@ export function SyncPanel() {
 
           {/* Connected Devices */}
           {connectedDevices.length > 0 && (
-            <div className="provider-panel-section">
-              <h4 className="provider-panel-section-title">
+            <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+              <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">
                 Online Devices
                 <button
                   onClick={loadDevices}

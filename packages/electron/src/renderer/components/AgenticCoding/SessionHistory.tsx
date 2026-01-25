@@ -18,7 +18,6 @@ import {
   sessionRegistryAtom,
   type SessionListItem as SessionListItemType,
 } from '../../store';
-import './SessionHistory.css';
 
 interface SessionItem {
   id: string;
@@ -1001,17 +1000,17 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
 
   if (loading) {
     return (
-      <div className="session-history">
-        <div className="workspace-color-accent" style={{ backgroundColor: workspaceColor }} />
-        <div className="session-history-header">
-          <div className="session-history-header-identity">
-            <h3 className="session-history-header-name">{workspaceName}</h3>
-            <div className="session-history-header-path">{workspacePath}</div>
+      <div className="session-history flex flex-col h-full bg-[var(--nim-bg)] overflow-hidden">
+        <div className="workspace-color-accent h-[3px] w-full opacity-90 shrink-0" style={{ backgroundColor: workspaceColor }} />
+        <div className="session-history-header flex items-center justify-between px-3 pt-2.5 pb-2 border-b border-[var(--nim-border)] bg-[var(--nim-bg)] gap-2 min-h-14 shrink-0">
+          <div className="session-history-header-identity flex-1 min-w-0 flex flex-col gap-0.5">
+            <h3 className="session-history-header-name m-0 text-[15px] font-bold text-[var(--nim-text)] overflow-hidden text-ellipsis whitespace-nowrap tracking-tight leading-tight">{workspaceName}</h3>
+            <div className="session-history-header-path text-[11px] text-[var(--nim-text-muted)] overflow-hidden text-ellipsis whitespace-nowrap opacity-75 font-normal">{workspacePath}</div>
           </div>
-          <div className="session-history-header-buttons">
+          <div className="session-history-header-buttons flex items-center gap-1.5 shrink-0">
             {onOpenQuickSearch && (
               <button
-                className="session-history-search-button"
+                className="session-history-search-button flex items-center justify-center p-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] cursor-pointer transition-colors duration-150 shrink-0 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] active:bg-[var(--nim-bg-tertiary)] [&_svg]:block"
                 data-testid="session-quick-search-button"
                 onClick={onOpenQuickSearch}
                 title={`Search sessions (${getShortcutDisplay(KeyboardShortcuts.window.sessionQuickOpen)})`}
@@ -1025,7 +1024,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
             )}
             {onImportSessions && (
               <button
-                className="session-history-import-button"
+                className="session-history-import-button flex items-center justify-center p-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] cursor-pointer transition-colors duration-150 shrink-0 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] active:bg-[var(--nim-bg-tertiary)] [&_svg]:block"
                 data-testid="import-sessions-button"
                 onClick={onImportSessions}
                 title="Import Claude Agent sessions"
@@ -1037,9 +1036,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
               </button>
             )}
             {(onNewSession || onNewWorktreeSession || onNewTerminal) && (
-              <div className="session-history-new-dropdown">
+              <div className="session-history-new-dropdown relative">
                 <button
-                  className="session-history-new-button"
+                  className="session-history-new-button flex items-center justify-center p-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] cursor-pointer transition-colors duration-150 shrink-0 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] active:bg-[var(--nim-bg-tertiary)] [&_svg]:block"
                   data-testid="new-dropdown-button"
                   onClick={handleNewButtonClick}
                   title="Create new..."
@@ -1050,10 +1049,10 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                   </svg>
                 </button>
                 {newDropdownOpen && (
-                  <div className="session-history-new-menu">
+                  <div className="session-history-new-menu absolute top-[calc(100%+4px)] right-0 min-w-40 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded overflow-hidden z-[100] shadow-[0_4px_12px_rgba(0,0,0,0.15)]">
                     {onNewSession && (
                       <button
-                        className="session-history-new-option"
+                        className="session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1"
                         data-testid="new-session-button"
                         onClick={() => { onNewSession(); setNewDropdownOpen(false); }}
                       >
@@ -1061,12 +1060,12 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                           <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                         </svg>
                         <span>New Session</span>
-                        <span className="session-history-new-option-shortcut">{getShortcutDisplay(KeyboardShortcuts.file.newSession)}</span>
+                        <span className="session-history-new-option-shortcut flex-none text-[11px] text-[var(--nim-text-muted)] opacity-70">{getShortcutDisplay(KeyboardShortcuts.file.newSession)}</span>
                       </button>
                     )}
                     {onNewWorktreeSession && (
                       <button
-                        className={`session-history-new-option ${!isGitRepo ? 'disabled' : ''}`}
+                        className={`session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1 ${!isGitRepo ? 'opacity-50 cursor-not-allowed hover:bg-transparent' : ''}`}
                         data-testid="new-worktree-session-button"
                         onClick={() => { if (isGitRepo) { onNewWorktreeSession(); setNewDropdownOpen(false); } }}
                         disabled={!isGitRepo}
@@ -1085,7 +1084,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                     )}
                     {onNewTerminal && (
                       <button
-                        className="session-history-new-option"
+                        className="session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1"
                         data-testid="new-terminal-button"
                         onClick={() => { onNewTerminal(); setNewDropdownOpen(false); }}
                       >
@@ -1102,21 +1101,21 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
             )}
           </div>
         </div>
-        <div className="session-history-section-label">Agent Sessions</div>
-        <div className="session-history-search">
+        <div className="session-history-section-label px-3 py-1.5 text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-wider border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] shrink-0">Agent Sessions</div>
+        <div className="session-history-search px-3 py-2 border-b border-[var(--nim-border)] shrink-0 relative">
           <input
             type="text"
-            className="session-history-search-input"
+            className="session-history-search-input nim-input w-full px-3 py-2 text-[13px] text-[var(--nim-text)] bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded outline-none transition-colors duration-150 placeholder:text-[var(--nim-text-faint)] focus:border-[var(--nim-primary)] focus:bg-[var(--nim-bg)]"
             placeholder="Search sessions..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             aria-label="Search sessions"
           />
         </div>
-        <div className="session-history-filters">
-          <div className="session-history-sort-dropdown">
+        <div className="session-history-filters flex items-center px-3 py-2 border-b border-[var(--nim-border)] gap-1.5 shrink-0">
+          <div className="session-history-sort-dropdown ml-auto relative">
             <button
-              className="session-history-sort-button"
+              className="session-history-sort-button flex items-center justify-center px-1.5 py-1 text-xs rounded border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] text-[var(--nim-text-muted)] cursor-pointer transition-all duration-150 outline-none hover:bg-[var(--nim-bg-tertiary)] hover:border-[var(--nim-primary)] hover:text-[var(--nim-text)] [&_svg]:block"
               onClick={toggleSortDropdown}
               title={`Sorted by: ${sortBy === 'updated' ? 'Last Updated' : 'Created'}`}
               aria-label="Sort sessions"
@@ -1126,9 +1125,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
               </svg>
             </button>
             {sortDropdownOpen && (
-              <div className="session-history-sort-menu">
+              <div className="session-history-sort-menu absolute top-[calc(100%+4px)] right-0 min-w-[140px] bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded overflow-hidden z-[100] shadow-[0_4px_12px_rgba(0,0,0,0.15)]">
                 <button
-                  className={`session-history-sort-option ${sortBy === 'updated' ? 'active' : ''}`}
+                  className={`session-history-sort-option flex items-center justify-between w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&>span]:flex-1 [&_svg]:shrink-0 [&_svg]:text-[var(--nim-primary)] ${sortBy === 'updated' ? 'bg-[var(--nim-bg-selected)] font-medium' : ''}`}
                   onClick={() => selectSortOption('updated')}
                 >
                   <span>Last Updated</span>
@@ -1139,7 +1138,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                   )}
                 </button>
                 <button
-                  className={`session-history-sort-option ${sortBy === 'created' ? 'active' : ''}`}
+                  className={`session-history-sort-option flex items-center justify-between w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&>span]:flex-1 [&_svg]:shrink-0 [&_svg]:text-[var(--nim-primary)] ${sortBy === 'created' ? 'bg-[var(--nim-bg-selected)] font-medium' : ''}`}
                   onClick={() => selectSortOption('created')}
                 >
                   <span>Created</span>
@@ -1153,7 +1152,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
             )}
           </div>
         </div>
-        <div className="session-history-loading">
+        <div className="session-history-loading flex flex-col items-center justify-center px-4 py-8 text-center text-[var(--nim-text-faint)] text-[13px]">
           <span>Searching sessions...</span>
         </div>
       </div>
@@ -1162,18 +1161,18 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
 
   if (error) {
     return (
-      <div className="session-history">
-        <div className="workspace-color-accent" style={{ backgroundColor: workspaceColor }} />
-        <div className="session-history-header">
-          <div className="session-history-header-identity">
-            <h3 className="session-history-header-name">{workspaceName}</h3>
-            <div className="session-history-header-path">{workspacePath}</div>
+      <div className="session-history flex flex-col h-full bg-[var(--nim-bg)] overflow-hidden">
+        <div className="workspace-color-accent h-[3px] w-full opacity-90 shrink-0" style={{ backgroundColor: workspaceColor }} />
+        <div className="session-history-header flex items-center justify-between px-3 pt-2.5 pb-2 border-b border-[var(--nim-border)] bg-[var(--nim-bg)] gap-2 min-h-14 shrink-0">
+          <div className="session-history-header-identity flex-1 min-w-0 flex flex-col gap-0.5">
+            <h3 className="session-history-header-name m-0 text-[15px] font-bold text-[var(--nim-text)] overflow-hidden text-ellipsis whitespace-nowrap tracking-tight leading-tight">{workspaceName}</h3>
+            <div className="session-history-header-path text-[11px] text-[var(--nim-text-muted)] overflow-hidden text-ellipsis whitespace-nowrap opacity-75 font-normal">{workspacePath}</div>
           </div>
-          <div className="session-history-header-buttons">
+          <div className="session-history-header-buttons flex items-center gap-1.5 shrink-0">
             {(onNewSession || onNewWorktreeSession || onNewTerminal) && (
-              <div className="session-history-new-dropdown">
+              <div className="session-history-new-dropdown relative">
                 <button
-                  className="session-history-new-button"
+                  className="session-history-new-button flex items-center justify-center p-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] cursor-pointer transition-colors duration-150 shrink-0 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] active:bg-[var(--nim-bg-tertiary)] [&_svg]:block"
                   data-testid="new-dropdown-button"
                   onClick={handleNewButtonClick}
                   title="Create new..."
@@ -1184,10 +1183,10 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                   </svg>
                 </button>
                 {newDropdownOpen && (
-                  <div className="session-history-new-menu">
+                  <div className="session-history-new-menu absolute top-[calc(100%+4px)] right-0 min-w-40 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded overflow-hidden z-[100] shadow-[0_4px_12px_rgba(0,0,0,0.15)]">
                     {onNewSession && (
                       <button
-                        className="session-history-new-option"
+                        className="session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1"
                         data-testid="new-session-button"
                         onClick={() => { onNewSession(); setNewDropdownOpen(false); }}
                       >
@@ -1195,12 +1194,12 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                           <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                         </svg>
                         <span>New Session</span>
-                        <span className="session-history-new-option-shortcut">{getShortcutDisplay(KeyboardShortcuts.file.newSession)}</span>
+                        <span className="session-history-new-option-shortcut flex-none text-[11px] text-[var(--nim-text-muted)] opacity-70">{getShortcutDisplay(KeyboardShortcuts.file.newSession)}</span>
                       </button>
                     )}
                     {onNewWorktreeSession && (
                       <button
-                        className={`session-history-new-option ${!isGitRepo ? 'disabled' : ''}`}
+                        className={`session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1 ${!isGitRepo ? 'opacity-50 cursor-not-allowed hover:bg-transparent' : ''}`}
                         data-testid="new-worktree-session-button"
                         onClick={() => { if (isGitRepo) { onNewWorktreeSession(); setNewDropdownOpen(false); } }}
                         disabled={!isGitRepo}
@@ -1219,7 +1218,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                     )}
                     {onNewTerminal && (
                       <button
-                        className="session-history-new-option"
+                        className="session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1"
                         data-testid="new-terminal-button"
                         onClick={() => { onNewTerminal(); setNewDropdownOpen(false); }}
                       >
@@ -1236,8 +1235,8 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
             )}
           </div>
         </div>
-        <div className="session-history-section-label">Agent Sessions</div>
-        <div className="session-history-error">
+        <div className="session-history-section-label px-3 py-1.5 text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-wider border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] shrink-0">Agent Sessions</div>
+        <div className="session-history-error flex flex-col items-center justify-center px-4 py-8 text-center text-[var(--nim-error)] text-[13px]">
           <span>{error}</span>
         </div>
       </div>
@@ -1250,17 +1249,17 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   if (sessions.length === 0 && !hasSearchQuery) {
     // No sessions at all - show simple empty state without search
     return (
-      <div className="session-history">
-        <div className="workspace-color-accent" style={{ backgroundColor: workspaceColor }} />
-        <div className="session-history-header">
-          <div className="session-history-header-identity">
-            <h3 className="session-history-header-name">{workspaceName}</h3>
-            <div className="session-history-header-path">{workspacePath}</div>
+      <div className="session-history flex flex-col h-full bg-[var(--nim-bg)] overflow-hidden">
+        <div className="workspace-color-accent h-[3px] w-full opacity-90 shrink-0" style={{ backgroundColor: workspaceColor }} />
+        <div className="session-history-header flex items-center justify-between px-3 pt-2.5 pb-2 border-b border-[var(--nim-border)] bg-[var(--nim-bg)] gap-2 min-h-14 shrink-0">
+          <div className="session-history-header-identity flex-1 min-w-0 flex flex-col gap-0.5">
+            <h3 className="session-history-header-name m-0 text-[15px] font-bold text-[var(--nim-text)] overflow-hidden text-ellipsis whitespace-nowrap tracking-tight leading-tight">{workspaceName}</h3>
+            <div className="session-history-header-path text-[11px] text-[var(--nim-text-muted)] overflow-hidden text-ellipsis whitespace-nowrap opacity-75 font-normal">{workspacePath}</div>
           </div>
-          <div className="session-history-header-buttons">
+          <div className="session-history-header-buttons flex items-center gap-1.5 shrink-0">
             {onImportSessions && (
               <button
-                className="session-history-import-button"
+                className="session-history-import-button flex items-center justify-center p-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] cursor-pointer transition-colors duration-150 shrink-0 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] active:bg-[var(--nim-bg-tertiary)] [&_svg]:block"
                 data-testid="import-sessions-button"
                 onClick={onImportSessions}
                 title="Import Claude Agent sessions"
@@ -1272,9 +1271,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
               </button>
             )}
             {(onNewSession || onNewWorktreeSession) && (
-              <div className="session-history-new-dropdown">
+              <div className="session-history-new-dropdown relative">
                 <button
-                  className="session-history-new-button"
+                  className="session-history-new-button flex items-center justify-center p-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] cursor-pointer transition-colors duration-150 shrink-0 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] active:bg-[var(--nim-bg-tertiary)] [&_svg]:block"
                   data-testid="new-dropdown-button"
                   onClick={handleNewButtonClick}
                   title="Create new..."
@@ -1285,10 +1284,10 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                   </svg>
                 </button>
                 {newDropdownOpen && (
-                  <div className="session-history-new-menu">
+                  <div className="session-history-new-menu absolute top-[calc(100%+4px)] right-0 min-w-40 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded overflow-hidden z-[100] shadow-[0_4px_12px_rgba(0,0,0,0.15)]">
                     {onNewSession && (
                       <button
-                        className="session-history-new-option"
+                        className="session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1"
                         data-testid="new-session-button"
                         onClick={() => { onNewSession(); setNewDropdownOpen(false); }}
                       >
@@ -1296,12 +1295,12 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                           <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                         </svg>
                         <span>New Session</span>
-                        <span className="session-history-new-option-shortcut">{getShortcutDisplay(KeyboardShortcuts.file.newSession)}</span>
+                        <span className="session-history-new-option-shortcut flex-none text-[11px] text-[var(--nim-text-muted)] opacity-70">{getShortcutDisplay(KeyboardShortcuts.file.newSession)}</span>
                       </button>
                     )}
                     {onNewWorktreeSession && (
                       <button
-                        className={`session-history-new-option ${!isGitRepo ? 'disabled' : ''}`}
+                        className={`session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1 ${!isGitRepo ? 'opacity-50 cursor-not-allowed hover:bg-transparent' : ''}`}
                         data-testid="new-worktree-session-button"
                         onClick={() => { if (isGitRepo) { onNewWorktreeSession(); setNewDropdownOpen(false); } }}
                         disabled={!isGitRepo}
@@ -1324,7 +1323,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
             )}
             {onNewTerminal && (
               <button
-                className="session-history-new-terminal-button"
+                className="session-history-new-terminal-button flex items-center justify-center p-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] cursor-pointer transition-colors duration-150 shrink-0 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] active:bg-[var(--nim-bg-tertiary)] [&_svg]:block"
                 data-testid="new-terminal-button"
                 onClick={() => onNewTerminal()}
                 title="New terminal"
@@ -1338,10 +1337,10 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
             )}
           </div>
         </div>
-        <div className="session-history-section-label">Agent Sessions</div>
-        <div className="session-history-empty">
-          <p>No sessions yet</p>
-          <p className="session-history-empty-hint">
+        <div className="session-history-section-label px-3 py-1.5 text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-wider border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] shrink-0">Agent Sessions</div>
+        <div className="session-history-empty flex flex-col items-center justify-center px-4 py-8 text-center text-[var(--nim-text-faint)] text-[13px]">
+          <p className="my-1">No sessions yet</p>
+          <p className="session-history-empty-hint my-1 text-xs text-[var(--nim-text-faint)]">
             Create a new session to get started
           </p>
         </div>
@@ -1350,17 +1349,17 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   }
 
   return (
-    <div className="session-history">
-      <div className="workspace-color-accent" style={{ backgroundColor: workspaceColor }} />
-      <div className="session-history-header">
-        <div className="session-history-header-identity">
-          <h3 className="session-history-header-name">{workspaceName}</h3>
-          <div className="session-history-header-path">{workspacePath}</div>
+    <div className="session-history flex flex-col h-full bg-[var(--nim-bg)] overflow-hidden">
+      <div className="workspace-color-accent h-[3px] w-full opacity-90 shrink-0" style={{ backgroundColor: workspaceColor }} />
+      <div className="session-history-header flex items-center justify-between px-3 pt-2.5 pb-2 border-b border-[var(--nim-border)] bg-[var(--nim-bg)] gap-2 min-h-14 shrink-0">
+        <div className="session-history-header-identity flex-1 min-w-0 flex flex-col gap-0.5">
+          <h3 className="session-history-header-name m-0 text-[15px] font-bold text-[var(--nim-text)] overflow-hidden text-ellipsis whitespace-nowrap tracking-tight leading-tight">{workspaceName}</h3>
+          <div className="session-history-header-path text-[11px] text-[var(--nim-text-muted)] overflow-hidden text-ellipsis whitespace-nowrap opacity-75 font-normal">{workspacePath}</div>
         </div>
-        <div className="session-history-header-buttons">
+        <div className="session-history-header-buttons flex items-center gap-1.5 shrink-0">
           {onOpenQuickSearch && (
             <button
-              className="session-history-search-button"
+              className="session-history-search-button flex items-center justify-center p-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] cursor-pointer transition-colors duration-150 shrink-0 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] active:bg-[var(--nim-bg-tertiary)] [&_svg]:block"
               data-testid="session-quick-search-button"
               onClick={onOpenQuickSearch}
               title={`Search sessions (${getShortcutDisplay(KeyboardShortcuts.window.sessionQuickOpen)})`}
@@ -1374,7 +1373,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
           )}
           {onImportSessions && (
             <button
-              className="session-history-import-button"
+              className="session-history-import-button flex items-center justify-center p-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] cursor-pointer transition-colors duration-150 shrink-0 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] active:bg-[var(--nim-bg-tertiary)] [&_svg]:block"
               data-testid="import-sessions-button"
               onClick={onImportSessions}
               title="Import Claude Agent sessions"
@@ -1386,9 +1385,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
             </button>
           )}
           {(onNewSession || onNewWorktreeSession || onNewTerminal) && (
-            <div className="session-history-new-dropdown">
+            <div className="session-history-new-dropdown relative">
               <button
-                className="session-history-new-button"
+                className="session-history-new-button flex items-center justify-center p-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] cursor-pointer transition-colors duration-150 shrink-0 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] active:bg-[var(--nim-bg-tertiary)] [&_svg]:block"
                 data-testid="new-dropdown-button"
                 onClick={handleNewButtonClick}
                 title="Create new..."
@@ -1399,10 +1398,10 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                 </svg>
               </button>
               {newDropdownOpen && (
-                <div className="session-history-new-menu">
+                <div className="session-history-new-menu absolute top-[calc(100%+4px)] right-0 min-w-40 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded overflow-hidden z-[100] shadow-[0_4px_12px_rgba(0,0,0,0.15)]">
                   {onNewSession && (
                     <button
-                      className="session-history-new-option"
+                      className="session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1"
                       data-testid="new-session-button"
                       onClick={() => { onNewSession(); setNewDropdownOpen(false); }}
                     >
@@ -1410,12 +1409,12 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                         <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                       </svg>
                       <span>New Session</span>
-                      <span className="session-history-new-option-shortcut">{getShortcutDisplay(KeyboardShortcuts.file.newSession)}</span>
+                      <span className="session-history-new-option-shortcut flex-none text-[11px] text-[var(--nim-text-muted)] opacity-70">{getShortcutDisplay(KeyboardShortcuts.file.newSession)}</span>
                     </button>
                   )}
                   {onNewWorktreeSession && (
                     <button
-                      className={`session-history-new-option ${!isGitRepo ? 'disabled' : ''}`}
+                      className={`session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1 ${!isGitRepo ? 'opacity-50 cursor-not-allowed hover:bg-transparent' : ''}`}
                       data-testid="new-worktree-session-button"
                       onClick={() => { if (isGitRepo) { onNewWorktreeSession(); setNewDropdownOpen(false); } }}
                       disabled={!isGitRepo}
@@ -1434,7 +1433,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                   )}
                   {onNewTerminal && (
                     <button
-                      className="session-history-new-option"
+                      className="session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1"
                       data-testid="new-terminal-button"
                       onClick={() => { onNewTerminal(); setNewDropdownOpen(false); }}
                     >
@@ -1451,11 +1450,11 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
           )}
         </div>
       </div>
-      <div className="session-history-section-label">Agent Sessions</div>
-      <div className="session-history-search">
+      <div className="session-history-section-label px-3 py-1.5 text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-wider border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] shrink-0">Agent Sessions</div>
+      <div className="session-history-search px-3 py-2 border-b border-[var(--nim-border)] shrink-0 relative">
         <input
           type="text"
-          className="session-history-search-input"
+          className="session-history-search-input nim-input w-full px-3 py-2 text-[13px] text-[var(--nim-text)] bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded outline-none transition-colors duration-150 placeholder:text-[var(--nim-text-faint)] focus:border-[var(--nim-primary)] focus:bg-[var(--nim-bg)]"
           placeholder="Search sessions..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
@@ -1468,13 +1467,13 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
           aria-label="Search sessions"
         />
         {isSearching && (
-          <div className="session-history-search-status">
+          <div className="session-history-search-status absolute right-6 top-1/2 -translate-y-1/2 text-xs text-[var(--nim-text-faint)] pointer-events-none">
             {contentSearchTriggered ? 'Searching messages...' : 'Searching...'}
           </div>
         )}
         {!isSearching && searchQuery && !contentSearchTriggered && (
           <button
-            className="session-history-content-search-hint"
+            className="session-history-content-search-hint absolute right-6 top-1/2 -translate-y-1/2 text-xs text-[var(--nim-text-muted)] bg-transparent border-none cursor-pointer flex items-center gap-1 px-2 py-1 rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-primary)]"
             onClick={searchMessageContents}
             title="Press Tab to search message contents"
           >
@@ -1482,9 +1481,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
           </button>
         )}
       </div>
-      <div className="session-history-filters">
+      <div className="session-history-filters flex items-center px-3 py-2 border-b border-[var(--nim-border)] gap-1.5 shrink-0">
         <button
-          className={`session-history-archive-filter ${showArchived ? 'active' : ''}`}
+          className={`session-history-archive-filter flex items-center justify-center px-1.5 py-1 text-xs rounded border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] text-[var(--nim-text-faint)] cursor-pointer transition-all duration-150 outline-none hover:bg-[var(--nim-bg-tertiary)] hover:border-[var(--nim-primary)] hover:text-[var(--nim-text)] [&_svg]:block ${showArchived ? 'bg-[var(--nim-primary)] border-[var(--nim-primary)] text-white hover:opacity-90' : ''}`}
           onClick={toggleShowArchived}
           title={showArchived ? 'Hide archived sessions' : 'Show archived sessions'}
           aria-label={showArchived ? 'Hide archived sessions' : 'Show archived sessions'}
@@ -1494,9 +1493,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
             <path d="M6 8h4" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/>
           </svg>
         </button>
-        <div className="session-history-sort-dropdown">
+        <div className="session-history-sort-dropdown ml-auto relative">
           <button
-            className="session-history-sort-button"
+            className="session-history-sort-button flex items-center justify-center px-1.5 py-1 text-xs rounded border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] text-[var(--nim-text-muted)] cursor-pointer transition-all duration-150 outline-none hover:bg-[var(--nim-bg-tertiary)] hover:border-[var(--nim-primary)] hover:text-[var(--nim-text)] [&_svg]:block"
             onClick={toggleSortDropdown}
             title={`Sorted by: ${sortBy === 'updated' ? 'Last Updated' : 'Created'}`}
             aria-label="Sort sessions"
@@ -1506,9 +1505,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
             </svg>
           </button>
           {sortDropdownOpen && (
-            <div className="session-history-sort-menu">
+            <div className="session-history-sort-menu absolute top-[calc(100%+4px)] right-0 min-w-[140px] bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded overflow-hidden z-[100] shadow-[0_4px_12px_rgba(0,0,0,0.15)]">
               <button
-                className={`session-history-sort-option ${sortBy === 'updated' ? 'active' : ''}`}
+                className={`session-history-sort-option flex items-center justify-between w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&>span]:flex-1 [&_svg]:shrink-0 [&_svg]:text-[var(--nim-primary)] ${sortBy === 'updated' ? 'bg-[var(--nim-bg-selected)] font-medium' : ''}`}
                 onClick={() => selectSortOption('updated')}
               >
                 <span>Last Updated</span>
@@ -1519,7 +1518,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                 )}
               </button>
               <button
-                className={`session-history-sort-option ${sortBy === 'created' ? 'active' : ''}`}
+                className={`session-history-sort-option flex items-center justify-between w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&>span]:flex-1 [&_svg]:shrink-0 [&_svg]:text-[var(--nim-primary)] ${sortBy === 'created' ? 'bg-[var(--nim-bg-selected)] font-medium' : ''}`}
                 onClick={() => selectSortOption('created')}
               >
                 <span>Created</span>
@@ -1534,11 +1533,11 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
         </div>
       </div>
       {selectedSessionIds.size > 0 && (
-        <div className="session-history-bulk-actions">
-          <span className="session-history-bulk-count">{selectedSessionIds.size} selected</span>
-          <div className="session-history-bulk-buttons">
+        <div className="session-history-bulk-actions flex items-center justify-between px-3 py-2 bg-[var(--nim-bg-selected)] border-b border-[var(--nim-border)] gap-2">
+          <span className="session-history-bulk-count text-xs font-medium text-[var(--nim-text)]">{selectedSessionIds.size} selected</span>
+          <div className="session-history-bulk-buttons flex gap-1.5">
             {showArchived ? (
-              <button className="session-history-bulk-button" onClick={handleBulkUnarchive} title="Unarchive selected">
+              <button className="session-history-bulk-button flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded border border-[var(--nim-border)] bg-[var(--nim-bg)] text-[var(--nim-text)] cursor-pointer transition-all duration-150 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] [&_svg]:shrink-0" onClick={handleBulkUnarchive} title="Unarchive selected">
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M2 5h12M4 5v8a1 1 0 001 1h6a1 1 0 001-1V5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
                   <path d="M8 11V7M6 9l2-2 2 2" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
@@ -1546,7 +1545,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                 Unarchive
               </button>
             ) : (
-              <button className="session-history-bulk-button" onClick={handleBulkArchive} title="Archive selected">
+              <button className="session-history-bulk-button flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded border border-[var(--nim-border)] bg-[var(--nim-bg)] text-[var(--nim-text)] cursor-pointer transition-all duration-150 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] [&_svg]:shrink-0" onClick={handleBulkArchive} title="Archive selected">
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M2 5h12M4 5v8a1 1 0 001 1h6a1 1 0 001-1V5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
                   <path d="M8 7v4M6 9l2 2 2-2" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
@@ -1555,28 +1554,28 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
               </button>
             )}
             {onSessionDelete && (
-              <button className="session-history-bulk-button destructive" onClick={handleBulkDelete} title="Delete selected">
+              <button className="session-history-bulk-button flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded border border-[var(--nim-border)] bg-[var(--nim-bg)] text-[var(--nim-error)] cursor-pointer transition-all duration-150 hover:bg-[var(--nim-error)] hover:border-[var(--nim-error)] hover:text-white [&_svg]:shrink-0" onClick={handleBulkDelete} title="Delete selected">
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M2 4h12M5.333 4V2.667A.667.667 0 016 2h4a.667.667 0 01.667.667V4M12.667 4v9.333a1.333 1.333 0 01-1.334 1.334H4.667a1.333 1.333 0 01-1.334-1.334V4" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
                 Delete
               </button>
             )}
-            <button className="session-history-bulk-button" onClick={clearSelection} title="Clear selection">
+            <button className="session-history-bulk-button flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded border border-[var(--nim-border)] bg-[var(--nim-bg)] text-[var(--nim-text)] cursor-pointer transition-all duration-150 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] [&_svg]:shrink-0" onClick={clearSelection} title="Clear selection">
               Cancel
             </button>
           </div>
         </div>
       )}
-      <div className="session-history-list" ref={scrollContainerRef}>
+      <div className="session-history-list nim-scrollbar flex-1 overflow-y-auto overflow-x-hidden py-2 scroll-smooth" ref={scrollContainerRef}>
         {groupKeys.length === 0 && hasSearchQuery ? (
           // No search results - show message with option to clear
-          <div className="session-history-empty">
-            <p>No matching sessions found</p>
-            <p className="session-history-empty-hint">
+          <div className="session-history-empty flex flex-col items-center justify-center px-4 py-8 text-center text-[var(--nim-text-faint)] text-[13px]">
+            <p className="my-1">No matching sessions found</p>
+            <p className="session-history-empty-hint my-1 text-xs text-[var(--nim-text-faint)]">
               Try a different search term or{' '}
               <button
-                className="session-history-clear-search-link"
+                className="session-history-clear-search-link bg-transparent border-none text-[var(--nim-primary)] cursor-pointer underline p-0 text-inherit font-inherit hover:opacity-80"
                 onClick={() => setSearchQuery('')}
                 type="button"
               >

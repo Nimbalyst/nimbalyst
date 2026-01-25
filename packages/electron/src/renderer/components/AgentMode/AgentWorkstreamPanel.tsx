@@ -55,7 +55,6 @@ import {
   filesEditedWidthAtom,
   setFilesEditedWidthAtom,
 } from '../../store/atoms/agentMode';
-import './AgentWorkstreamPanel.css';
 
 export interface AgentWorkstreamPanelRef {
   closeActiveTab: () => void;
@@ -182,9 +181,9 @@ const WorkstreamHeader: React.FC<{
   }, [workstreamId, onArchiveStatusChange]);
 
   return (
-    <div className="workstream-header">
-      <div className="workstream-header-main">
-        <div className="workstream-header-icon">
+    <div className="workstream-header shrink-0 h-12 px-4 border-b border-[var(--nim-border)] bg-[var(--nim-bg)]">
+      <div className="workstream-header-main flex items-center gap-3 h-full">
+        <div className="workstream-header-icon shrink-0 text-[var(--nim-text-muted)]">
           {hasChildren ? (
             <MaterialSymbol icon="account_tree" size={20} />
           ) : (
@@ -192,12 +191,12 @@ const WorkstreamHeader: React.FC<{
           )}
         </div>
 
-        <div className="workstream-header-content">
+        <div className="workstream-header-content min-w-0">
           {isEditing ? (
             <input
               ref={inputRef}
               type="text"
-              className="workstream-header-title-input"
+              className="workstream-header-title-input text-sm font-semibold text-[var(--nim-text)] bg-[var(--nim-bg-secondary)] border border-[var(--nim-border-accent)] rounded py-0.5 px-1 m-0 outline-none w-full min-w-[150px] max-w-[300px]"
               value={editValue}
               onChange={(e) => setEditValue(e.target.value)}
               onBlur={handleRenameSubmit}
@@ -205,7 +204,7 @@ const WorkstreamHeader: React.FC<{
             />
           ) : (
             <h2
-              className="workstream-header-title"
+              className="workstream-header-title m-0 text-sm font-semibold text-[var(--nim-text)] whitespace-nowrap overflow-hidden text-ellipsis leading-tight cursor-pointer py-0.5 px-1 rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
               onClick={handleTitleClick}
               title="Click to rename"
             >
@@ -215,12 +214,12 @@ const WorkstreamHeader: React.FC<{
         </div>
 
         {isProcessing && (
-          <div className="workstream-header-processing">
-            <span className="workstream-header-spinner" />
+          <div className="workstream-header-processing shrink-0 flex items-center justify-center">
+            <span className="workstream-header-spinner w-4 h-4 border-2 border-[var(--nim-border)] border-t-[var(--nim-primary)] rounded-full animate-spin" />
           </div>
         )}
 
-        <div className="workstream-header-spacer" />
+        <div className="workstream-header-spacer flex-1" />
 
         {/* Layout controls - shared component with Files/Agent labels */}
         <LayoutControls
@@ -232,7 +231,7 @@ const WorkstreamHeader: React.FC<{
         {/* New Terminal button - only show for worktree sessions */}
         {worktreeId && onOpenTerminal && (
           <button
-            className="workstream-sidebar-toggle layout-control-btn"
+            className="workstream-sidebar-toggle layout-control-btn w-7 h-7 flex items-center justify-center rounded text-[var(--nim-text-faint)] cursor-pointer border-none bg-transparent ml-2 hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text-muted)]"
             onClick={onOpenTerminal}
             title="Open terminal in worktree"
           >
@@ -242,17 +241,17 @@ const WorkstreamHeader: React.FC<{
 
         {/* Archive/Unarchive button */}
         <button
-          className="workstream-sidebar-toggle layout-control-btn with-label"
+          className="workstream-archive-button flex items-center gap-1.5 h-6 px-2 rounded text-[var(--nim-text-faint)] text-[11px] font-medium cursor-pointer border-none bg-transparent hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text-muted)]"
           onClick={isArchived ? handleUnarchive : handleArchive}
           title={isArchived ? 'Unarchive session' : 'Archive session'}
         >
           <MaterialSymbol icon={isArchived ? 'unarchive' : 'archive'} size={16} />
-          {isArchived ? 'Unarchive session' : 'Archive session'}
+          <span>{isArchived ? 'Unarchive session' : 'Archive session'}</span>
         </button>
 
         {/* Toggle files sidebar */}
         <button
-          className={`workstream-sidebar-toggle ${sidebarVisible ? 'active' : ''}`}
+          className={`workstream-sidebar-toggle w-7 h-7 flex items-center justify-center rounded cursor-pointer border-none bg-transparent ml-2 hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text-muted)] ${sidebarVisible ? 'active text-[var(--nim-primary)]' : 'text-[var(--nim-text-faint)]'}`}
           onClick={onToggleSidebar}
           title={sidebarVisible ? 'Hide edited files' : 'Show edited files'}
         >
@@ -638,9 +637,9 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
   }), []);
 
   return (
-    <div className="agent-workstream-panel">
+    <div className="agent-workstream-panel flex flex-row h-full overflow-hidden">
       {/* Main column - header + content */}
-      <div className="agent-workstream-panel-main">
+      <div className="agent-workstream-panel-main flex flex-col flex-1 min-w-0 overflow-hidden">
         <WorkstreamHeader
           workstreamId={workstreamId}
           workspacePath={workspacePath}
@@ -651,12 +650,12 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
           onOpenTerminal={sessionWorktreeId ? handleOpenTerminal : undefined}
         />
 
-        <div ref={contentRef} className="agent-workstream-panel-content">
+        <div ref={contentRef} className="agent-workstream-panel-content flex-1 min-h-0 flex flex-col overflow-hidden">
           {/* Editor tabs for the entire workstream */}
           {showEditorTabs && (
             <div
               ref={editorAreaRef}
-              className={`agent-workstream-editor-area ${layoutMode === 'editor' ? 'maximized' : ''}`}
+              className={`agent-workstream-editor-area shrink-0 border-b border-[var(--nim-border)] min-h-0 flex flex-col ${layoutMode === 'editor' ? 'maximized flex-1 border-b-0' : ''}`}
               style={layoutMode === 'split' ? { height: `${splitRatio * 100}%`, minHeight: '100px' } : undefined}
             >
               <WorkstreamEditorTabs
@@ -673,14 +672,14 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
           {/* Vertical resizer between editor and session */}
           {layoutMode === 'split' && (
             <div
-              className={`agent-workstream-vertical-resizer ${isDraggingVertical ? 'dragging' : ''}`}
+              className={`agent-workstream-vertical-resizer h-1 shrink-0 cursor-ns-resize bg-[var(--nim-border)] transition-colors duration-150 hover:bg-[var(--nim-primary)] ${isDraggingVertical ? 'dragging bg-[var(--nim-primary)]' : ''}`}
               onMouseDown={handleVerticalResizeStart}
             />
           )}
 
           {/* Session tabs + active session panel */}
           {showSessionTabs && (
-            <div className={`agent-workstream-session-area ${layoutMode === 'transcript' ? 'maximized' : ''}`}>
+            <div className={`agent-workstream-session-area flex-1 min-h-0 flex flex-col overflow-hidden ${layoutMode === 'transcript' ? 'maximized' : ''}`}>
               <WorkstreamSessionTabs
                 workspacePath={workspacePath}
                 workstreamId={workstreamId}
@@ -697,7 +696,7 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
       {/* Sidebar resizer */}
       {sidebarVisible && activeSessionId && (
         <div
-          className={`agent-workstream-sidebar-resizer ${isDraggingSidebar ? 'dragging' : ''}`}
+          className={`agent-workstream-sidebar-resizer w-1 shrink-0 cursor-ew-resize bg-[var(--nim-border)] transition-colors duration-150 hover:bg-[var(--nim-primary)] ${isDraggingSidebar ? 'dragging bg-[var(--nim-primary)]' : ''}`}
           onMouseDown={handleSidebarResizeStart}
         />
       )}

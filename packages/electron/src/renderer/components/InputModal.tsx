@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-import '../InputModal.css';
 
 interface InputModalProps {
   isOpen: boolean;
@@ -50,33 +49,44 @@ export function InputModal({
   };
 
   return (
-    <div className="input-modal-overlay" onClick={onCancel}>
-      <div className="input-modal" onClick={(e) => e.stopPropagation()}>
+    <div className="input-modal-overlay nim-overlay" onClick={onCancel}>
+      <div
+        className="input-modal rounded-lg p-5 w-[400px] max-w-[90%] shadow-[0_10px_25px_rgba(0,0,0,0.2)] bg-[var(--nim-bg)] text-[var(--nim-text)]"
+        onClick={(e) => e.stopPropagation()}
+      >
         <form onSubmit={handleSubmit}>
-          <h3 className="input-modal-title">{title}</h3>
-          <div className={`input-modal-input-wrapper ${suffix ? 'has-suffix' : ''}`}>
+          <h3 className="input-modal-title m-0 mb-4 text-base font-semibold text-[var(--nim-text)]">
+            {title}
+          </h3>
+          <div
+            className={`input-modal-input-wrapper relative flex items-center mb-4 ${suffix ? 'has-suffix' : ''}`}
+          >
             <input
               ref={inputRef}
               type="text"
-              className="input-modal-input"
+              className={`input-modal-input nim-input text-sm ${suffix ? 'pr-[120px]' : ''}`}
               placeholder={placeholder}
               value={value}
               onChange={(e) => setValue(e.target.value)}
               onKeyDown={handleKeyDown}
             />
-            {suffix && <span className="input-modal-suffix">{suffix}</span>}
+            {suffix && (
+              <span className="input-modal-suffix absolute right-3 text-sm text-[var(--nim-text-faint)] pointer-events-none select-none">
+                {suffix}
+              </span>
+            )}
           </div>
-          <div className="input-modal-buttons">
-            <button 
-              type="button" 
-              className="input-modal-button input-modal-cancel"
+          <div className="input-modal-buttons flex justify-end gap-2">
+            <button
+              type="button"
+              className="input-modal-button input-modal-cancel nim-btn-secondary px-4 py-1.5 text-sm"
               onClick={onCancel}
             >
               Cancel
             </button>
-            <button 
-              type="submit" 
-              className="input-modal-button input-modal-confirm"
+            <button
+              type="submit"
+              className="input-modal-button input-modal-confirm nim-btn-primary px-4 py-1.5 text-sm"
               disabled={!value.trim()}
             >
               Create

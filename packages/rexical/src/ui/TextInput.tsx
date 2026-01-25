@@ -8,8 +8,6 @@
 
 import type {JSX} from 'react';
 
-import './Input.css';
-
 import {HTMLInputTypeAttribute} from 'react';
 
 type Props = Readonly<{
@@ -30,11 +28,13 @@ export default function TextInput({
   type = 'text',
 }: Props): JSX.Element {
   return (
-    <div className="Input__wrapper">
-      <label className="Input__label">{label}</label>
+    <div className="Input__wrapper flex flex-row items-center mb-[10px]">
+      <label className="Input__label flex flex-1 text-[#666] dark:text-[var(--nim-text-muted)]">
+        {label}
+      </label>
       <input
         type={type}
-        className="Input__input"
+        className="Input__input flex flex-[2] border border-[#999] py-[7px] px-[10px] text-base rounded-[5px] min-w-0 bg-white text-[#333] dark:border-[var(--nim-border)] dark:bg-[var(--nim-bg-secondary)] dark:text-[var(--nim-text)] dark:placeholder:text-[var(--nim-text-muted)]"
         placeholder={placeholder}
         value={value}
         onChange={(e) => {

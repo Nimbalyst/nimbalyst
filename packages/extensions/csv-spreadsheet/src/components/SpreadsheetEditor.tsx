@@ -1483,14 +1483,8 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
   // Render loading state
   if (isLoading) {
     return (
-      <div className="spreadsheet-editor" data-theme={theme}>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '100%',
-          color: 'var(--text-secondary)',
-        }}>
+      <div className="spreadsheet-editor flex flex-col h-full w-full bg-nim text-nim overflow-hidden" data-theme={theme}>
+        <div className="flex items-center justify-center h-full text-nim-muted">
           Loading spreadsheet...
         </div>
       </div>
@@ -1500,14 +1494,10 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
   // Render error state
   if (loadError) {
     return (
-      <div className="spreadsheet-editor" data-theme={theme}>
-        <div style={{
-          padding: '20px',
-          color: 'var(--text-primary)',
-          backgroundColor: 'var(--surface-primary)',
-        }}>
-          <h3 style={{ color: 'var(--text-primary)' }}>Error Loading Spreadsheet</h3>
-          <p style={{ color: 'var(--text-secondary)' }}>{loadError.message}</p>
+      <div className="spreadsheet-editor flex flex-col h-full w-full bg-nim text-nim overflow-hidden" data-theme={theme}>
+        <div className="p-5 text-nim bg-nim">
+          <h3 className="text-nim">Error Loading Spreadsheet</h3>
+          <p className="text-nim-muted">{loadError.message}</p>
         </div>
       </div>
     );
@@ -1516,19 +1506,19 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
   return (
     <div
       ref={editorRef}
-      className="spreadsheet-editor"
+      className="spreadsheet-editor flex flex-col h-full w-full bg-nim text-nim overflow-hidden"
       data-theme={theme}
       onKeyDown={handleKeyDown}
       tabIndex={0}
     >
-      <div className="spreadsheet-toolbar">
+      <div className="flex items-center gap-2 bg-nim-secondary border-b border-nim">
         <FormulaBar
           ref={formulaBarRef}
           onChange={handleFormulaChange}
         />
         {host.supportsSourceMode && (
           <button
-            className="source-mode-button"
+            className="px-3 py-1.5 mr-3 text-[13px] font-medium bg-nim-tertiary border border-nim rounded text-nim-muted cursor-pointer transition-all whitespace-nowrap hover:bg-nim-hover hover:text-nim active:bg-nim"
             onClick={() => host.toggleSourceMode?.()}
             title="View raw CSV source"
           >
@@ -1538,7 +1528,7 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
       </div>
       <div
         ref={gridContainerRef}
-        className="spreadsheet-grid-container"
+        className="flex-1 overflow-hidden relative"
         tabIndex={0}
         {...(!isActive ? { inert: '' } : {})}
         data-is-active={isActive}

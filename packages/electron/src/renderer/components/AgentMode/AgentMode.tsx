@@ -41,7 +41,6 @@ import {
 import { errorNotificationService } from '../../services/ErrorNotificationService';
 import { initWorkstreamState, loadWorkstreamStates, workstreamStateAtom, workstreamActiveChildAtom } from '../../store/atoms/workstreamState';
 import { initSessionStateListeners } from '../../store/sessionStateListeners';
-import './AgentMode.css';
 
 export interface AgentModeRef {
   createNewSession: () => Promise<void>;
@@ -476,9 +475,12 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
       onFileOpen={onFileOpen}
     />
   ) : (
-    <div className="agent-mode-empty">
-      <p>Select a session or create a new one to get started</p>
-      <button onClick={createNewSession} className="agent-mode-new-button">
+    <div className="agent-mode-empty flex flex-col items-center justify-center h-full gap-4 text-nim-text-secondary">
+      <p className="m-0 text-sm">Select a session or create a new one to get started</p>
+      <button
+        onClick={createNewSession}
+        className="agent-mode-new-button py-2 px-4 rounded-md border border-nim-border bg-nim-bg-secondary text-nim-text-primary cursor-pointer text-sm transition-colors hover:bg-nim-bg-active"
+      >
         New Session
       </button>
     </div>
@@ -508,7 +510,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
   );
 
   return (
-    <div className="agent-mode">
+    <div className="agent-mode flex flex-row h-full w-full overflow-hidden">
       <ResizablePanel
         leftPanel={leftContent}
         rightPanel={rightContent}

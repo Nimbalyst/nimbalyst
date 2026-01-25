@@ -34,6 +34,9 @@ export interface MonacoCodeEditorProps {
   // Theme
   theme: ConfigTheme;
 
+  // Extension theme ID (e.g., 'sample-themes:solarized-light') for custom Monaco themes
+  extensionThemeId?: string;
+
   // Whether this editor's tab is active
   isActive?: boolean;
 
@@ -62,6 +65,7 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   fileName,
   initialContent,
   theme,
+  extensionThemeId,
   isActive = true,
   onDirtyChange,
   onGetContent,
@@ -119,8 +123,8 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   // Get Monaco language from file extension
   const language = getMonacoLanguage(filePath);
 
-  // Get Monaco theme from Nimbalyst theme
-  const monacoTheme = getMonacoTheme(theme);
+  // Get Monaco theme from Nimbalyst theme (with custom theme support for extensions)
+  const monacoTheme = getMonacoTheme(theme, undefined, extensionThemeId);
 
   /**
    * Get current editor content

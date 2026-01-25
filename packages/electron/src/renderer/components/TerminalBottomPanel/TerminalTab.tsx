@@ -61,7 +61,7 @@ export const TerminalTab: React.FC<TerminalTabProps> = ({
 
   return (
     <div
-      className={`terminal-tab ${isActive ? 'active' : ''}`}
+      className={`terminal-tab group flex items-center gap-1 px-2 py-1 bg-transparent border-none text-xs cursor-pointer rounded whitespace-nowrap max-w-[200px] transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)] ${isActive ? 'active bg-[var(--nim-bg)] text-[var(--nim-text)] font-medium' : 'text-[var(--nim-text-muted)]'}`}
       onClick={onSelect}
       onKeyDown={handleKeyDown}
       role="tab"
@@ -70,15 +70,15 @@ export const TerminalTab: React.FC<TerminalTabProps> = ({
       title={`${terminal.title}\n${terminal.cwd}\nShell: ${terminal.shellName}`}
     >
       <MaterialSymbol icon={getShellIcon(terminal.shellName)} size={14} />
-      <span className="terminal-tab-title">{terminal.title}</span>
+      <span className="terminal-tab-title overflow-hidden text-ellipsis shrink min-w-0">{terminal.title}</span>
       {terminal.worktreeId && (
-        <span className="terminal-tab-worktree-badge" title="Worktree terminal">
+        <span className="terminal-tab-worktree-badge flex items-center justify-center p-px bg-[var(--nim-accent-subtle)] rounded-sm text-[var(--nim-primary)] shrink-0" title="Worktree terminal">
           <MaterialSymbol icon="alt_route" size={12} />
         </span>
       )}
-      <span className="terminal-tab-cwd">{getAbbreviatedCwd(terminal.cwd)}</span>
+      <span className={`terminal-tab-cwd text-[10px] overflow-hidden text-ellipsis shrink min-w-0 ${isActive ? 'text-[var(--nim-text-muted)]' : 'text-[var(--nim-text-faint)]'}`}>{getAbbreviatedCwd(terminal.cwd)}</span>
       <button
-        className="terminal-tab-close"
+        className="terminal-tab-close hidden group-hover:flex items-center justify-center w-4 h-4 p-0 bg-transparent border-none text-[var(--nim-text-faint)] cursor-pointer rounded-sm shrink-0 ml-0.5 transition-colors duration-150 hover:bg-[var(--nim-bg-tertiary)] hover:text-[var(--nim-text)]"
         onClick={handleCloseClick}
         title="Close terminal"
       >
@@ -87,5 +87,3 @@ export const TerminalTab: React.FC<TerminalTabProps> = ({
     </div>
   );
 };
-
-// CSS is included in TerminalBottomPanel.css

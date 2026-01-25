@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { getCursorCoordinates } from './typeaheadUtils';
-import './GenericTypeahead.css';
 
 export interface TypeaheadOption {
   id: string;
@@ -243,7 +242,7 @@ export function GenericTypeahead({
   const menuElement = (
     <div
       ref={menuRef}
-      className={`generic-typeahead ${className}`}
+      className={`generic-typeahead bg-nim-secondary border border-nim rounded-md shadow-lg z-[1000] overflow-hidden flex flex-col ${className}`}
       style={{
         position: 'fixed',
         top: `${position.top}px`,
@@ -255,11 +254,11 @@ export function GenericTypeahead({
         transition: 'opacity 0.1s ease-in'
       }}
     >
-      <div className="generic-typeahead-content">
+      <div className="generic-typeahead-content overflow-y-auto overflow-x-hidden flex-1 min-h-0">
         {groupedOptions.map(({ section, options: sectionOptions }, groupIndex) => (
-          <div key={section || groupIndex} className="generic-typeahead-section">
+          <div key={section || groupIndex} className="generic-typeahead-section py-0.5 [&:not(:last-child)]:border-b [&:not(:last-child)]:border-nim">
             {section && (
-              <div className="generic-typeahead-section-header">{section}</div>
+              <div className="generic-typeahead-section-header px-3 pt-1.5 pb-1 text-[0.6875rem] font-semibold text-nim-tertiary uppercase tracking-wide">{section}</div>
             )}
             {sectionOptions.map((option) => {
               // Calculate visual index based on flat ordered list (matches navigation order)
@@ -270,29 +269,29 @@ export function GenericTypeahead({
                 <div
                   key={option.id}
                   data-option-index={visualIndex}
-                  className={`generic-typeahead-option ${
-                    isSelected ? 'selected' : ''
-                  } ${option.disabled ? 'disabled' : ''}`}
+                  className={`generic-typeahead-option flex items-center gap-2 px-3 py-1.5 cursor-pointer transition-colors duration-150 ${
+                    isSelected ? 'selected bg-nim-hover' : ''
+                  } ${option.disabled ? 'disabled opacity-50 cursor-not-allowed' : ''}`}
                   onClick={() => handleOptionClick(option, visualIndex)}
                   onMouseEnter={() => handleOptionMouseEnter(visualIndex)}
                 >
                   {option.icon && (
                     typeof option.icon === 'string' ? (
-                      <span className="material-symbols-outlined generic-typeahead-option-icon">
+                      <span className="material-symbols-outlined generic-typeahead-option-icon text-lg shrink-0 text-nim-secondary">
                         {option.icon}
                       </span>
                     ) : (
-                      <span className="generic-typeahead-option-icon">
+                      <span className="generic-typeahead-option-icon text-lg shrink-0 text-nim-secondary">
                         {option.icon}
                       </span>
                     )
                   )}
-                  <div className="generic-typeahead-option-text">
-                    <div className="generic-typeahead-option-label">
+                  <div className="generic-typeahead-option-text flex-1 min-w-0 flex flex-col gap-0.5">
+                    <div className="generic-typeahead-option-label text-sm text-nim-primary whitespace-nowrap overflow-hidden text-ellipsis">
                       {option.label}
                     </div>
                     {option.description && (
-                      <div className="generic-typeahead-option-description">
+                      <div className="generic-typeahead-option-description text-xs text-nim-tertiary break-words leading-snug">
                         {option.description}
                       </div>
                     )}

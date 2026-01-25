@@ -9,7 +9,6 @@ import { useState, useEffect, useCallback } from 'react';
 import type { PanelHostProps } from '@nimbalyst/extension-sdk';
 import type { Database } from 'sql.js';
 import { SQLiteBrowserCore, getSqlJs, getFileName, type DatabaseInfo } from './SQLiteBrowserCore';
-import './SQLiteBrowserPanel.css';
 
 // Storage keys
 const STORAGE_KEY_RECENT_DBS = 'recentDatabases';
@@ -207,26 +206,28 @@ export function SQLiteBrowserPanel({ host }: PanelHostProps) {
 
   // Recent databases UI for empty state
   const recentDatabasesUI = recentDatabases.length > 0 ? (
-    <div className="sqlite-browser-recent">
-      <h4>Recent Databases</h4>
-      <div className="sqlite-browser-recent-list">
+    <div className="mt-8 w-full max-w-[400px]">
+      <h4 className="m-0 mb-3 text-xs font-semibold text-nim-muted uppercase tracking-wider">Recent Databases</h4>
+      <div className="flex flex-col gap-1">
         {recentDatabases.map((recent) => (
-          <div key={recent.path} className="sqlite-browser-recent-item">
+          <div key={recent.path} className="flex items-center gap-1">
             <button
-              className="sqlite-browser-recent-btn"
+              className="flex-1 flex items-center justify-between p-2.5 px-3 bg-nim-secondary border border-nim rounded-md cursor-pointer transition-all text-left hover:bg-nim-hover hover:border-[var(--nim-border-focus)]"
               onClick={() => loadDatabaseFromPath(recent.path)}
               title={recent.path}
             >
-              <span className="sqlite-browser-recent-name">{recent.name}</span>
-              <span className="sqlite-browser-recent-time">{formatRelativeTime(recent.lastOpened)}</span>
+              <span className="text-[13px] font-medium text-nim whitespace-nowrap overflow-hidden text-ellipsis">{recent.name}</span>
+              <span className="text-[11px] text-nim-faint shrink-0 ml-2">{formatRelativeTime(recent.lastOpened)}</span>
             </button>
             <button
-              className="sqlite-browser-recent-remove"
+              className="w-6 h-6 flex items-center justify-center bg-transparent border-none rounded text-nim-faint cursor-pointer text-sm opacity-0 transition-all hover:bg-nim-tertiary hover:text-nim group-hover:opacity-100"
               onClick={(e) => {
                 e.stopPropagation();
                 removeFromRecentDatabases(recent.path);
               }}
               title="Remove from recent"
+              style={{ opacity: 1 }}
+              onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
             >
               x
             </button>

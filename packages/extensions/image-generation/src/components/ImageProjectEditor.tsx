@@ -336,8 +336,8 @@ export const ImageProjectEditor = forwardRef<unknown, EditorHostProps>(
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: 'var(--surface-primary, #2d2d2d)',
-            color: 'var(--text-secondary, #b3b3b3)',
+            background: 'var(--nim-bg, #2d2d2d)',
+            color: 'var(--nim-text-muted, #b3b3b3)',
           }}
         >
           <div>Loading project...</div>
@@ -357,7 +357,7 @@ export const ImageProjectEditor = forwardRef<unknown, EditorHostProps>(
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: 'var(--surface-primary, #2d2d2d)',
+            background: 'var(--nim-bg, #2d2d2d)',
             color: 'var(--error-color, #ef4444)',
           }}
         >
@@ -379,8 +379,8 @@ export const ImageProjectEditor = forwardRef<unknown, EditorHostProps>(
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
-          background: 'var(--surface-primary, #2d2d2d)',
-          color: 'var(--text-primary, #ffffff)',
+          background: 'var(--nim-bg, #2d2d2d)',
+          color: 'var(--nim-text, #ffffff)',
         }}
       >
         {/* API Key Missing Banner */}

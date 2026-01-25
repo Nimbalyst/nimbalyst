@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { Agent } from '@nimbalyst/runtime/agents';
 import { agentApi } from '../services/agentApi';
 import { aiApi } from '../services/aiApi';
-import './AgentCommandPalette.css';
 
 interface AgentCommandPaletteProps {
   isOpen: boolean;
@@ -271,7 +270,7 @@ export const AgentCommandPalette: React.FC<AgentCommandPaletteProps> = ({
           <select
             value={value}
             onChange={(e) => setParameters({ ...parameters, [key]: e.target.value })}
-            className="agent-param-select"
+            className="agent-param-select py-2 px-3 rounded-md text-sm outline-none bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] focus:border-[var(--nim-primary)]"
           >
             {param.options?.map((option: any) => (
               <option key={option} value={option}>
@@ -286,7 +285,7 @@ export const AgentCommandPalette: React.FC<AgentCommandPaletteProps> = ({
             type="checkbox"
             checked={value}
             onChange={(e) => setParameters({ ...parameters, [key]: e.target.checked })}
-            className="agent-param-checkbox"
+            className="agent-param-checkbox w-5 h-5 cursor-pointer"
           />
         );
       case 'number':
@@ -297,7 +296,7 @@ export const AgentCommandPalette: React.FC<AgentCommandPaletteProps> = ({
             onChange={(e) => setParameters({ ...parameters, [key]: e.target.value })}
             min={param.min}
             max={param.max}
-            className="agent-param-input"
+            className="agent-param-input py-2 px-3 rounded-md text-sm outline-none bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] focus:border-[var(--nim-primary)]"
           />
         );
       default:
@@ -306,7 +305,7 @@ export const AgentCommandPalette: React.FC<AgentCommandPaletteProps> = ({
             type="text"
             value={value}
             onChange={(e) => setParameters({ ...parameters, [key]: e.target.value })}
-            className="agent-param-input"
+            className="agent-param-input py-2 px-3 rounded-md text-sm outline-none bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] focus:border-[var(--nim-primary)]"
           />
         );
     }
@@ -315,15 +314,22 @@ export const AgentCommandPalette: React.FC<AgentCommandPaletteProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="agent-command-palette-overlay" onClick={onClose}>
-      <div className="agent-command-palette" onClick={e => e.stopPropagation()} onKeyDown={handleKeyDown}>
+    <div
+      className="agent-command-palette-overlay nim-overlay items-start justify-center pt-[10vh]"
+      onClick={onClose}
+    >
+      <div
+        className="agent-command-palette nim-modal w-[90%] max-w-[600px] max-h-[70vh] shadow-[0_8px_32px_rgba(0,0,0,0.2)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.5)]"
+        onClick={e => e.stopPropagation()}
+        onKeyDown={handleKeyDown}
+      >
         {!selectedAgent ? (
           <>
-            <div className="agent-command-palette-header">
+            <div className="agent-command-palette-header p-3 border-b border-[var(--nim-border)]">
               <input
                 ref={searchInputRef}
                 type="text"
-                className="agent-command-palette-input"
+                className="agent-command-palette-input nim-input text-base"
                 placeholder="Search agents..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -332,36 +338,36 @@ export const AgentCommandPalette: React.FC<AgentCommandPaletteProps> = ({
               />
             </div>
 
-            <div className="agent-command-palette-content">
+            <div className="agent-command-palette-content flex-1 overflow-y-auto min-h-[200px] max-h-[400px]">
               {isLoading ? (
-                <div className="agent-command-palette-loading">Loading agents...</div>
+                <div className="agent-command-palette-loading p-8 text-center text-sm text-[var(--nim-text-muted)]">Loading agents...</div>
               ) : filteredAgents.length === 0 ? (
-                <div className="agent-command-palette-empty">
+                <div className="agent-command-palette-empty p-8 text-center text-sm text-[var(--nim-text-muted)]">
                   {agents.length === 0
                     ? "No agents found. Create agents in the workspace/agents folder."
                     : "No matching agents found."}
                 </div>
               ) : (
-                <ul ref={resultsListRef} className="agent-command-palette-results">
+                <ul ref={resultsListRef} className="agent-command-palette-results list-none m-0 p-2">
                   {filteredAgents.map((agent, index) => (
                     <li
                       key={agent.id}
-                      className={`agent-command-palette-item ${index === selectedIndex ? 'selected' : ''}`}
+                      className={`agent-command-palette-item p-2 mb-1 rounded-md cursor-pointer transition-colors duration-150 ${index === selectedIndex ? 'selected bg-[var(--nim-bg-selected)]' : 'hover:bg-[var(--nim-bg-hover)]'}`}
                       onClick={() => selectAgent(agent)}
                       onMouseEnter={() => setSelectedIndex(index)}
                     >
-                      <div className="agent-item-header">
-                        <span className="agent-item-icon">🤖</span>
-                        <span className="agent-item-name">{agent.metadata.name}</span>
+                      <div className="agent-item-header flex items-center gap-2 mb-1">
+                        <span className="agent-item-icon text-lg">🤖</span>
+                        <span className="agent-item-name font-medium flex-1 text-[var(--nim-text)]">{agent.metadata.name}</span>
                         {agent.metadata.version && (
-                          <span className="agent-item-version">v{agent.metadata.version}</span>
+                          <span className="agent-item-version text-[11px] py-0.5 px-1.5 rounded bg-[var(--nim-bg-secondary)] text-[var(--nim-text-muted)]">v{agent.metadata.version}</span>
                         )}
                       </div>
-                      <div className="agent-item-description">{agent.metadata.description}</div>
+                      <div className="agent-item-description text-[13px] leading-snug ml-[26px] text-[var(--nim-text-muted)]">{agent.metadata.description}</div>
                       {agent.metadata.tags && agent.metadata.tags.length > 0 && (
-                        <div className="agent-item-tags">
+                        <div className="agent-item-tags flex gap-1 mt-1.5 ml-[26px] flex-wrap">
                           {agent.metadata.tags.map(tag => (
-                            <span key={tag} className="agent-item-tag">{tag}</span>
+                            <span key={tag} className="agent-item-tag text-[11px] py-0.5 px-1.5 rounded bg-[color-mix(in_srgb,var(--nim-primary)_10%,transparent)] text-[var(--nim-primary)]">{tag}</span>
                           ))}
                         </div>
                       )}
@@ -371,36 +377,36 @@ export const AgentCommandPalette: React.FC<AgentCommandPaletteProps> = ({
               )}
             </div>
 
-            <div className="agent-command-palette-footer">
-              <span className="agent-command-palette-hint">
-                <kbd>↑↓</kbd> Navigate <kbd>Enter</kbd> Select <kbd>Esc</kbd> Cancel
+            <div className="agent-command-palette-footer py-2 px-3 border-t border-[var(--nim-border)] flex items-center justify-between">
+              <span className="agent-command-palette-hint text-xs flex items-center gap-2 text-[var(--nim-text-muted)]">
+                <kbd className="py-0.5 px-1 rounded text-[11px] font-mono bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)]">↑↓</kbd> Navigate <kbd className="py-0.5 px-1 rounded text-[11px] font-mono bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)]">Enter</kbd> Select <kbd className="py-0.5 px-1 rounded text-[11px] font-mono bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)]">Esc</kbd> Cancel
               </span>
             </div>
           </>
         ) : (
           <>
-            <div className="agent-command-palette-header">
-              <div className="agent-params-header">
-                <span className="agent-params-icon">🤖</span>
-                <span className="agent-params-title">{selectedAgent.metadata.name}</span>
+            <div className="agent-command-palette-header p-3 border-b border-[var(--nim-border)]">
+              <div className="agent-params-header flex items-center gap-2">
+                <span className="agent-params-icon text-xl">🤖</span>
+                <span className="agent-params-title text-lg font-medium text-[var(--nim-text)]">{selectedAgent.metadata.name}</span>
               </div>
             </div>
 
-            <div className="agent-command-palette-content agent-params-content">
-              <div className="agent-params-description">
+            <div className="agent-command-palette-content agent-params-content flex-1 overflow-y-auto p-4">
+              <div className="agent-params-description mb-5 leading-snug text-[var(--nim-text-muted)]">
                 {selectedAgent.metadata.description}
               </div>
 
               {selectedAgent.metadata.parameters && Object.keys(selectedAgent.metadata.parameters).length > 0 ? (
-                <div className="agent-params-list">
-                  <div className="agent-params-label">Parameters:</div>
+                <div className="agent-params-list flex flex-col gap-4">
+                  <div className="agent-params-label text-xs font-semibold uppercase mb-2 text-[var(--nim-text-muted)]">Parameters:</div>
                   {Object.entries(selectedAgent.metadata.parameters).map(([key, param]) => (
-                    <div key={key} className="agent-param-item">
-                      <label className="agent-param-label">
+                    <div key={key} className="agent-param-item flex flex-col gap-1.5">
+                      <label className="agent-param-label text-sm font-medium flex items-center gap-1.5 text-[var(--nim-text)]">
                         {key}
-                        {param.required && <span className="agent-param-required">*</span>}
+                        {param.required && <span className="agent-param-required text-[var(--nim-error)]">*</span>}
                         {param.description && (
-                          <span className="agent-param-description">{param.description}</span>
+                          <span className="agent-param-description text-xs font-normal text-[var(--nim-text-muted)]">{param.description}</span>
                         )}
                       </label>
                       {renderParameterInput(key, param)}
@@ -408,30 +414,30 @@ export const AgentCommandPalette: React.FC<AgentCommandPaletteProps> = ({
                   ))}
                 </div>
               ) : (
-                <div className="agent-params-none">
+                <div className="agent-params-none p-5 text-center italic text-[var(--nim-text-muted)]">
                   This agent has no configurable parameters.
                 </div>
               )}
             </div>
 
-            <div className="agent-command-palette-footer">
-              <div style={{ display: 'flex', gap: '8px' }}>
+            <div className="agent-command-palette-footer py-2 px-3 border-t border-[var(--nim-border)] flex items-center justify-between">
+              <div className="flex gap-2">
                 <button
-                  className="agent-cancel-btn"
+                  className="agent-cancel-btn nim-btn-secondary"
                   onClick={onClose}
                 >
                   Cancel
                 </button>
                 <button
-                  className="agent-execute-btn"
+                  className="agent-execute-btn nim-btn-primary"
                   onClick={executeAgent}
                   disabled={isExecuting}
                 >
                   {isExecuting ? 'Executing...' : 'Execute Agent'}
                 </button>
               </div>
-              <span className="agent-command-palette-hint">
-                <kbd>⌘Enter</kbd> Execute <kbd>Esc</kbd> Back
+              <span className="agent-command-palette-hint text-xs flex items-center gap-2 text-[var(--nim-text-muted)]">
+                <kbd className="py-0.5 px-1 rounded text-[11px] font-mono bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)]">⌘Enter</kbd> Execute <kbd className="py-0.5 px-1 rounded text-[11px] font-mono bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)]">Esc</kbd> Back
               </span>
             </div>
           </>

@@ -10,7 +10,6 @@
 import React, { useMemo, useEffect } from 'react';
 import { DocumentHeaderRegistry } from './DocumentHeaderRegistry';
 import type { DocumentHeaderComponentProps } from './DocumentHeaderRegistry';
-import './DocumentHeader.css';
 
 interface DocumentHeaderContainerProps {
   filePath: string;
@@ -38,6 +37,21 @@ export const DocumentHeaderContainer: React.FC<DocumentHeaderContainerProps> = (
     const newContent = getContent();
     setLocalContent(newContent);
   }, [getContent]);
+
+  // Re-query content after a short delay to handle the case where the editor
+  // hasn't provided its getContent function yet on first render.
+  // This is needed because getContent is a stable callback that reads from a ref,
+  // and the ref may not be set when DocumentHeaderContainer first mounts.
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      const newContent = getContent();
+      if (newContent) {
+        setLocalContent(prev => prev !== newContent ? newContent : prev);
+      }
+    }, 50);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Get matching providers
   const providers = useMemo(() => {
@@ -67,7 +81,7 @@ export const DocumentHeaderContainer: React.FC<DocumentHeaderContainerProps> = (
   };
 
   return (
-    <div className="document-header-container">
+    <div className="document-header-container w-full bg-[var(--nim-bg)] border-b border-[var(--nim-border)]">
       {providers.map(provider => {
         const Component = provider.component;
         return <Component key={provider.id} {...componentProps} />;

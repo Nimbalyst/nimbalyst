@@ -1,7 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import * as monaco from 'monaco-editor';
 import { getMonacoLanguage } from '@nimbalyst/runtime';
-import './MonacoDiffViewer.css';
 
 interface MonacoDiffViewerProps {
   oldContent: string;
@@ -101,8 +100,8 @@ export function MonacoDiffViewer({
   }, [oldContent, newContent, filePath, theme]);
 
   return (
-    <div className="monaco-diff-viewer">
-      <div ref={containerRef} className="monaco-diff-container" />
+    <div className="monaco-diff-viewer flex flex-col h-full w-full overflow-hidden">
+      <div ref={containerRef} className="monaco-diff-container flex-1 overflow-hidden min-h-0" />
     </div>
   );
 }

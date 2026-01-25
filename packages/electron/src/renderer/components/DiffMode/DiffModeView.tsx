@@ -5,7 +5,6 @@ import { ChangesPanel } from './ChangesPanel';
 import { MergeConflictDialog } from './MergeConflictDialog';
 import { RebaseConflictDialog } from './RebaseConflictDialog';
 import { ArchiveWorktreeDialog } from './ArchiveWorktreeDialog';
-import './DiffModeView.css';
 
 export interface ChangedFile {
   path: string;
@@ -525,9 +524,9 @@ Please proceed with this strategy.`;
   }
 
   return (
-    <div className="diff-mode-view">
+    <div className="diff-mode-view flex flex-row h-full w-full bg-nim overflow-hidden">
       {/* Left side: diff content */}
-      <div className="diff-mode-main">
+      <div className="diff-mode-main flex-1 min-w-0 flex flex-col overflow-hidden">
         {changedFiles.length > 0 ? (
           <>
             <DiffFileTabs
@@ -548,17 +547,17 @@ Please proceed with this strategy.`;
                 filePath={selectedFile}
               />
             ) : (
-              <div className="diff-mode-empty">
+              <div className="diff-mode-empty flex-1 flex items-center justify-center text-nim-secondary text-sm">
                 <p>Select a file to view its diff</p>
               </div>
             )}
           </>
         ) : isLoading ? (
-          <div className="diff-mode-empty">
+          <div className="diff-mode-empty flex-1 flex items-center justify-center text-nim-secondary text-sm">
             <p>Loading changes...</p>
           </div>
         ) : (
-          <div className="diff-mode-empty">
+          <div className="diff-mode-empty flex-1 flex items-center justify-center text-nim-secondary text-sm">
             <p>No changes in this worktree</p>
           </div>
         )}
@@ -566,15 +565,15 @@ Please proceed with this strategy.`;
 
       {/* Resize handle */}
       <div
-        className={`diff-mode-resize-handle ${panelCollapsed ? 'is-hidden' : ''}`}
+        className={`diff-mode-resize-handle w-2 cursor-col-resize flex items-center justify-center bg-transparent transition-colors duration-150 hover:bg-nim-accent ${panelCollapsed ? 'hidden' : ''}`}
         onMouseDown={handleResizeMouseDown}
       >
-        <div className="diff-mode-resize-handle-inner" />
+        <div className="diff-mode-resize-handle-inner w-0.5 h-10 bg-nim-border-secondary rounded-sm transition-colors duration-150 group-hover:bg-nim-accent" />
       </div>
 
       {/* Right side: changes panel */}
       <div
-        className={`diff-mode-panel ${panelCollapsed ? 'collapsed' : ''}`}
+        className={`diff-mode-panel flex flex-col bg-nim-secondary border-l border-nim overflow-hidden transition-[width] duration-200 ${panelCollapsed ? 'collapsed w-12' : ''}`}
         style={{ width: panelCollapsed ? 48 : rightPanelWidth }}
       >
         <ChangesPanel

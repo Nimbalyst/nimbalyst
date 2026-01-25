@@ -7,7 +7,6 @@ import { LoginRequiredWidget } from './LoginRequiredWidget';
 import { ContextLimitWidget } from './ContextLimitWidget';
 import { MaterialSymbol } from '../../icons/MaterialSymbol';
 import { formatToolDisplayName } from '../utils/toolNameFormatter';
-import './MessageSegment.css';
 
 interface MessageSegmentProps {
   message: Message;
@@ -428,11 +427,11 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
     };
 
     return (
-      <div className="message-attachments">
+      <div className="message-attachments flex flex-wrap gap-2 mb-2">
         {message.attachments.map((attachment) => (
           <div
             key={attachment.id}
-            className="message-attachment-item"
+            className="message-attachment-item flex items-center gap-2 px-2.5 py-1.5 border border-[var(--nim-border)] rounded-md bg-[var(--nim-bg-secondary)] cursor-pointer transition-colors duration-150 max-w-[200px] hover:bg-[var(--nim-bg-hover)]"
             onClick={() => handleAttachmentClick(attachment)}
             title="Click to preview"
           >
@@ -440,16 +439,16 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
               <img
                 src={attachment.thumbnail || `file://${attachment.filepath}`}
                 alt={attachment.filename}
-                className="message-attachment-thumbnail"
+                className="message-attachment-thumbnail w-12 h-12 object-cover rounded shrink-0"
               />
             ) : (
-              <div className="message-attachment-icon">
+              <div className="message-attachment-icon w-12 h-12 flex items-center justify-center bg-[var(--nim-bg-tertiary)] rounded shrink-0 text-[var(--nim-text-muted)]">
                 <MaterialSymbol icon={getFileIcon(attachment.type)} size={24} />
               </div>
             )}
-            <div className="message-attachment-info">
-              <span className="message-attachment-filename">{attachment.filename}</span>
-              <span className="message-attachment-size">{formatFileSize(attachment.size)}</span>
+            <div className="message-attachment-info flex flex-col gap-0.5 min-w-0 flex-1">
+              <span className="message-attachment-filename text-xs font-medium text-[var(--nim-text)] whitespace-nowrap overflow-hidden text-ellipsis">{attachment.filename}</span>
+              <span className="message-attachment-size text-[10px] text-[var(--nim-text-faint)]">{formatFileSize(attachment.size)}</span>
             </div>
           </div>
         ))}
@@ -478,15 +477,15 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
 
     return (
       <div
-        className="message-attachment-modal-overlay"
+        className="message-attachment-modal-overlay fixed inset-0 bg-black/80 flex items-center justify-center z-[10000] p-10 cursor-pointer"
         onClick={() => setEnlargedImage(null)}
       >
         <div
-          className="message-attachment-modal"
+          className="message-attachment-modal relative max-w-[90vw] max-h-[90vh] flex flex-col items-center cursor-default"
           onClick={(e) => e.stopPropagation()}
         >
           <button
-            className="message-attachment-modal-close"
+            className="message-attachment-modal-close absolute -top-8 -right-8 w-7 h-7 p-0 border-none bg-[var(--nim-bg-secondary)] rounded-full cursor-pointer flex items-center justify-center text-[var(--nim-text)] transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
             onClick={() => setEnlargedImage(null)}
             aria-label="Close"
           >
@@ -495,9 +494,9 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
           <img
             src={getEnlargedSrc()}
             alt={enlargedImage.filename}
-            className="message-attachment-modal-image"
+            className="message-attachment-modal-image max-w-full max-h-[calc(90vh-60px)] object-contain rounded-lg shadow-[0_4px_24px_rgba(0,0,0,0.3)]"
           />
-          <div className="message-attachment-modal-caption">
+          <div className="message-attachment-modal-caption mt-3 text-[13px] text-[var(--nim-text-muted)] bg-[var(--nim-bg-secondary)] px-3 py-1.5 rounded max-w-full whitespace-nowrap overflow-hidden text-ellipsis">
             {enlargedImage.filename}
           </div>
         </div>
@@ -517,41 +516,41 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
 
     return (
       <div
-        className="message-attachment-modal-overlay"
+        className="message-attachment-modal-overlay fixed inset-0 bg-black/80 flex items-center justify-center z-[10000] p-10 cursor-pointer"
         onClick={handleClose}
       >
         <div
-          className="message-attachment-text-modal"
+          className="message-attachment-text-modal relative w-[80vw] max-w-[900px] max-h-[80vh] flex flex-col bg-[var(--nim-bg)] rounded-lg shadow-[0_4px_24px_rgba(0,0,0,0.3)] cursor-default overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="message-attachment-text-modal-header">
+          <div className="message-attachment-text-modal-header flex items-center gap-2 px-4 py-3 border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] shrink-0 text-[var(--nim-text-muted)]">
             <MaterialSymbol
               icon={enlargedText.type === 'pdf' ? 'picture_as_pdf' : 'description'}
               size={18}
             />
-            <span className="message-attachment-text-modal-title">
+            <span className="message-attachment-text-modal-title text-sm font-medium text-[var(--nim-text)] whitespace-nowrap overflow-hidden text-ellipsis flex-1">
               {enlargedText.filename}
             </span>
             <button
-              className="message-attachment-modal-close message-attachment-text-modal-close"
+              className="message-attachment-modal-close static ml-auto w-6 h-6 p-0 border-none bg-[var(--nim-bg-secondary)] rounded-full cursor-pointer flex items-center justify-center text-[var(--nim-text)] transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
               onClick={handleClose}
               aria-label="Close"
             >
               <MaterialSymbol icon="close" size={18} />
             </button>
           </div>
-          <div className="message-attachment-text-modal-content">
+          <div className="message-attachment-text-modal-content flex-1 overflow-auto p-4 bg-[var(--nim-bg)]">
             {textLoadError ? (
-              <div className="message-attachment-text-modal-error">
+              <div className="message-attachment-text-modal-error flex flex-col items-center justify-center gap-2 p-8 text-[var(--nim-error)] text-sm">
                 <MaterialSymbol icon="error" size={24} />
                 <span>{textLoadError}</span>
               </div>
             ) : textContent === null ? (
-              <div className="message-attachment-text-modal-loading">
+              <div className="message-attachment-text-modal-loading flex flex-col items-center justify-center gap-2 p-8 text-[var(--nim-text-faint)] text-sm">
                 <span>Loading...</span>
               </div>
             ) : (
-              <pre className="message-attachment-text-modal-pre">
+              <pre className="message-attachment-text-modal-pre m-0 font-mono text-[13px] leading-normal text-[var(--nim-text)] whitespace-pre-wrap break-words tab-4">
                 {textContent}
               </pre>
             )}

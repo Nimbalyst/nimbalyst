@@ -5,7 +5,7 @@
  */
 
 import { SpreadsheetEditor } from './components/SpreadsheetEditor';
-import './styles.css';
+import './revogrid-theme.css';
 
 // Export the editor component for the extension system
 export { SpreadsheetEditor };

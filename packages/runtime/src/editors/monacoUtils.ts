@@ -7,6 +7,16 @@
 import type { ConfigTheme } from 'rexical';
 
 /**
+ * Map of extension theme IDs to their Monaco theme names.
+ * These must match the themes defined in monacoConfig.ts.
+ */
+const EXTENSION_THEME_TO_MONACO: Record<string, string> = {
+  'sample-themes:solarized-light': 'solarized-light',
+  'sample-themes:solarized-dark': 'solarized-dark',
+  'sample-themes:monokai': 'monokai',
+};
+
+/**
  * Map Nimbalyst theme to Monaco editor theme
  *
  * Monaco provides these built-in themes:
@@ -15,9 +25,18 @@ import type { ConfigTheme } from 'rexical';
  * - 'hc-black' - High contrast dark theme
  * - 'hc-light' - High contrast light theme
  *
- * We use 'vs' for light and 'vs-dark' for our dark variants.
+ * We also define custom themes for extension themes like Solarized and Monokai.
+ *
+ * @param nimbalystTheme - The Nimbalyst theme (built-in or extension)
+ * @param isDark - Optional: whether the theme is dark (required for unknown extension themes)
+ * @param extensionThemeId - Optional: the full extension theme ID for custom theme mapping
  */
-export function getMonacoTheme(nimbalystTheme: ConfigTheme): string {
+export function getMonacoTheme(nimbalystTheme: ConfigTheme, isDark?: boolean, extensionThemeId?: string): string {
+  // Check if there's a custom Monaco theme for this extension theme
+  if (extensionThemeId && EXTENSION_THEME_TO_MONACO[extensionThemeId]) {
+    return EXTENSION_THEME_TO_MONACO[extensionThemeId];
+  }
+
   switch (nimbalystTheme) {
     case 'light':
       return 'vs';
@@ -32,6 +51,11 @@ export function getMonacoTheme(nimbalystTheme: ConfigTheme): string {
       return 'vs';
 
     default:
+      // Extension themes or unknown themes - use isDark flag if provided
+      if (isDark !== undefined) {
+        return isDark ? 'vs-dark' : 'vs';
+      }
+      // Fall back to light for unknown themes
       return 'vs';
   }
 }

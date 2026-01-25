@@ -9,7 +9,6 @@ import { ImageDiffViewer } from './ImageDiffViewer';
 import { getFileType, type EditorType } from '../../utils/fileTypeDetector';
 import { getFileName } from '../../utils/pathUtils';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
-import './HistoryDialog.css';
 
 interface HistoryDialogProps {
   isOpen: boolean;
@@ -417,32 +416,32 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
   if (!isOpen) return null;
 
   return (
-    <div className="history-dialog-overlay" onClick={onClose}>
-      <div className="history-dialog" onClick={(e) => e.stopPropagation()}>
-        <div className="history-dialog-header">
-          <div className="history-dialog-title">
-            <h2>{filePath ? getFileName(filePath) : 'Document History'}</h2>
-            {filePath && <span className="history-dialog-path">{filePath}</span>}
+    <div className="history-dialog-overlay fixed inset-0 flex items-center justify-center z-[10000] bg-black/50" onClick={onClose}>
+      <div className="history-dialog flex flex-col overflow-hidden rounded-xl bg-[var(--nim-bg)] border border-[var(--nim-border)] shadow-[0_20px_60px_rgba(0,0,0,0.3)] w-[90vw] max-w-[1200px] h-[80vh] max-h-[800px]" onClick={(e) => e.stopPropagation()}>
+        <div className="history-dialog-header flex items-center justify-between py-3 px-4 border-b border-[var(--nim-border)]">
+          <div className="history-dialog-title flex flex-col gap-0.5 min-w-0 flex-1">
+            <h2 className="m-0 text-base font-semibold text-[var(--nim-text)] whitespace-nowrap overflow-hidden text-ellipsis">{filePath ? getFileName(filePath) : 'Document History'}</h2>
+            {filePath && <span className="history-dialog-path text-[11px] text-[var(--nim-text-muted)] whitespace-nowrap overflow-hidden text-ellipsis">{filePath}</span>}
           </div>
-          <button className="history-dialog-close" onClick={onClose}>
-            <span className="material-symbols-outlined">close</span>
+          <button className="history-dialog-close nim-btn-icon" onClick={onClose}>
+            <span className="material-symbols-outlined text-xl">close</span>
           </button>
         </div>
         
-        <div className="history-dialog-content">
-          <div className="history-list">
-            <div className="history-list-header">
-              <div className="history-list-header-left">
-                <h3>Snapshots ({displayedSnapshots.length}{compactView && snapshots.length !== displayedSnapshots.length ? ` of ${snapshots.length}` : ''})</h3>
-                {loading && <span className="history-loading">Loading...</span>}
+        <div className="history-dialog-content flex-1 flex overflow-hidden">
+          <div className="history-list w-[350px] border-r border-[var(--nim-border)] flex flex-col">
+            <div className="history-list-header py-2 px-3 border-b border-[var(--nim-border)] flex items-center justify-between bg-[var(--nim-bg-secondary)]">
+              <div className="history-list-header-left flex items-center gap-2">
+                <h3 className="m-0 text-xs font-semibold text-[var(--nim-text-muted)] uppercase tracking-wider">Snapshots ({displayedSnapshots.length}{compactView && snapshots.length !== displayedSnapshots.length ? ` of ${snapshots.length}` : ''})</h3>
+                {loading && <span className="history-loading text-xs text-[var(--nim-text-muted)]">Loading...</span>}
               </div>
               {snapshots.length > 5 && (
                 <button
-                  className="history-compact-toggle"
+                  className="history-compact-toggle nim-btn-icon"
                   onClick={() => setCompactView(!compactView)}
                   title={compactView ? 'Show all versions' : 'Hide minor auto-saves'}
                 >
-                  <span className="material-symbols-outlined">
+                  <span className="material-symbols-outlined text-lg">
                     {compactView ? 'unfold_more' : 'unfold_less'}
                   </span>
                 </button>
@@ -450,11 +449,11 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
             </div>
 
             {displayedSnapshots.length === 0 ? (
-              <div className="history-empty">
+              <div className="history-empty py-10 px-5 text-center text-[var(--nim-text-muted)] text-sm">
                 No history available for this document
               </div>
             ) : (
-              <div className="history-items">
+              <div className="history-items nim-scrollbar flex-1 overflow-y-auto p-1">
                 {displayedSnapshots.map((snapshot, index) => {
                   const snapshotId = getSnapshotId(snapshot, index);
                   const isSelected = selectedVersions.some(v => v.snapshotId === snapshotId);
@@ -478,32 +477,32 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
                     data-snapshot-id={snapshotId}
                     data-snapshot-type={snapshot.type}
                     data-selected={isSelected}
-                    className={`history-item ${isSelected ? 'selected' : ''}`}
+                    className={`history-item mb-0.5 rounded cursor-pointer transition-all duration-150 ${isSelected ? 'selected bg-[var(--nim-primary)]' : 'hover:bg-[var(--nim-bg-hover)]'}`}
                     onClick={(e) => handleSnapshotSelect(snapshotId, snapshot.timestamp, index, e.metaKey || e.ctrlKey)}
                   >
-                    <div className="history-item-content">
-                      <div className="history-item-main">
-                        <span className="history-item-icon material-symbols-outlined">{getSnapshotIcon(snapshot.type)}</span>
-                        <div className="history-item-info">
-                          <div className="history-item-type-row">
-                            <span className="history-item-type">{snapshot.type.replace('-', ' ')}</span>
-                            <span className="history-item-time">{relativeTime}</span>
+                    <div className="history-item-content py-1.5 px-2 flex items-center justify-between">
+                      <div className="history-item-main flex items-center gap-2 flex-1 min-w-0">
+                        <span className={`history-item-icon material-symbols-outlined text-lg shrink-0 ${isSelected ? 'text-white' : 'text-[var(--nim-text-muted)]'}`}>{getSnapshotIcon(snapshot.type)}</span>
+                        <div className="history-item-info flex flex-col gap-0.5 min-w-0 flex-1">
+                          <div className="history-item-type-row flex items-center justify-between gap-2">
+                            <span className={`history-item-type text-xs font-medium capitalize whitespace-nowrap ${isSelected ? 'text-white' : 'text-[var(--nim-text)]'}`}>{snapshot.type.replace('-', ' ')}</span>
+                            <span className={`history-item-time text-[11px] whitespace-nowrap shrink-0 ${isSelected ? 'text-white' : 'text-[var(--nim-text-faint)]'}`}>{relativeTime}</span>
                           </div>
                           {isAIEdit && session && (
                             <button
-                              className="history-item-session-link"
+                              className={`history-item-session-link flex items-center gap-1 py-0.5 px-1.5 mt-0.5 border-none rounded text-[11px] cursor-pointer transition-all duration-150 max-w-full overflow-hidden ${isSelected ? 'bg-white/20 text-white hover:bg-white/30' : 'bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-muted)] hover:bg-[var(--nim-accent-light)] hover:text-[var(--nim-primary)]'}`}
                               onClick={handleSessionClick}
                               title="Open AI session in chat"
                             >
                               <ProviderIcon provider={session.provider} size={12} />
-                              <span className="history-item-session-name">{session.title}</span>
+                              <span className="history-item-session-name whitespace-nowrap overflow-hidden text-ellipsis">{session.title}</span>
                             </button>
                           )}
                         </div>
                       </div>
-                      <div className="history-item-actions">
+                      <div className="history-item-actions flex items-center gap-2 shrink-0">
                         <button
-                          className="history-item-delete"
+                          className={`history-item-delete w-5 h-5 border-none bg-transparent cursor-pointer opacity-0 transition-all duration-200 rounded flex items-center justify-center shrink-0 group-hover:opacity-60 hover:!opacity-100 hover:bg-[var(--nim-error-light)] [.history-item:hover_&]:opacity-60`}
                           data-testid={`history-item-delete-${index}`}
                           onClick={(e) => {
                             e.stopPropagation();
@@ -511,7 +510,7 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
                           }}
                           title="Delete snapshot"
                         >
-                          <span className="material-symbols-outlined">delete</span>
+                          <span className={`material-symbols-outlined text-base ${isSelected ? 'text-white' : 'text-[var(--nim-text-muted)]'} [.history-item-delete:hover_&]:text-[var(--nim-error)]`}>delete</span>
                         </button>
                       </div>
                     </div>
@@ -522,41 +521,41 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
             )}
           </div>
           
-          <div className="history-preview">
-            <div className="history-preview-header">
-              <div className="history-preview-header-left">
-                <h3>{diffMode ? 'Diff Preview' : 'Preview'}</h3>
+          <div className="history-preview flex-1 flex flex-col relative min-w-0 overflow-hidden">
+            <div className="history-preview-header py-2 px-3 border-b border-[var(--nim-border)] flex items-center justify-between bg-[var(--nim-bg-secondary)] gap-3">
+              <div className="history-preview-header-left flex items-center gap-3 min-w-0 flex-1 overflow-hidden flex-wrap">
+                <h3 className="m-0 text-xs font-semibold text-[var(--nim-text-muted)] uppercase tracking-wider">{diffMode ? 'Diff Preview' : 'Preview'}</h3>
                 {diffMode && versionAMeta && versionBMeta && (
-                  <div className="diff-version-labels">
-                    <span className="diff-version-label diff-version-old">
+                  <div className="diff-version-labels flex items-center gap-2 text-[11px] text-[var(--nim-text-muted)]">
+                    <span className="diff-version-label diff-version-old py-0.5 px-2 rounded bg-[var(--nim-bg-tertiary)] font-medium text-[var(--nim-error)]">
                       {formatVersionLabel(versionAMeta.type, versionAMeta.timestamp)}
                     </span>
-                    <span className="diff-version-separator">vs</span>
-                    <span className="diff-version-label diff-version-new">
+                    <span className="diff-version-separator font-semibold text-[var(--nim-text-faint)]">vs</span>
+                    <span className="diff-version-label diff-version-new py-0.5 px-2 rounded bg-[var(--nim-bg-tertiary)] font-medium text-[var(--nim-success)]">
                       {formatVersionLabel(versionBMeta.type, versionBMeta.timestamp)}
                     </span>
                   </div>
                 )}
                 {diffMode && fileType === 'markdown' && (
                   <>
-                    <div className="diff-mode-toggle">
+                    <div className="diff-mode-toggle flex bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md p-0.5 gap-0.5">
                       <button
-                        className={`diff-mode-button ${diffViewMode === 'rich' ? 'active' : ''}`}
+                        className={`diff-mode-button py-1 px-3 text-[11px] font-medium bg-transparent border-none rounded cursor-pointer transition-all duration-200 ${diffViewMode === 'rich' ? 'active text-white bg-[var(--nim-primary)]' : 'text-[var(--nim-text-muted)] hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]'}`}
                         onClick={() => setDiffViewMode('rich')}
                       >
                         Rich
                       </button>
                       <button
-                        className={`diff-mode-button ${diffViewMode === 'text' ? 'active' : ''}`}
+                        className={`diff-mode-button py-1 px-3 text-[11px] font-medium bg-transparent border-none rounded cursor-pointer transition-all duration-200 ${diffViewMode === 'text' ? 'active text-white bg-[var(--nim-primary)]' : 'text-[var(--nim-text-muted)] hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]'}`}
                         onClick={() => setDiffViewMode('text')}
                       >
                         Text
                       </button>
                     </div>
                     {navigationState && navigationState.totalGroups > 0 && (
-                      <div className="diff-navigation-controls">
+                      <div className="diff-navigation-controls flex items-center gap-2 ml-3">
                         <button
-                          className="diff-nav-button"
+                          className="diff-nav-button w-6 h-6 p-0 border border-[var(--nim-border)] bg-[var(--nim-bg)] rounded cursor-pointer flex items-center justify-center text-[var(--nim-text-muted)] transition-all duration-200 hover:not-disabled:bg-[var(--nim-bg-hover)] hover:not-disabled:text-[var(--nim-text)] disabled:opacity-40 disabled:cursor-not-allowed"
                           onClick={handleNavigatePrevious}
                           disabled={!navigationState.canGoPrevious}
                           title="Previous change"
@@ -565,11 +564,11 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
                             <path d="M6 9L3 6L6 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                           </svg>
                         </button>
-                        <span className="diff-change-counter">
+                        <span className="diff-change-counter text-[11px] font-medium text-[var(--nim-text-muted)] min-w-[50px] text-center">
                           {navigationState.currentIndex + 1} / {navigationState.totalGroups}
                         </span>
                         <button
-                          className="diff-nav-button"
+                          className="diff-nav-button w-6 h-6 p-0 border border-[var(--nim-border)] bg-[var(--nim-bg)] rounded cursor-pointer flex items-center justify-center text-[var(--nim-text-muted)] transition-all duration-200 hover:not-disabled:bg-[var(--nim-bg-hover)] hover:not-disabled:text-[var(--nim-text)] disabled:opacity-40 disabled:cursor-not-allowed"
                           onClick={handleNavigateNext}
                           disabled={!navigationState.canGoNext}
                           title="Next change"
@@ -579,9 +578,9 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
                           </svg>
                         </button>
                         {diffViewMode === 'text' && 'addedLines' in navigationState && (
-                          <div className="diff-stats">
-                            <span className="diff-stat diff-stat-added">+{navigationState.addedLines}</span>
-                            <span className="diff-stat diff-stat-removed">-{navigationState.removedLines}</span>
+                          <div className="diff-stats flex items-center gap-2 ml-2 pl-2 border-l border-[var(--nim-border)]">
+                            <span className="diff-stat diff-stat-added text-[11px] font-semibold py-0.5 px-1.5 rounded-sm text-[var(--nim-success)] bg-[var(--nim-success-light)]">+{navigationState.addedLines}</span>
+                            <span className="diff-stat diff-stat-removed text-[11px] font-semibold py-0.5 px-1.5 rounded-sm text-[var(--nim-error)] bg-[var(--nim-error-light)]">-{navigationState.removedLines}</span>
                           </div>
                         )}
                       </div>
@@ -591,7 +590,7 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
               </div>
               {selectedVersions.length === 1 && (
                 <button
-                  className="history-restore-button"
+                  className="history-restore-button py-1.5 px-4 bg-[var(--nim-primary)] text-white border-none rounded-md text-[13px] font-medium cursor-pointer transition-all duration-200 shrink-0 whitespace-nowrap hover:not-disabled:bg-[var(--nim-primary-hover)] hover:not-disabled:-translate-y-px hover:not-disabled:shadow-[0_2px_8px_rgba(59,130,246,0.3)] disabled:opacity-50 disabled:cursor-not-allowed"
                   onClick={handleRestore}
                   disabled={!previewContent}
                 >
@@ -601,7 +600,7 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
             </div>
 
             {diffMode ? (
-              <div className="history-preview-content">
+              <div className="history-preview-content nim-scrollbar flex-1 overflow-auto [&:has(.diff-preview-editor)]:p-0">
                 {fileType === 'markdown' ? (
                   // Markdown files: use rich or text diff
                   diffViewMode === 'rich' ? (
@@ -644,9 +643,9 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
                 )}
               </div>
             ) : selectedVersions.length === 1 ? (
-              <div className="history-preview-content">
+              <div className="history-preview-content nim-scrollbar flex-1 overflow-auto [&_pre]:m-0 [&_pre]:font-mono [&_pre]:text-[13px] [&_pre]:leading-relaxed [&_pre]:text-[var(--nim-text)] [&_pre]:whitespace-pre-wrap [&_pre]:break-words">
                 {fileType === 'image' ? (
-                  <div className="image-preview">
+                  <div className="image-preview flex items-center justify-center w-full h-full bg-[var(--nim-bg-tertiary)] p-4 [&_img]:max-w-full [&_img]:max-h-full [&_img]:object-contain">
                     <img src={`file://${filePath}`} alt="Preview" />
                   </div>
                 ) : (
@@ -654,15 +653,15 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
                 )}
               </div>
             ) : (
-              <div className="history-preview-empty">
+              <div className="history-preview-empty flex-1 flex items-center justify-center text-[var(--nim-text-muted)] text-sm">
                 Select a snapshot to see diff with previous version, or Cmd+Click two snapshots to compare any versions
               </div>
             )}
 
             {loadingPreview && (diffViewMode === 'rich' || !diffMode) && (
-              <div className="history-preview-loading">
-                <div className="history-preview-loading-spinner" />
-                <div className="history-preview-loading-text">
+              <div className="history-preview-loading absolute inset-0 flex flex-col items-center justify-center bg-[var(--nim-bg)] z-10 gap-3">
+                <div className="history-preview-loading-spinner w-10 h-10 border-[3px] border-[var(--nim-border)] border-t-[var(--nim-primary)] rounded-full animate-spin" />
+                <div className="history-preview-loading-text text-[var(--nim-text-muted)] text-sm">
                   {selectedVersions.length === 2 ? 'Loading diff...' : 'Loading preview...'}
                 </div>
               </div>

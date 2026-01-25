@@ -7,7 +7,8 @@ import type { OnboardingConfig } from '../../shared/types/workspace';
 import { DEFAULT_ONBOARDING_CONFIG } from '../../shared/types/workspace';
 import type { InstalledPackage } from '../../shared/toolPackages';
 
-export type AppTheme = 'dark' | 'light' | 'system' | 'auto' | 'crystal-dark';
+// Theme can be a built-in theme or an extension theme ID (format: "extensionId:themeId")
+export type AppTheme = 'dark' | 'light' | 'system' | 'auto' | 'crystal-dark' | string;
 export type { SessionState, SessionWindow } from '../types';
 
 export type CompletionSoundType = 'chime' | 'bell' | 'pop' | 'alert' | 'none';
@@ -29,6 +30,7 @@ export interface ExtensionSettings {
 
 interface AppStoreSchema {
   theme: AppTheme;
+  themeIsDark?: boolean; // Whether the current theme is dark (used for extension themes)
   recent: {
     workspaces: RecentItem[];
     documents: RecentItem[];
@@ -561,8 +563,16 @@ export function getTheme(): AppTheme {
   return getAppStore().get('theme');
 }
 
-export function setTheme(theme: AppTheme): void {
+export function setTheme(theme: AppTheme, isDark?: boolean): void {
   getAppStore().set('theme', theme);
+  // Store isDark for extension themes so main process knows how to style title bars
+  if (isDark !== undefined) {
+    getAppStore().set('themeIsDark', isDark);
+  }
+}
+
+export function getThemeIsDark(): boolean | undefined {
+  return getAppStore().get('themeIsDark');
 }
 
 // getThemeSync resolves 'system'/'auto' to the actual theme for the renderer

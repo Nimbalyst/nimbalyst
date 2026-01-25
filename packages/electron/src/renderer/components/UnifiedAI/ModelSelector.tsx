@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MaterialSymbol, getProviderIcon } from '@nimbalyst/runtime';
 import { getClaudeCodeModelLabel } from '../../utils/modelUtils';
-import './ModelSelector.css';
 
 interface Model {
   id: string;
@@ -143,38 +142,38 @@ export function ModelSelector({
   }, {} as Record<'agents' | 'models', Record<string, Model[]>>);
 
   return (
-    <div className="model-selector" ref={dropdownRef}>
+    <div className="model-selector relative inline-block" ref={dropdownRef}>
       <button
         ref={buttonRef}
-        className="model-selector-button"
+        className="model-selector-button flex items-center gap-1 px-2 py-[3px] rounded-xl text-[11px] font-medium cursor-pointer transition-all duration-200 outline-none whitespace-nowrap max-w-[200px] bg-[var(--nim-bg-secondary)] text-[var(--nim-text-muted)] border border-[var(--nim-border)] hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)]"
         onClick={() => setIsOpen(!isOpen)}
         title={`Current model: ${getCurrentModelName()}`}
         data-testid="model-picker"
       >
-        <span className="model-selector-label">{getCurrentModelName()}</span>
-        <MaterialSymbol icon="expand_more" size={14} className={`model-selector-arrow ${isOpen ? 'open' : ''}`} />
+        <span className="model-selector-label overflow-hidden text-ellipsis">{getCurrentModelName()}</span>
+        <MaterialSymbol icon="expand_more" size={14} className={`model-selector-arrow transition-transform duration-200 shrink-0 ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="model-selector-dropdown">
+        <div className="model-selector-dropdown nim-scrollbar absolute bottom-full left-0 mb-1 min-w-[240px] max-w-[320px] max-h-[400px] overflow-y-auto rounded-lg p-1 z-[1000] bg-[var(--nim-bg)] border border-[var(--nim-border)] shadow-[0_4px_12px_rgba(0,0,0,0.15)]">
           {loading ? (
-            <div className="model-selector-loading">Loading models...</div>
+            <div className="model-selector-loading p-3 text-center text-xs text-[var(--nim-text-faint)]">Loading models...</div>
           ) : Object.keys(models).length === 0 ? (
-            <div className="model-selector-empty">No models available</div>
+            <div className="model-selector-empty p-3 text-center text-xs text-[var(--nim-text-faint)]">No models available</div>
           ) : (
             <>
               {/* Agents Section */}
               {groupedProviders.agents && Object.keys(groupedProviders.agents).length > 0 && (
                 <>
-                  <div className="model-selector-section-header">Agents</div>
+                  <div className="model-selector-section-header px-2 pt-1.5 pb-1 text-[10px] font-semibold uppercase tracking-[0.5px] text-[var(--nim-text-faint)]">Agents</div>
                   {isSectionDisabled('agent') && (
-                    <div className="model-selector-disabled-notice">
+                    <div className="model-selector-disabled-notice px-2 pt-1 pb-1.5 text-[11px] italic text-[var(--nim-text-faint)]">
                       Start a new session to use agents
                     </div>
                   )}
                   {Object.entries(groupedProviders.agents).map(([provider, providerModels]) => (
-                    <div key={provider} className="model-selector-provider-group">
-                      <div className="model-selector-provider-header">
+                    <div key={provider} className="model-selector-provider-group mb-1">
+                      <div className="model-selector-provider-header flex items-center gap-1.5 px-2 py-1 text-[11px] font-medium text-[var(--nim-text-muted)]">
                         {getProviderIcon(provider, { size: 12 })}
                         {getProviderLabel(provider)}
                       </div>
@@ -185,14 +184,14 @@ export function ModelSelector({
                         return (
                           <button
                             key={model.id}
-                            className={`model-selector-option ${isCurrent ? 'selected' : ''} ${isDisabled ? 'disabled' : ''}`}
+                            className={`model-selector-option flex items-center justify-between gap-2 pl-6 pr-2 py-1.5 w-full bg-transparent border-none rounded text-xs cursor-pointer transition-[background] duration-150 text-left text-[var(--nim-text)] ${isCurrent ? 'selected bg-[var(--nim-bg-secondary)] text-[var(--nim-primary)]' : ''} ${isDisabled ? 'disabled opacity-50 cursor-not-allowed' : 'hover:bg-[var(--nim-bg-hover)]'}`}
                             onClick={() => !isDisabled && handleModelSelect(model.id)}
                             title={isDisabled ? disabledTooltip : undefined}
                             aria-disabled={isDisabled}
                           >
-                            <span className="model-selector-option-name">{model.name}</span>
+                            <span className={`model-selector-option-name flex-1 overflow-hidden text-ellipsis whitespace-nowrap ${isDisabled ? 'text-[var(--nim-text-faint)]' : ''}`}>{model.name}</span>
                             {isDisabled ? (
-                              <MaterialSymbol icon="block" size={14} className="disabled-icon" />
+                              <MaterialSymbol icon="block" size={14} className="disabled-icon text-[var(--nim-text-faint)]" />
                             ) : isCurrent ? (
                               <MaterialSymbol icon="check" size={14} />
                             ) : null}
@@ -208,17 +207,17 @@ export function ModelSelector({
               {groupedProviders.models && Object.keys(groupedProviders.models).length > 0 && (
                 <>
                   {groupedProviders.agents && Object.keys(groupedProviders.agents).length > 0 && (
-                    <div className="model-selector-divider" />
+                    <div className="model-selector-divider h-px my-1 bg-[var(--nim-border)]" />
                   )}
-                  <div className="model-selector-section-header">Chat with open document</div>
+                  <div className="model-selector-section-header px-2 pt-1.5 pb-1 text-[10px] font-semibold uppercase tracking-[0.5px] text-[var(--nim-text-faint)]">Chat with open document</div>
                   {isSectionDisabled('model') && (
-                    <div className="model-selector-disabled-notice">
+                    <div className="model-selector-disabled-notice px-2 pt-1 pb-1.5 text-[11px] italic text-[var(--nim-text-faint)]">
                       Start a new session to use chat models
                     </div>
                   )}
                   {Object.entries(groupedProviders.models).map(([provider, providerModels]) => (
-                    <div key={provider} className="model-selector-provider-group">
-                      <div className="model-selector-provider-header">
+                    <div key={provider} className="model-selector-provider-group mb-1">
+                      <div className="model-selector-provider-header flex items-center gap-1.5 px-2 py-1 text-[11px] font-medium text-[var(--nim-text-muted)]">
                         {getProviderIcon(provider, { size: 12 })}
                         {getProviderLabel(provider)}
                       </div>
@@ -229,14 +228,14 @@ export function ModelSelector({
                         return (
                           <button
                             key={model.id}
-                            className={`model-selector-option ${isCurrent ? 'selected' : ''} ${isDisabled ? 'disabled' : ''}`}
+                            className={`model-selector-option flex items-center justify-between gap-2 pl-6 pr-2 py-1.5 w-full bg-transparent border-none rounded text-xs cursor-pointer transition-[background] duration-150 text-left text-[var(--nim-text)] ${isCurrent ? 'selected bg-[var(--nim-bg-secondary)] text-[var(--nim-primary)]' : ''} ${isDisabled ? 'disabled opacity-50 cursor-not-allowed' : 'hover:bg-[var(--nim-bg-hover)]'}`}
                             onClick={() => !isDisabled && handleModelSelect(model.id)}
                             title={isDisabled ? disabledTooltip : undefined}
                             aria-disabled={isDisabled}
                           >
-                            <span className="model-selector-option-name">{model.name}</span>
+                            <span className={`model-selector-option-name flex-1 overflow-hidden text-ellipsis whitespace-nowrap ${isDisabled ? 'text-[var(--nim-text-faint)]' : ''}`}>{model.name}</span>
                             {isDisabled ? (
-                              <MaterialSymbol icon="block" size={14} className="disabled-icon" />
+                              <MaterialSymbol icon="block" size={14} className="disabled-icon text-[var(--nim-text-faint)]" />
                             ) : isCurrent ? (
                               <MaterialSymbol icon="check" size={14} />
                             ) : null}
@@ -249,9 +248,9 @@ export function ModelSelector({
               )}
 
               {/* Configure Models */}
-              <div className="model-selector-divider" />
+              <div className="model-selector-divider h-px my-1 bg-[var(--nim-border)]" />
               <button
-                className="model-selector-configure"
+                className="model-selector-configure flex items-center gap-2 px-2 py-1.5 w-full bg-transparent border-none rounded text-xs cursor-pointer transition-[background] duration-150 text-left text-[var(--nim-text-muted)] hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]"
                 onClick={handleConfigureModels}
               >
                 <MaterialSymbol icon="settings" size={14} />

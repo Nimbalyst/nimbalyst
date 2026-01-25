@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
-import './ExtensionErrorConsole.css';
 
 type LogLevel = 'error' | 'warn' | 'info' | 'debug';
 type LogSource = 'renderer' | 'main' | 'build';
@@ -174,25 +173,52 @@ export const ExtensionErrorConsole: React.FC<ExtensionErrorConsoleProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="extension-error-console-overlay" onClick={onClose}>
+    <div
+      className="extension-error-console-overlay nim-overlay z-[1000]"
+      onClick={onClose}
+    >
       <div
-        className="extension-error-console"
+        className="extension-error-console flex flex-col w-4/5 max-w-[1000px] h-[70%] max-h-[600px] rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.25)] nim-animate-slide-up"
+        style={{
+          background: 'var(--nim-bg)',
+          border: '1px solid var(--nim-border)',
+        }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="extension-error-console-header">
-          <h2>Extension Logs</h2>
-          <div className="extension-error-console-stats">
+        <div
+          className="extension-error-console-header flex items-center gap-4 px-5 py-4 rounded-t-xl"
+          style={{
+            borderBottom: '1px solid var(--nim-border)',
+            background: 'var(--nim-bg-secondary)',
+          }}
+        >
+          <h2
+            className="m-0 text-base font-semibold"
+            style={{ color: 'var(--nim-text)' }}
+          >
+            Extension Logs
+          </h2>
+          <div className="extension-error-console-stats flex gap-3 ml-auto">
             {stats && (
               <>
-                <span className="stat stat-error">
+                <span
+                  className="stat stat-error flex items-center gap-1 text-xs font-medium"
+                  style={{ color: 'var(--nim-error)' }}
+                >
                   <MaterialSymbol icon="error" size={14} />
                   {stats.byLevel.error}
                 </span>
-                <span className="stat stat-warn">
+                <span
+                  className="stat stat-warn flex items-center gap-1 text-xs font-medium"
+                  style={{ color: 'var(--nim-warning)' }}
+                >
                   <MaterialSymbol icon="warning" size={14} />
                   {stats.byLevel.warn}
                 </span>
-                <span className="stat stat-info">
+                <span
+                  className="stat stat-info flex items-center gap-1 text-xs font-medium"
+                  style={{ color: 'var(--nim-info)' }}
+                >
                   <MaterialSymbol icon="info" size={14} />
                   {stats.byLevel.info}
                 </span>
@@ -200,7 +226,8 @@ export const ExtensionErrorConsole: React.FC<ExtensionErrorConsoleProps> = ({
             )}
           </div>
           <button
-            className="extension-error-console-close"
+            className="extension-error-console-close flex items-center justify-center w-8 h-8 border-none bg-transparent rounded-md cursor-pointer transition-all duration-100 hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]"
+            style={{ color: 'var(--nim-text-muted)' }}
             onClick={onClose}
             aria-label="Close"
           >
@@ -208,9 +235,21 @@ export const ExtensionErrorConsole: React.FC<ExtensionErrorConsoleProps> = ({
           </button>
         </div>
 
-        <div className="extension-error-console-toolbar">
-          <div className="extension-error-console-filters">
+        <div
+          className="extension-error-console-toolbar flex items-center justify-between px-4 py-2"
+          style={{
+            borderBottom: '1px solid var(--nim-border)',
+            background: 'var(--nim-bg-secondary)',
+          }}
+        >
+          <div className="extension-error-console-filters flex gap-2">
             <select
+              className="px-2 py-1.5 text-xs rounded-md cursor-pointer hover:border-[var(--nim-border-hover)]"
+              style={{
+                border: '1px solid var(--nim-border)',
+                background: 'var(--nim-bg)',
+                color: 'var(--nim-text)',
+              }}
               value={filter.logLevel}
               onChange={(e) =>
                 setFilter((f) => ({
@@ -228,6 +267,12 @@ export const ExtensionErrorConsole: React.FC<ExtensionErrorConsoleProps> = ({
             </select>
 
             <select
+              className="px-2 py-1.5 text-xs rounded-md cursor-pointer hover:border-[var(--nim-border-hover)]"
+              style={{
+                border: '1px solid var(--nim-border)',
+                background: 'var(--nim-bg)',
+                color: 'var(--nim-text)',
+              }}
               value={filter.source}
               onChange={(e) =>
                 setFilter((f) => ({
@@ -244,6 +289,12 @@ export const ExtensionErrorConsole: React.FC<ExtensionErrorConsoleProps> = ({
             </select>
 
             <select
+              className="px-2 py-1.5 text-xs rounded-md cursor-pointer hover:border-[var(--nim-border-hover)]"
+              style={{
+                border: '1px solid var(--nim-border)',
+                background: 'var(--nim-bg)',
+                color: 'var(--nim-text)',
+              }}
               value={filter.extensionId}
               onChange={(e) =>
                 setFilter((f) => ({ ...f, extensionId: e.target.value }))
@@ -259,17 +310,21 @@ export const ExtensionErrorConsole: React.FC<ExtensionErrorConsoleProps> = ({
             </select>
           </div>
 
-          <div className="extension-error-console-actions">
-            <label className="auto-refresh-toggle">
+          <div className="extension-error-console-actions flex items-center gap-2">
+            <label
+              className="auto-refresh-toggle flex items-center gap-1.5 text-xs cursor-pointer"
+              style={{ color: 'var(--nim-text-muted)' }}
+            >
               <input
                 type="checkbox"
+                className="cursor-pointer"
                 checked={autoRefresh}
                 onChange={(e) => setAutoRefresh(e.target.checked)}
               />
               Auto-refresh
             </label>
             <button
-              className="toolbar-button"
+              className="toolbar-button nim-btn-icon"
               onClick={fetchLogs}
               disabled={isLoading}
               title="Refresh"
@@ -277,7 +332,7 @@ export const ExtensionErrorConsole: React.FC<ExtensionErrorConsoleProps> = ({
               <MaterialSymbol icon="refresh" size={18} />
             </button>
             <button
-              className="toolbar-button"
+              className="toolbar-button nim-btn-icon"
               onClick={handleClearLogs}
               title="Clear logs"
             >
@@ -286,12 +341,17 @@ export const ExtensionErrorConsole: React.FC<ExtensionErrorConsoleProps> = ({
           </div>
         </div>
 
-        <div className="extension-error-console-logs">
+        <div
+          className="extension-error-console-logs flex-1 overflow-y-auto p-2 font-mono text-xs"
+        >
           {logs.length === 0 ? (
-            <div className="extension-error-console-empty">
+            <div
+              className="extension-error-console-empty flex flex-col items-center justify-center h-full text-center"
+              style={{ color: 'var(--nim-text-faint)' }}
+            >
               <MaterialSymbol icon="check_circle" size={48} />
-              <p>No logs to display</p>
-              <p className="hint">
+              <p className="mt-2 mb-0">No logs to display</p>
+              <p className="hint text-xs max-w-[300px]">
                 Extension logs will appear here when extensions emit console
                 messages or errors.
               </p>
@@ -300,23 +360,37 @@ export const ExtensionErrorConsole: React.FC<ExtensionErrorConsoleProps> = ({
             logs.map((log, index) => (
               <div
                 key={`${log.timestamp}-${index}`}
-                className={`log-entry log-${log.level} ${
-                  expandedLogs.has(index) ? 'expanded' : ''
-                }`}
+                className={`log-entry log-${log.level} px-2 py-1.5 rounded mb-0.5 transition-colors duration-100 hover:bg-[var(--nim-bg-hover)] ${
+                  expandedLogs.has(index) ? 'expanded bg-[var(--nim-bg-secondary)]' : ''
+                } ${log.stack ? 'cursor-pointer' : 'cursor-default'}`}
                 onClick={() => log.stack && toggleExpand(index)}
               >
-                <div className="log-entry-header">
+                <div className="log-entry-header flex items-start gap-2">
                   <span style={{ color: LOG_LEVEL_COLORS[log.level] }}>
                     <MaterialSymbol
                       icon={LOG_LEVEL_ICONS[log.level]}
                       size={16}
                     />
                   </span>
-                  <span className="log-time">{formatTime(log.timestamp)}</span>
-                  <span className="log-source">[{log.source}]</span>
+                  <span
+                    className="log-time shrink-0"
+                    style={{ color: 'var(--nim-text-faint)' }}
+                  >
+                    {formatTime(log.timestamp)}
+                  </span>
+                  <span
+                    className="log-source shrink-0"
+                    style={{ color: 'var(--nim-text-faint)' }}
+                  >
+                    [{log.source}]
+                  </span>
                   {log.extensionId && (
                     <button
-                      className="log-extension"
+                      className="log-extension shrink-0 px-1 border-none rounded font-inherit text-inherit cursor-pointer transition-all duration-100 hover:bg-[rgba(168,85,247,0.25)] hover:text-[#c084fc]"
+                      style={{
+                        color: '#a855f7',
+                        background: 'rgba(168, 85, 247, 0.1)',
+                      }}
                       onClick={(e) => {
                         e.stopPropagation();
                         setFilter((f) => ({ ...f, extensionId: log.extensionId! }));
@@ -326,20 +400,48 @@ export const ExtensionErrorConsole: React.FC<ExtensionErrorConsoleProps> = ({
                       {log.extensionId}
                     </button>
                   )}
-                  <span className="log-message">{log.message}</span>
+                  <span
+                    className={`log-message flex-1 break-words ${
+                      log.level === 'error'
+                        ? 'text-[var(--nim-error)]'
+                        : log.level === 'warn'
+                          ? 'text-[var(--nim-warning)]'
+                          : ''
+                    }`}
+                    style={
+                      log.level !== 'error' && log.level !== 'warn'
+                        ? { color: 'var(--nim-text)' }
+                        : undefined
+                    }
+                  >
+                    {log.message}
+                  </span>
                   {log.stack && (
                     <MaterialSymbol
                       icon={expandedLogs.has(index) ? 'expand_less' : 'expand_more'}
                       size={16}
-                      className="log-expand-icon"
+                      className="log-expand-icon shrink-0"
+                      style={{ color: 'var(--nim-text-faint)' }}
                     />
                   )}
                 </div>
                 {expandedLogs.has(index) && log.stack && (
-                  <pre className="log-stack">{log.stack}</pre>
+                  <pre
+                    className="log-stack mt-2 ml-6 p-2 rounded overflow-x-auto text-[11px] whitespace-pre-wrap break-words"
+                    style={{
+                      background: 'var(--nim-bg)',
+                      border: '1px solid var(--nim-border)',
+                      color: 'var(--nim-text-muted)',
+                    }}
+                  >
+                    {log.stack}
+                  </pre>
                 )}
                 {log.sourceFile && log.line && (
-                  <div className="log-location">
+                  <div
+                    className="log-location mt-1 ml-6 text-[11px]"
+                    style={{ color: 'var(--nim-text-faint)' }}
+                  >
                     {log.sourceFile}:{log.line}
                   </div>
                 )}

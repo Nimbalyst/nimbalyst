@@ -1,12 +1,24 @@
 # Theming Documentation
 
+## Overview
+
+Nimbalyst uses a unified theming system with CSS variables. The system supports:
+- **Built-in themes**: Light, Dark, Crystal Dark
+- **Extension themes**: Custom themes provided by extensions
+
+For extension theme development, see [EXTENSION_THEMING.md](/docs/EXTENSION_THEMING.md).
+
 ## Critical Rules for Theming
 
 ### NEVER HARDCODE COLORS IN CSS FILES
-All colors MUST use CSS variables defined in `/packages/rexical/src/themes/PlaygroundEditorTheme.css`. This is the single source of truth for ALL theme colors.
+All colors MUST use CSS variables. The theme system has two variable naming conventions:
+- **Legacy**: `--surface-*`, `--text-*`, `--border-*`, `--accent-*` (defined in `PlaygroundEditorTheme.css`)
+- **Unified**: `--nim-*` (defined in `NimbalystTheme.css`, recommended for new code)
 
 ### Single Source of Truth
-The theme system uses `/packages/rexical/src/themes/PlaygroundEditorTheme.css` as the ONLY place where theme colors are defined. All other CSS files MUST reference these variables.
+Theme colors are defined in `/packages/rexical/src/themes/`:
+- `PlaygroundEditorTheme.css` - Legacy variable definitions
+- `NimbalystTheme.css` - Unified `--nim-*` variable definitions (maps from legacy vars)
 
 ## Theme Architecture
 
@@ -194,6 +206,112 @@ If a component shows wrong colors:
 
 ## The Golden Rule
 
-**There is ONE and ONLY ONE place to define theme colors: `/packages/rexical/src/themes/PlaygroundEditorTheme.css`**
+**There is ONE and ONLY ONE place to define theme colors: `/packages/rexical/src/themes/`**
+
+The theme files are:
+- `PlaygroundEditorTheme.css` - Legacy variables (`--surface-*`, `--text-*`, etc.)
+- `NimbalystTheme.css` - Unified variables (`--nim-*`) that map from legacy vars
 
 Everything else MUST reference these variables. No exceptions.
+
+## Unified Theme System (Recommended for New Code)
+
+The unified theme system uses `--nim-*` CSS variables and integrates with Tailwind CSS.
+
+### CSS Variable Naming
+
+| Unified (`--nim-*`) | Legacy | Description |
+|---------------------|--------|-------------|
+| `--nim-bg` | `--surface-primary` | Main background |
+| `--nim-bg-secondary` | `--surface-secondary` | Sidebar, panels |
+| `--nim-bg-tertiary` | `--surface-tertiary` | Nested backgrounds |
+| `--nim-text` | `--text-primary` | Main text |
+| `--nim-text-muted` | `--text-secondary` | Muted text |
+| `--nim-border` | `--border-primary` | Default borders |
+| `--nim-primary` | `--accent-primary` | Primary action color |
+
+### Tailwind CSS Integration
+
+The monorepo includes a shared Tailwind config (`/tailwind.config.ts`) with theme utilities:
+
+```jsx
+// Using Tailwind classes (recommended)
+<div className="bg-nim text-nim border-nim-border">
+  Content
+</div>
+
+// Equivalent CSS
+<div style={{
+  backgroundColor: 'var(--nim-bg)',
+  color: 'var(--nim-text)',
+  borderColor: 'var(--nim-border)'
+}}>
+  Content
+</div>
+```
+
+### TypeScript Theme Types
+
+The theme system includes TypeScript types in `rexical`:
+
+```typescript
+import { ThemeColors, ThemeId, getBaseThemeColors } from 'rexical';
+
+// Get base colors for a theme
+const darkColors = getBaseThemeColors(true); // isDark = true
+```
+
+## Common Tailwind Migration Pitfalls
+
+### Conditional Classes Don't Override
+
+**CRITICAL: Tailwind does NOT override based on class order in the className string.**
+
+```jsx
+// WRONG: bg-transparent and bg-nim-primary both apply - whichever comes
+// later in Tailwind's generated CSS "wins", not whichever is later in className
+<button className={`bg-transparent ${isActive ? 'bg-nim-primary' : ''}`}>
+
+// CORRECT: Use ternary to apply mutually exclusive class sets
+<button className={`${isActive ? 'bg-nim-primary text-white' : 'bg-transparent text-nim-muted'}`}>
+```
+
+### Primary vs Background Colors
+
+| Use Case | Wrong | Right |
+|----------|-------|-------|
+| Panel/container background | `bg-nim-primary` | `bg-nim` or `bg-nim-secondary` |
+| Text color | `text-nim-primary` | `text-nim` |
+| Button/action background | `bg-nim` | `bg-nim-primary` |
+
+`--nim-primary` is the **brand/action color** (blue). Use it for buttons and interactive elements, NOT for container backgrounds.
+
+### Modal/Dialog Sizing
+
+```jsx
+// WRONG: Percentage-based sizing can be affected by parent containers
+<div className="w-[90%] h-[80%]">
+
+// CORRECT: Use viewport units for fixed-position modals
+<div className="w-[90vw] h-[80vh] max-w-[1200px] max-h-[800px]">
+```
+
+### CSS Files That Should NOT Be Deleted
+
+Some CSS files must remain because they use:
+- Classes applied via DOM manipulation (`classList.add()`)
+- Vendor-prefixed pseudo-elements (`::-webkit-slider-thumb`)
+- Complex selectors applied dynamically by Lexical nodes
+- Styles for third-party components that don't support Tailwind
+
+Examples:
+- `CollapsiblePlugin/Collapsible.css` - Lexical `createDOM()` classes
+- `KanbanBoardPlugin/Board.css` - Drag-and-drop DOM manipulation
+- `StatusBarSlider.css` - Range input thumb styling
+- Search highlight classes - Applied programmatically
+
+## Extension Themes
+
+Extensions can contribute custom themes. See [EXTENSION_THEMING.md](/docs/EXTENSION_THEMING.md) for details.
+
+Users can select extension themes from the theme picker button in the navigation gutter.

@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
-import './FileContextMenu.css';
 import type { NewFileType, ExtensionFileType } from './NewFileMenu';
 
 interface FileContextMenuProps {
@@ -197,10 +196,15 @@ export function FileContextMenu({
     return (
       <div
         ref={menuRef}
-        className="file-context-menu file-context-menu-rename"
-        style={{ left: adjustedPosition.x, top: adjustedPosition.y }}
+        className="file-context-menu file-context-menu-rename fixed p-2 min-w-[250px] rounded-md z-[10000] backdrop-blur-[10px] shadow-[0_4px_12px_rgba(0,0,0,0.15)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.5)]"
+        style={{
+          left: adjustedPosition.x,
+          top: adjustedPosition.y,
+          background: 'var(--nim-bg)',
+          border: '1px solid var(--nim-border)',
+        }}
       >
-        <div className="rename-input-container">
+        <div className="rename-input-container flex items-center">
           <input
             ref={inputRef}
             type="text"
@@ -208,7 +212,12 @@ export function FileContextMenu({
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={handleRenameKeyDown}
             onBlur={handleRenameSubmit}
-            className="rename-input"
+            className="rename-input w-full px-2 py-1.5 rounded text-[13px] outline-none transition-colors"
+            style={{
+              background: 'var(--nim-bg-secondary)',
+              border: '1px solid var(--nim-primary)',
+              color: 'var(--nim-text)',
+            }}
           />
         </div>
       </div>
@@ -220,10 +229,18 @@ export function FileContextMenu({
     return (
       <div
         ref={menuRef}
-        className="file-context-menu"
-        style={{ left: adjustedPosition.x, top: adjustedPosition.y }}
+        className="file-context-menu fixed p-1 min-w-[200px] max-h-[calc(100vh-20px)] overflow-y-auto rounded-md z-[10000] text-[13px] backdrop-blur-[10px] shadow-[0_4px_12px_rgba(0,0,0,0.15)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.5)]"
+        style={{
+          left: adjustedPosition.x,
+          top: adjustedPosition.y,
+          background: 'var(--nim-bg)',
+          border: '1px solid var(--nim-border)',
+        }}
       >
-        <div className="file-context-menu-item file-context-menu-item-danger" onClick={handleDelete}>
+        <div
+          className="file-context-menu-item file-context-menu-item-danger flex items-center gap-2.5 px-3 py-1.5 rounded cursor-pointer transition-colors text-[var(--nim-error)] hover:bg-[var(--nim-error-subtle)]"
+          onClick={handleDelete}
+        >
           <MaterialSymbol icon="delete" size={18} />
           <span>Delete {selectedPaths.size} Items</span>
         </div>
@@ -231,50 +248,59 @@ export function FileContextMenu({
     );
   }
 
+  const menuItemClasses = "file-context-menu-item flex items-center gap-2.5 px-3 py-1.5 rounded cursor-pointer transition-colors text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]";
+  const dangerItemClasses = "file-context-menu-item file-context-menu-item-danger flex items-center gap-2.5 px-3 py-1.5 rounded cursor-pointer transition-colors text-[var(--nim-error)] hover:bg-[var(--nim-error-subtle)]";
+  const separatorClasses = "context-menu-separator h-px my-1 mx-2 bg-[var(--nim-border)]";
+
   return (
     <div
       ref={menuRef}
-      className="file-context-menu"
+      className="file-context-menu fixed p-1 min-w-[200px] max-h-[calc(100vh-20px)] overflow-y-auto rounded-md z-[10000] text-[13px] backdrop-blur-[10px] shadow-[0_4px_12px_rgba(0,0,0,0.15)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.5)]"
       data-testid="file-context-menu"
-      style={{ left: adjustedPosition.x, top: adjustedPosition.y }}
+      style={{
+        left: adjustedPosition.x,
+        top: adjustedPosition.y,
+        background: 'var(--nim-bg)',
+        border: '1px solid var(--nim-border)',
+      }}
     >
       {fileType === 'directory' && (
         <>
           {onNewFile && (
             <>
-              <div className="file-context-menu-item" onClick={() => { onNewFile(filePath, 'markdown'); onClose(); }}>
+              <div className={menuItemClasses} onClick={() => { onNewFile(filePath, 'markdown'); onClose(); }}>
                 <MaterialSymbol icon="description" size={18} />
                 <span>New Markdown File</span>
               </div>
-              <div className="file-context-menu-item" onClick={() => { onNewFile(filePath, 'mockup'); onClose(); }}>
+              <div className={menuItemClasses} onClick={() => { onNewFile(filePath, 'mockup'); onClose(); }}>
                 <MaterialSymbol icon="web" size={18} />
                 <span>New Mockup</span>
               </div>
               {extensionFileTypes.map((extType) => (
                 <div
                   key={extType.extension}
-                  className="file-context-menu-item"
+                  className={menuItemClasses}
                   onClick={() => { onNewFile(filePath, `ext:${extType.extension}`); onClose(); }}
                 >
                   <MaterialSymbol icon={extType.icon} size={18} />
                   <span>New {extType.displayName}</span>
                 </div>
               ))}
-              <div className="file-context-menu-item" onClick={() => { onNewFile(filePath, 'any'); onClose(); }}>
+              <div className={menuItemClasses} onClick={() => { onNewFile(filePath, 'any'); onClose(); }}>
                 <MaterialSymbol icon="note_add" size={18} />
                 <span>New File...</span>
               </div>
             </>
           )}
           {onNewFolder && (
-            <div className="file-context-menu-item" onClick={() => { onNewFolder(filePath); onClose(); }}>
+            <div className={menuItemClasses} onClick={() => { onNewFolder(filePath); onClose(); }}>
               <MaterialSymbol icon="create_new_folder" size={18} />
               <span>New Folder</span>
             </div>
           )}
-          {(onNewFile || onNewFolder) && <div className="context-menu-separator" />}
+          {(onNewFile || onNewFolder) && <div className={separatorClasses} />}
           {onViewWorkspaceHistory && (
-            <div className="file-context-menu-item" onClick={() => { onViewWorkspaceHistory(filePath); onClose(); }}>
+            <div className={menuItemClasses} onClick={() => { onViewWorkspaceHistory(filePath); onClose(); }}>
               <MaterialSymbol icon="history" size={18} />
               <span>View Folder History...</span>
             </div>
@@ -284,12 +310,12 @@ export function FileContextMenu({
 
       {fileType === 'file' && (
         <>
-          <div className="file-context-menu-item" onClick={handleOpenInDefaultApp}>
+          <div className={menuItemClasses} onClick={handleOpenInDefaultApp}>
             <MaterialSymbol icon="launch" size={18} />
             <span>Open in Default App</span>
           </div>
           {onViewHistory && (
-            <div className="file-context-menu-item" onClick={() => { onViewHistory(filePath); onClose(); }}>
+            <div className={menuItemClasses} onClick={() => { onViewHistory(filePath); onClose(); }}>
               <MaterialSymbol icon="history" size={18} />
               <span>View History...</span>
             </div>
@@ -297,27 +323,27 @@ export function FileContextMenu({
         </>
       )}
 
-      <div className="file-context-menu-item" onClick={handleRenameClick}>
+      <div className={menuItemClasses} onClick={handleRenameClick}>
         <MaterialSymbol icon="edit" size={18} />
         <span>Rename</span>
       </div>
 
-      <div className="context-menu-separator" />
+      <div className={separatorClasses} />
 
-      <div className="file-context-menu-item" onClick={handleShowInFinder}>
+      <div className={menuItemClasses} onClick={handleShowInFinder}>
         <MaterialSymbol icon="folder_open" size={18} />
         <span>Show in Finder</span>
       </div>
 
-      <div className="file-context-menu-item" onClick={handleCopyPath}>
+      <div className={menuItemClasses} onClick={handleCopyPath}>
         <MaterialSymbol icon="content_copy" size={18} />
         <span>Copy Path</span>
       </div>
 
-      <div className="context-menu-separator" />
+      <div className={separatorClasses} />
 
       <div
-        className="file-context-menu-item file-context-menu-item-danger"
+        className={dangerItemClasses}
         data-testid="context-menu-delete"
         onClick={handleDelete}
       >

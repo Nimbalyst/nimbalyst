@@ -13,7 +13,134 @@ import { EditToolResultCard } from './EditToolResultCard';
 import { TranscriptSearchBar } from './TranscriptSearchBar';
 import { formatToolDisplayName } from '../utils/toolNameFormatter';
 import { getCustomToolWidget } from './CustomToolWidgets';
-import './RichTranscriptView.css';
+
+// Inject RichTranscriptView styles once (for animations, scrollbar, and complex selectors)
+const injectRichTranscriptStyles = () => {
+  const styleId = 'rich-transcript-view-styles';
+  if (document.getElementById(styleId)) return;
+
+  const style = document.createElement('style');
+  style.id = styleId;
+  style.textContent = `
+    /* Avatar color-mix backgrounds */
+    .rich-transcript-message-avatar.user {
+      background-color: color-mix(in srgb, var(--nim-success) 20%, transparent);
+      color: var(--nim-success);
+    }
+    .rich-transcript-message-avatar.assistant {
+      background-color: color-mix(in srgb, var(--nim-primary) 20%, transparent);
+      color: var(--nim-primary);
+    }
+
+    /* Edit card icon background */
+    .rich-transcript-edit-card__icon {
+      background-color: color-mix(in srgb, var(--nim-primary) 12%, transparent);
+    }
+
+    /* Edit card status backgrounds */
+    .rich-transcript-edit-card__status--success {
+      background-color: color-mix(in srgb, var(--nim-success) 15%, transparent);
+    }
+    .rich-transcript-edit-card__status--error {
+      background-color: color-mix(in srgb, var(--nim-error) 15%, transparent);
+    }
+
+    /* Streaming avatar background */
+    .rich-transcript-streaming-avatar {
+      background-color: color-mix(in srgb, var(--nim-primary) 20%, transparent);
+      color: var(--nim-primary);
+    }
+
+    /* Sub-agent styling */
+    .rich-transcript-tool-card.sub-agent {
+      background-color: color-mix(in srgb, var(--nim-primary) 5%, var(--nim-bg-secondary));
+      border-color: color-mix(in srgb, var(--nim-primary) 20%, var(--nim-border));
+    }
+
+    /* VList scrollbar styling */
+    .rich-transcript-vlist {
+      scrollbar-width: thin;
+      scrollbar-color: var(--nim-scrollbar-thumb) transparent;
+    }
+    .rich-transcript-vlist::-webkit-scrollbar {
+      width: 8px;
+    }
+    .rich-transcript-vlist::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .rich-transcript-vlist::-webkit-scrollbar-thumb {
+      background-color: var(--nim-scrollbar-thumb);
+      border-radius: 4px;
+    }
+    .rich-transcript-vlist::-webkit-scrollbar-thumb:hover {
+      background-color: var(--nim-scrollbar-thumb-hover);
+    }
+
+    /* VList inner container styling */
+    .rich-transcript-vlist > div {
+      display: flex;
+      flex-direction: column;
+      max-width: 64rem;
+      margin: 0 auto;
+      padding: 0 0.75rem;
+    }
+    .rich-transcript-content.compact .rich-transcript-vlist > div {
+      max-width: 72rem;
+    }
+
+    /* Copy button hover visibility */
+    .rich-transcript-message-copy-action {
+      opacity: 0;
+      transition: opacity 0.15s ease-in-out;
+    }
+    .rich-transcript-message-content:hover .rich-transcript-message-copy-action {
+      opacity: 1;
+    }
+    .rich-transcript-message-copy-action:has(.copied) {
+      opacity: 1;
+    }
+
+    /* Animations */
+    @keyframes thinking-pulse {
+      0%, 100% {
+        opacity: 0.4;
+        transform: scale(0.9);
+      }
+      50% {
+        opacity: 1;
+        transform: scale(1.1);
+      }
+    }
+    .rich-transcript-waiting-dot {
+      animation: thinking-pulse 1.4s ease-in-out infinite;
+    }
+    .rich-transcript-waiting-dot:nth-child(1) { animation-delay: 0s; }
+    .rich-transcript-waiting-dot:nth-child(2) { animation-delay: 0.2s; }
+    .rich-transcript-waiting-dot:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes highlight {
+      0%, 100% { background-color: inherit; }
+      50% { background-color: var(--nim-bg-hover); }
+    }
+    .rich-transcript-message.highlight-message {
+      animation: highlight 2s ease-in-out;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    .rich-transcript-cursor {
+      animation: pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+  `;
+  document.head.appendChild(style);
+};
+
+// Initialize styles on module load
+if (typeof document !== 'undefined') {
+  injectRichTranscriptStyles();
+}
 
 interface RichTranscriptViewProps {
   sessionId: string;
@@ -511,7 +638,7 @@ export const RichTranscriptView = React.forwardRef<
       return (
         <div
           key={`tool-${toolIndex}-${depth}`}
-          className={`rich-transcript-tool-container ${depth > 0 ? 'nested' : ''}`}
+          className={`rich-transcript-tool-container mb-2 ${depth > 0 ? 'nested ml-0' : ''}`}
           style={{ marginLeft: depth > 0 ? '1rem' : '0' }}
         >
           <CustomWidget
@@ -530,30 +657,11 @@ export const RichTranscriptView = React.forwardRef<
     const editEntries = editTool ? extractEditsFromToolMessage(toolMsg) : [];
     const toolDisplayName = formatToolDisplayName(tool.name || '') || tool.name || 'Tool';
 
-    // DEBUG: Log tool detection results
-    // if (tool.name && (tool.name.toLowerCase().includes('edit') || tool.name.toLowerCase().includes('write'))) {
-    //   console.log('[RichTranscriptView] Tool detection:', {
-    //     toolName: tool.name,
-    //     isEditTool: editTool,
-    //     editEntriesCount: editEntries.length,
-    //     toolStructure: {
-    //       hasArguments: !!tool.arguments,
-    //       hasResult: !!tool.result,
-    //       hasEdits: !!toolMsg.edits,
-    //       argumentsKeys: tool.arguments ? Object.keys(tool.arguments) : [],
-    //       resultKeys: tool.result ? Object.keys(tool.result) : []
-    //     }
-    //   });
-    //   if (editEntries.length > 0) {
-    //     console.log('[RichTranscriptView] Edit entries:', editEntries);
-    //   }
-    // }
-
     if (editTool && editEntries.length > 0) {
       return (
         <div
           key={`tool-${toolIndex}-${depth}`}
-          className={`rich-transcript-tool-container ${depth > 0 ? 'nested' : ''}`}
+          className={`rich-transcript-tool-container mb-2 ${depth > 0 ? 'nested ml-0' : ''}`}
           style={{ marginLeft: depth > 0 ? '1rem' : '0' }}
         >
           <EditToolResultCard
@@ -575,26 +683,26 @@ export const RichTranscriptView = React.forwardRef<
 
     // Special styling for sub-agents
     const cardClass = isSubAgent
-      ? 'rich-transcript-tool-card sub-agent'
+      ? 'rich-transcript-tool-card sub-agent rounded border border-[var(--nim-border)] overflow-hidden'
       : depth > 0
-        ? 'rich-transcript-tool-card child-tool'
-        : 'rich-transcript-tool-card';
+        ? 'rich-transcript-tool-card child-tool rounded border border-[var(--nim-border)] overflow-hidden bg-[var(--nim-bg-tertiary)]'
+        : 'rich-transcript-tool-card rounded border border-[var(--nim-border)] overflow-hidden bg-[var(--nim-bg-secondary)]';
 
     return (
-      <div key={`tool-${toolIndex}-${depth}`} className={`rich-transcript-tool-container ${depth > 0 ? 'nested' : ''}`} style={{ marginLeft: depth > 0 ? '1rem' : '0' }}>
+      <div key={`tool-${toolIndex}-${depth}`} className={`rich-transcript-tool-container mb-2 ${depth > 0 ? 'nested ml-0' : ''}`} style={{ marginLeft: depth > 0 ? '1rem' : '0' }}>
         <div className={cardClass}>
-          <button onClick={() => toggleToolExpand(toolId)} className="rich-transcript-tool-button">
+          <button onClick={() => toggleToolExpand(toolId)} className="rich-transcript-tool-button w-full py-1 px-2 flex items-center gap-1.5 text-left border-none cursor-pointer text-sm bg-transparent">
             {isSubAgent ? (
               // Document/clipboard icon for sub-agents
-              <MaterialSymbol icon="description" size={16} className="rich-transcript-tool-icon sub-agent-icon" />
+              <MaterialSymbol icon="description" size={16} className="rich-transcript-tool-icon sub-agent-icon w-4 h-4 text-[var(--nim-primary)] shrink-0" />
             ) : (
               // Wrench icon for regular tools
-              <MaterialSymbol icon="build" size={16} className="rich-transcript-tool-icon" />
+              <MaterialSymbol icon="build" size={16} className="rich-transcript-tool-icon w-4 h-4 text-[var(--nim-primary)] shrink-0" />
             )}
-            <span className="rich-transcript-tool-name" title={tool.name || undefined}>
+            <span className="rich-transcript-tool-name font-mono text-sm text-[var(--nim-text)] font-medium" title={tool.name || undefined}>
               {isSubAgent ? 'Sub-Agent' : toolDisplayName}
               {isSubAgent && tool.subAgentType && (
-                <span className="rich-transcript-tool-subagent-type"> [{tool.subAgentType}]</span>
+                <span className="rich-transcript-tool-subagent-type text-[var(--nim-primary)] font-semibold"> [{tool.subAgentType}]</span>
               )}
             </span>
             {!isSubAgent && tool.arguments && (() => {
@@ -610,7 +718,7 @@ export const RichTranscriptView = React.forwardRef<
                   <span
                     role="link"
                     tabIndex={0}
-                    className="rich-transcript-tool-args rich-transcript-tool-args-link"
+                    className="rich-transcript-tool-args rich-transcript-tool-args-link text-[var(--nim-text-muted)] flex-1 overflow-hidden text-ellipsis whitespace-nowrap bg-transparent border-none p-0 m-0 font-inherit text-[var(--accent-link)] cursor-pointer no-underline text-left hover:underline"
                     onClick={(e) => {
                       e.stopPropagation();
                       onOpenFile(filePath);
@@ -628,31 +736,31 @@ export const RichTranscriptView = React.forwardRef<
                   </span>
                 );
               }
-              return <span className="rich-transcript-tool-args">{argStr}</span>;
+              return <span className="rich-transcript-tool-args text-[var(--nim-text-muted)] flex-1 overflow-hidden text-ellipsis whitespace-nowrap">{argStr}</span>;
             })()}
             {tool.result && !(toolMsg as any).isError && (
-              <MaterialSymbol icon="check_circle" size={16} className="rich-transcript-tool-success" />
+              <MaterialSymbol icon="check_circle" size={16} className="rich-transcript-tool-success w-4 h-4 text-[var(--nim-success)] shrink-0" />
             )}
             {tool.result && (toolMsg as any).isError && (
-              <MaterialSymbol icon="cancel" size={16} className="rich-transcript-tool-error" />
+              <MaterialSymbol icon="cancel" size={16} className="rich-transcript-tool-error w-4 h-4 text-[var(--nim-error)] shrink-0" />
             )}
-            <MaterialSymbol icon={isExpanded ? "expand_more" : "chevron_right"} size={16} className="rich-transcript-tool-chevron" />
+            <MaterialSymbol icon={isExpanded ? "expand_more" : "chevron_right"} size={16} className="rich-transcript-tool-chevron w-3 h-3 text-[var(--nim-text-faint)]" />
           </button>
 
           {isExpanded && (
-            <div className="rich-transcript-tool-expanded">
+            <div className="rich-transcript-tool-expanded p-2 text-sm border-t border-[var(--nim-border)]">
               {/* Show description for sub-agents */}
               {isSubAgent && description && (
-                <div className="rich-transcript-tool-section">
-                  <div className="rich-transcript-tool-description">{description}</div>
+                <div className="rich-transcript-tool-section mb-1.5">
+                  <div className="rich-transcript-tool-description text-sm text-[var(--nim-text)] leading-relaxed mb-2">{description}</div>
                 </div>
               )}
 
               {/* Show prompt for sub-agents (collapsable) */}
               {isSubAgent && prompt && (
-                <details className="rich-transcript-tool-details">
-                  <summary className="rich-transcript-tool-details-summary">View full prompt</summary>
-                  <div className="rich-transcript-tool-details-content">
+                <details className="rich-transcript-tool-details my-2">
+                  <summary className="rich-transcript-tool-details-summary text-xs text-[var(--nim-text-faint)] cursor-pointer py-1 select-none hover:text-[var(--nim-text-muted)]">View full prompt</summary>
+                  <div className="rich-transcript-tool-details-content mt-1 text-sm">
                     <MarkdownRenderer content={prompt} isUser={false} />
                   </div>
                 </details>
@@ -660,19 +768,19 @@ export const RichTranscriptView = React.forwardRef<
 
               {/* Show regular tool arguments (not for sub-agents) */}
               {!isSubAgent && tool.arguments && Object.keys(tool.arguments).length > 0 && (
-                <div className="rich-transcript-tool-section">
-                  <div className="rich-transcript-tool-section-label">Arguments:</div>
+                <div className="rich-transcript-tool-section mb-1.5">
+                  <div className="rich-transcript-tool-section-label text-[var(--nim-text-faint)] mb-0.5 text-xs">Arguments:</div>
                   <JSONViewer data={tool.arguments} maxHeight="16rem" />
                 </div>
               )}
 
               {/* Recursively render child tools */}
               {hasChildren && (
-                <div className="rich-transcript-tool-section">
-                  <div className="rich-transcript-tool-section-label">
+                <div className="rich-transcript-tool-section mb-1.5">
+                  <div className="rich-transcript-tool-section-label text-[var(--nim-text-faint)] mb-0.5 text-xs">
                     Sub-agent Actions ({tool.childToolCalls!.length}):
                   </div>
-                  <div className="rich-transcript-subagent-children">
+                  <div className="rich-transcript-subagent-children flex flex-col gap-1 mt-2">
                     {tool.childToolCalls!.map((childMsg, childIdx) =>
                       renderToolCard(childMsg, childIdx, depth + 1)
                     )}
@@ -682,11 +790,11 @@ export const RichTranscriptView = React.forwardRef<
 
               {/* Show result - extract text from JSON if possible */}
               {tool.result && (
-                <details className="rich-transcript-tool-details" open={!isSubAgent}>
-                  <summary className="rich-transcript-tool-details-summary">
+                <details className="rich-transcript-tool-details my-2" open={!isSubAgent}>
+                  <summary className="rich-transcript-tool-details-summary text-xs text-[var(--nim-text-faint)] cursor-pointer py-1 select-none hover:text-[var(--nim-text-muted)]">
                     {isSubAgent ? 'View result' : 'Result'}
                   </summary>
-                  <div className="rich-transcript-tool-details-content">
+                  <div className="rich-transcript-tool-details-content mt-1 text-sm">
                     {resultText ? (
                       <MarkdownRenderer content={resultText} isUser={false} />
                     ) : typeof tool.result === 'string' ? (
@@ -705,7 +813,7 @@ export const RichTranscriptView = React.forwardRef<
   };
 
   return (
-    <div className="rich-transcript-view">
+    <div className="rich-transcript-view h-full flex flex-col bg-[var(--nim-bg)] relative overflow-x-hidden">
       {/* Search Bar */}
       <TranscriptSearchBar
         isVisible={showSearchBar}
@@ -715,32 +823,32 @@ export const RichTranscriptView = React.forwardRef<
 
       {/* Settings Panel */}
       {showSettings && onSettingsChange && (
-        <div className="rich-transcript-settings">
-          <div className="rich-transcript-settings-controls">
-            <label className="rich-transcript-settings-label">
+        <div className="rich-transcript-settings py-2 px-3 border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)]">
+          <div className="rich-transcript-settings-controls flex flex-wrap gap-3 text-xs">
+            <label className="rich-transcript-settings-label flex items-center gap-2">
               <input
                 type="checkbox"
                 checked={settings.showToolCalls}
                 onChange={(e) => onSettingsChange({ ...settings, showToolCalls: e.target.checked })}
-                className="rich-transcript-settings-checkbox"
+                className="rich-transcript-settings-checkbox rounded border border-[var(--nim-border)]"
               />
               <span>Show Tool Calls</span>
             </label>
-            <label className="rich-transcript-settings-label">
+            <label className="rich-transcript-settings-label flex items-center gap-2">
               <input
                 type="checkbox"
                 checked={settings.compactMode}
                 onChange={(e) => onSettingsChange({ ...settings, compactMode: e.target.checked })}
-                className="rich-transcript-settings-checkbox"
+                className="rich-transcript-settings-checkbox rounded border border-[var(--nim-border)]"
               />
               <span>Compact Mode</span>
             </label>
-            <label className="rich-transcript-settings-label">
+            <label className="rich-transcript-settings-label flex items-center gap-2">
               <input
                 type="checkbox"
                 checked={settings.showThinking}
                 onChange={(e) => onSettingsChange({ ...settings, showThinking: e.target.checked })}
-                className="rich-transcript-settings-checkbox"
+                className="rich-transcript-settings-checkbox rounded border border-[var(--nim-border)]"
               />
               <span>Show Thinking</span>
             </label>
@@ -749,30 +857,30 @@ export const RichTranscriptView = React.forwardRef<
       )}
 
       {/* Messages */}
-      <div ref={scrollContainerRef} className="rich-transcript-scroll-container">
-        <div className={`rich-transcript-content ${settings.compactMode ? 'compact' : 'normal'}`}>
+      <div ref={scrollContainerRef} className="rich-transcript-scroll-container flex-1 overflow-hidden relative">
+        <div className={`rich-transcript-content mx-auto py-1 h-full ${settings.compactMode ? 'compact' : 'normal'}`}>
           {messages.length === 0 && !isWaitingForResponse ? (
-            <div className="rich-transcript-empty">
-              <div className="rich-transcript-empty-content">
-                <div className="rich-transcript-empty-title">
+            <div className="rich-transcript-empty flex flex-col items-center p-8 px-4 h-full max-w-4xl mx-auto">
+              <div className="rich-transcript-empty-content flex-1 flex flex-col justify-center max-w-[400px] text-left">
+                <div className="rich-transcript-empty-title text-[var(--nim-text-faint)] text-sm mb-2 leading-relaxed">
                   {getProviderDisplayName(provider)} is ready to assist with:
                 </div>
-                <ul className="rich-transcript-empty-capabilities">
-                  <li>Web research</li>
-                  <li>Code analysis</li>
-                  <li>File editing</li>
+                <ul className="rich-transcript-empty-capabilities list-none p-0 m-0 ml-6">
+                  <li className="text-[var(--nim-text-faint)] text-sm py-1 pl-3 relative leading-relaxed before:content-['•'] before:absolute before:left-0 before:text-[var(--nim-text-faint)]">Web research</li>
+                  <li className="text-[var(--nim-text-faint)] text-sm py-1 pl-3 relative leading-relaxed before:content-['•'] before:absolute before:left-0 before:text-[var(--nim-text-faint)]">Code analysis</li>
+                  <li className="text-[var(--nim-text-faint)] text-sm py-1 pl-3 relative leading-relaxed before:content-['•'] before:absolute before:left-0 before:text-[var(--nim-text-faint)]">File editing</li>
                 </ul>
-                <div className="rich-transcript-empty-footer">
+                <div className="rich-transcript-empty-footer text-[var(--nim-text-faint)] text-sm mt-3 leading-relaxed">
                   Enter a task below to get started
                 </div>
               </div>
               {renderEmptyExtra?.()}
             </div>
           ) : (
-            <div className="rich-transcript-messages">
+            <div className="rich-transcript-messages flex flex-col max-w-full overflow-x-hidden h-full">
               <VList
                   ref={vlistRef}
-                  className="rich-transcript-vlist"
+                  className="rich-transcript-vlist !h-full !w-full"
                   style={{ height: '100%' }}
                   onScroll={(offset) => {
                     // Track if we're at the bottom for auto-scroll
@@ -826,7 +934,7 @@ export const RichTranscriptView = React.forwardRef<
                     // Render orphaned tool calls
                     if (isTool && message.toolCall) {
                       return (
-                        <div key={`${sessionId}-${index}`} className="rich-transcript-tool-container orphan">
+                        <div key={`${sessionId}-${index}`} className="rich-transcript-tool-container orphan ml-6 mb-2">
                           {renderToolCard(message, index, 0)}
                         </div>
                       );
@@ -838,28 +946,28 @@ export const RichTranscriptView = React.forwardRef<
                         ref={(el) => {
                           if (el) messageRefs.current.set(index, el);
                         }}
-                        className={`rich-transcript-message ${isUser ? 'user' : 'assistant'} ${settings.compactMode ? 'compact' : 'normal'} ${!isNewGroup ? 'continuation' : ''}`}
+                        className={`rich-transcript-message rounded-md relative max-w-full overflow-x-hidden break-words mb-2 ${isUser ? 'user bg-[var(--nim-bg-secondary)]' : 'assistant bg-[var(--nim-bg)]'} ${settings.compactMode ? 'compact p-2' : 'normal p-3'} ${!isNewGroup ? 'continuation -mt-1' : ''}`}
                       >
                         {isNewGroup && (
-                          <div className="rich-transcript-message-header">
-                            <div className={`rich-transcript-message-avatar ${isUser ? 'user' : 'assistant'}`}>
+                          <div className="rich-transcript-message-header flex items-center gap-2 mb-1.5">
+                            <div className={`rich-transcript-message-avatar rounded-full p-1 shrink-0 ${isUser ? 'user' : 'assistant'}`}>
                               {isUser && (
                                 <MaterialSymbol icon="person" size={18} />
                               )}
                             </div>
-                            <div className="rich-transcript-message-meta">
-                              <span className="rich-transcript-message-sender">
+                            <div className="rich-transcript-message-meta flex-1 flex items-baseline gap-2">
+                              <span className="rich-transcript-message-sender font-medium text-[var(--nim-text)] text-sm">
                                 {isUser ? 'You' : ''}
                               </span>
-                              <span className="rich-transcript-message-time">
+                              <span className="rich-transcript-message-time text-xs text-[var(--nim-text-faint)]">
                                 {formatMessageTime(message.timestamp)}
                               </span>
                             </div>
-                            <div className="rich-transcript-message-actions">
+                            <div className="rich-transcript-message-actions flex items-center gap-1">
                               {message.content.length > 200 && (
                                 <button
                                   onClick={() => toggleMessageCollapse(index)}
-                                  className="rich-transcript-collapse-button"
+                                  className="rich-transcript-collapse-button p-1 rounded-md bg-transparent border-none text-[var(--nim-text-faint)] cursor-pointer transition-colors hover:bg-[var(--nim-bg-secondary)] hover:text-[var(--nim-text-muted)]"
                                   title={isCollapsed ? "Show full message" : "Collapse message"}
                                 >
                                   {isCollapsed ? (
@@ -874,25 +982,25 @@ export const RichTranscriptView = React.forwardRef<
                         )}
 
                         {toolMessagesBefore.length > 0 && (
-                          <div className={`rich-transcript-tool-messages ${isNewGroup ? 'indented' : ''}`}>
+                          <div className={`rich-transcript-tool-messages flex flex-col gap-2 mb-1.5 ${isNewGroup ? 'indented ml-6' : ''}`}>
                             {toolMessagesBefore.map(({ message: toolMsg, index: toolIndex }) =>
                               renderToolCard(toolMsg, toolIndex, 0)
                             )}
                           </div>
                         )}
 
-                        <div className={`rich-transcript-message-content ${isNewGroup ? '' : 'no-indent'}`}>
+                        <div className={`rich-transcript-message-content relative ${isNewGroup ? 'ml-6' : 'no-indent ml-0'}`}>
                           {/* Copy button - shows on hover */}
-                          <div className="rich-transcript-message-copy-action">
+                          <div className="rich-transcript-message-copy-action absolute -top-1 right-0 z-[1]">
                             <button
                               onClick={() => copyMessageContent(message, index)}
-                              className={`rich-transcript-copy-button ${copiedMessageIndex === index ? 'copied' : ''}`}
+                              className={`rich-transcript-copy-button p-1.5 rounded-md bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] cursor-pointer transition-all flex items-center justify-center hover:bg-[var(--nim-bg-hover)] ${copiedMessageIndex === index ? 'copied' : ''}`}
                               title="Copy as Markdown"
                             >
                               {copiedMessageIndex === index ? (
-                                <MaterialSymbol icon="check" size={16} />
+                                <MaterialSymbol icon="check" size={16} className="text-[var(--nim-success)]" />
                               ) : (
-                                <MaterialSymbol icon="content_copy" size={16} />
+                                <MaterialSymbol icon="content_copy" size={16} className="text-[var(--nim-text-faint)]" />
                               )}
                             </button>
                           </div>
@@ -916,11 +1024,11 @@ export const RichTranscriptView = React.forwardRef<
                     );
                   })}
                   {isWaitingForResponse && (
-                    <div key="waiting" className="rich-transcript-waiting">
-                      <div className="rich-transcript-waiting-dots">
-                        <div className="rich-transcript-waiting-dot" />
-                        <div className="rich-transcript-waiting-dot" />
-                        <div className="rich-transcript-waiting-dot" />
+                    <div key="waiting" className="rich-transcript-waiting flex items-center gap-2 text-[var(--nim-text-muted)] italic py-2 px-4 mb-2">
+                      <div className="rich-transcript-waiting-dots flex gap-1">
+                        <div className="rich-transcript-waiting-dot w-2 h-2 rounded-full bg-[var(--nim-primary)]" />
+                        <div className="rich-transcript-waiting-dot w-2 h-2 rounded-full bg-[var(--nim-primary)]" />
+                        <div className="rich-transcript-waiting-dot w-2 h-2 rounded-full bg-[var(--nim-primary)]" />
                       </div>
                       <span className="rich-transcript-waiting-text">Thinking...</span>
                     </div>
@@ -932,10 +1040,10 @@ export const RichTranscriptView = React.forwardRef<
 
         {/* Scroll to bottom button */}
         {showScrollButton && (
-          <div className="rich-transcript-scroll-button-container">
+          <div className="rich-transcript-scroll-button-container sticky bottom-3 flex justify-center pointer-events-none">
             <button
               onClick={scrollToBottom}
-              className="rich-transcript-scroll-button"
+              className="rich-transcript-scroll-button pointer-events-auto p-2 bg-[var(--nim-primary)] text-white rounded-full border-none shadow-lg cursor-pointer transition-all hover:bg-[var(--nim-primary-hover)] hover:scale-110"
               title="Scroll to bottom"
             >
               <MaterialSymbol icon="arrow_downward" size={20} />

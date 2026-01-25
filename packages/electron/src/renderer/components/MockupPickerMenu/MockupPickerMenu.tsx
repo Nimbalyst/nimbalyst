@@ -17,8 +17,6 @@ import {
 import { $getRoot } from 'lexical';
 import type { LexicalEditor } from 'lexical';
 
-import './MockupPickerMenu.css';
-
 interface MockupPickerMenuProps {
   onClose: () => void;
 }
@@ -348,45 +346,61 @@ function MockupPickerMenu({ onClose }: MockupPickerMenuProps): JSX.Element {
   }, [searchQuery]);
 
   return (
-    <div className="mockup-picker-overlay">
-      <div ref={menuRef} className="mockup-picker-menu" onKeyDown={handleKeyDown}>
+    <div className="mockup-picker-overlay fixed inset-0 z-[1000] flex items-start justify-center pt-[20vh]">
+      <div
+        ref={menuRef}
+        className="mockup-picker-menu flex flex-col overflow-hidden w-80 max-h-[400px] rounded-lg border border-[var(--nim-border)] bg-[var(--nim-bg)] shadow-[0_4px_20px_rgba(0,0,0,0.15)]"
+        onKeyDown={handleKeyDown}
+      >
         {isCreatingNew ? (
-          <div className="mockup-picker-create">
+          <div className="mockup-picker-create p-2">
             <input
               ref={inputRef}
               type="text"
-              className="mockup-picker-input"
+              className="mockup-picker-input w-full px-4 py-3 border-none border-b border-b-[var(--nim-border)] text-sm bg-transparent text-[var(--nim-text)] outline-none placeholder:text-[var(--nim-text-faint)]"
               placeholder="Enter mockup name..."
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               autoFocus
             />
-            <div className="mockup-picker-create-hint">Press Enter to create, Escape to cancel</div>
+            <div className="mockup-picker-create-hint px-3 py-2 text-xs text-[var(--nim-text-faint)]">
+              Press Enter to create, Escape to cancel
+            </div>
           </div>
         ) : (
           <>
             <input
               ref={inputRef}
               type="text"
-              className="mockup-picker-input"
+              className="mockup-picker-input w-full px-4 py-3 border-none border-b border-b-[var(--nim-border)] text-sm bg-transparent text-[var(--nim-text)] outline-none placeholder:text-[var(--nim-text-faint)]"
               placeholder="Search mockups..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
-            <div className="mockup-picker-list">
+            <div className="mockup-picker-list flex-1 overflow-y-auto p-1">
               {isLoading ? (
-                <div className="mockup-picker-loading">Loading...</div>
+                <div className="mockup-picker-loading p-4 text-center text-sm text-[var(--nim-text-muted)]">
+                  Loading...
+                </div>
               ) : (
                 options.map((option, index) => (
                   <div
                     key={option.id}
-                    className={`mockup-picker-item ${index === selectedIndex ? 'selected' : ''} ${option.isNew ? 'new-item' : ''}`}
+                    className={`mockup-picker-item flex flex-col gap-0.5 px-3 py-2 rounded cursor-pointer text-[var(--nim-text)] ${
+                      index === selectedIndex ? 'selected bg-[var(--nim-bg-hover)]' : ''
+                    } ${
+                      option.isNew
+                        ? 'new-item text-[var(--nim-primary)] font-medium border-b border-b-[var(--nim-border)] mb-1 rounded-t rounded-b-none'
+                        : 'hover:bg-[var(--nim-bg-hover)]'
+                    }`}
                     onClick={() => handleSelect(option)}
                     onMouseEnter={() => setSelectedIndex(index)}
                   >
-                    <span className="mockup-picker-item-label">{option.label}</span>
+                    <span className="mockup-picker-item-label text-sm">{option.label}</span>
                     {'description' in option && option.description && (
-                      <span className="mockup-picker-item-desc">{option.description}</span>
+                      <span className="mockup-picker-item-desc text-xs text-[var(--nim-text-faint)] overflow-hidden text-ellipsis whitespace-nowrap">
+                        {option.description}
+                      </span>
                     )}
                   </div>
                 ))

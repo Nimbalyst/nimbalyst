@@ -79,7 +79,7 @@ export function ImageGenerationSettings({ storage, theme }: SettingsPanelProps) 
 
   if (isLoading) {
     return (
-      <div style={{ padding: 20, color: 'var(--text-secondary)' }}>
+      <div style={{ padding: 20, color: 'var(--nim-text-muted)' }}>
         Loading settings...
       </div>
     );
@@ -90,7 +90,7 @@ export function ImageGenerationSettings({ storage, theme }: SettingsPanelProps) 
       <h3 style={{ margin: '0 0 8px 0', fontSize: 16, fontWeight: 600 }}>
         Google AI API Key
       </h3>
-      <p style={{ margin: '0 0 16px 0', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+      <p style={{ margin: '0 0 16px 0', fontSize: 13, color: 'var(--nim-text-muted)', lineHeight: 1.5 }}>
         Required for image generation using Google's Imagen model.{' '}
         <a
           href="https://aistudio.google.com/app/apikey"
@@ -134,7 +134,7 @@ export function ImageGenerationSettings({ storage, theme }: SettingsPanelProps) 
             borderRadius: 6,
             border: '1px solid var(--border-color)',
             background: 'var(--input-background)',
-            color: 'var(--text-primary)',
+            color: 'var(--nim-text)',
             fontSize: 14,
           }}
           onKeyDown={(e) => {
@@ -150,8 +150,8 @@ export function ImageGenerationSettings({ storage, theme }: SettingsPanelProps) 
             padding: '8px 16px',
             borderRadius: 6,
             border: 'none',
-            background: apiKey.trim() ? 'var(--accent-color)' : 'var(--surface-secondary)',
-            color: apiKey.trim() ? '#ffffff' : 'var(--text-secondary)',
+            background: apiKey.trim() ? 'var(--accent-color)' : 'var(--nim-bg-secondary)',
+            color: apiKey.trim() ? '#ffffff' : 'var(--nim-text-muted)',
             cursor: apiKey.trim() ? 'pointer' : 'not-allowed',
             fontWeight: 500,
             fontSize: 14,
@@ -168,7 +168,7 @@ export function ImageGenerationSettings({ storage, theme }: SettingsPanelProps) 
               borderRadius: 6,
               border: '1px solid var(--border-color)',
               background: 'transparent',
-              color: 'var(--text-secondary)',
+              color: 'var(--nim-text-muted)',
               cursor: 'pointer',
               fontSize: 14,
             }}
@@ -202,7 +202,7 @@ export function ImageGenerationSettings({ storage, theme }: SettingsPanelProps) 
         <h4 style={{ margin: '0 0 8px 0', fontSize: 14, fontWeight: 500 }}>
           About Image Generation
         </h4>
-        <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+        <p style={{ margin: 0, fontSize: 13, color: 'var(--nim-text-muted)', lineHeight: 1.5 }}>
           This extension uses Google's Imagen 4 model to generate images from text prompts.
           Create architecture diagrams, UI wireframes, illustrations, and more directly in Nimbalyst.
         </p>

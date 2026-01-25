@@ -12,7 +12,6 @@ import { KeyboardShortcuts } from '../../shared/KeyboardShortcuts';
 import { HelpTooltip } from '../help';
 import { store, gitStatusMapAtom, type FileGitStatus as AtomFileGitStatus } from '../store';
 import { useTabsActions } from '../contexts/TabsContext';
-import '../WorkspaceSidebar.css';
 
 interface FileTreeItem {
   name: string;
@@ -1114,27 +1113,27 @@ export function WorkspaceSidebar({
   const workspaceColor = generateWorkspaceColor(workspacePath);
 
   return (
-    <div className="workspace-sidebar"
+    <div className="workspace-sidebar w-full bg-[var(--nim-bg-secondary)] border-r border-[var(--nim-border)] flex flex-col h-full overflow-hidden relative"
       onDragOver={handleRootDragOver}
       onDragLeave={handleRootDragLeave}
       onDrop={handleRootDrop}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="workspace-color-accent" style={{ backgroundColor: workspaceColor }} />
-      <div className="workspace-sidebar-header">
-        <div className="workspace-identity">
-          <h3 className="workspace-name">{workspaceName}</h3>
-          <div className="workspace-path" title={workspacePath}>
+      <div className="workspace-color-accent h-[3px] w-full opacity-90 shrink-0" style={{ backgroundColor: workspaceColor }} />
+      <div className="workspace-sidebar-header px-3 pt-2.5 pb-2 border-b border-[var(--nim-border)] flex items-center justify-between bg-[var(--nim-bg)] gap-2 min-h-[56px]">
+        <div className="workspace-identity flex-1 min-w-0 flex flex-col gap-0.5">
+          <h3 className="workspace-name m-0 text-[15px] font-bold text-[var(--nim-text)] overflow-hidden text-ellipsis whitespace-nowrap tracking-tight leading-tight">{workspaceName}</h3>
+          <div className="workspace-path text-[11px] text-[var(--nim-text-muted)] overflow-hidden text-ellipsis whitespace-nowrap opacity-75" title={workspacePath}>
             {workspacePath}
           </div>
         </div>
-        <div className="workspace-sidebar-actions">
+        <div className="workspace-sidebar-actions flex items-center gap-1">
           {currentView === 'files' && (
             <>
               <button
                 ref={newFileButtonRef}
-                className="workspace-action-button"
+                className="workspace-action-button bg-transparent border-none p-1.5 cursor-pointer rounded text-[var(--nim-text-faint)] flex items-center justify-center transition-all duration-200 relative hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]"
                 onClick={handleNewFileButtonClick}
                 title="New file"
                 aria-label="New file"
@@ -1144,7 +1143,7 @@ export function WorkspaceSidebar({
                 </span>
               </button>
               <button
-                className="workspace-action-button"
+                className="workspace-action-button bg-transparent border-none p-1.5 cursor-pointer rounded text-[var(--nim-text-faint)] flex items-center justify-center transition-all duration-200 relative hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]"
                 onClick={handleNewFolder}
                 title="New folder"
                 aria-label="New folder"
@@ -1157,7 +1156,7 @@ export function WorkspaceSidebar({
                 <HelpTooltip testId="file-tree-quick-open-button">
                   <button
                     data-testid="file-tree-quick-open-button"
-                    className="workspace-action-button"
+                    className="workspace-action-button bg-transparent border-none p-1.5 cursor-pointer rounded text-[var(--nim-text-faint)] flex items-center justify-center transition-all duration-200 relative hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]"
                     onClick={onOpenQuickSearch}
                     aria-label="Search files"
                   >
@@ -1171,7 +1170,7 @@ export function WorkspaceSidebar({
                 <button
                   ref={filterButtonRef}
                   data-testid="file-tree-filter-button"
-                  className="workspace-action-button"
+                  className="workspace-action-button bg-transparent border-none p-1.5 cursor-pointer rounded text-[var(--nim-text-faint)] flex items-center justify-center transition-all duration-200 relative hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]"
                   onClick={handleFilterButtonClick}
                   aria-label="Filter files"
                 >
@@ -1179,7 +1178,7 @@ export function WorkspaceSidebar({
                     filter_alt
                   </span>
                   {fileTreeFilter !== 'all' && (
-                    <span className="filter-active-indicator" title="Filter active">•</span>
+                    <span className="filter-active-indicator text-[var(--nim-primary)] font-bold text-base leading-none absolute top-0.5 right-0.5" title="Filter active">•</span>
                   )}
                 </button>
               </HelpTooltip>
@@ -1190,22 +1189,22 @@ export function WorkspaceSidebar({
 
       {currentView === 'files' ? (
         <>
-          <div className="workspace-section-label">Files</div>
-          <div className={`workspace-file-tree ${isDragOverRoot ? 'drag-over-root' : ''}`}>
+          <div className="workspace-section-label nim-section-label py-1.5 px-3 border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] shrink-0">Files</div>
+          <div className={`workspace-file-tree nim-scrollbar flex-1 overflow-y-auto overflow-x-hidden py-2 relative transition-colors duration-200 ${isDragOverRoot ? 'drag-over-root bg-[var(--nim-accent-subtle)] border-2 border-dashed border-[var(--nim-primary)] !py-1.5' : ''}`}>
             {shouldShowFilterHint && (
-              <div className="file-tree-filter-hint">
+              <div className="file-tree-filter-hint py-2 px-3 text-xs text-[var(--nim-text-faint)] leading-relaxed border-b border-[var(--nim-border)] mb-1">
                 {aiFilterHintText}
               </div>
             )}
             {isFilteredTreeEmpty && fileTreeFilter !== 'all' ? (
-              <div className="file-tree-empty-state">
-                <span className="material-symbols-outlined file-tree-empty-icon">
+              <div className="file-tree-empty-state flex flex-col items-center justify-center py-12 px-6 text-center min-h-[300px]">
+                <span className="material-symbols-outlined file-tree-empty-icon text-5xl text-[var(--nim-text-faint)] opacity-50 mb-4">
                   filter_list_off
                 </span>
-                <h3 className="file-tree-empty-title">{getEmptyStateMessage().title}</h3>
-                <p className="file-tree-empty-description">{getEmptyStateMessage().description}</p>
+                <h3 className="file-tree-empty-title m-0 mb-2 text-base font-semibold text-[var(--nim-text)]">{getEmptyStateMessage().title}</h3>
+                <p className="file-tree-empty-description m-0 mb-6 text-[13px] text-[var(--nim-text-muted)] leading-normal max-w-[280px]">{getEmptyStateMessage().description}</p>
                 <button
-                  className="file-tree-clear-filter-btn"
+                  className="file-tree-clear-filter-btn nim-btn-primary px-4 py-2 rounded-md text-[13px] font-medium hover:opacity-90 hover:-translate-y-px active:translate-y-0 transition-all duration-200"
                   onClick={() => handleFilterChange('all')}
                 >
                   Clear Filter
@@ -1232,7 +1231,7 @@ export function WorkspaceSidebar({
               />
             )}
             {isDragOverRoot && (
-              <div className="root-drop-indicator">
+              <div className="root-drop-indicator sticky top-0 bg-gradient-to-b from-[var(--nim-accent-subtle)] to-transparent text-center text-[13px] font-medium text-[var(--nim-primary)] z-10 mb-2 rounded">
                 Drop here to move to workspace root
               </div>
             )}

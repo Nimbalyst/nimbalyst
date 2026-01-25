@@ -7,7 +7,6 @@
  */
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import './TerminalBottomPanel.css';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import { TerminalPanel } from '../Terminal/TerminalPanel';
 import { TerminalTab } from './TerminalTab';
@@ -233,13 +232,16 @@ export const TerminalBottomPanel: React.FC<TerminalBottomPanelProps> = ({
 
   return (
     <div
-      className="terminal-bottom-panel-container"
+      className="terminal-bottom-panel-container relative shrink-0 flex flex-col border-t-2 border-[var(--nim-border)]"
       style={{ height: `${height}px` }}
     >
-      <div className="terminal-bottom-panel-resize-handle" onMouseDown={handleMouseDown} />
-      <div className="terminal-bottom-panel">
-        <div className="terminal-bottom-panel-header">
-          <div className="terminal-bottom-panel-tabs">
+      <div
+        className="terminal-bottom-panel-resize-handle absolute top-0 left-0 right-0 h-1 cursor-ns-resize z-10 bg-transparent hover:bg-[var(--nim-primary)]"
+        onMouseDown={handleMouseDown}
+      />
+      <div className="terminal-bottom-panel flex flex-col h-full bg-[var(--nim-bg)] overflow-hidden">
+        <div className="terminal-bottom-panel-header flex items-center justify-between h-8 px-1.5 bg-[var(--nim-bg-secondary)] border-b border-[var(--nim-border)] shrink-0">
+          <div className="terminal-bottom-panel-tabs flex gap-0.5 items-center overflow-x-auto flex-1 min-w-0 [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:bg-[var(--nim-bg-tertiary)] [&::-webkit-scrollbar-thumb]:rounded-sm">
             {terminals.map((terminal) => (
               <TerminalTab
                 key={terminal.id}
@@ -250,7 +252,7 @@ export const TerminalBottomPanel: React.FC<TerminalBottomPanelProps> = ({
               />
             ))}
             <button
-              className="terminal-bottom-panel-new-tab"
+              className="terminal-bottom-panel-new-tab flex items-center justify-center w-6 h-6 p-0 bg-transparent border-none text-[var(--nim-text-muted)] cursor-pointer rounded shrink-0 transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]"
               onClick={handleCreateTerminal}
               title="New Terminal"
             >
@@ -258,18 +260,18 @@ export const TerminalBottomPanel: React.FC<TerminalBottomPanelProps> = ({
             </button>
           </div>
           <button
-            className="terminal-bottom-panel-close"
+            className="terminal-bottom-panel-close flex items-center justify-center w-6 h-6 p-0 bg-transparent border-none text-[var(--nim-text-muted)] cursor-pointer rounded ml-2 shrink-0 transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]"
             onClick={handleClose}
             title="Close panel"
           >
             <MaterialSymbol icon="close" size={18} />
           </button>
         </div>
-        <div className="terminal-bottom-panel-content">
+        <div className="terminal-bottom-panel-content flex-1 overflow-hidden flex flex-col min-h-0">
           {terminals.map((terminal) => (
             <div
               key={terminal.id}
-              className="terminal-bottom-panel-terminal"
+              className="terminal-bottom-panel-terminal flex-1 flex flex-col min-h-0"
               style={{ display: activeTerminalId === terminal.id ? 'flex' : 'none' }}
             >
               <TerminalPanel
@@ -281,9 +283,12 @@ export const TerminalBottomPanel: React.FC<TerminalBottomPanelProps> = ({
             </div>
           ))}
           {terminals.length === 0 && (
-            <div className="terminal-bottom-panel-empty">
+            <div className="terminal-bottom-panel-empty flex-1 flex flex-col items-center justify-center gap-3 text-[var(--nim-text-muted)] text-sm">
               <p>No terminals open</p>
-              <button onClick={handleCreateTerminal}>
+              <button
+                className="flex items-center gap-1.5 px-4 py-2 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded-md text-[var(--nim-text)] text-[13px] cursor-pointer transition-colors duration-150 hover:bg-[var(--nim-bg-tertiary)] hover:border-[var(--nim-primary)]"
+                onClick={handleCreateTerminal}
+              >
                 <MaterialSymbol icon="terminal" size={16} />
                 New Terminal
               </button>

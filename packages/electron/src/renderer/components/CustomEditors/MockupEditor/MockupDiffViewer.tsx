@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { renderMockupHtml } from './mockupDomUtils';
-import './MockupDiffViewer.css';
 
 interface MockupDiffViewerProps {
   originalHtml: string;
@@ -85,12 +84,16 @@ export const MockupDiffViewer: React.FC<MockupDiffViewerProps> = ({
   }, [updateSliderFromPointer]);
 
   return (
-    <div className="mockup-diff-viewer">
-      <div className="mockup-diff-content" role="region" aria-label={isNewFile ? 'New mockup preview' : 'Mockup diff preview'}>
+    <div className="mockup-diff-viewer flex flex-col h-full bg-[var(--nim-bg)]">
+      <div
+        className="mockup-diff-content flex-1 flex flex-col overflow-hidden bg-[#111]"
+        role="region"
+        aria-label={isNewFile ? 'New mockup preview' : 'Mockup diff preview'}
+      >
         {isNewFile ? (
           // New file: simple preview without slider
-          <div className="mockup-diff-new-file-wrapper">
-            <div className="mockup-diff-new-file-stage">
+          <div className="mockup-diff-new-file-wrapper flex-1 flex flex-col p-4">
+            <div className="mockup-diff-new-file-stage relative flex-1 rounded-lg overflow-hidden bg-black [&>iframe]:absolute [&>iframe]:inset-0 [&>iframe]:border-none [&>iframe]:w-full [&>iframe]:h-full">
               <iframe
                 ref={afterFrameRef}
                 title="New mockup preview"
@@ -100,9 +103,9 @@ export const MockupDiffViewer: React.FC<MockupDiffViewerProps> = ({
           </div>
         ) : (
           // Modified file: show slider diff view
-          <div className="mockup-diff-slider-wrapper">
+          <div className="mockup-diff-slider-wrapper flex-1 flex flex-col p-4 gap-3">
             <div
-              className={`mockup-diff-slider-stage ${isDragging ? 'dragging' : ''}`}
+              className={`mockup-diff-slider-stage relative flex-1 rounded-lg overflow-hidden bg-black cursor-ew-resize [&>iframe]:absolute [&>iframe]:inset-0 [&>iframe]:border-none [&>iframe]:w-full [&>iframe]:h-full ${isDragging ? 'dragging cursor-grabbing' : ''}`}
               ref={sliderStageRef}
             >
               <iframe
@@ -111,7 +114,7 @@ export const MockupDiffViewer: React.FC<MockupDiffViewerProps> = ({
                 sandbox="allow-scripts allow-same-origin"
               />
               <div
-                className="mockup-diff-slider-before"
+                className="mockup-diff-slider-before absolute inset-0 w-full h-full overflow-hidden border-r border-white/50 pointer-events-none [&>iframe]:absolute [&>iframe]:inset-0 [&>iframe]:w-full [&>iframe]:h-full"
                 style={{ clipPath: `inset(0 ${100 - sliderPosition}% 0 0)` }}
               >
                 <iframe
@@ -121,7 +124,7 @@ export const MockupDiffViewer: React.FC<MockupDiffViewerProps> = ({
                 />
               </div>
               <div
-                className="mockup-diff-slider-handle"
+                className="mockup-diff-slider-handle absolute top-0 bottom-0 w-0.5 bg-white/80 border border-gray-500/75 pointer-events-auto cursor-ew-resize z-[6]"
                 style={{ left: `${sliderPosition}%` }}
                 role="slider"
                 aria-valuenow={sliderPosition}
@@ -129,13 +132,13 @@ export const MockupDiffViewer: React.FC<MockupDiffViewerProps> = ({
                 aria-valuemax={100}
                 onPointerDown={handleSliderPointerDown}
               >
-                <div className="mockup-diff-slider-handle-bar" />
+                <div className="mockup-diff-slider-handle-bar absolute top-1/2 -left-2.5 w-5 h-10 bg-white/90 rounded-full border-2 border-gray-500/75 -translate-y-1/2" />
               </div>
-              <div className="mockup-diff-slider-label before">Before</div>
-              <div className="mockup-diff-slider-label after">After</div>
-              <div className="mockup-diff-slider-hint">Drag anywhere to compare</div>
+              <div className="mockup-diff-slider-label before absolute top-3 left-4 py-1 px-2.5 text-[11px] uppercase tracking-wide rounded-full bg-black/55 text-white z-[6]">Before</div>
+              <div className="mockup-diff-slider-label after absolute top-3 right-4 py-1 px-2.5 text-[11px] uppercase tracking-wide rounded-full bg-black/55 text-white z-[6]">After</div>
+              <div className="mockup-diff-slider-hint absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/60 text-white text-xs py-1 px-2.5 rounded-full pointer-events-none z-[6]">Drag anywhere to compare</div>
               <div
-                className="mockup-diff-slider-overlay"
+                className="mockup-diff-slider-overlay absolute inset-0 z-[5] cursor-ew-resize"
                 onPointerDown={handleSliderPointerDown}
                 aria-hidden="true"
               />

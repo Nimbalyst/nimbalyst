@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import './WorkspaceManager.css';
 
 // Helper function to apply theme
 const applyTheme = () => {
@@ -303,29 +302,29 @@ export const WorkspaceManager: React.FC = () => {
   };
 
   return (
-    <div className="workspace-manager">
-      <div className="sidebar">
-        <div className="sidebar-header">
-          <div className="app-branding">
-            <img src="./icon.png" alt="Nimbalyst" className="app-logo" />
-            <h2>Nimbalyst</h2>
+    <div className="workspace-manager flex w-full h-screen overflow-hidden bg-[var(--nim-bg)] pt-[38px] before:content-[''] before:fixed before:top-0 before:left-0 before:right-0 before:h-[38px] before:[-webkit-app-region:drag] before:z-[1000]">
+      <div className="sidebar w-[380px] bg-[var(--nim-bg-secondary)] border-r border-[var(--nim-border)] flex flex-col shrink-0">
+        <div className="sidebar-header p-3 bg-[var(--nim-bg)] border-b border-[var(--nim-border)] [-webkit-app-region:no-drag]">
+          <div className="app-branding flex items-center gap-2.5 mb-4">
+            <img src="./icon.png" alt="Nimbalyst" className="app-logo w-8 h-8 shrink-0 object-contain" />
+            <h2 className="m-0 text-lg font-bold text-[var(--nim-text)] tracking-tight">Nimbalyst</h2>
           </div>
-          <div className="action-buttons">
-            <button className="btn btn-primary" onClick={handleBrowse}>
+          <div className="action-buttons flex gap-2">
+            <button className="btn nim-btn-primary" onClick={handleBrowse}>
               Open Folder
             </button>
-            <button className="btn btn-secondary" onClick={handleCreateWorkspace}>
+            <button className="btn nim-btn-secondary" onClick={handleCreateWorkspace}>
               New Folder
             </button>
           </div>
         </div>
 
-        <div className="workspaces-list">
+        <div className="workspaces-list nim-scrollbar flex-1 overflow-y-auto overflow-x-hidden p-2 [-webkit-app-region:no-drag] flex flex-col">
           {!loading && workspaces.length > 0 && (
-            <div className="search-container">
+            <div className="search-container pb-2 shrink-0">
               <input
                 type="text"
-                className="workspace-search"
+                className="workspace-search nim-input"
                 placeholder="Search projects..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -336,22 +335,22 @@ export const WorkspaceManager: React.FC = () => {
           )}
 
           {loading ? (
-            <div className="loading">
-              <div className="spinner"></div>
+            <div className="loading p-8 text-center">
+              <div className="spinner w-6 h-6 border-2 border-[var(--nim-border)] border-t-[var(--nim-primary)] rounded-full animate-spin mx-auto"></div>
             </div>
           ) : workspaces.length === 0 ? (
-            <div className="sidebar-empty">
-              <p>No recent projects</p>
+            <div className="sidebar-empty flex flex-col items-center justify-center h-full p-5 text-center">
+              <p className="text-[13px] text-[var(--nim-text-faint)] m-0">No recent projects</p>
             </div>
           ) : filteredWorkspaces.length === 0 ? (
-            <div className="sidebar-empty">
-              <p>No matching projects</p>
+            <div className="sidebar-empty flex flex-col items-center justify-center h-full p-5 text-center">
+              <p className="text-[13px] text-[var(--nim-text-faint)] m-0">No matching projects</p>
             </div>
           ) : (
             filteredWorkspaces.map((workspace, index) => (
               <div
                 key={workspace.path}
-                className={`workspace-item ${selectedWorkspace?.path === workspace.path ? 'selected' : ''} ${highlightedIndex === index ? 'highlighted' : ''}`}
+                className={`workspace-item flex gap-2 py-1.5 px-2 mb-0.5 rounded cursor-pointer transition-colors duration-100 border-none items-center hover:bg-[var(--nim-bg-hover)] ${selectedWorkspace?.path === workspace.path ? 'selected bg-[var(--nim-bg-selected)]' : ''} ${highlightedIndex === index ? 'highlighted bg-[var(--nim-bg-hover)]' : ''} ${highlightedIndex === index && selectedWorkspace?.path === workspace.path ? '!bg-[var(--nim-bg-selected-hover)]' : ''}`}
                 onClick={(e) => {
                   // Command/Ctrl + click to deselect
                   if (e.metaKey || e.ctrlKey) {
@@ -365,17 +364,17 @@ export const WorkspaceManager: React.FC = () => {
                 }}
                 onDoubleClick={handleOpenWorkspace}
               >
-                <div className="workspace-icon">
-                  <span className="material-symbols-outlined">folder</span>
+                <div className={`workspace-icon shrink-0 flex items-center justify-center text-[var(--nim-text-muted)] ${selectedWorkspace?.path === workspace.path ? '!text-[var(--nim-primary)]' : ''}`}>
+                  <span className="material-symbols-outlined text-[20px]" style={{ fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20" }}>folder</span>
                 </div>
-                <div className="workspace-info">
-                  <div className="workspace-name">{workspace.name}</div>
-                  <div className="workspace-path">{workspace.path}</div>
-                  <div className="workspace-meta">
+                <div className="workspace-info flex-1 min-w-0">
+                  <div className={`workspace-name text-[13px] font-medium text-[var(--nim-text)] mb-0.5 overflow-hidden text-ellipsis whitespace-nowrap ${selectedWorkspace?.path === workspace.path ? '!text-[var(--nim-primary)]' : ''}`}>{workspace.name}</div>
+                  <div className="workspace-path text-[11px] text-[var(--nim-text-muted)] overflow-hidden text-ellipsis whitespace-nowrap mb-0.5">{workspace.path}</div>
+                  <div className="workspace-meta flex gap-3 text-[11px] text-[var(--nim-text-faint)]">
                     {workspace.markdownCount !== undefined && (
-                      <span>{workspace.markdownCount} markdown files</span>
+                      <span className="whitespace-nowrap">{workspace.markdownCount} markdown files</span>
                     )}
-                    <span>{formatDate(workspace.lastOpened)}</span>
+                    <span className="whitespace-nowrap">{formatDate(workspace.lastOpened)}</span>
                   </div>
                 </div>
               </div>
@@ -384,53 +383,53 @@ export const WorkspaceManager: React.FC = () => {
         </div>
       </div>
 
-      <div className="content">
+      <div className="content flex-1 flex flex-col bg-[var(--nim-bg)] overflow-hidden">
         {selectedWorkspace ? (
           <>
-            <div className="content-header">
+            <div className="content-header py-5 px-6 border-b border-[var(--nim-border)] bg-[var(--nim-bg)] flex justify-between items-start gap-5">
               <div className="workspace-title">
-                <h1>{selectedWorkspace.name}</h1>
-                <div className="workspace-path">{selectedWorkspace.path}</div>
+                <h1 className="text-xl font-semibold text-[var(--nim-text)] m-0 mb-1">{selectedWorkspace.name}</h1>
+                <div className="workspace-path text-[13px] text-[var(--nim-text-muted)]">{selectedWorkspace.path}</div>
               </div>
-              <div className="content-actions">
-                <button className="btn btn-primary" onClick={handleOpenWorkspace}>
+              <div className="content-actions flex gap-2 shrink-0">
+                <button className="btn nim-btn-primary" onClick={handleOpenWorkspace}>
                   Open Project
                 </button>
-                <button className="btn btn-danger" onClick={handleRemoveFromRecent}>
+                <button className="btn nim-btn-secondary !text-[var(--nim-error)] !border-[var(--nim-error-subtle)] hover:!bg-[var(--nim-error-subtle)]" onClick={handleRemoveFromRecent}>
                   Remove from Recent
                 </button>
               </div>
             </div>
 
-            <div className="workspace-details">
+            <div className="workspace-details nim-scrollbar flex-1 overflow-y-auto p-6 bg-[var(--nim-bg-secondary)]">
               {workspaceStats ? (
                 <>
-                  <div className="stats-grid">
-                    <div className="stat-card">
-                      <div className="stat-value">{workspaceStats.fileCount}</div>
-                      <div className="stat-label">Total Files</div>
+                  <div className="stats-grid grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-4">
+                    <div className="stat-card bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md p-4">
+                      <div className="stat-value text-2xl font-semibold text-[var(--nim-text)] mb-1">{workspaceStats.fileCount}</div>
+                      <div className="stat-label text-xs text-[var(--nim-text-muted)] uppercase tracking-wider">Total Files</div>
                     </div>
-                    <div className="stat-card">
-                      <div className="stat-value">{workspaceStats.markdownCount}</div>
-                      <div className="stat-label">Markdown Files</div>
+                    <div className="stat-card bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md p-4">
+                      <div className="stat-value text-2xl font-semibold text-[var(--nim-text)] mb-1">{workspaceStats.markdownCount}</div>
+                      <div className="stat-label text-xs text-[var(--nim-text-muted)] uppercase tracking-wider">Markdown Files</div>
                     </div>
-                    <div className="stat-card">
-                      <div className="stat-value">{formatSize(workspaceStats.totalSize)}</div>
-                      <div className="stat-label">Total Size</div>
+                    <div className="stat-card bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md p-4">
+                      <div className="stat-value text-2xl font-semibold text-[var(--nim-text)] mb-1">{formatSize(workspaceStats.totalSize)}</div>
+                      <div className="stat-label text-xs text-[var(--nim-text-muted)] uppercase tracking-wider">Total Size</div>
                     </div>
-                    <div className="stat-card">
-                      <div className="stat-value">{formatDate(selectedWorkspace.lastOpened)}</div>
-                      <div className="stat-label">Last Opened</div>
+                    <div className="stat-card bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md p-4">
+                      <div className="stat-value text-2xl font-semibold text-[var(--nim-text)] mb-1">{formatDate(selectedWorkspace.lastOpened)}</div>
+                      <div className="stat-label text-xs text-[var(--nim-text-muted)] uppercase tracking-wider">Last Opened</div>
                     </div>
                   </div>
 
                   {workspaceStats.recentFiles.length > 0 && (
-                    <div className="recent-files">
-                      <h3>Recent Files</h3>
-                      <ul>
+                    <div className="recent-files bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md p-4 mt-4">
+                      <h3 className="text-sm font-semibold text-[var(--nim-text)] m-0 mb-3">Recent Files</h3>
+                      <ul className="list-none m-0 p-0">
                         {workspaceStats.recentFiles.map(file => (
-                          <li key={file}>
-                            <span className="material-symbols-outlined">description</span>
+                          <li key={file} className="flex items-center gap-2 py-1.5 text-[13px] text-[var(--nim-text-muted)] border-b border-[var(--nim-border-subtle)] last:border-b-0">
+                            <span className="material-symbols-outlined text-base text-[var(--nim-text-faint)]" style={{ fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20" }}>description</span>
                             {file}
                           </li>
                         ))}
@@ -439,38 +438,38 @@ export const WorkspaceManager: React.FC = () => {
                   )}
                 </>
               ) : (
-                <div className="loading">
-                  <div className="spinner"></div>
+                <div className="loading p-8 text-center">
+                  <div className="spinner w-6 h-6 border-2 border-[var(--nim-border)] border-t-[var(--nim-primary)] rounded-full animate-spin mx-auto"></div>
                 </div>
               )}
             </div>
           </>
         ) : (
-          <div className="welcome-container">
-            <div className="welcome-content">
-              <div className="welcome-header">
-                <img src="./icon.png" alt="Nimbalyst" className="welcome-logo" />
-                <div className="welcome-text">
-                  <h1 className="welcome-title">Nimbalyst</h1>
-                  <p className="welcome-subtitle">AI-native markdown editor</p>
+          <div className="welcome-container flex items-center justify-center h-full p-10 bg-gradient-to-br from-[#667eea] to-[#764ba2] relative overflow-hidden before:content-[''] before:absolute before:top-[-50%] before:right-[-50%] before:w-[200%] before:h-[200%] before:bg-[radial-gradient(circle,rgba(255,255,255,0.1)_0%,transparent_70%)] before:animate-[float_20s_ease-in-out_infinite]">
+            <div className="welcome-content bg-white/[0.98] dark:bg-[var(--nim-bg)] rounded-2xl p-8 max-w-[500px] w-full shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] backdrop-blur-[10px] relative z-[1]">
+              <div className="welcome-header flex items-center justify-center gap-5 mb-6">
+                <img src="./icon.png" alt="Nimbalyst" className="welcome-logo w-16 h-16 object-contain" />
+                <div className="welcome-text text-left">
+                  <h1 className="welcome-title text-[28px] font-extrabold text-[var(--nim-text)] m-0 mb-1 tracking-tight">Nimbalyst</h1>
+                  <p className="welcome-subtitle text-sm text-[var(--nim-text-muted)] m-0 font-normal">AI-native markdown editor</p>
                 </div>
               </div>
 
-              <div className="welcome-info-compact">
-                <p className="welcome-description">
+              <div className="welcome-info-compact mb-6 text-center">
+                <p className="welcome-description text-sm text-[var(--nim-text-muted)] leading-relaxed m-0">
                   Projects are local folders on your computer. Open any folder to view and edit all markdown files within it.
                   If you are working on a coding project, it is recommended to open the root folder of your project as
                   agents are configured at the project level.
                 </p>
               </div>
 
-              <div className="welcome-actions">
-                <button className="btn btn-large btn-welcome-primary" onClick={handleBrowse}>
-                  <span className="material-symbols-outlined">folder_open</span>
+              <div className="welcome-actions flex justify-center gap-4">
+                <button className="btn btn-large btn-welcome-primary bg-[var(--nim-primary)] text-white border-none py-3 px-6 text-[15px] font-semibold rounded-lg cursor-pointer transition-all duration-200 flex items-center justify-center gap-2 shadow-[0_2px_8px_rgba(59,130,246,0.3)] hover:bg-[var(--nim-primary-hover)] hover:shadow-[0_4px_12px_rgba(59,130,246,0.4)] hover:-translate-y-px" onClick={handleBrowse}>
+                  <span className="material-symbols-outlined text-[20px]" style={{ fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20" }}>folder_open</span>
                   Open Folder
                 </button>
-                <button className="btn btn-large btn-welcome-secondary" onClick={handleCreateWorkspace}>
-                  <span className="material-symbols-outlined">create_new_folder</span>
+                <button className="btn btn-large btn-welcome-secondary bg-[var(--nim-bg)] text-[var(--nim-text-muted)] border-2 border-[var(--nim-border)] py-3 px-6 text-[15px] font-semibold rounded-lg cursor-pointer transition-all duration-200 flex items-center justify-center gap-2 hover:bg-[var(--nim-bg-secondary)] hover:border-[var(--nim-border-hover)] hover:-translate-y-px" onClick={handleCreateWorkspace}>
+                  <span className="material-symbols-outlined text-[20px]" style={{ fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20" }}>create_new_folder</span>
                   New Folder
                 </button>
               </div>
@@ -478,6 +477,14 @@ export const WorkspaceManager: React.FC = () => {
           </div>
         )}
       </div>
+
+      <style>{`
+        @keyframes float {
+          0%, 100% { transform: translate(0, 0) rotate(0deg); }
+          33% { transform: translate(-30px, -30px) rotate(120deg); }
+          66% { transform: translate(30px, -20px) rotate(240deg); }
+        }
+      `}</style>
     </div>
   );
 };

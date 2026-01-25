@@ -154,8 +154,8 @@ export const ToolPackagesPanel: React.FC<ToolPackagesPanelProps> = ({
 
   if (!workspacePath) {
     return (
-      <div className="settings-panel-content">
-        <div className="settings-panel-empty">
+      <div className="settings-panel-content flex flex-col p-6">
+        <div className="settings-panel-empty text-center py-12 text-[var(--nim-text-muted)]">
           <p>Open a workspace to configure tool packages.</p>
         </div>
       </div>
@@ -163,14 +163,14 @@ export const ToolPackagesPanel: React.FC<ToolPackagesPanelProps> = ({
   }
 
   return (
-    <div className="settings-panel-content">
-      <div className="settings-panel-header">
-        <h2>Tool Packages for {workspaceName}</h2>
-        <p>
+    <div className="settings-panel-content flex flex-col p-6">
+      <div className="settings-panel-header mb-6">
+        <h2 className="text-xl font-semibold text-[var(--nim-text)] mb-2">Tool Packages for {workspaceName}</h2>
+        <p className="text-sm text-[var(--nim-text-muted)] leading-relaxed">
           Tool packages bundle custom commands and tracker schemas into curated sets for different
           workflows. Each package includes everything you need to get started quickly.{' '}
           <button
-            className="settings-learn-more-link"
+            className="settings-learn-more-link text-[var(--nim-link)] hover:text-[var(--nim-link-hover)] bg-transparent border-none cursor-pointer underline"
             onClick={() => setShowLearnMore(true)}
           >
             Learn more
@@ -179,59 +179,63 @@ export const ToolPackagesPanel: React.FC<ToolPackagesPanelProps> = ({
       </div>
 
       {error && (
-        <div className="settings-message error">
+        <div className="settings-message error flex items-center gap-2 p-3 mb-4 rounded bg-[var(--nim-error)]/10 text-[var(--nim-error)] text-sm">
           <span className="material-symbols-outlined">error</span>
           <span>{error}</span>
         </div>
       )}
 
       {success && (
-        <div className="settings-message success">
+        <div className="settings-message success flex items-center gap-2 p-3 mb-4 rounded bg-[var(--nim-success)]/10 text-[var(--nim-success)] text-sm">
           <span className="material-symbols-outlined">check_circle</span>
           <span>{success}</span>
         </div>
       )}
 
       {totalCount > 0 && (
-        <div className="packages-progress">
-          <div className="packages-progress-bar">
+        <div className="packages-progress mb-6">
+          <div className="packages-progress-bar h-2 rounded-full bg-[var(--nim-bg-tertiary)] overflow-hidden">
             <div
-              className="packages-progress-fill"
+              className="packages-progress-fill h-full rounded-full bg-[var(--nim-primary)] transition-all"
               style={{ width: `${(installedCount / totalCount) * 100}%` }}
             />
           </div>
-          <span className="packages-progress-text">
+          <span className="packages-progress-text text-xs text-[var(--nim-text-muted)] mt-2 block">
             {installedCount} of {totalCount} packages installed
             {needsUpdateCount > 0 && ` - ${needsUpdateCount} update${needsUpdateCount > 1 ? 's' : ''} available`}
           </span>
         </div>
       )}
 
-      <div className="packages-section-title">Available Packages</div>
+      <div className="packages-section-title text-sm font-medium text-[var(--nim-text)] mb-3">Available Packages</div>
 
-      <div className="packages-list">
+      <div className="packages-list flex flex-col gap-3">
         {packages.map(({ package: pkg, versionStatus }) => (
           <div
             key={pkg.id}
-            className={`package-card ${versionStatus.isInstalled ? 'installed' : ''}`}
+            className={`package-card rounded-lg border p-4 ${
+              versionStatus.isInstalled
+                ? 'border-[var(--nim-primary)]/30 bg-[var(--nim-primary)]/5'
+                : 'border-[var(--nim-border)] bg-[var(--nim-bg-secondary)]'
+            }`}
           >
-            <div className="package-card-header">
-              <div className="package-icon">
+            <div className="package-card-header flex items-start gap-3">
+              <div className="package-icon w-10 h-10 rounded-lg bg-[var(--nim-bg-tertiary)] flex items-center justify-center text-[var(--nim-text-muted)]">
                 <span className="material-symbols-outlined">{pkg.icon}</span>
               </div>
-              <div className="package-info">
-                <div className="package-name">
+              <div className="package-info flex-1 min-w-0">
+                <div className="package-name text-sm font-medium text-[var(--nim-text)] flex items-center gap-2">
                   {pkg.name}
                   {versionStatus.isInstalled && versionStatus.installedVersion && (
-                    <span className="package-version">v{versionStatus.installedVersion}</span>
+                    <span className="package-version text-xs text-[var(--nim-text-muted)] font-normal">v{versionStatus.installedVersion}</span>
                   )}
                 </div>
-                <div className="package-description">{pkg.description}</div>
+                <div className="package-description text-xs text-[var(--nim-text-muted)] mt-0.5">{pkg.description}</div>
               </div>
-              <div className="package-actions">
+              <div className="package-actions flex items-center gap-2">
                 {!versionStatus.isInstalled ? (
                   <button
-                    className="btn-install"
+                    className="btn-install px-3 py-1.5 rounded text-xs font-medium bg-[var(--nim-primary)] text-white hover:bg-[var(--nim-primary-hover)] disabled:opacity-50 cursor-pointer"
                     onClick={() => handleInstallPackage(pkg.id)}
                     disabled={isProcessing}
                   >
@@ -240,14 +244,14 @@ export const ToolPackagesPanel: React.FC<ToolPackagesPanelProps> = ({
                 ) : versionStatus.needsUpdate ? (
                   <>
                     <button
-                      className="btn-install"
+                      className="btn-install px-3 py-1.5 rounded text-xs font-medium bg-[var(--nim-primary)] text-white hover:bg-[var(--nim-primary-hover)] disabled:opacity-50 cursor-pointer"
                       onClick={() => handleInstallPackage(pkg.id)}
                       disabled={isProcessing}
                     >
                       Update to v{versionStatus.latestVersion}
                     </button>
                     <button
-                      className="btn-uninstall"
+                      className="btn-uninstall px-3 py-1.5 rounded text-xs font-medium border border-[var(--nim-border)] bg-transparent text-[var(--nim-text-muted)] hover:bg-[var(--nim-bg-hover)] disabled:opacity-50 cursor-pointer"
                       onClick={() => handleUninstallPackage(pkg.id)}
                       disabled={isProcessing}
                     >
@@ -256,9 +260,9 @@ export const ToolPackagesPanel: React.FC<ToolPackagesPanelProps> = ({
                   </>
                 ) : (
                   <>
-                    <span className="package-status-installed">Installed</span>
+                    <span className="package-status-installed text-xs text-[var(--nim-success)] font-medium">Installed</span>
                     <button
-                      className="btn-uninstall"
+                      className="btn-uninstall px-3 py-1.5 rounded text-xs font-medium border border-[var(--nim-border)] bg-transparent text-[var(--nim-text-muted)] hover:bg-[var(--nim-bg-hover)] disabled:opacity-50 cursor-pointer"
                       onClick={() => handleUninstallPackage(pkg.id)}
                       disabled={isProcessing}
                     >
@@ -269,9 +273,9 @@ export const ToolPackagesPanel: React.FC<ToolPackagesPanelProps> = ({
               </div>
             </div>
 
-            <div className="package-details">
+            <div className="package-details mt-3 pt-3 border-t border-[var(--nim-border)]">
               <button
-                className="package-details-toggle"
+                className="package-details-toggle flex items-center gap-1 text-xs text-[var(--nim-text-muted)] hover:text-[var(--nim-text)] bg-transparent border-none cursor-pointer p-0"
                 onClick={() => togglePackageDetails(pkg.id)}
               >
                 <span>{expandedPackageId === pkg.id ? 'Hide details' : 'Show details'}</span>
@@ -281,26 +285,26 @@ export const ToolPackagesPanel: React.FC<ToolPackagesPanelProps> = ({
               </button>
 
               {expandedPackageId === pkg.id && (
-                <div className="package-details-content">
+                <div className="package-details-content mt-3 flex flex-col gap-4">
                   <div className="package-details-section">
-                    <div className="package-details-section-title">
+                    <div className="package-details-section-title text-xs font-medium text-[var(--nim-text)] mb-2">
                       Custom Commands ({pkg.customCommands.length})
                     </div>
-                    <div className="package-commands">
+                    <div className="package-commands flex flex-wrap gap-1.5">
                       {pkg.customCommands.map(cmd => (
-                        <span key={cmd.name} className="package-command">/{cmd.name}</span>
+                        <span key={cmd.name} className="package-command px-2 py-1 rounded text-xs bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-muted)] font-mono">/{cmd.name}</span>
                       ))}
                     </div>
                   </div>
 
                   <div className="package-details-section">
-                    <div className="package-details-section-title">
+                    <div className="package-details-section-title text-xs font-medium text-[var(--nim-text)] mb-2">
                       Tracker Schemas ({pkg.trackerSchemas.length})
                     </div>
-                    <div className="package-schemas">
+                    <div className="package-schemas flex flex-wrap gap-1.5">
                       {pkg.trackerSchemas.map(schema => (
-                        <span key={schema.type} className="package-schema">
-                          <span className="material-symbols-outlined">{schema.icon}</span>
+                        <span key={schema.type} className="package-schema px-2 py-1 rounded text-xs bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-muted)] flex items-center gap-1">
+                          <span className="material-symbols-outlined text-sm">{schema.icon}</span>
                           {schema.displayName}
                         </span>
                       ))}

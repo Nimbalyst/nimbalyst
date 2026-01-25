@@ -1,6 +1,5 @@
 import React, { useState, useCallback } from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
-import './CommitSection.css';
 
 interface CommitSectionProps {
   stagedCount: number;
@@ -52,9 +51,9 @@ export function CommitSection({
   const canRebase = effectiveCommitsBehind > 0 && !hasUncommittedChanges && !isRebasing;
 
   return (
-    <div className="commit-section">
+    <div className="commit-section flex flex-col gap-2 p-3 border-b border-[var(--nim-border)]">
       <textarea
-        className="commit-section-message"
+        className="commit-section-message w-full px-2.5 py-2 font-inherit text-[0.8125rem] leading-[1.4] text-[var(--nim-text)] bg-[var(--nim-bg)] border border-[var(--nim-border-secondary)] rounded-md resize-y min-h-[60px] transition-[border-color,box-shadow] duration-150 ease-out placeholder:text-[var(--nim-text-faint)] focus:outline-none focus:border-[var(--nim-primary)] focus:shadow-[0_0_0_2px_var(--nim-accent-muted)] disabled:opacity-70 disabled:cursor-not-allowed"
         placeholder="Commit message..."
         value={message}
         onChange={(e) => setMessage(e.target.value)}
@@ -62,10 +61,10 @@ export function CommitSection({
         disabled={isCommitting}
         rows={3}
       />
-      <div className="commit-section-actions">
+      <div className="commit-section-actions flex gap-2">
         <button
           type="button"
-          className="commit-section-button commit-section-button--primary"
+          className="commit-section-button commit-section-button--primary flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-[0.8125rem] font-medium border-none rounded-md cursor-pointer transition-[background-color,opacity] duration-150 ease-out bg-[var(--nim-primary)] text-[var(--nim-accent-contrast)] hover:enabled:bg-[var(--nim-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={handleCommit}
           disabled={!canCommit}
           title={stagedCount === 0 ? 'Stage files to commit' : !message.trim() ? 'Enter commit message' : 'Commit staged changes'}
@@ -84,7 +83,11 @@ export function CommitSection({
         </button>
         <button
           type="button"
-          className={`commit-section-button ${effectiveCommitsBehind > 0 ? 'commit-section-button--warning' : 'commit-section-button--secondary'}`}
+          className={`commit-section-button flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-[0.8125rem] font-medium border-none rounded-md cursor-pointer transition-[background-color,opacity] duration-150 ease-out disabled:opacity-50 disabled:cursor-not-allowed ${
+            effectiveCommitsBehind > 0
+              ? 'commit-section-button--warning bg-[var(--nim-warning)] text-white hover:enabled:bg-[var(--nim-warning-hover)]'
+              : 'commit-section-button--secondary bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)] hover:enabled:bg-[var(--nim-bg-hover)]'
+          }`}
           onClick={onRebase}
           disabled={!canRebase}
           title={
@@ -109,7 +112,7 @@ export function CommitSection({
         </button>
         <button
           type="button"
-          className="commit-section-button commit-section-button--secondary"
+          className="commit-section-button commit-section-button--secondary flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-[0.8125rem] font-medium border-none rounded-md cursor-pointer transition-[background-color,opacity] duration-150 ease-out bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)] hover:enabled:bg-[var(--nim-bg-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={onMerge}
           disabled={!canMerge}
           title={

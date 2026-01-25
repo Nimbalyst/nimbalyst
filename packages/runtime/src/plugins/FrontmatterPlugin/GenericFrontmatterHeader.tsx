@@ -14,7 +14,6 @@ import {
   type InferredField,
 } from './fieldUtils';
 import { MaterialSymbol } from '../../ui/icons/MaterialSymbol';
-import './GenericFrontmatterHeader.css';
 
 export const GenericFrontmatterHeader: React.FC<DocumentHeaderComponentProps> = ({
   content,
@@ -68,14 +67,14 @@ export const GenericFrontmatterHeader: React.FC<DocumentHeaderComponentProps> = 
       };
 
       return (
-        <div key={field.key} className="frontmatter-field frontmatter-field-tags">
-          <label>{field.key}</label>
-          <div className="frontmatter-tags-container">
+        <div key={field.key} className="frontmatter-field frontmatter-field-tags flex flex-col gap-1 min-w-[200px] flex-1 max-md:w-full">
+          <label className="text-[11px] font-medium text-[var(--nim-text-muted)] uppercase tracking-wider">{field.key}</label>
+          <div className="frontmatter-tags-container flex flex-wrap gap-1.5 items-center p-1 border border-[var(--nim-border)] rounded bg-[var(--nim-bg)] min-h-8 focus-within:border-[var(--nim-primary)] focus-within:shadow-[0_0_0_2px_rgba(59,130,246,0.1)]">
             {tags.map((tag, index) => (
-              <span key={index} className="frontmatter-tag">
+              <span key={index} className="frontmatter-tag inline-flex items-center gap-1 px-2 py-0.5 bg-[var(--nim-bg-tertiary)] rounded-xl text-xs text-[var(--nim-text)]">
                 {String(tag)}
                 <button
-                  className="frontmatter-tag-remove"
+                  className="frontmatter-tag-remove flex items-center justify-center bg-transparent border-none p-0.5 cursor-pointer text-[var(--nim-text-muted)] rounded-full transition-all duration-150 hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]"
                   onClick={() => handleRemoveTag(index)}
                   aria-label={`Remove ${tag}`}
                 >
@@ -85,7 +84,7 @@ export const GenericFrontmatterHeader: React.FC<DocumentHeaderComponentProps> = 
             ))}
             <input
               type="text"
-              className="frontmatter-tag-input"
+              className="frontmatter-tag-input border-none bg-transparent px-1 py-0.5 text-xs min-w-20 flex-1 shadow-none outline-none placeholder:text-[var(--nim-text-faint)] placeholder:text-xs"
               placeholder="Add tag..."
               onKeyDown={handleAddTag}
             />
@@ -95,6 +94,11 @@ export const GenericFrontmatterHeader: React.FC<DocumentHeaderComponentProps> = 
     },
     [handleFieldChange]
   );
+
+  // Common input styles for frontmatter fields
+  const inputStyles = "px-2 py-1.5 border border-[var(--nim-border)] rounded bg-[var(--nim-bg)] text-[var(--nim-text)] text-[13px] font-[inherit] transition-colors duration-200 focus:outline-none focus:border-[var(--nim-primary)] focus:shadow-[0_0_0_2px_rgba(59,130,246,0.1)]";
+  const labelStyles = "text-[11px] font-medium text-[var(--nim-text-muted)] uppercase tracking-wider";
+  const fieldStyles = "frontmatter-field flex flex-col gap-1 min-w-[140px] flex-none max-md:w-full";
 
   const renderField = useCallback(
     (field: InferredField) => {
@@ -106,11 +110,12 @@ export const GenericFrontmatterHeader: React.FC<DocumentHeaderComponentProps> = 
 
         case 'boolean':
           return (
-            <div key={field.key} className="frontmatter-field frontmatter-field-checkbox">
-              <label htmlFor={fieldId}>
+            <div key={field.key} className="frontmatter-field frontmatter-field-checkbox flex flex-row items-center max-md:w-full">
+              <label htmlFor={fieldId} className="flex items-center gap-1.5 normal-case tracking-normal text-[13px] cursor-pointer">
                 <input
                   id={fieldId}
                   type="checkbox"
+                  className="cursor-pointer w-4 h-4"
                   checked={Boolean(field.value)}
                   onChange={(e) => handleFieldChange(field.key, e.target.checked)}
                 />
@@ -146,11 +151,12 @@ export const GenericFrontmatterHeader: React.FC<DocumentHeaderComponentProps> = 
             }
           }
           return (
-            <div key={field.key} className="frontmatter-field">
-              <label htmlFor={fieldId}>{field.key}</label>
+            <div key={field.key} className={fieldStyles}>
+              <label htmlFor={fieldId} className={labelStyles}>{field.key}</label>
               <input
                 id={fieldId}
                 type="date"
+                className={inputStyles}
                 value={dateValue}
                 onChange={(e) => {
                   // Preserve time component when updating date
@@ -166,12 +172,13 @@ export const GenericFrontmatterHeader: React.FC<DocumentHeaderComponentProps> = 
 
         case 'number':
           return (
-            <div key={field.key} className="frontmatter-field">
-              <label htmlFor={fieldId}>{field.key}</label>
+            <div key={field.key} className={fieldStyles}>
+              <label htmlFor={fieldId} className={labelStyles}>{field.key}</label>
               <input
                 id={fieldId}
                 type="number"
                 step="any"
+                className={inputStyles}
                 value={field.value as number}
                 onChange={(e) => {
                   const val = e.target.value;
@@ -197,12 +204,13 @@ export const GenericFrontmatterHeader: React.FC<DocumentHeaderComponentProps> = 
           const canRenderLink = linkValue && isValidUrl(linkValue);
 
           return (
-            <div key={field.key} className="frontmatter-field frontmatter-field-link">
-              <label htmlFor={fieldId}>{field.key}</label>
-              <div className="frontmatter-link-container">
+            <div key={field.key} className="frontmatter-field frontmatter-field-link flex flex-col gap-1 min-w-[200px] flex-1 max-md:w-full">
+              <label htmlFor={fieldId} className={labelStyles}>{field.key}</label>
+              <div className="frontmatter-link-container flex items-center gap-1">
                 <input
                   id={fieldId}
                   type="url"
+                  className={`${inputStyles} flex-1`}
                   value={linkValue}
                   onChange={(e) => handleFieldChange(field.key, e.target.value)}
                   placeholder="https://..."
@@ -212,7 +220,7 @@ export const GenericFrontmatterHeader: React.FC<DocumentHeaderComponentProps> = 
                     href={linkValue}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="frontmatter-link-open"
+                    className="frontmatter-link-open flex items-center justify-center p-1.5 text-[var(--nim-text-muted)] rounded transition-all duration-200 hover:bg-[var(--nim-bg-tertiary)] hover:text-[var(--nim-primary)]"
                     aria-label="Open link"
                   >
                     <MaterialSymbol icon="open_in_new" size={14} />
@@ -226,11 +234,12 @@ export const GenericFrontmatterHeader: React.FC<DocumentHeaderComponentProps> = 
           // Non-tag arrays as comma-separated
           const arrayValue = Array.isArray(field.value) ? field.value.join(', ') : '';
           return (
-            <div key={field.key} className="frontmatter-field">
-              <label htmlFor={fieldId}>{field.key}</label>
+            <div key={field.key} className={fieldStyles}>
+              <label htmlFor={fieldId} className={labelStyles}>{field.key}</label>
               <input
                 id={fieldId}
                 type="text"
+                className={inputStyles}
                 value={arrayValue}
                 onChange={(e) => {
                   const newValue = e.target.value
@@ -247,11 +256,12 @@ export const GenericFrontmatterHeader: React.FC<DocumentHeaderComponentProps> = 
         case 'string':
         default:
           return (
-            <div key={field.key} className="frontmatter-field">
-              <label htmlFor={fieldId}>{field.key}</label>
+            <div key={field.key} className={fieldStyles}>
+              <label htmlFor={fieldId} className={labelStyles}>{field.key}</label>
               <input
                 id={fieldId}
                 type="text"
+                className={inputStyles}
                 value={String(field.value || '')}
                 onChange={(e) => handleFieldChange(field.key, e.target.value)}
               />
@@ -265,12 +275,12 @@ export const GenericFrontmatterHeader: React.FC<DocumentHeaderComponentProps> = 
   // Show error banner if frontmatter exists but failed to parse
   if (parseResult.hasFrontmatter && !parseResult.success) {
     return (
-      <div className="frontmatter-header frontmatter-header-error">
-        <div className="frontmatter-error-banner">
-          <MaterialSymbol icon="error" size={20} />
-          <div className="frontmatter-error-content">
-            <span className="frontmatter-error-title">Invalid Frontmatter</span>
-            <span className="frontmatter-error-message">{parseResult.error}</span>
+      <div className="frontmatter-header frontmatter-header-error bg-[var(--nim-bg-secondary)] p-3 shadow-sm relative z-[1]">
+        <div className="frontmatter-error-banner flex items-start gap-3 px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-md text-[var(--nim-text)]">
+          <MaterialSymbol icon="error" size={20} className="text-red-500 shrink-0" />
+          <div className="frontmatter-error-content flex flex-col gap-1 min-w-0">
+            <span className="frontmatter-error-title font-semibold text-[13px] text-red-500">Invalid Frontmatter</span>
+            <span className="frontmatter-error-message text-xs text-[var(--nim-text-muted)] font-mono whitespace-pre-wrap break-words">{parseResult.error}</span>
           </div>
         </div>
       </div>
@@ -283,36 +293,35 @@ export const GenericFrontmatterHeader: React.FC<DocumentHeaderComponentProps> = 
 
   if (isCollapsed) {
     return (
-      <div className="frontmatter-header frontmatter-header-collapsed">
+      <div className="frontmatter-header frontmatter-header-collapsed bg-[var(--nim-bg-secondary)] px-3 py-2 shadow-sm relative z-[1]">
         <button
-          className="frontmatter-toggle"
+          className="frontmatter-toggle bg-transparent border-none px-3 py-1.5 cursor-pointer rounded text-[var(--nim-text-muted)] flex items-center gap-2 transition-all duration-200 text-[13px] w-full hover:bg-[var(--nim-bg-tertiary)] hover:text-[var(--nim-text)]"
           onClick={() => setIsCollapsed(false)}
           aria-label="Expand metadata"
         >
           <MaterialSymbol icon="data_object" size={18} />
           <span>Document Metadata</span>
-          <span className="frontmatter-field-count">{localFields.length} fields</span>
+          <span className="frontmatter-field-count ml-auto text-[11px] opacity-70">{localFields.length} fields</span>
         </button>
       </div>
     );
   }
 
   return (
-    <div className="frontmatter-header">
+    <div className="frontmatter-header bg-[var(--nim-bg-secondary)] p-3 shadow-sm relative z-[1]">
       <div
-        className="frontmatter-header-title"
+        className="frontmatter-header-title flex justify-between items-center mb-3 px-2 py-1 -mx-2 -mt-1 rounded transition-colors duration-150 cursor-pointer hover:bg-[var(--nim-bg-hover)]"
         onClick={() => setIsCollapsed(true)}
-        style={{ cursor: 'pointer' }}
       >
-        <div className="frontmatter-title-left">
+        <div className="frontmatter-title-left flex items-center gap-2 font-semibold text-[var(--nim-text)] text-sm">
           <MaterialSymbol icon="data_object" size={20} />
           <span>Document Metadata</span>
         </div>
-        <MaterialSymbol icon="expand_less" size={18} className="frontmatter-collapse-icon" />
+        <MaterialSymbol icon="expand_less" size={18} className="frontmatter-collapse-icon text-[var(--nim-text-muted)]" />
       </div>
 
-      <div className="frontmatter-content">
-        <div className="frontmatter-fields">
+      <div className="frontmatter-content flex flex-col gap-3">
+        <div className="frontmatter-fields flex flex-wrap gap-4 items-start max-md:flex-col">
           {localFields.map((field) => renderField(field))}
         </div>
       </div>

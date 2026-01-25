@@ -13,7 +13,6 @@ import ReactDOM from 'react-dom';
 import type { PromptMarker } from '../types';
 import { formatShortTime } from '../../../utils/dateUtils';
 import { MaterialSymbol } from '../../icons/MaterialSymbol';
-import './FloatingTranscriptActions.css';
 
 // =============================================================================
 // PromptsMenuButton - Standalone prompts menu dropdown
@@ -81,47 +80,47 @@ export const PromptsMenuButton: React.FC<PromptsMenuButtonProps> = ({
 
   const dropdownContent = showMenu ? (
     <div
-      className={dropdownClassName || 'floating-transcript-prompts-dropdown'}
+      className={dropdownClassName || 'floating-transcript-prompts-dropdown absolute top-11 right-11 min-w-80 max-w-[480px] max-h-[500px] overflow-y-auto bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md shadow-lg z-[11] pointer-events-auto'}
       ref={menuRef}
     >
       {prompts.length > 0 ? (
-        <ul className="prompts-list">
+        <ul className="prompts-list list-none m-0 py-1 px-0">
           {prompts.map((prompt) => (
             <li
               key={prompt.id}
-              className="prompts-item"
+              className="prompts-item flex items-start gap-2 px-3 py-2.5 cursor-pointer transition-colors border-b border-[var(--nim-border)] last:border-b-0 hover:bg-[var(--nim-bg-hover)]"
               onClick={() => handlePromptClick(prompt)}
               title={prompt.promptText}
             >
-              <div className="prompts-item-number">#{prompt.id}</div>
-              <div className="prompts-item-text">
+              <div className="prompts-item-number text-[var(--nim-text-faint)] text-[11px] font-semibold min-w-8 text-right pt-0.5">#{prompt.id}</div>
+              <div className="prompts-item-text flex-1 text-[var(--nim-text)] text-[13px] leading-snug overflow-hidden text-ellipsis line-clamp-2">
                 {truncatePrompt(prompt.promptText)}
               </div>
-              <div className="prompts-item-timestamp">
+              <div className="prompts-item-timestamp text-[var(--nim-text-faint)] text-[11px] whitespace-nowrap pt-0.5">
                 {formatShortTime(prompt.timestamp)}
               </div>
             </li>
           ))}
         </ul>
       ) : (
-        <div className="prompts-empty">No prompts in this session</div>
+        <div className="prompts-empty py-6 px-4 text-center text-[var(--nim-text-faint)] text-[13px]">No prompts in this session</div>
       )}
     </div>
   ) : null;
 
   return (
-    <div className={className || 'prompts-menu-container'}>
+    <div className={className || 'prompts-menu-container relative inline-flex'}>
       <button
         ref={buttonRef}
-        className={buttonClassName || 'floating-transcript-button'}
+        className={buttonClassName || 'floating-transcript-button pointer-events-auto w-9 h-9 rounded-md border border-[var(--nim-border)] bg-[var(--nim-bg)] text-[var(--nim-text)] cursor-pointer flex items-center justify-center transition-all relative shadow-sm hover:bg-[var(--nim-bg-hover)] active:scale-95'}
         onClick={() => setShowMenu(!showMenu)}
         aria-label="Prompts Menu"
         title="Show prompts in this session"
       >
         {/* Table of contents icon */}
-        <i className="icon table-of-contents" />
+        <i className="icon table-of-contents w-5 h-5 bg-contain bg-no-repeat bg-[url('../../../images/icons/table-of-contents.svg')] dark:invert" />
         {prompts.length > 0 && (
-          <span className="prompts-badge">{prompts.length}</span>
+          <span className="prompts-badge absolute -top-1 -right-1 bg-[var(--nim-primary)] text-white text-[10px] font-semibold px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-none shadow-sm">{prompts.length}</span>
         )}
       </button>
 
@@ -153,7 +152,7 @@ export const FloatingTranscriptActions: React.FC<FloatingTranscriptActionsProps>
   onNavigateToPrompt,
 }) => {
   return (
-    <div className="floating-transcript-actions">
+    <div className="floating-transcript-actions absolute top-1.5 right-3 flex gap-2 z-[100] pointer-events-none">
       {/* Prompts Menu Button */}
       <PromptsMenuButton
         prompts={prompts}
@@ -163,7 +162,7 @@ export const FloatingTranscriptActions: React.FC<FloatingTranscriptActionsProps>
       {/* Toggle History Button - only shown if onToggleSidebar is provided */}
       {onToggleSidebar && (
         <button
-          className="floating-transcript-button"
+          className="floating-transcript-button pointer-events-auto w-9 h-9 rounded-md border border-[var(--nim-border)] bg-[var(--nim-bg)] text-[var(--nim-text)] cursor-pointer flex items-center justify-center transition-all relative shadow-sm hover:bg-[var(--nim-bg-hover)] active:scale-95"
           onClick={onToggleSidebar}
           aria-label={isSidebarCollapsed ? 'Show file history' : 'Hide file history'}
           title={isSidebarCollapsed ? 'Show file history' : 'Hide file history'}

@@ -1,6 +1,5 @@
 import React from 'react';
 import { KeyboardShortcuts, getShortcutDisplay } from '../../../shared/KeyboardShortcuts';
-import './KeyboardShortcutsDialog.css';
 
 interface KeyboardShortcutsDialogProps {
   isOpen: boolean;
@@ -88,23 +87,44 @@ export function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardShortcutsDi
   ];
 
   return (
-    <div className="keyboard-shortcuts-dialog-overlay" onClick={onClose}>
-      <div className="keyboard-shortcuts-dialog" onClick={(e) => e.stopPropagation()}>
-        <div className="keyboard-shortcuts-dialog-header">
-          <h2>Keyboard Shortcuts</h2>
-          <button className="keyboard-shortcuts-dialog-close" onClick={onClose} aria-label="Close">
+    <div
+      className="keyboard-shortcuts-dialog-overlay nim-overlay backdrop-blur"
+      onClick={onClose}
+    >
+      <div
+        className="keyboard-shortcuts-dialog flex flex-col w-[90%] max-w-[900px] max-h-[85vh] rounded-lg border border-[var(--nim-border)] bg-[var(--nim-bg)] shadow-[0_8px_32px_rgba(0,0,0,0.3)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="keyboard-shortcuts-dialog-header flex items-center justify-between px-6 py-5 border-b border-[var(--nim-border)]">
+          <h2 className="m-0 text-xl font-semibold text-[var(--nim-text)]">
+            Keyboard Shortcuts
+          </h2>
+          <button
+            className="keyboard-shortcuts-dialog-close flex items-center justify-center w-8 h-8 p-0 bg-transparent border-none text-[32px] leading-none text-[var(--nim-text-muted)] cursor-pointer rounded transition-all duration-200 hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]"
+            onClick={onClose}
+            aria-label="Close"
+          >
             ×
           </button>
         </div>
-        <div className="keyboard-shortcuts-dialog-content">
+        <div className="keyboard-shortcuts-dialog-content overflow-y-auto p-6 grid grid-cols-[repeat(auto-fit,minmax(400px,1fr))] gap-8 max-[900px]:grid-cols-1 max-[600px]:p-5 max-[600px]:gap-6">
           {shortcutGroups.map((group) => (
-            <div key={group.title} className="keyboard-shortcuts-group">
-              <h3 className="keyboard-shortcuts-group-title">{group.title}</h3>
-              <div className="keyboard-shortcuts-list">
+            <div key={group.title} className="keyboard-shortcuts-group flex flex-col gap-3">
+              <h3 className="keyboard-shortcuts-group-title m-0 text-sm font-semibold text-[var(--nim-text-muted)] uppercase tracking-[0.5px]">
+                {group.title}
+              </h3>
+              <div className="keyboard-shortcuts-list flex flex-col gap-2">
                 {group.shortcuts.map((item) => (
-                  <div key={item.label} className="keyboard-shortcut-item">
-                    <span className="keyboard-shortcut-label">{item.label}</span>
-                    <kbd className="keyboard-shortcut-key">{getShortcutDisplay(item.shortcut)}</kbd>
+                  <div
+                    key={item.label}
+                    className="keyboard-shortcut-item flex items-center justify-between py-2 gap-4"
+                  >
+                    <span className="keyboard-shortcut-label text-[var(--nim-text)] text-sm flex-1">
+                      {item.label}
+                    </span>
+                    <kbd className="keyboard-shortcut-key bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded px-2.5 py-1 font-sans text-[13px] font-medium text-[var(--nim-text)] whitespace-nowrap shadow-[0_1px_2px_rgba(0,0,0,0.1)] dark:shadow-[0_1px_2px_rgba(0,0,0,0.3)] min-w-[60px] text-center">
+                      {getShortcutDisplay(item.shortcut)}
+                    </kbd>
                   </div>
                 ))}
               </div>

@@ -8,8 +8,6 @@
 
 import type {JSX} from 'react';
 
-import './ColorPicker.css';
-
 import {calculateZoomLevel} from '@lexical/utils';
 import {useEffect, useMemo, useRef, useState} from 'react';
 import * as React from 'react';
@@ -117,14 +115,14 @@ export default function ColorPicker({
 
   return (
     <div
-      className="color-picker-wrapper"
+      className="color-picker-wrapper p-5"
       style={{width: WIDTH}}
       ref={innerDivRef}>
       <TextInput label="Hex" onChange={onSetHex} value={inputColor} />
-      <div className="color-picker-basic-color">
+      <div className="color-picker-basic-color flex flex-wrap gap-[10px] m-0 p-0">
         {basicColors.map((basicColor) => (
           <button
-            className={basicColor === selfColor.hex ? ' active' : ''}
+            className={`border border-[#ccc] rounded h-4 w-4 cursor-pointer ${basicColor === selfColor.hex ? 'active shadow-[0px_0px_2px_2px_rgba(0,0,0,0.3)]' : ''}`}
             key={basicColor}
             style={{backgroundColor: basicColor}}
             onClick={() => {
@@ -135,11 +133,14 @@ export default function ColorPicker({
         ))}
       </div>
       <MoveWrapper
-        className="color-picker-saturation"
-        style={{backgroundColor: `hsl(${selfColor.hsv.h}, 100%, 50%)`}}
+        className="color-picker-saturation w-full relative mt-[15px] h-[150px] select-none"
+        style={{
+          backgroundColor: `hsl(${selfColor.hsv.h}, 100%, 50%)`,
+          backgroundImage: 'linear-gradient(transparent, black), linear-gradient(to right, white, transparent)',
+        }}
         onChange={onMoveSaturation}>
         <div
-          className="color-picker-saturation_cursor"
+          className="color-picker-saturation_cursor absolute w-5 h-5 border-2 border-white rounded-full shadow-[0_0_15px_#00000026] box-border -translate-x-[10px] -translate-y-[10px]"
           style={{
             backgroundColor: selfColor.hex,
             left: saturationPosition.x,
@@ -147,9 +148,14 @@ export default function ColorPicker({
           }}
         />
       </MoveWrapper>
-      <MoveWrapper className="color-picker-hue" onChange={onMoveHue}>
+      <MoveWrapper
+        className="color-picker-hue w-full relative mt-[15px] h-3 select-none rounded-xl"
+        style={{
+          backgroundImage: 'linear-gradient(to right, rgb(255, 0, 0), rgb(255, 255, 0), rgb(0, 255, 0), rgb(0, 255, 255), rgb(0, 0, 255), rgb(255, 0, 255), rgb(255, 0, 0))',
+        }}
+        onChange={onMoveHue}>
         <div
-          className="color-picker-hue_cursor"
+          className="color-picker-hue_cursor absolute w-5 h-5 border-2 border-white rounded-full shadow-[#0003_0_0_0_0.5px] box-border -translate-x-[10px] -translate-y-1"
           style={{
             backgroundColor: `hsl(${selfColor.hsv.h}, 100%, 50%)`,
             left: huePosition.x,
@@ -157,7 +163,7 @@ export default function ColorPicker({
         />
       </MoveWrapper>
       <div
-        className="color-picker-color"
+        className="color-picker-color border border-[#ccc] mt-[15px] w-full h-5"
         style={{backgroundColor: selfColor.hex}}
       />
     </div>

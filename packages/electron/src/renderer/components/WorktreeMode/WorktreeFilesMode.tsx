@@ -20,7 +20,6 @@ import { createInitialFileContent } from '../../utils/fileUtils';
 import { getFileName } from '../../utils/pathUtils';
 import { WorktreeContentMode } from './WorktreeModeToggle';
 import { DiffModeView } from '../DiffMode';
-import './WorktreeFilesMode.css';
 
 interface FileTreeItem {
   name: string;
@@ -572,7 +571,7 @@ const WorktreeFilesModeInner = forwardRef<WorktreeFilesModeRef, WorktreeFilesMod
     return (
       <div
         key={`agent-mode-${sessionId}`}
-        className="worktree-agent-mode"
+        className="worktree-agent-mode flex-1 flex flex-col min-h-0 bg-[var(--nim-bg)]"
         style={{ display: isActive ? 'flex' : 'none', width: '100%', height: '100%' }}
       >
         {chatPanel}
@@ -585,7 +584,7 @@ const WorktreeFilesModeInner = forwardRef<WorktreeFilesModeRef, WorktreeFilesMod
     return (
       <div
         key={`changes-mode-${sessionId}`}
-        className="worktree-changes-mode"
+        className="worktree-changes-mode flex-1 flex flex-col min-h-0 bg-[var(--nim-bg)]"
         style={{ display: isActive ? 'flex' : 'none', width: '100%', height: '100%' }}
       >
         <DiffModeView
@@ -603,10 +602,10 @@ const WorktreeFilesModeInner = forwardRef<WorktreeFilesModeRef, WorktreeFilesMod
   return (
     <div
       key={`files-mode-${sessionId}`}
-      className="worktree-files-mode"
+      className="worktree-files-mode flex-1 flex flex-row min-h-0 bg-[var(--nim-bg)]"
       style={{ display: isActive ? 'flex' : 'none' }}
     >
-      <div className="worktree-files-editor">
+      <div className="worktree-files-editor flex-1 min-w-0 flex flex-col">
         {tabs.tabs.length > 0 ? (
           <TabManager
             onTabClose={(tabId) => {
@@ -622,112 +621,139 @@ const WorktreeFilesModeInner = forwardRef<WorktreeFilesModeRef, WorktreeFilesMod
             />
           </TabManager>
         ) : (
-          <div className="worktree-files-empty">
+          <div className="worktree-files-empty flex-1 flex flex-col items-center justify-center text-[var(--nim-text-muted)] gap-3">
             <p>Select a file from the Files panel or open one from chat.</p>
-            <button type="button" onClick={() => setIsNewFileModalOpen(true)}>New File</button>
+            <button
+              type="button"
+              onClick={() => setIsNewFileModalOpen(true)}
+              className="border-none rounded-md px-4 py-2 bg-[var(--nim-primary)] text-white font-medium cursor-pointer"
+            >
+              New File
+            </button>
           </div>
         )}
       </div>
 
       {/* Resize handle */}
       <div
-        className={`worktree-resize-handle ${panelCollapsed ? 'is-hidden' : ''}`}
+        className={`worktree-resize-handle w-1 cursor-col-resize shrink-0 relative z-10 ${panelCollapsed ? 'pointer-events-none opacity-0' : ''}`}
         onMouseDown={handleResizeMouseDown}
       >
-        <div className="worktree-resize-handle-inner" />
+        <div className="worktree-resize-handle-inner w-px h-full mx-auto bg-[var(--nim-border)] transition-all duration-200 hover:w-[3px] hover:bg-[var(--nim-primary)]" />
       </div>
 
       <div
-        className={`worktree-files-right-panel ${rightPanelClassName}`}
+        className={`worktree-files-right-panel min-w-[48px] flex flex-col bg-[var(--nim-bg-secondary)] shrink-0 ${panelCollapsed ? 'collapsed' : ''}`}
         style={{ width: panelCollapsed ? 48 : rightPanelWidth }}
       >
-        <div className="worktree-right-panel-header">
-          <div className="worktree-right-tabs">
-            <button
-              type="button"
-              className={rightPanelTab === 'chat' ? 'is-active' : ''}
-              onClick={() => setRightPanelTab('chat')}
-            >
-              Chat
-            </button>
-            <button
-              type="button"
-              className={rightPanelTab === 'files' ? 'is-active' : ''}
-              onClick={() => setRightPanelTab('files')}
-            >
-              Files
-            </button>
-          </div>
-          <div className="worktree-right-actions">
-            <button type="button" title="New file" onClick={() => setIsNewFileModalOpen(true)}>
-              <MaterialSymbol icon="add" size={18} />
-            </button>
-            <button
-              type="button"
-              title="Filter files"
-              ref={filterButtonRef}
-              onClick={handleFilterButtonClick}
-            >
-              <MaterialSymbol icon="filter_list" size={18} />
-            </button>
-            <button type="button" title="Refresh files" onClick={refreshFileTree}>
-              <MaterialSymbol icon="refresh" size={18} />
-            </button>
-            {onMaximize && (
+        <div className={`worktree-right-panel-header flex items-center justify-between px-2.5 py-2 border-b border-white/[0.06] gap-2 ${panelCollapsed ? 'justify-center px-1' : ''}`}>
+          {!panelCollapsed && (
+            <div className="worktree-right-tabs inline-flex bg-white/[0.04] rounded-full">
               <button
                 type="button"
-                title="Maximize agent view"
-                onClick={onMaximize}
+                className={`border-none bg-transparent text-[var(--nim-text-muted)] px-3 py-1.5 rounded-full text-xs cursor-pointer ${rightPanelTab === 'chat' ? 'bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)]' : ''}`}
+                onClick={() => setRightPanelTab('chat')}
               >
-                <MaterialSymbol icon="fullscreen" size={18} />
+                Chat
               </button>
+              <button
+                type="button"
+                className={`border-none bg-transparent text-[var(--nim-text-muted)] px-3 py-1.5 rounded-full text-xs cursor-pointer ${rightPanelTab === 'files' ? 'bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)]' : ''}`}
+                onClick={() => setRightPanelTab('files')}
+              >
+                Files
+              </button>
+            </div>
+          )}
+          <div className={`worktree-right-actions inline-flex gap-1 ${panelCollapsed ? 'w-full justify-center' : ''}`}>
+            {!panelCollapsed && (
+              <>
+                <button
+                  type="button"
+                  title="New file"
+                  onClick={() => setIsNewFileModalOpen(true)}
+                  className="border-none bg-transparent text-[var(--nim-text-muted)] rounded-md p-1 cursor-pointer hover:bg-white/[0.08] hover:text-[var(--nim-text)]"
+                >
+                  <MaterialSymbol icon="add" size={18} />
+                </button>
+                <button
+                  type="button"
+                  title="Filter files"
+                  ref={filterButtonRef}
+                  onClick={handleFilterButtonClick}
+                  className="border-none bg-transparent text-[var(--nim-text-muted)] rounded-md p-1 cursor-pointer hover:bg-white/[0.08] hover:text-[var(--nim-text)]"
+                >
+                  <MaterialSymbol icon="filter_list" size={18} />
+                </button>
+                <button
+                  type="button"
+                  title="Refresh files"
+                  onClick={refreshFileTree}
+                  className="border-none bg-transparent text-[var(--nim-text-muted)] rounded-md p-1 cursor-pointer hover:bg-white/[0.08] hover:text-[var(--nim-text)]"
+                >
+                  <MaterialSymbol icon="refresh" size={18} />
+                </button>
+                {onMaximize && (
+                  <button
+                    type="button"
+                    title="Maximize agent view"
+                    onClick={onMaximize}
+                    className="border-none bg-transparent text-[var(--nim-text-muted)] rounded-md p-1 cursor-pointer hover:bg-white/[0.08] hover:text-[var(--nim-text)]"
+                  >
+                    <MaterialSymbol icon="fullscreen" size={18} />
+                  </button>
+                )}
+              </>
             )}
             <button
               type="button"
               title={panelCollapsed ? 'Expand panel' : 'Collapse panel'}
               onClick={() => setPanelCollapsed(prev => !prev)}
+              className="border-none bg-transparent text-[var(--nim-text-muted)] rounded-md p-1 cursor-pointer hover:bg-white/[0.08] hover:text-[var(--nim-text)]"
             >
               <MaterialSymbol icon={panelCollapsed ? 'chevron_left' : 'chevron_right'} size={18} />
             </button>
           </div>
         </div>
 
-        <div className="worktree-right-panel-body">
-          {rightPanelTab === 'chat' ? (
-            <div key={`chat-panel-wrapper-${sessionId}`} className="worktree-chat-panel">
-              {chatPanel}
-            </div>
-          ) : (
-            <div className="worktree-files-panel">
-              {filteredTree.length === 0 ? (
-                <div className="worktree-files-empty-state">
-                  {fileTreeFilter === 'all' ? (
-                    <p>No files found in this worktree.</p>
-                  ) : CLAUDE_FILTERS.includes(fileTreeFilter) ? (
-                    <p>
-                      {activeClaudeFilterCount === 0
-                        ? 'No files match this filter for the current session.'
-                        : 'No files available.'}
-                    </p>
-                  ) : (
-                    <p>No files match the selected filter.</p>
-                  )}
-                </div>
-              ) : (
-                <div className="worktree-files-tree">
-                  <FileTree
-                    items={filteredTree}
-                    currentFilePath={activeFilePath}
-                    onFileSelect={handleFileSelect}
-                    level={0}
-                    showIcons={showFileIcons}
-                    gitStatusMap={showGitStatus ? gitStatusMap : undefined}
-                  />
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        {!panelCollapsed && (
+          <div className="worktree-right-panel-body flex-1 min-h-0 flex">
+            {rightPanelTab === 'chat' ? (
+              <div key={`chat-panel-wrapper-${sessionId}`} className="worktree-chat-panel flex-1 min-h-0 flex [&>div]:flex-1 [&>div]:min-h-0">
+                {chatPanel}
+              </div>
+            ) : (
+              <div className="worktree-files-panel flex-1 min-h-0 flex flex-col py-1 overflow-hidden">
+                {filteredTree.length === 0 ? (
+                  <div className="worktree-files-empty-state flex-1 flex items-center justify-center text-[var(--nim-text-muted)] p-4 text-center">
+                    {fileTreeFilter === 'all' ? (
+                      <p>No files found in this worktree.</p>
+                    ) : CLAUDE_FILTERS.includes(fileTreeFilter) ? (
+                      <p>
+                        {activeClaudeFilterCount === 0
+                          ? 'No files match this filter for the current session.'
+                          : 'No files available.'}
+                      </p>
+                    ) : (
+                      <p>No files match the selected filter.</p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="worktree-files-tree flex-1 overflow-y-auto px-2">
+                    <FileTree
+                      items={filteredTree}
+                      currentFilePath={activeFilePath}
+                      onFileSelect={handleFileSelect}
+                      level={0}
+                      showIcons={showFileIcons}
+                      gitStatusMap={showGitStatus ? gitStatusMap : undefined}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {isFilterMenuOpen && (

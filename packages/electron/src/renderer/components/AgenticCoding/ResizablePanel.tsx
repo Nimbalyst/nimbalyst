@@ -1,5 +1,4 @@
 import React, { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
-import './ResizablePanel.css';
 
 interface ResizablePanelProps {
   leftPanel: ReactNode;
@@ -69,17 +68,17 @@ export const ResizablePanel: React.FC<ResizablePanelProps> = ({
   const displayWidth = collapsed ? 0 : currentWidth;
 
   return (
-    <div className="resizable-panel-container" ref={containerRef}>
+    <div className="resizable-panel-container flex flex-1 overflow-hidden h-full" ref={containerRef}>
       {!collapsed && (
         <>
           <div
-            className="resizable-panel-left"
+            className="resizable-panel-left flex flex-col overflow-hidden bg-nim border-r border-nim"
             style={{ width: `${displayWidth}px`, flexShrink: 0 }}
           >
             {leftPanel}
           </div>
           <div
-            className={`resizable-panel-divider ${isDragging ? 'dragging' : ''}`}
+            className={`resizable-panel-divider relative w-0.5 cursor-ew-resize bg-nim-border shrink-0 transition-colors duration-150 hover:bg-nim-accent ${isDragging ? 'bg-nim-accent' : ''}`}
             onMouseDown={handleMouseDown}
             role="separator"
             aria-orientation="vertical"
@@ -88,11 +87,11 @@ export const ResizablePanel: React.FC<ResizablePanelProps> = ({
             aria-valuemin={minWidth}
             aria-valuemax={maxWidth}
           >
-            <div className="resizable-panel-divider-handle" />
+            <div className="resizable-panel-divider-handle absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-10 bg-transparent pointer-events-none" />
           </div>
         </>
       )}
-      <div className="resizable-panel-right">
+      <div className="resizable-panel-right flex-1 flex flex-col overflow-hidden bg-nim">
         {rightPanel}
       </div>
     </div>

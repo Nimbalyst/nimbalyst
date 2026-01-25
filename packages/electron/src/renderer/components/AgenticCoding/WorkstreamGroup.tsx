@@ -3,7 +3,6 @@ import { useAtomValue } from 'jotai';
 import { MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
 import { sessionProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom } from '../../store';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
-import './WorkstreamGroup.css';
 
 /**
  * Unified component for rendering expandable session groups in the session history.
@@ -233,18 +232,20 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
 
   return (
     <div
-      className={`workstream-group ${displayIsArchived ? 'archived' : ''} ${isActive ? 'active' : ''}`}
+      className={`workstream-group mb-1 ${displayIsArchived ? 'archived' : ''} ${isActive ? 'active' : ''}`}
       data-testid={type === 'worktree' ? 'worktree-group' : 'workstream-group'}
       onMouseLeave={handleCloseContextMenu}
     >
       {/* Header */}
       <div
-        className="workstream-group-header"
+        className={`workstream-group-header flex items-center gap-0 text-[0.8125rem] text-[var(--nim-text)] transition-colors duration-150 rounded-md mx-2 w-[calc(100%-1rem)] ${
+          isActive ? 'bg-[var(--nim-bg-selected)]' : 'hover:bg-[var(--nim-bg-hover)]'
+        }`}
         onContextMenu={handleContextMenu}
       >
         {/* Chevron - separate click target for expand/collapse */}
         <button
-          className="workstream-group-chevron-button"
+          className="workstream-group-chevron-button flex items-center justify-center w-6 h-full min-h-[2.5rem] p-0 bg-transparent border-none cursor-pointer text-[var(--nim-text-faint)] shrink-0 rounded-l-md hover:bg-[var(--nim-bg-secondary)] focus:outline-none focus-visible:outline-2 focus-visible:outline-[var(--nim-border-focus)] focus-visible:outline-offset-[-2px]"
           onClick={handleChevronClick}
           aria-expanded={isExpanded}
           aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${type}`}
@@ -252,13 +253,13 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
           <MaterialSymbol
             icon="chevron_right"
             size={12}
-            className={`workstream-group-chevron ${isExpanded ? 'expanded' : ''}`}
+            className={`workstream-group-chevron shrink-0 text-[var(--nim-text-faint)] transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}
           />
         </button>
 
         {/* Main clickable area - icon and content */}
         <div
-          className="workstream-group-main"
+          className="workstream-group-main flex items-start gap-2 flex-1 min-w-0 py-2 pr-2 pl-1 cursor-pointer focus:outline-none focus-visible:outline-2 focus-visible:outline-[var(--nim-border-focus)] focus-visible:outline-offset-[-2px] focus-visible:rounded"
           onClick={handleHeaderClick}
           role="button"
           tabIndex={0}
@@ -271,7 +272,9 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
           aria-label={`${type === 'worktree' ? 'Worktree' : 'Workstream'}: ${displayTitle}, ${sessionCount} session${sessionCount !== 1 ? 's' : ''}`}
         >
           {/* Icon */}
-          <div className="workstream-group-icon">
+          <div className={`workstream-group-icon shrink-0 w-[1.125rem] h-[1.125rem] mt-[0.0625rem] flex items-center justify-center ${
+            isActive ? 'text-[var(--nim-primary)]' : 'text-[var(--nim-text-muted)]'
+          } [&_svg]:w-full [&_svg]:h-full`}>
             {type === 'worktree' ? (
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <rect x="3" y="2" width="3" height="3" rx="0.5" stroke="currentColor" strokeWidth="1.5" fill="none"/>
@@ -292,32 +295,32 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
           </div>
 
           {/* Content */}
-          <div className="workstream-group-content">
-            <div className="workstream-group-row-primary">
-              <span className="workstream-group-name">{displayTitle}</span>
+          <div className="workstream-group-content flex-1 min-w-0 flex flex-col gap-0.5">
+            <div className="workstream-group-row-primary flex items-center gap-1">
+              <span className="workstream-group-name font-medium text-[var(--nim-text)] whitespace-nowrap overflow-hidden text-ellipsis">{displayTitle}</span>
               {displayIsPinned && (
-                <MaterialSymbol icon="push_pin" size={12} className="workstream-group-pin-icon" />
+                <MaterialSymbol icon="push_pin" size={12} className="workstream-group-pin-icon shrink-0 text-[var(--nim-text-faint)] opacity-70" />
               )}
               {displayIsArchived && (
-                <span className="workstream-group-badge archived">archived</span>
+                <span className="workstream-group-badge archived text-[0.5625rem] px-1.5 py-[0.0625rem] rounded-[0.625rem] font-medium bg-[rgba(156,163,175,0.15)] text-[var(--nim-text-faint)]">archived</span>
               )}
             </div>
-            <div className="workstream-group-row-secondary">
+            <div className="workstream-group-row-secondary flex items-center gap-1.5 flex-wrap">
               {/* Git status badges for worktrees */}
               {type === 'worktree' && gitStatus && (
                 <>
                   {gitStatus.ahead && gitStatus.ahead > 0 && (
-                    <span className="workstream-group-badge ahead">
+                    <span className="workstream-group-badge ahead text-[0.5625rem] px-1.5 py-[0.0625rem] rounded-[0.625rem] font-medium bg-[rgba(74,158,255,0.15)] text-[var(--nim-primary)]">
                       {gitStatus.ahead} ahead
                     </span>
                   )}
                   {gitStatus.behind && gitStatus.behind > 0 && (
-                    <span className="workstream-group-badge behind">
+                    <span className="workstream-group-badge behind text-[0.5625rem] px-1.5 py-[0.0625rem] rounded-[0.625rem] font-medium bg-[rgba(245,158,11,0.15)] text-[var(--nim-warning)]">
                       {gitStatus.behind} behind
                     </span>
                   )}
                   {gitStatus.uncommitted && (
-                    <span className="workstream-group-badge uncommitted">
+                    <span className="workstream-group-badge uncommitted text-[0.5625rem] px-1.5 py-[0.0625rem] rounded-[0.625rem] font-medium bg-[rgba(245,158,11,0.15)] text-[var(--nim-warning)]">
                       uncommitted
                     </span>
                   )}
@@ -326,13 +329,13 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
               {/* Show total uncommitted count for workstreams */}
               {type === 'workstream' && totalUncommittedCount > 0 && (
                 <span
-                  className="workstream-group-badge uncommitted"
+                  className="workstream-group-badge uncommitted text-[0.5625rem] px-1.5 py-[0.0625rem] rounded-[0.625rem] font-medium bg-[rgba(245,158,11,0.15)] text-[var(--nim-warning)]"
                   title={`${totalUncommittedCount} uncommitted change${totalUncommittedCount !== 1 ? 's' : ''} across all sessions`}
                 >
                   {totalUncommittedCount} uncommitted
                 </span>
               )}
-              <span className="workstream-group-count">
+              <span className="workstream-group-count shrink-0 text-[0.6875rem] text-[var(--nim-text-faint)]">
                 {sessionCount} session{sessionCount !== 1 ? 's' : ''}
               </span>
             </div>
@@ -341,10 +344,10 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
 
         {/* Action buttons for worktrees */}
         {type === 'worktree' && (onFilesMode || onChangesMode) && (
-          <div className="workstream-group-actions">
+          <div className="workstream-group-actions flex items-center gap-0.5 pr-2 shrink-0">
             {onFilesMode && (
               <button
-                className="workstream-group-action-button"
+                className="workstream-group-action-button flex items-center justify-center w-6 h-6 p-0 bg-transparent border-none rounded cursor-pointer text-[var(--nim-text-faint)] transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)] focus:outline-none focus-visible:outline-2 focus-visible:outline-[var(--nim-border-focus)] focus-visible:outline-offset-[-2px]"
                 onClick={handleFilesMode}
                 title="Browse Files"
                 aria-label="Browse files in worktree"
@@ -354,7 +357,7 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
             )}
             {onChangesMode && (
               <button
-                className="workstream-group-action-button"
+                className="workstream-group-action-button flex items-center justify-center w-6 h-6 p-0 bg-transparent border-none rounded cursor-pointer text-[var(--nim-text-faint)] transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)] focus:outline-none focus-visible:outline-2 focus-visible:outline-[var(--nim-border-focus)] focus-visible:outline-offset-[-2px]"
                 onClick={handleChangesMode}
                 title="View Changes"
                 aria-label="View changes in worktree"
@@ -368,7 +371,7 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
 
       {/* Sessions List */}
       {isExpanded && (
-        <div className="workstream-group-sessions">
+        <div className="workstream-group-sessions pt-1 pb-1 pl-10 animate-[workstreamSlideDown_0.2s_ease-out]">
           {sortedSessions.map(session => (
             <WorkstreamSessionItem
               key={session.id}
@@ -396,7 +399,7 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
       {showContextMenu && (
         <div
           ref={contextMenuRef}
-          className="workstream-group-context-menu"
+          className="workstream-group-context-menu fixed z-[1000] min-w-[140px] bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)] p-1"
           style={{
             left: (adjustedContextMenuPosition || contextMenuPosition).x,
             top: (adjustedContextMenuPosition || contextMenuPosition).y
@@ -405,7 +408,7 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
         >
           {type === 'worktree' && onWorktreePinToggle && (
             <button
-              className="workstream-group-context-menu-item"
+              className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
               onClick={handlePinToggle}
             >
               <MaterialSymbol icon="push_pin" size={14} />
@@ -414,7 +417,7 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
           )}
           {type === 'worktree' && onAddSession && (
             <button
-              className="workstream-group-context-menu-item"
+              className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
               onClick={handleAddSession}
             >
               <MaterialSymbol icon="add" size={14} />
@@ -423,7 +426,7 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
           )}
           {type === 'worktree' && onAddTerminal && (
             <button
-              className="workstream-group-context-menu-item"
+              className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
               onClick={handleAddTerminal}
             >
               <MaterialSymbol icon="terminal" size={14} />
@@ -432,9 +435,9 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
           )}
           {type === 'worktree' && onWorktreeArchive && (
             <>
-              <div className="workstream-group-context-menu-divider" />
+              <div className="workstream-group-context-menu-divider h-px my-1 bg-[var(--nim-border)]" />
               <button
-                className="workstream-group-context-menu-item destructive"
+                className="workstream-group-context-menu-item destructive flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-error)] text-left rounded transition-colors duration-150 hover:bg-[rgba(239,68,68,0.1)]"
                 onClick={handleArchive}
               >
                 <MaterialSymbol icon="archive" size={14} />
@@ -444,6 +447,30 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
           )}
         </div>
       )}
+
+      {/* Keyframe animation styles */}
+      <style>{`
+        @keyframes workstreamSlideDown {
+          from {
+            opacity: 0;
+            transform: translateY(-4px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        .workstream-group.archived .workstream-group-header {
+          opacity: 0.5;
+        }
+        .workstream-group.archived .workstream-session-item {
+          opacity: 0.5;
+        }
+      `}</style>
     </div>
   );
 };
@@ -460,7 +487,7 @@ const WorkstreamSessionStatusIndicator = memo<{ sessionId: string; uncommittedCo
   // Priority: processing > pending prompt > unread > uncommitted count
   if (isProcessing) {
     return (
-      <div className="workstream-session-item-status processing" title="Processing...">
+      <div className="workstream-session-item-status processing flex items-center justify-center text-[var(--nim-primary)] animate-spin" title="Processing...">
         <MaterialSymbol icon="progress_activity" size={12} />
       </div>
     );
@@ -468,7 +495,7 @@ const WorkstreamSessionStatusIndicator = memo<{ sessionId: string; uncommittedCo
 
   if (hasPendingPrompt) {
     return (
-      <div className="workstream-session-item-status pending-prompt" title="Waiting for your response">
+      <div className="workstream-session-item-status pending-prompt flex items-center justify-center text-[var(--nim-warning)]" title="Waiting for your response">
         <MaterialSymbol icon="help" size={12} />
       </div>
     );
@@ -476,7 +503,7 @@ const WorkstreamSessionStatusIndicator = memo<{ sessionId: string; uncommittedCo
 
   if (hasUnread) {
     return (
-      <div className="workstream-session-item-status unread" title="Unread response">
+      <div className="workstream-session-item-status unread flex items-center justify-center text-[var(--nim-primary)]" title="Unread response">
         <MaterialSymbol icon="circle" size={6} fill />
       </div>
     );
@@ -485,7 +512,7 @@ const WorkstreamSessionStatusIndicator = memo<{ sessionId: string; uncommittedCo
   if (uncommittedCount && uncommittedCount > 0) {
     return (
       <span
-        className="workstream-session-item-badge uncommitted"
+        className="workstream-session-item-badge uncommitted text-[0.625rem] py-[0.0625rem] px-1 rounded-lg font-medium text-[var(--nim-warning)] bg-[color-mix(in_srgb,var(--nim-warning)_15%,transparent)]"
         title={`${uncommittedCount} uncommitted change${uncommittedCount !== 1 ? 's' : ''}`}
       >
         {uncommittedCount}
@@ -585,7 +612,9 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
 
   return (
     <div
-      className={`workstream-session-item ${isActive ? 'active' : ''}`}
+      className={`workstream-session-item flex items-center gap-2 py-1.5 px-3 mr-2 mb-0.5 cursor-pointer rounded transition-colors duration-150 select-none ${
+        isActive ? 'active bg-[var(--nim-bg-selected)]' : 'hover:bg-[var(--nim-bg-hover)]'
+      } focus:outline-2 focus:outline-[var(--nim-border-focus)] focus:outline-offset-[-2px]`}
       onClick={onClick}
       onContextMenu={handleContextMenu}
       onMouseLeave={() => setShowContextMenu(false)}
@@ -600,17 +629,21 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
       aria-label={`Session: ${displayTitle}`}
       aria-current={isActive ? 'page' : undefined}
     >
-      <div className="workstream-session-item-icon">
+      <div className={`workstream-session-item-icon shrink-0 flex items-center justify-center ${
+        isActive ? 'text-[var(--nim-primary)]' : 'text-[var(--nim-text-muted)]'
+      }`}>
         <ProviderIcon provider={session.provider || 'claude'} size={14} />
       </div>
       {session.isPinned && (
-        <MaterialSymbol icon="push_pin" size={10} className="workstream-session-item-pin-icon" />
+        <MaterialSymbol icon="push_pin" size={10} className={`workstream-session-item-pin-icon shrink-0 -ml-1 opacity-70 ${
+          isActive ? 'text-[var(--nim-primary)]' : 'text-[var(--nim-text-faint)]'
+        }`} />
       )}
       {isRenaming ? (
         <input
           ref={renameInputRef}
           type="text"
-          className="workstream-session-item-rename-input"
+          className="workstream-session-item-rename-input flex-1 min-w-0 py-0.5 px-1.5 text-xs font-medium border border-[var(--nim-primary)] rounded bg-[var(--nim-bg)] text-[var(--nim-text)] outline-none box-border"
           value={renameValue}
           onChange={(e) => setRenameValue(e.target.value)}
           onKeyDown={handleRenameKeyDown}
@@ -619,13 +652,15 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
         />
       ) : (
         <>
-          <span className="workstream-session-item-title">{displayTitle}</span>
-          <span className="workstream-session-item-timestamp">
+          <span className={`workstream-session-item-title flex-1 text-xs text-[var(--nim-text)] whitespace-nowrap overflow-hidden text-ellipsis ${
+            isActive ? 'font-medium' : ''
+          }`}>{displayTitle}</span>
+          <span className="workstream-session-item-timestamp shrink-0 text-[0.6875rem] text-[var(--nim-text-faint)] ml-2">
             {getRelativeTimeString(session.updatedAt || session.createdAt)}
           </span>
         </>
       )}
-      <div className="workstream-session-item-right">
+      <div className="workstream-session-item-right flex items-center gap-1 shrink-0">
         <WorkstreamSessionStatusIndicator sessionId={session.id} uncommittedCount={session.uncommittedCount} />
       </div>
 
@@ -633,7 +668,7 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
       {showContextMenu && (
         <div
           ref={contextMenuRef}
-          className="workstream-group-context-menu"
+          className="workstream-group-context-menu fixed z-[1000] min-w-[140px] bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)] p-1"
           style={{
             left: contextMenuPosition.x,
             top: contextMenuPosition.y
@@ -642,7 +677,7 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
         >
           {onPinToggle && (
             <button
-              className="workstream-group-context-menu-item"
+              className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
               onClick={handlePinToggle}
             >
               <MaterialSymbol icon="push_pin" size={14} />
@@ -651,7 +686,7 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
           )}
           {onRename && (
             <button
-              className="workstream-group-context-menu-item"
+              className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
               onClick={handleRenameClick}
             >
               <MaterialSymbol icon="edit" size={14} />
@@ -660,7 +695,7 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
           )}
           {onArchive && (
             <button
-              className="workstream-group-context-menu-item"
+              className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
               onClick={handleArchive}
             >
               <MaterialSymbol icon="archive" size={14} />
@@ -669,7 +704,7 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
           )}
           {onDelete && (
             <button
-              className="workstream-group-context-menu-item destructive"
+              className="workstream-group-context-menu-item destructive flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-error)] text-left rounded transition-colors duration-150 hover:bg-[rgba(239,68,68,0.1)]"
               onClick={handleDelete}
             >
               <MaterialSymbol icon="delete" size={14} />

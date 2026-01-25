@@ -211,7 +211,7 @@ export class GitWorktreeService {
     try {
       // Get current branch
       const currentBranch = await git.revparse(['--abbrev-ref', 'HEAD']);
-      logger.info('Current branch', { currentBranch });
+      // logger.info('Current branch', { currentBranch });
 
       // Get status to check for uncommitted changes
       const status = await git.status();
@@ -220,7 +220,7 @@ export class GitWorktreeService {
 
       // Use provided base branch (from database) or fall back to inferring
       const baseBranch = baseBranchOverride || await this.inferBaseBranch(git);
-      logger.info('Using base branch', { baseBranch });
+      // logger.info('Using base branch', { baseBranch });
 
       // Get commits ahead/behind base branch
       let commitsAhead = 0;
@@ -234,7 +234,7 @@ export class GitWorktreeService {
         commitsBehind = behind || 0;
         commitsAhead = ahead || 0;
 
-        logger.info('Commits ahead/behind', { commitsAhead, commitsBehind });
+        // logger.info('Commits ahead/behind', { commitsAhead, commitsBehind });
 
         // Check if branch is merged
         const mergedBranches = await git.raw(['branch', '--merged', baseBranch]);

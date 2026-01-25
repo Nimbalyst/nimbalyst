@@ -3,7 +3,6 @@ import { useAtomValue } from 'jotai';
 import { ProviderIcon, MaterialSymbol } from '@nimbalyst/runtime';
 import { getRelativeTimeString } from '../utils/dateFormatting';
 import { sessionOrChildProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom } from '../store';
-import './SessionQuickOpen.css';
 
 interface SessionItem {
   id: string;
@@ -29,15 +28,21 @@ const SessionStatusIndicator = memo<{ sessionId: string }>(({ sessionId }) => {
   // Priority: processing > pending prompt > unread
   if (isProcessing) {
     return (
-      <div className="session-quick-open-status processing" title="Processing...">
-        <MaterialSymbol icon="progress_activity" size={14} />
+      <div
+        className="session-quick-open-status processing flex items-center justify-center w-5 h-5 text-[var(--nim-primary)] opacity-80"
+        title="Processing..."
+      >
+        <MaterialSymbol icon="progress_activity" size={14} className="animate-spin" />
       </div>
     );
   }
 
   if (hasPendingPrompt) {
     return (
-      <div className="session-quick-open-status pending-prompt" title="Waiting for your response">
+      <div
+        className="session-quick-open-status pending-prompt flex items-center justify-center w-5 h-5 text-[var(--nim-warning)] animate-pulse"
+        title="Waiting for your response"
+      >
         <MaterialSymbol icon="help" size={14} />
       </div>
     );
@@ -45,7 +50,10 @@ const SessionStatusIndicator = memo<{ sessionId: string }>(({ sessionId }) => {
 
   if (hasUnread) {
     return (
-      <div className="session-quick-open-status unread" title="Unread response">
+      <div
+        className="session-quick-open-status unread flex items-center justify-center w-5 h-5 text-[var(--nim-primary)]"
+        title="Unread response"
+      >
         <MaterialSymbol icon="circle" size={8} fill />
       </div>
     );
@@ -185,31 +193,34 @@ export const SessionQuickOpen: React.FC<SessionQuickOpenProps> = ({
 
   return (
     <>
-      <div className="session-quick-open-backdrop" onClick={onClose} />
-      <div className="session-quick-open-modal">
-        <div className="session-quick-open-header">
+      <div
+        className="session-quick-open-backdrop fixed inset-0 bg-black/50 z-[99998] nim-animate-fade-in"
+        onClick={onClose}
+      />
+      <div className="session-quick-open-modal fixed top-[20%] left-1/2 -translate-x-1/2 w-[90%] max-w-[600px] max-h-[60vh] flex flex-col overflow-hidden rounded-lg z-[99999] bg-[var(--nim-bg)] border border-[var(--nim-border)] shadow-[0_20px_60px_rgba(0,0,0,0.3)]">
+        <div className="session-quick-open-header relative p-3 border-b border-[var(--nim-border)]">
           <input
             ref={searchInputRef}
             type="text"
-            className="session-quick-open-search"
+            className="session-quick-open-search w-full py-2 px-3 text-base rounded-md outline-none box-border bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] focus:border-[#007aff] focus:shadow-[0_0_0_3px_rgba(0,122,255,0.1)]"
             placeholder="Search AI sessions by name..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
 
-        <div className="session-quick-open-results">
+        <div className="session-quick-open-results flex-1 overflow-y-auto min-h-[200px]">
           {displaySessions.length === 0 ? (
-            <div className="session-quick-open-empty">
+            <div className="session-quick-open-empty p-10 text-center text-[var(--nim-text-faint)]">
               {searchQuery ? 'No sessions found' : 'No recent sessions'}
             </div>
           ) : (
-            <ul className="session-quick-open-list" ref={resultsListRef}>
+            <ul className="session-quick-open-list list-none m-0 p-0" ref={resultsListRef}>
               {displaySessions.map((session, index) => (
                 <li
                   key={session.id}
-                  className={`session-quick-open-item ${
-                    index === selectedIndex ? 'selected' : ''
+                  className={`session-quick-open-item flex items-start gap-3 py-2.5 px-4 cursor-pointer border-l-[3px] border-transparent transition-all duration-100 hover:bg-[var(--nim-bg-hover)] ${
+                    index === selectedIndex ? 'selected bg-[rgba(0,122,255,0.1)] border-l-[#007aff]' : ''
                   }`}
                   onClick={() => handleSessionSelect(session.id)}
                   onMouseEnter={() => {
@@ -218,30 +229,33 @@ export const SessionQuickOpen: React.FC<SessionQuickOpenProps> = ({
                     }
                   }}
                 >
-                  <div className="session-quick-open-item-icon">
+                  <div className="session-quick-open-item-icon shrink-0 flex items-center justify-center pt-0.5 text-[var(--nim-text-muted)]">
                     <ProviderIcon provider={session.provider || 'claude'} size={16} />
                   </div>
-                  <div className="session-quick-open-item-content">
-                    <div className="session-quick-open-item-name">
+                  <div className="session-quick-open-item-content flex-1 min-w-0">
+                    <div className="session-quick-open-item-name text-sm font-medium text-[var(--nim-text)] flex items-center gap-2 overflow-hidden text-ellipsis whitespace-nowrap">
                       {session.title || 'New conversation'}
                       {session.parentSessionId && (
-                        <span className="session-quick-open-badge workstream-badge">
+                        <span className="session-quick-open-badge workstream-badge shrink-0 text-[10px] py-0.5 px-1.5 rounded-[3px] font-semibold bg-[var(--nim-primary)] text-white">
                           In Workstream
                         </span>
                       )}
                       {session.messageCount > 0 && (
-                        <span className="session-quick-open-badge">
+                        <span className="session-quick-open-badge shrink-0 text-[10px] py-0.5 px-1.5 rounded-[3px] font-semibold bg-[var(--nim-text-faint)] text-white">
                           {session.messageCount} msg{session.messageCount !== 1 ? 's' : ''}
                         </span>
                       )}
                     </div>
-                    <div className="session-quick-open-item-meta">
+                    <div className="session-quick-open-item-meta text-xs text-[var(--nim-text-faint)] mt-0.5">
                       {getRelativeTimeString(session.updatedAt)}
                     </div>
                   </div>
-                  <div className="session-quick-open-item-right">
+                  <div className="session-quick-open-item-right shrink-0 flex items-center gap-1.5 ml-auto">
                     {session.uncommittedCount !== undefined && session.uncommittedCount > 0 && (
-                      <span className="session-quick-open-badge uncommitted" title={`${session.uncommittedCount} uncommitted change${session.uncommittedCount !== 1 ? 's' : ''}`}>
+                      <span
+                        className="session-quick-open-badge uncommitted shrink-0 text-[10px] py-0.5 px-1.5 rounded-[3px] font-semibold bg-[rgba(245,158,11,0.15)] text-[var(--nim-warning)]"
+                        title={`${session.uncommittedCount} uncommitted change${session.uncommittedCount !== 1 ? 's' : ''}`}
+                      >
                         {session.uncommittedCount}
                       </span>
                     )}
@@ -253,15 +267,15 @@ export const SessionQuickOpen: React.FC<SessionQuickOpenProps> = ({
           )}
         </div>
 
-        <div className="session-quick-open-footer">
-          <span className="session-quick-open-hint">
-            <kbd>Up/Down</kbd> Navigate
+        <div className="session-quick-open-footer flex gap-4 py-2 px-4 border-t border-[var(--nim-border)] bg-[var(--nim-bg-secondary)]">
+          <span className="session-quick-open-hint text-[11px] text-[var(--nim-text-faint)] flex items-center gap-1">
+            <kbd className="py-0.5 px-1.5 rounded-[3px] font-mono text-[10px] bg-[var(--nim-bg)] border border-[var(--nim-border)] text-[var(--nim-text)]">Up/Down</kbd> Navigate
           </span>
-          <span className="session-quick-open-hint">
-            <kbd>Enter</kbd> Open
+          <span className="session-quick-open-hint text-[11px] text-[var(--nim-text-faint)] flex items-center gap-1">
+            <kbd className="py-0.5 px-1.5 rounded-[3px] font-mono text-[10px] bg-[var(--nim-bg)] border border-[var(--nim-border)] text-[var(--nim-text)]">Enter</kbd> Open
           </span>
-          <span className="session-quick-open-hint">
-            <kbd>Esc</kbd> Close
+          <span className="session-quick-open-hint text-[11px] text-[var(--nim-text-faint)] flex items-center gap-1">
+            <kbd className="py-0.5 px-1.5 rounded-[3px] font-mono text-[10px] bg-[var(--nim-bg)] border border-[var(--nim-border)] text-[var(--nim-text)]">Esc</kbd> Close
           </span>
         </div>
       </div>

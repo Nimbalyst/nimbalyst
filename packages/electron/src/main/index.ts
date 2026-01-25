@@ -798,8 +798,8 @@ app.whenReady().then(async () => {
     });
 
     // Set up IPC handler for theme changes from renderer
-    safeOn('set-theme', (event, theme: AppTheme) => {
-        setTheme(theme);
+    safeOn('set-theme', (event, theme: AppTheme, isDark?: boolean) => {
+        setTheme(theme, isDark);
         updateNativeTheme();
         BrowserWindow.getAllWindows().forEach(window => {
             window.webContents.send('theme-change', theme);

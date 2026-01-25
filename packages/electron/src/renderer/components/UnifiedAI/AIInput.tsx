@@ -28,7 +28,6 @@ import {
   fileMentionOptionsAtom,
   searchFileMentionAtom,
 } from '../../store';
-import './AIInput.css';
 
 export interface AIInputRef {
   focus: () => void;
@@ -888,10 +887,10 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
     }, []);
 
     return (
-      <div className={`ai-chat-input ${isMemoryMode ? 'memory-mode' : ''}`} style={{ position: 'relative' }}>
+      <div className={`ai-chat-input flex flex-col gap-2 p-3 border-t border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] shrink-0 relative ${isMemoryMode ? 'memory-mode' : ''}`}>
         {/* Vertical resize handle at top of input area */}
         <div
-          className={`ai-chat-input-resize-handle ${isResizing ? 'resizing' : ''}`}
+          className={`ai-chat-input-resize-handle absolute -top-[3px] left-0 right-0 h-1.5 cursor-row-resize z-10 before:content-[''] before:absolute before:top-0.5 before:left-0 before:right-0 before:h-0.5 before:bg-transparent before:transition-colors before:duration-150 ${isResizing ? 'before:bg-[var(--nim-primary)]' : ''} hover:before:bg-[var(--nim-primary)]`}
           onMouseDown={handleResizeMouseDown}
           title="Drag to resize prompt box"
         />
@@ -1010,7 +1009,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
         >
           <textarea
             ref={textareaRef}
-            className="ai-chat-input-field"
+            className="ai-chat-input-field flex-1 min-h-9 py-2 px-3 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md text-[var(--nim-text)] text-[13px] font-[inherit] resize-none outline-none transition-colors duration-200 focus:border-[var(--nim-primary)] disabled:opacity-50 disabled:cursor-not-allowed placeholder:text-[var(--nim-text-faint)]"
             value={value}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -1021,10 +1020,8 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
             disabled={disabled}
             rows={1}
             style={{
-              flex: 1,
               minHeight: `${MIN_PROMPT_HEIGHT}px`,
               maxHeight: `${userSetHeight ?? DEFAULT_MAX_PROMPT_HEIGHT}px`,
-              resize: 'none'
             }}
           />
           {isMemoryMode ? (
@@ -1037,7 +1034,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
           ) : isLoading ? (
             onCancel && (
               <button
-                className="ai-chat-cancel-button"
+                className="ai-chat-cancel-button w-9 h-9 flex items-center justify-center bg-red-600 border-none rounded-md text-white cursor-pointer transition-all duration-200 animate-pulse hover:bg-red-700 hover:scale-105 hover:animate-none"
                 onClick={() => {
                   console.log('[AIInput] Cancel button clicked, onCancel:', !!onCancel);
                   onCancel();
@@ -1052,7 +1049,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
             )
           ) : (
             <button
-              className="ai-chat-send-button"
+              className="ai-chat-send-button w-9 h-9 flex items-center justify-center bg-[var(--nim-primary)] border-none rounded-md text-white cursor-pointer transition-all duration-200 shrink-0 hover:enabled:bg-[var(--nim-primary-hover)] hover:enabled:scale-105 disabled:opacity-40 disabled:cursor-not-allowed"
               onClick={handleSend}
               disabled={disabled || !value.trim()}
               title="Send message (Enter)"

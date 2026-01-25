@@ -129,18 +129,18 @@ export function ClaudeCodePanel({
   };
 
   return (
-    <div className="provider-panel">
-      <div className="provider-panel-header">
-        <h3 className="provider-panel-title">Claude Agent</h3>
-        <p className="provider-panel-description">
+    <div className="provider-panel flex flex-col">
+      <div className="provider-panel-header mb-6 pb-4 border-b border-[var(--nim-border)]">
+        <h3 className="provider-panel-title text-xl font-semibold leading-tight mb-2 text-[var(--nim-text)]">Claude Agent</h3>
+        <p className="provider-panel-description text-sm leading-relaxed text-[var(--nim-text-muted)]">
           Agent mode uses the Claude Code SDK with a few extensions for added functionality in Nimbalyst.
           Has full MCP support with file system access, multi-file operations, and session persistence.
         </p>
       </div>
 
-      <div className="provider-enable" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span className="provider-enable-label">Enable Claude Agent</span>
-        <label className="provider-toggle">
+      <div className="provider-enable flex items-center justify-between gap-4 py-4 mb-4 border-b border-[var(--nim-border)]">
+        <span className="provider-enable-label text-sm font-medium text-[var(--nim-text)]">Enable Claude Agent</span>
+        <label className="provider-toggle relative inline-block w-11 h-6 cursor-pointer">
           <input
             type="checkbox"
             checked={config.enabled || false}
@@ -148,382 +148,219 @@ export function ClaudeCodePanel({
               console.log('[ClaudeCodePanel] Toggle changed to:', e.target.checked);
               onToggle(e.target.checked);
             }}
+            className="opacity-0 w-0 h-0 absolute"
           />
-          <span className="provider-toggle-slider"></span>
+          <span className="provider-toggle-slider absolute cursor-pointer inset-0 rounded-full transition-all bg-[var(--nim-bg-tertiary)] before:absolute before:content-[''] before:h-5 before:w-5 before:left-0.5 before:bottom-0.5 before:rounded-full before:transition-all before:bg-white before:shadow-sm peer-checked:bg-[var(--nim-primary)] peer-checked:before:translate-x-5"></span>
         </label>
       </div>
 
       { isWindowsPlatform && isCheckingClaudeWindowsStatus && (
-        <>
-          <div className="installation-status installing">
-            <div className="installation-status-row">
-              <span className="installation-status-label">Checking Claude Code Installation...</span>
-            </div>
+        <div className="installation-status p-4 rounded-lg bg-[rgba(245,158,11,0.05)] border border-[rgba(245,158,11,0.2)]">
+          <div className="installation-status-row flex items-center gap-3 py-1">
+            <span className="installation-status-label text-sm font-medium text-[var(--nim-text-muted)]">Checking Claude Code Installation...</span>
           </div>
-        </>
+        </div>
       )}
       { !isCheckingClaudeWindowsStatus && (
-        <>
-          <div className="provider-panel-section">
-            { isWindowsPlatform ? (
-              <>
-                <h4 className="provider-panel-section-title">Claude Code for Windows Installation</h4>
-                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '12px', lineHeight: '1.4' }}>
-                  Nimbalyst requires Claude Code for Windows to be installed to use the Claude Code provider.
-                </p>
-                { Boolean(claudeCodeWindowsStatus?.claudeCodeVersion) ? (
-                  <>
-                    <div className="installation-status installed">
-                      <div className="installation-status-row">
-                        <span className="installation-status-label">Claude Code Version:</span>
-                        <span className="installation-status-value">{claudeCodeWindowsStatus?.claudeCodeVersion}</span>
-                      </div>
-                    </div>
-                  </>
-                ): (
-                  <>
-                    <div className="installation-status not-installed">
-                      <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '12px', lineHeight: '1.4' }}>
-                        <div>Install Claude Code for Windows by following the instructions beloew:</div>
-                        <div>
-                          <ol>
-                            <li>Install <a href={'https://git-scm.com/install/windows'}>Git for Windows</a>. This is a prerequisite for installing Claude Code</li>
-                            <li>Install <a href={'https://code.claude.com/docs/en/overview#windows'}>Claude Code for Windows</a>.</li>
-                            <li>When finished, click the button below to recheck / verify the installation.</li>
-                          </ol>
-                        </div>
-                        <div>
-                          <button className={"button-update"} onClick={checkClaudeCodeWindowsInstallation}>Re-verify Claude Code Installation</button>
-                        </div>
-                      </p>
-                    </div>
-                  </>
-                )}
-              </>
-            ): (
-              <>
-                <h4 className="provider-panel-section-title">Claude Agent SDK</h4>
-                <div className="installation-status installed">
-                  <div className="installation-status-row">
-                    <span className="installation-status-label">Version:</span>
-                    <span className="installation-status-value">{BUNDLED_SDK_VERSION}</span>
+        <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+          { isWindowsPlatform ? (
+            <>
+              <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Claude Code for Windows Installation</h4>
+              <p className="text-xs text-[var(--nim-text-muted)] mt-3 leading-relaxed">
+                Nimbalyst requires Claude Code for Windows to be installed to use the Claude Code provider.
+              </p>
+              { Boolean(claudeCodeWindowsStatus?.claudeCodeVersion) ? (
+                <div className="installation-status mt-3 p-4 rounded-lg bg-[rgba(16,185,129,0.05)] border border-[rgba(16,185,129,0.2)]">
+                  <div className="installation-status-row flex items-center gap-3 py-1">
+                    <span className="installation-status-label text-sm font-medium text-[var(--nim-text-muted)]">Claude Code Version:</span>
+                    <span className="installation-status-value text-sm text-[var(--nim-text)]">{claudeCodeWindowsStatus?.claudeCodeVersion}</span>
                   </div>
-                  <div className="installation-status-row">
-                    <span className="installation-status-label">Source:</span>
-                    <span className="installation-status-value">Built-in (bundled with app)</span>
-                  </div>
-                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '12px', lineHeight: '1.4' }}>
-                    Nimbalyst includes the Claude Agent SDK. No additional installation required.
-                  </p>
                 </div>
-              </>
-            )}
-          </div>
-        </>
+              ): (
+                <div className="installation-status mt-3 p-4 rounded-lg bg-[rgba(239,68,68,0.05)] border border-[rgba(239,68,68,0.2)]">
+                  <div className="text-xs text-[var(--nim-text-muted)] mt-3 leading-relaxed">
+                    <p className="mb-2">Install Claude Code for Windows by following the instructions below:</p>
+                    <ol className="list-decimal list-inside space-y-1 mb-4">
+                      <li>Install <a href="https://git-scm.com/install/windows" className="text-[var(--nim-link)] hover:underline">Git for Windows</a>. This is a prerequisite for installing Claude Code</li>
+                      <li>Install <a href="https://code.claude.com/docs/en/overview#windows" className="text-[var(--nim-link)] hover:underline">Claude Code for Windows</a>.</li>
+                      <li>When finished, click the button below to recheck / verify the installation.</li>
+                    </ol>
+                    <button className="nim-btn-primary" onClick={checkClaudeCodeWindowsInstallation}>Re-verify Claude Code Installation</button>
+                  </div>
+                </div>
+              )}
+            </>
+          ): (
+            <>
+              <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Claude Agent SDK</h4>
+              <div className="installation-status p-4 rounded-lg bg-[rgba(16,185,129,0.05)] border border-[rgba(16,185,129,0.2)]">
+                <div className="installation-status-row flex items-center gap-3 py-1">
+                  <span className="installation-status-label text-sm font-medium text-[var(--nim-text-muted)]">Version:</span>
+                  <span className="installation-status-value text-sm text-[var(--nim-text)]">{BUNDLED_SDK_VERSION}</span>
+                </div>
+                <div className="installation-status-row flex items-center gap-3 py-1">
+                  <span className="installation-status-label text-sm font-medium text-[var(--nim-text-muted)]">Source:</span>
+                  <span className="installation-status-value text-sm text-[var(--nim-text)]">Built-in (bundled with app)</span>
+                </div>
+                <p className="text-xs leading-relaxed text-[var(--nim-text-muted)] mt-3">
+                  Nimbalyst includes the Claude Agent SDK. No additional installation required.
+                </p>
+              </div>
+            </>
+          )}
+        </div>
       )}
 
       {config.enabled && isClaudeCodeWindowsReady() && (
         <>
-              <div className="provider-panel-section">
-                <h4 className="provider-panel-section-title">Authentication</h4>
-                <div className="api-key-section">
-                  {/* Authentication Method Selector */}
-                  <div style={{ marginBottom: '16px' }}>
-                    <label style={{
-                      display: 'block',
-                      fontSize: '13px',
-                      fontWeight: '600',
-                      color: 'var(--text-primary)',
-                      marginBottom: '8px'
-                    }}>
-                      Authentication Method
-                    </label>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button
-                        style={{
-                          flex: 1,
-                          padding: '10px 16px',
-                          borderRadius: '6px',
-                          fontSize: '13px',
-                          fontWeight: '500',
-                          cursor: 'pointer',
-                          transition: 'all 0.15s ease',
-                          border: selectedAuthMethod === 'login'
-                            ? '2px solid var(--primary-color, #2563eb)'
-                            : '1px solid var(--border-primary)',
-                          background: selectedAuthMethod === 'login'
-                            ? 'var(--primary-color, #2563eb)10'
-                            : 'var(--surface-secondary)',
-                          color: selectedAuthMethod === 'login'
-                            ? 'var(--primary-color, #2563eb)'
-                            : 'var(--text-primary)'
-                        }}
-                        onClick={() => {
-                          setSelectedAuthMethod('login');
-                          onConfigChange({ authMethod: 'login' });
-                        }}
-                      >
-                        Claude Plan (Recommended)
-                      </button>
-                      <button
-                        style={{
-                          flex: 1,
-                          padding: '10px 16px',
-                          borderRadius: '6px',
-                          fontSize: '13px',
-                          fontWeight: '500',
-                          cursor: 'pointer',
-                          transition: 'all 0.15s ease',
-                          border: selectedAuthMethod === 'api-key'
-                            ? '2px solid var(--primary-color, #2563eb)'
-                            : '1px solid var(--border-primary)',
-                          background: selectedAuthMethod === 'api-key'
-                            ? 'var(--primary-color, #2563eb)10'
-                            : 'var(--surface-secondary)',
-                          color: selectedAuthMethod === 'api-key'
-                            ? 'var(--primary-color, #2563eb)'
-                            : 'var(--text-primary)'
-                        }}
-                        onClick={() => {
-                          setSelectedAuthMethod('api-key');
-                          onConfigChange({ authMethod: 'api-key' });
-                        }}
-                      >
-                        API Key
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Claude Plan Authentication */}
-                  {selectedAuthMethod === 'login' && (
-                    <>
-                      {loginStatus?.isLoggedIn ? (
-                        <>
-                          {/* Logged In State */}
-                          <div style={{
-                            marginBottom: '16px',
-                            padding: '14px 16px',
-                            backgroundColor: '#10b98114',
-                            border: '1px solid #10b98130',
-                            borderRadius: '6px',
-                            fontSize: '13px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            gap: '12px'
-                          }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
-                              <span style={{ color: '#10b981', fontSize: '20px', lineHeight: 1 }}>✓</span>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                <span style={{ color: 'var(--text-primary)', fontWeight: '600', fontSize: '14px' }}>
-                                  Authenticated with Claude Plan
-                                </span>
-                                {loginStatus.email && (
-                                  <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
-                                    {loginStatus.email}
-                                    {loginStatus.organization && ` • ${loginStatus.organization}`}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                              <button
-                                style={{
-                                  padding: '6px 12px',
-                                  borderRadius: '4px',
-                                  fontSize: '12px',
-                                  fontWeight: '500',
-                                  cursor: 'pointer',
-                                  transition: 'all 0.15s ease',
-                                  border: '1px solid var(--border-primary)',
-                                  background: 'var(--surface-secondary)',
-                                  color: 'var(--text-primary)'
-                                }}
-                                onClick={checkLoginStatus}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.background = 'var(--surface-hover)';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.background = 'var(--surface-secondary)';
-                                }}
-                              >
-                                Refresh
-                              </button>
-                              <button
-                                style={{
-                                  padding: '6px 12px',
-                                  borderRadius: '4px',
-                                  fontSize: '12px',
-                                  fontWeight: '500',
-                                  cursor: 'pointer',
-                                  transition: 'all 0.15s ease',
-                                  border: '1px solid var(--border-primary)',
-                                  background: 'var(--surface-secondary)',
-                                  color: 'var(--text-primary)'
-                                }}
-                                onClick={handleLogout}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.background = 'var(--surface-hover)';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.background = 'var(--surface-secondary)';
-                                }}
-                              >
-                                Logout
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Switch Account Info */}
-                          <div style={{ marginBottom: '16px' }}>
-                            <p style={{
-                              fontSize: '12px',
-                              color: 'var(--text-secondary)',
-                              lineHeight: '1.5'
-                            }}>
-                              Need to use a different Claude account? Logout above and login again.
-                            </p>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          {/* Not Logged In State */}
-                          <div style={{
-                            marginBottom: '16px',
-                            padding: '16px',
-                            backgroundColor: 'var(--surface-secondary)',
-                            border: '1px solid var(--border-primary)',
-                            borderRadius: '8px'
-                          }}>
-                            <p style={{
-                              fontSize: '13px',
-                              color: 'var(--text-secondary)',
-                              marginBottom: '12px',
-                              lineHeight: '1.5'
-                            }}>
-                              Authenticate with your Claude Pro or Team subscription. No API credits needed.
-                            </p>
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                              <button
-                                style={{
-                                  flex: 1,
-                                  padding: '12px 16px',
-                                  borderRadius: '6px',
-                                  fontSize: '14px',
-                                  fontWeight: '600',
-                                  cursor: isLoggingIn ? 'not-allowed' : 'pointer',
-                                  transition: 'all 0.15s ease',
-                                  border: 'none',
-                                  background: isLoggingIn ? 'var(--text-tertiary)' : 'var(--primary-color, #2563eb)',
-                                  color: 'white',
-                                  opacity: isLoggingIn ? '0.6' : '1'
-                                }}
-                                onClick={handleLogin}
-                                disabled={isLoggingIn}
-                                onMouseEnter={(e) => {
-                                  if (!isLoggingIn) {
-                                    e.currentTarget.style.opacity = '0.9';
-                                  }
-                                }}
-                                onMouseLeave={(e) => {
-                                  if (!isLoggingIn) {
-                                    e.currentTarget.style.opacity = '1';
-                                  }
-                                }}
-                              >
-                                {isLoggingIn ? 'Opening Login...' : 'Login with Claude Plan'}
-                              </button>
-                              <button
-                                style={{
-                                  padding: '12px 16px',
-                                  borderRadius: '6px',
-                                  fontSize: '14px',
-                                  fontWeight: '600',
-                                  cursor: 'pointer',
-                                  transition: 'all 0.15s ease',
-                                  border: '1px solid var(--border-primary)',
-                                  background: 'var(--surface-secondary)',
-                                  color: 'var(--text-primary)'
-                                }}
-                                onClick={checkLoginStatus}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.background = 'var(--surface-hover)';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.background = 'var(--surface-secondary)';
-                                }}
-                              >
-                                Refresh
-                              </button>
-                            </div>
-                            <p style={{
-                              fontSize: '11px',
-                              color: 'var(--text-secondary)',
-                              marginTop: '8px',
-                              lineHeight: '1.4'
-                            }}>
-                              Opens Terminal for OAuth authentication
-                            </p>
-                          </div>
-                        </>
-                      )}
-                    </>
-                  )}
-
-                  {/* API Key Authentication */}
-                  {selectedAuthMethod === 'api-key' && (
-                    <>
-                      <div style={{ marginBottom: '12px' }}>
-                        <p style={{
-                          fontSize: '13px',
-                          color: 'var(--text-secondary)',
-                          marginBottom: '12px',
-                          lineHeight: '1.5'
-                        }}>
-                          Use an Anthropic API key. Pay-per-use with API credits from your Anthropic account.
-                        </p>
-                      </div>
-                      <div className="api-key-row">
-                        <input
-                          type="password"
-                          value={apiKeys['claude-code'] || ''}
-                          onChange={(e) => onApiKeyChange('claude-code', e.target.value)}
-                          onFocus={(e) => e.target.select()}
-                          placeholder="sk-ant-..."
-                          className="api-key-input"
-                        />
-                        {apiKeys['claude-code'] ? (
-                          <button
-                            className={`test-button ${config.testStatus}`}
-                            onClick={onTestConnection}
-                            disabled={config.testStatus === 'testing'}
-                          >
-                            {config.testStatus === 'testing' ? 'Testing...' :
-                             config.testStatus === 'success' ? '✓ Connected' :
-                             config.testStatus === 'error' ? '✗ Failed' : 'Test'}
-                          </button>
-                        ) : null}
-                      </div>
-                      {config.testMessage && config.testStatus === 'error' && (
-                        <div className="test-error">{config.testMessage}</div>
-                      )}
-                    </>
-                  )}
+          <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+            <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Authentication</h4>
+            <div className="api-key-section mt-4">
+              {/* Authentication Method Selector */}
+              <div className="auth-method-selector mb-4">
+                <label className="auth-method-label block text-[13px] font-semibold mb-2 text-[var(--nim-text)]">Authentication Method</label>
+                <div className="auth-method-buttons flex gap-2">
+                  <button
+                    className={`auth-method-button flex-1 py-2.5 px-4 rounded-md text-[13px] font-medium cursor-pointer transition-all border ${
+                      selectedAuthMethod === 'login'
+                        ? 'border-2 border-[var(--nim-primary)] bg-[rgba(59,130,246,0.1)] text-[var(--nim-primary)]'
+                        : 'border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-border-focus)]'
+                    }`}
+                    onClick={() => {
+                      setSelectedAuthMethod('login');
+                      onConfigChange({ authMethod: 'login' });
+                    }}
+                  >
+                    Claude Plan (Recommended)
+                  </button>
+                  <button
+                    className={`auth-method-button flex-1 py-2.5 px-4 rounded-md text-[13px] font-medium cursor-pointer transition-all border ${
+                      selectedAuthMethod === 'api-key'
+                        ? 'border-2 border-[var(--nim-primary)] bg-[rgba(59,130,246,0.1)] text-[var(--nim-primary)]'
+                        : 'border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-border-focus)]'
+                    }`}
+                    onClick={() => {
+                      setSelectedAuthMethod('api-key');
+                      onConfigChange({ authMethod: 'api-key' });
+                    }}
+                  >
+                    API Key
+                  </button>
                 </div>
               </div>
 
+              {/* Claude Plan Authentication */}
+              {selectedAuthMethod === 'login' && (
+                <>
+                  {loginStatus?.isLoggedIn ? (
+                    <>
+                      {/* Logged In State */}
+                      <div className="status-box-success mb-4 py-3.5 px-4 rounded-lg text-[13px] flex items-center gap-3 justify-between bg-[rgba(16,185,129,0.08)] border border-[rgba(16,185,129,0.2)]">
+                        <div className="flex items-center gap-3 flex-1">
+                          <span className="status-box-icon text-xl leading-none shrink-0 text-[var(--nim-success)]">✓</span>
+                          <div className="status-box-content flex flex-col gap-1 flex-1">
+                            <span className="status-box-title font-semibold text-sm text-[var(--nim-text)]">Authenticated with Claude Plan</span>
+                            {loginStatus.email && (
+                              <span className="status-box-subtitle text-xs text-[var(--nim-text-muted)]">
+                                {loginStatus.email}
+                                {loginStatus.organization && ` • ${loginStatus.organization}`}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="status-box-actions flex gap-2 shrink-0">
+                          <button className="btn-small py-1.5 px-3 rounded text-xs font-medium cursor-pointer transition-all bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]" onClick={checkLoginStatus}>
+                            Refresh
+                          </button>
+                          <button className="btn-small py-1.5 px-3 rounded text-xs font-medium cursor-pointer transition-all bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]" onClick={handleLogout}>
+                            Logout
+                          </button>
+                        </div>
+                      </div>
 
-              <div className="provider-panel-section">
-                <h4 className="provider-panel-section-title">Tool Permissions</h4>
-                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
-                  Tool permissions are now managed per-project. When Claude Agent attempts to use a tool,
-                  you'll be prompted to allow or deny the action.
-                </p>
-                <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                  To view or modify allowed tools for a project, go to{' '}
-                  <strong>Project Settings &gt; Permissions</strong>.
-                </p>
-              </div>
+                      {/* Switch Account Info */}
+                      <p className="text-xs leading-relaxed text-[var(--nim-text-muted)] mb-4">
+                        Need to use a different Claude account? Logout above and login again.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      {/* Not Logged In State */}
+                      <div className="mb-4 p-4 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded-lg">
+                        <p className="text-xs leading-relaxed text-[var(--nim-text-muted)] mb-3">
+                          Authenticate with your Claude Pro or Team subscription. No API credits needed.
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            className="nim-btn-primary flex-1"
+                            onClick={handleLogin}
+                            disabled={isLoggingIn}
+                          >
+                            {isLoggingIn ? 'Opening Login...' : 'Login with Claude Plan'}
+                          </button>
+                          <button className="nim-btn-secondary" onClick={checkLoginStatus}>
+                            Refresh
+                          </button>
+                        </div>
+                        <p className="text-[11px] leading-relaxed text-[var(--nim-text-faint)] mt-2">
+                          Opens Terminal for OAuth authentication
+                        </p>
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+
+              {/* API Key Authentication */}
+              {selectedAuthMethod === 'api-key' && (
+                <>
+                  <p className="text-xs leading-relaxed text-[var(--nim-text-muted)] mb-3">
+                    Use an Anthropic API key. Pay-per-use with API credits from your Anthropic account.
+                  </p>
+                  <div className="api-key-row flex gap-2 items-center">
+                    <input
+                      type="password"
+                      value={apiKeys['claude-code'] || ''}
+                      onChange={(e) => onApiKeyChange('claude-code', e.target.value)}
+                      onFocus={(e) => e.target.select()}
+                      placeholder="sk-ant-..."
+                      className="api-key-input flex-1 py-2 px-3 rounded-md bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] outline-none font-mono focus:border-[var(--nim-primary)]"
+                    />
+                    {apiKeys['claude-code'] ? (
+                      <button
+                        className={`test-button inline-flex items-center justify-center py-2 px-4 rounded-md text-sm font-medium whitespace-nowrap cursor-pointer transition-all bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)] border border-[var(--nim-border)] hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] ${
+                          config.testStatus === 'testing' ? 'opacity-60 cursor-wait' : ''
+                        } ${config.testStatus === 'success' ? 'text-[var(--nim-success)] border-[var(--nim-success)]' : ''} ${
+                          config.testStatus === 'error' ? 'text-[var(--nim-error)] border-[var(--nim-error)]' : ''
+                        }`}
+                        onClick={onTestConnection}
+                        disabled={config.testStatus === 'testing'}
+                      >
+                        {config.testStatus === 'testing' ? 'Testing...' :
+                         config.testStatus === 'success' ? '✓ Connected' :
+                         config.testStatus === 'error' ? '✗ Failed' : 'Test'}
+                      </button>
+                    ) : null}
+                  </div>
+                  {config.testMessage && config.testStatus === 'error' && (
+                    <div className="test-error text-xs mt-2 text-[var(--nim-error)]">{config.testMessage}</div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+            <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Tool Permissions</h4>
+            <p className="text-xs leading-relaxed text-[var(--nim-text-muted)] mb-2">
+              Tool permissions are now managed per-project. When Claude Agent attempts to use a tool,
+              you'll be prompted to allow or deny the action.
+            </p>
+            <p className="text-xs leading-relaxed text-[var(--nim-text-muted)]">
+              To view or modify allowed tools for a project, go to{' '}
+              <strong className="font-medium text-[var(--nim-text)]">Project Settings &gt; Permissions</strong>.
+            </p>
+          </div>
         </>
       )}
     </div>

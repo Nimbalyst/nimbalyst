@@ -2,6 +2,89 @@ import { useEffect } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import type { ConfigTheme } from 'rexical';
 import { themeIdAtom, setThemeAtom, store, type ThemeId } from '@nimbalyst/runtime/store';
+import { getExtensionLoader } from '@nimbalyst/runtime';
+import { getBaseThemeColors, type ExtendedThemeColors } from 'rexical';
+
+/**
+ * Map of ExtendedThemeColors keys to CSS variable names.
+ *
+ * These are the INNER variable names that NimbalystTheme.css references via var().
+ * For example, NimbalystTheme.css defines: --nim-bg: var(--surface-primary, #fff)
+ * So we set --surface-primary to override the value.
+ *
+ * This pattern ensures that inline styles properly override the CSS defaults.
+ */
+const CSS_VAR_MAP: Record<keyof ExtendedThemeColors, string> = {
+  // Core colors - set inner variables that --nim-* vars reference
+  'bg': '--surface-primary',
+  'bg-secondary': '--surface-secondary',
+  'bg-tertiary': '--surface-tertiary',
+  'bg-hover': '--surface-hover',
+  'bg-selected': '--surface-selected',
+  'bg-active': '--surface-active',
+  'text': '--text-primary',
+  'text-muted': '--text-secondary',
+  'text-faint': '--text-tertiary',
+  'text-disabled': '--text-disabled',
+  'border': '--border-primary',
+  'border-focus': '--border-focus',
+  'primary': '--accent-primary',
+  'primary-hover': '--accent-primary-hover',
+  'link': '--accent-link',
+  'link-hover': '--accent-link-hover',
+  'success': '--success-color',
+  'warning': '--warning-color',
+  'error': '--error-color',
+  'info': '--info-color',
+
+  // Code blocks
+  'code-bg': '--code-background',
+  'code-text': '--code-text',
+  'code-border': '--code-border',
+  'code-gutter': '--code-gutter',
+
+  // Table - set --nim-* directly to override CSS fallbacks
+  'table-border': '--nim-table-border',
+  'table-header': '--nim-table-header',
+  'table-cell': '--nim-table-cell',
+  'table-stripe': '--nim-table-stripe',
+
+  // Toolbar
+  'toolbar-bg': '--toolbar-background',
+  'toolbar-border': '--toolbar-border',
+  'toolbar-hover': '--toolbar-button-hover',
+  'toolbar-active': '--toolbar-button-active',
+
+  // Special
+  'highlight-bg': '--highlight-background',
+  'highlight-border': '--highlight-border',
+  'quote-text': '--quote-text',
+  'quote-border': '--quote-border',
+
+  // Scrollbar
+  'scrollbar-thumb': '--scrollbar-thumb',
+  'scrollbar-thumb-hover': '--scrollbar-thumb-hover',
+  'scrollbar-track': '--scrollbar-track',
+
+  // Diff
+  'diff-add-bg': '--diff-add-bg',
+  'diff-add-border': '--diff-add-border',
+  'diff-remove-bg': '--diff-remove-bg',
+  'diff-remove-border': '--diff-remove-border',
+
+  // Syntax highlighting
+  'code-comment': '--code-comment',
+  'code-punctuation': '--code-punctuation',
+  'code-property': '--code-property',
+  'code-selector': '--code-selector',
+  'code-operator': '--code-operator',
+  'code-attr': '--code-attr',
+  'code-variable': '--code-variable',
+  'code-function': '--code-function',
+};
+
+// Track currently applied extension theme for cleanup
+let currentExtensionThemeId: string | null = null;
 
 /**
  * Initialize theme from main process and set up IPC listener.
@@ -12,7 +95,10 @@ export function initializeTheme(): void {
   const mainProcessTheme = window.electronAPI?.getThemeSync?.() || 'light';
   store.set(themeIdAtom, mainProcessTheme as ThemeId);
 
-  // Listen for theme changes from the menu (Window > Theme)
+  // Apply the theme (handles both built-in and extension themes)
+  applyThemeToDOM(mainProcessTheme as ThemeId);
+
+  // Listen for theme changes from the menu (Window > Theme) or other windows
   if (window.electronAPI?.on) {
     window.electronAPI.on('theme-change', (newTheme: string) => {
       const resolvedTheme = newTheme as ThemeId;
@@ -20,7 +106,7 @@ export function initializeTheme(): void {
       // Update atom (this will re-render all subscribing components)
       store.set(themeIdAtom, resolvedTheme);
 
-      // Update DOM immediately (same logic as index.html)
+      // Update DOM immediately (handles both built-in and extension themes)
       applyThemeToDOM(resolvedTheme);
     });
   }
@@ -28,11 +114,22 @@ export function initializeTheme(): void {
 
 /**
  * Apply theme to DOM (classList and data-theme attribute).
- * This is the same logic as in index.html for consistency.
+ * Handles both built-in themes and extension themes.
  */
 function applyThemeToDOM(theme: ThemeId): void {
   const root = document.documentElement;
 
+  // Check if this is an extension theme
+  if (isExtensionTheme(theme)) {
+    // Apply extension theme (which sets base theme + CSS variables)
+    applyExtensionTheme(theme);
+    return;
+  }
+
+  // Clear any extension theme when switching to built-in
+  clearExtensionTheme();
+
+  // Apply built-in theme
   let targetClass = '';
   let targetDataTheme = '';
 
@@ -58,6 +155,34 @@ function applyThemeToDOM(theme: ThemeId): void {
 }
 
 /**
+ * Get the effective base theme for a theme ID.
+ * For built-in themes, returns as-is.
+ * For extension themes, looks up isDark and returns 'dark' or 'light'.
+ */
+function getEffectiveBaseTheme(themeId: string): ConfigTheme {
+  // Built-in themes pass through
+  if (themeId === 'light' || themeId === 'dark' || themeId === 'crystal-dark') {
+    return themeId;
+  }
+
+  // Extension theme - look up whether it's dark
+  if (isExtensionTheme(themeId)) {
+    try {
+      const loader = getExtensionLoader();
+      const themes = loader.getThemes();
+      const theme = themes.find(t => t.id === themeId);
+      if (theme) {
+        return theme.isDark ? 'dark' : 'light';
+      }
+    } catch {
+      // Extension system not ready, fall back to light
+    }
+  }
+
+  return 'light';
+}
+
+/**
  * Custom hook for managing application theme.
  *
  * IMPORTANT: This hook does NOT re-apply the theme on mount to prevent flash.
@@ -67,18 +192,27 @@ function applyThemeToDOM(theme: ThemeId): void {
  * 2. Provides setTheme for programmatic changes
  *
  * Theme changes from menu are handled by initializeTheme() which runs once.
+ *
+ * Returns:
+ * - theme: The effective theme for components that only understand 'light'|'dark'|'crystal-dark'
+ * - themeId: The raw theme ID (may be an extension theme like 'sample-themes:solarized-light')
+ * - setTheme: Function to change the theme
  */
 export function useTheme() {
-  const theme = useAtomValue(themeIdAtom) as ConfigTheme;
+  const themeId = useAtomValue(themeIdAtom) as string;
   const setTheme = useSetAtom(setThemeAtom);
+
+  // Compute effective base theme for Lexical and other components
+  // that only understand built-in theme names
+  const theme = getEffectiveBaseTheme(themeId) as ConfigTheme;
 
   // When theme atom changes, also update DOM
   // This handles programmatic theme changes from within React
   useEffect(() => {
-    applyThemeToDOM(theme as ThemeId);
-  }, [theme]);
+    applyThemeToDOM(themeId as ThemeId);
+  }, [themeId]);
 
-  return { theme, setTheme };
+  return { theme, themeId, setTheme };
 }
 
 /**
@@ -95,4 +229,166 @@ export function useThemeValue(): ConfigTheme {
  */
 export function getTheme(): ThemeId {
   return store.get(themeIdAtom);
+}
+
+/**
+ * Check if a theme ID is an extension theme (format: extensionId:themeId).
+ */
+export function isExtensionTheme(themeId: string): boolean {
+  return themeId.includes(':');
+}
+
+/**
+ * Get all available themes (built-in + extension themes).
+ */
+export function getAllAvailableThemes(): Array<{
+  id: string;
+  name: string;
+  isDark: boolean;
+  isExtension: boolean;
+}> {
+  const builtInThemes = [
+    { id: 'light', name: 'Light', isDark: false, isExtension: false },
+    { id: 'dark', name: 'Dark', isDark: true, isExtension: false },
+    { id: 'crystal-dark', name: 'Crystal Dark', isDark: true, isExtension: false },
+  ];
+
+  try {
+    const loader = getExtensionLoader();
+    const extensionThemes = loader.getThemes().map(t => ({
+      id: t.id,
+      name: t.name,
+      isDark: t.isDark,
+      isExtension: true,
+    }));
+
+    return [...builtInThemes, ...extensionThemes];
+  } catch {
+    // Extension system may not be initialized yet
+    return builtInThemes;
+  }
+}
+
+/**
+ * Apply an extension theme by setting CSS variables on the document root.
+ * Extension themes are layered on top of a base theme (light or dark).
+ */
+export function applyExtensionTheme(themeId: string): boolean {
+  if (!isExtensionTheme(themeId)) {
+    console.warn('[useTheme] Not an extension theme:', themeId);
+    return false;
+  }
+
+  try {
+    const loader = getExtensionLoader();
+    const themes = loader.getThemes();
+    const theme = themes.find(t => t.id === themeId);
+
+    if (!theme) {
+      console.error('[useTheme] Extension theme not found:', themeId);
+      return false;
+    }
+
+    const root = document.documentElement;
+
+    // First, apply the base theme (light or dark) for proper fallbacks
+    const baseTheme = theme.isDark ? 'dark' : 'light';
+    root.classList.remove('dark-theme', 'light-theme', 'crystal-dark-theme');
+    root.classList.add(`${baseTheme}-theme`);
+    root.setAttribute('data-theme', baseTheme);
+
+    // Get base colors for fallbacks
+    const baseColors = getBaseThemeColors(theme.isDark);
+
+    // Derive missing colors from extension's colors for better consistency
+    const extColors = theme.colors as Record<string, string>;
+    const derivedColors: Record<string, string> = {};
+
+    // Table colors: derive from extension's background colors if not specified
+    if (!extColors['table-header'] && extColors['bg-secondary']) {
+      derivedColors['table-header'] = extColors['bg-secondary'];
+    }
+    if (!extColors['table-cell'] && extColors['bg']) {
+      derivedColors['table-cell'] = extColors['bg'];
+    }
+    if (!extColors['table-stripe'] && extColors['bg-tertiary']) {
+      derivedColors['table-stripe'] = extColors['bg-tertiary'];
+    }
+    if (!extColors['table-border'] && extColors['border']) {
+      derivedColors['table-border'] = extColors['border'];
+    }
+
+    // Code block colors
+    if (!extColors['code-bg'] && extColors['bg-secondary']) {
+      derivedColors['code-bg'] = extColors['bg-secondary'];
+    }
+    if (!extColors['code-text'] && extColors['text']) {
+      derivedColors['code-text'] = extColors['text'];
+    }
+    if (!extColors['code-border'] && extColors['border']) {
+      derivedColors['code-border'] = extColors['border'];
+    }
+
+    // Toolbar colors
+    if (!extColors['toolbar-bg'] && extColors['bg']) {
+      derivedColors['toolbar-bg'] = extColors['bg'];
+    }
+    if (!extColors['toolbar-border'] && extColors['border']) {
+      derivedColors['toolbar-border'] = extColors['border'];
+    }
+
+    // Quote colors
+    if (!extColors['quote-text'] && extColors['text-muted']) {
+      derivedColors['quote-text'] = extColors['text-muted'];
+    }
+    if (!extColors['quote-border'] && extColors['border']) {
+      derivedColors['quote-border'] = extColors['border'];
+    }
+
+    // Apply all theme colors as CSS variables
+    // Start with base colors, then derived colors, then extension overrides
+    const allColors = { ...baseColors, ...derivedColors, ...theme.colors };
+
+    for (const [key, cssVar] of Object.entries(CSS_VAR_MAP)) {
+      const colorKey = key as keyof ExtendedThemeColors;
+      const value = allColors[colorKey];
+      if (value) {
+        root.style.setProperty(cssVar, value);
+      }
+    }
+
+    // Mark as extension theme for cleanup
+    root.setAttribute('data-extension-theme', themeId);
+    currentExtensionThemeId = themeId;
+
+    console.info(`[useTheme] Applied extension theme: ${theme.name} (${themeId})`);
+    return true;
+  } catch (error) {
+    console.error('[useTheme] Failed to apply extension theme:', error);
+    return false;
+  }
+}
+
+/**
+ * Clear any extension theme overrides, restoring the base theme.
+ */
+export function clearExtensionTheme(): void {
+  const root = document.documentElement;
+
+  // Remove extension theme marker
+  root.removeAttribute('data-extension-theme');
+
+  // Clear all --nim-* CSS variable overrides
+  for (const cssVar of Object.values(CSS_VAR_MAP)) {
+    root.style.removeProperty(cssVar);
+  }
+
+  currentExtensionThemeId = null;
+}
+
+/**
+ * Get the currently applied extension theme ID, if any.
+ */
+export function getCurrentExtensionTheme(): string | null {
+  return currentExtensionThemeId;
 }

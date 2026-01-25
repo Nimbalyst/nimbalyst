@@ -5,7 +5,6 @@ import { parseModelInfo, getProviderLabel } from '../../utils/modelUtils';
 import type { SessionData } from '@nimbalyst/runtime/ai/server/types';
 import { formatDate } from '@nimbalyst/runtime';
 import { sessionProcessingAtom, sessionUnreadAtom } from '../../store';
-import './SessionDropdown.css';
 
 /**
  * Status indicator that subscribes to session atoms.
@@ -16,10 +15,20 @@ const SessionStatusIndicator = memo<{ sessionId: string }>(({ sessionId }) => {
   const hasUnread = useAtomValue(sessionUnreadAtom(sessionId));
 
   if (isProcessing) {
-    return <div className="session-status-indicator processing" title="Running" />;
+    return (
+      <div
+        className="session-status-indicator processing w-2 h-2 rounded-full shrink-0 bg-[var(--nim-primary)] animate-pulse"
+        title="Running"
+      />
+    );
   }
   if (hasUnread) {
-    return <div className="session-status-indicator unread" title="Unread response" />;
+    return (
+      <div
+        className="session-status-indicator unread w-2 h-2 rounded-full shrink-0 bg-[var(--nim-primary)]"
+        title="Unread response"
+      />
+    );
   }
   return null;
 });
@@ -124,22 +133,26 @@ export function SessionDropdown({
   };
 
   return (
-    <div className="session-dropdown" ref={dropdownRef}>
+    <div className="session-dropdown relative" ref={dropdownRef}>
       <button
         ref={triggerRef}
-        className="session-dropdown-trigger"
+        className="session-dropdown-trigger flex items-center gap-1 px-2 py-1.5 bg-transparent border border-[var(--nim-border)] rounded-md text-[var(--nim-text)] text-[13px] cursor-pointer transition-all duration-200 h-8 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-border-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
         onClick={handleToggle}
         title="Session History"
       >
         {currentSessionId && <SessionStatusIndicator sessionId={currentSessionId} />}
         <ProviderIcon provider={getCurrentSession()?.provider || 'claude'} size={16} />
-        <span className="session-dropdown-name">{getCurrentSessionName()}</span>
-        <MaterialSymbol icon="expand_more" size={16} className={`session-dropdown-arrow ${isOpen ? 'open' : ''}`} />
+        <span className="session-dropdown-name overflow-hidden text-ellipsis whitespace-nowrap max-w-[200px]">{getCurrentSessionName()}</span>
+        <MaterialSymbol
+          icon="expand_more"
+          size={16}
+          className={`session-dropdown-arrow shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+        />
       </button>
 
       {isOpen && menuPosition && (
         <div
-          className="session-dropdown-menu"
+          className="session-dropdown-menu min-w-[280px] max-w-[400px] bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-lg shadow-[0_4px_12px_rgba(0,0,0,0.1)] z-[10000] overflow-hidden"
           style={{
             position: 'fixed',
             top: `${menuPosition.top}px`,
@@ -148,7 +161,7 @@ export function SessionDropdown({
         >
           {onOpenSessionManager && (
             <button
-              className="session-dropdown-all-sessions"
+              className="session-dropdown-all-sessions flex items-center gap-2 w-full px-3 py-2 bg-transparent border-none text-[var(--nim-text)] text-[13px] cursor-pointer transition-colors duration-200 text-left hover:bg-[var(--nim-bg-hover)]"
               onClick={() => {
                 onOpenSessionManager();
                 setIsOpen(false);
@@ -159,18 +172,18 @@ export function SessionDropdown({
             </button>
           )}
           {sessions.length > 0 && (
-            <div className="session-dropdown-divider" />
+            <div className="session-dropdown-divider h-px bg-[var(--nim-border)] my-1" />
           )}
-          <div className="session-dropdown-sessions">
+          <div className="session-dropdown-sessions max-h-[300px] overflow-y-auto">
             {sessions.map(session => (
                   <div
                     key={session.id}
-                    className={`session-dropdown-item ${session.id === currentSessionId ? 'active' : ''}`}
+                    className={`session-dropdown-item flex items-center justify-between px-3 py-2.5 bg-transparent border-none text-[var(--nim-text)] text-[13px] cursor-pointer transition-colors duration-200 w-full text-left hover:bg-[var(--nim-bg-hover)] ${session.id === currentSessionId ? 'active bg-[var(--nim-bg-selected)] font-medium' : ''}`}
                   >
                     {renamingId === session.id ? (
                       <input
                         type="text"
-                        className="session-rename-input"
+                        className="session-rename-input flex-1 px-1.5 py-1 border border-[var(--nim-primary)] rounded bg-[var(--nim-bg)] text-[var(--nim-text)] text-[13px] outline-none"
                         value={renameValue}
                         onChange={(e) => setRenameValue(e.target.value)}
                         onBlur={submitRename}
@@ -180,36 +193,36 @@ export function SessionDropdown({
                       />
                     ) : (
                       <div
-                        className="session-info"
+                        className="session-info flex-1 flex flex-col gap-0.5 min-w-0"
                         onClick={() => {
                           onSessionSelect(session.id);
                           setIsOpen(false);
                         }}
                       >
-                        <div className="session-name-row">
+                        <div className="session-name-row flex items-center gap-1.5">
                           <SessionStatusIndicator sessionId={session.id} />
-                          <span className="session-name">{formatSessionName(session)}</span>
+                          <span className="session-name overflow-hidden text-ellipsis whitespace-nowrap">{formatSessionName(session)}</span>
                           {session.provider && (
-                            <span className={`session-provider-badge provider-${session.provider}`}>
+                            <span className={`session-provider-badge provider-${session.provider} inline-flex items-center px-1 py-px rounded text-[9px] font-semibold uppercase tracking-wide shrink-0`}>
                               {getProviderLabel(session.provider)}
                             </span>
                           )}
                           {session.model && (
-                            <span className="session-model-badge">
+                            <span className="session-model-badge inline-flex items-center px-1.5 py-px rounded text-[10px] font-medium bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-muted)] shrink-0">
                               {parseModelInfo(session.model)?.shortModelName}
                             </span>
                           )}
                         </div>
                         {session.messageCount !== undefined && (
-                          <span className="session-message-count">{session.messageCount} turns</span>
+                          <span className="session-message-count text-[11px] text-[var(--nim-text-muted)]">{session.messageCount} turns</span>
                         )}
                       </div>
                     )}
 
-                    <div className="session-actions">
+                    <div className="session-actions flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100 [.session-dropdown-item:hover_&]:opacity-100">
                       {onRenameSession && (
                         <button
-                          className="session-action-btn"
+                          className="session-action-btn nim-btn-icon"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleRename(session.id);
@@ -220,7 +233,7 @@ export function SessionDropdown({
                         </button>
                       )}
                       <button
-                        className="session-action-btn delete"
+                        className="session-action-btn delete nim-btn-icon hover:bg-[var(--nim-bg-tertiary)] hover:text-[var(--nim-error)]"
                         onClick={(e) => {
                           e.stopPropagation();
                           if (confirm('Delete this session?')) {
@@ -236,7 +249,7 @@ export function SessionDropdown({
             ))}
           </div>
           {sessions.length === 0 && (
-            <div className="session-dropdown-empty">
+            <div className="session-dropdown-empty p-5 text-center text-[var(--nim-text-muted)] text-[13px]">
               <span>No sessions yet</span>
             </div>
           )}

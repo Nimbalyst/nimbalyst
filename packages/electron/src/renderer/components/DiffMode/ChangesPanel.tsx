@@ -6,7 +6,6 @@ import { CommitsHistory } from './CommitsHistory';
 import { MergeConfirmDialog } from './MergeConfirmDialog';
 import { SquashCommitModal } from './SquashCommitModal';
 import type { ChangedFile, CommitInfo } from './DiffModeView';
-import './ChangesPanel.css';
 
 interface ChangesPanelProps {
   files: ChangedFile[];
@@ -240,10 +239,10 @@ export function ChangesPanel({
 
   if (collapsed) {
     return (
-      <div className="changes-panel changes-panel--collapsed">
+      <div className="changes-panel changes-panel--collapsed flex flex-col h-full overflow-hidden items-center justify-start pt-2">
         <button
           type="button"
-          className="changes-panel-expand-button"
+          className="changes-panel-expand-button nim-btn-icon w-8 h-8"
           onClick={onCollapse}
           title="Expand panel"
         >
@@ -254,26 +253,27 @@ export function ChangesPanel({
   }
 
   return (
-    <div className="changes-panel">
+    <div className="changes-panel flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="changes-panel-header">
-        <div className="changes-panel-title-group">
-          <div className="changes-panel-title">
+      <div className="changes-panel-header flex items-center justify-between px-3 py-2 border-b border-[var(--nim-border)]">
+        <div className="changes-panel-title-group flex flex-col gap-0.5">
+          <div className="changes-panel-title flex items-center gap-1.5 text-[0.8125rem] font-medium text-[var(--nim-text)]">
             <span>Changes</span>
             {files.length > 0 && (
-              <span className="changes-panel-count">{files.length}</span>
+              <span className="changes-panel-count inline-flex items-center justify-center min-w-[18px] h-[18px] px-[5px] text-[0.6875rem] font-semibold bg-[var(--nim-primary)] text-[var(--nim-accent-contrast)] rounded-full">{files.length}</span>
             )}
           </div>
           {repoRootBranch && (
-            <div className="changes-panel-base-branch" title="Comparing against repo root branch">
+            <div className="changes-panel-base-branch flex items-center gap-1 text-[0.6875rem] text-[var(--nim-text-faint)]" title="Comparing against repo root branch">
               <MaterialSymbol icon="compare_arrows" size={14} />
-              <span>{repoRootBranch}</span>
+              <span className="font-mono text-[0.625rem]">{repoRootBranch}</span>
             </div>
           )}
         </div>
-        <div className="changes-panel-actions">
+        <div className="changes-panel-actions flex items-center gap-1">
           <button
             type="button"
+            className="nim-btn-icon"
             title="Refresh"
             onClick={onRefresh}
           >
@@ -281,6 +281,7 @@ export function ChangesPanel({
           </button>
           <button
             type="button"
+            className="nim-btn-icon"
             title="Collapse panel"
             onClick={onCollapse}
           >
@@ -291,24 +292,24 @@ export function ChangesPanel({
 
       {/* Error message */}
       {error && (
-        <div className="changes-panel-error">
+        <div className="changes-panel-error flex items-center justify-between gap-2 px-3 py-2 bg-[var(--nim-error-light)] text-[var(--nim-error)] text-xs">
           <span>{error}</span>
-          <button type="button" onClick={onDismissError}>
+          <button type="button" className="flex items-center justify-center w-[18px] h-[18px] p-0 bg-transparent border-none text-[var(--nim-error)] cursor-pointer opacity-70 hover:opacity-100 transition-opacity duration-150" onClick={onDismissError}>
             <MaterialSymbol icon="close" size={14} />
           </button>
         </div>
       )}
 
       {/* Main content */}
-      <div className="changes-panel-body">
+      <div className="changes-panel-body flex-1 flex flex-col overflow-hidden">
         {/* Changed files tree */}
-        <div className="changes-panel-section">
-          <div className="changes-panel-section-header">
+        <div className="changes-panel-section flex flex-col border-b border-[var(--nim-border)]">
+          <div className="changes-panel-section-header flex items-center justify-between px-3 py-2 text-xs font-medium text-[var(--nim-text-muted)] uppercase tracking-wide">
             <span>Changed Files</span>
             {files.length > 0 && (
               <button
                 type="button"
-                className="changes-panel-toggle-all"
+                className="changes-panel-toggle-all px-1.5 py-0.5 text-[0.6875rem] font-medium text-[var(--nim-primary)] bg-transparent border-none cursor-pointer transition-colors duration-150 hover:text-[var(--nim-primary-hover)] hover:underline"
                 onClick={() => onToggleAllStaged(!allStaged)}
                 title={allStaged ? 'Unstage all' : 'Stage all'}
               >
@@ -340,33 +341,33 @@ export function ChangesPanel({
         />
 
         {/* Commits history */}
-        <div className="changes-panel-section changes-panel-section--commits">
-          <div className="changes-panel-section-header">
+        <div className="changes-panel-section changes-panel-section--commits flex flex-col flex-1 min-h-0 border-b-0">
+          <div className="changes-panel-section-header flex items-center justify-between px-3 py-2 text-xs font-medium text-[var(--nim-text-muted)] uppercase tracking-wide">
             <span>Commits</span>
             {commits.length > 0 && (
-              <span className="changes-panel-section-count">{commits.length}</span>
+              <span className="changes-panel-section-count text-[0.6875rem] font-semibold text-[var(--nim-text-faint)]">{commits.length}</span>
             )}
           </div>
           {commits.length > 1 && selectedCommits.size > 0 && (
-            <div className="changes-panel-squash-actions changes-panel-squash-actions--active">
-              <div className="changes-panel-squash-info">
+            <div className="changes-panel-squash-actions changes-panel-squash-actions--active px-3 py-2 border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] flex flex-col gap-2">
+              <div className="changes-panel-squash-info text-xs text-[var(--nim-text-muted)] text-center">
                 {selectedCommits.size === 1 ? (
                   <span>Select at least one more commit</span>
                 ) : (
                   <span>{selectedCommits.size} commits selected</span>
                 )}
               </div>
-              <div className="changes-panel-squash-buttons">
+              <div className="changes-panel-squash-buttons flex gap-2">
                 <button
                   type="button"
-                  className="changes-panel-squash-cancel"
+                  className="changes-panel-squash-cancel flex-1 px-3 py-1.5 rounded text-[0.8125rem] cursor-pointer transition-all duration-150 border-none bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]"
                   onClick={handleClearSelection}
                 >
                   Clear
                 </button>
                 <button
                   type="button"
-                  className="changes-panel-squash-confirm"
+                  className="changes-panel-squash-confirm flex-1 px-3 py-1.5 rounded text-[0.8125rem] cursor-pointer transition-all duration-150 border-none bg-[var(--nim-primary)] text-white hover:bg-[var(--nim-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
                   onClick={handleSquashClick}
                   disabled={selectedCommits.size < 2 || isSquashing}
                 >

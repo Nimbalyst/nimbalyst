@@ -9,7 +9,6 @@ import {
   type DiffChangeGroup
 } from 'rexical';
 import type { LexicalEditor } from 'lexical';
-import './DiffPreviewEditor.css';
 
 const HIGHLIGHT_CLASS_REMOVED = 'diff-group-highlight-removed';
 const HIGHLIGHT_CLASS_ADDED = 'diff-group-highlight-added';
@@ -342,8 +341,8 @@ export function DiffPreviewEditor({
   const isDarkTheme = theme === 'dark' || theme === 'crystal-dark';
 
   return (
-    <div className={`diff-preview-editor ${!isReady ? 'loading' : ''}`}>
-      <div className="diff-preview-editor-container">
+    <div className={`diff-preview-editor w-full h-full flex flex-col ${!isReady ? 'opacity-0' : ''}`}>
+      <div className="diff-preview-editor-container flex-1 flex flex-col overflow-auto transition-opacity duration-150">
         <StravuEditor
           config={{
             initialContent: oldMarkdown,

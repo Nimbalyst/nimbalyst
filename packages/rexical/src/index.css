@@ -7,6 +7,7 @@
  */
 
 @import 'https://fonts.googleapis.com/css?family=Reenie+Beanie';
+@import './themes/NimbalystTheme.css';
 @import './themes/DarkEditorTheme.css';
 @import './themes/CrystalDarkTheme.css';
 
@@ -19,7 +20,8 @@
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: #eee;
+  background: var(--nim-bg);
+  color: var(--nim-text);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -72,7 +74,7 @@ header h1 {
 }
 
 .stravu-editor .editor-shell .editor-container {
-  background: #fff;
+  background: var(--nim-bg);
   position: relative;
   display: block;
   border-bottom-left-radius: 0;
@@ -80,10 +82,6 @@ header h1 {
   flex: 1;
   overflow: visible;
   min-height: 0;
-}
-
-.stravu-editor.dark-theme .editor-shell .editor-container {
-  background: var(--stravu-editor-bg);
 }
 
 .stravu-editor .editor-shell .editor-container.tree-view {
@@ -107,6 +105,7 @@ header h1 {
   overflow: auto;
   flex: 1;
   min-height: 0;
+  background: var(--nim-bg);
 }
 
 .stravu-editor .editor {
@@ -295,7 +294,7 @@ header h1 {
 }
 
 .typeahead-popover {
-  background: #fff;
+  background: var(--nim-bg);
   box-shadow: 0px 5px 10px rgba(0, 0, 0, 0.3);
   border-radius: 8px;
   position: relative;
@@ -332,7 +331,7 @@ header h1 {
 .typeahead-popover li {
   margin: 0 8px 0 8px;
   padding: 8px;
-  color: #050505;
+  color: var(--nim-text);
   cursor: pointer;
   line-height: 16px;
   font-size: 15px;
@@ -340,7 +339,7 @@ header h1 {
   align-content: center;
   flex-direction: row;
   flex-shrink: 0;
-  background-color: #fff;
+  background-color: var(--nim-bg);
   border-radius: 8px;
   border: 0;
 }
@@ -801,7 +800,7 @@ i.page-break,
     inset 0 0 0 1px rgba(255, 255, 255, 0.5);
   border-radius: 8px;
   min-height: 40px;
-  background-color: var(--surface-primary);
+  background-color: var(--nim-bg);
 }
 
 .stravu-editor .dropdown.table-cell-action-menu-dropdown {
@@ -820,7 +819,7 @@ i.page-break,
   flex-direction: row;
   flex-shrink: 0;
   justify-content: space-between;
-  background-color: var(--surface-primary);
+  background-color: var(--nim-bg);
   border-radius: 8px;
   border: 0;
   max-width: 264px;
@@ -861,7 +860,7 @@ i.page-break,
 }
 
 .stravu-editor .dropdown .item:hover {
-  background-color: var(--surface-hover);
+  background-color: var(--nim-bg-hover);
 }
 
 .stravu-editor .dropdown .item .text {
@@ -1412,7 +1411,7 @@ i.page-break,
   top: 10px;
   right: 10px;
   border-radius: 15px;
-  background-color: var(--surface-secondary);
+  background-color: var(--nim-bg-secondary);
   color: var(--text-primary);
   padding: 4px;
   display: inline-block;
@@ -1420,7 +1419,7 @@ i.page-break,
 }
 
 .table-cell-action-button:hover {
-  background-color: var(--surface-hover);
+  background-color: var(--nim-bg-hover);
 }
 
 i.file-text,
@@ -1443,7 +1442,7 @@ i.chevron-down {
 }
 
 .action-button {
-  background-color: var(--surface-tertiary);
+  background-color: var(--nim-bg-tertiary);
   border: 0;
   padding: 8px 12px;
   position: relative;
@@ -1455,7 +1454,7 @@ i.chevron-down {
 }
 
 .action-button:hover {
-  background-color: var(--surface-hover);
+  background-color: var(--nim-bg-hover);
   color: var(--text-primary);
 }
 
@@ -1465,7 +1464,7 @@ i.chevron-down {
 
 button.action-button:disabled {
   opacity: 0.6;
-  background: var(--surface-tertiary);
+  background: var(--nim-bg-tertiary);
   cursor: not-allowed;
 }
 
@@ -1563,7 +1562,7 @@ button.action-button:disabled {
 .stravu-editor .toolbar {
   display: flex;
   margin-bottom: 1px;
-  background: #fff;
+  background: var(--nim-toolbar-bg, var(--nim-bg));
   padding: 2px;
   border-top-left-radius: 10px;
   flex-shrink: 0;
@@ -1573,11 +1572,6 @@ button.action-button:disabled {
   height: 36px;
   position: sticky;
   top: 0;
-}
-
-.stravu-editor.dark-theme .toolbar {
-  background: var(--stravu-toolbar-bg);
-
   z-index: 2;
   overflow-y: hidden; /* disable vertical scroll*/
 }

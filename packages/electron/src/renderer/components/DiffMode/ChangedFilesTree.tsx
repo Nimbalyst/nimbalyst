@@ -1,7 +1,6 @@
 import React, { useMemo } from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import type { ChangedFile } from './DiffModeView';
-import './ChangedFilesTree.css';
 
 interface ChangedFilesTreeProps {
   files: ChangedFile[];
@@ -126,14 +125,14 @@ export function ChangedFilesTree({ files, onToggleStaged, onSelectFile }: Change
 
   if (files.length === 0) {
     return (
-      <div className="changed-files-tree changed-files-tree--empty">
+      <div className="changed-files-tree changed-files-tree--empty flex flex-col py-4 px-3 text-xs text-center text-[var(--nim-text-faint)]">
         <p>No changes</p>
       </div>
     );
   }
 
   return (
-    <div className="changed-files-tree">
+    <div className="changed-files-tree flex flex-col py-1 max-h-[200px] overflow-y-auto">
       {flattenedTree.map(node => {
         // Verify checkbox state matches source data for files
         const expectedStaged = node.type === 'file' ? stagedStatusMap.get(node.path) ?? false : false;
@@ -151,37 +150,46 @@ export function ChangedFilesTree({ files, onToggleStaged, onSelectFile }: Change
         return (
           <div
             key={node.path}
-            className={`changed-files-tree-item changed-files-tree-item--${node.type}`}
+            className={`changed-files-tree-item changed-files-tree-item--${node.type} flex items-center gap-1.5 h-7 pr-3 ${node.type === 'directory' ? 'text-xs text-[var(--nim-text-muted)]' : ''}`}
             style={{ paddingLeft: 12 + node.depth * 16 }}
           >
             {node.type === 'file' ? (
               <>
-                <label className="changed-files-tree-checkbox">
+                <label className="changed-files-tree-checkbox flex items-center justify-center cursor-pointer">
                   <input
                     type="checkbox"
                     checked={expectedStaged}
                     onChange={() => onToggleStaged(node.path)}
+                    className="peer absolute opacity-0 w-0 h-0"
                   />
-                  <span className="changed-files-tree-checkbox-mark">
+                  <span className="changed-files-tree-checkbox-mark flex items-center justify-center w-4 h-4 bg-[var(--nim-bg)] border border-[var(--nim-border-secondary)] rounded-[3px] text-[var(--nim-accent-contrast)] transition-[background-color,border-color] duration-150 peer-checked:bg-[var(--nim-primary)] peer-checked:border-[var(--nim-primary)] peer-focus:shadow-[0_0_0_2px_var(--nim-accent-muted)]">
                     {expectedStaged && <MaterialSymbol icon="check" size={12} />}
                   </span>
                 </label>
                 <button
                   type="button"
-                  className="changed-files-tree-file"
+                  className="changed-files-tree-file flex-1 flex items-center gap-1.5 min-w-0 py-1 px-1.5 bg-transparent border-none rounded text-[0.8125rem] text-left text-[var(--nim-text)] cursor-pointer transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
                   onClick={() => onSelectFile(node.path)}
                   title={node.path}
                 >
-                  <span className={`changed-files-tree-status changed-files-tree-status--${node.status}`}>
+                  <span
+                    className={`changed-files-tree-status changed-files-tree-status--${node.status} inline-flex items-center justify-center w-3.5 h-3.5 text-[0.625rem] font-semibold rounded-sm shrink-0 ${
+                      node.status === 'added'
+                        ? 'bg-[var(--nim-success-light)] text-[var(--nim-success)]'
+                        : node.status === 'modified'
+                          ? 'bg-[var(--nim-warning-light)] text-[var(--nim-warning)]'
+                          : 'bg-[var(--nim-error-light)] text-[var(--nim-error)]'
+                    }`}
+                  >
                     {node.status && getStatusBadge(node.status)}
                   </span>
-                  <span className="changed-files-tree-name">{node.name}</span>
+                  <span className="changed-files-tree-name overflow-hidden text-ellipsis whitespace-nowrap">{node.name}</span>
                 </button>
               </>
             ) : (
               <>
                 <MaterialSymbol icon="folder" size={14} />
-                <span className="changed-files-tree-folder-name">{node.displayPath || node.name}</span>
+                <span className="changed-files-tree-folder-name text-xs text-[var(--nim-text-muted)]">{node.displayPath || node.name}</span>
               </>
             )}
           </div>

@@ -23,7 +23,6 @@ import {
 } from '../../store';
 import { convertToWorkstreamAtom } from '../../store/atoms/sessions';
 import { workstreamHasChildrenAtom } from '../../store/atoms/workstreamState';
-import './WorkstreamSessionTabs.css';
 
 export interface WorkstreamSessionTabsProps {
   workspacePath: string;
@@ -49,14 +48,28 @@ const SessionTab: React.FC<{
 
   return (
     <button
-      className={`session-tab ${isActive ? 'active' : ''} ${hasUnread ? 'unread' : ''}`}
+      className={`session-tab flex items-center gap-1.5 px-2.5 py-[5px] border-none rounded text-xs font-medium cursor-pointer whitespace-nowrap transition-colors duration-150 ${
+        isActive
+          ? 'active bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)]'
+          : 'bg-transparent text-[var(--nim-text-muted)] hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]'
+      } ${hasUnread ? 'unread' : ''}`}
       onClick={onClick}
       title={title || 'Untitled'}
     >
-      {isProcessing && <span className="session-tab-processing-dot" />}
-      <ProviderIcon provider={provider} size={14} className="session-tab-icon" />
-      <span className="session-tab-title">{title || 'Untitled'}</span>
-      {hasUnread && <span className="session-tab-unread-dot" />}
+      {isProcessing && (
+        <span className="session-tab-processing-dot w-1.5 h-1.5 rounded-full bg-[var(--nim-primary)] animate-pulse" />
+      )}
+      <ProviderIcon
+        provider={provider}
+        size={14}
+        className={`session-tab-icon shrink-0 ${isActive ? 'opacity-100' : 'opacity-80'}`}
+      />
+      <span className={`session-tab-title max-w-[150px] overflow-hidden text-ellipsis ${hasUnread ? 'font-semibold' : ''}`}>
+        {title || 'Untitled'}
+      </span>
+      {hasUnread && (
+        <span className="session-tab-unread-dot w-1.5 h-1.5 rounded-full bg-[var(--nim-warning)]" />
+      )}
     </button>
   );
 });
@@ -76,7 +89,7 @@ const SessionTabBar: React.FC<{
 }> = React.memo(({ sessions, activeSessionId, onSessionSelect, onNewSession }) => {
   // Always show the tab bar - even for single sessions, the user should see their session tab
   return (
-    <div className="session-tab-bar">
+    <div className="session-tab-bar nim-scrollbar-thin flex items-center gap-0.5 px-3 pt-1 pb-1.5 bg-[var(--nim-bg-secondary)] border-t-[3px] border-b border-[var(--nim-border)] overflow-x-auto shrink-0">
       {sessions.map((sessionId) => (
         <SessionTab
           key={sessionId}
@@ -86,7 +99,7 @@ const SessionTabBar: React.FC<{
         />
       ))}
       <button
-        className="session-tab-new"
+        className="session-tab-new nim-btn-icon-sm text-[var(--nim-text-faint)] hover:text-[var(--nim-text-muted)] active:bg-[var(--nim-bg-tertiary)]"
         onClick={onNewSession}
         title="New session in workstream"
       >
@@ -137,14 +150,14 @@ export const WorkstreamSessionTabs: React.FC<WorkstreamSessionTabsProps> = React
 
   if (!activeSessionId) {
     return (
-      <div className="workstream-session-tabs-empty">
+      <div className="workstream-session-tabs-empty flex items-center justify-center h-full text-[var(--nim-text-muted)] text-sm">
         <p>Loading sessions...</p>
       </div>
     );
   }
 
   return (
-    <div className="workstream-session-tabs">
+    <div className="workstream-session-tabs flex flex-col h-full overflow-hidden">
       <SessionTabBar
         sessions={sessions}
         activeSessionId={activeSessionId}
@@ -152,7 +165,7 @@ export const WorkstreamSessionTabs: React.FC<WorkstreamSessionTabsProps> = React
         onNewSession={handleNewSession}
       />
 
-      <div className="workstream-session-tabs-content">
+      <div className="workstream-session-tabs-content flex-1 min-h-0 overflow-hidden">
         <AgentSessionPanel
           key={activeSessionId}
           sessionId={activeSessionId}

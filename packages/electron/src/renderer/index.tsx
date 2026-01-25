@@ -5,6 +5,7 @@ import ReactDOM from 'react-dom/client';
 import { Provider as JotaiProvider } from 'jotai';
 import App from './App';
 import './index.css';
+import './styles/components.css';
 import posthog from "posthog-js";
 import {PostHogProvider} from "posthog-js/react";
 import {beforePostHogSendWeb} from "../main/services/analytics/analytics-utils.ts";

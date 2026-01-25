@@ -9,7 +9,6 @@ import {
   sessionHasTabsAtom,
 } from '../../store';
 import { LayoutControls } from '../UnifiedAI/LayoutControls';
-import './AgentSessionHeader.css';
 
 interface WorktreeWithStatus {
   id: string;
@@ -142,12 +141,12 @@ export const AgentSessionHeader: React.FC<AgentSessionHeaderProps> = ({
   const displayTitle = sessionData.title || sessionData.name || 'Untitled Session';
 
   return (
-    <div className="agent-session-header">
-      <div className="agent-session-header-main">
+    <div className="agent-session-header shrink-0 px-4 py-2 border-b border-[var(--nim-border)] bg-[var(--nim-bg)]">
+      <div className="agent-session-header-main flex items-center gap-3">
         {/* Icon renders immediately - worktree icon if worktreeId exists, workstream icon if parentSessionId exists, otherwise provider icon */}
         {isWorktreeSession ? (
-          <div className="agent-session-header-icon-wrapper">
-            <div className="agent-session-header-wt-icon">
+          <div className="agent-session-header-icon-wrapper relative shrink-0 w-6 h-6">
+            <div className="agent-session-header-wt-icon w-6 h-6 text-[var(--nim-text-muted)] [&_svg]:w-full [&_svg]:h-full">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M8 21v-4a2 2 0 0 1 2-2h4"/>
                 <path d="M14 15V7"/>
@@ -156,61 +155,61 @@ export const AgentSessionHeader: React.FC<AgentSessionHeaderProps> = ({
                 <path d="M8 9v4a2 2 0 0 0 2 2"/>
               </svg>
             </div>
-            <div className="agent-session-header-ai-badge">
+            <div className="agent-session-header-ai-badge absolute -bottom-0.5 -right-1 bg-[var(--nim-bg)] rounded-full p-0.5 flex items-center justify-center">
               <ProviderIcon provider={sessionData.provider || 'claude'} size={12} />
             </div>
           </div>
         ) : isWorkstreamSession ? (
-          <div className="agent-session-header-icon workstream-header-icon">
+          <div className="agent-session-header-icon workstream-header-icon shrink-0 text-[var(--nim-text-muted)]">
             <MaterialSymbol icon="account_tree" size={20} />
           </div>
         ) : (
-          <div className="agent-session-header-icon">
+          <div className="agent-session-header-icon shrink-0 text-[var(--nim-text-muted)]">
             <ProviderIcon provider={sessionData.provider || 'claude'} size={20} />
           </div>
         )}
 
-        <div className="agent-session-header-content">
-          <h1 className="agent-session-header-title">{displayTitle}</h1>
+        <div className="agent-session-header-content flex-1 min-w-0">
+          <h1 className="agent-session-header-title m-0 text-base font-semibold text-[var(--nim-text)] whitespace-nowrap overflow-hidden text-ellipsis leading-tight">{displayTitle}</h1>
 
-          <div className="agent-session-header-meta">
+          <div className="agent-session-header-meta flex items-center gap-2 mt-0.5 text-xs text-[var(--nim-text-muted)]">
             {/* Meta info: worktree details load async, but we show model immediately for non-worktree */}
             {isWorktreeSession ? (
               worktreeData ? (
                 <>
-                  <span className="agent-session-header-worktree-name">{worktreeData.name}</span>
+                  <span className="agent-session-header-worktree-name text-[var(--nim-text-muted)] font-medium">{worktreeData.name}</span>
                   {worktreeData.gitStatus?.ahead && worktreeData.gitStatus.ahead > 0 && (
-                    <span className="agent-session-header-badge ahead">
+                    <span className="agent-session-header-badge ahead inline-flex items-center px-1.5 py-0.5 rounded text-[0.625rem] font-medium uppercase tracking-wide bg-green-500/15 text-green-500">
                       {worktreeData.gitStatus.ahead} ahead
                     </span>
                   )}
                   {worktreeData.gitStatus?.behind && worktreeData.gitStatus.behind > 0 && (
-                    <span className="agent-session-header-badge behind">
+                    <span className="agent-session-header-badge behind inline-flex items-center px-1.5 py-0.5 rounded text-[0.625rem] font-medium uppercase tracking-wide bg-orange-500/15 text-orange-500">
                       {worktreeData.gitStatus.behind} behind
                     </span>
                   )}
                   {worktreeData.gitStatus?.uncommitted && (
-                    <span className="agent-session-header-badge uncommitted">
+                    <span className="agent-session-header-badge uncommitted inline-flex items-center px-1.5 py-0.5 rounded text-[0.625rem] font-medium uppercase tracking-wide bg-violet-500/15 text-violet-500">
                       uncommitted
                     </span>
                   )}
                 </>
               ) : (
-                <span className="agent-session-header-worktree-name agent-session-header-loading">Loading...</span>
+                <span className="agent-session-header-worktree-name agent-session-header-loading text-[var(--nim-text-faint)] italic">Loading...</span>
               )
             ) : null}
           </div>
         </div>
 
         {isProcessing && (
-          <div className="agent-session-header-processing">
-            <div className="agent-session-header-spinner" />
+          <div className="agent-session-header-processing shrink-0 flex items-center justify-center">
+            <div className="agent-session-header-spinner w-4 h-4 border-2 border-[var(--nim-border)] border-t-[var(--nim-primary)] rounded-full animate-spin" />
           </div>
         )}
 
         {/* Layout controls for non-worktree sessions */}
         {showLayoutControls && (
-          <div className="agent-session-header-layout-controls">
+          <div className="agent-session-header-layout-controls shrink-0 ml-auto pl-3 border-l border-[var(--nim-border)]">
             <LayoutControls
               mode={sessionEditorState.layoutMode}
               hasTabs={hasTabs}
