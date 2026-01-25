@@ -29,6 +29,10 @@ interface FilesEditedSidebarProps {
   workspacePath: string;
   onFileClick: (filePath: string) => void;
   width?: number;
+  /** The worktree ID if this is a worktree session */
+  worktreeId?: string | null;
+  /** The worktree path if this is a worktree session */
+  worktreePath?: string | null;
 }
 
 // Extended FileEditSummary to track which session the edit came from
@@ -48,6 +52,8 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
   workspacePath,
   onFileClick,
   width = 256,
+  worktreeId,
+  worktreePath,
 }) => {
   const [allFileEdits, setAllFileEdits] = useState<FileEditWithSession[]>([]);
   const [pendingReviewFiles, setPendingReviewFiles] = useState<Set<string>>(new Set());
@@ -419,6 +425,8 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
         workspacePath={workspacePath}
         sessionId={activeSessionId || workstreamId}
         editedFiles={editedFilePaths}
+        worktreeId={worktreeId}
+        worktreePath={worktreePath}
       />
     </div>
   );

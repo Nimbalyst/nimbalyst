@@ -714,6 +714,8 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
           workspacePath={workspacePath}
           onFileClick={handleFileClick}
           width={sidebarWidth}
+          worktreeId={sessionWorktreeId}
+          worktreePath={worktreePath}
         />
       )}
     </div>
