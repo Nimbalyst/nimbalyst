@@ -35,6 +35,8 @@ export interface AgentModeLayout {
   collapsedGroups: string[];
   /** Sort order for sessions */
   sortOrder: 'updated' | 'created';
+  /** View mode for session history (list or card) */
+  viewMode: 'list' | 'card';
 }
 
 // ============================================================
@@ -47,6 +49,7 @@ const DEFAULT_LAYOUT: AgentModeLayout = {
   filesEditedWidth: 256,
   collapsedGroups: [],
   sortOrder: 'updated',
+  viewMode: 'list',
 };
 
 /**
@@ -88,6 +91,11 @@ export const sortOrderAtom = atom(
   (get) => get(agentModeLayoutAtom).sortOrder
 );
 
+/** View mode for session history (list or card) */
+export const viewModeAtom = atom(
+  (get) => get(agentModeLayoutAtom).viewMode
+);
+
 // ============================================================
 // Debounced Persistence
 // ============================================================
@@ -109,6 +117,7 @@ function schedulePersist(workspacePath: string, layout: AgentModeLayout): void {
             collapsed: false,
             collapsedGroups: layout.collapsedGroups,
             sortOrder: layout.sortOrder,
+            viewMode: layout.viewMode,
           },
           filesEditedWidth: layout.filesEditedWidth,
         },
@@ -209,6 +218,16 @@ export const setSortOrderAtom = atom(
   }
 );
 
+/**
+ * Set view mode.
+ */
+export const setViewModeAtom = atom(
+  null,
+  (get, set, viewMode: 'list' | 'card') => {
+    set(setAgentModeLayoutAtom, { viewMode });
+  }
+);
+
 // ============================================================
 // Initialization
 // ============================================================
@@ -232,13 +251,14 @@ export async function initAgentModeLayout(workspacePath: string): Promise<void> 
 
     if (result?.sessionHistoryLayout) {
       const layout = result.sessionHistoryLayout;
-      const restoredLayout = {
+      const restoredLayout: AgentModeLayout = {
         sessionHistoryWidth: layout.width ?? DEFAULT_LAYOUT.sessionHistoryWidth,
         // CRITICAL: Never collapse SessionHistory in agent mode
         sessionHistoryCollapsed: false,
         filesEditedWidth: result.filesEditedWidth ?? DEFAULT_LAYOUT.filesEditedWidth,
         collapsedGroups: layout.collapsedGroups ?? DEFAULT_LAYOUT.collapsedGroups,
         sortOrder: layout.sortOrder ?? DEFAULT_LAYOUT.sortOrder,
+        viewMode: layout.viewMode ?? DEFAULT_LAYOUT.viewMode,
       };
       console.log('[agentMode] Restored layout:', restoredLayout);
       store.set(agentModeLayoutAtom, restoredLayout);
