@@ -165,7 +165,7 @@ export function DiffPlugin(): JSX.Element | null {
           const selection = $getSelection();
 
           if (!$isRangeSelection(selection) || !selection.isCollapsed()) {
-            return false;
+            return;
           }
 
           // Remove old text

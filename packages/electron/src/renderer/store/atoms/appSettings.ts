@@ -15,7 +15,7 @@
  * - Setter atoms that update and trigger persist
  */
 
-import { atom } from 'jotai';
+import { atom, type Atom } from 'jotai';
 import posthog from 'posthog-js';
 import { AlphaFeatureTag } from '../../../shared/alphaFeatures';
 
@@ -491,9 +491,9 @@ export const walkthroughsTotalCountAtom = atom(
  * }
  * ```
  */
-const alphaFeatureAtomCache = new Map<AlphaFeatureTag, ReturnType<typeof atom<boolean>>>();
+const alphaFeatureAtomCache = new Map<AlphaFeatureTag, Atom<boolean>>();
 
-export function alphaFeatureEnabledAtom(tag: AlphaFeatureTag) {
+export function alphaFeatureEnabledAtom(tag: AlphaFeatureTag): Atom<boolean> {
   let cached = alphaFeatureAtomCache.get(tag);
   if (!cached) {
     cached = atom(

@@ -28,6 +28,6 @@
       "rexical/*": ["../rexical/src/*"]
     }
   },
-  "include": ["src", "src/renderer/electron.d.ts"],
+  "include": ["src", "src/renderer/electron.d.ts", "../rexical/src/types/*.d.ts"],
   "exclude": ["node_modules", "dist", "out", "e2e"]
 }

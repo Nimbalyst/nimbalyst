@@ -602,6 +602,7 @@ import {
         }, 100);
         return () => clearTimeout(timer);
       }
+      return undefined;
     }, [position !== null]);
 
     // Only allow hover selection after mouse interaction is enabled
@@ -677,6 +678,7 @@ import {
 
         return () => clearTimeout(timeoutId);
       }
+      return undefined;
     }, [resolution, maxHeight, minWidth, maxWidth, options, anchorElem]);
 
     // Determine if menu should be visible based on measurement state

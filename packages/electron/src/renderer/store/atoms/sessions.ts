@@ -49,6 +49,11 @@ export interface SessionMeta {
   worktreeId: string | null;
   childCount: number;
   uncommittedCount: number;
+  // Transient state (not persisted, computed from atoms)
+  isProcessing?: boolean;
+  childProcessing?: boolean;
+  hasPendingPrompt?: boolean;
+  hasUnread?: boolean;
 }
 
 /**

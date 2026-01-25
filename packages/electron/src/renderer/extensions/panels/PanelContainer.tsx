@@ -90,12 +90,15 @@ export function PanelContainer({
   const [themeListeners] = useState(() => new Set<(theme: 'light' | 'dark' | 'crystal-dark') => void>());
   const setExtensionPanelAIContext = useSetAtom(setExtensionPanelAIContextAtom);
 
+  // Resolve theme to effective value (never 'auto' at runtime)
+  const resolvedTheme = (theme === 'auto' ? 'light' : theme) as 'light' | 'dark' | 'crystal-dark';
+
   // Notify theme listeners when theme changes
   useEffect(() => {
     for (const listener of themeListeners) {
-      listener(theme);
+      listener(resolvedTheme);
     }
-  }, [theme, themeListeners]);
+  }, [resolvedTheme, themeListeners]);
 
   // Create stable theme subscription function
   const onThemeChange = useCallback((callback: (theme: 'light' | 'dark' | 'crystal-dark') => void) => {
@@ -115,7 +118,7 @@ export function PanelContainer({
     const options: PanelHostOptions = {
       panelId: panel.id,
       extensionId: panel.extensionId,
-      theme,
+      theme: resolvedTheme,
       workspacePath,
       aiSupported: panel.aiSupported,
       storage,
@@ -126,7 +129,7 @@ export function PanelContainer({
     };
 
     return createPanelHost(options);
-  }, [panel.id, panel.extensionId, panel.aiSupported, workspacePath, storage, onOpenFile, onOpenPanel, onClose, onThemeChange, theme]);
+  }, [panel.id, panel.extensionId, panel.aiSupported, workspacePath, storage, onOpenFile, onOpenPanel, onClose, onThemeChange, resolvedTheme]);
 
   // Subscribe to AI context changes and sync to atom
   useEffect(() => {

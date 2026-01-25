@@ -19,9 +19,9 @@
  */
 
 import { useMemo } from 'react';
-import { useAtomValue, atom } from 'jotai';
+import { useAtomValue, atom, type Atom } from 'jotai';
 import { alphaFeatureEnabledAtom } from '../store/atoms/appSettings';
-import type { AlphaFeatureTag } from '../../../shared/alphaFeatures';
+import type { AlphaFeatureTag } from '../../shared/alphaFeatures';
 
 /**
  * Check if an alpha feature is enabled.
@@ -56,23 +56,23 @@ export function useAlphaFeature(tag: AlphaFeatureTag): boolean {
  */
 
 // Cache for multi-feature atoms keyed by sorted tag string
-const multiFeatureAtomCache = new Map<string, ReturnType<typeof atom<Record<string, boolean>>>>();
+const multiFeatureAtomCache = new Map<string, Atom<Record<string, boolean>>>();
 
 export function useAlphaFeatures(tags: AlphaFeatureTag[]): Record<AlphaFeatureTag, boolean> {
   // Create a stable key from sorted tags
   const cacheKey = useMemo(() => [...tags].sort().join(','), [tags]);
 
   // Get or create the combined atom
-  const combinedAtom = useMemo(() => {
+  const combinedAtom = useMemo((): Atom<Record<string, boolean>> => {
     let cached = multiFeatureAtomCache.get(cacheKey);
     if (!cached) {
       // Get all the individual feature atoms
-      const featureAtoms = tags.map(tag => ({ tag, atom: alphaFeatureEnabledAtom(tag) }));
+      const featureAtoms = tags.map(tag => ({ tag, featureAtom: alphaFeatureEnabledAtom(tag) }));
 
       // Create a single derived atom that reads all features
       cached = atom((get) => {
         const result: Record<string, boolean> = {};
-        for (const { tag, atom: featureAtom } of featureAtoms) {
+        for (const { tag, featureAtom } of featureAtoms) {
           result[tag] = get(featureAtom);
         }
         return result;

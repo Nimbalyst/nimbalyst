@@ -225,6 +225,7 @@ export default function DropDown({
         document.removeEventListener('click', handle);
       };
     }
+    return undefined;
   }, [dropDownRef, buttonRef, showDropDown, stopCloseOnClickSelf]);
 
   useEffect(() => {

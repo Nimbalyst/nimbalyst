@@ -308,6 +308,7 @@ function CommentInputBox({
         body.removeChild(container);
       };
     }
+    return undefined;
   }, [selectionState.container, updateLocation]);
 
   useEffect(() => {
@@ -734,6 +735,7 @@ export default function CommentPlugin({
       const provider = providerFactory('comments', yjsDocMap);
       return commentStore.registerCollaboration(provider);
     }
+    return undefined;
   }, [commentStore, providerFactory, yjsDocMap]);
 
   const cancelAddComment = useCallback(() => {

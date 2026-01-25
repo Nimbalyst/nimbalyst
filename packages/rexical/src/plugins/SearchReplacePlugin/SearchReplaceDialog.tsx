@@ -119,6 +119,7 @@ export const SearchReplaceDialog = forwardRef<SearchReplaceDialogHandle, SearchR
 
       return () => observer.disconnect();
     }
+    return undefined;
   }, []);
   
   // Expose focus method to parent
@@ -288,12 +289,13 @@ export const SearchReplaceDialog = forwardRef<SearchReplaceDialogHandle, SearchR
     if (isDragging) {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
-      
+
       return () => {
         document.removeEventListener('mousemove', handleMouseMove);
         document.removeEventListener('mouseup', handleMouseUp);
       };
     }
+    return undefined;
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
   return (

@@ -13,6 +13,7 @@ import { LayoutControls } from '../UnifiedAI/LayoutControls';
 interface WorktreeWithStatus {
   id: string;
   name: string;
+  displayName?: string;
   path: string;
   branch: string;
   base_branch?: string;

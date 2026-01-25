@@ -240,6 +240,7 @@ function TextFormatFloatingToolbar({
         document.removeEventListener('mouseup', mouseUpListener);
       };
     }
+    return undefined;
   }, [popupCharStylesEditorRef]);
 
   const $updateTextFormatFloatingToolbar = useCallback(() => {

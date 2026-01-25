@@ -267,7 +267,7 @@ function TableCellResizer({editor}: {editor: LexicalEditor}): JSX.Element {
     const getCellColumnIndex = (
         tableCellNode: TableCellNode,
         tableMap: TableMapType,
-    ) => {
+    ): number | undefined => {
         for (let row = 0; row < tableMap.length; row++) {
             for (let column = 0; column < tableMap[row].length; column++) {
                 if (tableMap[row][column].cell === tableCellNode) {
@@ -275,6 +275,7 @@ function TableCellResizer({editor}: {editor: LexicalEditor}): JSX.Element {
                 }
             }
         }
+        return undefined;
     };
 
     const calculateColumnWidthsFromDOM = (

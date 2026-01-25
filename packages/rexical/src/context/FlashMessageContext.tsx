@@ -52,6 +52,7 @@ export const FlashMessageContext = ({
       );
       return () => clearTimeout(timeoutId);
     }
+    return undefined;
   }, [props]);
   return (
     <Context.Provider value={showFlashMessage}>

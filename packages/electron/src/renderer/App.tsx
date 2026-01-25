@@ -1275,8 +1275,8 @@ export default function App() {
       }
     };
 
-    window.addEventListener('open-ai-session', handleOpenAiSession as EventListener);
-    return () => window.removeEventListener('open-ai-session', handleOpenAiSession as EventListener);
+    window.addEventListener('open-ai-session', handleOpenAiSession as unknown as EventListener);
+    return () => window.removeEventListener('open-ai-session', handleOpenAiSession as unknown as EventListener);
   }, [activeMode]);
 
   // Save AI Chat state when it changes (but only after initial load)
