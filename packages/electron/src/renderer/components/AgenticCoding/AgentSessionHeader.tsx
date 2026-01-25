@@ -135,6 +135,35 @@ export const AgentSessionHeader: React.FC<AgentSessionHeaderProps> = ({
     });
   }, [sessionData?.worktreeId, fetchWorktreeData]);
 
+  // Listen for worktree display name updates from main process
+  // This handles automatic worktree naming when first session in worktree is named
+  useEffect(() => {
+    if (!sessionData?.worktreeId) return;
+
+    const unsubscribe = window.electronAPI?.on?.('worktree:display-name-updated',
+      (data: { worktreeId: string; displayName: string }) => {
+        if (data.worktreeId === sessionData.worktreeId) {
+          // Update local state
+          setWorktreeData(prev => prev ? {
+            ...prev,
+            displayName: data.displayName
+          } : null);
+
+          // Update module-level cache
+          if (worktreeCache.has(data.worktreeId)) {
+            const cached = worktreeCache.get(data.worktreeId)!;
+            worktreeCache.set(data.worktreeId, {
+              ...cached,
+              displayName: data.displayName
+            });
+          }
+        }
+      }
+    );
+
+    return () => unsubscribe?.();
+  }, [sessionData?.worktreeId]);
+
   if (!sessionData) {
     return null;
   }

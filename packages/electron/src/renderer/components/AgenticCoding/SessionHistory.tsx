@@ -490,6 +490,31 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     }
   }, [renamedWorktree]);
 
+  // Listen for worktree display name updates from main process
+  // This handles automatic worktree naming when first session in worktree is named
+  useEffect(() => {
+    if (!workspacePath) return;
+
+    const unsubscribe = window.electronAPI?.on?.('worktree:display-name-updated',
+      (data: { worktreeId: string; displayName: string }) => {
+        setWorktreeCache(prev => {
+          const existing = prev.get(data.worktreeId);
+          if (existing) {
+            const updated = new Map(prev);
+            updated.set(data.worktreeId, {
+              ...existing,
+              displayName: data.displayName
+            });
+            return updated;
+          }
+          return prev;
+        });
+      }
+    );
+
+    return () => unsubscribe?.();
+  }, [workspacePath]);
+
   // Update session timestamp when updated (efficient update without database reload)
   useEffect(() => {
     if (updatedSession) {
