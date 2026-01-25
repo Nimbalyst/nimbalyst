@@ -857,9 +857,11 @@ function scheduleAgentModePersist(settings: AgentModeSettings): void {
   if (agentModePersistTimer) {
     clearTimeout(agentModePersistTimer);
   }
+  console.log('[appSettings] Scheduling persist of defaultModel:', settings.defaultModel);
   agentModePersistTimer = setTimeout(async () => {
     agentModePersistTimer = null;
     if (typeof window !== 'undefined' && window.electronAPI) {
+      console.log('[appSettings] Persisting defaultModel to main process:', settings.defaultModel);
       await window.electronAPI.invoke('settings:set-default-ai-model', settings.defaultModel);
     }
   }, AGENT_MODE_PERSIST_DEBOUNCE_MS);
@@ -894,18 +896,23 @@ export const setAgentModeSettingsAtom = atom(
  */
 export async function initAgentModeSettings(): Promise<AgentModeSettings> {
   if (typeof window === 'undefined' || !window.electronAPI) {
+    console.log('[appSettings] initAgentModeSettings: No window/electronAPI, using defaults');
     return defaultAgentModeSettings;
   }
 
   try {
     const defaultModel = await window.electronAPI.invoke('settings:get-default-ai-model');
-    return {
+    console.log('[appSettings] initAgentModeSettings: Loaded from main process:', defaultModel);
+    const result = {
       defaultModel: defaultModel || 'claude-code:sonnet',
     };
+    console.log('[appSettings] initAgentModeSettings: Returning:', result.defaultModel);
+    return result;
   } catch (error) {
     console.error('[appSettings] Failed to load agent mode settings:', error);
   }
 
+  console.log('[appSettings] initAgentModeSettings: Using defaults');
   return defaultAgentModeSettings;
 }
 

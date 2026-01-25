@@ -154,6 +154,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
 
     try {
       const sessionId = crypto.randomUUID();
+      console.log('[AgentMode] Creating new session with defaultModel:', defaultModel);
       const result = await window.electronAPI.invoke('sessions:create', {
         session: {
           id: sessionId,

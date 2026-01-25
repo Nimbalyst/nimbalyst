@@ -9,6 +9,7 @@
 import React, { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle, useMemo } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
+import { ModelIdentifier } from '@nimbalyst/runtime/ai/server/types';
 import { SessionTranscript, SessionTranscriptRef } from '../UnifiedAI/SessionTranscript';
 import { SessionDropdown } from '../AIChat/SessionDropdown';
 import {
@@ -16,6 +17,8 @@ import {
   refreshSessionListAtom,
   initSessionList,
 } from '../../store';
+import { defaultAgentModelAtom } from '../../store/atoms/appSettings';
+import './ChatSidebar.css';
 
 export interface ChatSidebarRef {
   focusInput: () => void;
@@ -70,6 +73,9 @@ export const ChatSidebar = forwardRef<ChatSidebarRef, ChatSidebarProps>(({
   // Session list from Jotai - filtered for chat mode (no worktrees, no workstream parents)
   const sessionList = useAtomValue(sessionListChatAtom);
   const refreshSessions = useSetAtom(refreshSessionListAtom);
+
+  // Default model for new sessions (user's last selected model)
+  const defaultModel = useAtomValue(defaultAgentModelAtom);
 
   // Convert to format expected by SessionDropdown
   const availableSessions = useMemo(() => {
@@ -139,12 +145,16 @@ export const ChatSidebar = forwardRef<ChatSidebarRef, ChatSidebarProps>(({
 
         // No chat sessions exist - create a new one
         const newSessionId = crypto.randomUUID();
+        // Parse provider from defaultModel using ModelIdentifier
+        const modelId = defaultModel ? ModelIdentifier.tryParse(defaultModel) : null;
+        const provider = modelId?.provider || 'claude-code';
         const result = await window.electronAPI.invoke(
           'sessions:create',
           {
             session: {
               id: newSessionId,
-              provider: 'claude',
+              provider,
+              model: defaultModel,
               title: 'Chat',
             },
             workspaceId: workspacePath,
@@ -180,12 +190,16 @@ export const ChatSidebar = forwardRef<ChatSidebarRef, ChatSidebarProps>(({
 
   const handleNewSession = useCallback(async () => {
     const newSessionId = crypto.randomUUID();
+    // Parse provider from defaultModel using ModelIdentifier
+    const modelId = defaultModel ? ModelIdentifier.tryParse(defaultModel) : null;
+    const provider = modelId?.provider || 'claude-code';
     const result = await window.electronAPI.invoke(
       'sessions:create',
       {
         session: {
           id: newSessionId,
-          provider: 'claude',
+          provider,
+          model: defaultModel,
           title: 'Chat',
         },
         workspaceId: workspacePath,
@@ -195,7 +209,7 @@ export const ChatSidebar = forwardRef<ChatSidebarRef, ChatSidebarProps>(({
       setSessionId(newSessionId);
       refreshSessions();
     }
-  }, [workspacePath, refreshSessions]);
+  }, [workspacePath, refreshSessions, defaultModel]);
 
   const handleDeleteSession = useCallback(async (sessionIdToDelete: string) => {
     await window.electronAPI.invoke('session:delete', sessionIdToDelete);
