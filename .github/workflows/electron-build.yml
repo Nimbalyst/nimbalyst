@@ -48,12 +48,13 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [macos-latest, macos-15-intel, ubuntu-latest, windows-latest]
         include:
+          # Both macOS builds run on arm64 runner (cheaper than Intel)
+          # electron-builder can cross-compile x64 on arm64
           - os: macos-latest
             platform: mac
             arch: arm64
-          - os: macos-15-intel
+          - os: macos-latest
             platform: mac
             arch: x64
           - os: ubuntu-latest
@@ -181,15 +182,17 @@ jobs:
           # Mark as official build for analytics tracking
           # This ensures PostHog only sends data from official GitHub release builds
           OFFICIAL_BUILD: 'true'
+          # Architecture for this build job (used for macOS cross-compilation)
+          BUILD_ARCH: ${{ matrix.arch }}
         working-directory: packages/electron
         run: |
-          if [ "${{ matrix.os }}" == "macos-latest" ] || [ "${{ matrix.os }}" == "macos-15-intel" ]; then
+          if [ "${{ matrix.platform }}" == "mac" ]; then
             if [ "${{ github.ref_type }}" == "tag" ] || [ "${{ inputs.release }}" == "true" ]; then
-              npm run build:mac:notarized
+              npm run build:mac:notarized -- --${{ matrix.arch }}
             else
-              npm run build:mac:local
+              npm run build:mac:local -- --${{ matrix.arch }}
             fi
-          elif [ "${{ matrix.os }}" == "windows-latest" ]; then
+          elif [ "${{ matrix.platform }}" == "win" ]; then
             npm run build:win
           else
             npm run build:linux
