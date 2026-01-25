@@ -32,6 +32,8 @@ export interface WorkstreamSessionTabsProps {
   activeSessionId: string | null;
   onSessionSelect: (sessionId: string) => void;
   onFileClick?: (filePath: string) => void;
+  worktreeId?: string | null; // If set, this is a worktree session (add sessions to worktree, not convert to workstream)
+  onAddSessionToWorktree?: (worktreeId: string) => Promise<void>; // Callback to add session to worktree
 }
 
 /**
@@ -108,6 +110,8 @@ export const WorkstreamSessionTabs: React.FC<WorkstreamSessionTabsProps> = React
   activeSessionId,
   onSessionSelect,
   onFileClick,
+  worktreeId,
+  onAddSessionToWorktree,
 }) => {
   const hasChildren = useAtomValue(workstreamHasChildrenAtom(workstreamId));
   const createChildSession = useSetAtom(createChildSessionAtom);
@@ -115,25 +119,27 @@ export const WorkstreamSessionTabs: React.FC<WorkstreamSessionTabsProps> = React
 
   // Handle creating a new child session
   const handleNewSession = useCallback(async () => {
-    console.log(`[WorkstreamSessionTabs] handleNewSession - workstreamId=${workstreamId}, hasChildren=${hasChildren}`);
+    // If this is a worktree, use the callback to add a session to it
+    if (worktreeId && onAddSessionToWorktree) {
+      await onAddSessionToWorktree(worktreeId);
+      return;
+    }
+
+    // Regular workstream logic
     if (hasChildren) {
       // Already a workstream - just create a child
-      console.log(`[WorkstreamSessionTabs] Calling createChildSession for parent ${workstreamId}`);
-      const result = await createChildSession({
+      await createChildSession({
         parentSessionId: workstreamId,
         workspacePath,
       });
-      console.log(`[WorkstreamSessionTabs] createChildSession result:`, result);
     } else {
       // Single session - convert to workstream first
-      console.log(`[WorkstreamSessionTabs] Calling convertToWorkstream for session ${workstreamId}`);
-      const result = await convertToWorkstream({
+      await convertToWorkstream({
         sessionId: workstreamId,
         workspacePath,
       });
-      console.log(`[WorkstreamSessionTabs] convertToWorkstream result:`, result);
     }
-  }, [workstreamId, workspacePath, hasChildren, createChildSession, convertToWorkstream]);
+  }, [workstreamId, workspacePath, hasChildren, worktreeId, onAddSessionToWorktree, createChildSession, convertToWorkstream]);
 
   if (!activeSessionId) {
     return (

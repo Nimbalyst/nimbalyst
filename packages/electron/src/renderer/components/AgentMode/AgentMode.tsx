@@ -249,6 +249,71 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
     }
   }, [workspacePath, addSession, setSelectedWorkstream, defaultModel]);
 
+  // Add session to an existing worktree
+  const addSessionToWorktree = useCallback(async (worktreeId: string) => {
+    if (!window.electronAPI) return;
+
+    try {
+      // Get the worktree data to use its name
+      const worktreeResult = await window.electronAPI.invoke('worktree:get', worktreeId);
+      if (!worktreeResult?.worktree) {
+        throw new Error('Worktree not found');
+      }
+
+      const worktree = worktreeResult.worktree;
+
+      // Create session with worktree association (no parentSessionId - this is NOT a workstream)
+      const sessionId = crypto.randomUUID();
+      const result = await window.electronAPI.invoke('sessions:create', {
+        session: {
+          id: sessionId,
+          provider: 'claude-code',
+          model: defaultModel,
+          title: `Session in ${worktree.displayName || worktree.name}`,
+          worktreeId: worktree.id,
+        },
+        workspaceId: workspacePath,
+      });
+
+      if (result.success && result.id) {
+        // Add to session list
+        addSession({
+          id: result.id,
+          name: `Session in ${worktree.displayName || worktree.name}`,
+          title: `Session in ${worktree.displayName || worktree.name}`,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          provider: 'claude-code',
+          model: defaultModel,
+          sessionType: 'coding',
+          messageCount: 0,
+          projectPath: workspacePath,
+          worktreeId: worktree.id,
+        });
+
+        // Initialize workstream state with worktree type
+        store.set(workstreamStateAtom(result.id), {
+          type: 'worktree',
+          worktreeId: worktree.id,
+        });
+
+        // Select the new session within the worktree
+        setSelectedWorkstream({
+          workspacePath,
+          selection: { type: 'worktree', id: result.id },
+        });
+      } else {
+        throw new Error(result.error || 'Failed to create session');
+      }
+    } catch (error) {
+      errorNotificationService.showError(
+        'Failed to Create Session',
+        error instanceof Error ? error.message : 'An unexpected error occurred while adding a session to the worktree.',
+        { duration: 5000 }
+      );
+    }
+  }, [workspacePath, addSession, setSelectedWorkstream, defaultModel]);
+
   // Open session by ID
   const openSessionInTab = useCallback(async (sessionId: string) => {
     console.log('[AgentMode] openSessionInTab called with:', sessionId);
@@ -474,6 +539,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
       workstreamId={selectedWorkstream.id}
       workstreamType={selectedWorkstream.type}
       onFileOpen={onFileOpen}
+      onAddSessionToWorktree={addSessionToWorktree}
     />
   ) : (
     <div className="agent-mode-empty">
@@ -497,6 +563,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
       onSessionBranch={handleSessionBranch}
       onNewSession={createNewSession}
       onNewWorktreeSession={createNewWorktreeSession}
+      onAddSessionToWorktree={addSessionToWorktree}
       isGitRepo={isGitRepo}
       collapsedGroups={collapsedGroups}
       onCollapsedGroupsChange={(groups) => setCollapsedGroups(groups)}
