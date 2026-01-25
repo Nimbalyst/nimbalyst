@@ -18,11 +18,11 @@ import {
   stageAllFilesAtom,
   clearStagingAtom,
 } from '../../store/atoms/gitOperations';
-import { RebaseConflictDialog } from '../DiffMode/RebaseConflictDialog';
-import { MergeConflictDialog } from '../DiffMode/MergeConflictDialog';
-import { MergeConfirmDialog } from '../DiffMode/MergeConfirmDialog';
-import { ArchiveWorktreeDialog } from '../DiffMode/ArchiveWorktreeDialog';
-import { SquashCommitModal } from '../DiffMode/SquashCommitModal';
+import { RebaseConflictDialog } from './RebaseConflictDialog';
+import { MergeConflictDialog } from './MergeConflictDialog';
+import { MergeConfirmDialog } from './MergeConfirmDialog';
+import { ArchiveWorktreeDialog } from './ArchiveWorktreeDialog';
+import { SquashCommitModal } from './SquashCommitModal';
 import './GitOperationsPanel.css';
 
 // Types for worktree mode (copied from DiffModeView)
