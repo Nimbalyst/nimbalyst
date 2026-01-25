@@ -1994,6 +1994,8 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                           isPinned={session.isPinned}
                           isArchived={session.isArchived}
                           childCount={session.childCount}
+                          onWorkstreamArchive={handleArchiveSession}
+                          onWorkstreamPinToggle={handleSessionPinToggle}
                         />
                       );
                     } else {

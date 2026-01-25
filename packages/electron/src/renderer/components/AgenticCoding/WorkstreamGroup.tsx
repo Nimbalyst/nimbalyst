@@ -67,6 +67,10 @@ interface WorkstreamGroupProps {
   isArchived?: boolean;
   childCount?: number;
 
+  // Workstream-specific
+  onWorkstreamArchive?: (sessionId: string) => void;
+  onWorkstreamPinToggle?: (sessionId: string, isPinned: boolean) => void;
+
   // Worktree-specific
   worktree?: WorktreeData;
   gitStatus?: GitStatus;
@@ -100,6 +104,8 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
   childCount,
   worktree,
   gitStatus,
+  onWorkstreamArchive,
+  onWorkstreamPinToggle,
   onWorktreePinToggle,
   onWorktreeArchive,
   onFilesMode,
@@ -143,18 +149,20 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
     setShowContextMenu(false);
     if (type === 'worktree' && worktree && onWorktreePinToggle) {
       onWorktreePinToggle(worktree.id, !worktree.isPinned);
+    } else if (type === 'workstream' && onWorkstreamPinToggle) {
+      onWorkstreamPinToggle(id, !isPinned);
     }
-    // TODO: Add workstream pin toggle when implemented
-  }, [type, worktree, onWorktreePinToggle]);
+  }, [type, id, isPinned, worktree, onWorktreePinToggle, onWorkstreamPinToggle]);
 
   const handleArchive = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     setShowContextMenu(false);
     if (type === 'worktree' && worktree && onWorktreeArchive) {
       onWorktreeArchive(worktree.id);
+    } else if (type === 'workstream' && onWorkstreamArchive) {
+      onWorkstreamArchive(id);
     }
-    // TODO: Add workstream archive when implemented
-  }, [type, worktree, onWorktreeArchive]);
+  }, [type, id, worktree, onWorktreeArchive, onWorkstreamArchive]);
 
   const handleAddSession = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -403,6 +411,7 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
           }}
           onClick={(e) => e.stopPropagation()}
         >
+          {/* Worktree menu items */}
           {type === 'worktree' && onWorktreePinToggle && (
             <button
               className="workstream-group-context-menu-item"
@@ -439,6 +448,29 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
               >
                 <MaterialSymbol icon="archive" size={14} />
                 Archive Worktree
+              </button>
+            </>
+          )}
+
+          {/* Workstream menu items */}
+          {type === 'workstream' && onWorkstreamPinToggle && (
+            <button
+              className="workstream-group-context-menu-item"
+              onClick={handlePinToggle}
+            >
+              <MaterialSymbol icon="push_pin" size={14} />
+              {isPinned ? 'Unpin' : 'Pin'}
+            </button>
+          )}
+          {type === 'workstream' && onWorkstreamArchive && (
+            <>
+              {onWorkstreamPinToggle && <div className="workstream-group-context-menu-divider" />}
+              <button
+                className="workstream-group-context-menu-item destructive"
+                onClick={handleArchive}
+              >
+                <MaterialSymbol icon="archive" size={14} />
+                Archive Workstream
               </button>
             </>
           )}
