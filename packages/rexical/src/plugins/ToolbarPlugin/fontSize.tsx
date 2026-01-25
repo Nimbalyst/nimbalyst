@@ -6,8 +6,6 @@
  *
  */
 
-import './fontSize.css';
-
 import {LexicalEditor} from 'lexical';
 import * as React from 'react';
 
@@ -100,10 +98,10 @@ export default function FontSize({
         onClick={() =>
           updateFontSize(editor, UpdateFontSizeType.decrement, inputValue)
         }
-        className="toolbar-item font-decrement"
+        className="toolbar-item font-decrement p-0 mr-[3px]"
         aria-label="Decrease font size"
         title={`Decrease font size (${SHORTCUTS.DECREASE_FONT_SIZE})`}>
-        <i className="format minus-icon" />
+        <i className="format minus-icon bg-[url('../../images/icons/minus-sign.svg')] bg-no-repeat bg-center" />
       </button>
 
       <input
@@ -111,7 +109,7 @@ export default function FontSize({
         title="Font size"
         value={inputValue}
         disabled={disabled}
-        className="toolbar-item font-size-input"
+        className="toolbar-item font-size-input font-bold text-sm text-[var(--nim-text-muted)] bg-[var(--nim-bg-tertiary)] border border-[var(--nim-border)] rounded-[5px] h-[15px] px-1 py-0.5 text-center w-5 self-center disabled:opacity-20 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
         min={MIN_ALLOWED_FONT_SIZE}
         max={MAX_ALLOWED_FONT_SIZE}
         onChange={(e) => setInputValue(e.target.value)}
@@ -129,10 +127,10 @@ export default function FontSize({
         onClick={() =>
           updateFontSize(editor, UpdateFontSizeType.increment, inputValue)
         }
-        className="toolbar-item font-increment"
+        className="toolbar-item font-increment p-0 ml-[3px]"
         aria-label="Increase font size"
         title={`Increase font size (${SHORTCUTS.INCREASE_FONT_SIZE})`}>
-        <i className="format add-icon" />
+        <i className="format add-icon bg-[url('../../images/icons/add-sign.svg')] bg-no-repeat bg-center" />
       </button>
     </>
   );

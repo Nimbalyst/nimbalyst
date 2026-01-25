@@ -46,32 +46,31 @@ export function AdvancedPanel() {
   };
 
   return (
-    <div className="provider-panel">
-      <div className="provider-panel-header">
+    <div className="provider-panel flex flex-col">
+      <div className="provider-panel-header mb-6 pb-4 border-b border-[var(--nim-border)]">
         <h3
-          className="provider-panel-title"
+          className="provider-panel-title text-xl font-semibold leading-tight mb-2 text-[var(--nim-text)] cursor-pointer"
           onClick={handleTitleClick}
-          style={{ cursor: 'pointer' }}
           title="Command/Ctrl-click to reveal release channel options"
         >
           Advanced Settings
         </h3>
-        <p className="provider-panel-description">
+        <p className="provider-panel-description text-sm leading-relaxed text-[var(--nim-text-muted)]">
           Advanced configuration options for AI features.
         </p>
       </div>
 
       {showReleaseChannel && (
-        <div className="provider-panel-section">
-          <h4 className="provider-panel-section-title">Release Channel</h4>
-          <p className="provider-panel-hint">
+        <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+          <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Release Channel</h4>
+          <p className="text-sm leading-relaxed text-[var(--nim-text-muted)] mb-4">
             Choose which release channel to receive updates from.
           </p>
 
-          <div className="setting-item">
-            <div className="setting-text">
-              <span className="setting-name">Update Channel</span>
-              <span className="setting-description">
+          <div className="setting-item py-3">
+            <div className="setting-text flex flex-col gap-0.5">
+              <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Update Channel</span>
+              <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
                 <strong>Stable:</strong> Production-ready releases from GitHub (recommended for most users).<br/>
                 <strong>Alpha:</strong> Early access to new features for internal testing. May be unstable.
               </span>
@@ -79,8 +78,7 @@ export function AdvancedPanel() {
             <select
               value={releaseChannel}
               onChange={(e) => updateSettings({ releaseChannel: e.target.value as ReleaseChannel })}
-              className="setting-select"
-              style={{ marginTop: '8px', width: '100%', padding: '8px', borderRadius: '4px' }}
+              className="setting-select mt-2 w-full py-2 px-3 pr-9 rounded-md text-sm bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] outline-none appearance-none bg-[url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%236b7280%22%20d%3D%22M3%204.5L6%207.5L9%204.5%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[right_12px_center] focus:border-[var(--nim-primary)]"
             >
               <option value="stable">Stable</option>
               <option value="alpha">Alpha (Internal Testing)</option>
@@ -140,23 +138,23 @@ export function AdvancedPanel() {
         </div>
       )}
 
-      <div className="provider-panel-section">
-        <h4 className="provider-panel-section-title">Privacy</h4>
-        <p className="provider-panel-hint">
+      <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+        <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Privacy</h4>
+        <p className="text-sm leading-relaxed text-[var(--nim-text-muted)] mb-4">
           Control how Nimbalyst collects anonymous usage data.
         </p>
 
-        <div className="setting-item">
-          <label className="setting-label">
+        <div className="setting-item py-3">
+          <label className="setting-label flex items-start gap-3 cursor-pointer">
             <input
               type="checkbox"
               checked={analyticsEnabled}
               onChange={(e) => updateSettings({ analyticsEnabled: e.target.checked })}
-              className="setting-checkbox"
+              className="setting-checkbox w-4 h-4 mt-0.5 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
             />
-            <div className="setting-text">
-              <span className="setting-name">Send Anonymous Usage Data</span>
-              <span className="setting-description">
+            <div className="setting-text flex flex-col gap-0.5">
+              <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Send Anonymous Usage Data</span>
+              <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
                 Help improve Nimbalyst by sending anonymous usage data. No prompts, content, or personal information is ever collected.
               </span>
             </div>
@@ -164,28 +162,28 @@ export function AdvancedPanel() {
         </div>
       </div>
 
-      <div className="provider-panel-section">
-        <h4 className="provider-panel-section-title">Feature Guides</h4>
-        <p className="provider-panel-hint">
+      <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+        <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Feature Guides</h4>
+        <p className="text-sm leading-relaxed text-[var(--nim-text-muted)] mb-4">
           Contextual guides that help you discover features.
           {walkthroughsTotalCount > 0 && (
-            <span style={{ marginLeft: '8px', color: 'var(--text-tertiary)' }}>
+            <span className="ml-2 text-[var(--nim-text-faint)]">
               ({walkthroughsViewedCount} of {walkthroughsTotalCount} viewed)
             </span>
           )}
         </p>
 
-        <div className="setting-item">
-          <label className="setting-label">
+        <div className="setting-item py-3">
+          <label className="setting-label flex items-start gap-3 cursor-pointer">
             <input
               type="checkbox"
               checked={walkthroughsEnabled}
               onChange={(e) => updateSettings({ walkthroughsEnabled: e.target.checked })}
-              className="setting-checkbox"
+              className="setting-checkbox w-4 h-4 mt-0.5 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
             />
-            <div className="setting-text">
-              <span className="setting-name">Show Feature Guides</span>
-              <span className="setting-description">
+            <div className="setting-text flex flex-col gap-0.5">
+              <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Show Feature Guides</span>
+              <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
                 Display walkthrough guides for new features and tips to help you get the most out of Nimbalyst.
               </span>
             </div>
@@ -193,46 +191,34 @@ export function AdvancedPanel() {
         </div>
 
         {walkthroughsViewedCount > 0 && (
-          <div className="setting-item" style={{ marginTop: '12px' }}>
-            <button
-              onClick={() => resetWalkthroughs()}
-              style={{
-                padding: '6px 12px',
-                fontSize: '13px',
-                fontWeight: 500,
-                color: 'var(--text-secondary)',
-                background: 'var(--surface-secondary)',
-                border: '1px solid var(--border-primary)',
-                borderRadius: '6px',
-                cursor: 'pointer',
-              }}
-            >
+          <div className="setting-item py-3 flex items-center gap-3">
+            <button onClick={() => resetWalkthroughs()} className="nim-btn-secondary text-sm">
               Reset All Guides
             </button>
-            <span style={{ marginLeft: '12px', fontSize: '13px', color: 'var(--text-tertiary)' }}>
+            <span className="text-[13px] text-[var(--nim-text-faint)]">
               Show all guides again from the beginning
             </span>
           </div>
         )}
       </div>
 
-      <div className="provider-panel-section">
-        <h4 className="provider-panel-section-title">Extension Development</h4>
-        <p className="provider-panel-hint">
+      <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+        <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Extension Development</h4>
+        <p className="text-sm leading-relaxed text-[var(--nim-text-muted)] mb-4">
           Tools for building and testing Nimbalyst extensions.
         </p>
 
-        <div className="setting-item">
-          <label className="setting-label">
+        <div className="setting-item py-3">
+          <label className="setting-label flex items-start gap-3 cursor-pointer">
             <input
               type="checkbox"
               checked={extensionDevToolsEnabled}
               onChange={(e) => updateSettings({ extensionDevToolsEnabled: e.target.checked })}
-              className="setting-checkbox"
+              className="setting-checkbox w-4 h-4 mt-0.5 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
             />
-            <div className="setting-text">
-              <span className="setting-name">Enable Extension Dev Tools</span>
-              <span className="setting-description">
+            <div className="setting-text flex flex-col gap-0.5">
+              <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Enable Extension Dev Tools</span>
+              <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
                 Enables MCP tools for building, installing, and hot-reloading extensions during development.
                 When enabled, Claude Code can use extension_build, extension_install, extension_reload, and
                 extension_uninstall tools to develop extensions in real-time.
@@ -242,16 +228,16 @@ export function AdvancedPanel() {
         </div>
       </div>
 
-      <div className="provider-panel-section">
-        <h4 className="provider-panel-section-title">Memory</h4>
-        <p className="provider-panel-hint">
+      <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+        <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Memory</h4>
+        <p className="text-sm leading-relaxed text-[var(--nim-text-muted)] mb-4">
           Configure memory limits for the application.
         </p>
 
-        <div className="setting-item">
-          <div className="setting-text">
-            <span className="setting-name">Maximum Heap Size (MB)</span>
-            <span className="setting-description">
+        <div className="setting-item py-3">
+          <div className="setting-text flex flex-col gap-0.5">
+            <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Maximum Heap Size (MB)</span>
+            <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
               V8 JavaScript heap memory limit. Increase if you experience out-of-memory crashes
               with large AI sessions. Default is 4096 MB (4 GB). Requires restart to take effect.
             </span>
@@ -259,8 +245,7 @@ export function AdvancedPanel() {
           <select
             value={maxHeapSizeMB}
             onChange={(e) => updateSettings({ maxHeapSizeMB: parseInt(e.target.value, 10) })}
-            className="setting-select"
-            style={{ marginTop: '8px', width: '100%', padding: '8px', borderRadius: '4px' }}
+            className="setting-select mt-2 w-full py-2 px-3 pr-9 rounded-md text-sm bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] outline-none appearance-none bg-[url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%236b7280%22%20d%3D%22M3%204.5L6%207.5L9%204.5%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[right_12px_center] focus:border-[var(--nim-primary)]"
           >
             <option value={2048}>2 GB</option>
             <option value={4096}>4 GB (Default)</option>
@@ -273,23 +258,23 @@ export function AdvancedPanel() {
       </div>
 
       {isDevelopment ? (
-        <div className="provider-panel-section">
-          <h4 className="provider-panel-section-title">Developer Options</h4>
-          <p className="provider-panel-hint">
+        <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+          <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Developer Options</h4>
+          <p className="text-sm leading-relaxed text-[var(--nim-text-muted)] mb-4">
             These options are only available in development mode.
           </p>
 
-          <div className="setting-item">
-            <label className="setting-label">
+          <div className="setting-item py-3">
+            <label className="setting-label flex items-start gap-3 cursor-pointer">
               <input
                 type="checkbox"
                 checked={showToolCalls}
                 onChange={(e) => updateAIDebugSettings({ showToolCalls: e.target.checked })}
-                className="setting-checkbox"
+                className="setting-checkbox w-4 h-4 mt-0.5 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
               />
-              <div className="setting-text">
-                <span className="setting-name">Show All Tool Calls</span>
-                <span className="setting-description">
+              <div className="setting-text flex flex-col gap-0.5">
+                <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Show All Tool Calls</span>
+                <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
                   Display all MCP tool calls in the AI chat sidebar, including Edit/applyDiff calls.
                   When disabled, edit operations are shown without the underlying tool call details to reduce clutter.
                   Useful for debugging and understanding exactly what tools the AI is using.
@@ -298,17 +283,17 @@ export function AdvancedPanel() {
             </label>
           </div>
 
-          <div className="setting-item">
-            <label className="setting-label">
+          <div className="setting-item py-3">
+            <label className="setting-label flex items-start gap-3 cursor-pointer">
               <input
                 type="checkbox"
                 checked={aiDebugLogging}
                 onChange={(e) => updateAIDebugSettings({ aiDebugLogging: e.target.checked })}
-                className="setting-checkbox"
+                className="setting-checkbox w-4 h-4 mt-0.5 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
               />
-              <div className="setting-text">
-                <span className="setting-name">Enable AI Debug Logging</span>
-                <span className="setting-description">
+              <div className="setting-text flex flex-col gap-0.5">
+                <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Enable AI Debug Logging</span>
+                <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
                   Capture detailed logs of all AI editing operations including LLM requests/responses,
                   diff applications, and streaming operations. Logs are saved per session in your
                   application support directory for troubleshooting integration issues.
@@ -318,8 +303,8 @@ export function AdvancedPanel() {
           </div>
         </div>
       ) : (
-        <div className="provider-panel-section">
-          <p className="provider-panel-hint">
+        <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+          <p className="text-sm leading-relaxed text-[var(--nim-text-muted)]">
             Advanced settings are only available in development mode.
           </p>
         </div>

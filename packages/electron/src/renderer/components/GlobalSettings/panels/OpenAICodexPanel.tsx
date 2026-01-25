@@ -211,18 +211,18 @@ export function OpenAICodexPanel({
   };
 
   return (
-    <div className="provider-panel">
-      <div className="provider-panel-header">
-        <h3 className="provider-panel-title">OpenAI Codex</h3>
-        <p className="provider-panel-description">
+    <div className="provider-panel flex flex-col">
+      <div className="provider-panel-header mb-6 pb-4 border-b border-[var(--nim-border)]">
+        <h3 className="provider-panel-title text-xl font-semibold leading-tight mb-2 text-[var(--nim-text)]">OpenAI Codex</h3>
+        <p className="provider-panel-description text-sm leading-relaxed text-[var(--nim-text-muted)]">
           Advanced code generation and completion powered by OpenAI Codex models.
           Provides intelligent code suggestions and automated programming assistance.
         </p>
       </div>
 
-      <div className="provider-enable" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span className="provider-enable-label">Enable OpenAI Codex</span>
-        <label className="provider-toggle">
+      <div className="provider-enable flex items-center justify-between gap-4 py-4 mb-4 border-b border-[var(--nim-border)]">
+        <span className="provider-enable-label text-sm font-medium text-[var(--nim-text)]">Enable OpenAI Codex</span>
+        <label className="provider-toggle relative inline-block w-11 h-6 cursor-pointer">
           <input
             type="checkbox"
             checked={config.enabled || false}
@@ -230,51 +230,57 @@ export function OpenAICodexPanel({
               console.log('[OpenAICodexPanel] Toggle changed to:', e.target.checked);
               onToggle(e.target.checked);
             }}
+            className="opacity-0 w-0 h-0 absolute"
           />
-          <span className="provider-toggle-slider"></span>
+          <span className="provider-toggle-slider absolute cursor-pointer inset-0 rounded-full transition-all bg-[var(--nim-bg-tertiary)]"></span>
         </label>
       </div>
 
-      <div className="provider-panel-section">
-        <h4 className="provider-panel-section-title">Installation Status</h4>
-        <div className={`installation-status ${getInstallationStatusClass()}`}>
+      <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+        <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Installation Status</h4>
+        <div className={`installation-status p-4 rounded-lg ${
+          getInstallationStatusClass() === 'installed' ? 'bg-[rgba(16,185,129,0.05)] border border-[rgba(16,185,129,0.2)]' :
+          getInstallationStatusClass() === 'installing' ? 'bg-[rgba(245,158,11,0.05)] border border-[rgba(245,158,11,0.2)]' :
+          getInstallationStatusClass() === 'error' ? 'bg-[rgba(239,68,68,0.05)] border border-[rgba(239,68,68,0.2)]' :
+          'bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)]'
+        }`}>
           {isChecking ? (
-            <div className="installation-status-row">
-              <span className="installation-status-label">Checking installation...</span>
+            <div className="installation-status-row flex items-center gap-3 py-1">
+              <span className="installation-status-label text-sm font-medium text-[var(--nim-text-muted)]">Checking installation...</span>
             </div>
           ) : (
             <>
-              <div className="installation-status-row">
-                <span className="installation-status-label">Status:</span>
-                <span className="installation-status-value">
+              <div className="installation-status-row flex items-center gap-3 py-1">
+                <span className="installation-status-label text-sm font-medium text-[var(--nim-text-muted)]">Status:</span>
+                <span className="installation-status-value text-sm text-[var(--nim-text)]">
                   {localInstallStatus.installed || config.installed ? 'Installed' : 'Not Installed'}
                   {config.installStatus === 'installing' && ' (Installing...)'}
                 </span>
               </div>
               {(localInstallStatus.version || config.version) && (
-                <div className="installation-status-row">
-                  <span className="installation-status-label">Version:</span>
-                  <span className="installation-status-value">{localInstallStatus.version || config.version}</span>
+                <div className="installation-status-row flex items-center gap-3 py-1">
+                  <span className="installation-status-label text-sm font-medium text-[var(--nim-text-muted)]">Version:</span>
+                  <span className="installation-status-value text-sm text-[var(--nim-text)]">{localInstallStatus.version || config.version}</span>
                 </div>
               )}
               {(localInstallStatus.path) && (
-                <div className="installation-status-row">
-                  <span className="installation-status-label">Location:</span>
-                  <span className="installation-status-value" style={{ fontSize: '11px' }}>{localInstallStatus.path}</span>
+                <div className="installation-status-row flex items-center gap-3 py-1">
+                  <span className="installation-status-label text-sm font-medium text-[var(--nim-text-muted)]">Location:</span>
+                  <span className="installation-status-value text-xs text-[var(--nim-text)]">{localInstallStatus.path}</span>
                 </div>
               )}
               {(localInstallStatus.updateAvailable || config.updateAvailable) && (
-                <div className="installation-status-row">
-                  <span className="installation-status-label">Update:</span>
-                  <span className="installation-status-value">
+                <div className="installation-status-row flex items-center gap-3 py-1">
+                  <span className="installation-status-label text-sm font-medium text-[var(--nim-text-muted)]">Update:</span>
+                  <span className="installation-status-value text-sm text-[var(--nim-text)]">
                     Version {localInstallStatus.latestVersion || 'new'} available
                   </span>
                 </div>
               )}
-              <div className="installation-actions">
+              <div className="installation-actions flex gap-2 mt-3">
                 {!localInstallStatus.installed && !config.installed && (
                   <button
-                    className="button-install"
+                    className="nim-btn-primary"
                     onClick={handleInstall}
                     disabled={config.installStatus === 'installing'}
                   >
@@ -283,7 +289,7 @@ export function OpenAICodexPanel({
                 )}
                 {(localInstallStatus.installed || config.installed) && (localInstallStatus.updateAvailable || config.updateAvailable) && (
                   <button
-                    className="button-update"
+                    className="nim-btn-primary"
                     onClick={handleUpdate}
                     disabled={config.installStatus === 'installing'}
                   >
@@ -292,7 +298,7 @@ export function OpenAICodexPanel({
                 )}
                 {(localInstallStatus.installed || config.installed) && (
                   <button
-                    className="button-uninstall"
+                    className="nim-btn-secondary"
                     onClick={handleUninstall}
                     disabled={config.installStatus === 'installing'}
                   >
@@ -300,7 +306,7 @@ export function OpenAICodexPanel({
                   </button>
                 )}
                 <button
-                  className="button-refresh"
+                  className="nim-btn-secondary"
                   onClick={checkInstallation}
                   disabled={isChecking}
                 >
@@ -314,23 +320,27 @@ export function OpenAICodexPanel({
 
       {config.enabled && (localInstallStatus.installed || config.installed) && (
         <>
-          <div className="provider-panel-section">
-            <h4 className="provider-panel-section-title">API Configuration</h4>
-            <div className="api-key-section">
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+          <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+            <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">API Configuration</h4>
+            <div className="api-key-section mt-4">
+              <p className="text-[13px] text-[var(--nim-text-muted)] mb-3">
                 OpenAI Codex uses the same API key as OpenAI (GPT models)
               </p>
-              <div className="api-key-row">
+              <div className="api-key-row flex gap-2 items-center">
                 <input
                   type="password"
                   value={apiKeys.openai || ''}
                   onChange={(e) => onApiKeyChange('openai', e.target.value)}
                   onFocus={(e) => e.target.select()}
                   placeholder="sk-..."
-                  className="api-key-input"
+                  className="api-key-input flex-1 py-2 px-3 rounded-md bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] outline-none font-mono focus:border-[var(--nim-primary)]"
                 />
                 <button
-                  className={`test-button ${config.testStatus}`}
+                  className={`test-button inline-flex items-center justify-center py-2 px-4 rounded-md text-sm font-medium whitespace-nowrap cursor-pointer transition-all bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)] border border-[var(--nim-border)] hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] ${
+                    config.testStatus === 'testing' ? 'opacity-60 cursor-wait' : ''
+                  } ${config.testStatus === 'success' ? 'text-[var(--nim-success)] border-[var(--nim-success)]' : ''} ${
+                    config.testStatus === 'error' ? 'text-[var(--nim-error)] border-[var(--nim-error)]' : ''
+                  }`}
                   onClick={onTestConnection}
                   disabled={config.testStatus === 'testing'}
                 >
@@ -340,15 +350,15 @@ export function OpenAICodexPanel({
                 </button>
               </div>
               {config.testMessage && config.testStatus === 'error' && (
-                <div className="test-error">{config.testMessage}</div>
+                <div className="test-error text-xs mt-2 text-[var(--nim-error)]">{config.testMessage}</div>
               )}
             </div>
           </div>
 
-          <div className="provider-panel-section">
-            <h4 className="provider-panel-section-title">Codex Configuration</h4>
+          <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+            <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Codex Configuration</h4>
             <div className="cli-config-section">
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+              <p className="text-[13px] text-[var(--nim-text-muted)] mb-3">
                 OpenAI Codex CLI manages its own model selection internally.
                 No additional configuration required.
               </p>

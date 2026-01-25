@@ -5,7 +5,6 @@
   "description": "Browse and query SQLite databases with AI assistance",
   "author": "Nimbalyst",
   "main": "dist/index.js",
-  "styles": "dist/index.css",
   "apiVersion": "1.0.0",
   "permissions": {
     "filesystem": true,

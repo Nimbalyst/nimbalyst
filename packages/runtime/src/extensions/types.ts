@@ -132,7 +132,45 @@ export interface ExtensionContributions {
    * Settings panel shown in the Settings screen under "Extensions" section.
    */
   settingsPanel?: SettingsPanelContribution;
+
+  /**
+   * Custom themes that users can select.
+   * Extensions can provide color themes that override the built-in themes.
+   */
+  themes?: ThemeContribution[];
 }
+
+/**
+ * Theme contribution for extensions.
+ * Extensions can provide custom color themes that users can select.
+ */
+export interface ThemeContribution {
+  /** Unique theme ID within this extension (will be namespaced as extensionId:themeId) */
+  id: string;
+
+  /** Display name for the theme (shown in theme picker) */
+  name: string;
+
+  /** Whether this is a dark theme (determines base theme for fallbacks) */
+  isDark: boolean;
+
+  /**
+   * Theme color values. Only include colors you want to override.
+   * Missing colors will fall back to the appropriate base theme (light or dark).
+   */
+  colors: Partial<Record<ThemeColorKey, string>>;
+}
+
+/**
+ * Available theme color keys.
+ */
+export type ThemeColorKey =
+  | 'bg' | 'bg-secondary' | 'bg-tertiary' | 'bg-hover' | 'bg-selected' | 'bg-active'
+  | 'text' | 'text-muted' | 'text-faint' | 'text-disabled'
+  | 'border' | 'border-focus'
+  | 'primary' | 'primary-hover'
+  | 'link' | 'link-hover'
+  | 'success' | 'warning' | 'error' | 'info';
 
 // ============================================================================
 // Extension Configuration Types

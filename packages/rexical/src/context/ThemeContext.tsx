@@ -1,69 +1,99 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Theme Context for Rexical
  *
- * This source code is licensed under the MIT license found in the
- * LICENSE file in the root directory of this source tree.
+ * This module provides theme information by reading from the DOM's data-theme attribute.
+ * The actual theme is controlled at the app level (electron/capacitor) via CSS variables.
  *
+ * Components that need to know if they're in dark mode can use useTheme().
+ * The theme CSS variables (--nim-*) are automatically available via CSS.
  */
 
-import type {JSX, ReactNode} from 'react';
-import {createContext, useContext, useEffect, useState} from 'react';
+import type { JSX, ReactNode } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 
 export type Theme = 'light' | 'dark' | 'crystal-dark';
 export type ThemeConfig = 'light' | 'dark' | 'crystal-dark' | 'auto';
 
-interface ThemeContextType {
-  theme: Theme;
-  toggleTheme: () => void;
-  setTheme: (theme: Theme) => void;
-}
-
-const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
-
-interface ThemeProviderProps {
-  children: ReactNode;
-  initialTheme?: ThemeConfig;
-}
-
-export function ThemeProvider({children, initialTheme = 'auto'}: ThemeProviderProps): JSX.Element {
-  // Simple state that just tracks what the parent tells us
-  const [theme, setThemeState] = useState<Theme>(() => {
-    // Parent explicitly set a theme
-    if (initialTheme === 'light' || initialTheme === 'dark' || initialTheme === 'crystal-dark') {
-      return initialTheme;
-    }
-    // Fallback for 'auto' or undefined
+/**
+ * Get the current theme from the DOM's data-theme attribute.
+ */
+function getThemeFromDOM(): Theme {
+  if (typeof document === 'undefined') {
     return 'light';
+  }
+  const dataTheme = document.documentElement.getAttribute('data-theme');
+  if (dataTheme === 'dark' || dataTheme === 'crystal-dark') {
+    return dataTheme;
+  }
+  // Check class as fallback
+  if (document.documentElement.classList.contains('dark-theme')) {
+    return 'dark';
+  }
+  if (document.documentElement.classList.contains('crystal-dark-theme')) {
+    return 'crystal-dark';
+  }
+  return 'light';
+}
+
+/**
+ * Subscribe to theme changes via MutationObserver on the document element.
+ */
+function subscribeToThemeChanges(callback: () => void): () => void {
+  if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') {
+    return () => {};
+  }
+
+  const observer = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      if (
+        mutation.type === 'attributes' &&
+        (mutation.attributeName === 'data-theme' || mutation.attributeName === 'class')
+      ) {
+        callback();
+        break;
+      }
+    }
   });
 
-  // Update theme when initialTheme prop changes (parent controls theme)
-  useEffect(() => {
-    if (initialTheme === 'light' || initialTheme === 'dark' || initialTheme === 'crystal-dark') {
-      setThemeState(initialTheme);
-    }
-  }, [initialTheme]);
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-theme', 'class'],
+  });
 
-  // These are no-op - parent controls theme
-  const setTheme = (newTheme: Theme) => {
-    // Theme is controlled by parent, but update state for legacy code
-    setThemeState(newTheme);
-  };
-
-  const toggleTheme = () => {
-    // No-op - theme switching happens at app level, not within editor
-  };
-
-  return (
-    <ThemeContext.Provider value={{theme, toggleTheme, setTheme}}>
-      {children}
-    </ThemeContext.Provider>
-  );
+  return () => observer.disconnect();
 }
 
-export function useTheme(): ThemeContextType {
-  const context = useContext(ThemeContext);
-  if (context === undefined) {
-    throw new Error('useTheme must be used within a ThemeProvider');
-  }
-  return context;
+/**
+ * Hook to get the current theme from the DOM.
+ * Automatically updates when the theme changes.
+ *
+ * @returns Object with theme and isDark properties
+ */
+export function useTheme(): { theme: Theme; isDark: boolean; toggleTheme: () => void; setTheme: (theme: Theme) => void } {
+  const theme = useSyncExternalStore(
+    subscribeToThemeChanges,
+    getThemeFromDOM,
+    () => 'light' as Theme // Server-side fallback
+  );
+
+  const isDark = theme === 'dark' || theme === 'crystal-dark';
+
+  // toggleTheme and setTheme are no-ops - theme is controlled at app level
+  const toggleTheme = () => {
+    console.warn('[rexical] toggleTheme is deprecated - theme is controlled at app level');
+  };
+
+  const setTheme = (_theme: Theme) => {
+    console.warn('[rexical] setTheme is deprecated - theme is controlled at app level');
+  };
+
+  return { theme, isDark, toggleTheme, setTheme };
+}
+
+/**
+ * @deprecated ThemeProvider is no longer needed. Theme is read from DOM.
+ * This is kept for backwards compatibility but does nothing.
+ */
+export function ThemeProvider({ children }: { children: ReactNode; initialTheme?: ThemeConfig }): JSX.Element {
+  return <>{children}</>;
 }

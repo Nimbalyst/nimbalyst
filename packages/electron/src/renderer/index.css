@@ -1,10 +1,20 @@
-/* Material Symbols font */
-@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
-
-/* Import theme variables from rexical - single source of truth */
+/* Import theme variables FIRST - must be defined before Tailwind processes them */
 @import '../../../rexical/src/themes/PlaygroundEditorTheme.css';
 @import '../../../rexical/src/themes/DarkEditorTheme.css';
 @import '../../../rexical/src/themes/CrystalDarkTheme.css';
+
+/* Import unified theme system CSS variables (--nim-* prefix) */
+@import '../../../rexical/src/themes/NimbalystTheme.css';
+
+/* Material Symbols font */
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
+
+/* Tailwind CSS - comes after theme variables so it can reference them */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Shared component utilities are now imported via JS in index.tsx */
 
 /* Map rexical variables to electron-specific aliases for backwards compatibility */
 :root {
@@ -41,16 +51,16 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--scrollbar-track);
+  background: var(--nim-scrollbar-track);
 }
 
 ::-webkit-scrollbar-thumb {
-  background-color: var(--scrollbar-thumb);
+  background-color: var(--nim-scrollbar-thumb);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background-color: var(--scrollbar-thumb-hover);
+  background-color: var(--nim-scrollbar-thumb-hover);
 }
 
 /* Material Symbols configuration */
@@ -71,6 +81,28 @@ body {
   font-feature-settings: 'liga';
 }
 
+/* Dev mode indicator - show "DEV MODE" text sideways in navigation gutter */
+body[data-dev-mode="true"] .nav-quick-access {
+  position: relative;
+}
+
+body[data-dev-mode="true"] .nav-quick-access::before {
+  content: 'DEV MODE';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-90deg);
+  transform-origin: center;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: var(--nim-warning);
+  opacity: 0.8;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 0;
+}
+
 /**
  * PostHog Survey Dark Mode Overrides
  *
@@ -79,37 +111,37 @@ body {
  */
 .PostHogSurvey,
 .PostHogSurvey__popup {
-  --survey-bg: var(--surface-primary) !important;
-  --survey-border: var(--border-primary) !important;
-  --survey-text: var(--text-primary) !important;
-  --survey-text-secondary: var(--text-secondary) !important;
+  --survey-bg: var(--nim-bg) !important;
+  --survey-border: var(--nim-border) !important;
+  --survey-text: var(--nim-text) !important;
+  --survey-text-secondary: var(--nim-text-muted) !important;
 }
 
 /* Survey popup container */
 .PostHogSurvey__popup {
-  background-color: var(--surface-primary) !important;
-  border-color: var(--border-primary) !important;
+  background-color: var(--nim-bg) !important;
+  border-color: var(--nim-border) !important;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4) !important;
 }
 
 /* Survey box/card */
 .survey-box,
 .PostHogSurvey__box {
-  background-color: var(--surface-primary) !important;
-  border-color: var(--border-primary) !important;
-  color: var(--text-primary) !important;
+  background-color: var(--nim-bg) !important;
+  border-color: var(--nim-border) !important;
+  color: var(--nim-text) !important;
 }
 
 /* Survey question text */
 .survey-question,
 .PostHogSurvey__question {
-  color: var(--text-primary) !important;
+  color: var(--nim-text) !important;
 }
 
 /* Survey description text */
 .survey-question-description,
 .PostHogSurvey__description {
-  color: var(--text-secondary) !important;
+  color: var(--nim-text-muted) !important;
 }
 
 /* Text input/textarea */
@@ -117,23 +149,23 @@ body {
 .PostHogSurvey input[type="text"],
 .survey-box textarea,
 .survey-box input[type="text"] {
-  background-color: var(--surface-secondary) !important;
-  border-color: var(--border-primary) !important;
-  color: var(--text-primary) !important;
+  background-color: var(--nim-bg-secondary) !important;
+  border-color: var(--nim-border) !important;
+  color: var(--nim-text) !important;
 }
 
 .PostHogSurvey textarea::placeholder,
 .PostHogSurvey input[type="text"]::placeholder,
 .survey-box textarea::placeholder,
 .survey-box input[type="text"]::placeholder {
-  color: var(--text-tertiary) !important;
+  color: var(--nim-text-faint) !important;
 }
 
 .PostHogSurvey textarea:focus,
 .PostHogSurvey input[type="text"]:focus,
 .survey-box textarea:focus,
 .survey-box input[type="text"]:focus {
-  border-color: var(--border-focus) !important;
+  border-color: var(--nim-primary) !important;
   outline: none !important;
 }
 
@@ -141,24 +173,24 @@ body {
 .PostHogSurvey__ratingButton,
 .ratings-number button,
 .rating-options button {
-  background-color: var(--surface-secondary) !important;
-  border-color: var(--border-primary) !important;
-  color: var(--text-primary) !important;
+  background-color: var(--nim-bg-secondary) !important;
+  border-color: var(--nim-border) !important;
+  color: var(--nim-text) !important;
 }
 
 .PostHogSurvey__ratingButton:hover,
 .ratings-number button:hover,
 .rating-options button:hover {
-  background-color: var(--surface-hover) !important;
-  border-color: var(--accent-primary) !important;
+  background-color: var(--nim-bg-hover) !important;
+  border-color: var(--nim-primary) !important;
 }
 
 .PostHogSurvey__ratingButton--selected,
 .PostHogSurvey__ratingButton.selected,
 .ratings-number button.selected,
 .rating-options button.selected {
-  background-color: var(--accent-primary) !important;
-  border-color: var(--accent-primary) !important;
+  background-color: var(--nim-primary) !important;
+  border-color: var(--nim-primary) !important;
   color: white !important;
 }
 
@@ -166,31 +198,31 @@ body {
 .PostHogSurvey__ratingLabels,
 .rating-text,
 .ratings-number span {
-  color: var(--text-tertiary) !important;
+  color: var(--nim-text-faint) !important;
 }
 
 /* Multiple choice options */
 .PostHogSurvey__choiceOption,
 .multiple-choice button,
 .survey-box .choice-option {
-  background-color: var(--surface-secondary) !important;
-  border-color: var(--border-primary) !important;
-  color: var(--text-primary) !important;
+  background-color: var(--nim-bg-secondary) !important;
+  border-color: var(--nim-border) !important;
+  color: var(--nim-text) !important;
 }
 
 .PostHogSurvey__choiceOption:hover,
 .multiple-choice button:hover,
 .survey-box .choice-option:hover {
-  background-color: var(--surface-hover) !important;
-  border-color: var(--accent-primary) !important;
+  background-color: var(--nim-bg-hover) !important;
+  border-color: var(--nim-primary) !important;
 }
 
 .PostHogSurvey__choiceOption--selected,
 .PostHogSurvey__choiceOption.selected,
 .multiple-choice button.selected,
 .survey-box .choice-option.selected {
-  background-color: var(--surface-selected) !important;
-  border-color: var(--accent-primary) !important;
+  background-color: var(--nim-bg-selected) !important;
+  border-color: var(--nim-primary) !important;
 }
 
 /* Submit/action buttons */
@@ -198,7 +230,7 @@ body {
 .survey-box .survey-submit,
 .survey-box button[type="submit"],
 .survey-box .buttons button {
-  background-color: var(--accent-primary) !important;
+  background-color: var(--nim-primary) !important;
   color: white !important;
   border: none !important;
 }
@@ -207,7 +239,7 @@ body {
 .survey-box .survey-submit:hover,
 .survey-box button[type="submit"]:hover,
 .survey-box .buttons button:hover {
-  background-color: var(--accent-primary-hover) !important;
+  background-color: var(--nim-primary-hover) !important;
 }
 
 .PostHogSurvey__button:disabled,
@@ -221,53 +253,303 @@ body {
 .PostHogSurvey__close,
 .survey-box .cancel,
 .survey-box .close-survey-btn {
-  color: var(--text-secondary) !important;
+  color: var(--nim-text-muted) !important;
 }
 
 .PostHogSurvey__close:hover,
 .survey-box .cancel:hover,
 .survey-box .close-survey-btn:hover {
-  color: var(--text-primary) !important;
-  background-color: var(--surface-hover) !important;
+  color: var(--nim-text) !important;
+  background-color: var(--nim-bg-hover) !important;
 }
 
 /* Thank you message */
 .PostHogSurvey__thankYou,
 .thank-you-message {
-  background-color: var(--surface-primary) !important;
-  color: var(--text-primary) !important;
+  background-color: var(--nim-bg) !important;
+  color: var(--nim-text) !important;
 }
 
 .PostHogSurvey__thankYouHeader,
 .thank-you-message h3,
 .thank-you-message-header {
-  color: var(--text-primary) !important;
+  color: var(--nim-text) !important;
 }
 
 .PostHogSurvey__thankYouBody,
 .thank-you-message p,
 .thank-you-message-body {
-  color: var(--text-secondary) !important;
+  color: var(--nim-text-muted) !important;
 }
 
 /* Footer/branding */
 .PostHogSurvey__footer,
 .footer-branding {
-  color: var(--text-tertiary) !important;
+  color: var(--nim-text-faint) !important;
 }
 
 .PostHogSurvey__footer a,
 .footer-branding a {
-  color: var(--accent-link) !important;
+  color: var(--nim-link) !important;
 }
 
 /* Progress indicator for multi-question surveys */
 .PostHogSurvey__progress,
 .survey-progress {
-  background-color: var(--surface-tertiary) !important;
+  background-color: var(--nim-bg-tertiary) !important;
 }
 
 .PostHogSurvey__progressFill,
 .survey-progress-fill {
-  background-color: var(--accent-primary) !important;
+  background-color: var(--nim-primary) !important;
+}
+
+/* ============================================= */
+/* Update Toast Animations                       */
+/* ============================================= */
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes extension-dev-menu-appear {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* =============================================================================
+ * Lexical Change Group Highlighting
+ * These classes are applied to Lexical nodes when navigating through diff changes
+ * ============================================================================= */
+
+.diff-group-highlight-removed {
+  background-color: rgba(220, 38, 38, 0.15) !important;
+}
+
+.diff-group-highlight-added {
+  background-color: rgba(22, 163, 74, 0.15) !important;
+}
+
+.diff-group-highlight-modified {
+  background-color: rgba(59, 130, 246, 0.15) !important;
+}
+
+/* =============================================================================
+ * Walkthrough Guide Styles
+ * Animation and target highlight styles for the walkthrough system
+ * ============================================================================= */
+
+@keyframes walkthrough-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes walkthrough-pulse {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--nim-primary) 40%, transparent);
+  }
+  50% {
+    opacity: 0.8;
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--nim-primary) 0%, transparent);
+  }
+}
+
+/* Target element highlight - applied dynamically via JS */
+.walkthrough-target-highlight {
+  position: relative;
+  z-index: 10000;
+}
+
+.walkthrough-target-highlight::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border: 2px solid var(--nim-primary);
+  border-radius: 8px;
+  pointer-events: none;
+  animation: walkthrough-pulse 1.5s ease-in-out infinite;
+}
+
+/* ============================================
+   File Tree Styles
+   ============================================ */
+
+.file-tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 13px;
+}
+
+.file-tree-item {
+  user-select: none;
+}
+
+.file-tree-directory,
+.file-tree-file {
+  display: flex;
+  align-items: center;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: background-color 0.1s;
+  white-space: nowrap;
+  overflow: hidden;
+  height: 28px;
+  border-radius: 4px;
+  color: var(--nim-text);
+}
+
+.file-tree-directory:hover,
+.file-tree-file:hover {
+  background-color: var(--nim-bg-hover);
+}
+
+.file-tree-file.active {
+  background-color: var(--nim-bg-selected);
+  color: var(--nim-text);
+}
+
+.file-tree-directory.selected {
+  background-color: var(--nim-bg-selected);
+  color: var(--nim-text);
+}
+
+/* Multi-selection styles */
+.file-tree-file.multi-selected,
+.file-tree-directory.multi-selected {
+  background-color: var(--nim-bg-selected);
+  color: var(--nim-text);
+}
+
+.file-tree-chevron {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  margin-right: 2px;
+  flex-shrink: 0;
+  color: var(--nim-text-muted);
+}
+
+.file-tree-spacer {
+  width: 18px;
+  flex-shrink: 0;
+}
+
+.file-tree-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 6px;
+  flex-shrink: 0;
+  color: var(--nim-text-muted);
+}
+
+.file-tree-file.active .file-tree-icon,
+.file-tree-directory.selected .file-tree-icon,
+.file-tree-directory.selected .file-tree-chevron,
+.file-tree-file.multi-selected .file-tree-icon,
+.file-tree-directory.multi-selected .file-tree-icon,
+.file-tree-directory.multi-selected .file-tree-chevron {
+  color: var(--nim-text);
+}
+
+/* Special directories (nimbalyst-local) */
+.file-tree-directory.special-directory .file-tree-icon {
+  color: #7c3aed;
+}
+
+.file-tree-directory.special-directory.selected .file-tree-icon {
+  color: #a78bfa;
+}
+
+.file-tree-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--nim-text);
+}
+
+/* Git Status Badge in File Tree */
+.file-tree-git-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  border-radius: 2px;
+  flex-shrink: 0;
+  color: white;
+  margin-left: auto;
+  margin-right: 4px;
+}
+
+.file-tree-git-status--modified {
+  background-color: var(--nim-warning);
+}
+
+.file-tree-git-status--staged {
+  background-color: var(--nim-success);
+}
+
+.file-tree-git-status--untracked {
+  background-color: var(--nim-text-faint);
+}
+
+.file-tree-git-status--deleted {
+  background-color: var(--nim-error);
+}
+
+.file-tree-git-status--inherited {
+  opacity: 0.5;
+}
+
+/* Drag and drop styles */
+.file-tree-directory.drag-over {
+  background-color: var(--nim-bg-selected) !important;
+  outline: 2px solid var(--nim-primary);
+  outline-offset: -2px;
 }

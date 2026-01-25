@@ -12,14 +12,44 @@
  * - Submitting responses that sync to the provider
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import type {
   PermissionRequestContent,
   PermissionResponseContent,
   AskUserQuestionRequestContent,
   AskUserQuestionResponseContent,
 } from '../../../ai/server/types';
-import './InteractivePromptWidget.css';
+
+// Inject interactive prompt styles once (for animations and color-mix patterns)
+const injectInteractivePromptStyles = () => {
+  const styleId = 'interactive-prompt-widget-styles';
+  if (document.getElementById(styleId)) return;
+
+  const style = document.createElement('style');
+  style.id = styleId;
+  style.textContent = `
+    @keyframes interactive-prompt-pulse {
+      0%, 100% {
+        box-shadow: 0 0 0 0 rgba(var(--primary-color-rgb, 59, 130, 246), 0.3);
+      }
+      50% {
+        box-shadow: 0 0 0 4px rgba(var(--primary-color-rgb, 59, 130, 246), 0.1);
+      }
+    }
+    .interactive-prompt--pending {
+      animation: interactive-prompt-pulse 2s ease-in-out infinite;
+    }
+    .interactive-prompt__option--selected {
+      background: rgba(var(--primary-color-rgb, 59, 130, 246), 0.1);
+    }
+  `;
+  document.head.appendChild(style);
+};
+
+// Initialize styles on module load
+if (typeof document !== 'undefined') {
+  injectInteractivePromptStyles();
+}
 
 // ============================================================================
 // Types
@@ -59,26 +89,26 @@ const PermissionRequestWidget: React.FC<PermissionRequestWidgetProps> = ({
 
   if (content.status !== 'pending') {
     return (
-      <div className="interactive-prompt interactive-prompt--resolved">
-        <div className="interactive-prompt__header">
-          <span className="interactive-prompt__icon interactive-prompt__icon--resolved">
+      <div className="interactive-prompt interactive-prompt--resolved bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded-lg p-3 my-2 opacity-70">
+        <div className="interactive-prompt__header flex items-center gap-2 mb-2">
+          <span className="interactive-prompt__icon interactive-prompt__icon--resolved flex items-center justify-center w-5 h-5 shrink-0 text-[var(--nim-success)]">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M13 4L6 11L3 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </span>
-          <span className="interactive-prompt__title">Permission Resolved</span>
+          <span className="interactive-prompt__title font-semibold text-sm text-[var(--nim-text)]">Permission Resolved</span>
         </div>
-        <div className="interactive-prompt__command">
-          <code>{content.rawCommand || content.toolName}</code>
+        <div className="interactive-prompt__command bg-[var(--nim-bg-tertiary)] rounded p-2 px-3 mb-3 overflow-x-auto">
+          <code className="font-mono text-xs text-[var(--nim-text)] whitespace-pre-wrap break-all">{content.rawCommand || content.toolName}</code>
         </div>
       </div>
     );
   }
 
   return (
-    <div className={`interactive-prompt interactive-prompt--pending ${content.isDestructive ? 'interactive-prompt--destructive' : ''}`}>
-      <div className="interactive-prompt__header">
-        <span className={`interactive-prompt__icon ${content.isDestructive ? 'interactive-prompt__icon--destructive' : ''}`}>
+    <div className={`interactive-prompt interactive-prompt--pending bg-[var(--nim-bg-secondary)] border rounded-lg p-3 my-2 ${content.isDestructive ? 'interactive-prompt--destructive border-[var(--nim-error)]' : 'border-[var(--nim-primary)]'}`}>
+      <div className="interactive-prompt__header flex items-center gap-2 mb-2">
+        <span className={`interactive-prompt__icon flex items-center justify-center w-5 h-5 shrink-0 ${content.isDestructive ? 'interactive-prompt__icon--destructive text-[var(--nim-error)]' : 'text-[var(--nim-primary)]'}`}>
           {content.isDestructive ? (
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M8 5.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
@@ -93,9 +123,9 @@ const PermissionRequestWidget: React.FC<PermissionRequestWidgetProps> = ({
             </svg>
           )}
         </span>
-        <span className="interactive-prompt__title">Allow this tool?</span>
+        <span className="interactive-prompt__title font-semibold text-sm text-[var(--nim-text)]">Allow this tool?</span>
         <button
-          className="interactive-prompt__details-toggle"
+          className="interactive-prompt__details-toggle ml-auto text-xs text-[var(--nim-text-faint)] bg-transparent border-none cursor-pointer py-0.5 px-1.5 rounded hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text-muted)]"
           onClick={() => setShowDetails(!showDetails)}
         >
           {showDetails ? 'Hide details' : 'Show details'}
@@ -104,10 +134,10 @@ const PermissionRequestWidget: React.FC<PermissionRequestWidgetProps> = ({
 
       {/* Warnings */}
       {content.warnings && content.warnings.length > 0 && (
-        <div className="interactive-prompt__warnings">
+        <div className="interactive-prompt__warnings mb-2">
           {content.warnings.map((warning, i) => (
-            <div key={i} className="interactive-prompt__warning">
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <div key={i} className="interactive-prompt__warning flex items-start gap-1.5 text-xs text-[var(--nim-warning)] py-1">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="shrink-0 mt-px">
                 <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5"/>
                 <path d="M8 5.5v3M8 11h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
               </svg>
@@ -118,43 +148,43 @@ const PermissionRequestWidget: React.FC<PermissionRequestWidgetProps> = ({
       )}
 
       {/* Command */}
-      <div className="interactive-prompt__command">
-        <code>{content.rawCommand || content.toolName}</code>
+      <div className="interactive-prompt__command bg-[var(--nim-bg-tertiary)] rounded p-2 px-3 mb-3 overflow-x-auto">
+        <code className="font-mono text-xs text-[var(--nim-text)] whitespace-pre-wrap break-all">{content.rawCommand || content.toolName}</code>
       </div>
 
       {/* Details */}
       {showDetails && (
-        <div className="interactive-prompt__details">
-          <div className="interactive-prompt__detail-row">
-            <span className="interactive-prompt__detail-label">Tool:</span>
-            <span className="interactive-prompt__detail-value">{content.toolName}</span>
+        <div className="interactive-prompt__details bg-[var(--nim-bg-tertiary)] rounded p-2 px-3 mb-3">
+          <div className="interactive-prompt__detail-row flex gap-2 text-xs py-0.5">
+            <span className="interactive-prompt__detail-label text-[var(--nim-text-faint)] shrink-0">Tool:</span>
+            <span className="interactive-prompt__detail-value text-[var(--nim-text-muted)] break-all">{content.toolName}</span>
           </div>
-          <div className="interactive-prompt__detail-row">
-            <span className="interactive-prompt__detail-label">Pattern:</span>
-            <span className="interactive-prompt__detail-value">{content.patternDisplayName}</span>
+          <div className="interactive-prompt__detail-row flex gap-2 text-xs py-0.5">
+            <span className="interactive-prompt__detail-label text-[var(--nim-text-faint)] shrink-0">Pattern:</span>
+            <span className="interactive-prompt__detail-value text-[var(--nim-text-muted)] break-all">{content.patternDisplayName}</span>
           </div>
         </div>
       )}
 
       {/* Actions */}
-      <div className="interactive-prompt__actions">
+      <div className="interactive-prompt__actions flex flex-wrap gap-2 mb-2">
         <button
-          className="interactive-prompt__button interactive-prompt__button--deny"
+          className="interactive-prompt__button interactive-prompt__button--deny px-3 py-1.5 text-xs font-medium rounded-md border border-[var(--nim-border)] cursor-pointer transition-all bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-muted)] hover:bg-[var(--nim-error)] hover:text-white hover:border-[var(--nim-error)] disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={() => onSubmit('deny', 'once')}
           disabled={isSubmitting}
         >
           Deny
         </button>
         <button
-          className="interactive-prompt__button interactive-prompt__button--allow"
+          className="interactive-prompt__button interactive-prompt__button--allow px-3 py-1.5 text-xs font-medium rounded-md border border-transparent cursor-pointer transition-all bg-[var(--nim-primary)] text-white hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={() => onSubmit('allow', 'once')}
           disabled={isSubmitting}
         >
           Allow Once
         </button>
-        <div className="interactive-prompt__separator" />
+        <div className="interactive-prompt__separator w-px bg-[var(--nim-border)] mx-1" />
         <button
-          className="interactive-prompt__button interactive-prompt__button--session"
+          className="interactive-prompt__button interactive-prompt__button--session px-3 py-1.5 text-xs font-medium rounded-md border border-[var(--nim-border)] cursor-pointer transition-all bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-muted)] hover:bg-[var(--nim-primary)] hover:text-white hover:border-[var(--nim-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={() => onSubmit('allow', 'session')}
           disabled={isSubmitting}
           title={`Allow ${content.patternDisplayName} for this session`}
@@ -162,7 +192,7 @@ const PermissionRequestWidget: React.FC<PermissionRequestWidgetProps> = ({
           Session
         </button>
         <button
-          className="interactive-prompt__button interactive-prompt__button--always"
+          className="interactive-prompt__button interactive-prompt__button--always px-3 py-1.5 text-xs font-medium rounded-md border border-[var(--nim-border)] cursor-pointer transition-all bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-muted)] hover:bg-[var(--nim-primary)] hover:text-white hover:border-[var(--nim-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={() => onSubmit('allow', 'always')}
           disabled={isSubmitting}
           title={`Save ${content.patternDisplayName} to settings`}
@@ -172,8 +202,8 @@ const PermissionRequestWidget: React.FC<PermissionRequestWidgetProps> = ({
       </div>
 
       {/* Pattern info */}
-      <div className="interactive-prompt__pattern-info">
-        Session/Always will allow: <span className="interactive-prompt__pattern-badge">{content.patternDisplayName}</span>
+      <div className="interactive-prompt__pattern-info text-[11px] text-[var(--nim-text-faint)]">
+        Session/Always will allow: <span className="interactive-prompt__pattern-badge inline-block px-1.5 py-0.5 bg-[var(--nim-bg-tertiary)] rounded font-mono text-[10px]">{content.patternDisplayName}</span>
       </div>
     </div>
   );

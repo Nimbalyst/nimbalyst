@@ -13,7 +13,6 @@
 
 import React, { useState, useEffect } from 'react';
 import type { CustomToolWidgetProps } from './index';
-import './MockupScreenshotWidget.css';
 
 /**
  * Extract just the mockup name from a file path
@@ -341,43 +340,44 @@ export const MockupScreenshotWidget: React.FC<CustomToolWidgetProps> = ({
   }, [showLightbox]);
 
   return (
-    <div className="mockup-screenshot-widget">
-      <div className="mockup-screenshot-widget__header">
-        <div className="mockup-screenshot-widget__details">
-          <div className="mockup-screenshot-widget__label">Viewing Mockup Image</div>
-          <div className="mockup-screenshot-widget__filename" title={filePath}>
+    <div className="mockup-screenshot-widget rounded bg-nim-secondary border border-nim overflow-hidden">
+      <div className="flex items-start gap-2 p-2">
+        <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+          <span className="text-xs text-nim-faint font-medium">Viewing Mockup Image</span>
+          <span className="font-mono text-sm text-nim font-semibold overflow-hidden text-ellipsis whitespace-nowrap" title={filePath}>
             {mockupName}
-          </div>
+          </span>
         </div>
         {/* Loading spinner when loading from persisted file */}
         {loadingPersistedFile && (
-          <div className="mockup-screenshot-widget__loading" title="Loading image...">
-            <div className="mockup-screenshot-widget__spinner" />
+          <div className="w-10 h-10 shrink-0 flex items-center justify-center border border-nim rounded bg-nim-tertiary" title="Loading image...">
+            <div className="w-4 h-4 border-2 border-nim border-t-nim-primary rounded-full animate-mockup-spin" />
           </div>
         )}
         {/* Thumbnail on the right if we have an image */}
         {imageSrc && !loadingPersistedFile && (
           <button
-            className="mockup-screenshot-widget__header-thumbnail"
+            className="w-10 h-10 shrink-0 p-0 m-0 border border-nim rounded bg-nim-tertiary cursor-pointer overflow-hidden transition-all duration-200 hover:border-nim-primary hover:shadow-[0_0_0_2px_color-mix(in_srgb,var(--nim-primary)_20%,transparent)]"
             onClick={() => setShowLightbox(true)}
             title="Click to enlarge"
           >
             <img
               src={imageSrc}
               alt={mockupName}
+              className="w-full h-full object-cover object-top-left"
             />
           </button>
         )}
         {/* Show error badge if there was an error */}
         {hasError && !loadingPersistedFile && (
-          <span className="mockup-screenshot-widget__status mockup-screenshot-widget__status--error">
+          <span className="text-[0.7rem] font-semibold py-0.5 px-2 rounded-full uppercase tracking-wide shrink-0 text-nim-error bg-[color-mix(in_srgb,var(--nim-error)_15%,transparent)]">
             Failed
           </span>
         )}
       </div>
 
       {errorMessage && (
-        <div className="mockup-screenshot-widget__error">
+        <div className="mx-2 mb-2 p-2 bg-[color-mix(in_srgb,var(--nim-error)_10%,transparent)] border border-[color-mix(in_srgb,var(--nim-error)_30%,transparent)] rounded text-nim-error text-xs leading-relaxed">
           {errorMessage}
         </div>
       )}
@@ -385,18 +385,18 @@ export const MockupScreenshotWidget: React.FC<CustomToolWidgetProps> = ({
       {/* Lightbox modal */}
       {showLightbox && imageSrc && (
         <div
-          className="mockup-screenshot-widget__lightbox"
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-[color-mix(in_srgb,var(--nim-bg)_90%,transparent)] backdrop-blur"
           onClick={() => setShowLightbox(false)}
           role="dialog"
           aria-modal="true"
           aria-label="Image preview"
         >
           <div
-            className="mockup-screenshot-widget__lightbox-content"
+            className="relative max-w-[90vw] max-h-[90vh] flex flex-col items-center"
             onClick={(e) => e.stopPropagation()}
           >
             <button
-              className="mockup-screenshot-widget__lightbox-close"
+              className="absolute top-2 right-2 w-10 h-10 p-2 bg-nim-secondary border border-nim rounded-full text-nim-muted cursor-pointer transition-all duration-200 flex items-center justify-center z-10 shadow-lg hover:bg-nim-hover hover:text-nim hover:scale-110"
               onClick={() => setShowLightbox(false)}
               aria-label="Close (Escape)"
               title="Close (Escape)"
@@ -408,11 +408,11 @@ export const MockupScreenshotWidget: React.FC<CustomToolWidgetProps> = ({
             <img
               src={imageSrc}
               alt={mockupName}
-              className="mockup-screenshot-widget__lightbox-image"
+              className="max-w-full max-h-[calc(90vh-3rem)] object-contain rounded-lg shadow-2xl"
             />
-            <div className="mockup-screenshot-widget__lightbox-caption">
+            <div className="mt-3 text-sm text-nim-muted font-mono bg-nim-secondary py-2 px-3 rounded text-center flex flex-col gap-1">
               {mockupName}
-              <span className="mockup-screenshot-widget__lightbox-hint">Click outside or press Escape to close</span>
+              <span className="text-xs text-nim-faint font-sans">Click outside or press Escape to close</span>
             </div>
           </div>
         </div>

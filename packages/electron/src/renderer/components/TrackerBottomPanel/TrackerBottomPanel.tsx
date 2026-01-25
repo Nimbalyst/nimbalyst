@@ -1,5 +1,4 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import './TrackerBottomPanel.css';
 import { TrackerTable, SortColumn as TrackerSortColumn, SortDirection as TrackerSortDirection } from '@nimbalyst/runtime/plugins/TrackerPlugin';
 import { MaterialSymbol, getFileIcon } from '@nimbalyst/runtime';
 import { globalRegistry, loadBuiltinTrackers } from '@nimbalyst/runtime/plugins/TrackerPlugin/models';
@@ -239,36 +238,51 @@ export const  TrackerBottomPanel: React.FC<BottomPanelProps> = ({
 
   return (
     <div
-      className={`bottom-panel-container ${isVisible ? 'visible' : 'hidden'}`}
+      className={`bottom-panel-container relative shrink-0 flex flex-col transition-[height] duration-200 ease-in-out ${isVisible ? 'visible flex' : 'hidden h-0 overflow-hidden !hidden'}`}
       style={{ height: isVisible ? `${height}px` : undefined }}
     >
       {isVisible && (
         <>
-          <div className="bottom-panel-resize-handle" onMouseDown={handleMouseDown} />
-          <div className="bottom-panel" style={{ height: '100%' }}>
-            <div className="bottom-panel-header">
-              <div className="bottom-panel-tabs">
+          <div
+            className="bottom-panel-resize-handle absolute top-0 left-0 right-0 h-1 cursor-ns-resize z-10 bg-transparent hover:bg-[var(--nim-primary)]"
+            onMouseDown={handleMouseDown}
+          />
+          <div className="bottom-panel flex flex-col bg-[var(--nim-bg)] border-t-2 border-[var(--nim-border)] overflow-hidden" style={{ height: '100%' }}>
+            <div className="bottom-panel-header flex items-center justify-between h-8 px-1.5 bg-[var(--nim-bg-secondary)] border-b border-[var(--nim-border)] shrink-0">
+              <div className="bottom-panel-tabs flex gap-0.5 items-center">
                 {trackerTypes.map((tracker) => (
                   <button
                     key={tracker.type}
-                    className={`bottom-panel-tab ${activePanel === tracker.type ? 'active' : ''}`}
+                    className={`bottom-panel-tab flex items-center gap-1 py-1 px-3 bg-transparent border-none text-[13px] cursor-pointer rounded transition-colors duration-150 ${
+                      activePanel === tracker.type
+                        ? 'active bg-[var(--nim-bg)] text-[var(--nim-text)] font-medium'
+                        : 'text-[var(--nim-text-muted)] hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]'
+                    }`}
                     onClick={() => handlePanelClick(tracker.type)}
                   >
                     <MaterialSymbol icon={tracker.icon} size={16} />
                     {tracker.displayNamePlural}
-                    <span className="tab-count">{itemCounts[tracker.type] || 0}</span>
+                    <span
+                      className={`tab-count ml-1 py-px px-1.5 text-[11px] font-semibold rounded-[10px] min-w-[18px] text-center ${
+                        activePanel === tracker.type
+                          ? 'bg-[var(--nim-primary)] text-white'
+                          : 'bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-muted)]'
+                      }`}
+                    >
+                      {itemCounts[tracker.type] || 0}
+                    </span>
                   </button>
                 ))}
               </div>
               <button
-                className="bottom-panel-close"
+                className="bottom-panel-close flex items-center justify-center w-6 h-6 p-0 bg-transparent border-none text-[var(--nim-text-muted)] cursor-pointer rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]"
                 onClick={() => onPanelChange(null)}
                 title="Close panel"
               >
                 <MaterialSymbol icon="close" size={18} />
               </button>
             </div>
-            <div className="bottom-panel-content">
+            <div className="bottom-panel-content flex-1 overflow-auto p-0">
               {activePanel && (
                 <TrackerTable
                   key={refreshKey}

@@ -1,7 +1,6 @@
 import React, { useMemo, useRef, useCallback, useEffect } from 'react';
 import { diffLines } from 'diff';
 import { generateUnifiedDiff } from 'rexical';
-import './TextDiffViewer.css';
 
 export interface TextDiffNavigationState {
   currentIndex: number;
@@ -254,20 +253,26 @@ export function TextDiffViewer({
   }, [currentChangeIndex, changeGroups.length, scrollToChange]);
 
   return (
-    <div className="text-diff-viewer">
-      <div className="text-diff-panels">
-        <div className="text-diff-panel text-diff-old">
-          <div className="text-diff-header">Old Version</div>
+    <div className="text-diff-viewer flex flex-col h-full overflow-hidden">
+      <div className="text-diff-panels flex flex-1 overflow-hidden">
+        <div className="text-diff-panel text-diff-old flex-1 flex flex-col overflow-hidden">
+          <div className="text-diff-header px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.5px] border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] text-red-600">
+            Old Version
+          </div>
           <div
-            className="text-diff-content"
+            className="text-diff-content flex-1 overflow-auto nim-scrollbar"
             ref={oldContentRef}
             onScroll={() => handleScroll('old')}
           >
-            <div className="text-diff-lines">
+            <div className="text-diff-lines font-mono text-[13px] leading-[1.6]">
               {oldLines.map((line, index) => (
                 <div
                   key={index}
-                  className={`text-diff-line text-diff-line-${line.type}`}
+                  className={`text-diff-line flex min-h-[1.6em] ${
+                    line.type === 'removed'
+                      ? 'bg-red-100 dark:bg-red-600/15'
+                      : ''
+                  }`}
                   onClick={() => {
                     if (line.type !== 'unchanged') {
                       handleLineClick(index, false);
@@ -275,25 +280,47 @@ export function TextDiffViewer({
                   }}
                   style={{ cursor: line.type !== 'unchanged' ? 'pointer' : 'default' }}
                 >
-                  <span className="text-diff-line-number">{line.lineNumber}</span>
-                  <span className="text-diff-line-content">{line.content || ' '}</span>
+                  <span
+                    className={`text-diff-line-number shrink-0 w-[50px] px-2 text-right select-none border-r border-[var(--nim-border)] ${
+                      line.type === 'removed'
+                        ? 'bg-red-200 text-red-800 dark:bg-red-600/25 dark:text-red-300'
+                        : 'bg-[var(--nim-bg-secondary)] text-[var(--nim-text-faint)]'
+                    }`}
+                  >
+                    {line.lineNumber}
+                  </span>
+                  <span
+                    className={`text-diff-line-content flex-1 px-3 whitespace-pre-wrap break-words ${
+                      line.type === 'removed'
+                        ? 'text-red-800 dark:text-red-300'
+                        : 'text-[var(--nim-text)]'
+                    }`}
+                  >
+                    {line.content || ' '}
+                  </span>
                 </div>
               ))}
             </div>
           </div>
         </div>
-        <div className="text-diff-panel text-diff-new">
-          <div className="text-diff-header">New Version</div>
+        <div className="text-diff-panel text-diff-new flex-1 flex flex-col overflow-hidden border-l border-[var(--nim-border)]">
+          <div className="text-diff-header px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.5px] border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] text-green-600">
+            New Version
+          </div>
           <div
-            className="text-diff-content"
+            className="text-diff-content flex-1 overflow-auto nim-scrollbar"
             ref={newContentRef}
             onScroll={() => handleScroll('new')}
           >
-            <div className="text-diff-lines">
+            <div className="text-diff-lines font-mono text-[13px] leading-[1.6]">
               {newLines.map((line, index) => (
                 <div
                   key={index}
-                  className={`text-diff-line text-diff-line-${line.type}`}
+                  className={`text-diff-line flex min-h-[1.6em] ${
+                    line.type === 'added'
+                      ? 'bg-green-100 dark:bg-green-600/15'
+                      : ''
+                  }`}
                   onClick={() => {
                     if (line.type !== 'unchanged') {
                       handleLineClick(index, true);
@@ -301,8 +328,24 @@ export function TextDiffViewer({
                   }}
                   style={{ cursor: line.type !== 'unchanged' ? 'pointer' : 'default' }}
                 >
-                  <span className="text-diff-line-number">{line.lineNumber}</span>
-                  <span className="text-diff-line-content">{line.content || ' '}</span>
+                  <span
+                    className={`text-diff-line-number shrink-0 w-[50px] px-2 text-right select-none border-r border-[var(--nim-border)] ${
+                      line.type === 'added'
+                        ? 'bg-green-200 text-green-900 dark:bg-green-600/25 dark:text-green-300'
+                        : 'bg-[var(--nim-bg-secondary)] text-[var(--nim-text-faint)]'
+                    }`}
+                  >
+                    {line.lineNumber}
+                  </span>
+                  <span
+                    className={`text-diff-line-content flex-1 px-3 whitespace-pre-wrap break-words ${
+                      line.type === 'added'
+                        ? 'text-green-900 dark:text-green-300'
+                        : 'text-[var(--nim-text)]'
+                    }`}
+                  >
+                    {line.content || ' '}
+                  </span>
                 </div>
               ))}
             </div>

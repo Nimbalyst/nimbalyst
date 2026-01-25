@@ -7,115 +7,17 @@
  *
  */
 
-/* Light Theme Variables */
-:root,
-.light-theme {
-  /* Base Surface Colors */
-  --surface-primary: #ffffff;
-  --surface-secondary: #f9fafb;
-  --surface-tertiary: #f3f4f6;
-  --surface-hover: rgba(0, 0, 0, 0.05);
-  --surface-selected: rgba(59, 130, 246, 0.1);
-  --surface-active: rgba(59, 130, 246, 0.2);
+/*
+ * Playground Editor Theme - Component styles
+ *
+ * NOTE: CSS variable definitions have been moved to NimbalystTheme.css
+ * to support extension themes. This file only contains component styles
+ * that consume those variables.
+ */
 
-  /* Text Colors */
-  --text-primary: #111827;
-  --text-secondary: #6b7280;
-  --text-tertiary: #9ca3af;
-  --text-disabled: #d1d5db;
-
-  /* Border & Divider */
-  --border-primary: #e5e7eb;
-  --border-focus: #3b82f6;
-
-  /* Interactive/Accent Colors */
-  --accent-primary: #3b82f6;
-  --accent-primary-hover: #2563eb;
-  --accent-link: rgb(33, 111, 219);
-  --accent-link-hover: rgb(33, 111, 219);
-
-  /* Editor-Specific */
-  --editor-background: #ffffff;
-  --editor-text: #111827;
-
-  /* Code Block */
-  --code-background: rgb(240, 242, 245);
-  --code-gutter: #eee;
-  --code-border: #ccc;
-  --code-text: #111827;
-
-  /* Table */
-  --table-border: #bbb;
-  --table-header: #f2f3f5;
-  --table-cell: #ffffff;
-  --table-stripe: #f2f5fb;
-  --table-frozen: #ffffff;
-
-  /* Toolbar */
-  --toolbar-background: #ffffff;
-  --toolbar-border: #e5e7eb;
-  --toolbar-button-hover: #f3f4f6;
-  --toolbar-button-active: rgba(59, 130, 246, 0.2);
-
-  /* Semantic Colors */
-  --success-color: #10b981;
-  --warning-color: #f59e0b;
-  --error-color: #ef4444;
-  --info-color: #3b82f6;
-
-  /* Diff Colors */
-  --diff-add-bg: #e6ffed;
-  --diff-add-border: #e6ffed;
-  --diff-remove-bg: #ffebe9;
-  --diff-remove-border: #ffebe9;
-  --diff-remove-strikethrough: #ffebe9;
-
-  /* Special Purpose */
-  --highlight-background: rgba(255, 212, 0, 0.14);
-  --highlight-border: rgba(255, 212, 0, 0.3);
-  --quote-text: rgb(101, 103, 107);
-  --quote-border: rgb(206, 208, 212);
-
-  /* Scrollbar */
-  --scrollbar-thumb: #d1d5db;
-  --scrollbar-thumb-hover: #9ca3af;
-  --scrollbar-track: transparent;
-
-  /* Lexical-specific */
+/* Lexical-specific variable that isn't theme-dependent */
+:root {
   --lexical-indent-base-value: 40px;
-
-  /* Terminal - Light theme */
-  --terminal-bg: #ffffff;
-  --terminal-fg: #1e1e1e;
-  --terminal-cursor: #3b82f6;
-  --terminal-cursor-accent: #ffffff;
-  --terminal-selection: rgba(59, 130, 246, 0.3);
-  --terminal-ansi-black: #1e1e1e;
-  --terminal-ansi-red: #dc2626;
-  --terminal-ansi-green: #16a34a;
-  --terminal-ansi-yellow: #ca8a04;
-  --terminal-ansi-blue: #2563eb;
-  --terminal-ansi-magenta: #9333ea;
-  --terminal-ansi-cyan: #0891b2;
-  --terminal-ansi-white: #e5e5e5;
-  --terminal-ansi-bright-black: #6b7280;
-  --terminal-ansi-bright-red: #ef4444;
-  --terminal-ansi-bright-green: #22c55e;
-  --terminal-ansi-bright-yellow: #eab308;
-  --terminal-ansi-bright-blue: #3b82f6;
-  --terminal-ansi-bright-magenta: #a855f7;
-  --terminal-ansi-bright-cyan: #06b6d4;
-  --terminal-ansi-bright-white: #ffffff;
-}
-
-/* Dark Theme Variable Overrides */
-[data-theme="dark"],
-[data-theme="crystal-dark"] {
-  --diff-add-bg: rgba(40, 167, 69, 0.15);
-  --diff-add-border: rgba(40, 167, 69, 0.4);
-  --diff-remove-bg: rgba(220, 53, 69, 0.15);
-  --diff-remove-border: rgba(220, 53, 69, 0.4);
-  --diff-remove-strikethrough: rgba(220, 53, 69, 0.6);
 }
 
 .PlaygroundEditorTheme__ltr {
@@ -366,14 +268,14 @@
 }
 .PlaygroundEditorTheme__tableFrozenRow tr:nth-of-type(1) > td {
   overflow: clip;
-  background-color: #ffffff;
+  background-color: var(--nim-table-cell);
   position: sticky;
   z-index: 2;
   top: 44px;
 }
 .PlaygroundEditorTheme__tableFrozenRow tr:nth-of-type(1) > th {
   overflow: clip;
-  background-color: #f2f3f5;
+  background-color: var(--nim-table-header);
   position: sticky;
   z-index: 2;
   top: 44px;
@@ -385,16 +287,16 @@
   left: 0;
   bottom: 0;
   width: 100%;
-  border-bottom: 1px solid #bbb;
+  border-bottom: 1px solid var(--nim-table-border);
 }
 .PlaygroundEditorTheme__tableFrozenColumn tr > td:first-child {
-  background-color: #ffffff;
+  background-color: var(--nim-table-cell);
   position: sticky;
   z-index: 2;
   left: 0;
 }
 .PlaygroundEditorTheme__tableFrozenColumn tr > th:first-child {
-  background-color: #f2f3f5;
+  background-color: var(--nim-table-header);
   position: sticky;
   z-index: 2;
   left: 0;
@@ -406,14 +308,14 @@
   top: 0;
   right: 0;
   height: 100%;
-  border-right: 1px solid #bbb;
+  border-right: 1px solid var(--nim-table-border);
 }
 .PlaygroundEditorTheme__tableRowStriping tr:nth-child(even),
 .PlaygroundEditorTheme__tableFrozenColumn
   .PlaygroundEditorTheme__table.PlaygroundEditorTheme__tableRowStriping
   tr:nth-child(even)
   > td:first-child {
-  background-color: #f2f5fb;
+  background-color: var(--nim-table-stripe);
 }
 .PlaygroundEditorTheme__tableSelection *::selection {
   background-color: transparent;
@@ -422,7 +324,7 @@
   outline: 2px solid rgb(60, 132, 244);
 }
 .PlaygroundEditorTheme__tableCell {
-  border: 1px solid #bbb;
+  border: 1px solid var(--nim-table-border);
   /*width: 75px;*/
   vertical-align: top;
   text-align: start;
@@ -449,7 +351,7 @@
   top: 0;
 }
 .PlaygroundEditorTheme__tableCellHeader {
-  background-color: #f2f3f5;
+  background-color: var(--nim-table-header);
   text-align: start;
 }
 .PlaygroundEditorTheme__tableCellSelected {

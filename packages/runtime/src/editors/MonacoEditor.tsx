@@ -23,6 +23,9 @@ export interface MonacoEditorConfig {
   /** Theme for the editor */
   theme?: ConfigTheme;
 
+  /** Extension theme ID for custom Monaco themes (e.g., 'sample-themes:solarized-light') */
+  extensionThemeId?: string;
+
   /** Whether this editor's tab is active */
   isActive?: boolean;
 }
@@ -207,6 +210,7 @@ export function MonacoEditor({
       fileName={fileName}
       initialContent={initialContent}
       theme={(config.theme ?? host.theme) as ConfigTheme}
+      extensionThemeId={config.extensionThemeId}
       isActive={config.isActive}
       onDirtyChange={handleDirtyChange}
       onGetContent={handleGetContent}

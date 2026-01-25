@@ -7,16 +7,11 @@
   max-width: 400px;
   width: 100%;
   opacity: 0;
-  background-color: #fff;
+  background-color: var(--nim-bg-secondary);
   box-shadow: 0 5px 10px rgba(0, 0, 0, 0.3);
   border-radius: 0 0 8px 8px;
   transition: opacity 0.5s;
   will-change: transform;
-}
-
-.stravu-editor.dark-theme .link-editor {
-  background-color: var(--surface-secondary);
-  box-shadow: 0 5px 10px rgba(0, 0, 0, 0.5);
 }
 
 .link-editor .button {
@@ -33,7 +28,7 @@
   width: 20px;
   height: 20px;
   display: inline-block;
-  background-color: #eee;
+  background-color: var(--nim-bg-hover);
 }
 
 .link-editor .button i,

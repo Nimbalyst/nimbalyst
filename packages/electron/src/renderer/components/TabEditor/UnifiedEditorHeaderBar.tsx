@@ -21,7 +21,6 @@ import {
 } from 'rexical';
 import { $generateHtmlFromNodes } from '@lexical/html';
 import { revealFolderAtom } from '../../store';
-import './UnifiedEditorHeaderBar.css';
 
 // Tracker type info
 interface TrackerTypeInfo {
@@ -578,47 +577,57 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
   const showTOCButton = isMarkdown && Boolean(lexicalEditor);
 
   return (
-    <div className="unified-editor-header-bar">
+    <div className="unified-editor-header-bar h-9 min-h-9 flex items-center justify-between px-3 shrink-0 bg-[var(--nim-bg)] border-b border-[var(--nim-border)]">
       {/* Left: Breadcrumb Path */}
-      <div className="unified-header-breadcrumb">
+      <div className="unified-header-breadcrumb flex items-center gap-1.5 text-[13px] min-w-0 overflow-hidden">
         {breadcrumbSegments.map((segment, index) => {
           const isLast = index === breadcrumbSegments.length - 1;
           const isClickable = !isLast && segment.folderPath;
           return (
             <React.Fragment key={index}>
               <span
-                className={`breadcrumb-segment ${isLast ? 'breadcrumb-filename' : ''} ${isClickable ? 'breadcrumb-clickable' : ''}`}
+                className={`breadcrumb-segment flex items-center gap-1 whitespace-nowrap ${
+                  isLast
+                    ? 'breadcrumb-filename text-[var(--nim-text)] font-medium'
+                    : 'text-[var(--nim-text-muted)]'
+                } ${
+                  isClickable
+                    ? 'breadcrumb-clickable cursor-pointer rounded py-0.5 px-1 -my-0.5 -mx-1 transition-colors duration-150 hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]'
+                    : ''
+                }`}
                 onClick={isClickable ? () => handleBreadcrumbClick(segment.folderPath) : undefined}
                 title={isClickable ? `Go to ${segment.name} in file tree` : undefined}
               >
                 {!isLast && (
-                  <svg className="breadcrumb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg className="breadcrumb-icon w-3.5 h-3.5 opacity-70 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
                   </svg>
                 )}
                 {isLast && (
-                  <svg className="breadcrumb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg className="breadcrumb-icon w-3.5 h-3.5 opacity-80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                     <polyline points="14 2 14 8 20 8"/>
                   </svg>
                 )}
                 {segment.name}
               </span>
-              {!isLast && <span className="breadcrumb-separator">/</span>}
+              {!isLast && <span className="breadcrumb-separator text-[var(--nim-text-faint)] text-[11px]">/</span>}
             </React.Fragment>
           );
         })}
       </div>
 
       {/* Right: Action Buttons */}
-      <div className="unified-header-actions">
+      <div className="unified-header-actions flex items-center gap-1">
         {/* AI Sessions Button */}
         {showAIButton && (
-          <div className="unified-header-dropdown-container">
+          <div className="unified-header-dropdown-container relative">
             <button
               ref={aiSessionsButtonRef}
               data-testid="ai-sessions-button"
-              className={`unified-header-button ${showAISessions ? 'active' : ''}`}
+              className={`unified-header-button nim-btn-icon w-7 h-7 rounded border-none bg-transparent cursor-pointer flex items-center justify-center transition-all duration-150 text-[var(--nim-text-muted)] hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)] ${
+                showAISessions ? 'active bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)]' : ''
+              }`}
               onClick={() => {
                 setShowAISessions(!showAISessions);
                 if (!showAISessions) {
@@ -627,64 +636,69 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
               }}
               title="AI Sessions"
             >
-              <svg viewBox="0 0 24 24" fill="currentColor">
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" opacity="0.8"/>
                 <path d="M14 16L18 12L20 14L16 18M14 16L16 18L10 24H8V22L14 16Z" opacity="0.8"/>
               </svg>
             </button>
 
             {showAISessions && (
-              <div className="unified-header-ai-dropdown">
-                <button
-                  className="ai-session-start-button"
-                  onClick={handleStartAgentSession}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                    <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM17 13H13V17H11V13H7V11H11V7H13V11H17V13Z" fill="currentColor"/>
-                  </svg>
-                  Start Agent Session
-                </button>
+              <div className="unified-header-ai-dropdown absolute top-[calc(100%+4px)] right-0 min-w-[300px] max-w-[400px] overflow-hidden rounded-md z-[1000] bg-[var(--nim-bg)] border border-[var(--nim-border)] shadow-[0_4px_12px_rgba(0,0,0,0.3)]">
+                {/* Dropdown header */}
+                <div className="ai-sessions-header px-4 py-2.5 border-b border-[var(--nim-border)]">
+                  <div className="ai-sessions-title text-[11px] font-semibold uppercase tracking-wide text-[var(--nim-text-muted)]">
+                    AI Sessions that edited this file
+                  </div>
+                </div>
 
                 {loadingSessions ? (
-                  <div className="ai-sessions-loading">Loading sessions...</div>
+                  <div className="ai-sessions-loading p-4 text-center text-[13px] text-[var(--nim-text-muted)]">Loading sessions...</div>
                 ) : aiSessions.length > 0 ? (
-                  <>
-                    <div className="ai-sessions-divider" />
-                    <div className="ai-sessions-list">
-                      {aiSessions.map((session) => (
-                        <div key={session.id} className="ai-session-item">
-                          <div className="ai-session-header">
-                            <div className="ai-session-title">{session.title}</div>
-                            <div className="ai-session-meta">
-                              {session.provider} &bull; {formatRelativeTime(session.updatedAt)} &bull; {session.messageCount} turns
-                            </div>
-                          </div>
-                          <div className="ai-session-actions">
-                            <button
-                              className="ai-session-action-button"
-                              onClick={() => handleLoadSessionInAgentMode(session.id)}
-                              title="Open in Agent mode"
-                            >
-                              Agent
-                            </button>
-                            <button
-                              className="ai-session-action-button"
-                              onClick={() => handleLoadSessionInChat(session.id)}
-                              title="Open in Chat panel"
-                            >
-                              Chat
-                            </button>
+                  <div className="ai-sessions-list max-h-[300px] overflow-y-auto">
+                    {aiSessions.map((session) => (
+                      <div key={session.id} className="ai-session-item py-3 px-4 flex flex-col gap-2 border-b border-[var(--nim-border)] last:border-b-0 hover:bg-[var(--nim-bg-hover)]">
+                        <div className="ai-session-header flex flex-col gap-1">
+                          <div className="ai-session-title text-sm font-medium whitespace-nowrap overflow-hidden text-ellipsis text-[var(--nim-text)]">{session.title}</div>
+                          <div className="ai-session-meta text-xs text-[var(--nim-text-muted)]">
+                            {session.provider} &bull; {formatRelativeTime(session.updatedAt)} &bull; {session.messageCount} turns
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  </>
+                        <div className="ai-session-actions flex gap-1.5">
+                          <button
+                            className="ai-session-action-button flex-1 py-1.5 px-2.5 text-xs font-medium rounded cursor-pointer transition-all duration-150 bg-[var(--nim-bg)] text-[var(--nim-text)] border border-[var(--nim-border)] hover:bg-[var(--nim-bg-secondary)] hover:border-[var(--nim-primary)]"
+                            onClick={() => handleLoadSessionInAgentMode(session.id)}
+                            title="Open in Agent mode"
+                          >
+                            Agent
+                          </button>
+                          <button
+                            className="ai-session-action-button flex-1 py-1.5 px-2.5 text-xs font-medium rounded cursor-pointer transition-all duration-150 bg-[var(--nim-bg)] text-[var(--nim-text)] border border-[var(--nim-border)] hover:bg-[var(--nim-bg-secondary)] hover:border-[var(--nim-primary)]"
+                            onClick={() => handleLoadSessionInChat(session.id)}
+                            title="Open in Chat panel"
+                          >
+                            Chat
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 ) : (
-                  <>
-                    <div className="ai-sessions-divider" />
-                    <div className="ai-sessions-empty">No AI sessions yet</div>
-                  </>
+                  <div className="ai-sessions-empty p-4 text-center text-[13px] text-[var(--nim-text-muted)]">No AI sessions have edited this file yet</div>
                 )}
+
+                {/* Start new session button - subtle style at bottom */}
+                <div className="ai-session-start-container px-3 py-2.5 border-t border-[var(--nim-border)]">
+                  <button
+                    className="ai-session-start-button w-full py-1.5 px-3 border border-[var(--nim-border)] rounded text-[13px] font-medium text-left cursor-pointer flex items-center gap-2 transition-all duration-150 text-[var(--nim-text-muted)] bg-transparent hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)] hover:border-[var(--nim-primary)]"
+                    onClick={handleStartAgentSession}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <line x1="12" y1="5" x2="12" y2="19"/>
+                      <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    Start new agent session
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -692,14 +706,16 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
 
         {/* TOC Button (Markdown only) */}
         {showTOCButton && (
-          <div className="unified-header-dropdown-container">
+          <div className="unified-header-dropdown-container relative">
             <button
               ref={tocButtonRef}
-              className={`unified-header-button ${showTOC ? 'active' : ''}`}
+              className={`unified-header-button nim-btn-icon w-7 h-7 rounded border-none bg-transparent cursor-pointer flex items-center justify-center transition-all duration-150 text-[var(--nim-text-muted)] hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)] ${
+                showTOC ? 'active bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)]' : ''
+              }`}
               onClick={() => setShowTOC(!showTOC)}
               title="Table of Contents"
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <line x1="8" y1="6" x2="21" y2="6"/>
                 <line x1="8" y1="12" x2="21" y2="12"/>
                 <line x1="8" y1="18" x2="21" y2="18"/>
@@ -710,13 +726,23 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
             </button>
 
             {showTOC && (
-              <div className="unified-header-toc-dropdown">
+              <div className="unified-header-toc-dropdown absolute top-[calc(100%+4px)] right-0 min-w-[250px] max-w-[350px] max-h-[400px] overflow-y-auto overflow-hidden rounded-md z-[1000] bg-[var(--nim-bg)] border border-[var(--nim-border)] shadow-[0_4px_12px_rgba(0,0,0,0.3)]">
                 {tocItems.length > 0 ? (
-                  <ul className="toc-list">
+                  <ul className="toc-list list-none m-0 py-1 px-0">
                     {tocItems.map((item) => (
                       <li
                         key={item.key}
-                        className={`toc-item toc-level-${item.level}`}
+                        className={`toc-item py-2 px-3 cursor-pointer text-sm leading-snug whitespace-nowrap overflow-hidden text-ellipsis transition-colors duration-150 text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)] ${
+                          item.level === 1
+                            ? 'toc-level-1 font-semibold pl-3'
+                            : item.level === 2
+                            ? 'toc-level-2 pl-6'
+                            : item.level === 3
+                            ? 'toc-level-3 pl-9 text-[13px]'
+                            : item.level === 4
+                            ? 'toc-level-4 pl-12 text-[13px]'
+                            : 'toc-level-5 pl-[60px] text-xs text-[var(--nim-text-muted)]'
+                        }`}
                         onClick={() => handleTOCItemClick(item.key)}
                       >
                         {item.text}
@@ -724,7 +750,7 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
                     ))}
                   </ul>
                 ) : (
-                  <div className="toc-empty">No headings in document</div>
+                  <div className="toc-empty py-4 px-3 text-center text-[13px] text-[var(--nim-text-muted)]">No headings in document</div>
                 )}
               </div>
             )}
@@ -732,14 +758,16 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
         )}
 
         {/* Actions Menu Button */}
-        <div className="unified-header-dropdown-container">
+        <div className="unified-header-dropdown-container relative">
           <button
             ref={actionsButtonRef}
-            className={`unified-header-button ${showActionsMenu ? 'active' : ''}`}
+            className={`unified-header-button nim-btn-icon w-7 h-7 rounded border-none bg-transparent cursor-pointer flex items-center justify-center transition-all duration-150 text-[var(--nim-text-muted)] hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)] ${
+              showActionsMenu ? 'active bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)]' : ''
+            }`}
             onClick={() => setShowActionsMenu(!showActionsMenu)}
             title="More actions"
           >
-            <svg viewBox="0 0 24 24" fill="currentColor">
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
               <circle cx="12" cy="12" r="2"/>
               <circle cx="19" cy="12" r="2"/>
               <circle cx="5" cy="12" r="2"/>
@@ -747,17 +775,17 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
           </button>
 
           {showActionsMenu && (
-            <div className="unified-header-actions-dropdown">
+            <div className="unified-header-actions-dropdown absolute top-[calc(100%+4px)] right-0 min-w-[220px] overflow-visible rounded-md z-[1000] py-1 bg-[var(--nim-bg)] border border-[var(--nim-border)] shadow-[0_4px_12px_rgba(0,0,0,0.3)]">
               {/* Toggle Source Mode */}
               {supportsSourceMode && onToggleSourceMode && (
                 <button
-                  className="dropdown-item"
+                  className="dropdown-item w-full py-2 px-3 border-none bg-transparent text-[13px] text-left cursor-pointer flex items-center gap-2.5 transition-colors duration-150 text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]"
                   onClick={() => {
                     onToggleSourceMode();
                     setShowActionsMenu(false);
                   }}
                 >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg className="w-4 h-4 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <polyline points="16 18 22 12 16 6"/>
                     <polyline points="8 6 2 12 8 18"/>
                   </svg>
@@ -768,13 +796,13 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
               {/* View History */}
               {onViewHistory && (
                 <button
-                  className="dropdown-item"
+                  className="dropdown-item w-full py-2 px-3 border-none bg-transparent text-[13px] text-left cursor-pointer flex items-center gap-2.5 transition-colors duration-150 text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]"
                   onClick={() => {
                     onViewHistory();
                     setShowActionsMenu(false);
                   }}
                 >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg className="w-4 h-4 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <circle cx="12" cy="12" r="10"/>
                     <polyline points="12 6 12 12 16 14"/>
                   </svg>
@@ -788,13 +816,13 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
                   {/* Toggle Markdown Mode - switch to Monaco */}
                   {onToggleMarkdownMode && (
                     <button
-                      className="dropdown-item"
+                      className="dropdown-item w-full py-2 px-3 border-none bg-transparent text-[13px] text-left cursor-pointer flex items-center gap-2.5 transition-colors duration-150 text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]"
                       onClick={() => {
                         onToggleMarkdownMode();
                         setShowActionsMenu(false);
                       }}
                     >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <svg className="w-4 h-4 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <polyline points="16 18 22 12 16 6"/>
                         <polyline points="8 6 2 12 8 18"/>
                       </svg>
@@ -805,10 +833,10 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
                   {/* Copy as Markdown */}
                   {lexicalEditor && (
                     <button
-                      className="dropdown-item"
+                      className="dropdown-item w-full py-2 px-3 border-none bg-transparent text-[13px] text-left cursor-pointer flex items-center gap-2.5 transition-colors duration-150 text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]"
                       onClick={handleCopyAsMarkdown}
                     >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <svg className="w-4 h-4 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
                         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
                       </svg>
@@ -819,10 +847,10 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
                   {/* Export to PDF */}
                   {lexicalEditor && (
                     <button
-                      className="dropdown-item"
+                      className="dropdown-item w-full py-2 px-3 border-none bg-transparent text-[13px] text-left cursor-pointer flex items-center gap-2.5 transition-colors duration-150 text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]"
                       onClick={handleExportToPdf}
                     >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <svg className="w-4 h-4 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                         <polyline points="14 2 14 8 20 8"/>
                         <path d="M12 18v-6"/>
@@ -835,53 +863,53 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
                   {/* Set Document Type with submenu */}
                   {lexicalEditor && (
                     <div
-                      className="dropdown-item dropdown-item-with-submenu"
+                      className="dropdown-item dropdown-item-with-submenu relative w-full py-2 px-3 border-none bg-transparent text-[13px] text-left cursor-pointer flex items-center gap-2.5 transition-colors duration-150 text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]"
                       onMouseEnter={() => setShowDocTypeSubmenu(true)}
                       onMouseLeave={() => setShowDocTypeSubmenu(false)}
                     >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <svg className="w-4 h-4 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                         <polyline points="14 2 14 8 20 8"/>
                         <line x1="16" y1="13" x2="8" y2="13"/>
                         <line x1="16" y1="17" x2="8" y2="17"/>
                       </svg>
-                      <span className="dropdown-item-label">Set Document Type</span>
-                      <span className="dropdown-item-chevron">&#8250;</span>
+                      <span className="dropdown-item-label flex-1">Set Document Type</span>
+                      <span className="dropdown-item-chevron ml-auto text-sm text-[var(--nim-text-faint)]">&#8250;</span>
 
                       {showDocTypeSubmenu && (
-                        <div className="dropdown-submenu">
+                        <div className="dropdown-submenu absolute right-full left-auto top-0 min-w-[180px] py-1 rounded-md z-[1001] bg-[var(--nim-bg)] border border-[var(--nim-border)] shadow-[0_4px_12px_rgba(0,0,0,0.3)]">
                           {TRACKER_TYPES.map((type) => (
                             <button
                               key={type.type}
-                              className="dropdown-item"
+                              className="dropdown-item w-full py-2 px-3 border-none bg-transparent text-[13px] text-left cursor-pointer flex items-center gap-2.5 transition-colors duration-150 text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleSetDocumentType(type.type);
                               }}
                             >
                               <span
-                                className="material-symbols-outlined"
+                                className="material-symbols-outlined opacity-70"
                                 style={{ color: type.color, fontSize: '18px' }}
                               >
                                 {type.icon}
                               </span>
                               <span>{type.displayName}</span>
                               {currentDocumentType === type.type && (
-                                <span className="dropdown-checkmark">&#10003;</span>
+                                <span className="dropdown-checkmark ml-auto text-sm text-[var(--nim-primary)]">&#10003;</span>
                               )}
                             </button>
                           ))}
                           {currentDocumentType && (
                             <>
-                              <div className="dropdown-divider" />
+                              <div className="dropdown-divider h-px my-1 bg-[var(--nim-border)]" />
                               <button
-                                className="dropdown-item"
+                                className="dropdown-item w-full py-2 px-3 border-none bg-transparent text-[13px] text-left cursor-pointer flex items-center gap-2.5 transition-colors duration-150 text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleRemoveDocumentType();
                                 }}
                               >
-                                <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
+                                <span className="material-symbols-outlined opacity-70" style={{ fontSize: '18px' }}>
                                   close
                                 </span>
                                 <span>Remove Type</span>
@@ -898,13 +926,13 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
               {/* Debug Tree (dev mode only) */}
               {isDevMode && isMarkdown && onToggleDebugTree && (
                 <button
-                  className="dropdown-item"
+                  className="dropdown-item w-full py-2 px-3 border-none bg-transparent text-[13px] text-left cursor-pointer flex items-center gap-2.5 transition-colors duration-150 text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]"
                   onClick={() => {
                     onToggleDebugTree();
                     setShowActionsMenu(false);
                   }}
                 >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg className="w-4 h-4 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <circle cx="12" cy="12" r="10"/>
                     <path d="M12 16v-4"/>
                     <path d="M12 8h.01"/>
@@ -916,21 +944,21 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
               {/* Extension Menu Items */}
               {extensionMenuItems.length > 0 && (
                 <>
-                  <div className="dropdown-divider" />
-                  <div className="dropdown-section-label">
+                  <div className="dropdown-divider h-px my-1 bg-[var(--nim-border)]" />
+                  <div className="dropdown-section-label pt-1.5 pb-1 px-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--nim-text-faint)]">
                     {extensionId || 'Extension'}
                   </div>
                   {extensionMenuItems.map((item, index) => (
                     <button
                       key={index}
-                      className="dropdown-item"
+                      className="dropdown-item w-full py-2 px-3 border-none bg-transparent text-[13px] text-left cursor-pointer flex items-center gap-2.5 transition-colors duration-150 text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]"
                       onClick={() => {
                         item.onClick();
                         setShowActionsMenu(false);
                       }}
                     >
                       {item.icon && (
-                        <span className="material-symbols-outlined">{item.icon}</span>
+                        <span className="material-symbols-outlined text-lg opacity-70">{item.icon}</span>
                       )}
                       {item.label}
                     </button>
@@ -941,15 +969,15 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
               {/* Extension Settings Link */}
               {onOpenExtensionSettings && (
                 <>
-                  <div className="dropdown-divider" />
+                  <div className="dropdown-divider h-px my-1 bg-[var(--nim-border)]" />
                   <button
-                    className="dropdown-item settings-link"
+                    className="dropdown-item settings-link w-full py-2 px-3 border-none bg-transparent text-[13px] text-left cursor-pointer flex items-center gap-2.5 transition-colors duration-150 text-[var(--nim-primary)] hover:bg-[var(--nim-bg-hover)]"
                     onClick={() => {
                       onOpenExtensionSettings();
                       setShowActionsMenu(false);
                     }}
                   >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg className="w-4 h-4 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <circle cx="12" cy="12" r="3"/>
                       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
                     </svg>

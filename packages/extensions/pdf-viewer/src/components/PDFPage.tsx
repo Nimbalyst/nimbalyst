@@ -142,8 +142,8 @@ export function PDFPage({ document, pageNumber, scale, width, height }: PDFPageP
   }, [document, pageNumber, debouncedScale]);
 
   return (
-    <div className="pdf-page" style={containerStyle}>
-      <canvas ref={canvasRef} style={{ maxWidth: '100%', maxHeight: '100%' }} />
+    <div className="relative flex justify-center items-center bg-white shadow-[0_2px_8px_rgba(0,0,0,0.1)] rounded-sm" style={containerStyle}>
+      <canvas ref={canvasRef} style={{ maxWidth: '100%', maxHeight: '100%', display: 'block' }} />
       <div
         ref={textLayerRef}
         className="textLayer"
@@ -155,7 +155,7 @@ export function PDFPage({ document, pageNumber, scale, width, height }: PDFPageP
         }}
       />
       {rendering && (
-        <div className="pdf-page-loading" style={{ position: 'absolute' }}>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/70 text-white px-4 py-2 rounded text-sm">
           Loading...
         </div>
       )}

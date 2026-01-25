@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
-import './ArchiveProgress.css';
 
 interface ArchiveTask {
   worktreeId: string;
@@ -72,14 +71,34 @@ export const ArchiveProgress: React.FC<ArchiveProgressProps> = ({ onWorktreeArch
   const getStatusIcon = (status: ArchiveTask['status']) => {
     switch (status) {
       case 'queued':
-        return <MaterialSymbol icon="schedule" className="archive-task-icon archive-task-icon--queued" />;
+        return (
+          <MaterialSymbol
+            icon="schedule"
+            className="archive-task-icon archive-task-icon--queued text-lg shrink-0 mt-0.5 text-[var(--nim-text-faint)]"
+          />
+        );
       case 'pending':
       case 'removing-worktree':
-        return <MaterialSymbol icon="progress_activity" className="archive-task-icon archive-task-icon--active" />;
+        return (
+          <MaterialSymbol
+            icon="progress_activity"
+            className="archive-task-icon archive-task-icon--active text-lg shrink-0 mt-0.5 text-[var(--nim-primary)] animate-spin"
+          />
+        );
       case 'completed':
-        return <MaterialSymbol icon="check_circle" className="archive-task-icon archive-task-icon--completed" />;
+        return (
+          <MaterialSymbol
+            icon="check_circle"
+            className="archive-task-icon archive-task-icon--completed text-lg shrink-0 mt-0.5 text-[var(--nim-success)]"
+          />
+        );
       case 'failed':
-        return <MaterialSymbol icon="error" className="archive-task-icon archive-task-icon--failed" />;
+        return (
+          <MaterialSymbol
+            icon="error"
+            className="archive-task-icon archive-task-icon--failed text-lg shrink-0 mt-0.5 text-[var(--nim-error)]"
+          />
+        );
     }
   };
 
@@ -105,36 +124,56 @@ export const ArchiveProgress: React.FC<ArchiveProgressProps> = ({ onWorktreeArch
   const activeCount = activeTasks.length;
 
   return (
-    <div className="archive-progress">
-      <button className="archive-progress-header" onClick={handleToggleExpand}>
-        <MaterialSymbol icon="archive" className="archive-progress-header-icon" />
-        <span className="archive-progress-header-text">Archive Tasks</span>
+    <div className="archive-progress shrink-0 border-t border-[var(--nim-border)] bg-[var(--nim-bg-secondary)]">
+      <button
+        className="archive-progress-header flex items-center gap-2 px-3 py-2.5 text-[13px] font-medium text-[var(--nim-text)] bg-transparent border-none w-full cursor-pointer transition-colors duration-150 hover:bg-[var(--nim-bg-tertiary)]"
+        onClick={handleToggleExpand}
+      >
+        <MaterialSymbol
+          icon="archive"
+          className="archive-progress-header-icon text-lg text-[var(--nim-text-muted)] shrink-0"
+        />
+        <span className="archive-progress-header-text flex-1 text-left">Archive Tasks</span>
         {activeCount > 0 && (
-          <span className="archive-progress-header-count">{activeCount} active</span>
+          <span className="archive-progress-header-count text-[13px] font-medium text-[var(--nim-primary)]">
+            {activeCount} active
+          </span>
         )}
         <MaterialSymbol
           icon="expand_more"
-          className={`archive-progress-header-chevron ${isExpanded ? 'expanded' : ''}`}
+          className={`archive-progress-header-chevron text-lg text-[var(--nim-text-muted)] shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
         />
       </button>
       {isExpanded && (
-        <div className="archive-progress-content">
+        <div className="archive-progress-content flex flex-col">
           {activeTasks.length > 0 && (
-            <div className="archive-progress-warning">
-              <MaterialSymbol icon="warning" className="archive-progress-warning-icon" />
-              <span className="archive-progress-warning-text">
+            <div className="archive-progress-warning flex items-start gap-2 px-3 py-2 bg-[rgba(251,191,36,0.1)] border-l-[3px] border-l-[var(--nim-warning)] mx-2 mb-2">
+              <MaterialSymbol
+                icon="warning"
+                className="archive-progress-warning-icon text-base text-[var(--nim-warning)] shrink-0 mt-px"
+              />
+              <span className="archive-progress-warning-text text-[11px] italic text-[var(--nim-text-muted)] leading-[1.4]">
                 Worktree removal can take several minutes for large repositories
               </span>
             </div>
           )}
-          <div className="archive-progress-tasks">
+          <div className="archive-progress-tasks flex flex-col px-2 pb-2 gap-1.5">
             {tasks.map((task) => (
-              <div key={task.worktreeId} className={`archive-task archive-task--${task.status}`}>
+              <div
+                key={task.worktreeId}
+                className={`archive-task flex items-start gap-2.5 px-3 py-2.5 bg-[var(--nim-bg)] rounded border border-[var(--nim-border)] ${task.status === 'completed' ? 'opacity-60' : ''}`}
+              >
                 {getStatusIcon(task.status)}
-                <div className="archive-task-content">
-                  <div className="archive-task-name">{task.worktreeName}</div>
-                  <div className="archive-task-path">{task.worktreeId}</div>
-                  <div className="archive-task-status">
+                <div className="archive-task-content flex-1 min-w-0 flex flex-col gap-1">
+                  <div className="archive-task-name text-[13px] font-medium text-[var(--nim-text)] overflow-hidden text-ellipsis whitespace-nowrap">
+                    {task.worktreeName}
+                  </div>
+                  <div className="archive-task-path text-[11px] text-[var(--nim-text-faint)] font-[var(--nim-font-mono)] overflow-hidden text-ellipsis whitespace-nowrap">
+                    {task.worktreeId}
+                  </div>
+                  <div
+                    className={`archive-task-status text-xs mt-0.5 ${task.status === 'failed' ? 'text-[var(--nim-error)]' : 'text-[var(--nim-text-muted)]'}`}
+                  >
                     {task.error || getStatusText(task.status)}
                   </div>
                 </div>

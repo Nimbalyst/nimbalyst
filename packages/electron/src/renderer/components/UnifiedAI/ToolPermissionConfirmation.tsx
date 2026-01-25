@@ -1,5 +1,4 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import './ToolPermissionConfirmation.css';
 
 interface ActionEvaluation {
   action: {
@@ -222,10 +221,22 @@ export const ToolPermissionConfirmation: React.FC<ToolPermissionConfirmationProp
   }, [data.workspacePath, data.requestId, data.sessionId, onSubmit]);
 
   return (
-    <div className={`tool-permission-confirmation ${hasDestructive ? 'tool-permission-confirmation--destructive' : ''}`}>
+    <div
+      className={`tool-permission-confirmation mx-4 my-3 p-3 flex flex-col gap-2 rounded-lg border ${
+        hasDestructive
+          ? 'tool-permission-confirmation--destructive border-[var(--nim-error)] bg-[color-mix(in_srgb,var(--nim-error)_5%,var(--nim-bg-secondary))]'
+          : 'border-[var(--nim-border)] bg-[var(--nim-bg-secondary)]'
+      }`}
+    >
       {/* Header */}
-      <div className="tool-permission-confirmation-header">
-        <span className={`tool-permission-confirmation-icon ${hasDestructive ? 'tool-permission-confirmation-icon--destructive' : ''}`}>
+      <div className="tool-permission-confirmation-header flex items-center gap-2">
+        <span
+          className={`tool-permission-confirmation-icon flex items-center justify-center ${
+            hasDestructive
+              ? 'tool-permission-confirmation-icon--destructive text-[var(--nim-error)]'
+              : 'text-[var(--nim-primary)]'
+          }`}
+        >
           {hasDestructive ? (
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M8 5.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
@@ -240,9 +251,11 @@ export const ToolPermissionConfirmation: React.FC<ToolPermissionConfirmationProp
             </svg>
           )}
         </span>
-        <span className="tool-permission-confirmation-title">Allow this tool?</span>
+        <span className="tool-permission-confirmation-title flex-1 font-semibold text-[13px] text-[var(--nim-text)]">
+          Allow this tool?
+        </span>
         <span
-          className="tool-permission-confirmation-help"
+          className="tool-permission-confirmation-help relative flex items-center cursor-pointer text-[var(--nim-text-faint)] hover:text-[var(--nim-text-muted)]"
           onMouseEnter={() => setShowTooltip(true)}
           onMouseLeave={() => setShowTooltip(false)}
         >
@@ -251,24 +264,30 @@ export const ToolPermissionConfirmation: React.FC<ToolPermissionConfirmationProp
             <path d="M8 11V8M8 5.5h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
           </svg>
           {showTooltip && (
-            <div className="tool-permission-confirmation-tooltip">
-              <div className="tool-permission-confirmation-tooltip-title">Permission Options</div>
-              <div className="tool-permission-confirmation-tooltip-item">
-                <span className="tool-permission-confirmation-tooltip-key">Deny:</span> Block this request
+            <div className="tool-permission-confirmation-tooltip absolute bottom-full right-0 mb-2 p-3 w-[300px] rounded-md border border-[var(--nim-border)] bg-[var(--nim-bg-tertiary)] text-[11px] leading-relaxed text-[var(--nim-text-muted)] shadow-[0_4px_12px_rgba(0,0,0,0.3)] z-[100]">
+              <div className="tool-permission-confirmation-tooltip-title font-semibold text-[var(--nim-text)] mb-2">
+                Permission Options
               </div>
-              <div className="tool-permission-confirmation-tooltip-item">
-                <span className="tool-permission-confirmation-tooltip-key">Allow Once:</span> Allow just this request
+              <div className="tool-permission-confirmation-tooltip-item mb-2">
+                <span className="tool-permission-confirmation-tooltip-key font-semibold text-[var(--nim-text)]">Deny:</span> Block this request
               </div>
-              <div className="tool-permission-confirmation-tooltip-item">
-                <span className="tool-permission-confirmation-tooltip-key">Session:</span> Allow{' '}
-                <span className="tool-permission-confirmation-tooltip-code">{patternDisplayName}</span> until you close the app
+              <div className="tool-permission-confirmation-tooltip-item mb-2">
+                <span className="tool-permission-confirmation-tooltip-key font-semibold text-[var(--nim-text)]">Allow Once:</span> Allow just this request
               </div>
-              <div className="tool-permission-confirmation-tooltip-item">
-                <span className="tool-permission-confirmation-tooltip-key">Always:</span> Save to{' '}
-                <span className="tool-permission-confirmation-tooltip-code">.claude/settings.local.json</span>
+              <div className="tool-permission-confirmation-tooltip-item mb-2">
+                <span className="tool-permission-confirmation-tooltip-key font-semibold text-[var(--nim-text)]">Session:</span> Allow{' '}
+                <span className="tool-permission-confirmation-tooltip-code font-mono text-[10px] text-[var(--nim-text-faint)] bg-[var(--nim-bg-secondary)] px-1 py-0.5 rounded">
+                  {patternDisplayName}
+                </span> until you close the app
               </div>
-              <div className="tool-permission-confirmation-tooltip-pattern">
-                Pattern: <span className="tool-permission-confirmation-tooltip-code">{rawPattern}</span>
+              <div className="tool-permission-confirmation-tooltip-item mb-0">
+                <span className="tool-permission-confirmation-tooltip-key font-semibold text-[var(--nim-text)]">Always:</span> Save to{' '}
+                <span className="tool-permission-confirmation-tooltip-code font-mono text-[10px] text-[var(--nim-text-faint)] bg-[var(--nim-bg-secondary)] px-1 py-0.5 rounded">
+                  .claude/settings.local.json
+                </span>
+              </div>
+              <div className="tool-permission-confirmation-tooltip-pattern mt-2 pt-2 border-t border-[var(--nim-border)] text-[var(--nim-text-faint)]">
+                Pattern: <span className="tool-permission-confirmation-tooltip-code font-mono text-[10px] text-[var(--nim-text-faint)] bg-[var(--nim-bg-secondary)] px-1 py-0.5 rounded">{rawPattern}</span>
               </div>
             </div>
           )}
@@ -277,10 +296,10 @@ export const ToolPermissionConfirmation: React.FC<ToolPermissionConfirmationProp
 
       {/* Warnings */}
       {allWarnings.length > 0 && (
-        <div className="tool-permission-confirmation-warnings">
+        <div className="tool-permission-confirmation-warnings flex flex-col gap-1.5">
           {allWarnings.map((warning, i) => (
-            <div key={i} className="tool-permission-confirmation-warning">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <div key={i} className="tool-permission-confirmation-warning flex items-start gap-1.5 text-xs text-[var(--nim-warning)]">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="shrink-0 mt-px">
                 <path d="M8 5.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                 <path d="M8 11h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                 <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5"/>
@@ -292,34 +311,36 @@ export const ToolPermissionConfirmation: React.FC<ToolPermissionConfirmationProp
       )}
 
       {/* Command display */}
-      <div className="tool-permission-confirmation-command">
-        <code>{rawCommand || toolName}</code>
+      <div className="tool-permission-confirmation-command bg-[var(--nim-bg-tertiary)] rounded p-2 max-h-[200px] overflow-x-auto">
+        <code className="font-mono text-xs text-[var(--nim-text)] whitespace-pre-wrap break-all">
+          {rawCommand || toolName}
+        </code>
       </div>
 
       {/* Actions row - all buttons on one line */}
-      <div className="tool-permission-confirmation-actions">
+      <div className="tool-permission-confirmation-actions flex items-center gap-2 flex-wrap">
         <button
-          className="tool-permission-confirmation-button tool-permission-confirmation-button--deny"
+          className="tool-permission-confirmation-button tool-permission-confirmation-button--deny px-3 py-1.5 rounded-[5px] text-[11px] font-medium cursor-pointer border border-transparent bg-transparent text-[var(--nim-text-muted)] whitespace-nowrap transition-all duration-150 hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)] active:opacity-80"
           onClick={handleDeny}
         >
           Deny
         </button>
         <button
-          className="tool-permission-confirmation-button tool-permission-confirmation-button--once"
+          className="tool-permission-confirmation-button tool-permission-confirmation-button--once px-3 py-1.5 rounded-[5px] text-[11px] font-medium cursor-pointer border border-[var(--nim-border)] bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)] whitespace-nowrap transition-all duration-150 hover:bg-[var(--nim-bg-hover)] active:opacity-80"
           onClick={handleAllowOnce}
         >
           Allow Once
         </button>
-        <div className="tool-permission-confirmation-separator" />
+        <div className="tool-permission-confirmation-separator w-px h-5 bg-[var(--nim-border)] mx-1" />
         <button
-          className="tool-permission-confirmation-button tool-permission-confirmation-button--session"
+          className="tool-permission-confirmation-button tool-permission-confirmation-button--session px-3 py-1.5 rounded-[5px] text-[11px] font-medium cursor-pointer border border-[var(--nim-primary)] bg-transparent text-[var(--nim-primary)] whitespace-nowrap transition-all duration-150 hover:bg-[color-mix(in_srgb,var(--nim-primary)_10%,transparent)] active:opacity-80"
           onClick={handleAllowSession}
           title={`Allow ${patternDisplayName} for this session`}
         >
           Session
         </button>
         <button
-          className="tool-permission-confirmation-button tool-permission-confirmation-button--always"
+          className="tool-permission-confirmation-button tool-permission-confirmation-button--always px-3 py-1.5 rounded-[5px] text-[11px] font-medium cursor-pointer border border-[var(--nim-primary)] bg-[var(--nim-primary)] text-white whitespace-nowrap transition-all duration-150 hover:opacity-90 active:opacity-80"
           onClick={handleAllowAlways}
           title={`Save ${patternDisplayName} to .claude/settings.local.json`}
         >
@@ -327,9 +348,9 @@ export const ToolPermissionConfirmation: React.FC<ToolPermissionConfirmationProp
         </button>
         {isWebFetchRequest && (
           <>
-            <div className="tool-permission-confirmation-separator" />
+            <div className="tool-permission-confirmation-separator w-px h-5 bg-[var(--nim-border)] mx-1" />
             <button
-              className="tool-permission-confirmation-button tool-permission-confirmation-button--all-domains"
+              className="tool-permission-confirmation-button tool-permission-confirmation-button--all-domains px-3 py-1.5 rounded-[5px] text-[11px] font-medium cursor-pointer border border-[var(--nim-primary)] bg-[var(--nim-primary)] text-white whitespace-nowrap transition-all duration-150 hover:opacity-90 active:opacity-80 disabled:opacity-60 disabled:cursor-not-allowed"
               onClick={handleAllowAllDomains}
               disabled={isAllowingAllDomains}
               title="Allow fetching from any domain without asking"
@@ -341,8 +362,8 @@ export const ToolPermissionConfirmation: React.FC<ToolPermissionConfirmationProp
       </div>
 
       {/* Pattern info line */}
-      <div className="tool-permission-confirmation-pattern-info">
-        Session/Always will allow: <span className="tool-permission-confirmation-pattern-badge">{patternDisplayName}</span>
+      <div className="tool-permission-confirmation-pattern-info text-[11px] text-[var(--nim-text-faint)] mt-1 pt-2 border-t border-[var(--nim-border)]">
+        Session/Always will allow: <span className="tool-permission-confirmation-pattern-badge font-medium text-[var(--nim-text-muted)] bg-[var(--nim-bg-tertiary)] px-1.5 py-0.5 rounded text-[10px]">{patternDisplayName}</span>
       </div>
     </div>
   );

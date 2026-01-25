@@ -22,7 +22,7 @@ import { DEFAULT_EDITOR_CONFIG, type EditorConfig } from './EditorConfig';
 import { SharedHistoryContext } from './context/SharedHistoryContext';
 import { TableContext } from './plugins/TablePlugin/TablePlugin.tsx';
 import { ToolbarContext } from './context/ToolbarContext';
-import { ThemeProvider, useTheme } from './context/ThemeContext';
+import { useTheme } from './context/ThemeContext';
 import { RuntimeSettingsProvider } from './context/RuntimeSettingsContext';
 import { useResponsiveWidth } from './hooks/useResponsiveWidth';
 import Editor from './Editor';
@@ -35,29 +35,35 @@ export interface StravuEditorProps {
     config?: EditorConfig;
 }
 
-function StravuEditorInner({config}: {config: EditorConfig}): JSX.Element {
+function StravuEditor({config}: StravuEditorProps): JSX.Element {
+    // Merge provided config with defaults
+    const mergedConfig = {
+        ...DEFAULT_EDITOR_CONFIG,
+        ...config
+    };
 
-    const { theme } = useTheme();
+    // Get theme from DOM (set by app-level theme system)
+    const { theme, isDark } = useTheme();
     const containerRef = useRef<HTMLDivElement>(null);
     const widthClass = useResponsiveWidth(containerRef);
     const markdownTransformers = useMemo(
-        () => config.markdownTransformers ?? getEditorTransformers(),
-        [config.markdownTransformers]
+        () => mergedConfig.markdownTransformers ?? getEditorTransformers(),
+        [mergedConfig.markdownTransformers]
     );
 
     const initialConfig = {
         // Set initial editor state based on whether we have initial content
         editorState: (() => {
-            if (config.initialContent) {
+            if (mergedConfig.initialContent) {
                 // Load markdown content properly through the initialConfig
                 return () => {
                     const root = $getRoot();
                     root.clear();
-                    $convertFromEnhancedMarkdownString(config.initialContent!, markdownTransformers);
+                    $convertFromEnhancedMarkdownString(mergedConfig.initialContent!, markdownTransformers);
                     // Don't call root.selectStart() here - it triggers auto-scroll behavior
                     // The selection will be set naturally when the user interacts with the editor
                 };
-            } else if (!config.emptyEditor) {
+            } else if (!mergedConfig.emptyEditor) {
                 // Create an empty editor with a paragraph
                 return $createEmptyEditor;
             }
@@ -70,15 +76,13 @@ function StravuEditorInner({config}: {config: EditorConfig}): JSX.Element {
             throw error;
         },
         theme: PlaygroundEditorTheme,
-        editable: config.editable !== undefined ? config.editable : true,
+        editable: mergedConfig.editable !== undefined ? mergedConfig.editable : true,
     };
-
-    const isDarkTheme = theme === 'dark' || theme === 'crystal-dark';
 
     return (
         <div
             ref={containerRef}
-            className={`stravu-editor ${widthClass} ${isDarkTheme ? 'dark-theme' : ''}`}
+            className={`stravu-editor ${widthClass} ${isDark ? 'dark-theme' : ''}`}
             data-theme={theme}
         >
             <RuntimeSettingsProvider>
@@ -87,7 +91,7 @@ function StravuEditorInner({config}: {config: EditorConfig}): JSX.Element {
                         <TableContext>
                             <ToolbarContext>
                                 <div className="editor-shell">
-                                    <Editor config={config}/>
+                                    <Editor config={mergedConfig}/>
                                 </div>
                             </ToolbarContext>
                         </TableContext>
@@ -95,20 +99,6 @@ function StravuEditorInner({config}: {config: EditorConfig}): JSX.Element {
                 </LexicalComposer>
             </RuntimeSettingsProvider>
         </div>
-    );
-}
-
-function StravuEditor({config}: StravuEditorProps): JSX.Element {
-    // Merge provided config with defaults
-    const mergedConfig = {
-        ...DEFAULT_EDITOR_CONFIG,
-        ...config
-    };
-
-    return (
-        <ThemeProvider initialTheme={mergedConfig.theme}>
-            <StravuEditorInner config={mergedConfig} />
-        </ThemeProvider>
     );
 }
 

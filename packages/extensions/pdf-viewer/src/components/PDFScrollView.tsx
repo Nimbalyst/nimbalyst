@@ -67,7 +67,7 @@ export function PDFScrollView({
     return (
       <div
         ref={containerRef}
-        className="pdf-scroll-container"
+        className="flex-1 overflow-y-auto overflow-x-hidden scroll-smooth"
         style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       >
         <div>No document loaded</div>
@@ -81,10 +81,10 @@ export function PDFScrollView({
   return (
     <div
       ref={containerRef}
-      className="pdf-scroll-container"
+      className="flex-1 overflow-y-auto overflow-x-hidden scroll-smooth"
       style={{
         height: '100%',
-        backgroundColor: 'var(--surface-secondary)',
+        backgroundColor: 'var(--nim-bg-secondary)',
       }}
     >
       <VList

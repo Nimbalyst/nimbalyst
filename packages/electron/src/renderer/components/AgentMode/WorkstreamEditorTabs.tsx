@@ -17,7 +17,6 @@ import { TabManager } from '../TabManager/TabManager';
 import { TabContent } from '../TabContent/TabContent';
 import { setSessionTabCountAtom } from '../../store';
 import { workstreamStateAtom } from '../../store/atoms/workstreamState';
-import './WorkstreamEditorTabs.css';
 
 // Current tab state - always kept up to date for sync flush on unmount
 const currentTabState = new Map<string, {
@@ -329,8 +328,8 @@ const WorkstreamEditorTabsInner = forwardRef<WorkstreamEditorTabsRef, Workstream
     }
 
     return (
-      <div className="workstream-editor-tabs">
-        <div className="workstream-editor-header">
+      <div className="workstream-editor-tabs flex flex-col h-full overflow-hidden">
+        <div className="workstream-editor-header shrink-0">
           <TabManager
             onTabClose={handleTabClose}
             onNewTab={handleNewTab}
@@ -340,7 +339,7 @@ const WorkstreamEditorTabsInner = forwardRef<WorkstreamEditorTabsRef, Workstream
             <></>
           </TabManager>
         </div>
-        <div className="workstream-editor-tabs-content">
+        <div className="workstream-editor-tabs-content flex-1 min-h-0 overflow-hidden">
           <TabContent workspaceId={basePath} />
         </div>
       </div>

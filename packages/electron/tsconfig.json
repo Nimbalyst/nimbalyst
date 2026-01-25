@@ -23,7 +23,9 @@
     "baseUrl": ".",
     "paths": {
       "@nimbalyst/runtime": ["../runtime/src/index.ts"],
-      "@nimbalyst/runtime/*": ["../runtime/src/*"]
+      "@nimbalyst/runtime/*": ["../runtime/src/*"],
+      "rexical": ["../rexical/src/index.ts"],
+      "rexical/*": ["../rexical/src/*"]
     }
   },
   "include": ["src", "src/renderer/electron.d.ts"],

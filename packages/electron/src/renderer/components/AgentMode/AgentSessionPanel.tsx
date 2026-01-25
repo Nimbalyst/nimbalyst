@@ -14,7 +14,6 @@
 
 import React, { useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { SessionTranscript, SessionTranscriptRef } from '../UnifiedAI/SessionTranscript';
-import './AgentSessionPanel.css';
 
 export interface AgentSessionPanelRef {
   focusInput: () => void;
@@ -54,7 +53,7 @@ export const AgentSessionPanel = forwardRef<AgentSessionPanelRef, AgentSessionPa
   }, [onFileClick]);
 
   return (
-    <div className="agent-session-panel">
+    <div className="agent-session-panel flex flex-col h-full min-h-0 overflow-hidden [&>div]:flex-1 [&>div]:min-h-0">
       <SessionTranscript
         ref={transcriptRef}
         sessionId={sessionId}

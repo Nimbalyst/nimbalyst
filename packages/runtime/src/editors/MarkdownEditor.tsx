@@ -19,7 +19,10 @@ import { StravuEditor, type EditorConfig } from 'rexical';
 import type { EditorHost } from '../extensions/editorHost';
 
 export interface MarkdownEditorConfig {
-  /** Theme for the editor */
+  /**
+   * @deprecated Theme is now controlled at app level via CSS variables.
+   * This prop is ignored. Theme is read from document root's data-theme attribute.
+   */
   theme?: 'light' | 'dark' | 'crystal-dark' | 'auto';
 
   /** Whether the editor is read-only */

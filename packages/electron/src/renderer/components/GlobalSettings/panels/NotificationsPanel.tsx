@@ -53,31 +53,31 @@ export function NotificationsPanel() {
   };
 
   return (
-    <div className="provider-panel">
-      <div className="provider-panel-header">
-        <h3 className="provider-panel-title">Notifications</h3>
-        <p className="provider-panel-description">
+    <div className="provider-panel flex flex-col">
+      <div className="provider-panel-header mb-6 pb-4 border-b border-[var(--nim-border)]">
+        <h3 className="provider-panel-title text-xl font-semibold leading-tight mb-2 text-[var(--nim-text)]">Notifications</h3>
+        <p className="provider-panel-description text-sm leading-relaxed text-[var(--nim-text-muted)]">
           Configure audio and visual notifications for AI interactions.
         </p>
       </div>
 
-      <div className="provider-panel-section">
-        <h4 className="provider-panel-section-title">Completion Sounds</h4>
-        <p className="provider-panel-hint">
+      <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+        <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Completion Sounds</h4>
+        <p className="text-sm leading-relaxed text-[var(--nim-text-muted)] mb-4">
           Play a sound when the AI or agent completes a turn and is ready for more input.
         </p>
 
-        <div className="setting-item">
-          <label className="setting-label">
+        <div className="setting-item py-3">
+          <label className="setting-label flex items-start gap-3 cursor-pointer">
             <input
               type="checkbox"
               checked={completionSoundEnabled}
               onChange={(e) => updateSettings({ completionSoundEnabled: e.target.checked })}
-              className="setting-checkbox"
+              className="setting-checkbox w-4 h-4 mt-0.5 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
             />
-            <div className="setting-text">
-              <span className="setting-name">Enable Completion Sounds</span>
-              <span className="setting-description">
+            <div className="setting-text flex flex-col gap-0.5">
+              <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Enable Completion Sounds</span>
+              <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
                 Play an audio notification when AI chat or agentic panel completes a response.
               </span>
             </div>
@@ -85,42 +85,32 @@ export function NotificationsPanel() {
         </div>
 
         {completionSoundEnabled && (
-          <div className="setting-item" style={{ marginTop: '16px' }}>
-            <div className="setting-text">
-              <span className="setting-name">Sound Type</span>
-              <span className="setting-description">
+          <div className="setting-item py-3 mt-4">
+            <div className="setting-text flex flex-col gap-0.5">
+              <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Sound Type</span>
+              <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
                 Choose the sound to play when a response completes.
               </span>
             </div>
-            <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div className="mt-3 flex flex-col gap-2">
               {(['chime', 'bell', 'pop'] as CompletionSoundType[]).map((sound) => (
-                <label key={sound} className="setting-radio-label">
+                <label key={sound} className="setting-radio-label flex items-center gap-2 cursor-pointer text-sm text-[var(--nim-text)]">
                   <input
                     type="radio"
                     name="sound-type"
                     value={sound}
                     checked={completionSoundType === sound}
                     onChange={(e) => updateSettings({ completionSoundType: e.target.value as CompletionSoundType })}
-                    className="setting-radio"
+                    className="setting-radio w-4 h-4 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
                   />
-                  <span style={{ textTransform: 'capitalize' }}>{sound}</span>
+                  <span className="capitalize">{sound}</span>
                 </label>
               ))}
             </div>
             <button
               onClick={handleTestSound}
               disabled={isTestPlaying}
-              className="button-test-sound"
-              style={{
-                marginTop: '12px',
-                padding: '8px 16px',
-                borderRadius: '4px',
-                border: '1px solid var(--border-primary)',
-                background: 'var(--surface-secondary)',
-                color: 'var(--text-primary)',
-                cursor: isTestPlaying ? 'default' : 'pointer',
-                opacity: isTestPlaying ? 0.6 : 1
-              }}
+              className="nim-btn-secondary text-sm mt-3"
             >
               {isTestPlaying ? 'Playing...' : 'Test Sound'}
             </button>
@@ -128,23 +118,23 @@ export function NotificationsPanel() {
         )}
       </div>
 
-      <div className="provider-panel-section" style={{ marginTop: '24px' }}>
-        <h4 className="provider-panel-section-title">OS Notifications</h4>
-        <p className="provider-panel-hint">
+      <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+        <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">OS Notifications</h4>
+        <p className="text-sm leading-relaxed text-[var(--nim-text-muted)] mb-4">
           Show system notifications when AI responses complete while the app is in the background.
         </p>
 
-        <div className="setting-item">
-          <label className="setting-label">
+        <div className="setting-item py-3">
+          <label className="setting-label flex items-start gap-3 cursor-pointer">
             <input
               type="checkbox"
               checked={osNotificationsEnabled}
               onChange={(e) => updateSettings({ osNotificationsEnabled: e.target.checked })}
-              className="setting-checkbox"
+              className="setting-checkbox w-4 h-4 mt-0.5 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
             />
-            <div className="setting-text">
-              <span className="setting-name">Enable OS Notifications</span>
-              <span className="setting-description">
+            <div className="setting-text flex flex-col gap-0.5">
+              <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Enable OS Notifications</span>
+              <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
                 Display native system notifications when AI completes a response and the app window is not focused.
                 Respects system Do Not Disturb settings.
               </span>
@@ -153,17 +143,17 @@ export function NotificationsPanel() {
         </div>
 
         {osNotificationsEnabled && (
-          <div className="setting-item" style={{ marginTop: '12px' }}>
-            <label className="setting-label">
+          <div className="setting-item py-3">
+            <label className="setting-label flex items-start gap-3 cursor-pointer">
               <input
                 type="checkbox"
                 checked={notifyWhenFocused}
                 onChange={(e) => updateSettings({ notifyWhenFocused: e.target.checked })}
-                className="setting-checkbox"
+                className="setting-checkbox w-4 h-4 mt-0.5 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
               />
-              <div className="setting-text">
-                <span className="setting-name">Notify Even When Focused</span>
-                <span className="setting-description">
+              <div className="setting-text flex flex-col gap-0.5">
+                <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Notify Even When Focused</span>
+                <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
                   Show notifications even when the app is focused, unless you are already viewing that session.
                   Useful when working in one session and waiting for another to complete.
                 </span>

@@ -20,7 +20,7 @@
 .kanban-board {
   padding: 1rem;
   min-height: 400px;
-  background: #f5f5f5;
+  background: var(--nim-bg-secondary);
   border-radius: 8px;
   border: 2px solid transparent;
   transition: border-color 0.2s ease;
@@ -38,7 +38,7 @@
 }
 
 .kanban-board:hover {
-  /*border-color: #4a90e2;*/
+  border-color: var(--nim-border);
 }
 
 .kanban-board-header {
@@ -67,13 +67,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--nim-text);
 }
-
-/*.kanban-board-title-container *:hover,*/
-/*.kanban-board-title-container *:focus {*/
-/*  background-color: rgba(0, 0, 0, 0.05);*/
-/*  outline: none;*/
-/*}*/
 
 .kanban-board-controls {
   display: flex;
@@ -86,8 +81,8 @@
 }
 
 .board-settings-button {
-  background: white;
-  border: 1px solid #ddd;
+  background: var(--nim-bg-tertiary);
+  border: 1px solid var(--nim-border);
   border-radius: 4px;
   padding: 6px 12px;
   cursor: pointer;
@@ -96,24 +91,22 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #666;
+  color: var(--nim-text);
   height: 32px;
 }
 
 .board-settings-button:hover {
-  background: #f0f0f0;
-  border-color: #999;
+  background: var(--nim-bg-hover);
+  border-color: var(--nim-border-focus);
 }
 
-/* Columns are now direct children of .kanban-board, handled by board's grid */
-
 .kanban-add-column-button {
-  background: white;
-  border: 1px solid #ddd;
+  background: var(--nim-bg-tertiary);
+  border: 1px solid var(--nim-border);
   border-radius: 4px;
   padding: 6px 12px;
   cursor: pointer;
-  color: #666;
+  color: var(--nim-text-muted);
   font-size: 13px;
   font-weight: normal;
   transition: all 0.2s ease;
@@ -126,15 +119,15 @@
 }
 
 .kanban-add-column-button:hover {
-  background: #f0f0f0;
-  border-color: #4a90e2;
-  color: #4a90e2;
+  background: var(--nim-bg-hover);
+  border-color: var(--nim-border-focus);
+  color: var(--nim-link);
   opacity: 1;
 }
 
 .kanban-column {
-  background: white;
-  border: 1px solid #ddd;
+  background: var(--nim-bg-tertiary);
+  border: 1px solid var(--nim-border);
   border-radius: 8px;
   overflow: hidden;
   width: 100%;
@@ -146,9 +139,9 @@
 }
 
 .kanban-column-header {
-  background: #f5f5f5;
+  background: var(--nim-bg-secondary);
   padding: 12px;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid var(--nim-border);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -161,7 +154,7 @@
 }
 
 .kanban-column-drag-handle {
-  color: #999;
+  color: var(--nim-text-muted);
   cursor: grab;
   font-size: 12px;
   line-height: 1;
@@ -175,7 +168,7 @@
 
 .kanban-column-drag-handle .material-symbols-outlined {
   font-size: 20px;
-  color: #999;
+  color: var(--nim-text-muted);
 }
 
 .kanban-column:hover .kanban-column-drag-handle {
@@ -197,7 +190,7 @@
   font-weight: 600;
   text-transform: uppercase;
   font-size: 14px;
-  color: #666;
+  color: var(--nim-text);
   letter-spacing: 0.5px;
 }
 
@@ -221,7 +214,7 @@
 
 .kanban-column-delete .material-symbols-outlined {
   font-size: 18px;
-  color: #999;
+  color: var(--nim-text-muted);
 }
 
 .kanban-column-delete:hover .material-symbols-outlined {
@@ -233,7 +226,7 @@
 }
 
 .kanban-column-delete:hover {
-  background: #ff4444;
+  background: var(--nim-error);
   color: white;
 }
 
@@ -242,7 +235,7 @@
   border: none;
   cursor: pointer;
   padding: 4px;
-  color: #999;
+  color: var(--nim-text-muted);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -252,15 +245,15 @@
 
 .kanban-column-menu-button .material-symbols-outlined {
   font-size: 20px;
-  color: #999;
+  color: var(--nim-text-muted);
 }
 
 .kanban-column-menu-button:hover {
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--nim-bg-hover);
 }
 
 .kanban-column-menu-button:hover .material-symbols-outlined {
-  color: #666;
+  color: var(--nim-text);
 }
 
 .kanban-column-content {
@@ -270,6 +263,7 @@
   min-height: 100px;
   display: flex;
   flex-direction: column;
+  background: var(--nim-bg-tertiary);
 }
 
 .kanban-cards-container {
@@ -281,12 +275,12 @@
 
 .kanban-add-card-button {
   background: transparent;
-  border: 1px dashed #e0e0e0;
+  border: 1px dashed var(--nim-border);
   border-radius: 4px;
   padding: 6px 8px;
   margin-top: 4px;
   cursor: pointer;
-  color: #999;
+  color: var(--nim-text-muted);
   font-size: 12px;
   transition: all 0.2s ease;
   text-align: center;
@@ -295,26 +289,26 @@
 }
 
 .kanban-add-card-button:hover {
-  background: #f8f9fa;
-  border-color: #4a90e2;
-  color: #4a90e2;
+  background: var(--nim-bg-hover);
+  border-color: var(--nim-border-focus);
+  color: var(--nim-link);
   opacity: 1;
 }
 
 .kanban-card {
-  background: white;
-  border: 1px solid #e0e0e0;
+  background: var(--nim-bg-secondary);
+  border: 1px solid var(--nim-border);
   border-radius: 6px;
   margin-bottom: 8px;
   cursor: move;
   transition: all 0.2s ease;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
   position: relative;
   min-height: 60px;
 }
 
 .kanban-card:hover {
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
   transform: translateY(-2px);
 }
 
@@ -328,8 +322,6 @@
   cursor: grabbing;
   transform: rotate(2deg);
 }
-
-/* Removed focus-within border styling for cleaner look */
 
 .kanban-card-header {
   display: flex;
@@ -356,11 +348,11 @@
 
 .kanban-card-edit .material-symbols-outlined {
   font-size: 16px;
-  color: #666;
+  color: var(--nim-text-muted);
 }
 
 .kanban-card-edit:hover {
-  background: #4a90e2;
+  background: var(--nim-primary);
 }
 
 .kanban-card-edit:hover .material-symbols-outlined {
@@ -383,11 +375,11 @@
 
 .kanban-card-delete .material-symbols-outlined {
   font-size: 18px;
-  color: #999;
+  color: var(--nim-text-muted);
 }
 
 .kanban-card-delete:hover {
-  background: #ff4444;
+  background: var(--nim-error);
 }
 
 .kanban-card-delete:hover .material-symbols-outlined {
@@ -417,16 +409,16 @@
 .kanban-card-content p {
   margin: 0;
   font-size: 14px;
-  color: #333;
+  color: var(--nim-text);
 }
 
 .kanban-card-meta {
   display: flex;
   gap: 8px;
   padding: 8px 12px;
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid var(--nim-border);
   font-size: 12px;
-  color: #666;
+  color: var(--nim-text-muted);
   flex-wrap: wrap;
   align-items: center;
 }
@@ -434,8 +426,8 @@
 .kanban-card-description {
   padding: 8px 12px;
   font-size: 13px;
-  color: #666;
-  border-top: 1px solid #f0f0f0;
+  color: var(--nim-text-muted);
+  border-top: 1px solid var(--nim-border);
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -470,15 +462,15 @@
 }
 
 .kanban-card-priority-low .material-symbols-outlined {
-  color: #2196F3;
+  color: var(--nim-info);
 }
 
 .kanban-card-priority-medium .material-symbols-outlined {
-  color: #FF9800;
+  color: var(--nim-warning);
 }
 
 .kanban-card-priority-high .material-symbols-outlined {
-  color: #F44336;
+  color: var(--nim-error);
 }
 
 .kanban-card-owner,
@@ -495,13 +487,13 @@
 
 /* Drag and drop visual feedback */
 .kanban-column-content.drag-over {
-  background: #f0f8ff;
-  border: 2px dashed #4a90e2;
+  background: var(--nim-bg-hover);
+  border: 2px dashed var(--nim-border-focus);
 }
 
 .card-drop-indicator {
   height: 2px;
-  background: #4a90e2;
+  background: var(--nim-border-focus);
   margin: 4px 0;
   border-radius: 1px;
   pointer-events: none;
@@ -512,280 +504,10 @@
 .column-drop-indicator {
   position: absolute;
   width: 3px;
-  background: #4a90e2;
+  background: var(--nim-border-focus);
   top: 0;
   bottom: 0;
   z-index: 1000;
   pointer-events: none;
   border-radius: 1px;
-}
-
-/* Dark mode support - using CSS variables */
-.stravu-editor[data-theme="dark"] .kanban-board {
-  background: var(--surface-secondary);
-  border-color: var(--stravu-editor-border);
-}
-
-.stravu-editor[data-theme="dark"] .kanban-board:hover {
-  border-color: var(--stravu-focus-border);
-}
-
-.stravu-editor[data-theme="dark"] .kanban-board-title-container h1,
-.stravu-editor[data-theme="dark"] .kanban-board-title-container h2,
-.stravu-editor[data-theme="dark"] .kanban-board-title-container h3,
-.stravu-editor[data-theme="dark"] .kanban-board-title-container p {
-  color: var(--text-primary);
-}
-
-.stravu-editor[data-theme="dark"] .kanban-board-title-container *:hover,
-.stravu-editor[data-theme="dark"] .kanban-board-title-container *:focus {
-  background-color: rgba(255, 255, 255, 0.05);
-}
-
-.stravu-editor[data-theme="dark"] .board-settings-button {
-  background: var(--surface-tertiary);
-  border-color: var(--stravu-editor-border);
-  color: var(--text-primary);
-}
-
-.stravu-editor[data-theme="dark"] .board-settings-button:hover {
-  background: var(--stravu-hover-bg);
-  border-color: var(--stravu-focus-border);
-}
-
-.stravu-editor[data-theme="dark"] .kanban-add-column-button {
-  background: var(--surface-tertiary);
-  border-color: var(--stravu-editor-border);
-  color: var(--text-secondary);
-}
-
-.stravu-editor[data-theme="dark"] .kanban-add-column-button:hover {
-  background: var(--stravu-hover-bg);
-  border-color: var(--stravu-focus-border);
-  color: var(--stravu-link-color);
-}
-
-.stravu-editor[data-theme="dark"] .kanban-column {
-  background: var(--surface-tertiary);
-  border-color: var(--stravu-editor-border);
-}
-
-.stravu-editor[data-theme="dark"] .kanban-column-header {
-  background: var(--surface-secondary);
-  border-bottom-color: var(--stravu-editor-border);
-}
-
-.stravu-editor[data-theme="dark"] .kanban-column-header-content {
-  color: var(--text-primary);
-}
-
-.stravu-editor[data-theme="dark"] .kanban-column-drag-handle .material-symbols-outlined {
-  color: var(--text-secondary);
-}
-
-.stravu-editor[data-theme="dark"] .kanban-column-delete .material-symbols-outlined {
-  color: var(--text-secondary);
-}
-
-.stravu-editor[data-theme="dark"] .kanban-column-menu-button .material-symbols-outlined {
-  color: var(--text-secondary);
-}
-
-.stravu-editor[data-theme="dark"] .kanban-column-menu-button:hover {
-  background: var(--stravu-hover-bg);
-}
-
-.stravu-editor[data-theme="dark"] .kanban-column-menu-button:hover .material-symbols-outlined {
-  color: var(--text-primary);
-}
-
-.stravu-editor[data-theme="dark"] .kanban-column-content {
-  background: var(--surface-tertiary);
-}
-
-.stravu-editor[data-theme="dark"] .kanban-add-card-button {
-  border-color: var(--stravu-editor-border);
-  color: var(--text-secondary);
-}
-
-.stravu-editor[data-theme="dark"] .kanban-add-card-button:hover {
-  background: var(--stravu-hover-bg);
-  border-color: var(--stravu-focus-border);
-  color: var(--stravu-link-color);
-}
-
-.stravu-editor[data-theme="dark"] .kanban-card {
-  background: var(--surface-secondary);
-  border-color: var(--stravu-editor-border);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-}
-
-.stravu-editor[data-theme="dark"] .kanban-card:hover {
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
-}
-
-/* Removed dark theme focus-within border styling */
-
-.stravu-editor[data-theme="dark"] .kanban-card-content p {
-  color: var(--text-primary);
-}
-
-.stravu-editor[data-theme="dark"] .kanban-card-edit .material-symbols-outlined {
-  color: var(--text-secondary);
-}
-
-.stravu-editor[data-theme="dark"] .kanban-card-edit:hover {
-  background: var(--stravu-focus-border);
-}
-
-.stravu-editor[data-theme="dark"] .kanban-card-delete .material-symbols-outlined {
-  color: var(--text-secondary);
-}
-
-.stravu-editor[data-theme="dark"] .kanban-card-meta {
-  border-top-color: var(--stravu-editor-border);
-  color: var(--text-secondary);
-}
-
-.stravu-editor[data-theme="dark"] .kanban-card-description {
-  border-top-color: var(--stravu-editor-border);
-  color: var(--text-secondary);
-}
-
-.stravu-editor[data-theme="dark"] .kanban-column-content.drag-over {
-  background: var(--stravu-hover-bg);
-  border-color: var(--stravu-focus-border);
-}
-
-.stravu-editor[data-theme="dark"] .card-drop-indicator {
-  background: var(--stravu-focus-border);
-}
-
-/* Crystal Dark theme support */
-.stravu-editor[data-theme="crystal-dark"] .kanban-board {
-  background: var(--surface-secondary);
-  border-color: var(--stravu-editor-border);
-}
-
-.stravu-editor[data-theme="crystal-dark"] .kanban-board:hover {
-  border-color: var(--stravu-focus-border);
-}
-
-.stravu-editor[data-theme="crystal-dark"] .board-settings-button {
-  background: var(--surface-tertiary);
-  border-color: var(--stravu-editor-border);
-  color: var(--text-primary);
-}
-
-.stravu-editor[data-theme="crystal-dark"] .board-settings-button:hover {
-  background: var(--stravu-hover-bg);
-  border-color: var(--stravu-focus-border);
-}
-
-.stravu-editor[data-theme="crystal-dark"] .kanban-add-column-button {
-  background: var(--surface-tertiary);
-  border-color: var(--stravu-editor-border);
-  color: var(--text-secondary);
-}
-
-.stravu-editor[data-theme="crystal-dark"] .kanban-add-column-button:hover {
-  background: var(--stravu-hover-bg);
-  border-color: var(--stravu-focus-border);
-  color: var(--stravu-link-color);
-}
-
-.stravu-editor[data-theme="crystal-dark"] .kanban-column {
-  background: var(--surface-tertiary);
-  border-color: var(--stravu-editor-border);
-}
-
-.stravu-editor[data-theme="crystal-dark"] .kanban-column-header {
-  background: var(--surface-secondary);
-  border-bottom-color: var(--stravu-editor-border);
-}
-
-.stravu-editor[data-theme="crystal-dark"] .kanban-column-header-content {
-  color: var(--text-primary);
-}
-
-.stravu-editor[data-theme="crystal-dark"] .kanban-column-drag-handle .material-symbols-outlined {
-  color: var(--text-secondary);
-}
-
-.stravu-editor[data-theme="crystal-dark"] .kanban-column-delete .material-symbols-outlined {
-  color: var(--text-secondary);
-}
-
-.stravu-editor[data-theme="crystal-dark"] .kanban-column-menu-button .material-symbols-outlined {
-  color: var(--text-secondary);
-}
-
-.stravu-editor[data-theme="crystal-dark"] .kanban-column-menu-button:hover {
-  background: var(--stravu-hover-bg);
-}
-
-.stravu-editor[data-theme="crystal-dark"] .kanban-column-menu-button:hover .material-symbols-outlined {
-  color: var(--text-primary);
-}
-
-.stravu-editor[data-theme="crystal-dark"] .kanban-column-content {
-  background: var(--surface-tertiary);
-}
-
-.stravu-editor[data-theme="crystal-dark"] .kanban-add-card-button {
-  border-color: var(--stravu-editor-border);
-  color: var(--text-secondary);
-}
-
-.stravu-editor[data-theme="crystal-dark"] .kanban-add-card-button:hover {
-  background: var(--stravu-hover-bg);
-  border-color: var(--stravu-focus-border);
-  color: var(--stravu-link-color);
-}
-
-.stravu-editor[data-theme="crystal-dark"] .kanban-card {
-  background: var(--surface-secondary);
-  border-color: var(--stravu-editor-border);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-}
-
-.stravu-editor[data-theme="crystal-dark"] .kanban-card:hover {
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
-}
-
-/* Removed crystal-dark theme focus-within border styling */
-
-.stravu-editor[data-theme="crystal-dark"] .kanban-card-content p {
-  color: var(--text-primary);
-}
-
-.stravu-editor[data-theme="crystal-dark"] .kanban-card-edit .material-symbols-outlined {
-  color: var(--text-secondary);
-}
-
-.stravu-editor[data-theme="crystal-dark"] .kanban-card-edit:hover {
-  background: var(--stravu-focus-border);
-}
-
-.stravu-editor[data-theme="crystal-dark"] .kanban-card-delete .material-symbols-outlined {
-  color: var(--text-secondary);
-}
-
-.stravu-editor[data-theme="crystal-dark"] .kanban-card-meta {
-  border-top-color: var(--stravu-editor-border);
-  color: var(--text-secondary);
-}
-
-.stravu-editor[data-theme="crystal-dark"] .kanban-card-description {
-  border-top-color: var(--stravu-editor-border);
-  color: var(--text-secondary);
-}
-
-.stravu-editor[data-theme="crystal-dark"] .kanban-column-content.drag-over {
-  background: var(--stravu-hover-bg);
-  border-color: var(--stravu-focus-border);
-}
-
-.stravu-editor[data-theme="crystal-dark"] .card-drop-indicator {
-  background: var(--stravu-focus-border);
 }

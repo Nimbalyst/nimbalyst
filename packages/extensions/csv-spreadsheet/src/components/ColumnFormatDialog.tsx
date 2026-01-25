@@ -108,26 +108,27 @@ export function ColumnFormatDialog({
   if (!isOpen) return null;
 
   return (
-    <div className="column-format-dialog-overlay" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[2000]" onClick={onClose}>
       <div
-        className="column-format-dialog"
+        className="bg-nim border border-nim rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.24)] min-w-[320px] max-w-[400px]"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={handleKeyDown}
       >
-        <div className="column-format-dialog-header">
-          <h3>Format Column {columnLetter}</h3>
-          <button className="dialog-close-button" onClick={onClose}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-nim">
+          <h3 className="m-0 text-base font-semibold text-nim">Format Column {columnLetter}</h3>
+          <button className="bg-none border-none text-xl text-nim-muted cursor-pointer p-0 leading-none hover:text-nim" onClick={onClose}>
             &times;
           </button>
         </div>
 
-        <div className="column-format-dialog-body">
+        <div className="px-5 py-5 flex flex-col gap-4">
           {/* Column Type */}
-          <div className="format-field">
-            <label>Type</label>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[13px] font-medium text-nim-muted">Type</label>
             <select
               value={type}
               onChange={(e) => handleTypeChange(e.target.value as ColumnType)}
+              className="px-3 py-2 text-sm bg-nim-secondary border border-nim rounded text-nim outline-none focus:border-[var(--nim-primary)] focus:shadow-[0_0_0_2px_rgba(59,130,246,0.2)]"
             >
               {COLUMN_TYPES.map((t) => (
                 <option key={t} value={t}>
@@ -139,26 +140,28 @@ export function ColumnFormatDialog({
 
           {/* Decimal Places (for number, currency, percentage) */}
           {(type === 'number' || type === 'currency' || type === 'percentage') && (
-            <div className="format-field">
-              <label>Decimal Places</label>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[13px] font-medium text-nim-muted">Decimal Places</label>
               <input
                 type="number"
                 min={0}
                 max={10}
                 value={decimals}
                 onChange={(e) => setDecimals(Math.max(0, Math.min(10, parseInt(e.target.value) || 0)))}
+                className="px-3 py-2 text-sm bg-nim-secondary border border-nim rounded text-nim outline-none focus:border-[var(--nim-primary)] focus:shadow-[0_0_0_2px_rgba(59,130,246,0.2)]"
               />
             </div>
           )}
 
           {/* Thousands Separator (for number, currency) */}
           {(type === 'number' || type === 'currency') && (
-            <div className="format-field format-field-checkbox">
-              <label>
+            <div className="flex flex-row items-center">
+              <label className="flex items-center gap-2 cursor-pointer font-normal text-nim">
                 <input
                   type="checkbox"
                   checked={showThousandsSeparator}
                   onChange={(e) => setShowThousandsSeparator(e.target.checked)}
+                  className="w-4 h-4 accent-[var(--nim-primary)]"
                 />
                 Show thousands separator
               </label>
@@ -167,11 +170,12 @@ export function ColumnFormatDialog({
 
           {/* Currency (for currency type) */}
           {type === 'currency' && (
-            <div className="format-field">
-              <label>Currency</label>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[13px] font-medium text-nim-muted">Currency</label>
               <select
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value as CurrencyCode)}
+                className="px-3 py-2 text-sm bg-nim-secondary border border-nim rounded text-nim outline-none focus:border-[var(--nim-primary)] focus:shadow-[0_0_0_2px_rgba(59,130,246,0.2)]"
               >
                 {CURRENCIES.map((c) => (
                   <option key={c} value={c}>
@@ -184,11 +188,12 @@ export function ColumnFormatDialog({
 
           {/* Date Format (for date type) */}
           {type === 'date' && (
-            <div className="format-field">
-              <label>Date Format</label>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[13px] font-medium text-nim-muted">Date Format</label>
               <select
                 value={dateFormat}
                 onChange={(e) => setDateFormat(e.target.value as DateFormat)}
+                className="px-3 py-2 text-sm bg-nim-secondary border border-nim rounded text-nim outline-none focus:border-[var(--nim-primary)] focus:shadow-[0_0_0_2px_rgba(59,130,246,0.2)]"
               >
                 {DATE_FORMATS.map((f) => (
                   <option key={f} value={f}>
@@ -200,11 +205,17 @@ export function ColumnFormatDialog({
           )}
         </div>
 
-        <div className="column-format-dialog-footer">
-          <button className="dialog-button secondary" onClick={onClose}>
+        <div className="flex justify-end gap-2 px-5 py-4 border-t border-nim">
+          <button
+            className="px-4 py-2 text-sm font-medium rounded cursor-pointer transition-all bg-nim-secondary border border-nim text-nim hover:bg-nim-hover"
+            onClick={onClose}
+          >
             Cancel
           </button>
-          <button className="dialog-button primary" onClick={handleSave}>
+          <button
+            className="px-4 py-2 text-sm font-medium rounded cursor-pointer transition-all bg-[var(--nim-primary)] border border-[var(--nim-primary)] text-white hover:opacity-90"
+            onClick={handleSave}
+          >
             Apply
           </button>
         </div>

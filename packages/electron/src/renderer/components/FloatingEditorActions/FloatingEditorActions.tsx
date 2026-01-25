@@ -17,7 +17,6 @@
  */
 
 import React from 'react';
-import './FloatingEditorActions.css';
 
 interface FloatingEditorActionsProps {
   children: React.ReactNode;
@@ -30,7 +29,11 @@ interface FloatingEditorActionsProps {
 export const FloatingEditorActions: React.FC<FloatingEditorActionsProps> = ({
   children,
 }) => {
-  return <div className="floating-editor-actions">{children}</div>;
+  return (
+    <div className="floating-editor-actions absolute top-1.5 right-3 flex gap-2 z-[100] pointer-events-none">
+      {children}
+    </div>
+  );
 };
 
 interface FloatingEditorButtonProps {
@@ -59,14 +62,14 @@ export const FloatingEditorButton: React.FC<FloatingEditorButtonProps> = ({
 }) => {
   return (
     <button
-      className={`floating-editor-button ${isActive ? 'active' : ''}`}
+      className={`floating-editor-button pointer-events-auto w-9 h-9 rounded-md border border-[var(--nim-border)] bg-[var(--nim-bg)] cursor-pointer flex items-center justify-center transition-all duration-200 p-0 text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${isActive ? 'active bg-[var(--nim-primary)] text-white border-[var(--nim-primary)]' : ''}`}
       onClick={onClick}
       disabled={disabled}
       title={label}
       aria-label={label}
     >
       {typeof icon === 'string' ? (
-        <span className="material-symbols-outlined">{icon}</span>
+        <span className="material-symbols-outlined text-xl opacity-80 group-hover:opacity-100">{icon}</span>
       ) : (
         icon
       )}
@@ -92,8 +95,13 @@ export const FloatingEditorMenu: React.FC<FloatingEditorMenuProps> = ({
 
   return (
     <>
-      <div className="floating-editor-menu-backdrop" onClick={onClose} />
-      <div className="floating-editor-menu">{children}</div>
+      <div
+        className="floating-editor-menu-backdrop fixed inset-0 z-[99]"
+        onClick={onClose}
+      />
+      <div className="floating-editor-menu absolute top-11 right-0 min-w-[180px] bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)] z-[100] pointer-events-auto py-1">
+        {children}
+      </div>
     </>
   );
 };
@@ -113,12 +121,12 @@ export const FloatingEditorMenuItem: React.FC<FloatingEditorMenuItemProps> = ({
 }) => {
   return (
     <button
-      className={`floating-editor-menu-item ${isActive ? 'active' : ''}`}
+      className={`floating-editor-menu-item w-full px-4 py-2.5 border-none bg-transparent text-[var(--nim-text)] text-sm text-left cursor-pointer transition-colors duration-150 flex items-center gap-2.5 hover:bg-[var(--nim-bg-hover)] active:bg-[var(--nim-bg-secondary)] ${isActive ? 'active text-[var(--nim-primary)]' : ''}`}
       onClick={onClick}
     >
-      {icon && <span className="material-symbols-outlined">{icon}</span>}
+      {icon && <span className="material-symbols-outlined text-lg opacity-80">{icon}</span>}
       <span>{label}</span>
-      {isActive && <span className="checkmark">✓</span>}
+      {isActive && <span className="checkmark ml-auto text-[var(--nim-primary)]">✓</span>}
     </button>
   );
 };

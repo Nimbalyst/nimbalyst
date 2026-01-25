@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import type { LexicalEditor } from 'lexical';
 import { $getRoot, $getNodeByKey, $isTextNode, $createRangeSelection, $setSelection } from 'lexical';
 import { SearchReplaceStateManager } from './SearchReplaceStateManager';
+// Only contains global highlight styles for dynamically applied classes
 import './SearchReplaceBar.css';
 
 interface SearchReplaceBarProps {
@@ -649,12 +650,16 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
     return null;
   }
 
+  // Common styles
+  const inputStyles = "w-full px-2.5 py-1.5 text-[13px] border border-[var(--nim-border)] rounded bg-[var(--nim-bg)] text-[var(--nim-text)] outline-none transition-colors duration-150 focus:border-[var(--nim-primary)] placeholder:text-[var(--nim-text-faint)]";
+  const navButtonStyles = "bg-transparent border border-[var(--nim-border)] rounded w-6 h-6 flex items-center justify-center cursor-pointer text-[var(--nim-text)] p-0 transition-colors duration-150 hover:enabled:bg-[var(--nim-bg-hover)] disabled:opacity-40 disabled:cursor-not-allowed";
+
   return (
-    <div className="search-replace-bar" data-testid="search-replace-bar">
+    <div className="search-replace-bar bg-[var(--nim-bg-secondary)] border-b border-[var(--nim-border)] px-4 py-2 flex flex-col gap-2" data-testid="search-replace-bar">
       {/* First row: search input + options + navigation + close */}
-      <div className="search-replace-bar-content">
+      <div className="search-replace-bar-content flex items-center w-full gap-3">
         {/* Search icon */}
-        <span className="search-replace-bar-icon">
+        <span className="search-replace-bar-icon flex items-center text-[var(--nim-text-muted)] shrink-0">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.5"/>
             <path d="M10 10L13 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
@@ -662,11 +667,11 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
         </span>
 
         {/* Search input */}
-        <div className="search-replace-input-group">
+        <div className="search-replace-input-group flex-auto min-w-[120px] max-w-[400px]">
           <input
             ref={searchInputRef}
             type="text"
-            className="search-replace-input"
+            className={`search-replace-input ${inputStyles}`}
             placeholder="Find..."
             value={searchString}
             tabIndex={1}
@@ -689,9 +694,9 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
         </div>
 
         {/* Options */}
-        <div className="search-replace-options">
+        <div className="search-replace-options flex gap-1 shrink-0">
           <button
-            className={`search-option-button ${!caseInsensitive ? 'active' : ''}`}
+            className={`search-option-button w-7 h-7 flex items-center justify-center bg-transparent border border-[var(--nim-border)] rounded text-[var(--nim-text-muted)] text-xs font-semibold cursor-pointer transition-all duration-150 p-0 hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)] ${!caseInsensitive ? 'bg-[var(--nim-primary)] border-[var(--nim-primary)] text-white' : ''}`}
             tabIndex={-1}
             onClick={() => {
               const newValue = !caseInsensitive;
@@ -704,7 +709,7 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
             Aa
           </button>
           <button
-            className={`search-option-button ${useRegex ? 'active' : ''}`}
+            className={`search-option-button w-7 h-7 flex items-center justify-center bg-transparent border border-[var(--nim-border)] rounded text-[var(--nim-text-muted)] text-xs font-semibold cursor-pointer transition-all duration-150 p-0 hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)] ${useRegex ? 'bg-[var(--nim-primary)] border-[var(--nim-primary)] text-white' : ''}`}
             tabIndex={-1}
             onClick={() => {
               const newValue = !useRegex;
@@ -719,19 +724,19 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
         </div>
 
         {/* Navigation */}
-        <div className="search-replace-navigation">
+        <div className="search-replace-navigation flex items-center gap-2 shrink-0">
           <button
             onClick={handlePrevious}
             disabled={matches.length === 0}
             tabIndex={-1}
             aria-label="Previous match"
-            className="search-nav-button"
+            className={`search-nav-button ${navButtonStyles}`}
           >
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
               <path d="M6 9L3 6L6 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </button>
-          <span className="search-match-counter" data-testid="match-counter">
+          <span className="search-match-counter text-[13px] text-[var(--nim-text-muted)] min-w-20 text-center select-none" data-testid="match-counter">
             {matches.length > 0 ? `${currentMatchIndex + 1} of ${matches.length}` : searchString ? 'No results' : ''}
           </span>
           <button
@@ -739,7 +744,7 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
             disabled={matches.length === 0}
             tabIndex={-1}
             aria-label="Next match"
-            className="search-nav-button"
+            className={`search-nav-button ${navButtonStyles}`}
           >
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
               <path d="M6 3L9 6L6 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -749,7 +754,7 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
 
         {/* Close button */}
         <button
-          className="search-replace-close"
+          className="search-replace-close bg-transparent border border-[var(--nim-border)] rounded w-7 h-7 flex items-center justify-center cursor-pointer text-[var(--nim-text-muted)] p-0 transition-all duration-150 shrink-0 hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]"
           onClick={handleClose}
           tabIndex={-1}
           aria-label="Close search"
@@ -762,9 +767,9 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
       </div>
 
       {/* Second row: replace input + actions */}
-      <div className="search-replace-bar-content">
+      <div className="search-replace-bar-content flex items-center w-full gap-3">
         {/* Spacer to align with search input */}
-        <span className="search-replace-bar-icon" style={{ visibility: 'hidden' }}>
+        <span className="search-replace-bar-icon flex items-center text-[var(--nim-text-muted)] shrink-0 invisible">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.5"/>
             <path d="M10 10L13 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
@@ -772,10 +777,10 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
         </span>
 
         {/* Replace input */}
-        <div className="search-replace-input-group">
+        <div className="search-replace-input-group flex-auto min-w-[120px] max-w-[400px]">
           <input
             type="text"
-            className="search-replace-input"
+            className={`search-replace-input ${inputStyles}`}
             placeholder="Replace..."
             value={replaceString}
             tabIndex={2}
@@ -798,9 +803,9 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
         </div>
 
         {/* Actions */}
-        <div className="search-replace-actions">
+        <div className="search-replace-actions flex gap-2 ml-auto shrink-0">
           <button
-            className="search-replace-button"
+            className="search-replace-button px-3 py-1.5 rounded-md text-[13px] font-medium cursor-pointer transition-all duration-200 bg-transparent border border-[var(--nim-border)] text-[var(--nim-text)] whitespace-nowrap hover:enabled:bg-[var(--nim-bg-hover)] disabled:opacity-40 disabled:cursor-not-allowed"
             onClick={handleReplace}
             disabled={currentMatchIndex < 0}
             tabIndex={3}
@@ -809,7 +814,7 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
             Replace
           </button>
           <button
-            className="search-replace-button"
+            className="search-replace-button px-3 py-1.5 rounded-md text-[13px] font-medium cursor-pointer transition-all duration-200 bg-transparent border border-[var(--nim-border)] text-[var(--nim-text)] whitespace-nowrap hover:enabled:bg-[var(--nim-bg-hover)] disabled:opacity-40 disabled:cursor-not-allowed"
             onClick={handleReplaceAll}
             disabled={matches.length === 0}
             tabIndex={4}

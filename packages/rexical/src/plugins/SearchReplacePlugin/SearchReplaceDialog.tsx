@@ -299,7 +299,9 @@ export const SearchReplaceDialog = forwardRef<SearchReplaceDialogHandle, SearchR
   return (
     <div
       ref={dialogRef}
-      className={`search-replace-dialog ${isDragging ? 'is-dragging' : ''}`}
+      className={`search-replace-dialog fixed top-20 right-5 w-[520px] max-w-[calc(100%-40px)] bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded-lg shadow-[0_4px_12px_rgba(0,0,0,0.15)] z-[500] font-sans text-sm select-none transition-shadow ${
+        isDragging ? 'shadow-[0_8px_24px_rgba(0,0,0,0.35)] opacity-95' : ''
+      }`}
       data-theme={theme}
       style={{
         transform: `translate(${position.x}px, ${position.y}px)`,
@@ -307,9 +309,9 @@ export const SearchReplaceDialog = forwardRef<SearchReplaceDialogHandle, SearchR
       }}
       onMouseDown={handleMouseDown}
     >
-      <div className="search-replace-header" style={{ cursor: 'grab' }}>
-        <span className="search-replace-title">Find and Replace</span>
-        <span className={'search-replace-count'}>
+      <div className={`search-replace-header flex justify-between items-center px-4 py-1.5 border-b border-[var(--nim-border)] ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}>
+        <span className="search-replace-title font-semibold text-[var(--nim-text)]">Find and Replace</span>
+        <span className="search-replace-count text-xs text-[var(--nim-text-muted)] whitespace-nowrap px-2 flex items-center">
           {matches.length > 0 ? (
             <>
               {currentMatchIndex + 1} of {matches.length}
@@ -319,22 +321,22 @@ export const SearchReplaceDialog = forwardRef<SearchReplaceDialogHandle, SearchR
           ) : null}
         </span>
         <button
-          className="search-replace-close"
+          className="search-replace-close w-6 h-6 flex items-center justify-center bg-transparent border-none rounded cursor-pointer text-xl text-[var(--nim-text)] transition-colors hover:bg-[var(--nim-bg-hover)]"
           onClick={onClose}
           aria-label="Close search"
           title="Close (Esc)"
         >
-          ×
+          x
         </button>
       </div>
 
-      <div className="search-replace-content">
-        <div className="search-replace-row">
-          <div className="search-replace-input-group">
+      <div className="search-replace-content p-4 flex flex-col gap-3">
+        <div className="search-replace-row flex gap-2 items-center flex-nowrap">
+          <div className="search-replace-input-group flex-[0_0_290px] min-w-0 relative">
             <input
               ref={searchInputRef}
               type="text"
-              className="search-replace-input"
+              className="search-replace-input w-full py-2 px-3 border border-[var(--nim-border)] rounded bg-[var(--nim-bg)] text-[var(--nim-text)] text-sm outline-none transition-colors h-8 box-border focus:border-[var(--nim-border-focus)]"
               placeholder="Find..."
               value={searchString}
               onChange={(e) => onSearchChange(e.target.value)}
@@ -344,11 +346,13 @@ export const SearchReplaceDialog = forwardRef<SearchReplaceDialogHandle, SearchR
               tabIndex={1}
             />
             {showSearchHistory && searchHistory.length > 0 && (
-              <div className="search-history-dropdown">
+              <div className="search-history-dropdown absolute top-full left-0 right-0 mt-1 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded shadow-[0_4px_12px_rgba(0,0,0,0.15)] max-h-[200px] overflow-y-auto z-[501]">
                 {searchHistory.map((item, index) => (
                   <div
                     key={index}
-                    className={`history-item ${index === searchHistoryIndex ? 'selected' : ''}`}
+                    className={`history-item py-2 px-3 cursor-pointer text-sm text-[var(--nim-text)] transition-colors whitespace-nowrap overflow-hidden text-ellipsis hover:bg-[var(--nim-bg-hover)] ${
+                      index === searchHistoryIndex ? 'bg-[var(--nim-bg-selected)]' : ''
+                    }`}
                     onMouseDown={(e) => {
                       e.preventDefault();
                       onSearchChange(item);
@@ -362,9 +366,13 @@ export const SearchReplaceDialog = forwardRef<SearchReplaceDialogHandle, SearchR
             )}
           </div>
 
-          <div className="search-replace-options">
+          <div className="search-replace-options flex gap-1 shrink-0">
             <button
-              className={`search-replace-option ${caseInsensitive ? '' : 'active'}`}
+              className={`search-replace-option w-8 h-8 flex items-center justify-center border rounded cursor-pointer text-xs font-semibold transition-all shrink-0 ${
+                caseInsensitive
+                  ? 'bg-[var(--nim-bg)] border-[var(--nim-border)] text-[var(--nim-text-muted)] hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]'
+                  : 'bg-[var(--nim-primary)] border-[var(--nim-primary)] text-white'
+              }`}
               onClick={() => onCaseInsensitiveChange(!caseInsensitive)}
               title={caseInsensitive ? 'Case insensitive' : 'Case sensitive'}
               aria-label={caseInsensitive ? 'Case insensitive' : 'Case sensitive'}
@@ -373,7 +381,11 @@ export const SearchReplaceDialog = forwardRef<SearchReplaceDialogHandle, SearchR
               Aa
             </button>
             <button
-              className={`search-replace-option ${useRegex ? 'active' : ''}`}
+              className={`search-replace-option w-8 h-8 flex items-center justify-center border rounded cursor-pointer text-xs font-semibold transition-all shrink-0 ${
+                useRegex
+                  ? 'bg-[var(--nim-primary)] border-[var(--nim-primary)] text-white'
+                  : 'bg-[var(--nim-bg)] border-[var(--nim-border)] text-[var(--nim-text-muted)] hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]'
+              }`}
               onClick={() => onUseRegexChange(!useRegex)}
               title={useRegex ? 'Regular expression' : 'Plain text'}
               aria-label={useRegex ? 'Regular expression' : 'Plain text'}
@@ -383,34 +395,34 @@ export const SearchReplaceDialog = forwardRef<SearchReplaceDialogHandle, SearchR
             </button>
           </div>
 
-          <div className="search-replace-nav">
+          <div className="search-replace-nav flex gap-1 shrink-0">
             <button
-              className="search-replace-nav-button"
+              className="search-replace-nav-button w-8 h-8 flex items-center justify-center bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded cursor-pointer text-[var(--nim-text)] text-base transition-all shrink-0 hover:bg-[var(--nim-bg-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={onPrevious}
               disabled={matches.length === 0}
               title="Previous match (Shift+Enter)"
               aria-label="Previous match"
             >
-              ↑
+              <span className="up-arrow"></span>
             </button>
             <button
-              className="search-replace-nav-button"
+              className="search-replace-nav-button w-8 h-8 flex items-center justify-center bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded cursor-pointer text-[var(--nim-text)] text-base transition-all shrink-0 hover:bg-[var(--nim-bg-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={onNext}
               disabled={matches.length === 0}
               title="Next match (Enter)"
               aria-label="Next match"
             >
-              ↓
+              <span className="down-arrow"></span>
             </button>
           </div>
         </div>
 
-        <div className="search-replace-row">
-          <div className="search-replace-input-group">
+        <div className="search-replace-row flex gap-2 items-center flex-nowrap">
+          <div className="search-replace-input-group flex-[0_0_290px] min-w-0 relative">
             <input
               ref={replaceInputRef}
               type="text"
-              className="search-replace-input search-replace-input-replace"
+              className="search-replace-input w-full py-2 px-3 border border-[var(--nim-border)] rounded bg-[var(--nim-bg)] text-[var(--nim-text)] text-sm outline-none transition-colors h-8 box-border focus:border-[var(--nim-border-focus)]"
               placeholder="Replace..."
               value={replaceString}
               onChange={(e) => onReplaceChange(e.target.value)}
@@ -420,11 +432,13 @@ export const SearchReplaceDialog = forwardRef<SearchReplaceDialogHandle, SearchR
               tabIndex={2}
             />
             {showReplaceHistory && replaceHistory.length > 0 && (
-              <div className="search-history-dropdown">
+              <div className="search-history-dropdown absolute top-full left-0 right-0 mt-1 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded shadow-[0_4px_12px_rgba(0,0,0,0.15)] max-h-[200px] overflow-y-auto z-[501]">
                 {replaceHistory.map((item, index) => (
                   <div
                     key={index}
-                    className={`history-item ${index === replaceHistoryIndex ? 'selected' : ''}`}
+                    className={`history-item py-2 px-3 cursor-pointer text-sm text-[var(--nim-text)] transition-colors whitespace-nowrap overflow-hidden text-ellipsis hover:bg-[var(--nim-bg-hover)] ${
+                      index === replaceHistoryIndex ? 'bg-[var(--nim-bg-selected)]' : ''
+                    }`}
                     onMouseDown={(e) => {
                       e.preventDefault();
                       onReplaceChange(item);
@@ -438,9 +452,9 @@ export const SearchReplaceDialog = forwardRef<SearchReplaceDialogHandle, SearchR
             )}
           </div>
 
-          <div className="search-replace-actions">
+          <div className="search-replace-actions flex gap-2 shrink-0">
             <button
-              className="search-replace-button"
+              className="search-replace-button py-2.5 px-4 bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)] border-none rounded text-sm cursor-pointer transition-colors whitespace-nowrap hover:bg-[var(--nim-bg-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={handleReplace}
               disabled={matches.length === 0}
               title="Replace (Cmd/Ctrl+Enter)"
@@ -448,7 +462,7 @@ export const SearchReplaceDialog = forwardRef<SearchReplaceDialogHandle, SearchR
               Replace
             </button>
             <button
-              className="search-replace-button"
+              className="search-replace-button py-2.5 px-4 bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)] border-none rounded text-sm cursor-pointer transition-colors whitespace-nowrap hover:bg-[var(--nim-bg-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={handleReplaceAll}
               disabled={matches.length === 0}
               title="Replace all (Cmd/Ctrl+Shift+Enter)"

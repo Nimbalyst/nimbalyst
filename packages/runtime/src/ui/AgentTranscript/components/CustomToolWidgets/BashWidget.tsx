@@ -11,7 +11,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import type { CustomToolWidgetProps } from './index';
-import './BashWidget.css';
 
 /**
  * Maximum number of lines to show before adding "show more" in expanded view
@@ -192,6 +191,13 @@ export const BashWidget: React.FC<CustomToolWidgetProps> = ({ message, isExpande
   const truncatedCommand = command ? truncateCommand(command, MAX_COLLAPSED_COMMAND_LENGTH) : null;
   const outputSummary = getOutputSummary(output);
 
+  // Determine border color based on state
+  const getBorderClass = () => {
+    if (hasError) return 'border-[color-mix(in_srgb,var(--nim-error)_40%,var(--nim-border))]';
+    if (isRunning) return 'border-[color-mix(in_srgb,var(--nim-primary)_40%,var(--nim-border))]';
+    return 'border-nim';
+  };
+
   // Collapsed view - two lines: description/label + command
   if (!isExpanded) {
     // Get first line of command for display
@@ -202,54 +208,54 @@ export const BashWidget: React.FC<CustomToolWidgetProps> = ({ message, isExpande
 
     return (
       <button
-        className={`bash-widget bash-widget--collapsed ${hasError ? 'bash-widget--error' : ''} ${isRunning ? 'bash-widget--running' : ''}`}
+        className={`bash-widget rounded-md bg-nim-tertiary ${getBorderClass()} border overflow-hidden font-mono flex items-center justify-between w-full py-1.5 px-2 cursor-pointer transition-colors duration-150 text-left hover:bg-nim-hover`}
         onClick={onToggle}
         type="button"
       >
-        <div className="bash-widget__collapsed-content">
-          <div className="bash-widget__collapsed-icon">
+        <div className="flex items-start gap-1.5 min-w-0 flex-1 overflow-hidden">
+          <div className="flex items-center justify-center shrink-0 text-nim-faint mt-0.5">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="4 17 10 11 4 5"></polyline>
               <line x1="12" y1="19" x2="20" y2="19"></line>
             </svg>
           </div>
-          <div className="bash-widget__collapsed-text">
+          <div className="flex flex-col gap-0.5 min-w-0 flex-1 overflow-hidden">
             {description ? (
               <>
-                <span className="bash-widget__collapsed-description">{description}</span>
+                <span className="text-xs text-nim-muted font-sans whitespace-nowrap overflow-hidden text-ellipsis">{description}</span>
                 {displayCommand && (
-                  <code className="bash-widget__collapsed-command">{displayCommand}</code>
+                  <code className="text-[0.7rem] text-nim-faint whitespace-nowrap overflow-hidden text-ellipsis">{displayCommand}</code>
                 )}
               </>
             ) : displayCommand ? (
-              <code className="bash-widget__collapsed-command">{displayCommand}</code>
+              <code className="text-[0.7rem] text-nim-faint whitespace-nowrap overflow-hidden text-ellipsis">{displayCommand}</code>
             ) : (
-              <span className="bash-widget__collapsed-label">Bash</span>
+              <span className="text-xs text-nim-faint font-sans">Bash</span>
             )}
           </div>
         </div>
-        <div className="bash-widget__collapsed-right">
+        <div className="flex items-center gap-1.5 shrink-0 ml-2">
           {isRunning && (
-            <span className="bash-widget__status bash-widget__status--running">
-              <span className="bash-widget__spinner" />
+            <span className="flex items-center gap-1 text-[0.7rem] font-medium font-sans text-nim-primary">
+              <span className="w-2.5 h-2.5 border-[1.5px] border-[color-mix(in_srgb,var(--nim-primary)_30%,transparent)] border-t-nim-primary rounded-full animate-spin" />
             </span>
           )}
           {!isRunning && !hasError && (
-            <span className="bash-widget__status bash-widget__status--success">
+            <span className="flex items-center gap-1 text-[0.7rem] font-medium font-sans text-nim-success">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="20 6 9 17 4 12"></polyline>
               </svg>
             </span>
           )}
           {!isRunning && hasError && (
-            <span className="bash-widget__status bash-widget__status--error">
+            <span className="flex items-center gap-1 text-[0.7rem] font-medium font-sans text-nim-error">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
                 <line x1="6" y1="6" x2="18" y2="18"></line>
               </svg>
             </span>
           )}
-          <svg className="bash-widget__chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg className="text-nim-faint shrink-0 transition-transform duration-150" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="9 18 15 12 9 6"></polyline>
           </svg>
         </div>
@@ -259,41 +265,41 @@ export const BashWidget: React.FC<CustomToolWidgetProps> = ({ message, isExpande
 
   // Expanded view - full details
   return (
-    <div className={`bash-widget ${hasError ? 'bash-widget--error' : ''} ${isRunning ? 'bash-widget--running' : ''}`}>
+    <div className={`bash-widget rounded-md bg-nim-tertiary ${getBorderClass()} border overflow-hidden font-mono`}>
       {/* Header with terminal icon and status */}
-      <button className="bash-widget__header" onClick={onToggle} type="button">
-        <div className="bash-widget__header-left">
-          <div className="bash-widget__icon">
+      <button className="flex items-center justify-between w-full py-1.5 px-2 bg-nim-secondary border-b border-nim gap-2 cursor-pointer transition-colors duration-150 text-left hover:bg-nim-hover" onClick={onToggle} type="button">
+        <div className="flex items-center gap-1.5">
+          <div className="flex items-center justify-center text-nim-faint">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="4 17 10 11 4 5"></polyline>
               <line x1="12" y1="19" x2="20" y2="19"></line>
             </svg>
           </div>
-          <span className="bash-widget__title">Terminal</span>
+          <span className="text-[0.7rem] font-medium text-nim-faint uppercase tracking-wide font-sans">Terminal</span>
         </div>
-        <div className="bash-widget__header-right">
+        <div className="flex items-center gap-1.5">
           {isRunning && (
-            <span className="bash-widget__status bash-widget__status--running">
-              <span className="bash-widget__spinner" />
+            <span className="flex items-center gap-1 text-[0.7rem] font-medium font-sans text-nim-primary">
+              <span className="w-2.5 h-2.5 border-[1.5px] border-[color-mix(in_srgb,var(--nim-primary)_30%,transparent)] border-t-nim-primary rounded-full animate-spin" />
               Running
             </span>
           )}
           {!isRunning && !hasError && (
-            <span className="bash-widget__status bash-widget__status--success">
+            <span className="flex items-center gap-1 text-[0.7rem] font-medium font-sans text-nim-success">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="20 6 9 17 4 12"></polyline>
               </svg>
             </span>
           )}
           {!isRunning && hasError && (
-            <span className="bash-widget__status bash-widget__status--error">
+            <span className="flex items-center gap-1 text-[0.7rem] font-medium font-sans text-nim-error">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
                 <line x1="6" y1="6" x2="18" y2="18"></line>
               </svg>
             </span>
           )}
-          <svg className="bash-widget__chevron bash-widget__chevron--expanded" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg className="text-nim-faint shrink-0 transition-transform duration-150" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="6 9 12 15 18 9"></polyline>
           </svg>
         </div>
@@ -301,20 +307,20 @@ export const BashWidget: React.FC<CustomToolWidgetProps> = ({ message, isExpande
 
       {/* Description if present */}
       {description && (
-        <div className="bash-widget__description">
+        <div className="py-1.5 px-2 text-xs text-nim-muted bg-[color-mix(in_srgb,var(--nim-primary)_5%,var(--nim-bg-secondary))] border-b border-nim font-sans leading-relaxed">
           {description}
         </div>
       )}
 
       {/* Command display */}
       {command && (
-        <div className="bash-widget__command-container">
-          <div className="bash-widget__command">
-            <span className="bash-widget__prompt">$</span>
-            <code className="bash-widget__command-text">{command}</code>
+        <div className="flex items-start gap-2 p-2 bg-nim-tertiary">
+          <div className="flex-1 flex items-start gap-1.5 min-w-0">
+            <span className="text-nim-success font-semibold shrink-0 select-none">$</span>
+            <code className="text-nim text-[0.8125rem] leading-normal break-words whitespace-pre-wrap">{command}</code>
           </div>
           <button
-            className={`bash-widget__copy ${copied ? 'bash-widget__copy--copied' : ''}`}
+            className={`shrink-0 flex items-center justify-center w-6 h-6 p-0 bg-transparent border-none rounded transition-all duration-150 opacity-60 cursor-pointer hover:bg-nim-hover hover:text-nim-muted hover:opacity-100 ${copied ? 'text-nim-success opacity-100' : 'text-nim-faint'}`}
             onClick={(e) => {
               e.stopPropagation();
               handleCopyCommand();
@@ -339,13 +345,13 @@ export const BashWidget: React.FC<CustomToolWidgetProps> = ({ message, isExpande
 
       {/* Output display */}
       {displayOutput && (
-        <div className="bash-widget__output-container">
-          <pre className={`bash-widget__output ${hasError ? 'bash-widget__output--error' : ''}`}>
+        <div className="relative border-t border-nim">
+          <pre className={`m-0 p-2 text-xs leading-normal ${hasError ? 'text-nim-error' : 'text-nim-muted'} bg-nim overflow-x-auto whitespace-pre-wrap break-words max-h-80 overflow-y-auto`}>
             {displayOutput}
           </pre>
           {needsTruncation && (
             <button
-              className="bash-widget__expand-toggle"
+              className="block w-full py-1.5 px-2 bg-nim-secondary border-t border-nim text-nim-faint text-[0.7rem] font-sans cursor-pointer text-center transition-all duration-150 hover:bg-nim-hover hover:text-nim-muted"
               onClick={() => setOutputExpanded(!outputExpanded)}
               type="button"
             >
@@ -360,11 +366,11 @@ export const BashWidget: React.FC<CustomToolWidgetProps> = ({ message, isExpande
 
       {/* Running indicator with no output yet */}
       {isRunning && !output && (
-        <div className="bash-widget__running-indicator">
-          <span className="bash-widget__dots">
-            <span></span>
-            <span></span>
-            <span></span>
+        <div className="flex items-center justify-center py-3 border-t border-nim bg-nim">
+          <span className="flex items-center gap-1">
+            <span className="w-1.5 h-1.5 bg-nim-faint rounded-full animate-bash-dot-pulse" style={{ animationDelay: '0s' }}></span>
+            <span className="w-1.5 h-1.5 bg-nim-faint rounded-full animate-bash-dot-pulse" style={{ animationDelay: '0.2s' }}></span>
+            <span className="w-1.5 h-1.5 bg-nim-faint rounded-full animate-bash-dot-pulse" style={{ animationDelay: '0.4s' }}></span>
           </span>
         </div>
       )}

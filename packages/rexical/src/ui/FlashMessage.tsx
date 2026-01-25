@@ -8,8 +8,6 @@
 
 import type {JSX} from 'react';
 
-import './FlashMessage.css';
-
 import {ReactNode} from 'react';
 import {createPortal} from 'react-dom';
 
@@ -21,8 +19,8 @@ export default function FlashMessage({
   children,
 }: FlashMessageProps): JSX.Element {
   return createPortal(
-    <div className="FlashMessage__overlay" role="dialog">
-      <p className="FlashMessage__alert" role="alert">
+    <div className="FlashMessage__overlay flex justify-center items-center fixed pointer-events-none inset-0" role="dialog">
+      <p className="FlashMessage__alert bg-black/80 text-white text-2xl rounded-[1em] py-2 px-6" role="alert">
         {children}
       </p>
     </div>,

@@ -34,7 +34,39 @@ export { RuntimeSettingsProvider, useRuntimeSettings } from './context/RuntimeSe
 
 // Themes
 export { default as PlaygroundEditorTheme } from './themes/PlaygroundEditorTheme';
+/** @deprecated Use NimbalystEditorTheme instead */
+export { default as NimbalystEditorTheme } from './themes/NimbalystEditorTheme';
 export { PRINT_STYLESHEET, wrapWithPrintStyles } from './themes/PrintTheme';
+
+// Unified Theme System Types
+export type {
+  ThemeId,
+  BuiltInThemeId,
+  ThemeColors,
+  ExtendedThemeColors,
+  Theme as NimbalystTheme,
+  ThemeContribution,
+  ThemeChangeEvent,
+} from './themes/types';
+export { isBuiltInTheme, getThemeExtensionId } from './themes/types';
+
+// Theme Registry
+export {
+  getTheme,
+  getAllThemes,
+  getBuiltInThemes,
+  getExtensionThemes,
+  getBaseThemeColors,
+  registerTheme,
+  registerThemeContribution,
+  getActiveThemeId,
+  getActiveTheme,
+  setActiveTheme,
+  onThemesChanged,
+  onActiveThemeChanged,
+  hasTheme,
+  getThemeColor,
+} from './themes/registry';
 
 // Node types - for advanced customization
 export { default as EditorNodes } from './nodes/EditorNodes';

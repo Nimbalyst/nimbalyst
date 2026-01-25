@@ -303,28 +303,28 @@ export function SQLiteBrowserCore({
 
   const renderDataTable = (result: QueryResult) => {
     if (result.columns.length === 0) {
-      return <p className="sqlite-browser-no-data">Query executed successfully (no rows returned)</p>;
+      return <p className="text-nim-muted m-0 p-4">Query executed successfully (no rows returned)</p>;
     }
 
     return (
-      <div className="sqlite-browser-data-table-wrapper">
-        <table className="sqlite-browser-data-table">
+      <div className="flex-1 overflow-auto border border-nim rounded">
+        <table className="w-full border-collapse text-xs font-mono">
           <thead>
             <tr>
               {result.columns.map((col, i) => (
-                <th key={i}>{col}</th>
+                <th key={i} className="sticky top-0 bg-nim-secondary p-2 text-left border-b border-nim font-semibold">{col}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {result.values.map((row, rowIdx) => (
-              <tr key={rowIdx}>
+              <tr key={rowIdx} className="hover:bg-nim-hover">
                 {row.map((cell, cellIdx) => (
-                  <td key={cellIdx}>
+                  <td key={cellIdx} className="p-2 border-b border-nim whitespace-nowrap max-w-[300px] overflow-hidden text-ellipsis">
                     {cell === null ? (
-                      <span className="sqlite-browser-null">NULL</span>
+                      <span className="text-nim-faint italic">NULL</span>
                     ) : typeof cell === 'object' ? (
-                      <span className="sqlite-browser-blob">[BLOB]</span>
+                      <span className="text-nim-muted italic">[BLOB]</span>
                     ) : (
                       String(cell)
                     )}
@@ -339,18 +339,25 @@ export function SQLiteBrowserCore({
   };
 
   return (
-    <div className="sqlite-browser-panel">
+    <div className="flex flex-col h-full bg-nim text-nim">
       {showHeader && (
-        <div className="sqlite-browser-header">
-          <h3>SQLite Browser</h3>
-          <div className="sqlite-browser-header-actions">
+        <div className="flex items-center justify-between p-3 border-b border-nim shrink-0">
+          <h3 className="m-0 text-sm font-semibold">SQLite Browser</h3>
+          <div className="flex gap-2">
             {onOpenClick && (
-              <button className="sqlite-browser-btn" onClick={onOpenClick} disabled={loading}>
+              <button
+                className="px-3 py-1.5 text-xs font-medium border-none rounded cursor-pointer bg-[var(--nim-primary)] text-white transition-all hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
+                onClick={onOpenClick}
+                disabled={loading}
+              >
                 {loading ? 'Loading...' : 'Open Database'}
               </button>
             )}
             {database && onClose && (
-              <button className="sqlite-browser-btn sqlite-browser-btn-secondary" onClick={onClose}>
+              <button
+                className="px-3 py-1.5 text-xs font-medium border border-nim rounded cursor-pointer bg-nim-tertiary text-nim transition-all hover:bg-[var(--nim-bg-hover)]"
+                onClick={onClose}
+              >
                 Close
               </button>
             )}
@@ -358,58 +365,61 @@ export function SQLiteBrowserCore({
         </div>
       )}
 
-      <div className="sqlite-browser-content">
+      <div className="flex-1 overflow-hidden flex flex-col">
         {error && (
-          <div className="sqlite-browser-error">
+          <div className="p-3 mx-4 my-2 bg-[rgba(239,68,68,0.1)] border border-[var(--nim-error)] rounded text-[var(--nim-error)]">
             <p>{error}</p>
           </div>
         )}
 
         {loading ? (
-          <div className="sqlite-browser-loading">
+          <div className="flex-1 flex items-center justify-center text-nim-muted">
             <p>Loading database...</p>
           </div>
         ) : !database ? (
-          <div className="sqlite-browser-empty">
-            <div className="sqlite-browser-empty-icon">
+          <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
+            <div className="mb-4 text-nim-faint">
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <ellipse cx="12" cy="5" rx="9" ry="3" />
                 <path d="M21 5v14c0 1.65-4.03 3-9 3s-9-1.35-9-3V5" />
                 <path d="M21 12c0 1.65-4.03 3-9 3s-9-1.35-9-3" />
               </svg>
             </div>
-            <p className="sqlite-browser-empty-title">No database selected</p>
-            <p className="sqlite-browser-empty-hint">
+            <p className="m-0 mb-2 text-base font-medium text-nim">No database selected</p>
+            <p className="m-0 mb-6 text-[13px] text-nim-muted max-w-[300px]">
               {onOpenClick
                 ? 'Click "Open Database" to browse a SQLite database file'
                 : 'Open a .db or .sqlite file to browse its contents'}
             </p>
             {onOpenClick && (
-              <button className="sqlite-browser-btn sqlite-browser-btn-primary" onClick={onOpenClick}>
+              <button
+                className="px-5 py-2.5 text-[13px] font-medium border-none rounded cursor-pointer bg-[var(--nim-primary)] text-white transition-all hover:opacity-90"
+                onClick={onOpenClick}
+              >
                 Open Database
               </button>
             )}
             {emptyStateExtra}
           </div>
         ) : (
-          <div className="sqlite-browser-main">
+          <div className="flex-1 flex overflow-hidden">
             {/* Sidebar with query and tables */}
-            <div className="sqlite-browser-sidebar">
-              <div className="sqlite-browser-sidebar-header">
-                <h4 title={database.path}>{database.name}</h4>
-                <span className="sqlite-browser-table-count">{database.tables.length} table(s)</span>
+            <div className="w-[220px] min-w-[180px] border-r border-nim flex flex-col overflow-hidden bg-nim-secondary">
+              <div className="p-3 border-b border-nim">
+                <h4 className="m-0 mb-1 text-[13px] font-semibold whitespace-nowrap overflow-hidden text-ellipsis" title={database.path}>{database.name}</h4>
+                <span className="text-[11px] text-nim-muted">{database.tables.length} table(s)</span>
               </div>
 
               {/* Query section */}
-              <div className="sqlite-browser-sidebar-section">
+              <div className="p-2 border-b border-nim">
                 <button
-                  className={`sqlite-browser-sidebar-item sqlite-browser-query-item ${viewMode === 'query' ? 'active' : ''}`}
+                  className={`flex items-center gap-2 w-full p-2 text-xs font-medium text-left border-none rounded cursor-pointer transition-all ${viewMode === 'query' ? 'bg-[var(--nim-primary)] text-white' : 'bg-transparent text-nim hover:bg-nim-hover'}`}
                   onClick={() => {
                     setViewMode('query');
                     setSelectedTable(null);
                   }}
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0">
                     <polyline points="4 17 10 11 4 5" />
                     <line x1="12" y1="19" x2="20" y2="19" />
                   </svg>
@@ -418,13 +428,13 @@ export function SQLiteBrowserCore({
               </div>
 
               {/* Tables section */}
-              <div className="sqlite-browser-sidebar-section">
-                <div className="sqlite-browser-sidebar-section-header">Tables</div>
-                <div className="sqlite-browser-table-list">
+              <div className="border-b border-nim last:border-b-0 flex-1 flex flex-col overflow-hidden">
+                <div className="px-3 py-1 pb-2 text-[10px] font-semibold uppercase tracking-wider text-nim-faint">Tables</div>
+                <div className="flex-1 overflow-y-auto">
                   {database.tables.map((table) => (
                     <button
                       key={table}
-                      className={`sqlite-browser-table-item ${selectedTable === table && viewMode === 'browse' ? 'active' : ''}`}
+                      className={`block w-full p-1.5 px-3 my-px text-xs font-mono text-left border-none rounded cursor-pointer transition-all ${selectedTable === table && viewMode === 'browse' ? 'bg-[var(--nim-primary)] text-white' : 'bg-transparent text-nim hover:bg-nim-hover'}`}
                       onClick={() => {
                         setViewMode('browse');
                         handleTableSelect(table);
@@ -438,44 +448,44 @@ export function SQLiteBrowserCore({
             </div>
 
             {/* Main content area */}
-            <div className="sqlite-browser-detail">
+            <div className="flex-1 flex flex-col overflow-hidden">
               {viewMode === 'browse' ? (
-                <div className="sqlite-browser-browse">
+                <div className="flex-1 flex flex-col overflow-hidden p-4 gap-4">
                   {selectedTable ? (
                     <>
-                      <div className="sqlite-browser-schema">
-                        <h5>Schema: {selectedTable}</h5>
-                        <div className="sqlite-browser-schema-list">
+                      <div className="shrink-0">
+                        <h5 className="m-0 mb-2 text-xs font-semibold text-nim-muted">Schema: {selectedTable}</h5>
+                        <div className="flex flex-wrap gap-2">
                           {tableSchema.map((col) => (
-                            <div key={col.name} className="sqlite-browser-schema-col">
-                              <span className="sqlite-browser-col-name">
-                                {col.pk && <span className="sqlite-browser-pk">PK</span>}
+                            <div key={col.name} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-nim-secondary rounded text-xs">
+                              <span className="font-mono font-medium">
+                                {col.pk && <span className="inline-block px-1 py-0.5 mr-1 text-[9px] font-semibold bg-[var(--nim-primary)] text-white rounded-sm">PK</span>}
                                 {col.name}
                               </span>
-                              <span className="sqlite-browser-col-type">{col.type}</span>
-                              {col.notnull && <span className="sqlite-browser-notnull">NOT NULL</span>}
+                              <span className="text-nim-muted text-[11px]">{col.type}</span>
+                              {col.notnull && <span className="text-[10px] text-[var(--nim-warning)]">NOT NULL</span>}
                             </div>
                           ))}
                         </div>
                       </div>
-                      <div className="sqlite-browser-data">
-                        <h5>Data (showing up to 100 rows)</h5>
+                      <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+                        <h5 className="m-0 mb-2 text-xs font-semibold text-nim-muted">Data (showing up to 100 rows)</h5>
                         {tableData && renderDataTable(tableData)}
                       </div>
                     </>
                   ) : (
-                    <div className="sqlite-browser-select-table">
+                    <div className="flex-1 flex items-center justify-center text-nim-muted">
                       <p>Select a table or Query from the sidebar</p>
                     </div>
                   )}
                 </div>
               ) : (
-                <div className="sqlite-browser-query-view">
-                  <div className="sqlite-browser-query-input">
-                    <div className="sqlite-browser-query-header">
-                      <div className="sqlite-browser-query-history-wrapper">
+                <div className="flex-1 flex flex-col overflow-hidden p-4 gap-4">
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-end mb-2">
+                      <div className="relative">
                         <button
-                          className="sqlite-browser-btn sqlite-browser-btn-secondary"
+                          className="px-3 py-1.5 text-xs font-medium border border-nim rounded cursor-pointer bg-nim-secondary text-nim transition-all hover:bg-nim-hover disabled:opacity-50 disabled:cursor-not-allowed"
                           onClick={() => setShowHistory(!showHistory)}
                           disabled={queryHistory.length === 0}
                           title={queryHistory.length === 0 ? 'No query history' : `${queryHistory.length} recent queries`}
@@ -483,17 +493,17 @@ export function SQLiteBrowserCore({
                           History ({queryHistory.length})
                         </button>
                         {showHistory && queryHistory.length > 0 && (
-                          <div className="sqlite-browser-query-history-dropdown">
+                          <div className="absolute top-full right-0 z-[100] w-[400px] max-h-[300px] overflow-y-auto mt-1 bg-nim border border-nim rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)]">
                             {queryHistory.map((entry, index) => (
                               <button
                                 key={index}
-                                className="sqlite-browser-query-history-item"
+                                className="flex flex-col items-start w-full p-2.5 px-3 bg-transparent border-none border-b border-nim last:border-b-0 cursor-pointer text-left transition-all hover:bg-nim-hover"
                                 onClick={() => handleSelectHistoryQuery(entry)}
                               >
-                                <span className="sqlite-browser-query-history-sql">
+                                <span className="text-xs font-mono text-nim whitespace-nowrap overflow-hidden text-ellipsis w-full">
                                   {entry.sql.length > 80 ? entry.sql.substring(0, 80) + '...' : entry.sql}
                                 </span>
-                                <span className="sqlite-browser-query-history-time">
+                                <span className="text-[10px] text-nim-faint mt-1">
                                   {formatRelativeTime(entry.timestamp)}
                                 </span>
                               </button>
@@ -508,9 +518,10 @@ export function SQLiteBrowserCore({
                       placeholder="Enter SQL query..."
                       spellCheck={false}
                       onFocus={() => setShowHistory(false)}
+                      className="w-full min-h-[100px] p-3 text-[13px] font-mono bg-nim-secondary border border-nim rounded text-nim resize-y focus:outline-none focus:border-[var(--nim-border-focus)]"
                     />
                     <button
-                      className="sqlite-browser-btn sqlite-browser-btn-primary"
+                      className="self-start px-5 py-2 text-sm font-medium rounded cursor-pointer bg-[var(--nim-primary)] text-white border-none transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
                       onClick={handleRunQuery}
                       disabled={!query.trim()}
                     >
@@ -518,13 +529,13 @@ export function SQLiteBrowserCore({
                     </button>
                   </div>
                   {queryError && (
-                    <div className="sqlite-browser-query-error">
+                    <div className="p-3 mx-0 my-0 bg-[rgba(239,68,68,0.1)] border border-[var(--nim-error)] rounded text-[var(--nim-error)]">
                       <p>{queryError}</p>
                     </div>
                   )}
                   {queryResult && (
-                    <div className="sqlite-browser-query-result">
-                      <div className="sqlite-browser-query-stats">
+                    <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+                      <div className="text-xs text-nim-muted mb-2 shrink-0">
                         {queryResult.rowCount} row(s) returned
                         {queryTime !== null && ` in ${queryTime.toFixed(1)}ms`}
                       </div>

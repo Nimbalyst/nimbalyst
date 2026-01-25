@@ -90,7 +90,7 @@ export const ExtensionConfigPanel: React.FC<ExtensionConfigPanelProps> = ({
 
   if (!config || Object.keys(properties).length === 0) {
     return (
-      <div className="extension-config-empty">
+      <div className="extension-config-empty py-8 text-center text-[var(--nim-text-muted)]">
         <p>This extension has no configurable settings.</p>
       </div>
     );
@@ -98,7 +98,7 @@ export const ExtensionConfigPanel: React.FC<ExtensionConfigPanelProps> = ({
 
   if (loading) {
     return (
-      <div className="extension-config-loading">
+      <div className="extension-config-loading py-8 text-center text-[var(--nim-text-muted)]">
         <p>Loading configuration...</p>
       </div>
     );
@@ -110,13 +110,13 @@ export const ExtensionConfigPanel: React.FC<ExtensionConfigPanelProps> = ({
   );
 
   return (
-    <div className="extension-config-panel">
+    <div className="extension-config-panel flex flex-col gap-4">
       {config.title && (
-        <div className="extension-config-header">
-          <h4>{config.title}</h4>
+        <div className="extension-config-header mb-2">
+          <h4 className="text-base font-medium text-[var(--nim-text)]">{config.title}</h4>
         </div>
       )}
-      <div className="extension-config-fields">
+      <div className="extension-config-fields flex flex-col gap-4">
         {sortedProperties.map(([key, prop]) => (
           <ConfigField
             key={key}
@@ -153,15 +153,16 @@ const ConfigField: React.FC<ConfigFieldProps> = ({
   switch (type) {
     case 'boolean':
       return (
-        <div className="config-field config-field-boolean">
-          <label className="config-field-toggle">
+        <div className="config-field config-field-boolean py-2">
+          <label className="config-field-toggle flex items-center gap-3 cursor-pointer">
             <input
               type="checkbox"
               checked={Boolean(value)}
               onChange={(e) => onChange(e.target.checked)}
               disabled={disabled}
+              className="w-4 h-4 rounded border-[var(--nim-border)] accent-[var(--nim-primary)]"
             />
-            <span className="config-field-label">{description || propertyKey}</span>
+            <span className="config-field-label text-sm text-[var(--nim-text)]">{description || propertyKey}</span>
           </label>
         </div>
       );
@@ -170,13 +171,14 @@ const ConfigField: React.FC<ConfigFieldProps> = ({
       // If has enum, render as select
       if (property.enum && property.enum.length > 0) {
         return (
-          <div className="config-field config-field-select">
-            <label className="config-field-label-block">
-              <span>{description || propertyKey}</span>
+          <div className="config-field config-field-select py-2">
+            <label className="config-field-label-block flex flex-col gap-1.5">
+              <span className="text-sm font-medium text-[var(--nim-text)]">{description || propertyKey}</span>
               <select
                 value={String(value ?? '')}
                 onChange={(e) => onChange(e.target.value)}
                 disabled={disabled}
+                className="px-3 py-1.5 rounded border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] text-[var(--nim-text)] text-sm"
               >
                 {property.enum.map((opt, idx) => (
                   <option key={String(opt)} value={String(opt)}>
@@ -191,9 +193,9 @@ const ConfigField: React.FC<ConfigFieldProps> = ({
 
       // Regular text input
       return (
-        <div className="config-field config-field-text">
-          <label className="config-field-label-block">
-            <span>{description || propertyKey}</span>
+        <div className="config-field config-field-text py-2">
+          <label className="config-field-label-block flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-[var(--nim-text)]">{description || propertyKey}</span>
             <input
               type="text"
               value={String(value ?? '')}
@@ -201,6 +203,7 @@ const ConfigField: React.FC<ConfigFieldProps> = ({
               placeholder={placeholder}
               pattern={property.pattern}
               disabled={disabled}
+              className="px-3 py-1.5 rounded border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] text-[var(--nim-text)] text-sm placeholder:text-[var(--nim-text-faint)]"
             />
           </label>
         </div>
@@ -208,9 +211,9 @@ const ConfigField: React.FC<ConfigFieldProps> = ({
 
     case 'number':
       return (
-        <div className="config-field config-field-number">
-          <label className="config-field-label-block">
-            <span>{description || propertyKey}</span>
+        <div className="config-field config-field-number py-2">
+          <label className="config-field-label-block flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-[var(--nim-text)]">{description || propertyKey}</span>
             <input
               type="number"
               value={value !== undefined ? Number(value) : ''}
@@ -219,6 +222,7 @@ const ConfigField: React.FC<ConfigFieldProps> = ({
               max={property.maximum}
               placeholder={placeholder}
               disabled={disabled}
+              className="px-3 py-1.5 rounded border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] text-[var(--nim-text)] text-sm placeholder:text-[var(--nim-text-faint)]"
             />
           </label>
         </div>
@@ -227,10 +231,10 @@ const ConfigField: React.FC<ConfigFieldProps> = ({
     default:
       // Fallback for unsupported types
       return (
-        <div className="config-field config-field-unsupported">
-          <span className="config-field-label">{description || propertyKey}</span>
-          <span className="config-field-value">{JSON.stringify(value)}</span>
-          <span className="config-field-hint">Type "{type}" not supported in UI</span>
+        <div className="config-field config-field-unsupported py-2 flex flex-col gap-1">
+          <span className="config-field-label text-sm font-medium text-[var(--nim-text)]">{description || propertyKey}</span>
+          <span className="config-field-value text-sm text-[var(--nim-text-muted)] font-mono">{JSON.stringify(value)}</span>
+          <span className="config-field-hint text-xs text-[var(--nim-text-faint)]">Type "{type}" not supported in UI</span>
         </div>
       );
   }

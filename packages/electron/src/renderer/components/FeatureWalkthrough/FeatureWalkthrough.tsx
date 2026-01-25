@@ -1,6 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { usePostHog } from 'posthog-js/react';
-import './FeatureWalkthrough.css';
 
 export interface FeatureWalkthroughProps {
   isOpen: boolean;
@@ -191,11 +190,11 @@ export const FeatureWalkthrough: React.FC<FeatureWalkthroughProps> = ({
   }
 
   return (
-    <div className="feature-walkthrough-overlay">
-      <div className="feature-walkthrough-dialog">
+    <div className="feature-walkthrough-overlay fixed inset-0 flex items-center justify-center z-[10000] backdrop-blur-[4px] bg-black/70">
+      <div className="feature-walkthrough-dialog flex flex-col overflow-hidden rounded-2xl border border-[var(--nim-border)] bg-[var(--nim-bg)] shadow-[0_8px_32px_rgba(0,0,0,0.3)] max-h-[calc(100vh-80px)] max-w-[calc(100vw-80px)]">
         {/* Image container with fixed dimensions based on largest image */}
         <div
-          className="feature-walkthrough-image-container"
+          className="feature-walkthrough-image-container relative flex items-center justify-center p-6 overflow-hidden border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] box-content"
           style={{
             width: displayWidth,
             height: displayHeight,
@@ -206,21 +205,26 @@ export const FeatureWalkthrough: React.FC<FeatureWalkthroughProps> = ({
           <img
             src={slide.image}
             alt={slide.title}
-            className="feature-walkthrough-image"
+            className="feature-walkthrough-image w-full h-full object-contain rounded-lg shadow-[0_4px_12px_rgba(0,0,0,0.15)]"
+            style={{ imageRendering: 'auto' }}
           />
         </div>
 
         {/* Content - title only since images contain descriptions */}
-        <div className="feature-walkthrough-content">
-          <h2 className="feature-walkthrough-title">{slide.title}</h2>
+        <div className="feature-walkthrough-content px-8 py-6 text-center">
+          <h2 className="feature-walkthrough-title m-0 text-[22px] font-semibold leading-[1.3] text-[var(--nim-text)]">{slide.title}</h2>
         </div>
 
         {/* Dots indicator */}
-        <div className="feature-walkthrough-dots">
+        <div className="feature-walkthrough-dots flex justify-center gap-2 px-8 pb-4">
           {WALKTHROUGH_SLIDES.map((_, index) => (
             <button
               key={index}
-              className={`feature-walkthrough-dot ${index === currentSlide ? 'active' : ''}`}
+              className={`feature-walkthrough-dot p-0 border-none cursor-pointer transition-all duration-200 ${
+                index === currentSlide
+                  ? 'active w-6 h-2.5 rounded-[5px] bg-[var(--nim-primary)]'
+                  : 'w-2.5 h-2.5 rounded-full bg-[var(--nim-bg-tertiary)] hover:bg-[var(--nim-text-faint)]'
+              }`}
               onClick={() => handleDotClick(index)}
               aria-label={`Go to slide ${index + 1}`}
             />
@@ -228,24 +232,24 @@ export const FeatureWalkthrough: React.FC<FeatureWalkthroughProps> = ({
         </div>
 
         {/* Footer with buttons */}
-        <div className="feature-walkthrough-footer">
+        <div className="feature-walkthrough-footer flex justify-between items-center px-8 pt-4 pb-6 border-t border-[var(--nim-border)]">
           <button
-            className="feature-walkthrough-skip-button"
+            className="feature-walkthrough-skip-button px-5 py-2.5 text-sm font-medium bg-transparent border-none rounded-lg cursor-pointer transition-all duration-150 text-[var(--nim-text-faint)] hover:text-[var(--nim-text-muted)] hover:bg-[var(--nim-bg-hover)]"
             onClick={handleSkip}
           >
             Skip
           </button>
-          <div className="feature-walkthrough-nav-buttons">
+          <div className="feature-walkthrough-nav-buttons flex gap-3">
             {currentSlide > 0 && (
               <button
-                className="feature-walkthrough-nav-button secondary"
+                className="feature-walkthrough-nav-button secondary px-7 py-3 text-[15px] font-semibold rounded-lg cursor-pointer transition-all duration-150 border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] text-[var(--nim-text-muted)] hover:bg-[var(--nim-bg-tertiary)] hover:text-[var(--nim-text)]"
                 onClick={handlePrevious}
               >
                 Previous
               </button>
             )}
             <button
-              className="feature-walkthrough-nav-button primary"
+              className="feature-walkthrough-nav-button primary px-7 py-3 text-[15px] font-semibold rounded-lg cursor-pointer transition-all duration-150 border-none text-white bg-[var(--nim-primary)] shadow-[0_2px_8px_rgba(59,130,246,0.2)] hover:bg-[var(--nim-primary-hover)] hover:shadow-[0_4px_12px_rgba(59,130,246,0.3)] hover:-translate-y-px active:translate-y-0"
               onClick={handleNext}
             >
               {isLastSlide ? 'Get Started' : 'Next'}

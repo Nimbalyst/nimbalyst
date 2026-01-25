@@ -476,7 +476,7 @@ function schedulePersist(workstreamId: string): void {
           [workstreamId]: state,
         },
       });
-      console.log(`[workstreamState] Persist complete for ${workstreamId}, result:`, result);
+      // console.log(`[workstreamState] Persist complete for ${workstreamId}, result:`, result);
     } catch (err) {
       console.error('[workstreamState] Failed to persist state:', err);
     }

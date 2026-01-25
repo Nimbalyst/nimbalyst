@@ -1,6 +1,21 @@
 import React from 'react';
-import './DiffViewer.css';
 import { stripCommonContext } from '../utils/stripCommonContext';
+
+// Diff line styles - use color-mix for subtle backgrounds
+const diffLineStyles = {
+  removed: {
+    backgroundColor: 'color-mix(in srgb, var(--nim-error) 12%, transparent)',
+  },
+  removedHover: {
+    backgroundColor: 'color-mix(in srgb, var(--nim-error) 18%, transparent)',
+  },
+  added: {
+    backgroundColor: 'color-mix(in srgb, var(--nim-success) 12%, transparent)',
+  },
+  addedHover: {
+    backgroundColor: 'color-mix(in srgb, var(--nim-success) 18%, transparent)',
+  },
+};
 
 interface DiffViewerProps {
   edit: any;
@@ -32,9 +47,9 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ edit, filePath: contextF
 
     if (isClickable) {
       return (
-        <div className="diff-file-header">
+        <div className="diff-file-header px-3 py-2 bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-muted)] font-medium border-b border-[var(--nim-border)] text-[0.7rem] shrink-0">
           <button
-            className="diff-file-header-link"
+            className="diff-file-header-link bg-transparent border-none p-0 m-0 font-inherit text-[var(--nim-link)] cursor-pointer no-underline text-left hover:underline"
             onClick={handleClick}
             title={`Open ${pathToOpen}`}
           >
@@ -43,7 +58,39 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ edit, filePath: contextF
         </div>
       );
     }
-    return <div className="diff-file-header">{displayPath}</div>;
+    return <div className="diff-file-header px-3 py-2 bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-muted)] font-medium border-b border-[var(--nim-border)] text-[0.7rem] shrink-0">{displayPath}</div>;
+  };
+
+  // Render a diff line with appropriate styling
+  const renderDiffLine = (type: 'added' | 'removed' | 'info', marker: string, content: string, key: string) => {
+    const [isHovered, setIsHovered] = React.useState(false);
+
+    let bgStyle: React.CSSProperties = {};
+    let markerColor = '';
+
+    if (type === 'removed') {
+      bgStyle = isHovered ? diffLineStyles.removedHover : diffLineStyles.removed;
+      markerColor = 'text-[var(--nim-error)]';
+    } else if (type === 'added') {
+      bgStyle = isHovered ? diffLineStyles.addedHover : diffLineStyles.added;
+      markerColor = 'text-[var(--nim-success)]';
+    } else {
+      bgStyle = isHovered ? { backgroundColor: 'var(--nim-bg-hover)' } : { backgroundColor: 'var(--nim-bg-secondary)' };
+      markerColor = 'text-[var(--nim-text-faint)]';
+    }
+
+    return (
+      <div
+        key={key}
+        className={`diff-line ${type} flex items-start px-3 py-0.5 min-h-6 whitespace-pre leading-normal text-[var(--nim-text)]`}
+        style={bgStyle}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
+        <span className={`diff-line-marker inline-block w-6 shrink-0 font-semibold select-none text-center ${markerColor}`}>{marker}</span>
+        <span className="diff-line-content pl-2 leading-normal whitespace-pre">{content || ' '}</span>
+      </div>
+    );
   };
 
   // Handle single edit with old_string/new_string (Claude Code Edit tool format)
@@ -61,30 +108,20 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ edit, filePath: contextF
     const newLines = newText.split('\n');
 
     return (
-      <div className="diff-viewer" style={{ maxHeight }}>
+      <div className="diff-viewer font-mono text-xs leading-normal bg-[var(--nim-bg-secondary)] rounded-md border border-[var(--nim-border)] flex flex-col" style={{ maxHeight }}>
         {renderFileHeader(filePath)}
-        <div className="diff-content"><div className="diff-content-inner">
+        <div className="diff-content overflow-auto py-1 flex-1 min-h-0"><div className="diff-content-inner inline-block min-w-full">
           {/* Show removed lines */}
           {oldLines.length > 0 && oldLines.some((line: string) => line.trim()) && (
             <>
-              {oldLines.map((line: string, i: number) => (
-                <div key={`old-${i}`} className="diff-line removed">
-                  <span className="diff-line-marker">-</span>
-                  <span className="diff-line-content">{line || ' '}</span>
-                </div>
-              ))}
+              {oldLines.map((line: string, i: number) => renderDiffLine('removed', '-', line, `old-${i}`))}
             </>
           )}
 
           {/* Show added lines */}
           {newLines.length > 0 && newLines.some((line: string) => line.trim()) && (
             <>
-              {newLines.map((line: string, i: number) => (
-                <div key={`new-${i}`} className="diff-line added">
-                  <span className="diff-line-marker">+</span>
-                  <span className="diff-line-content">{line || ' '}</span>
-                </div>
-              ))}
+              {newLines.map((line: string, i: number) => renderDiffLine('added', '+', line, `new-${i}`))}
             </>
           )}
         </div></div>
@@ -110,30 +147,20 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ edit, filePath: contextF
           const newLines = newText.split('\n');
 
           return (
-            <div key={idx} className="diff-viewer" style={{ maxHeight, marginBottom: idx < replacements.length - 1 ? '0.5rem' : '0' }}>
+            <div key={idx} className="diff-viewer font-mono text-xs leading-normal bg-[var(--nim-bg-secondary)] rounded-md border border-[var(--nim-border)] flex flex-col" style={{ maxHeight, marginBottom: idx < replacements.length - 1 ? '0.5rem' : '0' }}>
               {renderFileHeader(`${filePath}${replacements.length > 1 ? ` (${idx + 1}/${replacements.length})` : ''}`)}
-              <div className="diff-content"><div className="diff-content-inner">
+              <div className="diff-content overflow-auto py-1 flex-1 min-h-0"><div className="diff-content-inner inline-block min-w-full">
                 {/* Show removed lines */}
                 {oldLines.length > 0 && oldLines.some((line: string) => line.trim()) && (
                   <>
-                    {oldLines.map((line: string, i: number) => (
-                      <div key={`old-${i}`} className="diff-line removed">
-                        <span className="diff-line-marker">-</span>
-                        <span className="diff-line-content">{line || ' '}</span>
-                      </div>
-                    ))}
+                    {oldLines.map((line: string, i: number) => renderDiffLine('removed', '-', line, `old-${i}`))}
                   </>
                 )}
 
                 {/* Show added lines */}
                 {newLines.length > 0 && newLines.some((line: string) => line.trim()) && (
                   <>
-                    {newLines.map((line: string, i: number) => (
-                      <div key={`new-${i}`} className="diff-line added">
-                        <span className="diff-line-marker">+</span>
-                        <span className="diff-line-content">{line || ' '}</span>
-                      </div>
-                    ))}
+                    {newLines.map((line: string, i: number) => renderDiffLine('added', '+', line, `new-${i}`))}
                   </>
                 )}
               </div></div>
@@ -148,15 +175,10 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ edit, filePath: contextF
   if (edit.content) {
     const lines = edit.content.split('\n');
     return (
-      <div className="diff-viewer" style={{ maxHeight }}>
+      <div className="diff-viewer font-mono text-xs leading-normal bg-[var(--nim-bg-secondary)] rounded-md border border-[var(--nim-border)] flex flex-col" style={{ maxHeight }}>
         {renderFileHeader(filePath)}
-        <div className="diff-content"><div className="diff-content-inner">
-          {lines.map((line: string, i: number) => (
-            <div key={`add-${i}`} className="diff-line added">
-              <span className="diff-line-marker">+</span>
-              <span className="diff-line-content">{line || ' '}</span>
-            </div>
-          ))}
+        <div className="diff-content overflow-auto py-1 flex-1 min-h-0"><div className="diff-content-inner inline-block min-w-full">
+          {lines.map((line: string, i: number) => renderDiffLine('added', '+', line, `add-${i}`))}
         </div></div>
       </div>
     );
@@ -164,21 +186,11 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ edit, filePath: contextF
 
   // Fallback: show edit details in a simple format
   return (
-    <div className="diff-viewer" style={{ maxHeight }}>
+    <div className="diff-viewer font-mono text-xs leading-normal bg-[var(--nim-bg-secondary)] rounded-md border border-[var(--nim-border)] flex flex-col" style={{ maxHeight }}>
       {renderFileHeader(filePath)}
-      <div className="diff-content"><div className="diff-content-inner">
-        {edit.operation && (
-          <div className="diff-line info">
-            <span className="diff-line-marker">•</span>
-            <span className="diff-line-content">Operation: {edit.operation}</span>
-          </div>
-        )}
-        {edit.instruction && (
-          <div className="diff-line info">
-            <span className="diff-line-marker">•</span>
-            <span className="diff-line-content">{edit.instruction}</span>
-          </div>
-        )}
+      <div className="diff-content overflow-auto py-1 flex-1 min-h-0"><div className="diff-content-inner inline-block min-w-full">
+        {edit.operation && renderDiffLine('info', '\u2022', `Operation: ${edit.operation}`, 'operation')}
+        {edit.instruction && renderDiffLine('info', '\u2022', edit.instruction, 'instruction')}
       </div></div>
     </div>
   );

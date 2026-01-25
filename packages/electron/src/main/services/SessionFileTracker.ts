@@ -192,7 +192,7 @@ export class SessionFileTracker {
         }
 
         const filePaths = extractBashFilePaths(command, workspaceId);
-        console.log('[SessionFileTracker] Extracted Bash file paths:', filePaths);
+        // console.log('[SessionFileTracker] Extracted Bash file paths:', filePaths);
 
         if (filePaths.length === 0) {
           logger.main.debug('[SessionFileTracker] No file operations detected in Bash command');
@@ -248,11 +248,11 @@ export class SessionFileTracker {
         // Ensure file watcher is attached for edited files
         // This is critical for detecting subsequent changes, even for files
         // beyond the 5000 file limit in the file tree
-        console.log(`[SessionFileTracker] Edited file detected: ${filePath}, window provided: ${!!window}, window destroyed: ${window?.isDestroyed?.()}`);
+        // console.log(`[SessionFileTracker] Edited file detected: ${filePath}, window provided: ${!!window}, window destroyed: ${window?.isDestroyed?.()}`);
         if (window && !window.isDestroyed()) {
           try {
             await startFileWatcher(window, filePath);
-            console.log(`[SessionFileTracker] Started file watcher for edited file: ${filePath}`);
+            // console.log(`[SessionFileTracker] Started file watcher for edited file: ${filePath}`);
           } catch (watchError) {
             // Log but don't fail - file watcher is not critical for tracking
             console.error(`[SessionFileTracker] Failed to start file watcher for ${filePath}:`, watchError);
@@ -268,7 +268,7 @@ export class SessionFileTracker {
         if (documentService) {
           try {
             await documentService.refreshFileMetadata(filePath);
-            console.log(`[SessionFileTracker] Refreshed tracker/metadata for: ${filePath}`);
+            // console.log(`[SessionFileTracker] Refreshed tracker/metadata for: ${filePath}`);
           } catch (refreshError) {
             // Log but don't fail - metadata refresh is not critical for tracking
             console.error(`[SessionFileTracker] Failed to refresh metadata for ${filePath}:`, refreshError);
@@ -280,7 +280,8 @@ export class SessionFileTracker {
         metadata = extractReadMetadata(toolName, args, result);
       }
 
-      // console.log('[SessionFileTracker] About to add file link:', {
+      // console.
+      // '[SessionFileTracker] About to add file link:', {
       //   sessionId,
       //   workspaceId,
       //   filePath,

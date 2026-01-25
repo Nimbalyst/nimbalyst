@@ -19,7 +19,6 @@ import type { FileEditSummary } from '@nimbalyst/runtime';
 import { diffTreeGroupByDirectoryAtom, setDiffTreeGroupByDirectoryAtom } from '../../store/atoms/projectState';
 import { workstreamSessionsAtom, sessionTitleAtom } from '../../store/atoms/sessions';
 import { GitOperationsPanel } from './GitOperationsPanel';
-import './FilesEditedSidebar.css';
 
 interface FilesEditedSidebarProps {
   /** The workstream ID (parent session ID) - files from all child sessions will be shown */
@@ -335,16 +334,16 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
   }, [workspacePath, workstreamSessions, isClearing]);
 
   return (
-    <div className="files-edited-sidebar" style={{ width }}>
+    <div className="files-edited-sidebar shrink-0 flex flex-col h-full bg-[var(--nim-bg-secondary)]" style={{ width }}>
       {/* Header with Files label and controls */}
-      <div className="files-edited-sidebar__header">
+      <div className="files-edited-sidebar__header flex items-center gap-2 px-3 py-2 border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] shrink-0">
         <MaterialSymbol icon="description" size={16} />
-        <span className="files-edited-sidebar__title">Files Edited</span>
+        <span className="files-edited-sidebar__title font-medium text-[var(--nim-text)]">Files Edited</span>
         {/* Controls */}
-        <div className="files-edited-sidebar__controls">
+        <div className="files-edited-sidebar__controls ml-auto flex gap-1">
           <button
             onClick={() => setGroupByDirectory(!groupByDirectory)}
-            className={`files-edited-sidebar__control-btn ${groupByDirectory ? 'active' : ''}`}
+            className={`files-edited-sidebar__control-btn flex items-center justify-center w-6 h-6 border-none rounded bg-transparent text-[var(--nim-text-muted)] cursor-pointer hover:enabled:bg-[var(--nim-bg-tertiary)] ${groupByDirectory ? 'bg-[var(--nim-bg-tertiary)]' : ''}`}
             title="Group by directory"
           >
             <MaterialSymbol icon="folder" size={16} />
@@ -354,7 +353,7 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
               window.dispatchEvent(new CustomEvent('file-edits-sidebar:expand-all'));
             }}
             disabled={!groupByDirectory}
-            className="files-edited-sidebar__control-btn"
+            className="files-edited-sidebar__control-btn flex items-center justify-center w-6 h-6 border-none rounded bg-transparent text-[var(--nim-text-muted)] cursor-pointer hover:enabled:bg-[var(--nim-bg-tertiary)] disabled:text-[var(--nim-text-disabled)] disabled:cursor-default disabled:opacity-50"
             title="Expand all"
           >
             <MaterialSymbol icon="unfold_more" size={16} />
@@ -364,7 +363,7 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
               window.dispatchEvent(new CustomEvent('file-edits-sidebar:collapse-all'));
             }}
             disabled={!groupByDirectory}
-            className="files-edited-sidebar__control-btn"
+            className="files-edited-sidebar__control-btn flex items-center justify-center w-6 h-6 border-none rounded bg-transparent text-[var(--nim-text-muted)] cursor-pointer hover:enabled:bg-[var(--nim-bg-tertiary)] disabled:text-[var(--nim-text-disabled)] disabled:cursor-default disabled:opacity-50"
             title="Collapse all"
           >
             <MaterialSymbol icon="unfold_less" size={16} />
@@ -374,11 +373,11 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
 
       {/* Session filter dropdown - only show if there are multiple sessions */}
       {hasMultipleSessions && (
-        <div className="files-edited-sidebar__filter">
+        <div className="files-edited-sidebar__filter px-2 py-1 border-b border-[var(--nim-border)] shrink-0">
           <select
             value={filterSessionId || ''}
             onChange={(e) => setFilterSessionId(e.target.value || null)}
-            className="files-edited-sidebar__filter-select"
+            className="files-edited-sidebar__filter-select w-full px-2 py-1 text-xs border border-[var(--nim-border)] rounded bg-[var(--nim-bg)] text-[var(--nim-text)] cursor-pointer focus:outline-none focus:border-[var(--nim-border-focus)]"
           >
             <option value="">All Sessions</option>
             {workstreamSessions.map((sessionId) => (
@@ -390,16 +389,16 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
 
       {/* Keep All button - show when there are pending files */}
       {pendingReviewFiles.size > 0 && (
-        <div className="files-edited-sidebar__keep-all-banner">
-          <div className="files-edited-sidebar__keep-all-info">
-            <MaterialSymbol icon="rate_review" size={16} className="files-edited-sidebar__keep-all-icon" />
-            <span className="files-edited-sidebar__keep-all-text">
-              <span className="files-edited-sidebar__keep-all-count">{pendingReviewFiles.size}</span>
+        <div className="files-edited-sidebar__keep-all-banner flex items-center justify-between px-3 py-2 bg-[color-mix(in_srgb,var(--nim-warning)_10%,var(--nim-bg))] border-b border-[color-mix(in_srgb,var(--nim-warning)_30%,transparent)] shrink-0">
+          <div className="files-edited-sidebar__keep-all-info flex items-center gap-2">
+            <MaterialSymbol icon="rate_review" size={16} className="files-edited-sidebar__keep-all-icon text-[var(--nim-warning)]" />
+            <span className="files-edited-sidebar__keep-all-text text-xs text-[var(--nim-warning)] font-medium">
+              <span className="files-edited-sidebar__keep-all-count font-semibold">{pendingReviewFiles.size}</span>
               {' '}file{pendingReviewFiles.size !== 1 ? 's' : ''} pending review
             </span>
           </div>
           <button
-            className="files-edited-sidebar__keep-all-btn"
+            className="files-edited-sidebar__keep-all-btn flex items-center gap-1 px-2.5 py-1 bg-transparent border border-[var(--nim-warning)] rounded text-[var(--nim-warning)] text-[11px] font-medium cursor-pointer transition-all duration-200 font-inherit hover:enabled:bg-[color-mix(in_srgb,var(--nim-warning)_15%,transparent)] disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={handleKeepAll}
             disabled={isClearing}
             title="Accept all pending AI changes"
@@ -411,7 +410,7 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
       )}
 
       {/* Files Content */}
-      <div className="files-edited-sidebar__content">
+      <div className="files-edited-sidebar__content flex-1 overflow-hidden">
         <FileEditsSidebarComponent
           fileEdits={fileEdits}
           onFileClick={onFileClick}

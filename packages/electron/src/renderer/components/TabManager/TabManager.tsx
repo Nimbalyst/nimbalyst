@@ -1,7 +1,6 @@
 import React from 'react';
 import { TabBar } from './TabBar';
 import { useTabs } from '../../contexts/TabsContext';
-import './TabManager.css';
 
 export interface Tab {
   id: string;
@@ -45,7 +44,7 @@ export const TabManager: React.FC<TabManagerProps> = ({
   const { tabs, activeTabId, switchTab, togglePin, reorderTabs } = useTabs();
 
   return (
-    <div className="tab-manager">
+    <div className="tab-manager flex flex-col h-full w-full">
       {!hideTabBar && tabs.length > 0 && (
         <TabBar
           tabs={tabs}
@@ -61,7 +60,7 @@ export const TabManager: React.FC<TabManagerProps> = ({
           isAIChatCollapsed={isAIChatCollapsed}
         />
       )}
-      <div className="tab-content">
+      <div className="tab-content flex-1 overflow-hidden relative">
         {children}
       </div>
     </div>

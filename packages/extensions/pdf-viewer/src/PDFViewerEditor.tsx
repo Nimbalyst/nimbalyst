@@ -102,25 +102,29 @@ export function PDFViewerEditor({ host }: EditorHostProps) {
 
   if (loading) {
     return (
-      <div className={`pdf-viewer-editor pdf-viewer-loading theme-${theme}`}>
-        <div className="pdf-loading-message">Loading PDF...</div>
+      <div className={`flex flex-col h-full w-full bg-nim-secondary text-nim theme-${theme}`}>
+        <div className="flex items-center justify-center h-full">
+          <div className="text-base text-nim-muted">Loading PDF...</div>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className={`pdf-viewer-editor pdf-viewer-error theme-${theme}`}>
-        <div className="pdf-error-message">
-          <h3>Error loading PDF</h3>
-          <p>{error}</p>
+      <div className={`flex flex-col h-full w-full bg-nim-secondary text-nim theme-${theme}`}>
+        <div className="flex items-center justify-center h-full p-8">
+          <div className="text-center max-w-[500px]">
+            <h3 className="text-nim mb-2">Error loading PDF</h3>
+            <p className="text-nim-muted text-sm">{error}</p>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className={`pdf-viewer-editor theme-${theme}`}>
+    <div className={`flex flex-col h-full w-full bg-nim-secondary text-nim theme-${theme}`}>
       <Toolbar
         totalPages={totalPages}
         scale={scale}

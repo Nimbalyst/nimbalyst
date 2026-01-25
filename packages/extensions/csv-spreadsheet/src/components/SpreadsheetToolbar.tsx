@@ -40,10 +40,10 @@ export function SpreadsheetToolbar({
   onRedo,
 }: SpreadsheetToolbarProps) {
   return (
-    <div className="spreadsheet-toolbar">
-      <div className="toolbar-group">
+    <div className="flex items-center gap-2 bg-nim-secondary border-b border-nim">
+      <div className="flex gap-1">
         <button
-          className="toolbar-button"
+          className="px-3 py-1.5 text-[13px] font-medium bg-nim-secondary border border-nim rounded text-nim cursor-pointer transition-all hover:bg-nim-hover active:bg-nim-tertiary disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={onUndo}
           disabled={!canUndo}
           title="Undo (Cmd+Z)"
@@ -51,7 +51,7 @@ export function SpreadsheetToolbar({
           Undo
         </button>
         <button
-          className="toolbar-button"
+          className="px-3 py-1.5 text-[13px] font-medium bg-nim-secondary border border-nim rounded text-nim cursor-pointer transition-all hover:bg-nim-hover active:bg-nim-tertiary disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={onRedo}
           disabled={!canRedo}
           title="Redo (Cmd+Shift+Z)"
@@ -60,11 +60,11 @@ export function SpreadsheetToolbar({
         </button>
       </div>
 
-      <div className="toolbar-separator" />
+      <div className="w-px h-6 bg-[var(--nim-border)] mx-2" />
 
-      <div className="toolbar-group">
+      <div className="flex gap-1">
         <button
-          className={`toolbar-button ${hasHeaders ? 'active' : ''}`}
+          className={`px-3 py-1.5 text-[13px] font-medium border rounded cursor-pointer transition-all ${hasHeaders ? 'bg-[var(--nim-primary)] text-white border-[var(--nim-primary)]' : 'bg-nim-secondary text-nim border-nim hover:bg-nim-hover active:bg-nim-tertiary'} disabled:opacity-50 disabled:cursor-not-allowed`}
           onClick={onToggleHeaders}
           title={hasHeaders ? 'First row is header (click to toggle)' : 'Treat first row as header'}
         >
@@ -72,18 +72,18 @@ export function SpreadsheetToolbar({
         </button>
       </div>
 
-      <div className="toolbar-separator" />
+      <div className="w-px h-6 bg-[var(--nim-border)] mx-2" />
 
-      <div className="toolbar-group">
+      <div className="flex gap-1">
         <button
-          className="toolbar-button"
+          className="px-3 py-1.5 text-[13px] font-medium bg-nim-secondary border border-nim rounded text-nim cursor-pointer transition-all hover:bg-nim-hover active:bg-nim-tertiary disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={onAddRow}
           title="Add Row"
         >
           + Row
         </button>
         <button
-          className="toolbar-button"
+          className="px-3 py-1.5 text-[13px] font-medium bg-nim-secondary border border-nim rounded text-nim cursor-pointer transition-all hover:bg-nim-hover active:bg-nim-tertiary disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={onDeleteRow}
           disabled={!hasSelection}
           title="Delete Row"
@@ -92,18 +92,18 @@ export function SpreadsheetToolbar({
         </button>
       </div>
 
-      <div className="toolbar-separator" />
+      <div className="w-px h-6 bg-[var(--nim-border)] mx-2" />
 
-      <div className="toolbar-group">
+      <div className="flex gap-1">
         <button
-          className="toolbar-button"
+          className="px-3 py-1.5 text-[13px] font-medium bg-nim-secondary border border-nim rounded text-nim cursor-pointer transition-all hover:bg-nim-hover active:bg-nim-tertiary disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={onAddColumn}
           title="Add Column"
         >
           + Col
         </button>
         <button
-          className="toolbar-button"
+          className="px-3 py-1.5 text-[13px] font-medium bg-nim-secondary border border-nim rounded text-nim cursor-pointer transition-all hover:bg-nim-hover active:bg-nim-tertiary disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={onDeleteColumn}
           disabled={!hasSelection}
           title="Delete Column"
@@ -112,11 +112,11 @@ export function SpreadsheetToolbar({
         </button>
       </div>
 
-      <div className="toolbar-separator" />
+      <div className="w-px h-6 bg-[var(--nim-border)] mx-2" />
 
-      <div className="toolbar-group">
+      <div className="flex gap-1">
         <button
-          className={`toolbar-button ${sortConfig?.direction === 'asc' ? 'active' : ''}`}
+          className={`px-3 py-1.5 text-[13px] font-medium border rounded cursor-pointer transition-all ${sortConfig?.direction === 'asc' ? 'bg-[var(--nim-primary)] text-white border-[var(--nim-primary)]' : 'bg-nim-secondary text-nim border-nim hover:bg-nim-hover active:bg-nim-tertiary'} disabled:opacity-50 disabled:cursor-not-allowed`}
           onClick={onSortAsc}
           disabled={!hasSelection}
           title="Sort Ascending"
@@ -124,7 +124,7 @@ export function SpreadsheetToolbar({
           A-Z
         </button>
         <button
-          className={`toolbar-button ${sortConfig?.direction === 'desc' ? 'active' : ''}`}
+          className={`px-3 py-1.5 text-[13px] font-medium border rounded cursor-pointer transition-all ${sortConfig?.direction === 'desc' ? 'bg-[var(--nim-primary)] text-white border-[var(--nim-primary)]' : 'bg-nim-secondary text-nim border-nim hover:bg-nim-hover active:bg-nim-tertiary'} disabled:opacity-50 disabled:cursor-not-allowed`}
           onClick={onSortDesc}
           disabled={!hasSelection}
           title="Sort Descending"

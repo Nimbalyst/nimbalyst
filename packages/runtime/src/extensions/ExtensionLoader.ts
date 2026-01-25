@@ -1103,6 +1103,50 @@ export class ExtensionLoader {
   }
 
   /**
+   * Get all theme contributions from loaded extensions.
+   * Themes are namespaced as `extensionId:themeId`.
+   */
+  getThemes(): Array<{
+    /** Full theme ID (extensionId:themeId) */
+    id: string;
+    /** Extension ID that provides this theme */
+    extensionId: string;
+    /** Theme display name */
+    name: string;
+    /** Whether this is a dark theme */
+    isDark: boolean;
+    /** Theme color overrides */
+    colors: Record<string, string>;
+  }> {
+    const themes: Array<{
+      id: string;
+      extensionId: string;
+      name: string;
+      isDark: boolean;
+      colors: Record<string, string>;
+    }> = [];
+
+    for (const loaded of this.loadedExtensions.values()) {
+      if (!loaded.enabled) continue;
+
+      const themeContributions = loaded.manifest.contributions?.themes;
+      if (!themeContributions || !Array.isArray(themeContributions)) continue;
+
+      for (const theme of themeContributions) {
+        themes.push({
+          id: `${loaded.manifest.id}:${theme.id}`,
+          extensionId: loaded.manifest.id,
+          name: theme.name,
+          isDark: theme.isDark,
+          colors: theme.colors as Record<string, string>,
+        });
+      }
+    }
+
+    return themes;
+  }
+
+  /**
    * Subscribe to extension changes
    */
   subscribe(listener: () => void): () => void {

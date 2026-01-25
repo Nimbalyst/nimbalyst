@@ -23,7 +23,6 @@ import { MergeConflictDialog } from './MergeConflictDialog';
 import { MergeConfirmDialog } from './MergeConfirmDialog';
 import { ArchiveWorktreeDialog } from './ArchiveWorktreeDialog';
 import { SquashCommitModal } from './SquashCommitModal';
-import './GitOperationsPanel.css';
 
 // Types for worktree mode (copied from DiffModeView)
 interface WorktreeChangedFile {
@@ -875,30 +874,39 @@ Please proceed with this strategy.`;
     const hasChanges = editedFiles.length > 0 || gitStatus.hasUncommitted;
 
     return (
-      <div className="git-operations-panel">
+      <div className="git-operations-panel min-w-[200px] border-t border-[var(--nim-border)] bg-[var(--nim-bg-secondary)]">
         {/* Header with mode toggle */}
-        <div className="git-operations-panel__header">
-          <div className="git-operations-panel__header-left" onClick={() => setIsExpanded(!isExpanded)}>
+        <div className="git-operations-panel__header flex items-center justify-between py-2 px-3 select-none text-xs font-medium text-[var(--nim-text)] border-b border-[var(--nim-border)]">
+          <div
+            className="git-operations-panel__header-left flex items-center gap-1.5 flex-1 cursor-pointer hover:opacity-80"
+            onClick={() => setIsExpanded(!isExpanded)}
+          >
             <MaterialSymbol icon={isExpanded ? 'expand_more' : 'chevron_right'} size={16} />
             <MaterialSymbol icon="account_tree" size={14} />
-            <span className="git-operations-panel__branch">{gitStatus.branch}</span>
+            <span className="git-operations-panel__branch font-semibold text-[var(--nim-text)]">
+              {gitStatus.branch}
+            </span>
             {(gitStatus.ahead > 0 || gitStatus.behind > 0) && (
-              <span className="git-operations-panel__sync-status">
+              <span className="git-operations-panel__sync-status text-[11px] text-[var(--nim-text-faint)] font-[var(--nim-font-mono)]">
                 {gitStatus.ahead > 0 && `↑${gitStatus.ahead}`}
                 {gitStatus.behind > 0 && ` ↓${gitStatus.behind}`}
               </span>
             )}
           </div>
-          <div className="git-operations-panel__mode-toggle">
+          <div className="git-operations-panel__mode-toggle flex rounded-[3px] overflow-hidden border border-[var(--nim-border)]">
             <button
-              className={mode === 'manual' ? 'active' : ''}
+              className={`px-1.5 py-0.5 border-none bg-transparent text-[var(--nim-text-muted)] text-[10px] font-medium cursor-pointer transition-all duration-150 border-r border-[var(--nim-border)] ${
+                mode === 'manual' ? 'bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)]' : 'hover:bg-[var(--nim-bg-tertiary)] hover:opacity-60'
+              }`}
               onClick={() => setMode('manual')}
               title="Manual staging and commit"
             >
               Manual
             </button>
             <button
-              className={mode === 'smart' ? 'active' : ''}
+              className={`px-1.5 py-0.5 border-none bg-transparent text-[var(--nim-text-muted)] text-[10px] font-medium cursor-pointer transition-all duration-150 ${
+                mode === 'smart' ? 'bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)]' : 'hover:bg-[var(--nim-bg-tertiary)] hover:opacity-60'
+              }`}
               onClick={() => setMode('smart')}
               title="AI-assisted commit"
             >
@@ -917,43 +925,46 @@ Please proceed with this strategy.`;
         </div>
 
         {isExpanded && (
-          <div className="git-operations-panel__content">
+          <div className="git-operations-panel__content px-3 pb-3 flex flex-col gap-3">
 
             {/* Manual Mode */}
             {mode === 'manual' && (
               <div className="git-operations-panel__manual">
                 {/* Staging Area */}
-                <div className="git-operations-panel__section">
-                  <div className="git-operations-panel__section-header">
+                <div className="git-operations-panel__section flex flex-col gap-2">
+                  <div className="git-operations-panel__section-header flex items-center justify-between text-[11px] font-semibold text-[var(--nim-text)]">
                     <span>Changes ({editedFiles.length})</span>
-                    <div className="git-operations-panel__section-actions">
+                    <div className="git-operations-panel__section-actions flex gap-2">
                       <button
                         onClick={() => stageAll(editedFiles)}
                         disabled={editedFiles.length === 0}
-                        className="git-operations-panel__btn-text"
+                        className="git-operations-panel__btn-text bg-transparent border-none text-[var(--nim-primary)] text-[10px] font-medium cursor-pointer p-0 hover:underline disabled:text-[var(--nim-text-faint)] disabled:cursor-not-allowed disabled:no-underline"
                       >
                         Stage All
                       </button>
                       <button
                         onClick={() => clearStaging()}
                         disabled={stagedFiles.size === 0}
-                        className="git-operations-panel__btn-text"
+                        className="git-operations-panel__btn-text bg-transparent border-none text-[var(--nim-primary)] text-[10px] font-medium cursor-pointer p-0 hover:underline disabled:text-[var(--nim-text-faint)] disabled:cursor-not-allowed disabled:no-underline"
                       >
                         Clear
                       </button>
                     </div>
                   </div>
-                  <div className="git-operations-panel__file-list">
+                  <div className="git-operations-panel__file-list flex flex-col gap-1 max-h-[200px] overflow-y-auto border border-[var(--nim-border)] rounded p-1 bg-[var(--nim-bg)]">
                     {editedFiles.map((filePath) => {
                       const isStaged = stagedFiles.has(filePath);
                       return (
-                        <div key={filePath} className="git-operations-panel__file-item">
+                        <div
+                          key={filePath}
+                          className="git-operations-panel__file-item flex items-center gap-2 p-1 text-[11px] text-[var(--nim-text)] hover:bg-[var(--nim-bg-tertiary)] hover:rounded-[3px]"
+                        >
                           <input
                             type="checkbox"
                             checked={isStaged}
                             onChange={() => toggleFileStaging(filePath)}
                           />
-                          <span className="git-operations-panel__file-path">
+                          <span className="git-operations-panel__file-path flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
                             {filePath.split('/').pop()}
                           </span>
                         </div>
@@ -963,12 +974,12 @@ Please proceed with this strategy.`;
                 </div>
 
                 {/* Commit Message */}
-                <div className="git-operations-panel__section">
-                  <div className="git-operations-panel__section-header">
+                <div className="git-operations-panel__section flex flex-col gap-2 mt-3">
+                  <div className="git-operations-panel__section-header flex items-center justify-between text-[11px] font-semibold text-[var(--nim-text)]">
                     <span>Commit Message</span>
                   </div>
                   <textarea
-                    className="git-operations-panel__commit-message"
+                    className="git-operations-panel__commit-message w-full p-2 border border-[var(--nim-border)] rounded bg-[var(--nim-bg)] text-[var(--nim-text)] text-[11px] font-[var(--nim-font-mono)] resize-y focus:outline-none focus:border-[var(--nim-primary)]"
                     value={commitMessage}
                     onChange={(e) => setCommitMessage(e.target.value)}
                     placeholder="Enter commit message..."
@@ -978,7 +989,7 @@ Please proceed with this strategy.`;
 
                 {/* Commit Button */}
                 <button
-                  className="git-operations-panel__commit-btn"
+                  className="git-operations-panel__commit-btn w-full p-2 border-none rounded bg-[var(--nim-primary)] text-white text-xs font-semibold cursor-pointer flex items-center justify-center gap-1.5 mt-3 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
                   onClick={handleManualCommit}
                   disabled={isCommitting || !commitMessage.trim() || stagedFiles.size === 0}
                 >
@@ -989,12 +1000,13 @@ Please proceed with this strategy.`;
 
             {/* Smart Mode */}
             {mode === 'smart' && (
-              <div className="git-operations-panel__smart">
-                <p className="git-operations-panel__smart-desc">
+              <div className="git-operations-panel__smart flex flex-col gap-2">
+                <p className="git-operations-panel__smart-desc text-xs text-[var(--nim-text-muted)] m-0 leading-normal">
                   Let AI analyze your changes and propose a commit message.
                 </p>
                 <button
-                  className="git-operations-panel__commit-btn smart"
+                  className="git-operations-panel__commit-btn smart w-full p-2 border-none rounded text-white text-xs font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{ background: 'linear-gradient(135deg, var(--nim-primary), var(--accent-secondary, var(--nim-primary)))' }}
                   onClick={handleSmartCommit}
                   disabled={!hasChanges}
                 >
@@ -1226,10 +1238,10 @@ Please proceed with this strategy.`;
             )}
 
             {/* History Toggle */}
-            <div className="git-operations-panel__history-toggle">
+            <div className="git-operations-panel__history-toggle text-center pt-2 border-t border-[var(--nim-border)]">
               <button
                 onClick={() => setShowHistory(!showHistory)}
-                className="git-operations-panel__btn-text"
+                className="git-operations-panel__btn-text bg-transparent border-none text-[var(--nim-primary)] text-[10px] font-medium cursor-pointer p-0 hover:underline"
               >
                 {showHistory ? 'Hide' : 'Show'} Recent Commits
               </button>
@@ -1237,14 +1249,16 @@ Please proceed with this strategy.`;
 
             {/* Commit History */}
             {showHistory && (
-              <div className="git-operations-panel__history">
+              <div className="git-operations-panel__history flex flex-col gap-2 max-h-[300px] overflow-y-auto border border-[var(--nim-border)] rounded p-2 bg-[var(--nim-bg)]">
                 {gitCommits.map((commit) => (
-                  <div key={commit.hash} className="git-operations-panel__commit">
-                    <div className="git-operations-panel__commit-hash">
+                  <div key={commit.hash} className="git-operations-panel__commit p-2 bg-[var(--nim-bg)] rounded text-[11px]">
+                    <div className="git-operations-panel__commit-hash font-[var(--nim-font-mono)] text-[var(--nim-primary)] text-[10px] mb-1">
                       {commit.hash.slice(0, 7)}
                     </div>
-                    <div className="git-operations-panel__commit-message">{commit.message}</div>
-                    <div className="git-operations-panel__commit-meta">
+                    <div className="git-operations-panel__commit-msg text-[var(--nim-text)] mb-1 font-medium">
+                      {commit.message}
+                    </div>
+                    <div className="git-operations-panel__commit-meta text-[var(--nim-text-faint)] text-[10px]">
                       {commit.author} • {new Date(commit.date).toLocaleDateString()}
                     </div>
                   </div>

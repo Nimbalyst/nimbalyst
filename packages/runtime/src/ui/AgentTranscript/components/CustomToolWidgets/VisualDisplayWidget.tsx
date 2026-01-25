@@ -32,7 +32,6 @@ import {
 } from 'recharts';
 import type { CustomToolWidgetProps } from './index';
 import { isDarkThemeAtom } from '../../../../store/atoms/theme';
-import './VisualDisplayWidget.css';
 
 // Theme-aware color palettes
 const LIGHT_COLORS = [
@@ -590,37 +589,35 @@ const ImageDisplay: React.FC<{
 
   if (loading) {
     return (
-      <div className="visual-display-widget__image-item visual-display-widget__image-item--loading">
-        <div className="visual-display-widget__image-loading">Loading...</div>
+      <div className="flex items-center justify-center p-4 bg-nim-secondary rounded-md border border-nim">
+        <span className="text-nim-muted text-sm">Loading...</span>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="visual-display-widget__image-item visual-display-widget__image-item--error">
-        <div className="visual-display-widget__image-error">{error}</div>
-        <div className="visual-display-widget__image-path">{image.path}</div>
+      <div className="flex flex-col items-center gap-2 p-4 bg-nim-secondary rounded-md border border-nim">
+        <span className="text-nim-error text-sm">{error}</span>
+        <span className="font-mono text-xs text-nim-faint break-all">{image.path}</span>
       </div>
     );
   }
 
   return (
-    <div className="visual-display-widget__image-item">
-      <div className="visual-display-widget__image-wrapper">
-        <img
-          src={imageData || ''}
-          alt={description || 'Image'}
-          className="visual-display-widget__image"
-          onError={(e) => {
-            console.error('[VisualDisplayWidget] Image element failed to load:', {
-              path: image.path,
-              src: imageData?.substring(0, 100) + (imageData && imageData.length > 100 ? '...' : '')
-            });
-            setError(`Failed to render image from: ${image.path}`);
-          }}
-        />
-      </div>
+    <div className="overflow-hidden rounded-md">
+      <img
+        src={imageData || ''}
+        alt={description || 'Image'}
+        className="max-w-full h-auto block"
+        onError={(e) => {
+          console.error('[VisualDisplayWidget] Image element failed to load:', {
+            path: image.path,
+            src: imageData?.substring(0, 100) + (imageData && imageData.length > 100 ? '...' : '')
+          });
+          setError(`Failed to render image from: ${image.path}`);
+        }}
+      />
     </div>
   );
 };
@@ -664,19 +661,19 @@ const ChartItemRenderer: React.FC<{
   };
 
   const errorFallback = (
-    <div className="visual-display-widget__item visual-display-widget__item--error">
-      <div className="visual-display-widget__item-description">{item.description}</div>
-      <div className="visual-display-widget__error">
+    <div className="p-3 rounded-md border border-nim-error bg-[color-mix(in_srgb,var(--nim-error)_10%,var(--nim-bg))]">
+      <p className="text-nim-muted text-sm mb-2">{item.description}</p>
+      <p className="text-nim-error text-sm">
         Failed to render {chartConfig.chartType} chart. Check that data contains valid "{chartConfig.xAxisKey}" and "{Array.isArray(chartConfig.yAxisKey) ? chartConfig.yAxisKey.join(', ') : chartConfig.yAxisKey}" fields.
-      </div>
+      </p>
     </div>
   );
 
   return (
     <VisualErrorBoundary fallback={errorFallback} context={`${chartConfig.chartType} chart`}>
-      <div className="visual-display-widget__item" role="img" aria-label={`${chartConfig.chartType} chart: ${item.description}`}>
-        <div className="visual-display-widget__item-description">{item.description}</div>
-        <div className="visual-display-widget__chart" style={{ height }}>
+      <div className="rounded-md overflow-hidden border border-nim bg-nim p-3" role="img" aria-label={`${chartConfig.chartType} chart: ${item.description}`}>
+        <p className="text-nim text-sm font-medium mb-3">{item.description}</p>
+        <div style={{ height }}>
           <ResponsiveContainer width="100%" height="100%">
             {renderChart()}
           </ResponsiveContainer>
@@ -698,29 +695,31 @@ const Lightbox: React.FC<{
 }> = ({ images, selectedIndex, onClose, onNavigate, readFile }) => {
   const lightboxContent = (
     <div
-      className="visual-display-widget__lightbox"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-[color-mix(in_srgb,var(--nim-bg)_90%,transparent)] backdrop-blur"
       onClick={onClose}
     >
-      <div className="visual-display-widget__lightbox-content" onClick={e => e.stopPropagation()}>
+      <div className="relative max-w-[90vw] max-h-[90vh] flex flex-col items-center" onClick={e => e.stopPropagation()}>
         <button
-          className="visual-display-widget__lightbox-close"
+          className="absolute top-2 right-2 w-10 h-10 p-2 bg-nim-secondary border border-nim rounded-full text-nim-muted cursor-pointer transition-all duration-200 flex items-center justify-center z-10 shadow-lg hover:bg-nim-hover hover:text-nim hover:scale-110"
           onClick={onClose}
           aria-label="Close"
         >
-          &times;
+          <span className="text-2xl leading-none">&times;</span>
         </button>
-        <ImageDisplay
-          image={images[selectedIndex].image!}
-          description={images[selectedIndex].description}
-          readFile={readFile}
-        />
-        <div className="visual-display-widget__lightbox-caption">
+        <div className="max-w-full max-h-[calc(90vh-3rem)]">
+          <ImageDisplay
+            image={images[selectedIndex].image!}
+            description={images[selectedIndex].description}
+            readFile={readFile}
+          />
+        </div>
+        <div className="mt-3 text-sm text-nim-muted font-mono bg-nim-secondary py-2 px-3 rounded text-center">
           {images[selectedIndex].description}
         </div>
         {images.length > 1 && (
-          <div className="visual-display-widget__lightbox-nav">
+          <div className="flex items-center gap-3 mt-3">
             <button
-              className="visual-display-widget__lightbox-prev"
+              className="w-10 h-10 flex items-center justify-center bg-nim-secondary border border-nim rounded-full text-nim-muted cursor-pointer transition-all duration-200 hover:bg-nim-hover hover:text-nim"
               onClick={(e) => {
                 e.stopPropagation();
                 onNavigate((selectedIndex - 1 + images.length) % images.length);
@@ -729,11 +728,11 @@ const Lightbox: React.FC<{
             >
               &larr;
             </button>
-            <span className="visual-display-widget__lightbox-counter">
+            <span className="text-sm text-nim-muted font-mono">
               {selectedIndex + 1} / {images.length}
             </span>
             <button
-              className="visual-display-widget__lightbox-next"
+              className="w-10 h-10 flex items-center justify-center bg-nim-secondary border border-nim rounded-full text-nim-muted cursor-pointer transition-all duration-200 hover:bg-nim-hover hover:text-nim"
               onClick={(e) => {
                 e.stopPropagation();
                 onNavigate((selectedIndex + 1) % images.length);
@@ -763,15 +762,15 @@ const ImageGallery: React.FC<{
 
   const imagePaths = images.map(img => img.image?.path).filter(Boolean);
   const errorFallback = (
-    <div className="visual-display-widget__item visual-display-widget__item--error">
-      <div className="visual-display-widget__error">
+    <div className="p-3 rounded-md border border-nim-error bg-[color-mix(in_srgb,var(--nim-error)_10%,var(--nim-bg))]">
+      <p className="text-nim-error text-sm">
         Failed to render image gallery ({images.length} image{images.length !== 1 ? 's' : ''}).
         {imagePaths.length > 0 && (
-          <div className="visual-display-widget__error-details">
+          <span className="block mt-1 text-nim-faint text-xs">
             Paths: {imagePaths.slice(0, 3).join(', ')}{imagePaths.length > 3 ? `, ...and ${imagePaths.length - 3} more` : ''}
-          </div>
+          </span>
         )}
-      </div>
+      </p>
     </div>
   );
 
@@ -779,16 +778,18 @@ const ImageGallery: React.FC<{
 
   return (
     <VisualErrorBoundary fallback={errorFallback} context="image gallery">
-      <div className="visual-display-widget__gallery">
-        <div className={`visual-display-widget__gallery-grid${isSingleImage ? ' visual-display-widget__gallery-grid--single' : ''}`}>
+      <div className="rounded-md overflow-hidden">
+        <div className={`grid gap-2 ${isSingleImage ? 'grid-cols-1' : 'grid-cols-[repeat(auto-fill,minmax(150px,1fr))]'}`}>
           {images.map((item, index) => (
             <div
               key={index}
-              className={`visual-display-widget__gallery-item${isSingleImage ? ' visual-display-widget__gallery-item--single' : ''}`}
+              className={`group cursor-pointer rounded-md overflow-hidden border border-nim bg-nim-secondary transition-all duration-200 hover:border-nim-primary hover:shadow-md ${isSingleImage ? 'max-w-full' : 'aspect-square'}`}
               onClick={() => setSelectedIndex(index)}
             >
-              <ImageDisplay image={item.image!} description={item.description} readFile={readFile} />
-              <div className="visual-display-widget__image-caption">{item.description}</div>
+              <div className={`${isSingleImage ? 'max-h-96' : 'w-full h-full'} overflow-hidden`}>
+                <ImageDisplay image={item.image!} description={item.description} readFile={readFile} />
+              </div>
+              <div className="p-2 bg-nim-secondary text-xs text-nim-muted truncate">{item.description}</div>
             </div>
           ))}
         </div>
@@ -918,14 +919,14 @@ export const VisualDisplayWidget: React.FC<CustomToolWidgetProps> = ({ message, 
     }
 
     return (
-      <div className="visual-display-widget visual-display-widget--error" role="img" aria-label="Visual content error">
-        <div className="visual-display-widget__header">
-          <span className="visual-display-widget__label">Visual</span>
-          <span className="visual-display-widget__status visual-display-widget__status--error">
+      <div className="visual-display-widget rounded-md border border-nim-error bg-nim-secondary overflow-hidden" role="img" aria-label="Visual content error">
+        <div className="flex items-center gap-2 py-2 px-3 border-b border-nim bg-nim-tertiary">
+          <span className="text-sm font-medium text-nim">Visual</span>
+          <span className="text-xs font-semibold text-nim-error py-0.5 px-2 rounded-full bg-[color-mix(in_srgb,var(--nim-error)_15%,transparent)]">
             Error
           </span>
         </div>
-        <div className="visual-display-widget__error">
+        <div className="p-3 text-sm text-nim-error whitespace-pre-wrap">
           {displayErrorMessage}
         </div>
       </div>
@@ -946,14 +947,14 @@ export const VisualDisplayWidget: React.FC<CustomToolWidgetProps> = ({ message, 
   ].filter(Boolean).join(' and ');
 
   const errorFallback = (
-    <div className="visual-display-widget visual-display-widget--error" role="img" aria-label="Visual content error">
-      <div className="visual-display-widget__header">
-        <span className="visual-display-widget__label">Visual</span>
-        <span className="visual-display-widget__status visual-display-widget__status--error">
+    <div className="visual-display-widget rounded-md border border-nim-error bg-nim-secondary overflow-hidden" role="img" aria-label="Visual content error">
+      <div className="flex items-center gap-2 py-2 px-3 border-b border-nim bg-nim-tertiary">
+        <span className="text-sm font-medium text-nim">Visual</span>
+        <span className="text-xs font-semibold text-nim-error py-0.5 px-2 rounded-full bg-[color-mix(in_srgb,var(--nim-error)_15%,transparent)]">
           Error
         </span>
       </div>
-      <div className="visual-display-widget__error">
+      <div className="p-3 text-sm text-nim-error">
         Failed to render visual content ({contentSummary || 'unknown content'}).
       </div>
     </div>
@@ -961,7 +962,7 @@ export const VisualDisplayWidget: React.FC<CustomToolWidgetProps> = ({ message, 
 
   return (
     <VisualErrorBoundary fallback={errorFallback} context="main widget">
-      <div className="visual-display-widget" role="img" aria-label={`${items.length} visual item(s)`}>
+      <div className="visual-display-widget flex flex-col gap-3" role="img" aria-label={`${items.length} visual item(s)`}>
         {segments.map((segment, index) => {
           if (segment.type === 'chart') {
             return (

@@ -4,12 +4,11 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- *
  */
 
 .Collapsible__container {
-  background: #fcfcfc;
-  border: 1px solid #eee;
+  background: var(--nim-bg-secondary);
+  border: 1px solid var(--nim-border);
   border-radius: 10px;
   margin-bottom: 8px;
 }
@@ -21,6 +20,7 @@
   font-weight: bold;
   list-style: none;
   outline: none;
+  color: var(--nim-text);
 }
 
 .Collapsible__title::marker,
@@ -32,7 +32,7 @@
   border-style: solid;
   border-color: transparent;
   border-width: 4px 6px 4px 6px;
-  border-left-color: #000;
+  border-left-color: var(--nim-text);
   display: block;
   content: '';
   position: absolute;
@@ -44,11 +44,12 @@
 .Collapsible__container[open] > .Collapsible__title:before {
   border-color: transparent;
   border-width: 6px 4px 0 4px;
-  border-top-color: #000;
+  border-top-color: var(--nim-text);
 }
 
 .Collapsible__content {
   padding: 0 5px 5px 20px;
+  color: var(--nim-text);
 }
 
 .Collapsible__collapsed .Collapsible__content {
@@ -56,29 +57,6 @@
   user-select: none;
 }
 
-/* Dark mode support */
-[data-theme="dark"] .Collapsible__container {
-  background: var(--surface-secondary);
-  border: 1px solid var(--editor-border);
-}
-
-[data-theme="dark"] .Collapsible__title {
-  color: var(--text-primary);
-}
-
-[data-theme="dark"] .Collapsible__title:before {
-  border-left-color: var(--text-primary);
-}
-
-[data-theme="dark"] .Collapsible__container[open] > .Collapsible__title:before {
-  border-top-color: var(--text-primary);
-}
-
-[data-theme="dark"] .Collapsible__content {
-  color: var(--text-primary);
-}
-
-/* Hover effects for better UX */
-[data-theme="dark"] .Collapsible__title:hover {
-  background-color: var(--hover-bg);
+.Collapsible__title:hover {
+  background-color: var(--nim-bg-hover);
 }

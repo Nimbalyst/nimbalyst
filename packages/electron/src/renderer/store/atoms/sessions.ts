@@ -1481,8 +1481,8 @@ export const setSelectedWorkstreamAtom = atom(
     selection: { type: WorkstreamType; id: string } | null;
   }) => {
     const prev = get(selectedWorkstreamAtom(workspacePath));
-    console.log(`[setSelectedWorkstreamAtom] Changing selection from ${prev?.type}:${prev?.id} to ${selection?.type}:${selection?.id}`);
-    console.trace('[setSelectedWorkstreamAtom] Call stack');
+    // console.log(`[setSelectedWorkstreamAtom] Changing selection from ${prev?.type}:${prev?.id} to ${selection?.type}:${selection?.id}`);
+    // console.trace('[setSelectedWorkstreamAtom] Call stack');
     set(selectedWorkstreamAtom(workspacePath), selection);
 
     // If selecting a single session, also set it as the global active session

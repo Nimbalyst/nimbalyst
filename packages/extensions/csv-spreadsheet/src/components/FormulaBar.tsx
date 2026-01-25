@@ -61,13 +61,17 @@ export const FormulaBar = forwardRef<FormulaBarHandle, FormulaBarProps>(
     );
 
     return (
-      <div className="formula-bar">
-        <div className="formula-bar-cell-ref">{cellRef || '-'}</div>
-        <div className="formula-bar-fx">{isFormula ? 'fx' : ''}</div>
+      <div className="flex items-center gap-2 px-3 py-1.5 bg-nim-secondary border-b border-nim min-h-[36px]">
+        <div className="font-mono text-[13px] font-semibold min-w-[48px] px-2 py-1 bg-nim-tertiary rounded text-center text-nim-muted">
+          {cellRef || '-'}
+        </div>
+        <div className="font-mono text-[13px] italic text-[var(--nim-primary)] min-w-[20px]">
+          {isFormula ? 'fx' : ''}
+        </div>
         <input
           ref={inputRef}
           type="text"
-          className="formula-bar-input"
+          className="flex-1 px-2.5 py-1.5 font-mono text-[13px] bg-nim border border-nim rounded text-nim outline-none focus:border-[var(--nim-primary)] focus:shadow-[0_0_0_2px_rgba(59,130,246,0.2)] disabled:bg-nim-secondary disabled:text-nim-faint disabled:cursor-not-allowed placeholder:text-nim-faint"
           value={localValue}
           onChange={handleChange}
           onBlur={handleBlur}

@@ -47,6 +47,9 @@ export type {
   PanelExport,
   SettingsPanelProps,
   ExtensionStorage,
+  // Theme types
+  ThemeContribution,
+  ThemeColorKey,
 } from './types';
 
 // Platform Service

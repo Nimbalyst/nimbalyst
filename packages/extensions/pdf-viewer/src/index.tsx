@@ -1,5 +1,5 @@
 import { PDFViewerEditor } from './PDFViewerEditor';
-import './styles/index.css';
+import './styles/textLayer.css';
 
 // Export the component for the extension system
 export const components = {

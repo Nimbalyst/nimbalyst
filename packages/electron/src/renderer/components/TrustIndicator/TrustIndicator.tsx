@@ -13,7 +13,6 @@ import {
   workspacePermissionsAtomFamily,
   loadWorkspacePermissions,
 } from '../../store/atoms/appSettings';
-import './TrustIndicator.css';
 
 export interface TrustStatus {
   trustedAt?: number;
@@ -164,6 +163,86 @@ export const TrustIndicator: React.FC<TrustIndicatorProps> = ({
     return 'untrusted';
   };
 
+  const getIndicatorColorClass = (): string => {
+    const statusClass = getStatusClass();
+    switch (statusClass) {
+      case 'bypass-all':
+        return 'text-[var(--nim-warning)]';
+      case 'loading':
+        return 'text-[var(--nim-text-faint)]';
+      default:
+        return 'text-[var(--nim-text-muted)]';
+    }
+  };
+
+  const getDotColorClass = (): string => {
+    const statusClass = getStatusClass();
+    switch (statusClass) {
+      case 'untrusted':
+        return 'bg-[var(--nim-warning)]';
+      case 'trusted':
+        return 'bg-[var(--nim-success)]';
+      case 'allow-all':
+        return 'bg-[var(--nim-primary)]';
+      case 'bypass-all':
+        return 'bg-[var(--nim-error)]';
+      case 'loading':
+        return 'bg-[var(--nim-text-faint)]';
+      default:
+        return 'bg-[var(--nim-text-faint)]';
+    }
+  };
+
+  const getBadgeClasses = (): string => {
+    const statusClass = getStatusClass();
+    const base = 'px-2 py-0.5 rounded text-[11px] font-medium';
+    switch (statusClass) {
+      case 'untrusted':
+        return `${base} bg-[color-mix(in_srgb,var(--nim-warning)_15%,transparent)] text-[var(--nim-warning)]`;
+      case 'trusted':
+        return `${base} bg-[color-mix(in_srgb,var(--nim-success)_15%,transparent)] text-[var(--nim-success)]`;
+      case 'allow-all':
+        return `${base} bg-[color-mix(in_srgb,var(--nim-primary)_15%,transparent)] text-[var(--nim-primary)]`;
+      case 'bypass-all':
+        return `${base} bg-[color-mix(in_srgb,var(--nim-error)_15%,transparent)] text-[var(--nim-error)]`;
+      default:
+        return base;
+    }
+  };
+
+  const getCurrentModeClasses = (): string => {
+    const statusClass = getStatusClass();
+    const base = 'mx-2 mb-2 p-3 rounded-md bg-[var(--nim-bg)] border border-[var(--nim-border)]';
+    switch (statusClass) {
+      case 'trusted':
+        return `${base} border-[var(--nim-success)] bg-[color-mix(in_srgb,var(--nim-success)_10%,transparent)]`;
+      case 'allow-all':
+        return `${base} border-[var(--nim-primary)] bg-[color-mix(in_srgb,var(--nim-primary)_10%,transparent)]`;
+      case 'bypass-all':
+        return `${base} border-[var(--nim-error)] bg-[color-mix(in_srgb,var(--nim-error)_10%,transparent)]`;
+      case 'untrusted':
+        return `${base} border-[var(--nim-warning)] bg-[color-mix(in_srgb,var(--nim-warning)_10%,transparent)]`;
+      default:
+        return base;
+    }
+  };
+
+  const getModeValueColorClass = (): string => {
+    const statusClass = getStatusClass();
+    switch (statusClass) {
+      case 'trusted':
+        return 'text-[var(--nim-success)]';
+      case 'allow-all':
+        return 'text-[var(--nim-primary)]';
+      case 'bypass-all':
+        return 'text-[var(--nim-error)]';
+      case 'untrusted':
+        return 'text-[var(--nim-warning)]';
+      default:
+        return 'text-[var(--nim-text)]';
+    }
+  };
+
   const getStatusLabel = (): string => {
     if (!status || loading) {
       return 'Loading trust status...';
@@ -197,10 +276,10 @@ export const TrustIndicator: React.FC<TrustIndicatorProps> = ({
   };
 
   return (
-    <div className="trust-indicator-container">
+    <div className="trust-indicator-container relative">
       <button
         ref={buttonRef}
-        className={`trust-indicator nav-button ${getStatusClass()}`}
+        className={`trust-indicator nav-button relative w-9 h-9 flex items-center justify-center bg-transparent border-none rounded-md cursor-pointer transition-all duration-150 p-0 hover:bg-nim-tertiary active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2 ${getStatusClass()} ${getIndicatorColorClass()}`}
         onClick={() => setMenuOpen(!menuOpen)}
         title={getStatusLabel()}
         aria-label={getStatusLabel()}
@@ -208,19 +287,45 @@ export const TrustIndicator: React.FC<TrustIndicatorProps> = ({
         aria-haspopup="menu"
       >
         <MaterialSymbol icon={getStatusIcon()} size={20} />
-        <span className={`trust-indicator-dot ${getStatusClass()}`} />
+        <span
+          className={`trust-indicator-dot absolute bottom-1 right-1 w-2 h-2 rounded-full border-2 border-[var(--nim-bg-secondary)] ${getStatusClass()} ${getDotColorClass()}`}
+        />
       </button>
 
       {menuOpen && (
-        <div ref={menuRef} className="trust-menu" role="menu">
-          <div className="trust-menu-header">
-            <span className="trust-menu-title">Agent Permissions</span>
+        <div
+          ref={menuRef}
+          className="trust-menu absolute bottom-0 left-[calc(100%+8px)] w-[280px] bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded-lg shadow-[0_4px_12px_rgba(0,0,0,0.15)] z-[100] animate-[trust-menu-appear_0.15s_ease-out]"
+          role="menu"
+          style={{
+            // Inline keyframe animation fallback
+            animation: 'trust-menu-appear 0.15s ease-out',
+          }}
+        >
+          <style>{`
+            @keyframes trust-menu-appear {
+              from {
+                opacity: 0;
+                transform: translateX(-4px);
+              }
+              to {
+                opacity: 1;
+                transform: translateX(0);
+              }
+            }
+          `}</style>
+          <div className="trust-menu-header flex items-center justify-between px-3 pt-3 pb-2">
+            <span className="trust-menu-title text-[13px] font-semibold text-[var(--nim-text)]">
+              Agent Permissions
+            </span>
           </div>
 
           {/* Current mode - prominent display */}
-          <div className={`trust-menu-current-mode ${getStatusClass()}`}>
-            <div className="trust-menu-current-mode-label">Current mode:</div>
-            <div className="trust-menu-current-mode-value">
+          <div className={`trust-menu-current-mode ${getStatusClass()} ${getCurrentModeClasses()}`}>
+            <div className="trust-menu-current-mode-label text-[11px] font-medium text-[var(--nim-text-faint)] uppercase tracking-[0.5px] mb-1.5">
+              Current mode:
+            </div>
+            <div className={`trust-menu-current-mode-value flex items-center gap-2 text-sm font-semibold mb-1 ${getModeValueColorClass()}`}>
               <MaterialSymbol
                 icon={getStatusIcon()}
                 size={20}
@@ -231,34 +336,34 @@ export const TrustIndicator: React.FC<TrustIndicatorProps> = ({
                   : 'Not Trusted'}
               </span>
             </div>
-            <div className="trust-menu-current-mode-description">
+            <div className="trust-menu-current-mode-description text-xs text-[var(--nim-text-muted)] leading-[1.4]">
               {getStatusDescription()}
             </div>
           </div>
 
           {status?.trustedAt && (
-            <div className="trust-menu-date">
+            <div className="trust-menu-date px-3 pb-2 text-[11px] text-[var(--nim-text-faint)]">
               Trusted {new Date(status.trustedAt).toLocaleDateString()}
             </div>
           )}
 
-          <div className="trust-menu-divider" />
+          <div className="trust-menu-divider h-px bg-[var(--nim-border)] my-1" />
 
-          <div className="trust-menu-actions">
+          <div className="trust-menu-actions p-1">
               <button
-                className="trust-menu-action"
+                className="trust-menu-action flex items-center gap-2 w-full p-2 border-none bg-transparent text-[var(--nim-text)] text-[13px] font-inherit text-left rounded cursor-pointer transition-colors duration-100 hover:bg-[var(--nim-bg-hover)]"
                 onClick={handleChangeMode}
                 role="menuitem"
               >
-                <MaterialSymbol icon="swap_horiz" size={18} />
+                <MaterialSymbol icon="swap_horiz" size={18} className="text-[var(--nim-text-muted)]" />
                 <span>Change permission mode</span>
               </button>
             <button
-              className="trust-menu-action"
+              className="trust-menu-action flex items-center gap-2 w-full p-2 border-none bg-transparent text-[var(--nim-text)] text-[13px] font-inherit text-left rounded cursor-pointer transition-colors duration-100 hover:bg-[var(--nim-bg-hover)]"
               onClick={handleOpenSettings}
               role="menuitem"
             >
-              <MaterialSymbol icon="settings" size={18} />
+              <MaterialSymbol icon="settings" size={18} className="text-[var(--nim-text-muted)]" />
               <span>Permission settings</span>
             </button>
           </div>

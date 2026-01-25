@@ -1,6 +1,11 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { errorNotificationService, type ErrorNotification } from '../../services/ErrorNotificationService';
-import './ErrorToast.css';
+
+const severityStyles = {
+  error: 'border-l-[#dc3545] bg-[#fff5f5] dark:bg-[#3d1f1f]',
+  warning: 'border-l-[#ffc107] bg-[#fffbf0] dark:bg-[#3d3419]',
+  info: 'border-l-[#17a2b8] bg-[#f0f9ff] dark:bg-[#1a2d35]',
+};
 
 export function ErrorToastContainer() {
   const [notifications, setNotifications] = useState<ErrorNotification[]>([]);
@@ -95,25 +100,25 @@ ${JSON.stringify(notification.context, null, 2)}
   if (notifications.length === 0) return null;
 
   return (
-    <div className="error-toast-container">
+    <div className="error-toast-container fixed top-10 right-5 z-[10000] flex flex-col gap-3 max-w-[500px] pointer-events-none">
       {notifications.map(notification => (
         <div
           key={notification.id}
-          className={`error-toast error-toast--${notification.severity}`}
+          className={`error-toast error-toast--${notification.severity} rounded-lg shadow-[0_4px_12px_rgba(0,0,0,0.15)] p-4 pointer-events-auto animate-[slideIn_0.3s_ease-out] border-l-4 ${severityStyles[notification.severity]}`}
           role="alert"
           onMouseEnter={() => pauseDismissTimer(notification.id)}
           onMouseLeave={() => resumeDismissTimer(notification)}
         >
-          <div className="error-toast-header">
-            <div className="error-toast-icon">
+          <div className="error-toast-header flex items-center gap-2 mb-2">
+            <div className="error-toast-icon text-xl leading-none">
               {notification.severity === 'error' && '🚨'}
               {notification.severity === 'warning' && '⚠️'}
               {notification.severity === 'info' && 'ℹ️'}
             </div>
-            <div className="error-toast-title">{notification.title}</div>
+            <div className="error-toast-title flex-1 font-semibold text-sm text-[var(--nim-text)]">{notification.title}</div>
             {notification.dismissible && (
               <button
-                className="error-toast-close"
+                className="error-toast-close bg-transparent border-none text-2xl leading-none cursor-pointer p-0 w-6 h-6 flex items-center justify-center text-[var(--nim-text-muted)] rounded transition-colors duration-200 hover:bg-black/5"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleDismiss(notification.id);
@@ -121,18 +126,18 @@ ${JSON.stringify(notification.context, null, 2)}
                 aria-label="Dismiss"
                 type="button"
               >
-                ×
+                x
               </button>
             )}
           </div>
 
-          <div className="error-toast-message">{notification.message}</div>
+          <div className="error-toast-message text-[13px] text-[var(--nim-text)] leading-normal mb-2">{notification.message}</div>
 
           {(notification.action || notification.details || notification.stack || notification.context) && (
-            <div className="error-toast-actions">
+            <div className="error-toast-actions flex gap-2 mt-3">
               {notification.action && (
                 <button
-                  className="error-toast-action-btn"
+                  className="error-toast-action-btn bg-[var(--nim-bg-secondary)] text-[var(--nim-text)] border border-[var(--nim-border)] px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-colors duration-200 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-border-focus)]"
                   onClick={() => handleActionClick(notification)}
                 >
                   {notification.action.label}
@@ -140,7 +145,7 @@ ${JSON.stringify(notification.context, null, 2)}
               )}
               {(notification.details || notification.stack || notification.context) && (
                 <button
-                  className="error-toast-copy-btn"
+                  className="error-toast-copy-btn bg-[var(--nim-primary)] text-white border-none px-3 py-1.5 rounded text-xs cursor-pointer transition-colors duration-200 hover:bg-[var(--nim-primary-hover)]"
                   onClick={() => handleCopyDetails(notification)}
                 >
                   Copy Details

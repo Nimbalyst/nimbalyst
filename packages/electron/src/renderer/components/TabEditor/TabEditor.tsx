@@ -101,7 +101,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                                                     }) => {
   // Use theme hook directly so we get live updates when theme changes
   // (TabContent creates each TabEditor in a separate React root, so prop updates don't work)
-  const { theme } = useTheme();
+  const { theme, themeId } = useTheme();
 
   // Debug: log every render to verify isDirty changes don't cause re-renders
   console.log('[TabEditor] render', fileName);
@@ -2345,6 +2345,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                     fileName={fileName}
                     config={{
                       theme,
+                      extensionThemeId: themeId,
                       isActive,
                     }}
                     onGetContent={(getContentFn) => {
@@ -2553,6 +2554,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                 fileName={fileName}
                 config={{
                   theme,
+                  extensionThemeId: themeId,
                   isActive,
                 }}
                 onGetContent={(getContentFn) => {
@@ -2601,6 +2603,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                 fileName={fileName}
                 config={{
                   theme,
+                  extensionThemeId: themeId,
                   isActive,
                 }}
                 onGetContent={(getContentFn) => {

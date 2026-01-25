@@ -3,7 +3,6 @@
  */
 
 import React from 'react';
-import './PlanListItem.css';
 
 export interface PlanData {
   id: string;
@@ -82,12 +81,12 @@ export function PlanListItem({ plan, isActive, onClick }: PlanListItemProps): JS
 
   return (
     <div
-      className={`plan-list-item ${isActive ? 'active' : ''}`}
+      className={`plan-list-item px-3 py-2 border-b border-nim cursor-pointer transition-colors duration-150 hover:bg-nim-hover ${isActive ? 'active bg-nim-secondary border-l-[3px] border-l-nim-accent pl-[9px]' : ''}`}
       onClick={() => onClick(plan)}
     >
-      <div className="plan-list-item-header">
+      <div className="plan-list-item-header flex items-start gap-1.5 mb-1.5">
         <span
-          className="plan-priority-indicator"
+          className="plan-priority-indicator text-[11px] font-bold tracking-tighter shrink-0 min-w-4"
           style={{ color: priorityColor }}
           title={`Priority: ${plan.priority}`}
         >
@@ -95,16 +94,16 @@ export function PlanListItem({ plan, isActive, onClick }: PlanListItemProps): JS
           {plan.priority === 'high' && '!!'}
           {plan.priority === 'medium' && '!'}
         </span>
-        <span className="material-symbols-outlined plan-type-icon" title={plan.planType || 'plan'}>
+        <span className="material-symbols-outlined plan-type-icon text-base text-nim-tertiary shrink-0 mt-px" title={plan.planType || 'plan'}>
           {planTypeIcon}
         </span>
-        <div className="plan-list-item-title">{plan.title}</div>
+        <div className="plan-list-item-title flex-1 text-[13px] font-medium text-nim-primary leading-snug overflow-hidden text-ellipsis line-clamp-2">{plan.title}</div>
       </div>
 
       {plan.progress > 0 && (
-        <div className="plan-progress-bar">
+        <div className="plan-progress-bar h-[3px] bg-nim-secondary rounded-sm overflow-hidden mb-1.5">
           <div
-            className="plan-progress-fill"
+            className="plan-progress-fill h-full transition-[width] duration-300 ease-in-out"
             style={{
               width: `${plan.progress}%`,
               backgroundColor: plan.progress === 100 ? '#22c55e' : '#60a5fa'
@@ -113,10 +112,10 @@ export function PlanListItem({ plan, isActive, onClick }: PlanListItemProps): JS
         </div>
       )}
 
-      <div className="plan-list-item-footer">
-        <span className="plan-updated-time">{formatDate(plan.lastUpdated)}</span>
+      <div className="plan-list-item-footer flex items-center justify-between gap-2">
+        <span className="plan-updated-time text-[11px] text-nim-tertiary">{formatDate(plan.lastUpdated)}</span>
         <span
-          className="plan-status-badge"
+          className="plan-status-badge text-[10px] px-1.5 py-0.5 rounded-sm border capitalize font-medium whitespace-nowrap"
           style={{
             backgroundColor: `${statusColor}20`,
             color: statusColor,

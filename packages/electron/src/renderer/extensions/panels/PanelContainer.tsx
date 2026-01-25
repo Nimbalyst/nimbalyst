@@ -6,13 +6,12 @@
  */
 
 import React, { useMemo, useEffect, useState, useCallback, useRef } from 'react';
-import { useAtomValue, useSetAtom } from 'jotai';
-import { themeIdAtom, type ThemeId } from '@nimbalyst/runtime/store';
+import { useSetAtom } from 'jotai';
+import { useTheme } from '../../hooks/useTheme';
 import { createExtensionStorage } from '@nimbalyst/runtime';
 import { createPanelHost, type PanelHostOptions } from './PanelHostImpl';
 import type { RegisteredPanel } from './PanelRegistry';
 import { setExtensionPanelAIContextAtom } from '../../store/atoms/extensionPanels';
-import './PanelContainer.css';
 
 // ============================================================================
 // Types
@@ -55,14 +54,14 @@ class PanelErrorBoundary extends React.Component<
   render(): React.ReactNode {
     if (this.state.hasError) {
       return (
-        <div className="panel-error">
-          <span className="material-symbols-outlined panel-error-icon">error</span>
-          <div className="panel-error-title">Panel Error</div>
-          <div className="panel-error-message">
+        <div className="panel-error flex flex-col items-center justify-center h-full p-8 text-center gap-3">
+          <span className="material-symbols-outlined panel-error-icon text-5xl text-[var(--nim-error)]">error</span>
+          <div className="panel-error-title text-base font-semibold text-[var(--nim-text)]">Panel Error</div>
+          <div className="panel-error-message text-[13px] text-[var(--nim-text-muted)] max-w-[300px] break-words">
             {this.state.error?.message || 'An unknown error occurred'}
           </div>
           <button
-            className="panel-error-retry"
+            className="panel-error-retry mt-2 px-4 py-2 border border-[var(--nim-border)] rounded bg-transparent text-[var(--nim-text)] text-[13px] cursor-pointer hover:bg-[var(--nim-bg-hover)]"
             onClick={() => this.setState({ hasError: false, error: undefined })}
           >
             Retry
@@ -86,9 +85,8 @@ export function PanelContainer({
   onOpenPanel,
   onClose,
 }: PanelContainerProps): JSX.Element {
-  const themeId = useAtomValue(themeIdAtom);
-  // Map ThemeId to panel theme type
-  const theme = themeId as 'light' | 'dark' | 'crystal-dark';
+  // Get the resolved theme (extension themes are resolved to 'light' or 'dark')
+  const { theme } = useTheme();
   const [themeListeners] = useState(() => new Set<(theme: 'light' | 'dark' | 'crystal-dark') => void>());
   const setExtensionPanelAIContext = useSetAtom(setExtensionPanelAIContextAtom);
 
@@ -165,7 +163,7 @@ export function PanelContainer({
   const PanelComponent = panel.component;
 
   return (
-    <div className="panel-container" data-panel-id={panel.id} data-theme={theme}>
+    <div className="panel-container flex flex-col h-full w-full overflow-hidden" data-panel-id={panel.id} data-theme={theme}>
       <PanelErrorBoundary panelId={panel.id}>
         <PanelComponent host={host} />
       </PanelErrorBoundary>

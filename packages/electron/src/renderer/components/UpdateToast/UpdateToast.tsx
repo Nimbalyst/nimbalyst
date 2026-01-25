@@ -3,7 +3,6 @@ import { UpdateAvailableToast } from './UpdateAvailableToast';
 import { ReleaseNotesDialog } from './ReleaseNotesDialog';
 import { DownloadProgressToast } from './DownloadProgressToast';
 import { UpdateReadyToast } from './UpdateReadyToast';
-import './UpdateToast.css';
 
 export type UpdateState = 'idle' | 'checking' | 'up-to-date' | 'available' | 'viewing-notes' | 'downloading' | 'ready' | 'error';
 
@@ -195,28 +194,44 @@ export function UpdateToast(): React.ReactElement | null {
     <>
       {/* Toast container for all toast states */}
       {(state === 'checking' || state === 'up-to-date' || state === 'available' || state === 'downloading' || state === 'ready' || state === 'error') && (
-        <div className="update-toast-container" data-testid="update-toast-container" data-state={state}>
+        <div
+          className="update-toast-container fixed bottom-5 right-5 z-[10000] animate-[slideUp_0.3s_ease-out]"
+          data-testid="update-toast-container"
+          data-state={state}
+        >
           {state === 'checking' && (
-            <div className="update-toast update-toast-checking" data-testid="update-checking-toast">
-              <div className="update-toast-spinner" />
-              <div className="update-toast-title">Checking for updates...</div>
+            <div
+              className="update-toast update-toast-checking flex items-center gap-3 w-auto min-w-[220px] relative rounded-xl p-4 px-5 border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] shadow-[0_10px_25px_-5px_rgba(0,0,0,0.3),0_4px_10px_-2px_rgba(0,0,0,0.2)]"
+              data-testid="update-checking-toast"
+            >
+              <div className="update-toast-spinner w-5 h-5 border-2 border-[var(--nim-bg-tertiary)] border-t-[var(--nim-primary)] rounded-full animate-spin shrink-0" />
+              <div className="update-toast-title text-sm font-semibold text-[var(--nim-text)] mb-0 pr-0">Checking for updates...</div>
             </div>
           )}
 
           {state === 'up-to-date' && (
-            <div className="update-toast update-toast-up-to-date" data-testid="update-up-to-date-toast">
-              <button className="update-toast-dismiss" onClick={handleDismiss} title="Dismiss" aria-label="Dismiss" data-testid="update-toast-dismiss">
+            <div
+              className="update-toast update-toast-up-to-date flex flex-col items-start w-auto min-w-[280px] relative rounded-xl p-4 px-5 border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] shadow-[0_10px_25px_-5px_rgba(0,0,0,0.3),0_4px_10px_-2px_rgba(0,0,0,0.2)]"
+              data-testid="update-up-to-date-toast"
+            >
+              <button
+                className="update-toast-dismiss absolute top-3 right-3 w-6 h-6 border-none bg-transparent cursor-pointer rounded flex items-center justify-center p-0 text-[var(--nim-text-faint)] transition-colors duration-200 hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text-muted)] [&>svg]:w-3.5 [&>svg]:h-3.5"
+                onClick={handleDismiss}
+                title="Dismiss"
+                aria-label="Dismiss"
+                data-testid="update-toast-dismiss"
+              >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M18 6L6 18M6 6l12 12" />
                 </svg>
               </button>
-              <div className="update-toast-check-icon">
+              <div className="update-toast-check-icon w-8 h-8 rounded-full bg-[var(--nim-success)] flex items-center justify-center mb-3 [&>svg]:w-[18px] [&>svg]:h-[18px] [&>svg]:text-white">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M20 6L9 17l-5-5" />
                 </svg>
               </div>
-              <div className="update-toast-title">You're up to date!</div>
-              <div className="update-toast-subtitle">Nimbalyst {currentVersion} is the latest version.</div>
+              <div className="update-toast-title text-sm font-semibold text-[var(--nim-text)] mb-1 pr-7">You're up to date!</div>
+              <div className="update-toast-subtitle text-xs text-[var(--nim-text-muted)] leading-normal mb-0">Nimbalyst {currentVersion} is the latest version.</div>
             </div>
           )}
 
@@ -248,16 +263,29 @@ export function UpdateToast(): React.ReactElement | null {
           )}
 
           {state === 'error' && (
-            <div className="update-toast update-toast-error" data-testid="update-error-toast">
-              <button className="update-toast-dismiss" onClick={handleDismiss} title="Dismiss" aria-label="Dismiss" data-testid="update-toast-dismiss">
+            <div
+              className="update-toast update-toast-error relative w-[380px] rounded-xl p-4 px-5 border border-[var(--nim-error)] bg-[var(--nim-bg-secondary)] shadow-[0_10px_25px_-5px_rgba(0,0,0,0.3),0_4px_10px_-2px_rgba(0,0,0,0.2)]"
+              data-testid="update-error-toast"
+            >
+              <button
+                className="update-toast-dismiss absolute top-3 right-3 w-6 h-6 border-none bg-transparent cursor-pointer rounded flex items-center justify-center p-0 text-[var(--nim-text-faint)] transition-colors duration-200 hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text-muted)] [&>svg]:w-3.5 [&>svg]:h-3.5"
+                onClick={handleDismiss}
+                title="Dismiss"
+                aria-label="Dismiss"
+                data-testid="update-toast-dismiss"
+              >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M18 6L6 18M6 6l12 12" />
                 </svg>
               </button>
-              <div className="update-toast-title">Update Error</div>
-              <div className="update-toast-subtitle" data-testid="error-message">{errorMessage}</div>
-              <div className="update-toast-actions">
-                <button className="update-toast-btn update-toast-btn-secondary" onClick={handleDismiss} data-testid="error-dismiss-btn">
+              <div className="update-toast-title text-sm font-semibold text-[var(--nim-error)] mb-1 pr-7">Update Error</div>
+              <div className="update-toast-subtitle text-xs text-[var(--nim-text-muted)] leading-normal mb-4" data-testid="error-message">{errorMessage}</div>
+              <div className="update-toast-actions flex gap-2 flex-wrap">
+                <button
+                  className="update-toast-btn update-toast-btn-secondary py-2 px-3.5 border border-[var(--nim-border)] rounded-md text-[13px] font-medium cursor-pointer transition-all duration-200 font-[inherit] whitespace-nowrap bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]"
+                  onClick={handleDismiss}
+                  data-testid="error-dismiss-btn"
+                >
                   Dismiss
                 </button>
               </div>

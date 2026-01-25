@@ -8,7 +8,6 @@ import { $getNodeByKey, NodeKey } from 'lexical';
 import { $isMermaidNode } from './MermaidNode';
 import { ErrorBoundary } from 'react-error-boundary';
 import { useTheme } from '../../context/ThemeContext';
-import './MermaidPlugin.css';
 
 interface MermaidComponentProps {
   content: string;
@@ -138,13 +137,13 @@ function MermaidDiagram({ content, id, renderKey }: { content: string; id: strin
   }, [content, id, isDarkTheme, renderKey]);
 
   return (
-    <div className="mermaid-diagram">
-      {loading && !error && <div className="mermaid-loading">Loading diagram...</div>}
-      <div ref={containerRef} className="mermaid-render-container" />
+    <div className="mermaid-diagram p-6 min-h-[200px] flex flex-col items-center justify-center">
+      {loading && !error && <div className="mermaid-loading text-[var(--nim-text-muted)] text-sm p-8 text-center">Loading diagram...</div>}
+      <div ref={containerRef} className="mermaid-render-container w-full overflow-x-auto" />
       {error && (
-        <div className="mermaid-error">
-          <strong>Diagram Error:</strong>
-          <pre>{error}</pre>
+        <div className="mermaid-error bg-[color-mix(in_srgb,var(--nim-error)_10%,var(--nim-bg))] border border-[color-mix(in_srgb,var(--nim-error)_30%,transparent)] rounded p-4 m-4 text-[var(--nim-error)]">
+          <strong className="block mb-2">Diagram Error:</strong>
+          <pre className="m-0 font-mono text-xs whitespace-pre-wrap break-words">{error}</pre>
         </div>
       )}
     </div>
@@ -214,19 +213,23 @@ function MermaidComponent({ content: initialContent, nodeKey, className }: Merma
   }, [initialContent]);
 
   return (
-    <div className={`mermaid-block ${className || ''}`}>
-      <div className="mermaid-header">
-        <span className="mermaid-label">Mermaid Diagram</span>
-        <div className="mermaid-header-buttons">
+    <div className={`mermaid-block my-4 border border-[var(--nim-border)] rounded-lg bg-[var(--nim-bg)] overflow-hidden ${className || ''}`}>
+      <div className="mermaid-header flex items-center justify-between px-4 py-2 bg-[var(--nim-bg-secondary)] border-b border-[var(--nim-border)]">
+        <span className="mermaid-label font-medium text-[var(--nim-text)] text-sm flex items-center gap-2">Mermaid Diagram</span>
+        <div className="mermaid-header-buttons flex gap-2">
           <button
-            className="mermaid-redraw-button"
+            className="mermaid-redraw-button py-1 px-3 text-xs border border-[var(--nim-border)] rounded bg-[var(--nim-bg)] text-[var(--nim-text-muted)] cursor-pointer transition-colors hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]"
             onClick={handleRedraw}
             title="Redraw diagram"
           >
             Redraw
           </button>
           <button
-            className={`mermaid-edit-button ${isEditing ? 'mermaid-edit-button-active' : ''}`}
+            className={`mermaid-edit-button py-1 px-3 text-xs border rounded cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+              isEditing
+                ? 'bg-[var(--nim-primary)] text-white border-[var(--nim-primary)] hover:bg-[var(--nim-primary-hover)]'
+                : 'border-[var(--nim-border)] bg-[var(--nim-bg)] text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]'
+            }`}
             onClick={handleToggleEdit}
           >
             {isEditing ? 'Done' : 'Edit'}
@@ -235,10 +238,10 @@ function MermaidComponent({ content: initialContent, nodeKey, className }: Merma
       </div>
 
       {isEditing && (
-        <div className="mermaid-editor">
+        <div className="mermaid-editor p-4 pb-0">
           <textarea
             ref={textareaRef}
-            className="mermaid-textarea"
+            className="mermaid-textarea w-full min-h-[80px] p-3 border border-[var(--nim-border)] rounded font-mono text-sm resize-none overflow-hidden bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)] leading-relaxed focus:outline-none focus:border-[var(--nim-border-focus)] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--nim-primary)_10%,transparent)]"
             value={editedContent}
             onChange={(e) => {
               handleContentChange(e.target.value);
@@ -256,12 +259,12 @@ function MermaidComponent({ content: initialContent, nodeKey, className }: Merma
 
       <ErrorBoundary
         fallback={
-          <div className="mermaid-error">
+          <div className="mermaid-error bg-[color-mix(in_srgb,var(--nim-error)_10%,var(--nim-bg))] border border-[color-mix(in_srgb,var(--nim-error)_30%,transparent)] rounded p-4 m-4 text-[var(--nim-error)]">
             Failed to render Mermaid diagram
           </div>
         }
       >
-        <React.Suspense fallback={<div className="mermaid-loading">Loading...</div>}>
+        <React.Suspense fallback={<div className="mermaid-loading text-[var(--nim-text-muted)] text-sm p-8 text-center">Loading...</div>}>
           <MermaidDiagram content={content} id={nodeKey} renderKey={renderKey} />
         </React.Suspense>
       </ErrorBoundary>

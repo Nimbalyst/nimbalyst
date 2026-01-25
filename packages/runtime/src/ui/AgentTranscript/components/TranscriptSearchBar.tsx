@@ -1,6 +1,37 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { MaterialSymbol } from '../../icons/MaterialSymbol';
-import './TranscriptSearchBar.css';
+
+// Inject search highlight styles once
+const injectHighlightStyles = () => {
+  const styleId = 'transcript-search-highlight-styles';
+  if (document.getElementById(styleId)) return;
+
+  const style = document.createElement('style');
+  style.id = styleId;
+  style.textContent = `
+    .transcript-search-highlight {
+      background-color: color-mix(in srgb, var(--warning-color, #fbbf24) 30%, transparent);
+      color: var(--nim-text);
+      border-radius: 0.125rem;
+      padding: 0 0.125rem;
+    }
+    .transcript-search-highlight-current {
+      background-color: var(--warning-color, #fbbf24);
+      color: var(--nim-bg);
+      font-weight: 500;
+    }
+    .transcript-search-message-has-matches {
+      outline: 1px solid color-mix(in srgb, var(--warning-color, #fbbf24) 25%, transparent);
+      outline-offset: -1px;
+    }
+    .transcript-search-message-current {
+      outline: 2px solid color-mix(in srgb, var(--warning-color, #fbbf24) 50%, transparent);
+      outline-offset: -2px;
+      background-color: color-mix(in srgb, var(--warning-color, #fbbf24) 5%, transparent) !important;
+    }
+  `;
+  document.head.appendChild(style);
+};
 
  /**
  * TranscriptSearchBar - Find-in-page search UI for agent transcript messages.
@@ -41,6 +72,11 @@ export const TranscriptSearchBar: React.FC<TranscriptSearchBarProps> = ({
   const inputRef = useRef<HTMLInputElement>(null);
   const highlightClassName = 'transcript-search-highlight';
   const currentHighlightClassName = 'transcript-search-highlight-current';
+
+  // Inject highlight styles on mount
+  useEffect(() => {
+    injectHighlightStyles();
+  }, []);
 
   // Navigate to next match
   const goToNextMatch = useCallback(() => {
@@ -335,24 +371,24 @@ export const TranscriptSearchBar: React.FC<TranscriptSearchBarProps> = ({
   const displayIndex = matchCount > 0 ? currentIndex + 1 : 0;
 
   return (
-    <div className="transcript-search-bar">
-      <div className="transcript-search-bar-content">
+    <div className="transcript-search-bar sticky top-0 z-10 bg-[var(--nim-bg-secondary)] border-b border-[var(--nim-border)] px-3 py-2">
+      <div className="transcript-search-bar-content flex items-center gap-2 max-w-4xl mx-auto">
         <input
           ref={inputRef}
           type="text"
-          className="transcript-search-input"
+          className="transcript-search-input flex-1 min-w-0 px-2.5 py-1.5 text-sm bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md text-[var(--nim-text)] outline-none transition-colors focus:border-[var(--nim-primary)] placeholder:text-[var(--nim-text-faint)]"
           placeholder="Find in transcript..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           onKeyDown={handleKeyDown}
         />
 
-        <div className="transcript-search-match-counter">
+        <div className="transcript-search-match-counter text-xs text-[var(--nim-text-muted)] whitespace-nowrap min-w-20 text-center">
           {matchCount > 0 ? `${displayIndex} of ${matchCount}` : 'No matches'}
         </div>
 
         <button
-          className="transcript-search-button"
+          className="transcript-search-button p-1.5 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md text-[var(--nim-text-muted)] cursor-pointer transition-all flex items-center justify-center hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] hover:text-[var(--nim-text)] disabled:opacity-40 disabled:cursor-not-allowed"
           onClick={goToPrevMatch}
           disabled={matchCount === 0}
           title="Previous match (Shift+Enter or Cmd+Shift+G)"
@@ -361,7 +397,7 @@ export const TranscriptSearchBar: React.FC<TranscriptSearchBarProps> = ({
         </button>
 
         <button
-          className="transcript-search-button"
+          className="transcript-search-button p-1.5 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md text-[var(--nim-text-muted)] cursor-pointer transition-all flex items-center justify-center hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] hover:text-[var(--nim-text)] disabled:opacity-40 disabled:cursor-not-allowed"
           onClick={goToNextMatch}
           disabled={matchCount === 0}
           title="Next match (Enter or Cmd+G)"
@@ -370,7 +406,7 @@ export const TranscriptSearchBar: React.FC<TranscriptSearchBarProps> = ({
         </button>
 
         <button
-          className="transcript-search-button transcript-search-case-button"
+          className={`transcript-search-button transcript-search-case-button p-1.5 text-xs font-semibold font-mono bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md text-[var(--nim-text-muted)] cursor-pointer transition-all flex items-center justify-center hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] hover:text-[var(--nim-text)] ${caseSensitive ? 'bg-[var(--nim-primary)] border-[var(--nim-primary)] text-white' : ''}`}
           onClick={() => setCaseSensitive(!caseSensitive)}
           title={caseSensitive ? 'Case sensitive' : 'Case insensitive'}
           data-active={caseSensitive}
@@ -379,7 +415,7 @@ export const TranscriptSearchBar: React.FC<TranscriptSearchBarProps> = ({
         </button>
 
         <button
-          className="transcript-search-button transcript-search-close-button"
+          className="transcript-search-button transcript-search-close-button ml-1 p-1.5 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md text-[var(--nim-text-muted)] cursor-pointer transition-all flex items-center justify-center hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] hover:text-[var(--nim-text)]"
           onClick={onClose}
           title="Close (Escape)"
         >

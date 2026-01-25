@@ -80,16 +80,16 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
   return (
     <div
       ref={menuRef}
-      className="context-menu"
+      className="absolute z-[1000] min-w-[160px] py-1 bg-nim border border-nim rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)] text-[13px]"
       style={{ left: x, top: y }}
     >
       {items.map((item, index) =>
         item.separator ? (
-          <div key={index} className="context-menu-separator" />
+          <div key={index} className="h-px my-1 bg-[var(--nim-border)]" />
         ) : (
           <button
             key={index}
-            className={`context-menu-item ${item.disabled ? 'disabled' : ''}`}
+            className={`block w-full px-3 py-2 text-left bg-none border-none cursor-pointer transition-colors ${item.disabled ? 'text-nim-faint cursor-not-allowed' : 'text-nim hover:bg-nim-hover active:bg-nim-tertiary'}`}
             onClick={() => handleItemClick(item)}
             disabled={item.disabled}
           >

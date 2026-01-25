@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { usePostHog } from 'posthog-js/react';
-import './ProjectTrustToast.css';
 
 interface ProjectTrustToastProps {
   workspacePath: string | null;
@@ -242,23 +241,50 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
   }
 
   return (
-    <div className="project-trust-toast-overlay">
-      <div className="project-trust-toast" ref={toastRef}>
+    <div className="project-trust-toast-overlay nim-overlay">
+      <div
+        className="project-trust-toast p-6 rounded-xl max-w-[540px] w-[calc(100%-32px)]"
+        style={{
+          background: 'var(--nim-bg)',
+          border: '1px solid var(--nim-border)',
+          boxShadow: '0 16px 48px rgba(0, 0, 0, 0.3)',
+        }}
+        ref={toastRef}
+      >
         {/* Header with Don't Trust button */}
-        <div className="project-trust-toast-header">
-          <span className="project-trust-toast-icon">
+        <div className="project-trust-toast-header flex items-start gap-4 mb-4">
+          <span
+            className="project-trust-toast-icon flex items-center justify-center w-12 h-12 rounded-xl shrink-0"
+            style={{
+              background: 'color-mix(in srgb, var(--nim-primary) 15%, transparent)',
+              color: 'var(--nim-primary)',
+            }}
+          >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </span>
-          <div className="project-trust-toast-header-text">
-            <h2 className="project-trust-toast-title">Trust "{projectName}"?</h2>
-            <p className="project-trust-toast-subtitle">
+          <div className="project-trust-toast-header-text flex-1">
+            <h2
+              className="project-trust-toast-title text-lg font-semibold m-0 mb-1"
+              style={{ color: 'var(--nim-text)' }}
+            >
+              Trust "{projectName}"?
+            </h2>
+            <p
+              className="project-trust-toast-subtitle text-sm m-0"
+              style={{ color: 'var(--nim-text-muted)' }}
+            >
               This project wants to use the AI agent
             </p>
           </div>
           <button
-            className="project-trust-toast-dont-trust"
+            className="project-trust-toast-dont-trust text-[13px] font-medium px-3 py-1.5 rounded-md cursor-pointer shrink-0 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{
+              background: 'none',
+              border: '1px solid var(--nim-border)',
+              color: 'var(--nim-text-muted)',
+            }}
             onClick={handleDontTrust}
             disabled={isSubmitting}
           >
@@ -267,8 +293,23 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
         </div>
 
         {/* Warning */}
-        <div className="project-trust-toast-warning">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <div
+          className="project-trust-toast-warning flex items-start gap-2.5 p-3 rounded-lg mb-4 text-[13px] leading-relaxed"
+          style={{
+            background: 'color-mix(in srgb, #f59e0b 10%)',
+            border: '1px solid color-mix(in srgb, #f59e0b 30%)',
+            color: 'var(--nim-text-muted)',
+          }}
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            className="shrink-0 mt-px"
+            style={{ color: '#f59e0b' }}
+          >
             <path d="M8 5.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
             <path d="M8 11h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
             <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5"/>
@@ -279,86 +320,199 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
         </div>
 
         {/* Description */}
-        <p className="project-trust-toast-description">
+        <p
+          className="project-trust-toast-description text-sm m-0 mb-3"
+          style={{ color: 'var(--nim-text-muted)' }}
+        >
           Choose how the agent handles tool calls in this project:
         </p>
 
         {/* Mode Toggle Buttons */}
-        <div className="project-trust-toast-mode-toggle">
+        <div className="project-trust-toast-mode-toggle flex gap-2 mb-4">
           <button
-            className={`project-trust-toast-mode-btn ${selectedMode === 'ask' ? 'project-trust-toast-mode-btn--selected' : ''}`}
+            className={`project-trust-toast-mode-btn flex-1 grid grid-rows-[1fr_auto] items-center justify-items-center px-4 pt-3 pb-2 min-h-16 rounded-lg cursor-pointer transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed ${
+              selectedMode === 'ask' ? 'project-trust-toast-mode-btn--selected' : ''
+            }`}
+            style={{
+              border: selectedMode === 'ask' ? '1px solid var(--nim-primary)' : '1px solid var(--nim-border)',
+              background: selectedMode === 'ask' ? 'color-mix(in srgb, var(--nim-primary) 12%)' : 'var(--nim-bg-secondary)',
+            }}
             onClick={() => setSelectedMode('ask')}
             disabled={isSubmitting}
           >
-            <span className="project-trust-toast-mode-label">Ask</span>
+            <span
+              className="project-trust-toast-mode-label text-sm font-semibold"
+              style={{ color: 'var(--nim-text)' }}
+            >
+              Ask
+            </span>
           </button>
           <button
-            className={`project-trust-toast-mode-btn ${selectedMode === 'allow-all' ? 'project-trust-toast-mode-btn--selected' : ''}`}
+            className={`project-trust-toast-mode-btn flex-1 grid grid-rows-[1fr_auto] items-center justify-items-center px-4 pt-3 pb-2 min-h-16 rounded-lg cursor-pointer transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed ${
+              selectedMode === 'allow-all' ? 'project-trust-toast-mode-btn--selected' : ''
+            }`}
+            style={{
+              border: selectedMode === 'allow-all' ? '1px solid var(--nim-primary)' : '1px solid var(--nim-border)',
+              background: selectedMode === 'allow-all' ? 'color-mix(in srgb, var(--nim-primary) 12%)' : 'var(--nim-bg-secondary)',
+            }}
             onClick={() => setSelectedMode('allow-all')}
             disabled={isSubmitting}
           >
-            <span className="project-trust-toast-mode-label">Allow Edits</span>
-            <span className="project-trust-toast-mode-badge">Recommended</span>
+            <span
+              className="project-trust-toast-mode-label text-sm font-semibold"
+              style={{ color: 'var(--nim-text)' }}
+            >
+              Allow Edits
+            </span>
+            <span
+              className="project-trust-toast-mode-badge text-[11px] font-medium px-2 py-0.5 rounded whitespace-nowrap row-start-2"
+              style={{
+                background: 'color-mix(in srgb, var(--nim-primary) 15%, transparent)',
+                color: 'var(--nim-primary)',
+              }}
+            >
+              Recommended
+            </span>
           </button>
           <button
-            className={`project-trust-toast-mode-btn ${selectedMode === 'bypass-all' ? 'project-trust-toast-mode-btn--selected' : ''}`}
+            className={`project-trust-toast-mode-btn flex-1 grid grid-rows-[1fr_auto] items-center justify-items-center px-4 pt-3 pb-2 min-h-16 rounded-lg cursor-pointer transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed ${
+              selectedMode === 'bypass-all' ? 'project-trust-toast-mode-btn--selected' : ''
+            }`}
+            style={{
+              border: selectedMode === 'bypass-all' ? '1px solid var(--nim-primary)' : '1px solid var(--nim-border)',
+              background: selectedMode === 'bypass-all' ? 'color-mix(in srgb, var(--nim-primary) 12%)' : 'var(--nim-bg-secondary)',
+            }}
             onClick={() => setSelectedMode('bypass-all')}
             disabled={isSubmitting}
           >
-            <span className="project-trust-toast-mode-label">Allow All</span>
+            <span
+              className="project-trust-toast-mode-label text-sm font-semibold"
+              style={{ color: 'var(--nim-text)' }}
+            >
+              Allow All
+            </span>
           </button>
         </div>
 
         {/* Mode Details */}
-        <div className="project-trust-toast-mode-details">
+        <div
+          className="project-trust-toast-mode-details rounded-lg p-4 mb-4"
+          style={{ background: 'var(--nim-bg-secondary)' }}
+        >
           {selectedMode === 'ask' ? (
             <>
-              <p className="project-trust-toast-mode-summary">
+              <p
+                className="project-trust-toast-mode-summary text-[13px] m-0 mb-3 leading-normal"
+                style={{ color: 'var(--nim-text-muted)' }}
+              >
                 The agent will ask for permission before running commands. When you approve, your choices are saved to <code>.claude/settings.local.json</code> for future sessions.
               </p>
-              <ul className="project-trust-toast-features-list">
-                <li>
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+              <ul className="project-trust-toast-features-list list-none m-0 p-0 flex flex-col gap-2">
+                <li
+                  className="flex items-start gap-2 text-[13px] leading-relaxed"
+                  style={{ color: 'var(--nim-text-muted)' }}
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    className="shrink-0 mt-0.5"
+                    style={{ color: 'var(--nim-primary)' }}
+                  >
                     <path d="M13.5 4.5l-7 7-4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
-                  <span><strong>Approve once</strong> or <strong>always</strong> for each tool pattern</span>
+                  <span><strong className="font-medium" style={{ color: 'var(--nim-text)' }}>Approve once</strong> or <strong className="font-medium" style={{ color: 'var(--nim-text)' }}>always</strong> for each tool pattern</span>
                 </li>
-                <li>
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <li
+                  className="flex items-start gap-2 text-[13px] leading-relaxed"
+                  style={{ color: 'var(--nim-text-muted)' }}
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    className="shrink-0 mt-0.5"
+                    style={{ color: 'var(--nim-primary)' }}
+                  >
                     <path d="M13.5 4.5l-7 7-4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
-                  <span><strong>Fine-grained control</strong> - allow "npm test" but block "rm -rf"</span>
+                  <span><strong className="font-medium" style={{ color: 'var(--nim-text)' }}>Fine-grained control</strong> - allow "npm test" but block "rm -rf"</span>
                 </li>
-                <li>
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <li
+                  className="flex items-start gap-2 text-[13px] leading-relaxed"
+                  style={{ color: 'var(--nim-text-muted)' }}
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    className="shrink-0 mt-0.5"
+                    style={{ color: 'var(--nim-primary)' }}
+                  >
                     <path d="M13.5 4.5l-7 7-4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
-                  <span><strong>Permissions shared</strong> with Claude Code CLI in this project</span>
+                  <span><strong className="font-medium" style={{ color: 'var(--nim-text)' }}>Permissions shared</strong> with Claude Code CLI in this project</span>
                 </li>
               </ul>
             </>
           ) : selectedMode === 'allow-all' ? (
             <>
-              <p className="project-trust-toast-mode-summary project-trust-toast-mode-summary--warning">
+              <p
+                className="project-trust-toast-mode-summary text-[13px] m-0 mb-3 leading-normal"
+                style={{ color: '#f59e0b' }}
+              >
                 The agent will run all file and edit operations without asking. Shell commands and web requests may still require approval.
               </p>
-              <ul className="project-trust-toast-features-list project-trust-toast-features-list--warning">
-                <li>
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+              <ul className="project-trust-toast-features-list list-none m-0 p-0 flex flex-col gap-2">
+                <li
+                  className="flex items-start gap-2 text-[13px] leading-relaxed"
+                  style={{ color: 'var(--nim-text-muted)' }}
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    className="shrink-0 mt-0.5"
+                    style={{ color: '#f59e0b' }}
+                  >
                     <path d="M8 5.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                     <path d="M8 11h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                   </svg>
                   <span>All file read/write/edit operations are automatically approved</span>
                 </li>
-                <li>
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <li
+                  className="flex items-start gap-2 text-[13px] leading-relaxed"
+                  style={{ color: 'var(--nim-text-muted)' }}
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    className="shrink-0 mt-0.5"
+                    style={{ color: '#f59e0b' }}
+                  >
                     <path d="M8 5.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                     <path d="M8 11h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                   </svg>
                   <span>Bash commands and web fetches follow Claude Code's settings</span>
                 </li>
-                <li>
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <li
+                  className="flex items-start gap-2 text-[13px] leading-relaxed"
+                  style={{ color: 'var(--nim-text-muted)' }}
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    className="shrink-0 mt-0.5"
+                    style={{ color: '#f59e0b' }}
+                  >
                     <path d="M8 5.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                     <path d="M8 11h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                   </svg>
@@ -368,26 +522,59 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
             </>
           ) : (
             <>
-              <p className="project-trust-toast-mode-summary project-trust-toast-mode-summary--warning">
+              <p
+                className="project-trust-toast-mode-summary text-[13px] m-0 mb-3 leading-normal"
+                style={{ color: '#f59e0b' }}
+              >
                 The agent will run all operations without permission prompts, including shell commands, file operations, and web requests.
               </p>
-              <ul className="project-trust-toast-features-list project-trust-toast-features-list--warning">
-                <li>
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+              <ul className="project-trust-toast-features-list list-none m-0 p-0 flex flex-col gap-2">
+                <li
+                  className="flex items-start gap-2 text-[13px] leading-relaxed"
+                  style={{ color: 'var(--nim-text-muted)' }}
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    className="shrink-0 mt-0.5"
+                    style={{ color: '#f59e0b' }}
+                  >
                     <path d="M8 5.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                     <path d="M8 11h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                   </svg>
                   <span>All tool calls are automatically approved</span>
                 </li>
-                <li>
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <li
+                  className="flex items-start gap-2 text-[13px] leading-relaxed"
+                  style={{ color: 'var(--nim-text-muted)' }}
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    className="shrink-0 mt-0.5"
+                    style={{ color: '#f59e0b' }}
+                  >
                     <path d="M8 5.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                     <path d="M8 11h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                   </svg>
                   <span>Uses Nimbalyst permissions instead of Claude Code settings</span>
                 </li>
-                <li>
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <li
+                  className="flex items-start gap-2 text-[13px] leading-relaxed"
+                  style={{ color: 'var(--nim-text-muted)' }}
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    className="shrink-0 mt-0.5"
+                    style={{ color: '#f59e0b' }}
+                  >
                     <path d="M8 5.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                     <path d="M8 11h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                   </svg>
@@ -399,23 +586,38 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
         </div>
 
         {/* Footer with Save/Cancel buttons */}
-        <div className="project-trust-toast-footer">
+        <div className="project-trust-toast-footer flex items-center justify-between">
           <button
-            className="project-trust-toast-settings-link"
+            className="project-trust-toast-settings-link text-[13px] p-1 px-2 rounded cursor-pointer transition-colors duration-150 hover:underline"
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--nim-text-faint)',
+            }}
             onClick={handleOpenSettings}
           >
             Advanced settings
           </button>
-          <div className="project-trust-toast-actions">
+          <div className="project-trust-toast-actions flex gap-2">
             <button
-              className="project-trust-toast-cancel"
+              className="project-trust-toast-cancel text-sm font-medium px-4 py-2 rounded-md cursor-pointer transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{
+                background: 'none',
+                border: '1px solid var(--nim-border)',
+                color: 'var(--nim-text-muted)',
+              }}
               onClick={handleDismiss}
               disabled={isSubmitting}
             >
               Cancel
             </button>
             <button
-              className="project-trust-toast-save"
+              className="project-trust-toast-save text-sm font-medium px-4 py-2 rounded-md cursor-pointer transition-all duration-150 disabled:opacity-70 disabled:cursor-not-allowed hover:brightness-110"
+              style={{
+                background: 'var(--nim-primary)',
+                border: 'none',
+                color: 'white',
+              }}
               onClick={handleSave}
               disabled={isSubmitting}
             >

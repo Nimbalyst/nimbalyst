@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
-import './SyncStatusButton.css';
 
 export interface SyncConfig {
   enabled: boolean;
@@ -152,6 +151,54 @@ export const SyncStatusButton: React.FC<SyncStatusButtonProps> = ({ workspacePat
     return 'disconnected';
   };
 
+  const getButtonColorClass = (): string => {
+    const statusClass = getStatusClass();
+    if (statusClass === 'connected' || statusClass === 'syncing') {
+      return 'text-[var(--nim-text-muted)]';
+    }
+    if (statusClass === 'disabled') {
+      return 'text-[var(--nim-text-faint)] opacity-60';
+    }
+    // disconnected or error
+    return 'text-[var(--nim-text-faint)]';
+  };
+
+  const getIndicatorColorClass = (): string => {
+    const statusClass = getStatusClass();
+    switch (statusClass) {
+      case 'connected':
+        return 'bg-[#22c55e]';
+      case 'syncing':
+        return 'bg-[#3b82f6] animate-pulse';
+      case 'disconnected':
+        return 'bg-[#f59e0b]';
+      case 'error':
+        return 'bg-[#ef4444]';
+      case 'disabled':
+        return 'bg-[var(--nim-text-faint)]';
+      default:
+        return '';
+    }
+  };
+
+  const getBadgeColorClass = (): string => {
+    const statusClass = getStatusClass();
+    switch (statusClass) {
+      case 'connected':
+        return 'bg-[rgba(34,197,94,0.15)] text-[#22c55e]';
+      case 'syncing':
+        return 'bg-[rgba(59,130,246,0.15)] text-[#3b82f6]';
+      case 'disconnected':
+        return 'bg-[rgba(245,158,11,0.15)] text-[#f59e0b]';
+      case 'error':
+        return 'bg-[rgba(239,68,68,0.15)] text-[#ef4444]';
+      case 'disabled':
+        return 'bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-faint)]';
+      default:
+        return '';
+    }
+  };
+
   const getStatusLabel = (): string => {
     if (!status.projectEnabled) {
       return 'Sync disabled for this project';
@@ -192,10 +239,10 @@ export const SyncStatusButton: React.FC<SyncStatusButtonProps> = ({ workspacePat
   };
 
   return (
-    <div className="sync-status-button-container">
+    <div className="sync-status-button-container relative">
       <button
         ref={buttonRef}
-        className={`sync-status-button nav-button ${getStatusClass()}`}
+        className={`sync-status-button nav-button relative w-9 h-9 flex items-center justify-center bg-transparent border-none rounded-md cursor-pointer transition-all duration-150 p-0 hover:bg-nim-tertiary active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2 ${getButtonColorClass()}`}
         onClick={() => setMenuOpen(!menuOpen)}
         title={getStatusLabel()}
         aria-label={getStatusLabel()}
@@ -203,60 +250,78 @@ export const SyncStatusButton: React.FC<SyncStatusButtonProps> = ({ workspacePat
         aria-haspopup="menu"
       >
         <MaterialSymbol icon={getStatusIcon()} size={20} />
-        <span className={`sync-indicator ${getStatusClass()}`} />
+        <span
+          className={`sync-indicator absolute bottom-1 right-1 w-1.5 h-1.5 rounded-full border border-[var(--nim-bg-secondary)] ${getIndicatorColorClass()}`}
+        />
       </button>
 
       {menuOpen && (
-        <div ref={menuRef} className="sync-menu" role="menu">
-          <div className="sync-menu-header">
-            <span className="sync-menu-title">Session Sync</span>
-            <span className={`sync-status-badge ${getStatusClass()}`}>
+        <div
+          ref={menuRef}
+          className="sync-menu absolute left-[calc(100%+8px)] bottom-0 min-w-[240px] bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded-lg shadow-[0_4px_12px_rgba(0,0,0,0.15)] z-[1000] overflow-hidden"
+          role="menu"
+        >
+          <div className="sync-menu-header flex justify-between items-center px-3.5 py-3 bg-[var(--nim-bg-tertiary)] border-b border-[var(--nim-border)]">
+            <span className="sync-menu-title text-[13px] font-semibold text-[var(--nim-text)]">
+              Session Sync
+            </span>
+            <span
+              className={`sync-status-badge text-[11px] font-medium px-2 py-0.5 rounded-[10px] ${getBadgeColorClass()}`}
+            >
               {status.projectEnabled ? (status.connected ? 'Connected' : 'Disconnected') : 'Disabled'}
             </span>
           </div>
 
           {status.userEmail && (
-            <div className="sync-menu-user">
+            <div className="sync-menu-user flex items-center gap-2 px-3.5 py-2.5 border-b border-[var(--nim-border)] text-[var(--nim-text-muted)] text-xs">
               <MaterialSymbol icon="account_circle" size={16} />
               <span>{status.userEmail}</span>
             </div>
           )}
 
           {status.error && (
-            <div className="sync-menu-error">
+            <div className="sync-menu-error flex items-center gap-2 px-3.5 py-2.5 bg-[rgba(239,68,68,0.1)] text-[#ef4444] text-xs">
               <MaterialSymbol icon="error" size={16} />
               <span>{status.error}</span>
             </div>
           )}
 
-          <div className="sync-menu-stats">
-            <div className="sync-stat">
-              <span className="sync-stat-label">Sessions synced</span>
-              <span className="sync-stat-value">{status.stats.sessionCount}</span>
+          <div className="sync-menu-stats px-3.5 py-3">
+            <div className="sync-stat flex justify-between items-center py-1">
+              <span className="sync-stat-label text-xs text-[var(--nim-text-muted)]">Sessions synced</span>
+              <span className="sync-stat-value text-xs font-medium text-[var(--nim-text)]">
+                {status.stats.sessionCount}
+              </span>
             </div>
-            <div className="sync-stat">
-              <span className="sync-stat-label">Last sync</span>
-              <span className="sync-stat-value">{formatLastSync()}</span>
+            <div className="sync-stat flex justify-between items-center py-1">
+              <span className="sync-stat-label text-xs text-[var(--nim-text-muted)]">Last sync</span>
+              <span className="sync-stat-value text-xs font-medium text-[var(--nim-text)]">
+                {formatLastSync()}
+              </span>
             </div>
           </div>
 
-          <div className="sync-menu-divider" />
+          <div className="sync-menu-divider h-px bg-[var(--nim-border)] m-0" />
 
-          <div className="sync-menu-actions">
+          <div className="sync-menu-actions p-1.5">
             <button
-              className="sync-menu-action"
+              className="sync-menu-action flex items-center gap-2.5 w-full px-2.5 py-2 bg-transparent border-none rounded-md text-[var(--nim-text)] text-[13px] text-left cursor-pointer transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
               onClick={handleToggleProjectSync}
               role="menuitem"
             >
-              <MaterialSymbol icon={status.projectEnabled ? 'toggle_on' : 'toggle_off'} size={18} />
+              <span className="text-[var(--nim-text-muted)]">
+                <MaterialSymbol icon={status.projectEnabled ? 'toggle_on' : 'toggle_off'} size={18} />
+              </span>
               <span>{status.projectEnabled ? 'Disable sync for this project' : 'Enable sync for this project'}</span>
             </button>
             <button
-              className="sync-menu-action"
+              className="sync-menu-action flex items-center gap-2.5 w-full px-2.5 py-2 bg-transparent border-none rounded-md text-[var(--nim-text)] text-[13px] text-left cursor-pointer transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
               onClick={handleOpenSettings}
               role="menuitem"
             >
-              <MaterialSymbol icon="settings" size={18} />
+              <span className="text-[var(--nim-text-muted)]">
+                <MaterialSymbol icon="settings" size={18} />
+              </span>
               <span>Sync settings</span>
             </button>
           </div>

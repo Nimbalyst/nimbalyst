@@ -1,12 +1,52 @@
 import { BrowserWindow, nativeTheme } from 'electron';
-import { getTheme } from '../utils/store';
+import { getTheme, getThemeIsDark } from '../utils/store';
+
+/**
+ * Check if a theme ID is an extension theme (format: extensionId:themeId).
+ */
+function isExtensionTheme(themeId: string): boolean {
+  return themeId.includes(':');
+}
+
+/**
+ * Determine if the current theme is dark.
+ * For extension themes, uses the stored isDark value.
+ * For built-in themes, uses hardcoded values.
+ */
+function isCurrentThemeDark(currentTheme: string): boolean {
+    // Built-in dark themes
+    if (currentTheme === 'dark' || currentTheme === 'crystal-dark') {
+        return true;
+    }
+    // Built-in light themes
+    if (currentTheme === 'light') {
+        return false;
+    }
+    // System theme - check OS preference
+    if (currentTheme === 'system') {
+        return nativeTheme.shouldUseDarkColors;
+    }
+    // Extension themes - use stored isDark value (defaults to false if not set)
+    if (isExtensionTheme(currentTheme)) {
+        return getThemeIsDark() ?? false;
+    }
+    // Unknown theme - default to light
+    return false;
+}
 
 // Function to update native theme
 export function updateNativeTheme() {
     const currentTheme = getTheme();
-    const desired: 'system' | 'dark' | 'light' =
-        currentTheme === 'system' ? 'system' :
-        (currentTheme === 'dark' || currentTheme === 'crystal-dark') ? 'dark' : 'light';
+
+    // Map to system/dark/light for nativeTheme
+    let desired: 'system' | 'dark' | 'light';
+    if (currentTheme === 'system') {
+        desired = 'system';
+    } else if (isCurrentThemeDark(currentTheme)) {
+        desired = 'dark';
+    } else {
+        desired = 'light';
+    }
 
     // Only set when it actually changes to avoid spurious 'updated' events
     if (nativeTheme.themeSource !== desired) {
@@ -17,10 +57,7 @@ export function updateNativeTheme() {
 // Function to update window title bar colors based on theme
 export function updateWindowTitleBars() {
     const currentTheme = getTheme();
-    const systemDarkMode = nativeTheme.shouldUseDarkColors;
-    const isDarkTheme = currentTheme === 'dark' ||
-                      currentTheme === 'crystal-dark' ||
-                      (currentTheme === 'system' && systemDarkMode);
+    const isDarkTheme = isCurrentThemeDark(currentTheme);
 
     // Do NOT touch nativeTheme.themeSource here to avoid triggering
     // nativeTheme 'updated' recursively. Only adjust window visuals.
@@ -35,14 +72,14 @@ export function updateWindowTitleBars() {
     // Select appropriate colors based on theme
     // IMPORTANT: Background colors MUST match CSS theme files exactly to prevent flash
     let titleBarColor = titleBarColors.light;
-    let backgroundColor = '#ffffff'; // Matches --surface-primary in PlaygroundEditorTheme.css
+    let backgroundColor = '#ffffff'; // Matches --nim-bg in light theme
 
     if (currentTheme === 'crystal-dark') {
         titleBarColor = titleBarColors.crystalDark;
-        backgroundColor = '#0f172a'; // Matches --surface-primary in CrystalDarkTheme.css
+        backgroundColor = '#0f172a'; // Matches --nim-bg in crystal-dark theme
     } else if (isDarkTheme) {
         titleBarColor = titleBarColors.dark;
-        backgroundColor = '#2d2d2d'; // Matches --surface-primary in DarkEditorTheme.css
+        backgroundColor = '#2d2d2d'; // Matches --nim-bg in dark theme
     }
 
     // Update all windows
@@ -68,10 +105,7 @@ export function updateWindowTitleBars() {
 // Get title bar colors for current theme
 export function getTitleBarColors() {
     const currentTheme = getTheme();
-    const systemDarkMode = nativeTheme.shouldUseDarkColors;
-    const isDarkTheme = currentTheme === 'dark' ||
-                      currentTheme === 'crystal-dark' ||
-                      (currentTheme === 'system' && systemDarkMode);
+    const isDarkTheme = isCurrentThemeDark(currentTheme);
 
     const titleBarColors = {
         dark: { color: '#1a1a1a', symbolColor: '#ffffff' },
@@ -92,15 +126,13 @@ export function getTitleBarColors() {
 // IMPORTANT: These colors MUST match the CSS theme files exactly to prevent flash
 export function getBackgroundColor() {
     const currentTheme = getTheme();
-    const systemDarkMode = nativeTheme.shouldUseDarkColors;
-    const isDarkTheme = currentTheme === 'dark' ||
-                      (currentTheme === 'system' && systemDarkMode);
+    const isDarkTheme = isCurrentThemeDark(currentTheme);
 
     if (currentTheme === 'crystal-dark') {
-        return '#0f172a'; // Matches --surface-primary in CrystalDarkTheme.css
+        return '#0f172a'; // Matches --nim-bg in crystal-dark theme
     } else if (isDarkTheme) {
-        return '#2d2d2d'; // Matches --surface-primary in DarkEditorTheme.css
+        return '#2d2d2d'; // Matches --nim-bg in dark theme
     } else {
-        return '#ffffff'; // Matches --surface-primary in PlaygroundEditorTheme.css
+        return '#ffffff'; // Matches --nim-bg in light theme
     }
 }

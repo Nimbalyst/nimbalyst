@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import './ModelComparison.css';
 
 interface ModelComparisonProps {
   workspaceId?: string;
@@ -35,7 +34,11 @@ export const ModelComparison: React.FC<ModelComparisonProps> = ({ workspaceId })
   }, [workspaceId]);
 
   if (loading) {
-    return <div className="model-comparison-loading">Loading...</div>;
+    return (
+      <div className="model-comparison-loading flex items-center justify-center min-h-[400px] text-base text-nim-muted">
+        Loading...
+      </div>
+    );
   }
 
   const chartData = data.map((item) => ({
@@ -45,29 +48,31 @@ export const ModelComparison: React.FC<ModelComparisonProps> = ({ workspaceId })
   }));
 
   return (
-    <div className="model-comparison">
-      <h3>Usage by Model</h3>
+    <div className="model-comparison flex flex-col gap-6">
+      <h3 className="m-0 text-lg font-semibold text-nim">Usage by Model</h3>
 
       {chartData.length > 0 ? (
         <ResponsiveContainer width="100%" height={400}>
           <BarChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border-primary)" />
-            <XAxis dataKey="name" stroke="var(--text-secondary)" />
-            <YAxis stroke="var(--text-secondary)" />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--nim-border)" />
+            <XAxis dataKey="name" stroke="var(--nim-text-muted)" />
+            <YAxis stroke="var(--nim-text-muted)" />
             <Tooltip
               contentStyle={{
-                background: 'var(--surface-secondary)',
-                border: '1px solid var(--border-primary)',
+                background: 'var(--nim-bg-secondary)',
+                border: '1px solid var(--nim-border)',
                 borderRadius: '6px',
-                color: 'var(--text-primary)',
+                color: 'var(--nim-text)',
               }}
             />
             <Legend />
-            <Bar dataKey="Total Tokens" fill="var(--primary-color)" />
+            <Bar dataKey="Total Tokens" fill="var(--nim-primary)" />
           </BarChart>
         </ResponsiveContainer>
       ) : (
-        <div className="no-data">No model usage data available</div>
+        <div className="no-data flex items-center justify-center min-h-[400px] text-base text-nim-muted">
+          No model usage data available
+        </div>
       )}
     </div>
   );

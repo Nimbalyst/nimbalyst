@@ -8,8 +8,6 @@
 
 import type {JSX} from 'react';
 
-import './Button.css';
-
 import {ReactNode} from 'react';
 
 import joinClasses from '../utils/joinClasses';
@@ -36,8 +34,11 @@ export default function Button({
       disabled={disabled}
       className={joinClasses(
         'Button__root',
-        disabled && 'Button__disabled',
-        small && 'Button__small',
+        'border-0 rounded-[5px] cursor-pointer text-sm',
+        'bg-[#eee] text-[#333] hover:bg-[#ddd]',
+        'dark:bg-[var(--nim-bg-tertiary)] dark:text-[var(--nim-text)] dark:hover:bg-[var(--nim-bg-hover)]',
+        small ? 'py-[5px] px-[10px] text-[13px]' : 'py-[10px] px-[15px]',
+        disabled && 'Button__disabled cursor-not-allowed dark:bg-[var(--nim-bg-secondary)] dark:text-[var(--nim-text-muted)] hover:bg-[#eee] dark:hover:bg-[var(--nim-bg-secondary)]',
         className,
       )}
       onClick={onClick}

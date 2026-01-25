@@ -7,6 +7,10 @@ import type { NodeKey } from 'lexical';
  * This replaces the reactive settings system with static configuration props.
  */
 
+/**
+ * @deprecated Theme is now controlled at app level via CSS variables.
+ * This type is kept for backwards compatibility.
+ */
 export type Theme = 'light' | 'dark' | 'crystal-dark' | 'auto';
 
 
@@ -82,8 +86,11 @@ export interface EditorConfig {
   markdownOnly?: boolean;
 
 
-  // Theme configuration
-  theme?: Theme; // Override theme: 'light' | 'dark' | 'auto' (default: 'auto')
+  /**
+   * @deprecated Theme is now controlled at app level via CSS variables on document root.
+   * This prop is ignored. Use the app's theme system instead.
+   */
+  theme?: Theme;
 
   /** Optional markdown transformers to use for import/export in this editor */
   markdownTransformers?: Transformer[];

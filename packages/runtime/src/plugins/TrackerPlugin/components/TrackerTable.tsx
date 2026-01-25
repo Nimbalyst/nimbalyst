@@ -12,7 +12,6 @@ import type {
   TrackerItemPriority
 } from '../../../core/DocumentService';
 import { globalRegistry } from '../models';
-import './TrackerTable.css';
 import {usePostHog} from "posthog-js/react";
 
 export type SortColumn = 'title' | 'type' | 'status' | 'priority' | 'progress' | 'module' | 'lastIndexed';
@@ -453,17 +452,17 @@ export function TrackerTable({
 
   const getSortIndicator = (column: SortColumn) => {
     if (currentSortBy !== column) {
-      return <span className="sort-indicator">⇅</span>;
+      return <span className="sort-indicator opacity-30 text-sm">&#8645;</span>;
     }
     return currentSortDirection === 'desc'
-      ? <span className="sort-indicator active">↓</span>
-      : <span className="sort-indicator active">↑</span>;
+      ? <span className="sort-indicator active opacity-100 text-[var(--nim-primary)] text-sm">&#8595;</span>
+      : <span className="sort-indicator active opacity-100 text-[var(--nim-primary)] text-sm">&#8593;</span>;
   };
 
   if (loading) {
     return (
-      <div className="tracker-table-loading">
-        <div className="spinner"></div>
+      <div className="tracker-table-loading flex flex-col items-center justify-center py-[60px] px-5 text-[var(--nim-text-muted)] text-center gap-3">
+        <div className="spinner w-8 h-8 border-[3px] border-[var(--nim-border)] border-t-[var(--nim-primary)] rounded-full animate-spin"></div>
         <span>Loading tracker items...</span>
       </div>
     );
@@ -471,8 +470,8 @@ export function TrackerTable({
 
   if (error) {
     return (
-      <div className="tracker-table-error">
-        <span>⚠️ {error}</span>
+      <div className="tracker-table-error flex flex-col items-center justify-center py-[60px] px-5 text-[#ef4444] text-center gap-3">
+        <span>Warning: {error}</span>
       </div>
     );
   }
@@ -504,109 +503,109 @@ export function TrackerTable({
   ];
 
   return (
-    <div className="tracker-table-wrapper">
+    <div className="tracker-table-wrapper flex flex-col h-full w-full bg-[var(--nim-bg)]">
       {/* Type filter tabs */}
       {!hideTypeTabs && (
-        <div className="tracker-type-tabs">
+        <div className="tracker-type-tabs flex gap-1 py-3 px-4 bg-[var(--nim-bg)] border-b border-[var(--nim-border)]">
           {typeOptions.map(option => (
             <button
               key={option.value}
-              className={`tracker-type-tab ${internalTypeFilter === option.value ? 'active' : ''}`}
+              className={`tracker-type-tab flex items-center gap-1.5 py-2 px-3 bg-transparent border border-[var(--nim-border)] rounded-md text-[var(--nim-text-muted)] text-[13px] font-medium cursor-pointer transition-all duration-150 hover:bg-[var(--nim-bg-secondary)] ${internalTypeFilter === option.value ? 'active bg-[var(--nim-bg-secondary)] !border-[var(--nim-primary)] !text-[var(--nim-primary)]' : ''}`}
               onClick={() => setInternalTypeFilter(option.value as TrackerItemType | 'all')}
             >
-              <span className="material-symbols-outlined">{option.icon}</span>
+              <span className="material-symbols-outlined text-lg">{option.icon}</span>
               <span>{option.label}</span>
-              {option.value === 'all' && <span className="count">{items.length}</span>}
+              {option.value === 'all' && <span className={`count py-0.5 px-1.5 rounded-[10px] text-[11px] font-semibold ${internalTypeFilter === option.value ? 'bg-[var(--nim-primary)] text-[var(--nim-bg)]' : 'bg-[var(--nim-bg-tertiary)]'}`}>{items.length}</span>}
               {option.value !== 'all' && (
-                <span className="count">{items.filter(i => i.type === option.value).length}</span>
+                <span className={`count py-0.5 px-1.5 rounded-[10px] text-[11px] font-semibold ${internalTypeFilter === option.value ? 'bg-[var(--nim-primary)] text-[var(--nim-bg)]' : 'bg-[var(--nim-bg-tertiary)]'}`}>{items.filter(i => i.type === option.value).length}</span>
               )}
             </button>
           ))}
         </div>
       )}
 
-      <div className="tracker-table-container">
-        <table className="tracker-table">
+      <div className="tracker-table-container flex-1 overflow-auto px-3 pb-3">
+        <table className="tracker-table w-full border-collapse text-[13px]">
           <thead>
             <tr>
               <th
-                className="tracker-table-header type sortable"
+                className="tracker-table-header type sortable sticky top-0 bg-[var(--nim-bg-secondary)] py-1.5 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 cursor-pointer select-none hover:bg-[var(--nim-bg-hover)]"
                 onClick={() => handleColumnClick('type')}
               >
-                <span className="header-content">
+                <span className="header-content inline-flex items-center gap-1 whitespace-nowrap">
                   <span>TYPE</span>
                   {getSortIndicator('type')}
                 </span>
               </th>
               <th
-                className="tracker-table-header title sortable"
+                className="tracker-table-header title sortable sticky top-0 bg-[var(--nim-bg-secondary)] py-1.5 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 cursor-pointer select-none hover:bg-[var(--nim-bg-hover)]"
                 onClick={() => handleColumnClick('title')}
               >
-                <span className="header-content">
+                <span className="header-content inline-flex items-center gap-1 whitespace-nowrap">
                   <span>TITLE</span>
                   {getSortIndicator('title')}
                 </span>
               </th>
               <th
-                className="tracker-table-header status sortable"
+                className="tracker-table-header status sortable sticky top-0 bg-[var(--nim-bg-secondary)] py-1.5 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 cursor-pointer select-none hover:bg-[var(--nim-bg-hover)]"
                 onClick={() => handleColumnClick('status')}
               >
-                <span className="header-content">
+                <span className="header-content inline-flex items-center gap-1 whitespace-nowrap">
                   <span>STATUS</span>
                   {getSortIndicator('status')}
                 </span>
               </th>
               <th
-                className="tracker-table-header priority sortable"
+                className="tracker-table-header priority sortable sticky top-0 bg-[var(--nim-bg-secondary)] py-1.5 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 cursor-pointer select-none hover:bg-[var(--nim-bg-hover)]"
                 onClick={() => handleColumnClick('priority')}
               >
-                <span className="header-content">
+                <span className="header-content inline-flex items-center gap-1 whitespace-nowrap">
                   <span>PRIORITY</span>
                   {getSortIndicator('priority')}
                 </span>
               </th>
               <th
-                className="tracker-table-header progress sortable"
+                className="tracker-table-header progress sortable sticky top-0 bg-[var(--nim-bg-secondary)] py-1.5 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 cursor-pointer select-none hover:bg-[var(--nim-bg-hover)]"
                 onClick={() => handleColumnClick('progress')}
               >
-                <span className="header-content">
+                <span className="header-content inline-flex items-center gap-1 whitespace-nowrap">
                   <span>PROGRESS</span>
                   {getSortIndicator('progress')}
                 </span>
               </th>
               <th
-                className="tracker-table-header module sortable"
+                className="tracker-table-header module sortable sticky top-0 bg-[var(--nim-bg-secondary)] py-1.5 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 cursor-pointer select-none hover:bg-[var(--nim-bg-hover)]"
                 onClick={() => handleColumnClick('module')}
               >
-                <span className="header-content">
+                <span className="header-content inline-flex items-center gap-1 whitespace-nowrap">
                   <span>MODULE</span>
                   {getSortIndicator('module')}
                 </span>
               </th>
               <th
-                className="tracker-table-header updated sortable"
+                className="tracker-table-header updated sortable sticky top-0 bg-[var(--nim-bg-secondary)] py-1.5 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 cursor-pointer select-none hover:bg-[var(--nim-bg-hover)]"
                 onClick={() => handleColumnClick('lastIndexed')}
               >
-                <span className="header-content">
+                <span className="header-content inline-flex items-center gap-1 whitespace-nowrap">
                   <span>UPDATED</span>
                   {getSortIndicator('lastIndexed')}
                 </span>
               </th>
             </tr>
             <tr className="filter-row">
-              <th className="tracker-table-header filter-cell"></th>
-              <th className="tracker-table-header filter-cell">
+              <th className="tracker-table-header filter-cell py-2 px-3 bg-[var(--nim-bg)]"></th>
+              <th className="tracker-table-header filter-cell py-2 px-3 bg-[var(--nim-bg)]">
                 <input
                   type="text"
-                  className="filter-input"
+                  className="filter-input w-full py-1 px-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] text-xs focus:outline-none focus:border-[var(--nim-primary)]"
                   placeholder="Search..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </th>
-              <th className="tracker-table-header filter-cell">
+              <th className="tracker-table-header filter-cell py-2 px-3 bg-[var(--nim-bg)]">
                 <select
-                  className="filter-select"
+                  className="filter-select w-full py-1 px-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] text-xs focus:outline-none focus:border-[var(--nim-primary)]"
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
                 >
@@ -617,9 +616,9 @@ export function TrackerTable({
                   ))}
                 </select>
               </th>
-              <th className="tracker-table-header filter-cell">
+              <th className="tracker-table-header filter-cell py-2 px-3 bg-[var(--nim-bg)]">
                 <select
-                  className="filter-select"
+                  className="filter-select w-full py-1 px-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] text-xs focus:outline-none focus:border-[var(--nim-primary)]"
                   value={priorityFilter}
                   onChange={(e) => setPriorityFilter(e.target.value)}
                 >
@@ -630,18 +629,18 @@ export function TrackerTable({
                   ))}
                 </select>
               </th>
-              <th className="tracker-table-header filter-cell"></th>
-              <th className="tracker-table-header filter-cell"></th>
-              <th className="tracker-table-header filter-cell"></th>
+              <th className="tracker-table-header filter-cell py-2 px-3 bg-[var(--nim-bg)]"></th>
+              <th className="tracker-table-header filter-cell py-2 px-3 bg-[var(--nim-bg)]"></th>
+              <th className="tracker-table-header filter-cell py-2 px-3 bg-[var(--nim-bg)]"></th>
             </tr>
           </thead>
           <tbody>
           {sortedItems.length === 0 ? (
             <tr>
-              <td colSpan={7} className="tracker-table-empty-cell">
-                <div className="tracker-table-empty">
+              <td colSpan={7} className="tracker-table-empty-cell !p-0 !border-none">
+                <div className="tracker-table-empty flex flex-col items-center justify-center py-[60px] px-5 text-[var(--nim-text-muted)] text-center gap-3">
                   <span>No tracker items found</span>
-                  <p>Create tracker items using #bug, #task, #plan, or #idea in any markdown file</p>
+                  <p className="text-xs text-[var(--nim-text-faint)] mt-2">Create tracker items using #bug, #task, #plan, or #idea in any markdown file</p>
                 </div>
               </td>
             </tr>
@@ -649,29 +648,35 @@ export function TrackerTable({
             sortedItems.map((item, index) => (
               <tr
                 key={index}
-                className="tracker-table-row"
+                className="tracker-table-row border-b border-[var(--nim-border)] cursor-pointer transition-colors duration-100 hover:bg-[var(--nim-bg-secondary)]"
                 onClick={() => handleRowClick(item)}
               >
-                <td className="tracker-table-cell type">
-                  <span className={`type-icon type-${item.type}`}>
-                    <span className="material-symbols-outlined">{getTypeIcon(item.type)}</span>
+                <td className="tracker-table-cell type p-[5px] text-[var(--nim-text)] align-middle w-[60px]">
+                  <span className={`type-icon type-${item.type} inline-flex items-center justify-center w-6 h-6 rounded ${
+                    item.type === 'bug' ? 'bg-[rgba(220,38,38,0.1)] text-[#dc2626]' :
+                    item.type === 'task' ? 'bg-[rgba(37,99,235,0.1)] text-[#2563eb]' :
+                    item.type === 'plan' ? 'bg-[rgba(124,58,237,0.1)] text-[#7c3aed]' :
+                    item.type === 'idea' ? 'bg-[rgba(202,138,4,0.1)] text-[#ca8a04]' :
+                    'bg-[var(--nim-bg-tertiary)]'
+                  }`}>
+                    <span className="material-symbols-outlined text-base">{getTypeIcon(item.type)}</span>
                   </span>
                 </td>
-                <td className="tracker-table-cell title">
-                  <div className="title-info">
-                    <div className="title-text">{item.title}</div>
+                <td className="tracker-table-cell title p-[5px] text-[var(--nim-text)] align-middle min-w-[200px]">
+                  <div className="title-info flex flex-col gap-0.5">
+                    <div className="title-text font-medium text-[var(--nim-text)]">{item.title}</div>
                     {/*{item.tags && item.tags.length > 0 && (*/}
-                    {/*  <div className="tags">*/}
+                    {/*  <div className="tags flex gap-1 flex-wrap">*/}
                     {/*    {item.tags.map((tag, i) => (*/}
-                    {/*      <span key={i} className="tag">{tag}</span>*/}
+                    {/*      <span key={i} className="tag py-0.5 px-1.5 bg-[var(--nim-bg-tertiary)] rounded-[3px] text-[11px] text-[var(--nim-text-muted)]">{tag}</span>*/}
                     {/*    ))}*/}
                     {/*  </div>*/}
                     {/*)}*/}
                   </div>
                 </td>
-                <td className="tracker-table-cell status">
+                <td className="tracker-table-cell status p-[5px] text-[var(--nim-text)] align-middle w-[120px]">
                   <span
-                    className="status-badge"
+                    className="status-badge inline-block py-0.5 px-2 rounded-[10px] text-[11px] font-medium border"
                     style={{
                       backgroundColor: `${getStatusColor(item.status)}20`,
                       color: getStatusColor(item.status),
@@ -681,29 +686,31 @@ export function TrackerTable({
                     {item.status.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
                   </span>
                 </td>
-                <td className="tracker-table-cell priority">
+                <td className="tracker-table-cell priority p-[5px] text-[var(--nim-text)] align-middle w-[100px]">
                   {item.priority && (
                     <span
-                      className="priority-badge"
+                      className="priority-badge font-semibold text-xs"
                       style={{ color: getPriorityColor(item.priority) }}
                     >
                       {item.priority.charAt(0).toUpperCase() + item.priority.slice(1)}
                     </span>
                   )}
                 </td>
-                <td className="tracker-table-cell progress">
+                <td className="tracker-table-cell progress p-[5px] text-[var(--nim-text)] align-middle w-[60px] min-w-[60px]">
                   {item.progress !== undefined && item.progress !== null && (
-                    <div className="progress-bar-container">
-                      <span className="progress-text">{item.progress}%</span>
-                      <div className="progress-bar-fill" style={{ '--progress-width': `${item.progress}%` } as React.CSSProperties}></div>
+                    <div className="progress-bar-container flex flex-col items-center gap-0.5">
+                      <span className="progress-text text-[11px] font-semibold text-[var(--nim-text)]">{item.progress}%</span>
+                      <div className="progress-bar-fill w-full h-1 bg-[var(--nim-bg-tertiary)] rounded-sm relative overflow-hidden" style={{ '--progress-width': `${item.progress}%` } as React.CSSProperties}>
+                        <div className="absolute top-0 left-0 h-full bg-[var(--nim-primary)] rounded-sm transition-all duration-300" style={{ width: `${item.progress}%` }}></div>
+                      </div>
                     </div>
                   )}
                 </td>
-                <td className="tracker-table-cell module">
-                  <span className="module-text">{item.module}</span>
+                <td className="tracker-table-cell module p-[5px] text-[var(--nim-text)] align-middle min-w-[150px] max-w-[250px]">
+                  <span className="module-text text-[var(--nim-text-muted)] text-xs font-mono whitespace-nowrap overflow-hidden text-ellipsis block">{item.module}</span>
                 </td>
-                <td className="tracker-table-cell updated">
-                  <span className="updated-text">{formatDate(item.lastIndexed)}</span>
+                <td className="tracker-table-cell updated p-[5px] text-[var(--nim-text)] align-middle w-[120px]">
+                  <span className="updated-text text-[var(--nim-text-faint)] text-xs">{formatDate(item.lastIndexed)}</span>
                 </td>
               </tr>
             ))

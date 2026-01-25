@@ -9,7 +9,6 @@ import { useState, useEffect, useCallback } from 'react';
 import type { EditorHostProps } from '@nimbalyst/extension-sdk';
 import type { Database } from 'sql.js';
 import { SQLiteBrowserCore, getSqlJs, getFileName, type DatabaseInfo } from './SQLiteBrowserCore';
-import './SQLiteBrowserPanel.css';
 
 export function SQLiteEditor({ host }: EditorHostProps) {
   const [database, setDatabase] = useState<DatabaseInfo | null>(null);

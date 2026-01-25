@@ -15,6 +15,7 @@ import {
   $hasDiffNodes
 } from 'rexical';
 import { usePostHog } from 'posthog-js/react';
+// Only contains global highlight styles for dynamically applied classes
 import './DiffApprovalBar.css';
 
 interface DiffApprovalBarProps {
@@ -462,31 +463,31 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
   }
 
   return (
-    <div className="diff-approval-bar">
-      <div className="diff-approval-bar-content">
-        <span className="diff-approval-bar-label">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <div className="diff-approval-bar bg-[var(--nim-bg-secondary)] border-b border-[var(--nim-border)] px-4 py-2 min-h-12 flex items-center">
+      <div className="diff-approval-bar-content flex items-center justify-between w-full gap-4 flex-wrap md:flex-nowrap">
+        <span className="diff-approval-bar-label flex items-center gap-2 text-[var(--nim-text)] text-sm font-medium flex-none md:flex-initial">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="shrink-0">
             <path d="M8 1L9 5L13 6L9 7L8 11L7 7L3 6L7 5L8 1Z" fill="currentColor"/>
           </svg>
         </span>
 
-        <div className="diff-approval-bar-navigation">
+        <div className="diff-approval-bar-navigation flex items-center gap-2 flex-auto md:flex-initial">
           <button
             onClick={handlePrevious}
             aria-label="Previous change"
-            className="diff-nav-button"
+            className="diff-nav-button bg-transparent border border-[var(--nim-border)] rounded w-6 h-6 flex items-center justify-center cursor-pointer text-[var(--nim-text)] p-0 transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
               <path d="M6 9L3 6L6 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </button>
-          <span className="diff-change-counter">
+          <span className="diff-change-counter text-[13px] text-[var(--nim-text-muted)] min-w-[60px] text-center select-none">
             {hasSelection ? `${currentGroupIndex + 1} of ${changeGroups.length}` : `${changeGroups.length} changes`}
           </span>
           <button
             onClick={handleNext}
             aria-label="Next change"
-            className="diff-nav-button"
+            className="diff-nav-button bg-transparent border border-[var(--nim-border)] rounded w-6 h-6 flex items-center justify-center cursor-pointer text-[var(--nim-text)] p-0 transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
               <path d="M6 3L9 6L6 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -494,9 +495,9 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
           </button>
         </div>
 
-        <div className="diff-approval-bar-actions">
+        <div className="diff-approval-bar-actions flex gap-2 ml-0 md:ml-auto">
           <button
-            className="diff-reject-button"
+            className="diff-reject-button px-3 py-1.5 rounded-md text-[13px] font-medium cursor-pointer transition-all duration-200 flex items-center gap-1.5 whitespace-nowrap bg-transparent border border-[var(--nim-border)] text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)] disabled:opacity-40 disabled:cursor-not-allowed"
             data-action="reject-single"
             onClick={handleRejectThis}
             title="Undo this change"
@@ -508,7 +509,7 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
             Undo
           </button>
           <button
-            className="diff-accept-button"
+            className="diff-accept-button px-3 py-1.5 rounded-md text-[13px] font-medium cursor-pointer transition-all duration-200 flex items-center gap-1.5 whitespace-nowrap bg-[var(--nim-primary)] border-none text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
             data-action="accept-single"
             onClick={handleAcceptThis}
             title="Keep this change"
@@ -520,7 +521,7 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
             Keep
           </button>
           <button
-            className="diff-reject-all-button"
+            className="diff-reject-all-button px-3 py-1.5 rounded-md text-[13px] font-medium cursor-pointer transition-all duration-200 flex items-center gap-1.5 whitespace-nowrap bg-transparent border border-[var(--nim-border)] text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)] disabled:opacity-40 disabled:cursor-not-allowed"
             data-action="reject-all"
             onClick={handleRejectAll}
             title="Undo all changes"
@@ -531,7 +532,7 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
             Undo All
           </button>
           <button
-            className="diff-accept-all-button"
+            className="diff-accept-all-button px-3 py-1.5 rounded-md text-[13px] font-medium cursor-pointer transition-all duration-200 flex items-center gap-1.5 whitespace-nowrap bg-[var(--nim-primary)] border-none text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
             data-action="accept-all"
             onClick={handleAcceptAll}
             title="Keep all changes"

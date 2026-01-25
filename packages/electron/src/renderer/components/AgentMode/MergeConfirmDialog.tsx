@@ -1,6 +1,5 @@
 import React, { useEffect, useRef } from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
-import './MergeConfirmDialog.css';
 
 interface MergeConfirmDialogProps {
   worktreePath: string;
@@ -47,25 +46,25 @@ export function MergeConfirmDialog({
   const projectName = getProjectName(workspacePath);
 
   return (
-    <div className="merge-confirm-dialog-overlay" onClick={onCancel}>
+    <div className="merge-confirm-dialog-overlay nim-overlay" onClick={onCancel}>
       <div
-        className="merge-confirm-dialog"
+        className="merge-confirm-dialog nim-modal w-full max-w-[440px] outline-none"
         ref={dialogRef}
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="merge-confirm-dialog-header">
+        <div className="merge-confirm-dialog-header flex items-center gap-3 px-6 pt-5 pb-4 text-[var(--nim-text)]">
           <MaterialSymbol icon="merge" size={24} />
-          <h2>Merge to Main</h2>
+          <h2 className="m-0 text-lg font-semibold">Merge to Main</h2>
         </div>
 
-        <div className="merge-confirm-dialog-body">
-          <p>
-            Are you sure you want to merge <strong>{worktreeName}</strong> into the main branch of <strong>{projectName}</strong>?
+        <div className="merge-confirm-dialog-body px-6 pb-5">
+          <p className="m-0 mb-4 text-sm leading-relaxed text-[var(--nim-text-muted)]">
+            Are you sure you want to merge <strong className="font-medium text-[var(--nim-text)]">{worktreeName}</strong> into the main branch of <strong className="font-medium text-[var(--nim-text)]">{projectName}</strong>?
           </p>
 
           {hasUncommittedChanges && (
-            <div className="merge-confirm-dialog-warning">
+            <div className="merge-confirm-dialog-warning flex items-start gap-2.5 p-3 mb-4 rounded-lg text-[0.8125rem] leading-snug bg-[var(--nim-warning-light)] text-[var(--nim-warning)]">
               <MaterialSymbol icon="warning" size={18} />
               <span>
                 You have uncommitted changes. Please commit all changes before merging.
@@ -73,29 +72,29 @@ export function MergeConfirmDialog({
             </div>
           )}
 
-          <div className="merge-confirm-dialog-info">
-            <div className="merge-confirm-dialog-info-row">
-              <span className="merge-confirm-dialog-info-label">Source:</span>
-              <span className="merge-confirm-dialog-info-value">{worktreeName}</span>
+          <div className="merge-confirm-dialog-info flex flex-col gap-2 p-3 rounded-lg bg-[var(--nim-bg-secondary)]">
+            <div className="merge-confirm-dialog-info-row flex items-center gap-2 text-[0.8125rem]">
+              <span className="merge-confirm-dialog-info-label min-w-[60px] text-[var(--nim-text-faint)]">Source:</span>
+              <span className="merge-confirm-dialog-info-value font-mono text-[var(--nim-text)]">{worktreeName}</span>
             </div>
-            <div className="merge-confirm-dialog-info-row">
-              <span className="merge-confirm-dialog-info-label">Target:</span>
-              <span className="merge-confirm-dialog-info-value">main ({projectName})</span>
+            <div className="merge-confirm-dialog-info-row flex items-center gap-2 text-[0.8125rem]">
+              <span className="merge-confirm-dialog-info-label min-w-[60px] text-[var(--nim-text-faint)]">Target:</span>
+              <span className="merge-confirm-dialog-info-value font-mono text-[var(--nim-text)]">main ({projectName})</span>
             </div>
           </div>
         </div>
 
-        <div className="merge-confirm-dialog-footer">
+        <div className="merge-confirm-dialog-footer flex justify-end gap-2 px-6 pt-4 pb-5 border-t border-[var(--nim-border)]">
           <button
             type="button"
-            className="merge-confirm-dialog-button merge-confirm-dialog-button--secondary"
+            className="merge-confirm-dialog-button nim-btn-secondary text-sm"
             onClick={onCancel}
           >
             Cancel
           </button>
           <button
             type="button"
-            className="merge-confirm-dialog-button merge-confirm-dialog-button--primary"
+            className="merge-confirm-dialog-button nim-btn-primary text-sm"
             onClick={onConfirm}
             disabled={hasUncommittedChanges}
           >
