@@ -11,6 +11,7 @@
  */
 
 import { AIProviderType, AI_PROVIDER_TYPES, CLAUDE_CODE_VARIANTS } from './types';
+import { DEFAULT_MODELS } from '../modelConstants';
 
 /**
  * Valid Claude Code model suffixes (e.g., -1m for 1M context window)
@@ -182,5 +183,25 @@ export class ModelIdentifier {
 
   toString(): string {
     return this.combined;
+  }
+
+  /**
+   * Get the default ModelIdentifier for a given provider.
+   * This is the single source of truth for default models.
+   */
+  static getDefaultForProvider(provider: AIProviderType): ModelIdentifier {
+    const defaultModelId = DEFAULT_MODELS[provider as keyof typeof DEFAULT_MODELS];
+    if (!defaultModelId) {
+      throw new Error(`No default model defined for provider: ${provider}`);
+    }
+    return ModelIdentifier.parse(defaultModelId);
+  }
+
+  /**
+   * Get the default model ID string (provider:model format) for a given provider.
+   * Convenience method that returns the string directly.
+   */
+  static getDefaultModelId(provider: AIProviderType): string {
+    return ModelIdentifier.getDefaultForProvider(provider).combined;
   }
 }

@@ -1,4 +1,4 @@
-import { SessionManager, ModelRegistry, ProviderFactory } from '@nimbalyst/runtime/ai/server';
+import { SessionManager, ProviderFactory } from '@nimbalyst/runtime/ai/server';
 import { AISessionsRepository } from '@nimbalyst/runtime';
 import { ModelIdentifier, type AIProviderType } from '@nimbalyst/runtime/ai/server/types';
 import type { UpdateSessionMetadataPayload } from '@nimbalyst/runtime/ai/adapters/sessionStore';
@@ -41,8 +41,8 @@ export async function registerSessionHandlers() {
                     provider = modelId.provider;
                 }
             } else {
-                // No model provided - get default for the provider
-                model = await ModelRegistry.getDefaultModel(provider);
+                // No model provided - get default for the provider using ModelIdentifier
+                model = ModelIdentifier.getDefaultModelId(provider);
                 console.log(`[SessionHandlers] No model provided, using default: ${model}`);
             }
 
@@ -407,9 +407,14 @@ export async function registerSessionHandlers() {
             // Use crypto.randomUUID() instead of dynamic import to avoid bundling issues
             const sessionId = crypto.randomUUID();
             console.log(`[SessionHandlers] Creating child session ${sessionId} for parent ${parentSessionId}`);
+
+            // Get the default model for this provider using ModelIdentifier
+            const model = ModelIdentifier.getDefaultModelId(provider as AIProviderType);
+
             const createPayload = {
                 id: sessionId,
                 provider,
+                model,  // Include proper model ID
                 title: 'New Session',
                 workspaceId: workspacePath,
                 parentSessionId,  // Link to parent
@@ -417,7 +422,7 @@ export async function registerSessionHandlers() {
             };
 
             await AISessionsRepository.create(createPayload as any);
-            console.log(`[SessionHandlers] Child session ${sessionId} created successfully`);
+            console.log(`[SessionHandlers] Child session ${sessionId} created successfully with model: ${model}`);
 
             return { success: true, sessionId };
         } catch (error) {

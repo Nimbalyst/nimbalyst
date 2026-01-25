@@ -227,4 +227,46 @@ describe('ModelIdentifier', () => {
       expect(ModelIdentifier.parse('openai:gpt-4o').modelForProvider).toBe('gpt-4o');
     });
   });
+
+  describe('getDefaultForProvider', () => {
+    it('returns default ModelIdentifier for claude', () => {
+      const id = ModelIdentifier.getDefaultForProvider('claude');
+      expect(id.provider).toBe('claude');
+      expect(id.combined).toBe('claude:claude-sonnet-4-5-20250929');
+    });
+
+    it('returns default ModelIdentifier for claude-code', () => {
+      const id = ModelIdentifier.getDefaultForProvider('claude-code');
+      expect(id.provider).toBe('claude-code');
+      expect(id.combined).toBe('claude-code:sonnet');
+    });
+
+    it('returns default ModelIdentifier for openai', () => {
+      const id = ModelIdentifier.getDefaultForProvider('openai');
+      expect(id.provider).toBe('openai');
+      expect(id.combined).toBe('openai:gpt-5');
+    });
+
+    it('returns default ModelIdentifier for openai-codex', () => {
+      const id = ModelIdentifier.getDefaultForProvider('openai-codex');
+      expect(id.provider).toBe('openai-codex');
+      expect(id.combined).toBe('openai-codex:gpt-5');
+    });
+
+    it('returns default ModelIdentifier for lmstudio', () => {
+      const id = ModelIdentifier.getDefaultForProvider('lmstudio');
+      expect(id.provider).toBe('lmstudio');
+      expect(id.combined).toBe('lmstudio:local-model');
+    });
+  });
+
+  describe('getDefaultModelId', () => {
+    it('returns default model ID string for all providers', () => {
+      expect(ModelIdentifier.getDefaultModelId('claude')).toBe('claude:claude-sonnet-4-5-20250929');
+      expect(ModelIdentifier.getDefaultModelId('claude-code')).toBe('claude-code:sonnet');
+      expect(ModelIdentifier.getDefaultModelId('openai')).toBe('openai:gpt-5');
+      expect(ModelIdentifier.getDefaultModelId('openai-codex')).toBe('openai-codex:gpt-5');
+      expect(ModelIdentifier.getDefaultModelId('lmstudio')).toBe('lmstudio:local-model');
+    });
+  });
 });
