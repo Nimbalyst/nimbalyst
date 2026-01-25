@@ -148,6 +148,9 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
     // Track attachments that are being processed (e.g., compressed)
     const [processingAttachments, setProcessingAttachments] = useState<Array<{ id: string; filename: string }>>([]);
 
+    // Track if content starting with '#' came from a paste (to prevent memory mode activation)
+    const pastedHashContentRef = useRef(false);
+
     // Voice mode state
     const [isVoiceActive, setIsVoiceActive] = useState(false);
     const showTranscription = useAtomValue(showTranscriptionAtom);
@@ -496,11 +499,18 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
 
     // Detect memory mode trigger (# as first character, Claude Code provider only)
     useEffect(() => {
+      // If content starts with '#', check if it came from a paste operation
       if (shouldActivateMemoryMode(value, provider)) {
+        // Don't activate memory mode if this '#' content was pasted
+        if (pastedHashContentRef.current) {
+          return;
+        }
         if (!isMemoryMode) {
           enterMemoryMode();
         }
       } else {
+        // Content no longer starts with '#', reset the paste flag
+        pastedHashContentRef.current = false;
         if (isMemoryMode) {
           exitMemoryMode();
         }
@@ -800,13 +810,14 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
       }
 
       // For Claude Code provider: prevent pasted text starting with '#' from triggering memory mode
-      // by prepending a newline when pasting into an empty input
-      if (provider === 'claude-code' && value.trim() === '') {
-        if (pastedText.trimStart().startsWith('#')) {
-          e.preventDefault();
-          // Prepend a newline to prevent '#' from being the first character
-          onChange('\n' + pastedText);
-        }
+      if (provider === 'claude-code' && pastedText.trimStart().startsWith('#')) {
+        e.preventDefault();
+        // Set flag to prevent memory mode activation for this pasted content
+        pastedHashContentRef.current = true;
+        // When pasting into empty input, prepend newline to avoid '#' being first character
+        // When pasting into non-empty input, use normal paste behavior
+        const newValue = value.trim() === '' ? '\n' + pastedText : value + pastedText;
+        onChange(newValue);
       }
     }, [onAttachmentAdd, handleFileAttachment, provider, value, onChange, sessionId]);
 
