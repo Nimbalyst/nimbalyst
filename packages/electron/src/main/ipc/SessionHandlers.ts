@@ -1,8 +1,24 @@
 import { SessionManager } from '@nimbalyst/runtime/ai/server';
 import { AISessionsRepository } from '@nimbalyst/runtime';
-import type { AIProviderType } from '@nimbalyst/runtime/ai/server/types';
+import { AI_PROVIDER_TYPES, type AIProviderType } from '@nimbalyst/runtime/ai/server/types';
+import type { UpdateSessionMetadataPayload } from '@nimbalyst/runtime/ai/adapters/sessionStore';
 import path from "path";
 import { safeHandle, safeOn } from '../utils/ipcRegistry';
+
+/**
+ * Extract provider from a model ID if it follows the "provider:model" format.
+ * Returns undefined if the format doesn't match or the provider is invalid.
+ */
+function extractProviderFromModel(modelId: string): AIProviderType | undefined {
+    if (typeof modelId !== 'string' || !modelId.includes(':')) {
+        return undefined;
+    }
+    const providerFromModel = modelId.split(':')[0];
+    if (providerFromModel && (AI_PROVIDER_TYPES as readonly string[]).includes(providerFromModel)) {
+        return providerFromModel as AIProviderType;
+    }
+    return undefined;
+}
 
 // Initialize session manager
 const sessionManager = new SessionManager();
@@ -30,9 +46,18 @@ export async function registerSessionHandlers() {
         try {
             const { session, workspaceId } = payload;
 
+            // Extract and sync provider from model ID if model follows "provider:model" format
+            let provider = session.provider;
+            if (session.model) {
+                const extractedProvider = extractProviderFromModel(session.model);
+                if (extractedProvider) {
+                    provider = extractedProvider;
+                }
+            }
+
             const createPayload = {
                 id: session.id,
-                provider: session.provider,
+                provider,
                 model: session.model,
                 title: session.title || 'Untitled',
                 workspaceId: workspaceId,
@@ -99,8 +124,16 @@ export async function registerSessionHandlers() {
     });
 
     // Update session metadata (including mode, isArchived, etc.)
-    safeHandle('sessions:update-metadata', async (event, sessionId: string, updates: any) => {
+    safeHandle('sessions:update-metadata', async (event, sessionId: string, updates: UpdateSessionMetadataPayload) => {
         try {
+            // When model is updated, extract and sync the provider from the model ID
+            // Model IDs follow the format "provider:model-name" (e.g., "claude-code:opus", "openai:gpt-4o")
+            if (updates.model) {
+                const extractedProvider = extractProviderFromModel(updates.model);
+                if (extractedProvider) {
+                    updates.provider = extractedProvider;
+                }
+            }
             await AISessionsRepository.updateMetadata(sessionId, updates);
             return { success: true };
         } catch (error) {

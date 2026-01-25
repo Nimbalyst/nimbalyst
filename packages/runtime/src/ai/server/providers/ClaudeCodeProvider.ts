@@ -19,6 +19,7 @@ import {
   AskUserQuestionRequestContent,
   AskUserQuestionResponseContent,
   getPatternDisplayName,
+  CLAUDE_CODE_VARIANTS,
 } from '../types';
 import { AgentMessagesRepository } from '../../../storage/repositories/AgentMessagesRepository';
 import path from 'path';
@@ -34,7 +35,6 @@ import { parseBashForFileOps, hasShellChainingOperators, splitOnShellOperators }
  * https://github.com/anthropics/claude-agent-sdk-typescript/blob/main/CHANGELOG.md
  * https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md
  */
-const CLAUDE_CODE_VARIANTS = ['opus', 'sonnet', 'haiku'] as const;
 type ClaudeCodeVariant = typeof CLAUDE_CODE_VARIANTS[number];
 
 // Map variants to their current version numbers

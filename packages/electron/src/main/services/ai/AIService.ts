@@ -9,16 +9,17 @@ import { SessionManager, ProviderFactory, ModelRegistry, AIProvider } from '@nim
 import { getSessionStateManager } from '@nimbalyst/runtime/ai/server/SessionStateManager';
 import { parseContextUsageMessage } from '@nimbalyst/runtime/ai/server/utils/contextUsage';
 import type { SessionStore } from '@nimbalyst/runtime';
-import type {
-  DocumentContext,
-  Message,
-  ProviderConfig,
-  ToolHandler,
-  DiffArgs,
-  DiffResult,
-  AIProviderType,
-  AIModel,
-  SessionData,
+import {
+  CLAUDE_CODE_VARIANTS,
+  type DocumentContext,
+  type Message,
+  type ProviderConfig,
+  type ToolHandler,
+  type DiffArgs,
+  type DiffResult,
+  type AIProviderType,
+  type AIModel,
+  type SessionData,
 } from '@nimbalyst/runtime/ai/server/types';
 // MCP imports removed - no longer using MCP HTTP server
 import { ToolExecutor, toolRegistry, BUILT_IN_TOOLS } from './tools';
@@ -1221,8 +1222,26 @@ export class AIService {
 
       // Only add model if it exists and provider isn't claude-code or openai-codex
       // Both claude-code and openai-codex manage their own model selection
-      if (session.providerConfig?.model && provider !== 'openai-codex') {
-        initConfig.model = session.providerConfig.model;
+      // Check both session.model (set via UI) and providerConfig.model (set at creation)
+      if ((session.model || session.providerConfig?.model) && provider !== 'openai-codex') {
+        const fullModel = session.model || session.providerConfig?.model;
+        if (fullModel) {
+          if (provider === 'claude-code') {
+            initConfig.model = fullModel;
+          } else if (fullModel.includes(':')) {
+            // Strip provider prefix (e.g., "openai:gpt-4o" -> "gpt-4o")
+            initConfig.model = fullModel.split(':').slice(1).join(':');
+          } else {
+            // Handle Claude Code variant names being used with regular Claude provider
+            // This can happen with corrupt/migrated session data
+            if (provider === 'claude' && (CLAUDE_CODE_VARIANTS as readonly string[]).includes(fullModel.toLowerCase())) {
+              logger.main.warn(`[AIService] Session has Claude Code variant "${fullModel}" with claude provider - using default model`);
+              // Don't set model - let ClaudeProvider use its default
+            } else {
+              initConfig.model = fullModel;
+            }
+          }
+        }
       }
 
       // Add LMStudio-specific config
@@ -1445,22 +1464,21 @@ export class AIService {
         // Only add model if it exists (openai-codex manages selection itself)
         if ((session.model || session.providerConfig?.model) && session.provider !== 'openai-codex') {
           const fullModel = session.model || session.providerConfig?.model;
-          //   sessionModel: session.model,
-          //   providerConfigModel: session.providerConfig?.model,
-          //   fullModel,
-          //   provider: session.provider
-          // });
 
           if (fullModel) {
             if (session.provider === 'claude-code') {
               reinitConfig.model = fullModel;
             } else if (fullModel.includes(':')) {
               reinitConfig.model = fullModel.split(':').slice(1).join(':');
-              //   original: fullModel,
-              //   stripped: reinitConfig.model
-              // });
             } else {
-              reinitConfig.model = fullModel;
+              // Handle Claude Code variant names being used with regular Claude provider
+              // This can happen with corrupt/migrated session data
+              if (session.provider === 'claude' && (CLAUDE_CODE_VARIANTS as readonly string[]).includes(fullModel.toLowerCase())) {
+                logger.main.warn(`[AIService] Session has Claude Code variant "${fullModel}" with claude provider - using default model`);
+                // Don't set model - let ClaudeProvider use its default
+              } else {
+                reinitConfig.model = fullModel;
+              }
             }
           }
         }
