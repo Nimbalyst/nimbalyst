@@ -20,6 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.3] - 2026-01-25
+
+
+### Added
+- Right-click context menu for workstreams
+- Allow adding new sessions to existing worktrees
+
+### Removed
+- Alternative Claude Code provider (alpha feature reverted)
+
 ## [0.52.2] - 2026-01-24
 
 
