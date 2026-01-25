@@ -16,6 +16,11 @@ import {
   updateSessionStoreAtom,
   removeSessionFullAtom,
   sessionRegistryAtom,
+  sessionOrChildProcessingAtom,
+  sessionUnreadAtom,
+  sessionPendingPromptAtom,
+  viewModeAtom,
+  setViewModeAtom,
   type SessionListItem as SessionListItemType,
 } from '../../store';
 import './SessionHistory.css';
@@ -112,6 +117,108 @@ function generateWorkspaceColor(path: string): string {
   return `hsl(${hue}, 65%, 55%)`;
 }
 
+// Component for rendering session status indicators in card view
+// NOT memoized - needs to re-render when atom values change
+const SessionCardStatus: React.FC<{ sessionId: string }> = ({ sessionId }) => {
+  const isProcessing = useAtomValue(sessionOrChildProcessingAtom(sessionId));
+  const hasUnread = useAtomValue(sessionUnreadAtom(sessionId));
+  const hasPendingPrompt = useAtomValue(sessionPendingPromptAtom(sessionId));
+
+  // Priority: processing > pending prompt > unread (same as SessionListItem)
+  if (isProcessing) {
+    return (
+      <div className="session-card-status-indicator processing" title="Processing">
+        <svg className="session-card-status-icon spinning" width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+        </svg>
+      </div>
+    );
+  }
+
+  if (hasPendingPrompt) {
+    return (
+      <div className="session-card-status-indicator pending" title="Waiting for your response">
+        <svg className="session-card-status-icon pulsing" width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
+          <path d="M12 8v5l3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+        </svg>
+      </div>
+    );
+  }
+
+  if (hasUnread) {
+    return (
+      <div className="session-card-status-indicator unread" title="Unread response">
+        <div className="session-card-status-dot"></div>
+      </div>
+    );
+  }
+
+  return null;
+};
+
+// Component for rendering worktree/workstream status indicators (checks all child sessions)
+// IMPORTANT: Parent must use a stable key that includes the group ID to ensure
+// this component is remounted when sessionIds array length changes
+const GroupCardStatus: React.FC<{ sessionIds: string[] }> = ({ sessionIds }) => {
+  // Compute status by checking the session registry directly instead of subscribing to each atom
+  // This avoids the "changing number of hooks" issue entirely
+  const sessionRegistry = useAtomValue(sessionRegistryAtom);
+
+  const hasProcessing = useMemo(() => {
+    return sessionIds.some(id => {
+      const session = sessionRegistry.get(id);
+      return session?.isProcessing || session?.childProcessing;
+    });
+  }, [sessionIds, sessionRegistry]);
+
+  const hasPendingPrompt = useMemo(() => {
+    return sessionIds.some(id => {
+      const session = sessionRegistry.get(id);
+      return session?.hasPendingPrompt;
+    });
+  }, [sessionIds, sessionRegistry]);
+
+  const hasUnread = useMemo(() => {
+    return sessionIds.some(id => {
+      const session = sessionRegistry.get(id);
+      return session?.hasUnread;
+    });
+  }, [sessionIds, sessionRegistry]);
+
+  // Priority: processing > pending prompt > unread (same as SessionListItem)
+  if (hasProcessing) {
+    return (
+      <div className="session-card-status-indicator processing" title="Processing">
+        <svg className="session-card-status-icon spinning" width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+        </svg>
+      </div>
+    );
+  }
+
+  if (hasPendingPrompt) {
+    return (
+      <div className="session-card-status-indicator pending" title="Waiting for your response">
+        <svg className="session-card-status-icon pulsing" width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
+          <path d="M12 8v5l3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+        </svg>
+      </div>
+    );
+  }
+
+  if (hasUnread) {
+    return (
+      <div className="session-card-status-indicator unread" title="Unread response">
+        <div className="session-card-status-dot"></div>
+      </div>
+    );
+  }
+
+  return null;
+};
+
 const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   workspacePath,
   activeSessionId,
@@ -202,6 +309,10 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   const [lastSelectedId, setLastSelectedId] = useState<string | null>(null); // For shift+click range selection
   const [worktreeCache, setWorktreeCache] = useState<Map<string, WorktreeWithStatus>>(new Map()); // Cache worktree data
   const [workstreamChildrenCache, setWorkstreamChildrenCache] = useState<Map<string, SessionItem[]>>(new Map()); // Cache workstream children
+
+  // View mode persisted via agentMode atoms
+  const viewMode = useAtomValue(viewModeAtom);
+  const setViewMode = useSetAtom(setViewModeAtom);
 
   // FTS index build dialog state
   const [showIndexDialog, setShowIndexDialog] = useState(false);
@@ -1484,6 +1595,25 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       </div>
       <div className="session-history-filters">
         <button
+          className={`session-history-view-toggle ${viewMode === 'card' ? 'active' : ''}`}
+          onClick={() => setViewMode(viewMode === 'list' ? 'card' : 'list')}
+          title={viewMode === 'list' ? 'Switch to card view' : 'Switch to list view'}
+          aria-label={viewMode === 'list' ? 'Switch to card view' : 'Switch to list view'}
+        >
+          {viewMode === 'list' ? (
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="2" y="2" width="5" height="5" stroke="currentColor" strokeWidth="1.25" rx="1"/>
+              <rect x="9" y="2" width="5" height="5" stroke="currentColor" strokeWidth="1.25" rx="1"/>
+              <rect x="2" y="9" width="5" height="5" stroke="currentColor" strokeWidth="1.25" rx="1"/>
+              <rect x="9" y="9" width="5" height="5" stroke="currentColor" strokeWidth="1.25" rx="1"/>
+            </svg>
+          ) : (
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/>
+            </svg>
+          )}
+        </button>
+        <button
           className={`session-history-archive-filter ${showArchived ? 'active' : ''}`}
           onClick={toggleShowArchived}
           title={showArchived ? 'Hide archived sessions' : 'Show archived sessions'}
@@ -1568,7 +1698,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
           </div>
         </div>
       )}
-      <div className="session-history-list" ref={scrollContainerRef}>
+      <div className={`session-history-list ${viewMode === 'card' ? 'session-history-list-cards' : ''}`} ref={scrollContainerRef}>
         {groupKeys.length === 0 && hasSearchQuery ? (
           // No search results - show message with option to clear
           <div className="session-history-empty">
@@ -1584,6 +1714,174 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
               </button>
             </p>
           </div>
+        ) : viewMode === 'card' ? (
+          <>
+            {/* Card view - flat display of top-level items only */}
+            <div className="session-history-cards-container">
+              {groupKeys.map(groupKey => {
+                const items = groupedItems[groupKey];
+                return items.map(item => {
+                  if (item.type === 'worktree') {
+                    // Worktree card - click to select first session
+                    const worktreeData = worktreeCache.get(item.worktreeId);
+                    const firstSession = item.sessions[0];
+                    const isWorktreeActive = item.sessions.some(s => s.id === activeSessionId);
+
+                    return (
+                      <div
+                        key={`worktree-card-${item.worktreeId}`}
+                        className={`session-history-card ${isWorktreeActive ? 'active' : ''} ${worktreeData?.isPinned ? 'pinned' : ''} ${worktreeData?.isArchived ? 'archived' : ''}`}
+                        onClick={() => firstSession && onSessionSelect(firstSession.id)}
+                      >
+                        <div className="session-history-card-icon">
+                          <svg width="32" height="32" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2">
+                            <path d="M5 13v-2.5a1.5 1.5 0 0 1 1.5-1.5h3"/>
+                            <path d="M9.5 9V4.5"/>
+                            <circle cx="5" cy="4.5" r="1.5"/>
+                            <circle cx="9.5" cy="4.5" r="1.5"/>
+                            <path d="M5 6v2.5a1.5 1.5 0 0 0 1.5 1.5"/>
+                          </svg>
+                        </div>
+                        <div className="session-history-card-content">
+                          <div className="session-history-card-header">
+                            <span className="session-history-card-title">{worktreeData?.displayName || worktreeData?.name || 'Loading...'}</span>
+                            <div className="session-history-card-badges">
+                              <GroupCardStatus sessionIds={item.sessions.map(s => s.id)} />
+                              {worktreeData?.isPinned && (
+                                <svg className="session-history-card-pin-icon" width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                                  <path d="M9.828 3.172a.5.5 0 0 1 .707 0l2.293 2.293a.5.5 0 0 1 0 .707l-4 4a.5.5 0 0 1-.708 0L5.828 7.879a.5.5 0 0 1 0-.707l4-4z"/>
+                                  <path d="M8 12l-1.5 1.5a.5.5 0 0 1-.707-.707L7.293 11.5 8 12z"/>
+                                </svg>
+                              )}
+                              {worktreeData?.isArchived && (
+                                <span className="session-history-card-archive-badge">archived</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="session-history-card-info">
+                            <div className="session-history-card-git-badges">
+                              {worktreeData?.gitStatus?.ahead && worktreeData.gitStatus.ahead > 0 && (
+                                <span className="session-history-card-git-badge ahead">{worktreeData.gitStatus.ahead} ahead</span>
+                              )}
+                              {worktreeData?.gitStatus?.behind && worktreeData.gitStatus.behind > 0 && (
+                                <span className="session-history-card-git-badge behind">{worktreeData.gitStatus.behind} behind</span>
+                              )}
+                              {worktreeData?.gitStatus?.uncommitted && (
+                                <span className="session-history-card-git-badge uncommitted">uncommitted</span>
+                              )}
+                            </div>
+                            <span className="session-history-card-branch">{worktreeData?.branch || ''}</span>
+                            <span className="session-history-card-count">{item.sessions.length} session{item.sessions.length !== 1 ? 's' : ''}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  } else if (item.type === 'workstream') {
+                    // Workstream card - click to select parent session
+                    const session = item.session;
+                    // Calculate total uncommitted from all child sessions
+                    const totalUncommitted = item.sessions.reduce((sum, child) => sum + (child.uncommittedCount || 0), 0);
+
+                    return (
+                      <div
+                        key={`workstream-card-${session.id}`}
+                        className={`session-history-card ${session.id === activeSessionId || activeSessionParentId === session.id ? 'active' : ''} ${session.isPinned ? 'pinned' : ''} ${session.isArchived ? 'archived' : ''}`}
+                        onClick={() => onSessionSelect(session.id)}
+                      >
+                        <div className="session-history-card-icon">
+                          <svg width="32" height="32" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="8" cy="4" r="2" stroke="currentColor" strokeWidth="1.2"/>
+                            <circle cx="4" cy="12" r="2" stroke="currentColor" strokeWidth="1.2"/>
+                            <circle cx="12" cy="12" r="2" stroke="currentColor" strokeWidth="1.2"/>
+                            <path d="M8 6v2M6 8l-2 2M10 8l2 2" stroke="currentColor" strokeWidth="1.2"/>
+                          </svg>
+                        </div>
+                        <div className="session-history-card-content">
+                          <div className="session-history-card-header">
+                            <span className="session-history-card-title">{session.title || 'Untitled Workstream'}</span>
+                            <div className="session-history-card-badges">
+                              <GroupCardStatus sessionIds={[session.id, ...item.sessions.map(s => s.id)]} />
+                              {session.isPinned && (
+                                <svg className="session-history-card-pin-icon" width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                                  <path d="M9.828 3.172a.5.5 0 0 1 .707 0l2.293 2.293a.5.5 0 0 1 0 .707l-4 4a.5.5 0 0 1-.708 0L5.828 7.879a.5.5 0 0 1 0-.707l4-4z"/>
+                                  <path d="M8 12l-1.5 1.5a.5.5 0 0 1-.707-.707L7.293 11.5 8 12z"/>
+                                </svg>
+                              )}
+                              {session.isArchived && (
+                                <span className="session-history-card-archive-badge">archived</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="session-history-card-info">
+                            <span className="session-history-card-count">{session.childCount || 0} session{session.childCount !== 1 ? 's' : ''}</span>
+                            <span className="session-history-card-meta">{session.messageCount || 0} message{session.messageCount !== 1 ? 's' : ''}</span>
+                            {totalUncommitted > 0 && (
+                              <span className="session-history-card-uncommitted-badge">{totalUncommitted} uncommitted</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  } else {
+                    // Regular session card
+                    const session = item.session;
+                    const timestamp = sortBy === 'updated' ? (session.updatedAt || session.createdAt) : session.createdAt;
+                    const relativeTime = new Date(timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
+                    return (
+                      <div
+                        key={`session-card-${session.id}`}
+                        className={`session-history-card ${session.id === activeSessionId ? 'active' : ''} ${session.isPinned ? 'pinned' : ''} ${session.isArchived ? 'archived' : ''} ${loadedSessionIds.includes(session.id) ? 'loaded' : ''}`}
+                        onClick={() => onSessionSelect(session.id)}
+                      >
+                        <div className="session-history-card-icon">
+                          {session.sessionType === 'terminal' ? (
+                            <svg width="32" height="32" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M3 5L7 9L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                              <path d="M9 13H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                            </svg>
+                          ) : (
+                            <svg width="32" height="32" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M4 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" stroke="currentColor" strokeWidth="1.2"/>
+                              <path d="M5 6h6M5 9h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                            </svg>
+                          )}
+                          {loadedSessionIds.includes(session.id) && (
+                            <div className="session-history-card-loaded-dot"></div>
+                          )}
+                        </div>
+                        <div className="session-history-card-content">
+                          <div className="session-history-card-header">
+                            <span className="session-history-card-title">{session.title || 'Untitled Session'}</span>
+                            <div className="session-history-card-badges">
+                              <SessionCardStatus sessionId={session.id} />
+                              {session.isPinned && (
+                                <svg className="session-history-card-pin-icon" width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                                  <path d="M9.828 3.172a.5.5 0 0 1 .707 0l2.293 2.293a.5.5 0 0 1 0 .707l-4 4a.5.5 0 0 1-.708 0L5.828 7.879a.5.5 0 0 1 0-.707l4-4z"/>
+                                  <path d="M8 12l-1.5 1.5a.5.5 0 0 1-.707-.707L7.293 11.5 8 12z"/>
+                                </svg>
+                              )}
+                              {session.isArchived && (
+                                <span className="session-history-card-archive-badge">archived</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="session-history-card-info">
+                            <span className="session-history-card-provider">{session.provider}</span>
+                            <span className="session-history-card-timestamp">{relativeTime}</span>
+                            <span className="session-history-card-meta">{session.messageCount || 0} message{session.messageCount !== 1 ? 's' : ''}</span>
+                            {session.uncommittedCount !== undefined && session.uncommittedCount > 0 && (
+                              <span className="session-history-card-uncommitted-badge">{session.uncommittedCount} uncommitted</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+                });
+              })}
+            </div>
+          </>
         ) : (
           <>
             {/* Unified time groups with interleaved sessions and worktrees */}
