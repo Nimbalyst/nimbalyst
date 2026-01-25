@@ -43,12 +43,6 @@ export const ALPHA_FEATURES: readonly AlphaFeatureDefinition[] = [
     description: 'Enable Claude Agent plugins and extensions management.',
     icon: 'widgets',
   },
-  {
-    tag: 'claude-code-custom-provider',
-    name: 'Claude Code Custom Provider',
-    description: 'Enable alternative Claude Code API providers (Amazon Bedrock, Google Vertex AI, z.ai/GLM, or custom configurations).',
-    icon: 'alt_route',
-  },
 ] as const;
 
 /**

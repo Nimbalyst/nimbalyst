@@ -42,7 +42,6 @@ export class ClaudeProvider extends BaseAIProvider {
 
     this.anthropic = new Anthropic({
       apiKey: config.apiKey,
-      ...(config.baseUrl && { baseURL: config.baseUrl }),
       defaultHeaders: {
         'anthropic-beta': 'fine-grained-tool-streaming-2025-05-14'
       }

@@ -18,7 +18,8 @@
  * ```
  */
 
-import { useAtomValue } from 'jotai';
+import { useMemo } from 'react';
+import { useAtomValue, atom } from 'jotai';
 import { alphaFeatureEnabledAtom } from '../store/atoms/appSettings';
 import type { AlphaFeatureTag } from '../../../shared/alphaFeatures';
 
@@ -38,6 +39,10 @@ export function useAlphaFeature(tag: AlphaFeatureTag): boolean {
 /**
  * Check if multiple alpha features are enabled.
  *
+ * Note: This hook creates a derived atom that reads all requested features at once.
+ * The tags array should be stable (defined outside component or memoized) to avoid
+ * creating new atoms on every render.
+ *
  * @example
  * ```tsx
  * const features = useAlphaFeatures(['sync', 'voice-mode']);
@@ -49,9 +54,33 @@ export function useAlphaFeature(tag: AlphaFeatureTag): boolean {
  * }
  * ```
  */
+
+// Cache for multi-feature atoms keyed by sorted tag string
+const multiFeatureAtomCache = new Map<string, ReturnType<typeof atom<Record<string, boolean>>>>();
+
 export function useAlphaFeatures(tags: AlphaFeatureTag[]): Record<AlphaFeatureTag, boolean> {
-  return tags.reduce((acc, tag) => {
-    acc[tag] = useAlphaFeature(tag);
-    return acc;
-  }, {} as Record<AlphaFeatureTag, boolean>);
+  // Create a stable key from sorted tags
+  const cacheKey = useMemo(() => [...tags].sort().join(','), [tags]);
+
+  // Get or create the combined atom
+  const combinedAtom = useMemo(() => {
+    let cached = multiFeatureAtomCache.get(cacheKey);
+    if (!cached) {
+      // Get all the individual feature atoms
+      const featureAtoms = tags.map(tag => ({ tag, atom: alphaFeatureEnabledAtom(tag) }));
+
+      // Create a single derived atom that reads all features
+      cached = atom((get) => {
+        const result: Record<string, boolean> = {};
+        for (const { tag, atom: featureAtom } of featureAtoms) {
+          result[tag] = get(featureAtom);
+        }
+        return result;
+      });
+      multiFeatureAtomCache.set(cacheKey, cached);
+    }
+    return cached;
+  }, [cacheKey, tags]);
+
+  return useAtomValue(combinedAtom) as Record<AlphaFeatureTag, boolean>;
 }

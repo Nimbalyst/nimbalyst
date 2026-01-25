@@ -192,10 +192,6 @@ export interface ProviderConfig {
   temperature?: number;
   baseUrl?: string;
   allowedTools?: string[];  // List of allowed tool names, ['*'] for all tools
-  // Claude Code provider-specific settings
-  claudeCodeProvider?: 'anthropic' | 'custom';
-  // Custom environment variables for custom provider (Bedrock, Vertex, z.ai, etc.)
-  customEnvVars?: Record<string, string>;
 }
 
 export interface ProviderCapabilities {
