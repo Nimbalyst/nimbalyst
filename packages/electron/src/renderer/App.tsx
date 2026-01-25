@@ -1260,6 +1260,26 @@ export default function App() {
     return () => window.removeEventListener('terminal:show', handleTerminalShow);
   }, []);
 
+  // Listen for open-ai-session events (from rebase/merge conflict resolution)
+  useEffect(() => {
+    const handleOpenAiSession = async (event: CustomEvent<{ sessionId: string; workspacePath: string; draftInput?: string }>) => {
+      const { sessionId } = event.detail;
+
+      // Switch to agent mode if needed
+      if (activeMode !== 'agent') {
+        setActiveMode('agent');
+      }
+
+      // Open the session using the AgentMode ref
+      if (agentModeRef.current) {
+        await agentModeRef.current.openSessionInTab(sessionId);
+      }
+    };
+
+    window.addEventListener('open-ai-session', handleOpenAiSession as EventListener);
+    return () => window.removeEventListener('open-ai-session', handleOpenAiSession as EventListener);
+  }, [activeMode]);
+
   // Save AI Chat state when it changes (but only after initial load)
   useEffect(() => {
     if (!workspacePath || !workspaceMode || !isAIChatStateLoaded) return;

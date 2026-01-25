@@ -37,6 +37,7 @@ import {
   refreshSessionListAtom,
   removeSessionFullAtom,
   updateSessionStoreAtom,
+  sessionRegistryAtom,
 } from '../../store';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
 import { initWorkstreamState, loadWorkstreamStates, workstreamStateAtom, workstreamActiveChildAtom } from '../../store/atoms/workstreamState';
@@ -328,6 +329,39 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
       const sessionListItem = result.sessions.find((s: any) => s.id === sessionId);
       console.log('[AgentMode] Session list item:', sessionListItem?.id, 'parentSessionId:', sessionListItem?.parentSessionId);
 
+      // Check if session is in the registry - if not, add it
+      // This handles cases where a session was just created (e.g., via rebase conflict resolution)
+      const registry = store.get(sessionRegistryAtom);
+      if (sessionListItem && !registry.has(sessionId)) {
+        console.log('[AgentMode] Session not in registry, adding it');
+        addSession({
+          id: sessionListItem.id,
+          name: sessionListItem.title || sessionListItem.name || 'Untitled Session',
+          title: sessionListItem.title || sessionListItem.name || 'Untitled Session',
+          createdAt: sessionListItem.createdAt,
+          updatedAt: sessionListItem.updatedAt,
+          provider: sessionListItem.provider || 'claude-code',
+          model: sessionListItem.model,
+          sessionType: sessionListItem.sessionType || 'coding',
+          messageCount: sessionListItem.messageCount || 0,
+          projectPath: workspacePath,
+          isArchived: sessionListItem.isArchived || false,
+          isPinned: sessionListItem.isPinned || false,
+          worktreeId: sessionListItem.worktreeId || null,
+          parentSessionId: sessionListItem.parentSessionId || null,
+          childCount: sessionListItem.childCount || 0,
+        });
+
+        // If it's a worktree session, initialize workstream state
+        if (sessionListItem.worktreeId) {
+          console.log('[AgentMode] Initializing worktree state for session');
+          store.set(workstreamStateAtom(sessionId), {
+            type: 'worktree',
+            worktreeId: sessionListItem.worktreeId,
+          });
+        }
+      }
+
       if (sessionListItem?.parentSessionId) {
         // This is a child session in a workstream
         console.log('[AgentMode] Child session detected, parent:', sessionListItem.parentSessionId);
@@ -378,7 +412,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
         selection: { type: 'session', id: sessionId },
       });
     }
-  }, [workspacePath, setSelectedWorkstream]);
+  }, [workspacePath, setSelectedWorkstream, addSession]);
 
   // Handle session selection from list (for root sessions/workstreams)
   const handleSessionSelect = useCallback((sessionId: string) => {
@@ -531,6 +565,12 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
     },
   }), [createNewSession, openSessionInTab, workspacePath, setSelectedWorkstream]);
 
+  // Handle worktree archived - refresh the session list to show updated state
+  const handleWorktreeArchived = useCallback(() => {
+    console.log('[AgentMode] Worktree archived, refreshing sessions');
+    refreshSessions();
+  }, [refreshSessions]);
+
   // Content for the right side
   const rightContent = selectedWorkstream ? (
     <AgentWorkstreamPanel
@@ -540,6 +580,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
       workstreamType={selectedWorkstream.type}
       onFileOpen={onFileOpen}
       onAddSessionToWorktree={addSessionToWorktree}
+      onWorktreeArchived={handleWorktreeArchived}
     />
   ) : (
     <div className="agent-mode-empty">

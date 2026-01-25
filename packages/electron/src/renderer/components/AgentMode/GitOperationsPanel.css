@@ -255,3 +255,241 @@
   color: var(--text-tertiary);
   font-size: 10px;
 }
+
+/* ============================================================
+   Worktree Mode Styles (matching CommitSection.css)
+   ============================================================ */
+
+.git-operations-panel__worktree {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.git-operations-panel__file-status {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  width: 14px;
+  text-align: center;
+}
+
+.git-operations-panel__file-status--added {
+  color: var(--success, #22c55e);
+}
+
+.git-operations-panel__file-status--modified {
+  color: var(--warning, #f59e0b);
+}
+
+.git-operations-panel__file-status--deleted {
+  color: var(--error, #ef4444);
+}
+
+.git-operations-panel__worktree-status {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  background: var(--surface-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.git-operations-panel__status-warning {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--warning, #f59e0b);
+}
+
+.git-operations-panel__status-success {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--success, #22c55e);
+}
+
+.git-operations-panel__worktree-commit-message {
+  width: 100%;
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--text-primary);
+  background-color: var(--surface-primary);
+  border: 1px solid var(--border-secondary);
+  border-radius: 6px;
+  resize: vertical;
+  min-height: 60px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.git-operations-panel__worktree-commit-message::placeholder {
+  color: var(--text-tertiary);
+}
+
+.git-operations-panel__worktree-commit-message:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px var(--accent-primary-muted);
+}
+
+.git-operations-panel__worktree-commit-message:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.git-operations-panel__worktree-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.git-operations-panel__worktree-button {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+.git-operations-panel__worktree-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.git-operations-panel__worktree-button--primary {
+  background-color: var(--accent-primary);
+  color: var(--accent-contrast);
+}
+
+.git-operations-panel__worktree-button--primary:not(:disabled):hover {
+  background-color: var(--accent-hover);
+}
+
+.git-operations-panel__worktree-button--secondary {
+  background-color: var(--surface-tertiary);
+  color: var(--text-primary);
+}
+
+.git-operations-panel__worktree-button--secondary:not(:disabled):hover {
+  background-color: var(--surface-hover);
+}
+
+.git-operations-panel__worktree-button--warning {
+  background-color: var(--warning-bg, #f59e0b);
+  color: var(--warning-contrast, #ffffff);
+}
+
+.git-operations-panel__worktree-button--warning:not(:disabled):hover {
+  background-color: var(--warning-hover, #d97706);
+}
+
+.git-operations-panel__worktree-commits {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 150px;
+  overflow-y: auto;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  padding: 4px;
+  background: var(--surface-primary);
+}
+
+.git-operations-panel__worktree-commit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px;
+  font-size: 11px;
+}
+
+.git-operations-panel__worktree-commit:hover {
+  background: var(--surface-tertiary);
+  border-radius: 3px;
+}
+
+.git-operations-panel__worktree-commit .git-operations-panel__worktree-commit-message {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  /* Reset textarea styles for inline display */
+  padding: 0;
+  border: none;
+  background: transparent;
+  resize: none;
+  min-height: unset;
+  font-size: 11px;
+  line-height: inherit;
+}
+
+/* Squash functionality styles */
+.git-operations-panel__squash-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px;
+  background: var(--surface-tertiary);
+  border-radius: 4px;
+  margin-bottom: 4px;
+}
+
+.git-operations-panel__squash-info {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.git-operations-panel__squash-buttons {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.git-operations-panel__squash-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  border: none;
+  border-radius: 4px;
+  background: var(--accent-primary);
+  color: var(--accent-contrast);
+  cursor: pointer;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+.git-operations-panel__squash-btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.git-operations-panel__squash-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.git-operations-panel__commit-checkbox {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+.git-operations-panel__commit-checkbox:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.git-operations-panel__worktree-commit--selected {
+  background: var(--accent-primary-muted, rgba(var(--accent-primary-rgb, 59, 130, 246), 0.1));
+  border-radius: 3px;
+}

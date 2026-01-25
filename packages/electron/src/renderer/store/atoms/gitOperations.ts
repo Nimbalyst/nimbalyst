@@ -51,9 +51,9 @@ export const commitMessageAtom = atom<string>('');
 export const isCommittingAtom = atom<boolean>(false);
 
 /**
- * Git operation mode: 'manual' or 'smart' (AI-assisted).
+ * Git operation mode: 'manual', 'smart' (AI-assisted), or 'worktree'.
  */
-export type GitOperationMode = 'manual' | 'smart';
+export type GitOperationMode = 'manual' | 'smart' | 'worktree';
 
 export const gitOperationModeAtom = atom<GitOperationMode>('smart');
 
