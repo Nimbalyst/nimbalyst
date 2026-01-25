@@ -2,7 +2,7 @@
  * Registry of available AI models with dynamic fetching
  */
 
-import { AIModel, AIProviderType } from './types';
+import { AIModel, AIProviderType, ModelIdentifier } from './types';
 
 export class ModelRegistry {
   private static cachedModels: Map<AIProviderType, AIModel[]> = new Map();
@@ -167,7 +167,9 @@ export class ModelRegistry {
   }
 
   private static extractClaudeModelMetadata(model: AIModel): { variant: string; releaseDate: number } | null {
-    const idPart = model.id.includes(':') ? model.id.split(':').pop()! : model.id;
+    // Extract the model part using ModelIdentifier
+    const parsed = ModelIdentifier.tryParse(model.id);
+    const idPart = parsed ? parsed.model : model.id;
     const normalized = idPart.toLowerCase();
     const variantMatch = normalized.match(/(opus|sonnet|haiku)/);
     const dateMatch = normalized.match(/(\d{8})$/);

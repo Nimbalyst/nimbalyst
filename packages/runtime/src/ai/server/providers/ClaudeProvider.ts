@@ -10,7 +10,8 @@ import {
   ProviderConfig,
   ProviderCapabilities,
   StreamChunk,
-  AIModel
+  AIModel,
+  ModelIdentifier
 } from '../types';
 import { CLAUDE_MODELS, DEFAULT_MODELS } from '../../modelConstants';
 
@@ -815,7 +816,7 @@ export class ClaudeProvider extends BaseAIProvider {
    */
   static getModels(): AIModel[] {
     return CLAUDE_MODELS.map(model => ({
-      id: `claude:${model.id}`,
+      id: ModelIdentifier.create('claude', model.id).combined,
       name: model.displayName,
       provider: 'claude' as const,
       maxTokens: model.maxTokens,

@@ -4,6 +4,7 @@
 
 import type { ToolDefinition } from '../tools';
 export type { ToolDefinition } from '../tools';
+export { ModelIdentifier } from './ModelIdentifier';
 
 export interface DocumentContext {
   filePath?: string;

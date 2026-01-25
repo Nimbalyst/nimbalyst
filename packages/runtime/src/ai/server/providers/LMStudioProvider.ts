@@ -10,7 +10,8 @@ import {
   ProviderCapabilities,
   StreamChunk,
   Message,
-  AIModel
+  AIModel,
+  ModelIdentifier
 } from '../types';
 
 interface LMStudioConfig extends ProviderConfig {
@@ -741,7 +742,7 @@ export class LMStudioProvider extends BaseAIProvider {
       
       // Map LMStudio models to our format
       return data.data.map((model: any) => ({
-        id: `lmstudio:${model.id}`,
+        id: ModelIdentifier.create('lmstudio', model.id).combined,
         name: this.formatModelName(model.id),
         provider: 'lmstudio' as const,
         maxTokens: model.max_tokens || 4096,
@@ -759,7 +760,7 @@ export class LMStudioProvider extends BaseAIProvider {
    */
   static getDefaultModels(): AIModel[] {
     return [{
-      id: 'lmstudio:local-model',
+      id: ModelIdentifier.create('lmstudio', 'local-model').combined,
       name: 'Local Model',
       provider: 'lmstudio' as const,
       maxTokens: 4096,

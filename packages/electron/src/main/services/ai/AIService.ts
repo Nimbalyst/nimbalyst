@@ -11,6 +11,8 @@ import { parseContextUsageMessage } from '@nimbalyst/runtime/ai/server/utils/con
 import type { SessionStore } from '@nimbalyst/runtime';
 import {
   CLAUDE_CODE_VARIANTS,
+  AI_PROVIDER_TYPES,
+  ModelIdentifier,
   type DocumentContext,
   type Message,
   type ProviderConfig,
@@ -109,6 +111,55 @@ function getFileExtensionForAnalytics(filePath: string | undefined): string | un
   // Standard single extension
   const lastDot = filePath.lastIndexOf('.');
   return lastDot >= 0 ? filePath.substring(lastDot).toLowerCase() : undefined;
+}
+
+/**
+ * Extract the model part from a full model ID for passing to provider APIs.
+ * For claude-code, returns the full model (with suffix if any).
+ * For other providers, strips the provider prefix.
+ *
+ * Returns null if the model is a Claude Code variant being used with a non-claude-code provider
+ * (which indicates corrupt/migrated session data).
+ */
+function extractModelForProvider(
+  fullModel: string,
+  provider: AIProviderType
+): string | null {
+  // Claude Code keeps the full model ID (including suffix like -1m)
+  if (provider === 'claude-code') {
+    return fullModel;
+  }
+
+  // Try parsing with ModelIdentifier
+  const parsed = ModelIdentifier.tryParse(fullModel);
+  if (parsed) {
+    // Check for provider mismatch - Claude Code variant with non-claude-code provider
+    if (parsed.provider === 'claude-code' && provider !== 'claude-code') {
+      logger.main.warn(`[AIService] Session has Claude Code model "${fullModel}" with ${provider} provider - using default model`);
+      return null;
+    }
+    // Validate that we're not just returning a provider name as a model
+    if (!parsed.model || parsed.model === parsed.provider) {
+      logger.main.warn(`[AIService] Model "${fullModel}" appears to be just a provider name - using default model`);
+      return null;
+    }
+    return parsed.model;
+  }
+
+  // Not a combined format - check for bare Claude Code variants with wrong provider
+  if (provider === 'claude' && (CLAUDE_CODE_VARIANTS as readonly string[]).includes(fullModel.toLowerCase())) {
+    logger.main.warn(`[AIService] Session has Claude Code variant "${fullModel}" with claude provider - using default model`);
+    return null;
+  }
+
+  // Check if the fullModel is just a provider name (invalid)
+  if ((AI_PROVIDER_TYPES as readonly string[]).includes(fullModel.toLowerCase())) {
+    logger.main.warn(`[AIService] Model "${fullModel}" is just a provider name, not a valid model ID - using default model`);
+    return null;
+  }
+
+  // Return as-is for non-combined formats (e.g., raw model IDs)
+  return fullModel;
 }
 
 /**
@@ -1163,20 +1214,38 @@ export class AIService {
 
       // Only add model to config if we have one and it's not claude-code
       if (model) {
-        if (provider === 'claude-code') {
-          providerConfig.model = model;
-        } else if (model.includes(':')) {
-          providerConfig.model = model.split(':').slice(1).join(':');
-        } else {
-          providerConfig.model = model;
+        const modelForProvider = extractModelForProvider(model, provider);
+        if (modelForProvider !== null) {
+          providerConfig.model = modelForProvider;
+        } else if (provider !== 'claude-code') {
+          // extractModelForProvider returned null (invalid model) - fall back to default
+          const defaultModel = await ModelRegistry.getDefaultModel(provider);
+          if (defaultModel) {
+            const defaultModelForProvider = extractModelForProvider(defaultModel, provider);
+            if (defaultModelForProvider !== null) {
+              providerConfig.model = defaultModelForProvider;
+              logger.main.info(`[AIService] Fell back to default model "${defaultModel}" for provider ${provider}`);
+            }
+          }
         }
       } else if (provider !== 'claude-code') {
         // For other providers, fall back to settings
         const settingsModel = this.getProviderSetting(provider, 'model');
-        if (settingsModel && settingsModel.includes(':')) {
-          providerConfig.model = settingsModel.split(':').slice(1).join(':');
-        } else {
-          providerConfig.model = settingsModel;
+        if (settingsModel) {
+          const modelForProvider = extractModelForProvider(settingsModel, provider);
+          if (modelForProvider !== null) {
+            providerConfig.model = modelForProvider;
+          }
+        }
+        // If still no model, get provider default
+        if (!providerConfig.model) {
+          const defaultModel = await ModelRegistry.getDefaultModel(provider);
+          if (defaultModel) {
+            const defaultModelForProvider = extractModelForProvider(defaultModel, provider);
+            if (defaultModelForProvider !== null) {
+              providerConfig.model = defaultModelForProvider;
+            }
+          }
         }
       }
 
@@ -1220,26 +1289,34 @@ export class AIService {
         initConfig.apiKey = apiKey;
       }
 
-      // Only add model if it exists and provider isn't claude-code or openai-codex
-      // Both claude-code and openai-codex manage their own model selection
+      // Only add model if it exists and provider isn't openai-codex
+      // openai-codex manages its own model selection
       // Check both session.model (set via UI) and providerConfig.model (set at creation)
       if ((session.model || session.providerConfig?.model) && provider !== 'openai-codex') {
         const fullModel = session.model || session.providerConfig?.model;
         if (fullModel) {
-          if (provider === 'claude-code') {
-            initConfig.model = fullModel;
-          } else if (fullModel.includes(':')) {
-            // Strip provider prefix (e.g., "openai:gpt-4o" -> "gpt-4o")
-            initConfig.model = fullModel.split(':').slice(1).join(':');
-          } else {
-            // Handle Claude Code variant names being used with regular Claude provider
-            // This can happen with corrupt/migrated session data
-            if (provider === 'claude' && (CLAUDE_CODE_VARIANTS as readonly string[]).includes(fullModel.toLowerCase())) {
-              logger.main.warn(`[AIService] Session has Claude Code variant "${fullModel}" with claude provider - using default model`);
-              // Don't set model - let ClaudeProvider use its default
-            } else {
-              initConfig.model = fullModel;
+          const modelForProvider = extractModelForProvider(fullModel, provider);
+          if (modelForProvider !== null) {
+            initConfig.model = modelForProvider;
+          } else if (provider !== 'claude-code') {
+            // extractModelForProvider returned null - fall back to default
+            const defaultModel = await ModelRegistry.getDefaultModel(provider);
+            if (defaultModel) {
+              const defaultModelForProvider = extractModelForProvider(defaultModel, provider);
+              if (defaultModelForProvider !== null) {
+                initConfig.model = defaultModelForProvider;
+                logger.main.info(`[AIService] Fell back to default model "${defaultModel}" for provider ${provider}`);
+              }
             }
+          }
+        }
+      } else if (provider !== 'claude-code' && provider !== 'openai-codex') {
+        // No model specified - get default
+        const defaultModel = await ModelRegistry.getDefaultModel(provider);
+        if (defaultModel) {
+          const defaultModelForProvider = extractModelForProvider(defaultModel, provider);
+          if (defaultModelForProvider !== null) {
+            initConfig.model = defaultModelForProvider;
           }
         }
       }
@@ -1466,19 +1543,28 @@ export class AIService {
           const fullModel = session.model || session.providerConfig?.model;
 
           if (fullModel) {
-            if (session.provider === 'claude-code') {
-              reinitConfig.model = fullModel;
-            } else if (fullModel.includes(':')) {
-              reinitConfig.model = fullModel.split(':').slice(1).join(':');
-            } else {
-              // Handle Claude Code variant names being used with regular Claude provider
-              // This can happen with corrupt/migrated session data
-              if (session.provider === 'claude' && (CLAUDE_CODE_VARIANTS as readonly string[]).includes(fullModel.toLowerCase())) {
-                logger.main.warn(`[AIService] Session has Claude Code variant "${fullModel}" with claude provider - using default model`);
-                // Don't set model - let ClaudeProvider use its default
-              } else {
-                reinitConfig.model = fullModel;
+            const modelForProvider = extractModelForProvider(fullModel, session.provider as AIProviderType);
+            if (modelForProvider !== null) {
+              reinitConfig.model = modelForProvider;
+            } else if (!isProviderClaudeCode) {
+              // extractModelForProvider returned null - fall back to default
+              const defaultModel = await ModelRegistry.getDefaultModel(session.provider as AIProviderType);
+              if (defaultModel) {
+                const defaultModelForProvider = extractModelForProvider(defaultModel, session.provider as AIProviderType);
+                if (defaultModelForProvider !== null) {
+                  reinitConfig.model = defaultModelForProvider;
+                  logger.main.info(`[AIService] Fell back to default model "${defaultModel}" for provider ${session.provider}`);
+                }
               }
+            }
+          }
+        } else if (!isProviderClaudeCode && session.provider !== 'openai-codex') {
+          // No model specified - get default
+          const defaultModel = await ModelRegistry.getDefaultModel(session.provider as AIProviderType);
+          if (defaultModel) {
+            const defaultModelForProvider = extractModelForProvider(defaultModel, session.provider as AIProviderType);
+            if (defaultModelForProvider !== null) {
+              reinitConfig.model = defaultModelForProvider;
             }
           }
         }

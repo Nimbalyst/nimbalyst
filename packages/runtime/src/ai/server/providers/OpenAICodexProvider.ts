@@ -9,7 +9,8 @@ import {
   StreamChunk,
   Message,
   ProviderCapabilities,
-  AIProviderType
+  AIProviderType,
+  ModelIdentifier
 } from '../types';
 
 export class OpenAICodexProvider extends BaseAIProvider {
@@ -39,7 +40,7 @@ export class OpenAICodexProvider extends BaseAIProvider {
 
   static getModels() {
     return [{
-      id: 'openai-codex:openai-codex-cli',
+      id: ModelIdentifier.create('openai-codex', 'openai-codex-cli').combined,
       name: 'OpenAI Codex CLI',
       provider: 'openai-codex' as AIProviderType,
       contextWindow: 272000,

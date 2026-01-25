@@ -3,6 +3,7 @@
  */
 
 import { CLAUDE_MODELS, OPENAI_MODELS } from '@nimbalyst/runtime/ai/modelConstants';
+import { ModelIdentifier } from '@nimbalyst/runtime/ai/server/types';
 
 interface ModelInfo {
   providerId: string;
@@ -21,17 +22,28 @@ const CLAUDE_CODE_VARIANT_VERSIONS: Record<ClaudeCodeVariant, string> = {
   haiku: '3.5'
 };
 
+/**
+ * Extract Claude Code variant from a model ID using ModelIdentifier.
+ * Returns the base variant (without suffix) or null if not a valid Claude Code model.
+ */
 function extractClaudeCodeVariant(modelId?: string): ClaudeCodeVariant | null {
   if (!modelId) return null;
-  const raw = modelId.includes(':') ? modelId.split(':').pop()! : modelId;
-  const normalized = raw.toLowerCase();
-  if (normalized === 'opus' || normalized === 'sonnet' || normalized === 'haiku') {
-    return normalized;
+
+  // Try parsing with ModelIdentifier
+  const parsed = ModelIdentifier.tryParse(modelId);
+  if (parsed && parsed.provider === 'claude-code') {
+    // baseVariant strips suffixes like -1m
+    const variant = parsed.baseVariant as ClaudeCodeVariant;
+    if (variant === 'opus' || variant === 'sonnet' || variant === 'haiku') {
+      return variant;
+    }
   }
-  // Legacy case: 'claude-code' without variant defaults to sonnet (what it was before)
-  if (normalized === 'claude-code') {
+
+  // Legacy case: bare 'claude-code' without variant defaults to sonnet
+  if (modelId.toLowerCase() === 'claude-code') {
     return 'sonnet';
   }
+
   return null;
 }
 
@@ -61,33 +73,58 @@ export function getClaudeCodeModelShortLabel(modelId?: string): string {
 export function parseModelInfo(modelId?: string): ModelInfo | null {
   if (!modelId) return null;
 
-  // Special case for Claude Code
-  if (modelId.startsWith('claude-code')) {
-    const modelName = getClaudeCodeModelShortLabel(modelId);
+  // Try parsing with ModelIdentifier
+  const parsed = ModelIdentifier.tryParse(modelId);
+  if (parsed) {
+    // Special case for Claude Code
+    if (parsed.provider === 'claude-code') {
+      const modelName = getClaudeCodeModelShortLabel(modelId);
+      return {
+        providerId: 'claude-code',
+        providerName: 'Claude Agent',
+        modelName,
+        shortModelName: modelName
+      };
+    }
+
+    // Get provider display name
+    const providerName = getProviderDisplayName(parsed.provider);
+
+    // Get model display names
+    const modelName = getModelDisplayName(parsed.provider, parsed.model);
+    const shortModelName = getModelShortName(parsed.provider, parsed.model);
+
     return {
-      providerId: 'claude-code',
-      providerName: 'Claude Agent',
+      providerId: parsed.provider,
+      providerName,
       modelName,
-      shortModelName: modelName
+      shortModelName
     };
   }
 
-  // Parse provider:model format
-  const [provider, ...modelParts] = modelId.split(':');
-  const model = modelParts.join(':');
+  // Fallback for legacy/non-standard formats
+  // Try to parse as provider:model format manually
+  if (modelId.includes(':')) {
+    const [provider, ...modelParts] = modelId.split(':');
+    const model = modelParts.join(':');
+    const providerName = getProviderDisplayName(provider);
+    const modelName = getModelDisplayName(provider, model);
+    const shortModelName = getModelShortName(provider, model);
 
-  // Get provider display name
-  const providerName = getProviderDisplayName(provider);
-  
-  // Get model display names
-  const modelName = getModelDisplayName(provider, model);
-  const shortModelName = getModelShortName(provider, model);
+    return {
+      providerId: provider,
+      providerName,
+      modelName,
+      shortModelName
+    };
+  }
 
-  return { 
-    providerId: provider, 
-    providerName, 
-    modelName,
-    shortModelName
+  // If no colon, treat the whole string as a provider name (fallback display)
+  return {
+    providerId: modelId,
+    providerName: getProviderDisplayName(modelId),
+    modelName: modelId,
+    shortModelName: modelId
   };
 }
 

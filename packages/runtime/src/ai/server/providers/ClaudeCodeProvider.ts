@@ -20,6 +20,7 @@ import {
   AskUserQuestionResponseContent,
   getPatternDisplayName,
   CLAUDE_CODE_VARIANTS,
+  ModelIdentifier,
 } from '../types';
 import { AgentMessagesRepository } from '../../../storage/repositories/AgentMessagesRepository';
 import path from 'path';
@@ -303,10 +304,20 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   private resolveModelVariant(): ClaudeCodeVariant {
     const fallback: ClaudeCodeVariant = 'sonnet';
     const configured = this.config.model || ClaudeCodeProvider.DEFAULT_MODEL;
-    const raw = configured.includes(':') ? configured.split(':').pop()! : configured;
-    const normalized = raw?.toLowerCase();
 
-    // Strip -1m suffix if present (handled via betas option instead)
+    // Try parsing with ModelIdentifier
+    const parsed = ModelIdentifier.tryParse(configured);
+    if (parsed && parsed.provider === 'claude-code') {
+      // baseVariant strips suffixes like -1m
+      const variant = parsed.baseVariant as ClaudeCodeVariant;
+      if ((CLAUDE_CODE_VARIANTS as readonly string[]).includes(variant)) {
+        return variant;
+      }
+    }
+
+    // Fallback for non-standard formats
+    const raw = parsed ? parsed.model : configured;
+    const normalized = raw?.toLowerCase();
     const withoutContext = normalized?.replace(/-1m$/, '');
 
     if (withoutContext && (CLAUDE_CODE_VARIANTS as readonly string[]).includes(withoutContext)) {
@@ -321,7 +332,15 @@ export class ClaudeCodeProvider extends BaseAIProvider {
    */
   private is1MModel(): boolean {
     const configured = this.config.model || ClaudeCodeProvider.DEFAULT_MODEL;
-    const raw = configured.includes(':') ? configured.split(':').pop()! : configured;
+
+    // Try parsing with ModelIdentifier
+    const parsed = ModelIdentifier.tryParse(configured);
+    if (parsed && parsed.provider === 'claude-code') {
+      return parsed.isExtendedContext;
+    }
+
+    // Fallback for non-standard formats
+    const raw = parsed ? parsed.model : configured;
     return raw?.toLowerCase().endsWith('-1m') || false;
   }
 
@@ -3516,7 +3535,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     for (const variant of CLAUDE_CODE_VARIANTS) {
       // Add base model
       models.push({
-        id: `claude-code:${variant}`,
+        id: ModelIdentifier.create('claude-code', variant).combined,
         name: `Claude Agent · ${CLAUDE_CODE_MODEL_LABELS[variant]} ${CLAUDE_CODE_VARIANT_VERSIONS[variant]}`,
         provider: 'claude-code' as const,
         maxTokens: 8192,
@@ -3528,7 +3547,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // If user doesn't have access, the SDK will return an error when they try to use it
       if (variant === 'sonnet') {
         models.push({
-          id: 'claude-code:sonnet-1m',
+          id: ModelIdentifier.create('claude-code', 'sonnet-1m').combined,
           name: `Claude Agent · Sonnet ${CLAUDE_CODE_VARIANT_VERSIONS.sonnet} (1M)`,
           provider: 'claude-code' as const,
           maxTokens: 8192,

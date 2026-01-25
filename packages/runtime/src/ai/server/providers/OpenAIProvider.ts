@@ -11,7 +11,8 @@ import {
   ProviderCapabilities,
   StreamChunk,
   Message,
-  AIModel
+  AIModel,
+  ModelIdentifier
 } from '../types';
 import { OPENAI_MODELS, DEFAULT_MODELS } from '../../modelConstants';
 
@@ -636,7 +637,7 @@ export class OpenAIProvider extends BaseAIProvider {
       for (const model of OPENAI_MODELS) {
         if (availableIds.has(model.id)) {
           filtered.push({
-            id: `openai:${model.id}`,
+            id: ModelIdentifier.create('openai', model.id).combined,
             name: model.displayName,
             provider: 'openai' as const,
             maxTokens: model.maxTokens,
@@ -658,7 +659,7 @@ export class OpenAIProvider extends BaseAIProvider {
    */
   static getDefaultModels(): AIModel[] {
     return OPENAI_MODELS.map(model => ({
-      id: `openai:${model.id}`,
+      id: ModelIdentifier.create('openai', model.id).combined,
       name: model.displayName,
       provider: 'openai' as const,
       maxTokens: model.maxTokens,
@@ -677,7 +678,9 @@ export class OpenAIProvider extends BaseAIProvider {
    * Check if a model is allowed
    */
   static isModelAllowed(modelId: string): boolean {
-    const cleanId = modelId.replace('openai:', '');
+    // Try parsing with ModelIdentifier to extract the model part
+    const parsed = ModelIdentifier.tryParse(modelId);
+    const cleanId = parsed ? parsed.model : modelId;
     // Check if it's in our allowed list
     return OPENAI_MODELS.some(m => m.id === cleanId) ||
            cleanId.startsWith('gpt-5') ||
