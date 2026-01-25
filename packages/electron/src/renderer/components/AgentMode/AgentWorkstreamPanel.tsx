@@ -67,6 +67,8 @@ export interface AgentWorkstreamPanelProps {
   workstreamType: WorkstreamType;
   onFileOpen?: (filePath: string) => Promise<void>;
   onAddSessionToWorktree?: (worktreeId: string) => Promise<void>;
+  /** Callback when a worktree is archived */
+  onWorktreeArchived?: () => void;
 }
 
 /**
@@ -277,6 +279,7 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
   workstreamType,
   onFileOpen,
   onAddSessionToWorktree,
+  onWorktreeArchived,
 }, ref) => {
   // Ref to the workstream editor tabs for opening files
   const editorTabsRef = useRef<WorkstreamEditorTabsRef>(null);
@@ -716,6 +719,7 @@ export const AgentWorkstreamPanel = React.memo(React.forwardRef<AgentWorkstreamP
           width={sidebarWidth}
           worktreeId={sessionWorktreeId}
           worktreePath={worktreePath}
+          onWorktreeArchived={onWorktreeArchived}
         />
       )}
     </div>

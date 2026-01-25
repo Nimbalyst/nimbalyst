@@ -19,6 +19,10 @@ import {
   clearStagingAtom,
 } from '../../store/atoms/gitOperations';
 import { RebaseConflictDialog } from '../DiffMode/RebaseConflictDialog';
+import { MergeConflictDialog } from '../DiffMode/MergeConflictDialog';
+import { MergeConfirmDialog } from '../DiffMode/MergeConfirmDialog';
+import { ArchiveWorktreeDialog } from '../DiffMode/ArchiveWorktreeDialog';
+import { SquashCommitModal } from '../DiffMode/SquashCommitModal';
 import './GitOperationsPanel.css';
 
 // Types for worktree mode (copied from DiffModeView)
@@ -45,10 +49,12 @@ interface GitOperationsPanelProps {
   worktreeId?: string | null;
   /** The worktree path if this is a worktree session */
   worktreePath?: string | null;
+  /** Callback when worktree is archived */
+  onWorktreeArchived?: () => void;
 }
 
 export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
-  ({ workspacePath, sessionId, editedFiles, worktreeId, worktreePath }) => {
+  ({ workspacePath, sessionId, editedFiles, worktreeId, worktreePath, onWorktreeArchived }) => {
     // Use useAtomValue for read-only, useSetAtom for write-only to minimize re-renders
     const gitStatus = useAtomValue(gitStatusAtom);
     const setGitStatus = useSetAtom(gitStatusAtom);
@@ -84,6 +90,15 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
       files: string[];
       commits?: { ours: string[]; theirs: string[] };
     } | null>(null);
+    const [mergeConflictFiles, setMergeConflictFiles] = useState<string[] | null>(null);
+    const [worktreeName, setWorktreeName] = useState<string>('');
+    const [showArchiveDialog, setShowArchiveDialog] = useState(false);
+    const [showMergeConfirmDialog, setShowMergeConfirmDialog] = useState(false);
+    const [showSquashModal, setShowSquashModal] = useState(false);
+    const [selectedCommits, setSelectedCommits] = useState<Set<string>>(new Set());
+    const [squashWarning, setSquashWarning] = useState<string | undefined>();
+    const [isSquashing, setIsSquashing] = useState(false);
+    const [isCheckingCommits, setIsCheckingCommits] = useState(false);
 
     // Track if worktree data has been loaded for the current worktreePath
     // This prevents redundant fetches when switching between manual/smart modes
@@ -305,6 +320,20 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
       }
     }, [worktreePath]);
 
+    // Load worktree name for archive dialog
+    const loadWorktreeName = useCallback(async () => {
+      if (!worktreePath) return;
+
+      try {
+        const result = await window.electronAPI.worktreeGetByPath(worktreePath);
+        if (result?.success && result.worktree) {
+          setWorktreeName(result.worktree.displayName || result.worktree.name);
+        }
+      } catch (err) {
+        console.error('[GitOperationsPanel] Failed to load worktree name:', err);
+      }
+    }, [worktreePath]);
+
     // Initial load for worktree mode - only fetch when entering worktree mode
     // and data hasn't been loaded for this worktreePath yet
     useEffect(() => {
@@ -315,6 +344,7 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
 
       const load = async () => {
         await Promise.all([
+          loadWorktreeName(),
           loadWorktreeChangedFiles(),
           loadWorktreeCommits(),
           loadWorktreeRepoRootBranch(),
@@ -324,7 +354,7 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
         worktreeDataLoadedForPath.current = worktreePath;
       };
       load();
-    }, [worktreePath, mode, loadWorktreeChangedFiles, loadWorktreeCommits, loadWorktreeRepoRootBranch, loadWorktreeStatus]);
+    }, [worktreePath, mode, loadWorktreeName, loadWorktreeChangedFiles, loadWorktreeCommits, loadWorktreeRepoRootBranch, loadWorktreeStatus]);
 
     // Reset the loaded flag when worktreePath changes (different worktree)
     useEffect(() => {
@@ -373,18 +403,27 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
       }
     }, [worktreeChangedFiles, worktreeCommitMessage, worktreePath, loadWorktreeChangedFiles, loadWorktreeCommits, loadWorktreeStatus]);
 
-    // Merge to main
-    const handleWorktreeMerge = useCallback(async () => {
+    // Merge to main (actual merge operation)
+    const performWorktreeMerge = useCallback(async () => {
       if (!worktreePath) return;
 
+      setShowMergeConfirmDialog(false);
       setWorktreeIsMerging(true);
       try {
         const result = await window.electronAPI.invoke('worktree:merge', worktreePath, workspacePath);
         if (result?.success) {
           // Reload files, commits, and status
           await Promise.all([loadWorktreeChangedFiles(), loadWorktreeCommits(), loadWorktreeStatus()]);
+          // Show archive dialog after successful merge
+          setShowArchiveDialog(true);
         } else {
-          console.error('[GitOperationsPanel] Worktree merge failed:', result?.error || result?.message);
+          // Check if this is a merge conflict error (detected before merge started)
+          if ((result?.message === 'merge-conflict-detected' || result?.message === 'merge-conflict-in-main') && result?.conflictedFiles) {
+            // Show merge conflict dialog
+            setMergeConflictFiles(result.conflictedFiles);
+          } else {
+            console.error('[GitOperationsPanel] Worktree merge failed:', result?.error || result?.message);
+          }
         }
       } catch (err) {
         console.error('[GitOperationsPanel] Failed to merge worktree:', err);
@@ -392,6 +431,11 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
         setWorktreeIsMerging(false);
       }
     }, [worktreePath, workspacePath, loadWorktreeChangedFiles, loadWorktreeCommits, loadWorktreeStatus]);
+
+    // Show merge confirmation dialog
+    const handleWorktreeMerge = useCallback(() => {
+      setShowMergeConfirmDialog(true);
+    }, []);
 
     // Rebase from base branch
     const handleWorktreeRebase = useCallback(async () => {
@@ -447,24 +491,24 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
           workspacePath, // workspacePath (main repo - so session appears in main session list)
           undefined, // modelId (use default)
           'coding', // sessionType
-          worktreeId  // worktreeId (associate with the worktree - Claude will run in worktree directory)
+          worktreeId ?? undefined  // worktreeId (associate with the worktree - Claude will run in worktree directory)
         );
 
         console.log('[GitOperationsPanel] Session result:', sessionResult);
 
         if (sessionResult?.id) {
-          const sessionId = sessionResult.id;
+          const rebaseSessionId = sessionResult.id;
 
           // Load the session data first (use workspacePath since session was created in main repo workspace)
-          console.log('[GitOperationsPanel] Loading session...', sessionId);
-          const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspacePath);
+          console.log('[GitOperationsPanel] Loading session...', rebaseSessionId);
+          const sessionData = await window.electronAPI.aiLoadSession(rebaseSessionId, workspacePath);
           console.log('[GitOperationsPanel] Session data:', sessionData);
 
           if (sessionData) {
             // Save the draft input so it appears in the text box but isn't sent yet
             console.log('[GitOperationsPanel] Saving draft input...');
             await window.electronAPI.aiSaveDraftInput(
-              sessionId,
+              rebaseSessionId,
               draftMessage,
               workspacePath
             );
@@ -474,7 +518,7 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
             console.log('[GitOperationsPanel] Dispatching event...');
             window.dispatchEvent(new CustomEvent('open-ai-session', {
               detail: {
-                sessionId,
+                sessionId: rebaseSessionId,
                 workspacePath: workspacePath,
                 draftInput: draftMessage
               }
@@ -486,6 +530,332 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
         console.error('[GitOperationsPanel] Failed to create agent session for rebase conflict resolution:', err);
       }
     }, [workspacePath, worktreePath, worktreeId, worktreeRepoRootBranch, rebaseConflictData]);
+
+    // Resolve merge conflicts with Claude Agent
+    const handleResolveConflictsWithAgent = useCallback(async () => {
+      if (!mergeConflictFiles || mergeConflictFiles.length === 0) return;
+
+      console.log('[GitOperationsPanel] Resolving conflicts with agent', { mergeConflictFiles, workspacePath });
+
+      // Close the dialog
+      setMergeConflictFiles(null);
+
+      try {
+        // Get the worktree branch name from the path
+        const wtName = worktreePath?.split('/').pop() || 'unknown';
+        const worktreeBranch = `worktree/${wtName}`;
+        const mainBranch = worktreeRepoRootBranch || 'main';
+
+        // Create a very specific prompt for resolving the merge conflicts
+        const conflictFilesList = mergeConflictFiles.map(f => `  - ${f}`).join('\n');
+        const draftMessage = `I need to merge the worktree branch into main, preserving both committed and uncommitted changes.
+
+**Context:**
+- Main repository: ${workspacePath}
+- Main branch: ${mainBranch}
+- Worktree location: ${worktreePath}
+- Worktree branch: ${worktreeBranch}
+
+**The Situation:**
+I'm trying to merge commits from ${worktreeBranch} into ${mainBranch}. These files have both uncommitted changes in main AND committed changes in the worktree:
+${conflictFilesList}
+
+**IMPORTANT - The desired end state:**
+For each file, the final result should have:
+1. The committed changes from ${worktreeBranch} (merged and committed)
+2. The uncommitted changes from ${mainBranch} (still unstaged, on top of the merged version)
+
+**What you need to do:**
+
+**Step 1: Stash the uncommitted changes**
+\`\`\`bash
+cd ${workspacePath}
+git stash push -m "Uncommitted changes before worktree merge"
+\`\`\`
+
+**Step 2: Merge the worktree branch**
+\`\`\`bash
+git merge --no-ff ${worktreeBranch}
+\`\`\`
+This applies the committed changes from the worktree.
+
+**Step 3: Reapply the uncommitted changes**
+\`\`\`bash
+git stash pop
+\`\`\`
+
+**Step 4: Resolve conflicts from stash pop**
+The \`git stash pop\` will likely create conflicts in ${mergeConflictFiles.join(', ')} because both the merge and the stash modified these files.
+
+For each conflicted file:
+- Open the file and look for conflict markers (\`<<<<<<< Updated upstream\`, \`=======\`, \`>>>>>>> Stashed changes\`)
+- Between \`<<<<<<< Updated upstream\` and \`=======\` is the newly merged version (this is what we want to keep as the base)
+- Between \`=======\` and \`>>>>>>> Stashed changes\` is the uncommitted changes (this is what we want on top)
+- **Merge both sections**: Keep the merged version as the base, then apply the uncommitted changes on top
+- Remove all conflict markers
+- The file should now have both the merged changes AND the uncommitted changes
+
+**Step 5: Verify the result**
+\`\`\`bash
+git status
+\`\`\`
+Should show the files as modified (uncommitted). The working directory should have:
+- The committed changes from ${worktreeBranch} (in the last commit)
+- The uncommitted changes (as unstaged modifications)
+
+**DO NOT** stage or commit these changes - they should remain uncommitted.
+
+Please proceed with this strategy.`;
+
+        console.log('[GitOperationsPanel] Creating AI session in main repo workspace...');
+        // Create the session in the MAIN REPO workspace (so it appears in session list)
+        // but associate it with the worktree via worktreeId
+        const sessionResult = await window.electronAPI.aiCreateSession(
+          'claude-code',
+          undefined, // documentContext
+          workspacePath, // workspacePath (main repo - so session appears in main session list)
+          undefined, // modelId (use default)
+          'coding', // sessionType
+          worktreeId ?? undefined  // worktreeId (associate with the worktree)
+        );
+
+        console.log('[GitOperationsPanel] Session result:', sessionResult);
+
+        // The session result uses 'id' not 'sessionId'
+        if (sessionResult?.id) {
+          const newSessionId = sessionResult.id;
+
+          // Load the session data first (use workspacePath since session was created in main repo workspace)
+          console.log('[GitOperationsPanel] Loading session...', newSessionId);
+          const sessionData = await window.electronAPI.aiLoadSession(newSessionId, workspacePath);
+          console.log('[GitOperationsPanel] Session data:', sessionData);
+
+          if (sessionData) {
+            // Save the draft input so it appears in the text box but isn't sent yet
+            console.log('[GitOperationsPanel] Saving draft input...');
+            await window.electronAPI.aiSaveDraftInput(
+              newSessionId,
+              draftMessage,
+              workspacePath
+            );
+
+            // Dispatch a custom event to notify the AgenticPanel to open this session
+            // Use workspacePath since that's where the session was created
+            console.log('[GitOperationsPanel] Dispatching event...');
+            window.dispatchEvent(new CustomEvent('open-ai-session', {
+              detail: {
+                sessionId: newSessionId,
+                workspacePath: workspacePath,
+                draftInput: draftMessage
+              }
+            }));
+            console.log('[GitOperationsPanel] Event dispatched successfully');
+          }
+        }
+      } catch (err) {
+        console.error('[GitOperationsPanel] Failed to create agent session for conflict resolution:', err);
+      }
+    }, [workspacePath, worktreePath, worktreeId, worktreeRepoRootBranch, mergeConflictFiles]);
+
+    // Handle archive worktree
+    const handleArchiveWorktree = useCallback(async () => {
+      if (!worktreeId) {
+        console.error('[GitOperationsPanel] Cannot archive: worktreeId not available');
+        return;
+      }
+
+      console.log('[GitOperationsPanel] Archiving worktree:', { worktreeId, hasCallback: !!onWorktreeArchived });
+
+      try {
+        await window.electronAPI.worktreeArchive(worktreeId, workspacePath);
+        console.log('[GitOperationsPanel] Archive complete, closing dialog and calling onWorktreeArchived');
+        setShowArchiveDialog(false);
+        // Notify parent that worktree was archived
+        if (onWorktreeArchived) {
+          console.log('[GitOperationsPanel] Calling onWorktreeArchived callback');
+          onWorktreeArchived();
+        } else {
+          console.warn('[GitOperationsPanel] No onWorktreeArchived callback provided');
+        }
+      } catch (err) {
+        console.error('[GitOperationsPanel] Failed to archive worktree:', err);
+      }
+    }, [worktreeId, workspacePath, onWorktreeArchived]);
+
+    // Handle keep worktree (dismiss dialog)
+    const handleKeepWorktree = useCallback(() => {
+      setShowArchiveDialog(false);
+    }, []);
+
+    // Squash commits
+    const handleWorktreeSquash = useCallback(async (commitHashes: string[], message: string) => {
+      if (!worktreePath) return;
+
+      setIsSquashing(true);
+      try {
+        const result = await window.electronAPI.invoke('worktree:squash-commits', worktreePath, commitHashes, message);
+        if (result?.success) {
+          // Reload commits, files, and status
+          await Promise.all([loadWorktreeCommits(), loadWorktreeChangedFiles(), loadWorktreeStatus()]);
+          setSelectedCommits(new Set());
+          setSquashWarning(undefined);
+        } else {
+          console.error('[GitOperationsPanel] Failed to squash commits:', result?.error);
+        }
+      } catch (err) {
+        console.error('[GitOperationsPanel] Failed to squash commits:', err);
+      } finally {
+        setIsSquashing(false);
+      }
+    }, [worktreePath, loadWorktreeCommits, loadWorktreeChangedFiles, loadWorktreeStatus]);
+
+    // Handle commit selection for squashing
+    const handleToggleCommit = useCallback((hash: string) => {
+      setSelectedCommits(prev => {
+        const next = new Set(prev);
+
+        if (next.has(hash)) {
+          // Always allow deselection
+          next.delete(hash);
+          return next;
+        }
+
+        // For selection, check if it would create a consecutive range
+        const commitIndex = worktreeCommits.findIndex(c => c.hash === hash);
+        if (commitIndex === -1) return prev;
+
+        if (next.size === 0) {
+          // First selection, always allowed
+          next.add(hash);
+          return next;
+        }
+
+        // Find indices of currently selected commits
+        const selectedIndices = Array.from(next)
+          .map(h => worktreeCommits.findIndex(c => c.hash === h))
+          .filter(idx => idx !== -1)
+          .sort((a, b) => a - b);
+
+        if (selectedIndices.length === 0) {
+          next.add(hash);
+          return next;
+        }
+
+        const minIndex = selectedIndices[0];
+        const maxIndex = selectedIndices[selectedIndices.length - 1];
+
+        // Only allow selection if it's adjacent to the current range
+        if (commitIndex === minIndex - 1 || commitIndex === maxIndex + 1) {
+          next.add(hash);
+          return next;
+        }
+
+        // Also allow if it fills a gap in the current range
+        if (commitIndex > minIndex && commitIndex < maxIndex) {
+          next.add(hash);
+          return next;
+        }
+
+        // Otherwise, don't allow the selection (non-consecutive)
+        return prev;
+      });
+    }, [worktreeCommits]);
+
+    // Clear commit selection
+    const handleClearSelection = useCallback(() => {
+      setSelectedCommits(new Set());
+    }, []);
+
+    // Handle squash button click
+    const handleSquashClick = useCallback(() => {
+      if (selectedCommits.size < 2) {
+        return;
+      }
+      // Show modal immediately - we'll check existence when confirming
+      setShowSquashModal(true);
+    }, [selectedCommits.size]);
+
+    // Handle squash confirmation
+    const handleSquashConfirm = useCallback(async (message: string) => {
+      // Capture the current selection at confirmation time
+      const commitsToSquash = Array.from(selectedCommits);
+
+      // If we haven't checked yet, check now before squashing
+      if (!squashWarning) {
+        setIsCheckingCommits(true);
+        let warningToShow: string | undefined;
+        try {
+          const result = await window.electronAPI.invoke(
+            'worktree:check-commits-existence',
+            worktreePath,
+            commitsToSquash
+          );
+
+          if (result?.success && result.existsElsewhere) {
+            warningToShow = 'Warning: Some of these commits exist on other branches. Squashing will rewrite history and may cause issues when merging.';
+          }
+        } catch (err) {
+          console.error('Failed to check commit existence:', err);
+        } finally {
+          setIsCheckingCommits(false);
+        }
+
+        // If there's a warning, show it and wait for re-confirmation
+        if (warningToShow) {
+          setSquashWarning(warningToShow);
+          return; // Stay in modal with warning displayed
+        }
+      }
+
+      // Proceed with squash
+      setShowSquashModal(false);
+      await handleWorktreeSquash(commitsToSquash, message);
+    }, [selectedCommits, squashWarning, worktreePath, handleWorktreeSquash]);
+
+    // Calculate which commits can be selected (for disabling checkboxes)
+    const getSelectableCommits = useCallback((): Set<string> => {
+      if (selectedCommits.size === 0) {
+        // All commits can be selected when nothing is selected
+        return new Set(worktreeCommits.map(c => c.hash));
+      }
+
+      const selectedIndices = Array.from(selectedCommits)
+        .map(h => worktreeCommits.findIndex(c => c.hash === h))
+        .filter(idx => idx !== -1)
+        .sort((a, b) => a - b);
+
+      if (selectedIndices.length === 0) {
+        return new Set(worktreeCommits.map(c => c.hash));
+      }
+
+      const minIndex = selectedIndices[0];
+      const maxIndex = selectedIndices[selectedIndices.length - 1];
+
+      const selectable = new Set<string>();
+
+      worktreeCommits.forEach((commit, index) => {
+        // Already selected commits are selectable (for deselection)
+        if (selectedCommits.has(commit.hash)) {
+          selectable.add(commit.hash);
+          return;
+        }
+
+        // Adjacent commits can be selected
+        if (index === minIndex - 1 || index === maxIndex + 1) {
+          selectable.add(commit.hash);
+          return;
+        }
+
+        // Commits within the range can be selected (filling gaps)
+        if (index > minIndex && index < maxIndex) {
+          selectable.add(commit.hash);
+        }
+      });
+
+      return selectable;
+    }, [selectedCommits, worktreeCommits]);
+
+    const selectableCommits = getSelectableCommits();
 
     // Derived state for worktree mode
     const worktreeStagedFiles = worktreeChangedFiles.filter(f => f.staged);
@@ -792,17 +1162,63 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
                     <div className="git-operations-panel__section-header">
                       <span>Commits ({worktreeCommits.length})</span>
                     </div>
-                    <div className="git-operations-panel__worktree-commits">
-                      {worktreeCommits.map((commit) => (
-                        <div key={commit.hash} className="git-operations-panel__worktree-commit">
-                          <div className="git-operations-panel__commit-hash">
-                            {commit.shortHash}
-                          </div>
-                          <div className="git-operations-panel__worktree-commit-message">
-                            {commit.message}
-                          </div>
+                    {/* Squash actions - only show when commits are selected */}
+                    {worktreeCommits.length > 1 && selectedCommits.size > 0 && (
+                      <div className="git-operations-panel__squash-actions">
+                        <div className="git-operations-panel__squash-info">
+                          {selectedCommits.size === 1 ? (
+                            <span>Select at least one more commit</span>
+                          ) : (
+                            <span>{selectedCommits.size} commits selected</span>
+                          )}
                         </div>
-                      ))}
+                        <div className="git-operations-panel__squash-buttons">
+                          <button
+                            type="button"
+                            className="git-operations-panel__btn-text"
+                            onClick={handleClearSelection}
+                          >
+                            Clear
+                          </button>
+                          <button
+                            type="button"
+                            className="git-operations-panel__squash-btn"
+                            onClick={handleSquashClick}
+                            disabled={selectedCommits.size < 2 || isSquashing}
+                          >
+                            {isSquashing ? 'Squashing...' : `Squash ${selectedCommits.size} Commits`}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    <div className="git-operations-panel__worktree-commits">
+                      {worktreeCommits.map((commit) => {
+                        const isSelected = selectedCommits.has(commit.hash);
+                        const canSelect = selectableCommits.has(commit.hash);
+                        return (
+                          <div
+                            key={commit.hash}
+                            className={`git-operations-panel__worktree-commit ${isSelected ? 'git-operations-panel__worktree-commit--selected' : ''}`}
+                          >
+                            {worktreeCommits.length > 1 && (
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                disabled={!canSelect && !isSelected}
+                                onChange={() => handleToggleCommit(commit.hash)}
+                                className="git-operations-panel__commit-checkbox"
+                                title={!canSelect && !isSelected ? 'Only consecutive commits can be squashed' : 'Select for squashing'}
+                              />
+                            )}
+                            <div className="git-operations-panel__commit-hash">
+                              {commit.shortHash}
+                            </div>
+                            <div className="git-operations-panel__worktree-commit-message">
+                              {commit.message}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -846,6 +1262,51 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
             conflictingCommits={rebaseConflictData.commits}
             onResolveWithAgent={handleResolveRebaseConflictsWithAgent}
             onCancel={() => setRebaseConflictData(null)}
+          />
+        )}
+
+        {/* Merge conflict dialog */}
+        {mergeConflictFiles && mergeConflictFiles.length > 0 && (
+          <MergeConflictDialog
+            workspacePath={workspacePath}
+            conflictedFiles={mergeConflictFiles}
+            onResolveWithAgent={handleResolveConflictsWithAgent}
+            onCancel={() => setMergeConflictFiles(null)}
+          />
+        )}
+
+        {/* Merge confirmation dialog */}
+        {showMergeConfirmDialog && (
+          <MergeConfirmDialog
+            worktreePath={worktreePath || ''}
+            workspacePath={workspacePath}
+            hasUncommittedChanges={worktreeHasUncommittedChanges}
+            onConfirm={performWorktreeMerge}
+            onCancel={() => setShowMergeConfirmDialog(false)}
+          />
+        )}
+
+        {/* Archive dialog */}
+        {showArchiveDialog && (
+          <ArchiveWorktreeDialog
+            worktreeName={worktreeName}
+            onArchive={handleArchiveWorktree}
+            onKeep={handleKeepWorktree}
+          />
+        )}
+
+        {/* Squash commit modal */}
+        {showSquashModal && (
+          <SquashCommitModal
+            isOpen={showSquashModal}
+            commitCount={selectedCommits.size}
+            warningMessage={squashWarning}
+            isChecking={isCheckingCommits}
+            onConfirm={handleSquashConfirm}
+            onCancel={() => {
+              setShowSquashModal(false);
+              setSquashWarning(undefined);
+            }}
           />
         )}
       </div>

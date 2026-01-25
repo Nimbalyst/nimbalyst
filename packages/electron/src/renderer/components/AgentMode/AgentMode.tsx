@@ -565,6 +565,12 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
     },
   }), [createNewSession, openSessionInTab, workspacePath, setSelectedWorkstream]);
 
+  // Handle worktree archived - refresh the session list to show updated state
+  const handleWorktreeArchived = useCallback(() => {
+    console.log('[AgentMode] Worktree archived, refreshing sessions');
+    refreshSessions();
+  }, [refreshSessions]);
+
   // Content for the right side
   const rightContent = selectedWorkstream ? (
     <AgentWorkstreamPanel
@@ -574,6 +580,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
       workstreamType={selectedWorkstream.type}
       onFileOpen={onFileOpen}
       onAddSessionToWorktree={addSessionToWorktree}
+      onWorktreeArchived={handleWorktreeArchived}
     />
   ) : (
     <div className="agent-mode-empty">
