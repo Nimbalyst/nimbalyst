@@ -176,17 +176,17 @@ export const NewFileDialog: React.FC<NewFileDialogProps> = ({
           return (
             <li key={folder.path}>
               <div
-                className={`new-file-folder-item flex items-center gap-2 py-1.5 px-2.5 rounded cursor-pointer text-[13px] ${isSelected ? 'selected text-white' : 'hover:bg-[var(--nim-bg-hover)]'}`}
-                style={{
-                  color: isSelected ? 'white' : 'var(--nim-text)',
-                  background: isSelected ? 'var(--nim-primary)' : undefined,
-                }}
+                className={`new-file-folder-item flex items-center gap-2 py-1.5 px-2.5 rounded cursor-pointer text-[13px] ${
+                  isSelected
+                    ? 'bg-nim-primary text-white'
+                    : 'text-nim hover:bg-nim-hover'
+                }`}
                 onClick={() => handleFolderSelect(folder.path)}
               >
                 <MaterialSymbol
                   icon="folder"
                   size={16}
-                  style={{ color: isSelected ? 'white' : 'var(--nim-text-muted)' }}
+                  className={isSelected ? 'text-white' : 'text-nim-muted'}
                 />
                 <span>{folder.name}</span>
               </div>
@@ -210,26 +210,16 @@ export const NewFileDialog: React.FC<NewFileDialogProps> = ({
   return (
     <div className="new-file-dialog-overlay nim-overlay" onClick={onClose}>
       <div
-        className="new-file-dialog w-[420px] max-w-[90vw] p-6 rounded-lg shadow-[0_4px_12px_rgba(0,0,0,0.3)]"
-        style={{
-          background: 'var(--nim-bg)',
-          border: '1px solid var(--nim-border)',
-        }}
+        className="new-file-dialog w-[420px] max-w-[90vw] p-6 rounded-lg shadow-[0_4px_12px_rgba(0,0,0,0.3)] bg-nim border border-nim"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2
-          className="m-0 mb-5 text-lg font-semibold"
-          style={{ color: 'var(--nim-text)' }}
-        >
+        <h2 className="m-0 mb-5 text-lg font-semibold text-nim">
           New File
         </h2>
 
         {/* File Type Selector */}
         <div className="new-file-field mb-4">
-          <label
-            className="block mb-1.5 text-[13px] font-medium"
-            style={{ color: 'var(--nim-text-muted)' }}
-          >
+          <label className="block mb-1.5 text-[13px] font-medium text-nim-muted">
             Type
           </label>
           <select
@@ -238,15 +228,7 @@ export const NewFileDialog: React.FC<NewFileDialogProps> = ({
               setSelectedFileType(e.target.value as NewFileType);
               setError('');
             }}
-            className="new-file-select w-full py-2 px-3 pr-8 text-sm rounded cursor-pointer appearance-none focus:outline-none"
-            style={{
-              background: 'var(--nim-bg-secondary)',
-              border: '1px solid var(--nim-border)',
-              color: 'var(--nim-text)',
-              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23969696' d='M3 4.5L6 7.5L9 4.5'/%3E%3C/svg%3E")`,
-              backgroundRepeat: 'no-repeat',
-              backgroundPosition: 'right 12px center',
-            }}
+            className="new-file-select w-full py-2 px-3 pr-8 text-sm rounded cursor-pointer appearance-none focus:outline-none bg-nim-secondary border border-nim text-nim bg-[url('data:image/svg+xml,%3Csvg_xmlns=%27http://www.w3.org/2000/svg%27_width=%2712%27_height=%2712%27_viewBox=%270_0_12_12%27%3E%3Cpath_fill=%27%23969696%27_d=%27M3_4.5L6_7.5L9_4.5%27/%3E%3C/svg%3E')] bg-no-repeat bg-[right_12px_center]"
           >
             {fileTypeOptions.map((option) => (
               <option key={option.id} value={option.id}>
@@ -258,57 +240,35 @@ export const NewFileDialog: React.FC<NewFileDialogProps> = ({
 
         {/* Location Selector */}
         <div className="new-file-field mb-4">
-          <label
-            className="block mb-1.5 text-[13px] font-medium"
-            style={{ color: 'var(--nim-text-muted)' }}
-          >
+          <label className="block mb-1.5 text-[13px] font-medium text-nim-muted">
             Location
           </label>
           <div className="new-file-location-picker relative" ref={folderPickerRef}>
             <button
               type="button"
-              className="new-file-location-button w-full flex items-center gap-2 py-2 px-3 text-sm rounded cursor-pointer text-left focus:outline-none"
-              style={{
-                background: 'var(--nim-bg-secondary)',
-                border: '1px solid var(--nim-border)',
-                color: 'var(--nim-text)',
-              }}
+              className="new-file-location-button w-full flex items-center gap-2 py-2 px-3 text-sm rounded cursor-pointer text-left focus:outline-none bg-nim-secondary border border-nim text-nim"
               onClick={() => setShowFolderPicker(!showFolderPicker)}
             >
               <MaterialSymbol icon="folder" size={16} />
-              <span
-                className="path flex-1 font-mono overflow-hidden text-ellipsis whitespace-nowrap"
-              >
+              <span className="path flex-1 font-mono overflow-hidden text-ellipsis whitespace-nowrap">
                 {relativePath}
               </span>
-              <MaterialSymbol
-                icon="expand_more"
-                size={16}
-                style={{ color: 'var(--nim-text-faint)' }}
-              />
+              <MaterialSymbol icon="expand_more" size={16} className="text-nim-faint" />
             </button>
             {showFolderPicker && fileTree.length > 0 && (
-              <div
-                className="new-file-folder-picker absolute top-[calc(100%+4px)] left-0 right-0 max-h-[250px] overflow-y-auto p-1 rounded z-[10001] shadow-[0_4px_12px_rgba(0,0,0,0.3)]"
-                style={{
-                  background: 'var(--nim-bg)',
-                  border: '1px solid var(--nim-border)',
-                }}
-              >
+              <div className="new-file-folder-picker absolute top-[calc(100%+4px)] left-0 right-0 max-h-[250px] overflow-y-auto p-1 rounded z-[10001] shadow-[0_4px_12px_rgba(0,0,0,0.3)] bg-nim border border-nim">
                 <div
-                  className={`new-file-folder-item flex items-center gap-2 py-1.5 px-2.5 rounded cursor-pointer text-[13px] ${currentDirectory === workspacePath ? 'selected text-white' : ''}`}
-                  style={{
-                    color: currentDirectory === workspacePath ? 'white' : 'var(--nim-text)',
-                    background: currentDirectory === workspacePath ? 'var(--nim-primary)' : undefined,
-                  }}
+                  className={`new-file-folder-item flex items-center gap-2 py-1.5 px-2.5 rounded cursor-pointer text-[13px] ${
+                    currentDirectory === workspacePath
+                      ? 'bg-nim-primary text-white'
+                      : 'text-nim hover:bg-nim-hover'
+                  }`}
                   onClick={() => handleFolderSelect(workspacePath)}
                 >
                   <MaterialSymbol
                     icon="folder"
                     size={16}
-                    style={{
-                      color: currentDirectory === workspacePath ? 'white' : 'var(--nim-text-muted)',
-                    }}
+                    className={currentDirectory === workspacePath ? 'text-white' : 'text-nim-muted'}
                   />
                   <span>{workspaceName} (root)</span>
                 </div>
@@ -321,19 +281,10 @@ export const NewFileDialog: React.FC<NewFileDialogProps> = ({
         {/* File Name Input */}
         <form onSubmit={handleSubmit}>
           <div className="new-file-field mb-4">
-            <label
-              className="block mb-1.5 text-[13px] font-medium"
-              style={{ color: 'var(--nim-text-muted)' }}
-            >
+            <label className="block mb-1.5 text-[13px] font-medium text-nim-muted">
               Name
             </label>
-            <div
-              className="new-file-input-wrapper flex items-center overflow-hidden rounded focus-within:border-[var(--nim-primary)]"
-              style={{
-                background: 'var(--nim-bg-secondary)',
-                border: '1px solid var(--nim-border)',
-              }}
-            >
+            <div className="new-file-input-wrapper flex items-center overflow-hidden rounded bg-nim-secondary border border-nim focus-within:border-nim-focus">
               <input
                 ref={inputRef}
                 type="text"
@@ -344,42 +295,29 @@ export const NewFileDialog: React.FC<NewFileDialogProps> = ({
                 }}
                 onKeyDown={handleKeyDown}
                 placeholder={selectedFileType === 'any' ? 'document.txt' : 'document'}
-                className="new-file-input flex-1 py-2 px-3 text-sm bg-transparent border-none focus:outline-none placeholder:text-[var(--nim-text-faint)]"
-                style={{ color: 'var(--nim-text)' }}
+                className="new-file-input flex-1 py-2 px-3 text-sm bg-transparent border-none focus:outline-none text-nim placeholder:text-nim-faint"
               />
               {extensionSuffix && (
-                <span
-                  className="new-file-extension py-2 pr-3 text-sm font-mono select-none"
-                  style={{ color: 'var(--nim-text-faint)' }}
-                >
+                <span className="new-file-extension py-2 pr-3 text-sm font-mono select-none text-nim-faint">
                   {extensionSuffix}
                 </span>
               )}
             </div>
           </div>
           {error && (
-            <div className="new-file-error text-[13px] mb-4 text-[#f48771]">{error}</div>
+            <div className="new-file-error text-[13px] mb-4 text-nim-error">{error}</div>
           )}
           <div className="new-file-buttons flex justify-end gap-2 mt-5">
             <button
               type="button"
               onClick={onClose}
-              className="py-1.5 px-4 text-[13px] rounded cursor-pointer transition-colors duration-200 hover:bg-[var(--nim-bg-hover)]"
-              style={{
-                background: 'var(--nim-bg-secondary)',
-                border: '1px solid var(--nim-border)',
-                color: 'var(--nim-text)',
-              }}
+              className="py-1.5 px-4 text-[13px] rounded cursor-pointer transition-colors duration-200 bg-nim-secondary border border-nim text-nim hover:bg-nim-hover"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="py-1.5 px-4 text-[13px] rounded cursor-pointer transition-colors duration-200 text-white hover:opacity-90"
-              style={{
-                background: 'var(--nim-primary)',
-                border: '1px solid var(--nim-primary)',
-              }}
+              className="py-1.5 px-4 text-[13px] rounded cursor-pointer transition-colors duration-200 bg-nim-primary border border-nim-primary text-white hover:bg-nim-primary-hover"
             >
               Create
             </button>

@@ -1656,12 +1656,12 @@ export default function App() {
   // Wait for both initial state and extensions to be ready before rendering editors
   // This ensures extension nodes (like DataModelNode) are registered with the pluginRegistry
   if (isInitializing || !extensionsReady) {
-    return <div style={{ height: '100vh' }} />;
+    return <div className="h-screen" />;
   }
 
   return (
     <WalkthroughProvider currentMode={activeMode}>
-    <div data-layout="root-container" style={{ height: '100vh', display: 'flex', flexDirection: 'row' }}>
+    <div data-layout="root-container" className="h-screen flex flex-row">
       {/* Left: Navigation Gutter - full height */}
       <NavigationGutter
         contentMode={activeMode}
@@ -1717,21 +1717,17 @@ export default function App() {
       />
 
       {/* Right: Main content area + Bottom Panel */}
-      <div data-layout="main-column-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div data-layout="main-column-container" className="flex-1 flex flex-col overflow-hidden">
         {/* Top: Main content (sidebar + editor/agent + AI chat) */}
-        <div data-layout="top-content-row" style={{ flex: 1, display: 'flex', flexDirection: 'row', minHeight: 0 }}>
+        <div data-layout="top-content-row" className="flex-1 flex flex-row min-h-0">
           {/* Center: Editor/Agent/Settings area */}
-          <div data-layout="center-content-wrapper" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
+          <div data-layout="center-content-wrapper" className="flex-1 flex flex-col overflow-hidden min-h-0">
             {/* Files Mode - always mounted, visibility controlled by display */}
             <div
               data-layout="files-mode-wrapper"
-              style={{
-                flex: 1,
-                display: activeMode === 'files' && !isFullscreenPanelActive ? 'flex' : 'none',
-                flexDirection: 'row',
-                overflow: 'hidden',
-                minHeight: 0
-              }}
+              className={`flex-1 flex-row overflow-hidden min-h-0 ${
+                activeMode === 'files' && !isFullscreenPanelActive ? 'flex' : 'hidden'
+              }`}
             >
               {/* Extension Sidebar Panel (when active) */}
               {activeExtensionPanel && (() => {
@@ -1740,15 +1736,7 @@ export default function App() {
                   return (
                     <div
                       data-layout="extension-panel-sidebar"
-                      style={{
-                        width: 280,
-                        minWidth: 200,
-                        maxWidth: 400,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        borderRight: '1px solid var(--border-color)',
-                        overflow: 'hidden',
-                      }}
+                      className="w-[280px] min-w-[200px] max-w-[400px] flex flex-col border-r border-nim overflow-hidden"
                     >
                       <PanelContainer
                         panel={panel}
@@ -1791,13 +1779,9 @@ export default function App() {
             {/* Agent Mode - always mounted, visibility controlled by display */}
             <div
               data-layout="agent-mode-wrapper"
-              style={{
-                flex: 1,
-                display: activeMode === 'agent' && !isFullscreenPanelActive ? 'flex' : 'none',
-                flexDirection: 'column',
-                overflow: 'hidden',
-                minHeight: 0
-              }}
+              className={`flex-1 flex-col overflow-hidden min-h-0 ${
+                activeMode === 'agent' && !isFullscreenPanelActive ? 'flex' : 'hidden'
+              }`}
             >
               {workspacePath ? (
                 <AgentMode
@@ -1809,10 +1793,10 @@ export default function App() {
                   onOpenQuickSearch={() => setIsSessionQuickOpenVisible(true)}
                 />
               ) : (
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
-                  <div style={{ textAlign: 'center' }}>
+                <div className="flex-1 flex items-center justify-center text-nim-muted">
+                  <div className="text-center">
                     <p>Agent mode requires a workspace</p>
-                    <p style={{ marginTop: '8px', fontSize: '14px' }}>Open a workspace to use agent features</p>
+                    <p className="mt-2 text-sm">Open a workspace to use agent features</p>
                   </div>
                 </div>
               )}
@@ -1825,24 +1809,10 @@ export default function App() {
                 return (
                   <div
                     data-layout="extension-panel-fullscreen"
-                    style={{
-                      flex: 1,
-                      display: 'flex',
-                      flexDirection: 'row',
-                      overflow: 'hidden',
-                      minHeight: 0,
-                    }}
+                    className="flex-1 flex flex-row overflow-hidden min-h-0"
                   >
                     {/* Extension panel content */}
-                    <div
-                      style={{
-                        flex: 1,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        overflow: 'hidden',
-                        minHeight: 0,
-                      }}
-                    >
+                    <div className="flex-1 flex flex-col overflow-hidden min-h-0">
                       <PanelContainer
                         panel={panel}
                         workspacePath={workspacePath}
@@ -1855,15 +1825,7 @@ export default function App() {
                     {panel.aiSupported && (
                       <div
                         data-layout="extension-ai-chat"
-                        style={{
-                          width: 400,
-                          minWidth: 320,
-                          maxWidth: 600,
-                          display: 'flex',
-                          flexDirection: 'column',
-                          borderLeft: '1px solid var(--border-primary)',
-                          overflow: 'hidden',
-                        }}
+                        className="w-[400px] min-w-[320px] max-w-[600px] flex flex-col border-l border-nim overflow-hidden"
                       >
                         <ChatSidebar
                           ref={chatSidebarRef}
@@ -1881,7 +1843,7 @@ export default function App() {
 
             {/* Settings Mode - conditionally rendered for now */}
             {activeMode === 'settings' && !isFullscreenPanelActive && (
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
+              <div className="flex-1 flex flex-col overflow-hidden min-h-0">
                 <SettingsView
                   key={settingsKey}
                   workspacePath={workspacePath}

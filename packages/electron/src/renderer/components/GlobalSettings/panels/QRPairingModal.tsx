@@ -136,61 +136,72 @@ export function QRPairingModal({ isOpen, onClose, serverUrl }: QRPairingModalPro
   if (!isOpen) return null;
 
   return (
-    <div className="qr-modal-overlay" onClick={onClose}>
-      <div className="qr-modal-content" onClick={(e) => e.stopPropagation()}>
-        <div className="qr-modal-header">
-          <h2 className="qr-modal-title">Pair Mobile Device</h2>
-          <button className="qr-modal-close" onClick={onClose}>
+    <div
+      className="qr-modal-overlay fixed inset-0 bg-black/50 flex items-center justify-center z-[10000] overflow-y-auto py-4"
+      onClick={onClose}
+    >
+      <div
+        className="qr-modal-content bg-nim rounded-xl w-[400px] max-h-[90vh] overflow-y-auto shadow-2xl my-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="qr-modal-header flex items-center justify-between px-5 py-4 border-b border-nim sticky top-0 bg-nim z-10">
+          <h2 className="qr-modal-title text-lg font-semibold text-nim m-0">Pair Mobile Device</h2>
+          <button
+            className="qr-modal-close p-1 bg-transparent border-none cursor-pointer text-nim-muted hover:text-nim"
+            onClick={onClose}
+          >
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M15 5L5 15M5 5l10 10" />
             </svg>
           </button>
         </div>
 
-        <div className="qr-modal-body">
+        <div className="qr-modal-body p-5">
           {/* Local dev server notice */}
           {isLocalServer && localIP && (
-            <div className="qr-dev-notice">
-              <div className="qr-dev-notice-header">
+            <div className="qr-dev-notice mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+              <div className="qr-dev-notice-header flex items-center gap-2 text-amber-500 font-medium text-sm mb-2">
                 <svg className="qr-dev-notice-icon" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M8 1a7 7 0 100 14A7 7 0 008 1zM7 5a1 1 0 112 0v3a1 1 0 11-2 0V5zm1 7a1 1 0 100-2 1 1 0 000 2z" />
                 </svg>
                 <span>Local Development Server</span>
               </div>
-              <p className="qr-dev-notice-text">
+              <p className="qr-dev-notice-text text-xs text-nim-muted mb-2">
                 Your phone needs to connect via your local network IP instead of localhost.
               </p>
-              <label className="qr-dev-toggle">
+              <label className="qr-dev-toggle flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={useLocalIP}
                   onChange={(e) => setUseLocalIP(e.target.checked)}
                 />
-                <span className="qr-dev-toggle-text">
-                  Use LAN IP: <code>{localIP}</code>
+                <span className="qr-dev-toggle-text text-xs text-nim">
+                  Use LAN IP: <code className="bg-nim-secondary px-1 py-0.5 rounded">{localIP}</code>
                 </span>
               </label>
-              <p className="qr-dev-notice-url">
-                Server URL in QR: <code>{effectiveUrl}</code>
+              <p className="qr-dev-notice-url text-xs text-nim-faint mt-2 mb-0">
+                Server URL in QR: <code className="bg-nim-secondary px-1 py-0.5 rounded">{effectiveUrl}</code>
               </p>
             </div>
           )}
 
           {error ? (
-            <div className="qr-error">
-              <p>{error}</p>
-              <button className="qr-regenerate-button" onClick={generateQR}>
+            <div className="qr-error text-center py-8">
+              <p className="text-nim-error mb-4">{error}</p>
+              <button
+                className="qr-regenerate-button px-4 py-2 bg-nim-primary text-white rounded-md text-sm font-medium cursor-pointer hover:bg-nim-primary-hover"
+                onClick={generateQR}
+              >
                 Try Again
               </button>
             </div>
           ) : qrDataUrl ? (
             <>
-              <div className="qr-code-container">
+              <div className="qr-code-container flex justify-center mb-4">
                 <img
                   src={qrDataUrl}
                   alt="QR Code for mobile pairing"
-                  className="qr-code-image"
-                  style={{ cursor: 'pointer' }}
+                  className="qr-code-image rounded-lg cursor-pointer"
                   onClick={(e) => {
                     if (e.metaKey && qrPayload) {
                       handleCopyPayload();
@@ -200,42 +211,37 @@ export function QRPairingModal({ isOpen, onClose, serverUrl }: QRPairingModalPro
                 />
               </div>
 
-              <div className="qr-instructions">
+              <div className="qr-instructions text-sm text-nim-muted space-y-1 mb-4">
                 <p className="qr-step">1. Open Nimbalyst on your mobile device</p>
                 <p className="qr-step">2. Go to Settings and tap "Scan QR Code"</p>
                 <p className="qr-step">3. Point your camera at this QR code</p>
                 <p className="qr-step">4. Sign in with the same account as desktop</p>
               </div>
 
-              <div className="qr-info" style={{
-                marginTop: '12px',
-                padding: '12px',
-                backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                border: '1px solid rgba(34, 197, 94, 0.2)',
-                borderRadius: '8px',
-                fontSize: '13px',
-                color: 'var(--text-secondary)',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+              <div className="qr-info mt-3 p-3 bg-green-500/10 border border-green-500/20 rounded-lg text-[13px] text-nim-muted">
+                <div className="flex items-center gap-2 mb-2">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2">
                     <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                     <path d="M7 11V7a5 5 0 0110 0v4" />
                   </svg>
-                  <span style={{ fontWeight: 600, color: '#22c55e' }}>End-to-End Encrypted</span>
+                  <span className="font-semibold text-green-500">End-to-End Encrypted</span>
                 </div>
-                <p style={{ margin: 0 }}>
+                <p className="m-0">
                   This QR code securely transfers your encryption key. Your keys never touch our servers - only your devices can decrypt your data.
                 </p>
               </div>
 
-              <div className="qr-warning">
-                <svg className="qr-warning-icon" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <div className="qr-warning flex items-center gap-2 mt-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-xs text-amber-600">
+                <svg className="qr-warning-icon shrink-0" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M8 1a7 7 0 100 14A7 7 0 008 1zM7 5a1 1 0 112 0v3a1 1 0 11-2 0V5zm1 7a1 1 0 100-2 1 1 0 000 2z" />
                 </svg>
                 <span>Only scan with your own device. This shares your encryption key.</span>
               </div>
 
-              <button className="qr-regenerate-button" onClick={generateQR}>
+              <button
+                className="qr-regenerate-button w-full mt-4 px-4 py-2 bg-nim-secondary text-nim-muted border border-nim rounded-md text-sm font-medium cursor-pointer hover:bg-nim-hover"
+                onClick={generateQR}
+              >
                 Regenerate QR Code
               </button>
 
@@ -243,24 +249,12 @@ export function QRPairingModal({ isOpen, onClose, serverUrl }: QRPairingModalPro
               {qrPayload && (
                 <div className="qr-dev-copy">
                   <button
-                    className="qr-dev-copy-button"
+                    className={`qr-dev-copy-button w-full mt-3 px-4 py-2 border border-nim rounded-md text-[13px] font-medium cursor-pointer flex items-center justify-center gap-1.5 ${
+                      copied
+                        ? 'bg-green-500 text-white border-green-500'
+                        : 'bg-nim-tertiary text-nim-muted hover:bg-nim-hover'
+                    }`}
                     onClick={handleCopyPayload}
-                    style={{
-                      marginTop: '12px',
-                      padding: '8px 16px',
-                      backgroundColor: copied ? '#22c55e' : 'var(--surface-tertiary)',
-                      color: copied ? 'white' : 'var(--text-secondary)',
-                      border: '1px solid var(--border-primary)',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontSize: '13px',
-                      fontWeight: 500,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px',
-                      width: '100%',
-                    }}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       {copied ? (
@@ -274,21 +268,16 @@ export function QRPairingModal({ isOpen, onClose, serverUrl }: QRPairingModalPro
                     </svg>
                     {copied ? 'Copied!' : 'Copy Pairing Data'}
                   </button>
-                  <p style={{
-                    marginTop: '8px',
-                    fontSize: '11px',
-                    color: 'var(--text-tertiary)',
-                    textAlign: 'center',
-                  }}>
+                  <p className="mt-2 text-[11px] text-nim-faint text-center">
                     Can't scan? Paste this into the mobile app's Manual Setup
                   </p>
                 </div>
               )}
             </>
           ) : (
-            <div className="qr-loading">
-              <div className="qr-spinner" />
-              <p>Generating QR code...</p>
+            <div className="qr-loading flex flex-col items-center justify-center py-8">
+              <div className="qr-spinner w-8 h-8 border-2 border-nim-primary border-t-transparent rounded-full animate-spin mb-3" />
+              <p className="text-nim-muted text-sm">Generating QR code...</p>
             </div>
           )}
         </div>

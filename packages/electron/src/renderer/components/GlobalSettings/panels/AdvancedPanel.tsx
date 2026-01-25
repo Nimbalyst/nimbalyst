@@ -87,9 +87,9 @@ export function AdvancedPanel() {
 
           {releaseChannel === 'alpha' && (
             <>
-              <div style={{ marginTop: '16px', padding: '12px', background: 'var(--surface-secondary)', borderRadius: '6px', border: '1px solid var(--border-primary)' }}>
+              <div className="mt-4 p-3 bg-nim-secondary rounded-md border border-nim">
                 {/* "All Alpha Features" master toggle */}
-                <div className="setting-item" style={{ marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px solid var(--border-primary)' }}>
+                <div className="setting-item mb-3 pb-3 border-b border-nim">
                   <label className="setting-label">
                     <input
                       type="checkbox"
@@ -110,7 +110,10 @@ export function AdvancedPanel() {
                 </div>
 
                 {ALPHA_FEATURES.map((feature) => (
-                  <div key={feature.tag} className="setting-item" style={{ opacity: areAllAlphaFeaturesEnabled(alphaFeatures) ? '0.6' : '1', pointerEvents: areAllAlphaFeaturesEnabled(alphaFeatures) ? 'none' : 'auto' }}>
+                  <div
+                    key={feature.tag}
+                    className={`setting-item ${areAllAlphaFeaturesEnabled(alphaFeatures) ? 'opacity-60 pointer-events-none' : ''}`}
+                  >
                     <label className="setting-label">
                       <input
                         type="checkbox"
@@ -130,7 +133,7 @@ export function AdvancedPanel() {
                 ))}
               </div>
 
-              <p style={{ marginTop: '12px', padding: '8px', fontSize: '13px', color: 'var(--color-danger)', background: 'var(--surface-secondary)', borderRadius: '4px', border: '1px solid var(--border-primary)' }}>
+              <p className="mt-3 p-2 text-[13px] text-nim-error bg-nim-secondary rounded border border-nim">
                 You may need to restart Nimbalyst for these changes to take effect.
               </p>
             </>

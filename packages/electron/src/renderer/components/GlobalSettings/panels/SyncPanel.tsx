@@ -85,55 +85,25 @@ function ProjectPickerPopup({
 
   return (
     <div
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: 'rgba(0, 0, 0, 0.5)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000,
-      }}
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-[1000]"
       onClick={onClose}
     >
       <div
-        style={{
-          background: 'var(--surface-primary)',
-          borderRadius: '12px',
-          width: '400px',
-          maxHeight: '500px',
-          overflow: 'hidden',
-          boxShadow: '0 20px 40px rgba(0, 0, 0, 0.3)',
-        }}
+        className="bg-nim rounded-xl w-[400px] max-h-[500px] overflow-hidden shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div style={{
-          padding: '16px 20px',
-          borderBottom: '1px solid var(--border-primary)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}>
+        <div className="px-5 py-4 border-b border-nim flex items-center justify-between">
           <div>
-            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>
+            <h3 className="m-0 text-[15px] font-semibold text-nim">
               Projects to Sync
             </h3>
-            <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--text-tertiary)' }}>
+            <p className="mt-1 mb-0 text-xs text-nim-faint">
               {enabledCount} of {projects.length} projects enabled
             </p>
           </div>
           <button
             onClick={onClose}
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              padding: '4px',
-              color: 'var(--text-tertiary)',
-            }}
+            className="bg-transparent border-none cursor-pointer p-1 text-nim-faint hover:text-nim"
           >
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M15 5L5 15M5 5l10 10" />
@@ -141,45 +111,28 @@ function ProjectPickerPopup({
           </button>
         </div>
 
-        <div style={{
-          padding: '12px 20px',
-          maxHeight: '350px',
-          overflowY: 'auto',
-        }}>
+        <div className="px-5 py-3 max-h-[350px] overflow-y-auto">
           {projects.length === 0 ? (
-            <p style={{ color: 'var(--text-tertiary)', fontSize: '13px', textAlign: 'center', padding: '20px 0' }}>
+            <p className="text-nim-faint text-[13px] text-center py-5">
               No projects found. Open a workspace to see projects here.
             </p>
           ) : (
             projects.map((project) => (
               <label
                 key={project.path}
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '12px',
-                  padding: '10px 0',
-                  cursor: 'pointer',
-                  borderBottom: '1px solid var(--border-primary)',
-                }}
+                className="flex items-start gap-3 py-2.5 cursor-pointer border-b border-nim last:border-b-0"
               >
                 <input
                   type="checkbox"
                   checked={enabledProjects.includes(project.path)}
                   onChange={(e) => onToggle(project.path, e.target.checked)}
-                  style={{ marginTop: '2px' }}
+                  className="mt-0.5"
                 />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] font-medium text-nim">
                     {project.name}
                   </div>
-                  <div style={{
-                    fontSize: '11px',
-                    color: 'var(--text-tertiary)',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}>
+                  <div className="text-[11px] text-nim-faint overflow-hidden text-ellipsis whitespace-nowrap">
                     {project.path}
                   </div>
                 </div>
@@ -188,24 +141,10 @@ function ProjectPickerPopup({
           )}
         </div>
 
-        <div style={{
-          padding: '12px 20px',
-          borderTop: '1px solid var(--border-primary)',
-          display: 'flex',
-          justifyContent: 'flex-end',
-        }}>
+        <div className="px-5 py-3 border-t border-nim flex justify-end">
           <button
             onClick={onClose}
-            style={{
-              padding: '8px 16px',
-              background: 'var(--primary-color)',
-              border: 'none',
-              borderRadius: '6px',
-              color: 'white',
-              fontSize: '13px',
-              fontWeight: 500,
-              cursor: 'pointer',
-            }}
+            className="px-4 py-2 bg-nim-primary border-none rounded-md text-white text-[13px] font-medium cursor-pointer hover:bg-nim-primary-hover"
           >
             Done
           </button>
@@ -461,41 +400,29 @@ export function SyncPanel() {
       {isDevelopment && (
         <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
           <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Environment (Dev Only)</h4>
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div className="flex gap-2">
             <button
               onClick={() => handleEnvironmentSwitch('development')}
-              style={{
-                flex: 1,
-                padding: '8px 12px',
-                fontSize: '12px',
-                background: currentEnvironment === 'development' ? 'var(--primary-color)' : 'var(--surface-secondary)',
-                color: currentEnvironment === 'development' ? 'white' : 'var(--text-secondary)',
-                border: '1px solid var(--border-primary)',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontWeight: currentEnvironment === 'development' ? 600 : 400,
-              }}
+              className={`flex-1 px-3 py-2 text-xs border border-nim rounded-md cursor-pointer ${
+                currentEnvironment === 'development'
+                  ? 'bg-nim-primary text-white font-semibold'
+                  : 'bg-nim-secondary text-nim-muted font-normal'
+              }`}
             >
               Development
             </button>
             <button
               onClick={() => handleEnvironmentSwitch('production')}
-              style={{
-                flex: 1,
-                padding: '8px 12px',
-                fontSize: '12px',
-                background: currentEnvironment === 'production' ? 'var(--primary-color)' : 'var(--surface-secondary)',
-                color: currentEnvironment === 'production' ? 'white' : 'var(--text-secondary)',
-                border: '1px solid var(--border-primary)',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontWeight: currentEnvironment === 'production' ? 600 : 400,
-              }}
+              className={`flex-1 px-3 py-2 text-xs border border-nim rounded-md cursor-pointer ${
+                currentEnvironment === 'production'
+                  ? 'bg-nim-primary text-white font-semibold'
+                  : 'bg-nim-secondary text-nim-muted font-normal'
+              }`}
             >
               Production
             </button>
           </div>
-          <p style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '6px', marginBottom: 0 }}>
+          <p className="text-[11px] text-nim-faint mt-1.5 mb-0">
             {currentEnvironment === 'development'
               ? 'Using test Stytch + localhost:8790'
               : 'Using live Stytch + sync.nimbalyst.com'}
@@ -508,81 +435,42 @@ export function SyncPanel() {
         <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Account</h4>
 
         {stytchAuth.isAuthenticated && stytchAuth.user ? (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            padding: '12px',
-            background: 'var(--surface-secondary)',
-            borderRadius: '8px',
-          }}>
-            <div style={{
-              width: '40px',
-              height: '40px',
-              borderRadius: '50%',
-              background: 'var(--primary-color)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'white',
-              fontWeight: 600,
-              fontSize: '16px',
-            }}>
+          <div className="flex items-center gap-3 p-3 bg-nim-secondary rounded-lg">
+            <div className="w-10 h-10 rounded-full bg-nim-primary flex items-center justify-center text-white font-semibold text-base">
               {(stytchAuth.user.name?.first_name?.[0] || stytchAuth.user.emails[0]?.email[0] || '?').toUpperCase()}
             </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 500, color: 'var(--text-primary)', fontSize: '13px' }}>
+            <div className="flex-1">
+              <div className="font-medium text-nim text-[13px]">
                 {stytchAuth.user.name?.first_name
                   ? `${stytchAuth.user.name.first_name} ${stytchAuth.user.name.last_name || ''}`.trim()
                   : stytchAuth.user.emails[0]?.email}
               </div>
-              <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
+              <div className="text-[11px] text-nim-faint">
                 {stytchAuth.user.emails[0]?.email}
               </div>
             </div>
             <button
               onClick={handleSignOut}
-              style={{
-                padding: '6px 12px',
-                fontSize: '12px',
-                background: 'transparent',
-                border: '1px solid var(--border-primary)',
-                borderRadius: '4px',
-                color: 'var(--text-secondary)',
-                cursor: 'pointer',
-              }}
+              className="px-3 py-1.5 text-xs bg-transparent border border-nim rounded text-nim-muted cursor-pointer hover:bg-nim-hover"
             >
               Sign Out
             </button>
           </div>
         ) : showAuthForm ? (
-          <div style={{
-            padding: '16px',
-            background: 'var(--surface-secondary)',
-            borderRadius: '8px',
-          }}>
+          <div className="p-4 bg-nim-secondary rounded-lg">
             {magicLinkSent ? (
               // Magic link sent confirmation
-              <div style={{ textAlign: 'center' }}>
-                <div style={{
-                  width: '48px',
-                  height: '48px',
-                  margin: '0 auto 12px',
-                  background: 'var(--primary-color)',
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}>
+              <div className="text-center">
+                <div className="w-12 h-12 mx-auto mb-3 bg-nim-primary rounded-full flex items-center justify-center">
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
                     <path d="M22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6z" />
                     <path d="M22 6l-10 7L2 6" />
                   </svg>
                 </div>
-                <h4 style={{ margin: '0 0 8px', color: 'var(--text-primary)', fontSize: '15px' }}>
+                <h4 className="m-0 mb-2 text-nim text-[15px]">
                   Check your email
                 </h4>
-                <p style={{ margin: '0 0 16px', color: 'var(--text-secondary)', fontSize: '13px' }}>
+                <p className="m-0 mb-4 text-nim-muted text-[13px]">
                   We sent a sign-in link to <strong>{email}</strong>
                 </p>
                 <button
@@ -591,15 +479,7 @@ export function SyncPanel() {
                     setEmail('');
                     setShowAuthForm(false);
                   }}
-                  style={{
-                    padding: '8px 16px',
-                    background: 'transparent',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '6px',
-                    color: 'var(--text-secondary)',
-                    fontSize: '13px',
-                    cursor: 'pointer',
-                  }}
+                  className="px-4 py-2 bg-transparent border border-nim rounded-md text-nim-muted text-[13px] cursor-pointer hover:bg-nim-hover"
                 >
                   Done
                 </button>
@@ -610,22 +490,9 @@ export function SyncPanel() {
                 <button
                   onClick={handleGoogleSignIn}
                   disabled={authLoading || !isStytchAvailable}
-                  style={{
-                    width: '100%',
-                    padding: '10px 16px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '10px',
-                    background: 'white',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '6px',
-                    cursor: authLoading ? 'wait' : 'pointer',
-                    opacity: authLoading ? 0.7 : 1,
-                    color: '#333',
-                    fontWeight: 500,
-                    fontSize: '13px',
-                  }}
+                  className={`w-full px-4 py-2.5 flex items-center justify-center gap-2.5 bg-white border border-nim rounded-md text-[#333] font-medium text-[13px] ${
+                    authLoading ? 'cursor-wait opacity-70' : 'cursor-pointer opacity-100'
+                  }`}
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24">
                     <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -636,17 +503,10 @@ export function SyncPanel() {
                   Continue with Google
                 </button>
 
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  margin: '16px 0',
-                  color: 'var(--text-tertiary)',
-                  fontSize: '12px',
-                }}>
-                  <div style={{ flex: 1, height: '1px', background: 'var(--border-primary)' }} />
+                <div className="flex items-center gap-3 my-4 text-nim-faint text-xs">
+                  <div className="flex-1 h-px bg-nim" />
                   or
-                  <div style={{ flex: 1, height: '1px', background: 'var(--border-primary)' }} />
+                  <div className="flex-1 h-px bg-nim" />
                 </div>
 
                 {/* Email Magic Link Form */}
@@ -657,39 +517,21 @@ export function SyncPanel() {
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="Enter your email"
                     disabled={!isStytchAvailable || authLoading}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      marginBottom: '12px',
-                      border: '1px solid var(--border-primary)',
-                      borderRadius: '6px',
-                      background: 'var(--surface-primary)',
-                      color: 'var(--text-primary)',
-                      fontSize: '13px',
-                    }}
+                    className="w-full px-3 py-2 mb-3 border border-nim rounded-md bg-nim text-nim text-[13px]"
                   />
                   <button
                     type="submit"
                     disabled={authLoading || !isStytchAvailable || !email}
-                    style={{
-                      width: '100%',
-                      padding: '10px 16px',
-                      background: 'var(--primary-color)',
-                      border: 'none',
-                      borderRadius: '6px',
-                      color: 'white',
-                      fontWeight: 500,
-                      fontSize: '13px',
-                      cursor: authLoading ? 'wait' : 'pointer',
-                      opacity: (authLoading || !email) ? 0.7 : 1,
-                    }}
+                    className={`w-full px-4 py-2.5 bg-nim-primary border-none rounded-md text-white font-medium text-[13px] ${
+                      authLoading ? 'cursor-wait' : 'cursor-pointer'
+                    } ${(authLoading || !email) ? 'opacity-70' : 'opacity-100'}`}
                   >
                     {authLoading ? 'Sending...' : 'Send Sign-In Link'}
                   </button>
                 </form>
 
                 {authError && (
-                  <p style={{ color: 'var(--error-color, #ef4444)', fontSize: '12px', marginTop: '8px', marginBottom: 0 }}>
+                  <p className="text-nim-error text-xs mt-2 mb-0">
                     {authError}
                   </p>
                 )}
@@ -700,16 +542,7 @@ export function SyncPanel() {
                     setAuthError(null);
                     setEmail('');
                   }}
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    marginTop: '12px',
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--text-tertiary)',
-                    cursor: 'pointer',
-                    fontSize: '12px',
-                  }}
+                  className="block w-full mt-3 bg-transparent border-none text-nim-faint cursor-pointer text-xs hover:text-nim-muted"
                 >
                   Cancel
                 </button>
@@ -717,34 +550,21 @@ export function SyncPanel() {
             )}
           </div>
         ) : (
-          <div style={{
-            padding: '16px',
-            background: 'var(--surface-secondary)',
-            borderRadius: '8px',
-            textAlign: 'center',
-          }}>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 12px' }}>
+          <div className="p-4 bg-nim-secondary rounded-lg text-center">
+            <p className="text-[13px] text-nim-muted m-0 mb-3">
               Sign in to sync sessions across all your devices.
             </p>
             <button
               onClick={() => setShowAuthForm(true)}
               disabled={!isStytchAvailable}
-              style={{
-                padding: '8px 20px',
-                background: 'var(--primary-color)',
-                border: 'none',
-                borderRadius: '6px',
-                color: 'white',
-                fontWeight: 500,
-                fontSize: '13px',
-                cursor: isStytchAvailable ? 'pointer' : 'not-allowed',
-                opacity: isStytchAvailable ? 1 : 0.5,
-              }}
+              className={`px-5 py-2 bg-nim-primary border-none rounded-md text-white font-medium text-[13px] ${
+                isStytchAvailable ? 'cursor-pointer opacity-100' : 'cursor-not-allowed opacity-50'
+              }`}
             >
               Sign In or Create Account
             </button>
             {!isStytchAvailable && (
-              <p style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '8px', marginBottom: 0 }}>
+              <p className="text-[11px] text-nim-faint mt-2 mb-0">
                 Restart the app to enable authentication.
               </p>
             )}
@@ -784,16 +604,7 @@ export function SyncPanel() {
             <select
               value={config.idleTimeoutMinutes ?? 5}
               onChange={(e) => handleFieldChange('idleTimeoutMinutes', Number(e.target.value))}
-              style={{
-                padding: '8px 12px',
-                fontSize: '13px',
-                background: 'var(--surface-secondary)',
-                border: '1px solid var(--border-primary)',
-                borderRadius: '6px',
-                color: 'var(--text-primary)',
-                cursor: 'pointer',
-                width: '100%',
-              }}
+              className="w-full px-3 py-2 text-[13px] bg-nim-secondary border border-nim rounded-md text-nim cursor-pointer"
             >
               <option value={1}>1 minute (for testing)</option>
               <option value={2}>2 minutes</option>
@@ -814,15 +625,7 @@ export function SyncPanel() {
               <h4 className="provider-panel-section-title text-base font-semibold text-[var(--nim-text)] m-0">Projects</h4>
               <button
                 onClick={() => setShowProjectPicker(true)}
-                style={{
-                  padding: '4px 10px',
-                  fontSize: '12px',
-                  background: 'var(--surface-secondary)',
-                  border: '1px solid var(--border-primary)',
-                  borderRadius: '4px',
-                  color: 'var(--text-secondary)',
-                  cursor: 'pointer',
-                }}
+                className="px-2.5 py-1 text-xs bg-nim-secondary border border-nim rounded text-nim-muted cursor-pointer hover:bg-nim-hover"
               >
                 {enabledProjectCount} of {projects.length} enabled
               </button>
@@ -836,52 +639,23 @@ export function SyncPanel() {
           {stytchAuth.isAuthenticated && (
             <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
               <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Get the Mobile App</h4>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '16px',
-                padding: '16px',
-                background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(59, 130, 246, 0.05) 100%)',
-                borderRadius: '8px',
-                border: '1px solid rgba(59, 130, 246, 0.2)',
-              }}>
-                <div style={{
-                  width: '56px',
-                  height: '56px',
-                  borderRadius: '12px',
-                  background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                }}>
+              <div className="flex items-center gap-4 p-4 bg-gradient-to-br from-blue-500/15 to-blue-500/5 rounded-lg border border-blue-500/20">
+                <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center shrink-0">
                   <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
                     <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
                     <line x1="12" y1="18" x2="12" y2="18"/>
                   </svg>
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                <div className="flex-1">
+                  <div className="text-sm font-semibold text-nim mb-1">
                     Nimbalyst for iOS
                   </div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                  <div className="text-xs text-nim-muted mb-2">
                     View AI sessions on your iPhone or iPad
                   </div>
                   <button
                     onClick={() => window.electronAPI.openExternal('https://apps.apple.com/app/nimbalyst')}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      padding: '6px 12px',
-                      background: 'white',
-                      borderRadius: '6px',
-                      fontSize: '12px',
-                      fontWeight: 500,
-                      color: '#111827',
-                      border: 'none',
-                      cursor: 'pointer',
-                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-md text-xs font-medium text-gray-900 border-none cursor-pointer hover:bg-gray-100"
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
@@ -898,12 +672,11 @@ export function SyncPanel() {
             <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
               <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Mobile Device</h4>
               <button
-                className="pair-device-button"
+                className="pair-device-button w-full flex items-center justify-center px-4 py-2.5 bg-nim-secondary border border-nim rounded-md text-nim font-medium text-[13px] cursor-pointer hover:bg-nim-hover disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={() => setShowQRModal(true)}
                 disabled={!effectiveServerUrl}
-                style={{ width: '100%' }}
               >
-                <svg style={{ width: '18px', height: '18px', marginRight: '8px' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg className="w-[18px] h-[18px] mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <rect x="3" y="3" width="7" height="7" rx="1" />
                   <rect x="14" y="3" width="7" height="7" rx="1" />
                   <rect x="3" y="14" width="7" height="7" rx="1" />
@@ -916,31 +689,20 @@ export function SyncPanel() {
               </button>
 
               {/* Encryption Explanation */}
-              <div style={{
-                marginTop: '12px',
-                padding: '16px',
-                background: 'rgba(34, 197, 94, 0.1)',
-                border: '1px solid rgba(34, 197, 94, 0.2)',
-                borderRadius: '8px',
-              }}>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  marginBottom: '10px',
-                }}>
+              <div className="mt-3 p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
+                <div className="flex items-center gap-2 mb-2.5">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2">
                     <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                     <path d="M7 11V7a5 5 0 0110 0v4" />
                   </svg>
-                  <span style={{ fontSize: '13px', fontWeight: 600, color: '#22c55e' }}>
+                  <span className="text-[13px] font-semibold text-green-500">
                     End-to-End Encryption
                   </span>
                 </div>
-                <p style={{ margin: '0 0 10px', fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                <p className="m-0 mb-2.5 text-xs text-nim-muted leading-relaxed">
                   The QR code securely transfers your encryption key directly between devices.
                 </p>
-                <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '12px', color: 'var(--text-primary)', lineHeight: 1.7 }}>
+                <ul className="m-0 pl-5 text-xs text-nim leading-7">
                   <li>Your encryption keys never touch our servers</li>
                   <li>Only your devices can decrypt your data</li>
                   <li>Sign in with the same account on both devices</li>
@@ -950,17 +712,12 @@ export function SyncPanel() {
           ) : (
             <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
               <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Mobile Device</h4>
-              <div style={{
-                padding: '16px',
-                background: 'var(--surface-secondary)',
-                borderRadius: '8px',
-                textAlign: 'center',
-              }}>
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)" strokeWidth="1.5" style={{ margin: '0 auto 12px' }}>
+              <div className="p-4 bg-nim-secondary rounded-lg text-center">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="mx-auto mb-3 text-nim-faint">
                   <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
                   <line x1="12" y1="18" x2="12" y2="18"/>
                 </svg>
-                <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-secondary)' }}>
+                <p className="m-0 text-[13px] text-nim-muted">
                   Sign in above to pair your mobile device
                 </p>
               </div>
@@ -975,45 +732,25 @@ export function SyncPanel() {
                 <button
                   onClick={loadDevices}
                   disabled={devicesLoading}
-                  style={{
-                    marginLeft: '8px',
-                    padding: '2px 6px',
-                    fontSize: '10px',
-                    background: 'var(--surface-secondary)',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '3px',
-                    cursor: devicesLoading ? 'wait' : 'pointer',
-                    color: 'var(--text-tertiary)',
-                  }}
+                  className={`ml-2 px-1.5 py-0.5 text-[10px] bg-nim-secondary border border-nim rounded text-nim-faint ${
+                    devicesLoading ? 'cursor-wait' : 'cursor-pointer hover:bg-nim-hover'
+                  }`}
                 >
                   Refresh
                 </button>
               </h4>
-              <div style={{ marginTop: '8px' }}>
+              <div className="mt-2">
                 {connectedDevices.map((device) => (
                   <div
                     key={device.device_id}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '10px',
-                      padding: '8px 10px',
-                      background: 'var(--surface-secondary)',
-                      borderRadius: '6px',
-                      marginBottom: '6px',
-                    }}
+                    className="flex items-center gap-2.5 px-2.5 py-2 bg-nim-secondary rounded-md mb-1.5 last:mb-0"
                   >
-                    <div style={{
-                      width: '8px',
-                      height: '8px',
-                      borderRadius: '50%',
-                      background: '#22c55e',
-                    }} />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
+                    <div className="w-2 h-2 rounded-full bg-green-500" />
+                    <div className="flex-1">
+                      <div className="text-[13px] text-nim">
                         {device.name}
                       </div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
+                      <div className="text-[11px] text-nim-faint">
                         {device.platform} - {formatRelativeTime(device.connected_at)}
                       </div>
                     </div>

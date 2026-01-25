@@ -49,32 +49,17 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
         <div
           role="alert"
           aria-live="assertive"
-          style={{
-            padding: '2rem',
-            textAlign: 'center',
-            color: 'var(--text-primary)',
-            background: 'var(--surface-secondary)',
-            borderRadius: '8px',
-            border: '1px solid var(--border-primary)'
-          }}
+          className="p-8 text-center text-nim bg-nim-secondary rounded-lg border border-nim"
         >
-          <h3 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '1.125rem' }}>
+          <h3 className="mt-0 mb-4 text-lg">
             Something went wrong
           </h3>
-          <p style={{ marginBottom: '1.5rem', color: 'var(--text-secondary)' }}>
+          <p className="mb-6 text-nim-muted">
             {this.state.error?.message || 'An unexpected error occurred'}
           </p>
           <button
             onClick={this.handleReset}
-            style={{
-              padding: '0.5rem 1rem',
-              background: 'var(--primary-color)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontSize: '0.875rem'
-            }}
+            className="px-4 py-2 bg-nim-primary text-white border-none rounded-md cursor-pointer text-sm hover:bg-nim-primary-hover"
           >
             Try Again
           </button>

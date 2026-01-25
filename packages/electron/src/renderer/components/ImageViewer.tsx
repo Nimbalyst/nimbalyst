@@ -47,19 +47,11 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({ filePath, fileName }) 
 
   if (error) {
     return (
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '100%',
-          color: 'var(--text-secondary)',
-        }}
-      >
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>📷</div>
+      <div className="flex items-center justify-center h-full text-nim-muted">
+        <div className="text-center">
+          <div className="text-5xl mb-4">📷</div>
           <div>{error}</div>
-          <div style={{ fontSize: '12px', marginTop: '8px', opacity: 0.7 }}>{fileName}</div>
+          <div className="text-xs mt-2 opacity-70">{fileName}</div>
         </div>
       </div>
     );
@@ -67,43 +59,17 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({ filePath, fileName }) 
 
   if (!imageSrc) {
     return (
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '100%',
-          color: 'var(--text-secondary)',
-        }}
-      >
+      <div className="flex items-center justify-center h-full text-nim-muted">
         Loading...
       </div>
     );
   }
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        overflow: 'auto',
-        backgroundColor: 'var(--surface-primary)',
-      }}
-    >
+    <div className="flex flex-col h-full overflow-auto bg-nim">
       {/* Info bar */}
       {dimensions && (
-        <div
-          style={{
-            padding: '8px 16px',
-            backgroundColor: 'var(--surface-secondary)',
-            borderBottom: '1px solid var(--border-primary)',
-            color: 'var(--text-secondary)',
-            fontSize: '12px',
-            display: 'flex',
-            gap: '16px',
-          }}
-        >
+        <div className="px-4 py-2 bg-nim-secondary border-b border-nim text-nim-muted text-xs flex gap-4">
           <span>{fileName}</span>
           <span>
             {dimensions.width} × {dimensions.height}
@@ -112,25 +78,13 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({ filePath, fileName }) 
       )}
 
       {/* Image container */}
-      <div
-        style={{
-          flex: 1,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '16px',
-        }}
-      >
+      <div className="flex-1 flex items-center justify-center p-4">
         <img
           src={imageSrc}
           alt={fileName}
           onLoad={handleImageLoad}
           onError={handleImageError}
-          style={{
-            maxWidth: '100%',
-            maxHeight: '100%',
-            objectFit: 'contain',
-          }}
+          className="max-w-full max-h-full object-contain"
         />
       </div>
     </div>
