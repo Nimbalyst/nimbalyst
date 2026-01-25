@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.4] - 2026-01-25
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Fixed AI provider field not syncing when model ID contains provider prefix
+
+### Removed
+- Removed deprecated DiffMode and WorktreeMode components
+
 ## [0.52.3] - 2026-01-25
 
 
