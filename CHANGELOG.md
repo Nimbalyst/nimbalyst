@@ -20,6 +20,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.52.2] - 2026-01-24
+
+
+### Added
+- Card view display mode for session history
+- Real-time worktree display name sync across UI
+- Dynamic alpha feature registry system
+- Alternative Claude Code provider support (alpha)
+- Worktree terminal button and improved terminal switching
+
+### Fixed
+- Pasted text starting with '#' no longer incorrectly activates memory mode
+- Alpha feature settings now persist across sessions
+- New Worktree button now enabled in agent mode for git repos
+- Enter key no longer sends message during IME composition
+
 ## [0.52.1] - 2026-01-23
 
 
