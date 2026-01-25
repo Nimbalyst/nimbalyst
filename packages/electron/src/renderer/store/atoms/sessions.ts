@@ -1002,7 +1002,22 @@ export const loadSessionDataAtom = atom(
       if (sessionData) {
         set(sessionStoreAtom(sessionId), sessionData);
         set(sessionModeAtom(sessionId), sessionData.mode || 'agent');
-        set(sessionModelAtom(sessionId), sessionData.model || sessionData.provider || 'claude-code:sonnet');
+        // Use model if set, otherwise construct a default based on provider
+        // Important: Don't fallback to just the provider name as that's not a valid model ID
+        let model = sessionData.model;
+        if (!model || !model.includes(':')) {
+          // No valid model - construct default based on provider
+          const provider = sessionData.provider || 'claude-code';
+          const defaults: Record<string, string> = {
+            'claude': 'claude:claude-sonnet-4-5-20250929',
+            'claude-code': 'claude-code:sonnet',
+            'openai': 'openai:gpt-4o',
+            'openai-codex': 'openai-codex:openai-codex-cli',
+            'lmstudio': 'lmstudio:local-model'
+          };
+          model = defaults[provider] || 'claude-code:sonnet';
+        }
+        set(sessionModelAtom(sessionId), model);
         set(sessionArchivedAtom(sessionId), sessionData.isArchived || false);
 
         // Initialize draft input if session has saved draft

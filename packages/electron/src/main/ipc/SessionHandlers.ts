@@ -1,4 +1,4 @@
-import { SessionManager } from '@nimbalyst/runtime/ai/server';
+import { SessionManager, ModelRegistry, ProviderFactory } from '@nimbalyst/runtime/ai/server';
 import { AISessionsRepository } from '@nimbalyst/runtime';
 import { ModelIdentifier, type AIProviderType } from '@nimbalyst/runtime/ai/server/types';
 import type { UpdateSessionMetadataPayload } from '@nimbalyst/runtime/ai/adapters/sessionStore';
@@ -32,18 +32,24 @@ export async function registerSessionHandlers() {
             const { session, workspaceId } = payload;
 
             // Extract and sync provider from model ID if model follows "provider:model" format
-            let provider = session.provider;
-            if (session.model) {
-                const modelId = ModelIdentifier.tryParse(session.model);
+            let provider = session.provider as AIProviderType;
+            let model = session.model;
+
+            if (model) {
+                const modelId = ModelIdentifier.tryParse(model);
                 if (modelId) {
                     provider = modelId.provider;
                 }
+            } else {
+                // No model provided - get default for the provider
+                model = await ModelRegistry.getDefaultModel(provider);
+                console.log(`[SessionHandlers] No model provided, using default: ${model}`);
             }
 
             const createPayload = {
                 id: session.id,
                 provider,
-                model: session.model,
+                model,
                 title: session.title || 'Untitled',
                 workspaceId: workspaceId,
                 providerConfig: session.providerConfig,
@@ -113,10 +119,23 @@ export async function registerSessionHandlers() {
         try {
             // When model is updated, extract and sync the provider from the model ID
             // Model IDs follow the format "provider:model-name" (e.g., "claude-code:opus", "openai:gpt-4o")
+            let providerType: AIProviderType | undefined;
             if (updates.model) {
                 const modelId = ModelIdentifier.tryParse(updates.model);
                 if (modelId) {
                     updates.provider = modelId.provider;
+                    providerType = modelId.provider;
+                }
+
+                // Invalidate the cached provider so it gets re-created with the new model
+                // on the next message. This ensures model changes take effect immediately.
+                if (providerType) {
+                    console.log(`[SessionHandlers] Model changed to ${updates.model}, invalidating provider for session ${sessionId}`);
+                    ProviderFactory.destroyProvider(sessionId, providerType);
+                } else {
+                    // If we couldn't parse the provider, destroy all providers for this session
+                    console.log(`[SessionHandlers] Model changed to ${updates.model}, invalidating all providers for session ${sessionId}`);
+                    ProviderFactory.destroyProvider(sessionId);
                 }
             }
             await AISessionsRepository.updateMetadata(sessionId, updates);
