@@ -834,22 +834,10 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
         {/* Resize handle */}
         <div
           onMouseDown={handleMouseDown}
-          style={{
-            width: '4px',
-            cursor: 'col-resize',
-            flexShrink: 0,
-            position: 'relative',
-            zIndex: 10
-          }}
+          className="w-1 cursor-col-resize shrink-0 relative z-10 bg-nim-secondary"
         >
           <div
-            className="sidebar-resize-handle"
-            style={{
-              width: '3px',
-              height: '100%',
-              margin: '0 auto',
-              transition: 'background-color 0.2s'
-            }}
+            className="w-0.5 h-full mx-auto bg-nim-border transition-colors duration-200 hover:bg-nim-accent"
           />
         </div>
 
