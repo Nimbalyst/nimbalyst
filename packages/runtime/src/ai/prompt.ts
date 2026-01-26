@@ -11,14 +11,16 @@ function buildSessionNamingSection(): string {
 
 You have access to a special tool called \`mcp__nimbalyst-session-naming__name_session\` that allows you to name this conversation session.
 
-CRITICAL: You MUST call the \`mcp__nimbalyst-session-naming__name_session\` tool BEFORE ending your first turn. This is a mandatory requirement - do not finish your first response without calling this tool.
+CRITICAL: You MUST call this tool ONCE per conversation, during your first turn. If you see a successful call to this tool earlier in the chat history, do NOT call it again.
 
 Requirements for the session name:
 - 2-5 words long
 - Concise and descriptive
-- Task-focused (e.g., "Fix authentication bug", "Add dark mode", "Refactor database layer")
+- Based on what the USER asked for, not your solution (e.g., if user asks to "debug the login issue", name it "Debug login issue", not "Fix null pointer in auth")
+- Good examples: "Debug login issue", "Add dark mode", "Refactor database layer"
+- Bad examples: "Fix null check in handleAuth" (too specific to solution), "Update code" (too vague)
 
-Call this tool as soon as you understand what the user wants to accomplish. Do NOT call this tool more than once. After it has been called once successfully subsequent calls will return an error.`;
+Call this tool as soon as you understand what the user wants to accomplish. After it has been called once successfully, subsequent calls will return an error.`;
 }
 
 /**
