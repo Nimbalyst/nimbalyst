@@ -336,11 +336,9 @@ export const ImageProjectEditor = forwardRef<unknown, EditorHostProps>(
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: 'var(--nim-bg, #2d2d2d)',
-            color: 'var(--nim-text-muted, #b3b3b3)',
           }}
         >
-          <div>Loading project...</div>
+          <div style={{ color: theme === 'dark' ? '#b3b3b3' : '#6b7280' }}>Loading project...</div>
         </div>
       );
     }
@@ -357,11 +355,9 @@ export const ImageProjectEditor = forwardRef<unknown, EditorHostProps>(
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: 'var(--nim-bg, #2d2d2d)',
-            color: 'var(--error-color, #ef4444)',
           }}
         >
-          <div>Failed to load: {loadError.message}</div>
+          <div style={{ color: '#ef4444' }}>Failed to load: {loadError.message}</div>
         </div>
       );
     }
@@ -379,8 +375,7 @@ export const ImageProjectEditor = forwardRef<unknown, EditorHostProps>(
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
-          background: 'var(--nim-bg, #2d2d2d)',
-          color: 'var(--nim-text, #ffffff)',
+          overflow: 'hidden',
         }}
       >
         {/* API Key Missing Banner */}

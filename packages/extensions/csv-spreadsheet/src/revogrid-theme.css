@@ -17,9 +17,9 @@
   --revo-row-odd-color: var(--nim-bg);
   --revo-row-even-color: var(--nim-bg);
   --revo-header-bg-color: var(--nim-bg-secondary);
-  --revo-border-color: var(--border-primary);
-  --revo-text-color: var(--text-primary);
-  --revo-header-text-color: var(--text-secondary);
+  --revo-border-color: var(--nim-border);
+  --revo-text-color: var(--nim-text);
+  --revo-header-text-color: var(--nim-text-muted);
   --revo-selected-bg-color: rgba(var(--primary-color-rgb, 59, 130, 246), 0.15);
   --revo-focus-bg-color: rgba(var(--primary-color-rgb, 59, 130, 246), 0.25);
 }
@@ -31,9 +31,9 @@
   --revo-row-odd-color: var(--nim-bg);
   --revo-row-even-color: var(--nim-bg);
   --revo-header-bg-color: var(--nim-bg-secondary);
-  --revo-border-color: var(--border-primary);
-  --revo-text-color: var(--text-primary);
-  --revo-header-text-color: var(--text-secondary);
+  --revo-border-color: var(--nim-border);
+  --revo-text-color: var(--nim-text);
+  --revo-header-text-color: var(--nim-text-muted);
   --revo-grid-cell-border: rgba(255, 255, 255, 0.15);
   --revo-grid-header-border: rgba(255, 255, 255, 0.2);
 }
@@ -97,8 +97,8 @@
 [data-theme="dark"] .spreadsheet-editor revo-grid revogr-edit input,
 [data-theme="crystal-dark"] .spreadsheet-editor revo-grid revogr-edit input {
   background-color: var(--nim-bg);
-  color: var(--text-primary);
-  border: 1px solid var(--primary-color);
+  color: var(--nim-text);
+  border: 1px solid var(--nim-primary);
   outline: none;
 }
 
@@ -134,7 +134,7 @@
 
 .spreadsheet-editor revo-grid [slot="colPinStart"],
 .spreadsheet-editor revo-grid [slot="colPinStart-header"] {
-  border-right: 2px solid var(--primary-color);
+  border-right: 2px solid var(--nim-primary);
 }
 
 [data-theme="dark"] .spreadsheet-editor revo-grid [slot="colPinStart"] revogr-data .rgCell,
@@ -159,7 +159,7 @@
 
 /* Formula cells (computed values) */
 .spreadsheet-editor .cell-formula {
-  color: var(--text-primary);
+  color: var(--nim-text);
 }
 
 /* ========================================

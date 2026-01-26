@@ -42,8 +42,10 @@ export function Gallery({ generations, imagesBasePath, onEditPrompt, theme }: Ga
     } else if (diffDays === 1) {
       return `Yesterday at ${date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
     } else {
-      return date.toLocaleDateString([], { month: 'short', day: 'numeric' }) +
-        ` at ${date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+      return (
+        date.toLocaleDateString([], { month: 'short', day: 'numeric' }) +
+        ` at ${date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
+      );
     }
   };
 
@@ -73,7 +75,7 @@ export function Gallery({ generations, imagesBasePath, onEditPrompt, theme }: Ga
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          color: isDark ? '#808080' : '#6b7280',
+          color: 'var(--nim-text-muted)',
           textAlign: 'center',
           padding: 40,
         }}
@@ -83,7 +85,7 @@ export function Gallery({ generations, imagesBasePath, onEditPrompt, theme }: Ga
           style={{
             fontSize: 16,
             fontWeight: 500,
-            color: isDark ? '#b3b3b3' : '#374151',
+            color: 'var(--nim-text)',
             marginBottom: 8,
           }}
         >
@@ -237,6 +239,7 @@ export function Gallery({ generations, imagesBasePath, onEditPrompt, theme }: Ga
     <div
       style={{
         flex: 1,
+        minHeight: 0,
         overflowY: 'auto',
         padding: 20,
         position: 'relative',
@@ -253,7 +256,7 @@ export function Gallery({ generations, imagesBasePath, onEditPrompt, theme }: Ga
               gap: 12,
               marginBottom: 16,
               padding: '12px 16px',
-              background: isDark ? '#1a1a1a' : '#f3f4f6',
+              background: 'var(--nim-bg-secondary)',
               borderRadius: 8,
             }}
           >
@@ -263,7 +266,7 @@ export function Gallery({ generations, imagesBasePath, onEditPrompt, theme }: Ga
                   style={{
                     flex: 1,
                     fontSize: 13,
-                    color: isDark ? '#ffffff' : '#111827',
+                    color: 'var(--nim-text)',
                     lineHeight: 1.5,
                   }}
                 >
@@ -274,9 +277,9 @@ export function Gallery({ generations, imagesBasePath, onEditPrompt, theme }: Ga
                   style={{
                     padding: '6px 10px',
                     background: 'transparent',
-                    border: `1px solid ${isDark ? '#4a4a4a' : '#e5e7eb'}`,
+                    border: '1px solid var(--nim-border)',
                     borderRadius: 5,
-                    color: isDark ? '#b3b3b3' : '#6b7280',
+                    color: 'var(--nim-text-muted)',
                     fontSize: 12,
                     cursor: 'pointer',
                     display: 'flex',
@@ -296,7 +299,7 @@ export function Gallery({ generations, imagesBasePath, onEditPrompt, theme }: Ga
                   gap: 12,
                   marginTop: 8,
                   fontSize: 11,
-                  color: isDark ? '#808080' : '#9ca3af',
+                  color: 'var(--nim-text-faint)',
                 }}
               >
                 <span
@@ -304,7 +307,7 @@ export function Gallery({ generations, imagesBasePath, onEditPrompt, theme }: Ga
                     display: 'inline-block',
                     padding: '3px 8px',
                     background: isDark ? 'rgba(96, 165, 250, 0.2)' : 'rgba(59, 130, 246, 0.1)',
-                    color: isDark ? '#60a5fa' : '#3b82f6',
+                    color: 'var(--nim-link)',
                     borderRadius: 4,
                     fontSize: 11,
                     fontWeight: 500,
@@ -333,7 +336,7 @@ export function Gallery({ generations, imagesBasePath, onEditPrompt, theme }: Ga
                   style={{
                     position: 'relative',
                     aspectRatio: '1',
-                    background: isDark ? '#1a1a1a' : '#e5e7eb',
+                    background: 'var(--nim-bg-secondary)',
                     borderRadius: 8,
                     overflow: 'hidden',
                     cursor: 'pointer',
@@ -342,7 +345,7 @@ export function Gallery({ generations, imagesBasePath, onEditPrompt, theme }: Ga
                   }}
                   onClick={() => setExpandedImage({ image: result, generation })}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = isDark ? '#4a4a4a' : '#d1d5db';
+                    e.currentTarget.style.borderColor = 'var(--nim-border)';
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.borderColor = 'transparent';
@@ -371,10 +374,10 @@ export function Gallery({ generations, imagesBasePath, onEditPrompt, theme }: Ga
                       height: '100%',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      background: `linear-gradient(135deg, ${isDark ? '#1a1a1a' : '#e5e7eb'} 0%, ${isDark ? '#2a3540' : '#d1d5db'} 100%)`,
+                      background: 'var(--nim-bg-tertiary)',
                     }}
                   >
-                    <div style={{ textAlign: 'center', color: isDark ? '#808080' : '#9ca3af' }}>
+                    <div style={{ textAlign: 'center', color: 'var(--nim-text-muted)' }}>
                       <div style={{ fontSize: 40, marginBottom: 8, opacity: 0.5 }}>&#128247;</div>
                       <div style={{ fontSize: 11 }}>{result.file}</div>
                     </div>
@@ -441,14 +444,14 @@ export function Gallery({ generations, imagesBasePath, onEditPrompt, theme }: Ga
                 style={{
                   position: 'relative',
                   aspectRatio: '1',
-                  background: isDark ? '#1a1a1a' : '#e5e7eb',
+                  background: 'var(--nim-bg-secondary)',
                   borderRadius: 8,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}
               >
-                <div style={{ textAlign: 'center', color: isDark ? '#808080' : '#9ca3af' }}>
+                <div style={{ textAlign: 'center', color: 'var(--nim-text-muted)' }}>
                   <div style={{ fontSize: 40, marginBottom: 8, opacity: 0.5 }}>&#8987;</div>
                   <div style={{ fontSize: 11 }}>Pending</div>
                 </div>

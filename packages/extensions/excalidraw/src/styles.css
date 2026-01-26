@@ -1,15 +1,17 @@
+/**
+ * Excalidraw Extension Styles
+ *
+ * Uses CSS variables from Nimbalyst's unified theme system (--nim-*).
+ * Variables are inherited from the parent Nimbalyst application.
+ */
+
 .excalidraw-editor {
   width: 100%;
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--background-primary, #ffffff);
-  color: var(--text-primary, #000000);
-}
-
-.excalidraw-editor[data-theme='dark'] {
-  background: var(--background-primary, #1e1e1e);
-  color: var(--text-primary, #ffffff);
+  background: var(--nim-bg, #ffffff);
+  color: var(--nim-text, #000000);
 }
 
 /* Ensure Excalidraw fills the container */

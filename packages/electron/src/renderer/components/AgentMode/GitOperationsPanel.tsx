@@ -1006,7 +1006,7 @@ Please proceed with this strategy.`;
                 </p>
                 <button
                   className="git-operations-panel__commit-btn smart w-full p-2 border-none rounded text-white text-xs font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={{ background: 'linear-gradient(135deg, var(--nim-primary), var(--accent-secondary, var(--nim-primary)))' }}
+                  style={{ background: 'linear-gradient(135deg, var(--nim-primary), var(--nim-primary-hover))' }}
                   onClick={handleSmartCommit}
                   disabled={!hasChanges}
                 >

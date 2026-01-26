@@ -1,7 +1,7 @@
 /**
  * DatamodelLM Extension Styles
  *
- * Uses CSS variables from Nimbalyst's theme system for consistent styling.
+ * Uses CSS variables from Nimbalyst's unified theme system (--nim-*).
  * Falls back to reasonable defaults if variables are not available.
  */
 
@@ -14,8 +14,8 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-  background-color: var(--surface-primary, #ffffff);
-  color: var(--text-primary, #333333);
+  background-color: var(--nim-bg, #ffffff);
+  color: var(--nim-text, #333333);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
@@ -34,8 +34,8 @@
   align-items: center;
   justify-content: space-between;
   padding: 8px 12px;
-  border-bottom: 1px solid var(--border-primary, #e2e8f0);
-  background-color: var(--surface-secondary, #f8fafc);
+  border-bottom: 1px solid var(--nim-border, #e2e8f0);
+  background-color: var(--nim-bg-secondary, #f8fafc);
   flex-shrink: 0;
 }
 
@@ -52,16 +52,16 @@
   font-size: 13px;
   font-weight: 500;
   border-radius: 6px;
-  border: 1px solid var(--border-primary, #e2e8f0);
-  background-color: var(--surface-primary, #ffffff);
-  color: var(--text-primary, #333333);
+  border: 1px solid var(--nim-border, #e2e8f0);
+  background-color: var(--nim-bg, #ffffff);
+  color: var(--nim-text, #333333);
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .datamodel-toolbar-button:hover:not(:disabled) {
-  background-color: var(--surface-hover, #f3f4f6);
-  border-color: var(--primary-color, #3b82f6);
+  background-color: var(--nim-bg-hover, #f3f4f6);
+  border-color: var(--nim-primary, #3b82f6);
 }
 
 .datamodel-toolbar-button:disabled {
@@ -82,26 +82,26 @@
 }
 
 .datamodel-toolbar-button-primary {
-  background-color: var(--primary-color, #3b82f6);
-  border-color: var(--primary-color, #3b82f6);
+  background-color: var(--nim-primary, #3b82f6);
+  border-color: var(--nim-primary, #3b82f6);
   color: white;
 }
 
 .datamodel-toolbar-button-primary:hover {
-  background-color: #2563eb;
-  border-color: #2563eb;
+  background-color: var(--nim-primary-hover, #2563eb);
+  border-color: var(--nim-primary-hover, #2563eb);
 }
 
 .datamodel-toolbar-label {
   font-size: 13px;
-  color: var(--text-secondary, #6b7280);
+  color: var(--nim-text-muted, #6b7280);
   margin-right: 4px;
 }
 
 .datamodel-view-mode-group {
   display: flex;
   border-radius: 6px;
-  border: 1px solid var(--border-primary, #e2e8f0);
+  border: 1px solid var(--nim-border, #e2e8f0);
   overflow: hidden;
 }
 
@@ -110,9 +110,9 @@
   font-size: 12px;
   font-weight: 500;
   border: none;
-  border-right: 1px solid var(--border-primary, #e2e8f0);
-  background-color: var(--surface-primary, #ffffff);
-  color: var(--text-secondary, #6b7280);
+  border-right: 1px solid var(--nim-border, #e2e8f0);
+  background-color: var(--nim-bg, #ffffff);
+  color: var(--nim-text-muted, #6b7280);
   cursor: pointer;
   transition: all 0.15s ease;
 }
@@ -122,53 +122,53 @@
 }
 
 .datamodel-view-mode-button:hover {
-  background-color: var(--surface-hover, #f3f4f6);
+  background-color: var(--nim-bg-hover, #f3f4f6);
 }
 
 .datamodel-view-mode-button.active {
-  background-color: var(--primary-color, #3b82f6);
+  background-color: var(--nim-primary, #3b82f6);
   color: white;
 }
 
 .datamodel-toolbar-stats {
   font-size: 13px;
-  color: var(--text-secondary, #6b7280);
+  color: var(--nim-text-muted, #6b7280);
 }
 
 /* Dark theme toolbar */
 [data-theme="dark"] .datamodel-toolbar,
 [data-theme="crystal-dark"] .datamodel-toolbar {
-  background-color: var(--surface-secondary, #1e1e1e);
-  border-color: var(--border-primary, #404040);
+  background-color: var(--nim-bg-secondary, #1e1e1e);
+  border-color: var(--nim-border, #404040);
 }
 
 [data-theme="dark"] .datamodel-toolbar-button,
 [data-theme="crystal-dark"] .datamodel-toolbar-button {
-  background-color: var(--surface-tertiary, #2d2d2d);
-  border-color: var(--border-primary, #404040);
-  color: var(--text-primary, #e5e5e5);
+  background-color: var(--nim-bg-tertiary, #2d2d2d);
+  border-color: var(--nim-border, #404040);
+  color: var(--nim-text, #e5e5e5);
 }
 
 [data-theme="dark"] .datamodel-toolbar-button:hover,
 [data-theme="crystal-dark"] .datamodel-toolbar-button:hover {
-  background-color: var(--surface-hover, #3d3d3d);
+  background-color: var(--nim-bg-hover, #3d3d3d);
 }
 
 [data-theme="dark"] .datamodel-view-mode-group,
 [data-theme="crystal-dark"] .datamodel-view-mode-group {
-  border-color: var(--border-primary, #404040);
+  border-color: var(--nim-border, #404040);
 }
 
 [data-theme="dark"] .datamodel-view-mode-button,
 [data-theme="crystal-dark"] .datamodel-view-mode-button {
-  background-color: var(--surface-tertiary, #2d2d2d);
-  border-color: var(--border-primary, #404040);
-  color: var(--text-secondary, #9ca3af);
+  background-color: var(--nim-bg-tertiary, #2d2d2d);
+  border-color: var(--nim-border, #404040);
+  color: var(--nim-text-muted, #9ca3af);
 }
 
 [data-theme="dark"] .datamodel-view-mode-button:hover,
 [data-theme="crystal-dark"] .datamodel-view-mode-button:hover {
-  background-color: var(--surface-hover, #3d3d3d);
+  background-color: var(--nim-bg-hover, #3d3d3d);
 }
 
 /* ============================================================================
@@ -179,14 +179,14 @@
   min-width: 250px;
   max-width: 350px;
   border-radius: 8px;
-  border: 1px solid var(--border-primary, #e2e8f0);
-  background-color: var(--surface-secondary, #ffffff);
+  border: 1px solid var(--nim-border, #e2e8f0);
+  background-color: var(--nim-bg-secondary, #ffffff);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   transition: all 0.2s ease;
 }
 
 .datamodel-entity-selected {
-  border-color: var(--primary-color, #3b82f6);
+  border-color: var(--nim-primary, #3b82f6);
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2), 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
@@ -200,14 +200,14 @@
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  background-color: var(--surface-tertiary, #3b82f6);
+  background-color: var(--nim-bg-tertiary, #3b82f6);
   border-radius: 7px 7px 0 0;
 }
 
 .datamodel-entity-icon {
   width: 16px;
   height: 16px;
-  color: var(--text-primary);
+  color: var(--nim-text);
   flex-shrink: 0;
 }
 
@@ -215,7 +215,7 @@
   margin: 0;
   font-size: 14px;
   font-weight: 600;
-  color: var(--text-primary);
+  color: var(--nim-text);
   cursor: pointer;
 }
 
@@ -231,7 +231,7 @@
   border: none;
   border-radius: 4px;
   background-color: white;
-  color: var(--primary-color, #3b82f6);
+  color: var(--nim-primary, #3b82f6);
 }
 
 .datamodel-entity-name-input:focus {
@@ -247,15 +247,15 @@
   padding: 24px 16px;
   text-align: center;
   font-size: 13px;
-  color: var(--text-tertiary, #9ca3af);
+  color: var(--nim-text-faint, #9ca3af);
 }
 
 .datamodel-entity-description {
   padding: 8px 12px;
   font-size: 12px;
-  color: var(--text-secondary, #6b7280);
-  background-color: var(--surface-tertiary, #f9fafb);
-  border-top: 1px solid var(--border-primary, #e2e8f0);
+  color: var(--nim-text-muted, #6b7280);
+  background-color: var(--nim-bg-tertiary, #f9fafb);
+  border-top: 1px solid var(--nim-border, #e2e8f0);
   border-radius: 0 0 7px 7px;
 }
 
@@ -288,8 +288,8 @@
   width: 24px;
   height: 24px;
   border-radius: 4px;
-  background-color: var(--surface-tertiary, #f3f4f6);
-  color: var(--text-secondary, #6b7280);
+  background-color: var(--nim-bg-tertiary, #f3f4f6);
+  color: var(--nim-text-muted, #6b7280);
   flex-shrink: 0;
 }
 
@@ -301,7 +301,7 @@
 .datamodel-entity-compact-name {
   font-size: 14px;
   font-weight: 600;
-  color: var(--text-primary, #1f2937);
+  color: var(--nim-text, #1f2937);
   cursor: pointer;
   flex: 1;
   min-width: 0;
@@ -311,22 +311,22 @@
 }
 
 .datamodel-entity-compact-name:hover {
-  color: var(--primary-color, #3b82f6);
+  color: var(--nim-primary, #3b82f6);
 }
 
 .datamodel-entity-compact-badge {
   padding: 2px 8px;
   font-size: 11px;
   font-weight: 500;
-  color: var(--text-secondary, #6b7280);
-  background-color: var(--surface-tertiary, #f3f4f6);
+  color: var(--nim-text-muted, #6b7280);
+  background-color: var(--nim-bg-tertiary, #f3f4f6);
   border-radius: 12px;
   flex-shrink: 0;
 }
 
 .datamodel-entity-compact-description {
   font-size: 12px;
-  color: var(--text-tertiary, #9ca3af);
+  color: var(--nim-text-faint, #9ca3af);
   line-height: 1.4;
   padding-left: 32px;
   overflow: hidden;
@@ -340,32 +340,32 @@
 .datamodel-entity-compact .datamodel-handle-visible {
   width: 10px !important;
   height: 10px !important;
-  border: 2px solid var(--primary-color, #3b82f6) !important;
-  background-color: var(--surface-primary, #ffffff) !important;
+  border: 2px solid var(--nim-primary, #3b82f6) !important;
+  background-color: var(--nim-bg, #ffffff) !important;
   opacity: 1 !important;
 }
 
 /* Dark theme compact styles */
 [data-theme="dark"] .datamodel-entity-compact-icon,
 [data-theme="crystal-dark"] .datamodel-entity-compact-icon {
-  background-color: var(--surface-tertiary, #374151);
-  color: var(--text-secondary, #9ca3af);
+  background-color: var(--nim-bg-tertiary, #374151);
+  color: var(--nim-text-muted, #9ca3af);
 }
 
 [data-theme="dark"] .datamodel-entity-compact-name,
 [data-theme="crystal-dark"] .datamodel-entity-compact-name {
-  color: var(--text-primary, #f3f4f6);
+  color: var(--nim-text, #f3f4f6);
 }
 
 [data-theme="dark"] .datamodel-entity-compact-badge,
 [data-theme="crystal-dark"] .datamodel-entity-compact-badge {
-  background-color: var(--surface-tertiary, #374151);
-  color: var(--text-secondary, #9ca3af);
+  background-color: var(--nim-bg-tertiary, #374151);
+  color: var(--nim-text-muted, #9ca3af);
 }
 
 [data-theme="dark"] .datamodel-entity-compact-description,
 [data-theme="crystal-dark"] .datamodel-entity-compact-description {
-  color: var(--text-tertiary, #6b7280);
+  color: var(--nim-text-faint, #6b7280);
 }
 
 /* ============================================================================
@@ -377,7 +377,7 @@
   display: flex;
   align-items: flex-start;
   padding: 8px 12px;
-  border-bottom: 1px solid var(--border-primary, #e2e8f0);
+  border-bottom: 1px solid var(--nim-border, #e2e8f0);
   transition: background-color 0.15s ease;
 }
 
@@ -386,7 +386,7 @@
 }
 
 .datamodel-field-row:hover {
-  background-color: var(--surface-hover, rgba(0, 0, 0, 0.03));
+  background-color: var(--nim-bg-hover, rgba(0, 0, 0, 0.03));
 }
 
 .datamodel-field-wrapper {
@@ -409,7 +409,7 @@
 .datamodel-field-description {
   font-size: 11px;
   font-style: italic;
-  color: var(--text-tertiary, #9ca3af);
+  color: var(--nim-text-faint, #9ca3af);
   line-height: 1.3;
   padding-left: 4px;
 }
@@ -418,7 +418,7 @@
   font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, monospace;
   font-size: 13px;
   font-weight: 500;
-  color: var(--text-primary, #333333);
+  color: var(--nim-text, #333333);
   cursor: pointer;
   padding: 2px 4px;
   border-radius: 3px;
@@ -430,7 +430,7 @@
 }
 
 .datamodel-field-name:hover {
-  background-color: var(--surface-hover, rgba(0, 0, 0, 0.05));
+  background-color: var(--nim-bg-hover, rgba(0, 0, 0, 0.05));
 }
 
 .datamodel-field-right {
@@ -443,22 +443,22 @@
 .datamodel-field-type {
   font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
-  color: var(--text-secondary, #6b7280);
+  color: var(--nim-text-muted, #6b7280);
 }
 
 .datamodel-field-input {
   font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, monospace;
   font-size: 13px;
   padding: 2px 6px;
-  border: 1px solid var(--border-primary, #e2e8f0);
+  border: 1px solid var(--nim-border, #e2e8f0);
   border-radius: 4px;
-  background-color: var(--surface-primary, #ffffff);
-  color: var(--text-primary, #333333);
+  background-color: var(--nim-bg, #ffffff);
+  color: var(--nim-text, #333333);
 }
 
 .datamodel-field-input:focus {
   outline: none;
-  border-color: var(--primary-color, #3b82f6);
+  border-color: var(--nim-primary, #3b82f6);
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
 }
 
@@ -532,8 +532,8 @@
 .datamodel-handle {
   width: 8px !important;
   height: 8px !important;
-  border: 2px solid var(--primary-color, #3b82f6) !important;
-  background-color: var(--surface-primary, #ffffff) !important;
+  border: 2px solid var(--nim-primary, #3b82f6) !important;
+  background-color: var(--nim-bg, #ffffff) !important;
 }
 
 .datamodel-handle-source {
@@ -553,7 +553,7 @@
 }
 
 .datamodel-edge:hover {
-  stroke: var(--primary-color, #3b82f6) !important;
+  stroke: var(--nim-primary, #3b82f6) !important;
 }
 
 .datamodel-edge-label-container {
@@ -566,16 +566,16 @@
   padding: 2px 8px;
   font-size: 11px;
   font-weight: 500;
-  border: 1px solid var(--border-primary, #e2e8f0);
+  border: 1px solid var(--nim-border, #e2e8f0);
   border-radius: 4px;
-  background-color: var(--surface-secondary, #ffffff);
-  color: var(--text-primary, #333333);
+  background-color: var(--nim-bg-secondary, #ffffff);
+  color: var(--nim-text, #333333);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .datamodel-edge-label-selected {
-  border-color: var(--primary-color, #3b82f6);
-  background-color: var(--primary-color, #3b82f6);
+  border-color: var(--nim-primary, #3b82f6);
+  background-color: var(--nim-primary, #3b82f6);
   color: white;
 }
 
@@ -585,28 +585,28 @@
 
 .datamodel-controls {
   border-radius: 8px !important;
-  border: 1px solid var(--border-primary, #e2e8f0) !important;
-  background-color: var(--surface-secondary, #ffffff) !important;
+  border: 1px solid var(--nim-border, #e2e8f0) !important;
+  background-color: var(--nim-bg-secondary, #ffffff) !important;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
 }
 
 .datamodel-controls button {
-  border-bottom: 1px solid var(--border-primary, #e2e8f0) !important;
+  border-bottom: 1px solid var(--nim-border, #e2e8f0) !important;
   background-color: transparent !important;
 }
 
 .datamodel-controls button:hover {
-  background-color: var(--surface-hover, rgba(0, 0, 0, 0.05)) !important;
+  background-color: var(--nim-bg-hover, rgba(0, 0, 0, 0.05)) !important;
 }
 
 .datamodel-controls button svg {
-  fill: var(--text-secondary, #6b7280) !important;
+  fill: var(--nim-text-muted, #6b7280) !important;
 }
 
 .datamodel-minimap {
   border-radius: 8px !important;
-  border: 1px solid var(--border-primary, #e2e8f0) !important;
-  background-color: var(--surface-secondary, #ffffff) !important;
+  border: 1px solid var(--nim-border, #e2e8f0) !important;
+  background-color: var(--nim-bg-secondary, #ffffff) !important;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
 }
 
@@ -616,66 +616,66 @@
 
 [data-theme="dark"] .datamodel-editor,
 [data-theme="crystal-dark"] .datamodel-editor {
-  background-color: var(--surface-primary, #1a1a1a);
-  color: var(--text-primary, #e5e5e5);
+  background-color: var(--nim-bg, #1a1a1a);
+  color: var(--nim-text, #e5e5e5);
 }
 
 [data-theme="dark"] .datamodel-entity,
 [data-theme="crystal-dark"] .datamodel-entity {
-  background-color: var(--surface-secondary, #2d2d2d);
-  border-color: var(--border-primary, #404040);
+  background-color: var(--nim-bg-secondary, #2d2d2d);
+  border-color: var(--nim-border, #404040);
 }
 
 [data-theme="dark"] .datamodel-field-row,
 [data-theme="crystal-dark"] .datamodel-field-row {
-  border-color: var(--border-primary, #404040);
+  border-color: var(--nim-border, #404040);
 }
 
 [data-theme="dark"] .datamodel-field-row:hover,
 [data-theme="crystal-dark"] .datamodel-field-row:hover {
-  background-color: var(--surface-hover, rgba(255, 255, 255, 0.05));
+  background-color: var(--nim-bg-hover, rgba(255, 255, 255, 0.05));
 }
 
 [data-theme="dark"] .datamodel-entity-description,
 [data-theme="crystal-dark"] .datamodel-entity-description {
-  background-color: var(--surface-tertiary, #252525);
-  border-color: var(--border-primary, #404040);
+  background-color: var(--nim-bg-tertiary, #252525);
+  border-color: var(--nim-border, #404040);
 }
 
 [data-theme="dark"] .datamodel-field-input,
 [data-theme="crystal-dark"] .datamodel-field-input {
-  background-color: var(--surface-tertiary, #252525);
-  border-color: var(--border-primary, #404040);
-  color: var(--text-primary, #e5e5e5);
+  background-color: var(--nim-bg-tertiary, #252525);
+  border-color: var(--nim-border, #404040);
+  color: var(--nim-text, #e5e5e5);
 }
 
 [data-theme="dark"] .datamodel-edge-label,
 [data-theme="crystal-dark"] .datamodel-edge-label {
-  background-color: var(--surface-secondary, #2d2d2d);
-  border-color: var(--border-primary, #404040);
-  color: var(--text-primary, #e5e5e5);
+  background-color: var(--nim-bg-secondary, #2d2d2d);
+  border-color: var(--nim-border, #404040);
+  color: var(--nim-text, #e5e5e5);
 }
 
 [data-theme="dark"] .datamodel-controls,
 [data-theme="crystal-dark"] .datamodel-controls {
-  background-color: var(--surface-secondary, #2d2d2d) !important;
-  border-color: var(--border-primary, #404040) !important;
+  background-color: var(--nim-bg-secondary, #2d2d2d) !important;
+  border-color: var(--nim-border, #404040) !important;
 }
 
 [data-theme="dark"] .datamodel-controls button,
 [data-theme="crystal-dark"] .datamodel-controls button {
-  border-color: var(--border-primary, #404040) !important;
+  border-color: var(--nim-border, #404040) !important;
 }
 
 [data-theme="dark"] .datamodel-controls button svg,
 [data-theme="crystal-dark"] .datamodel-controls button svg {
-  fill: var(--text-secondary, #9ca3af) !important;
+  fill: var(--nim-text-muted, #9ca3af) !important;
 }
 
 [data-theme="dark"] .datamodel-minimap,
 [data-theme="crystal-dark"] .datamodel-minimap {
-  background-color: var(--surface-secondary, #2d2d2d) !important;
-  border-color: var(--border-primary, #404040) !important;
+  background-color: var(--nim-bg-secondary, #2d2d2d) !important;
+  border-color: var(--nim-border, #404040) !important;
 }
 
 /* ============================================================================
@@ -699,8 +699,8 @@
   margin-top: 4px;
   min-width: 200px;
   border-radius: 8px;
-  border: 1px solid var(--border-primary, #e2e8f0);
-  background-color: var(--surface-primary, #ffffff);
+  border: 1px solid var(--nim-border, #e2e8f0);
+  background-color: var(--nim-bg, #ffffff);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
   z-index: 100;
   overflow: hidden;
@@ -712,8 +712,8 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--text-tertiary, #9ca3af);
-  border-bottom: 1px solid var(--border-primary, #e2e8f0);
+  color: var(--nim-text-faint, #9ca3af);
+  border-bottom: 1px solid var(--nim-border, #e2e8f0);
 }
 
 .datamodel-export-dropdown-item {
@@ -722,7 +722,7 @@
   padding: 10px 12px;
   font-size: 13px;
   text-align: left;
-  color: var(--text-primary, #333333);
+  color: var(--nim-text, #333333);
   background: none;
   border: none;
   cursor: pointer;
@@ -730,29 +730,29 @@
 }
 
 .datamodel-export-dropdown-item:hover {
-  background-color: var(--surface-hover, #f3f4f6);
+  background-color: var(--nim-bg-hover, #f3f4f6);
 }
 
 /* Dark theme export dropdown */
 [data-theme="dark"] .datamodel-export-dropdown,
 [data-theme="crystal-dark"] .datamodel-export-dropdown {
-  background-color: var(--surface-secondary, #2d2d2d);
-  border-color: var(--border-primary, #404040);
+  background-color: var(--nim-bg-secondary, #2d2d2d);
+  border-color: var(--nim-border, #404040);
 }
 
 [data-theme="dark"] .datamodel-export-dropdown-header,
 [data-theme="crystal-dark"] .datamodel-export-dropdown-header {
-  border-color: var(--border-primary, #404040);
+  border-color: var(--nim-border, #404040);
 }
 
 [data-theme="dark"] .datamodel-export-dropdown-item,
 [data-theme="crystal-dark"] .datamodel-export-dropdown-item {
-  color: var(--text-primary, #e5e5e5);
+  color: var(--nim-text, #e5e5e5);
 }
 
 [data-theme="dark"] .datamodel-export-dropdown-item:hover,
 [data-theme="crystal-dark"] .datamodel-export-dropdown-item:hover {
-  background-color: var(--surface-hover, #3d3d3d);
+  background-color: var(--nim-bg-hover, #3d3d3d);
 }
 
 /* ============================================================================
@@ -777,8 +777,8 @@
   max-height: 80vh;
   margin: 16px;
   border-radius: 12px;
-  border: 1px solid var(--border-primary, #e2e8f0);
-  background-color: var(--surface-primary, #ffffff);
+  border: 1px solid var(--nim-border, #e2e8f0);
+  background-color: var(--nim-bg, #ffffff);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
 }
 
@@ -787,14 +787,14 @@
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
-  border-bottom: 1px solid var(--border-primary, #e2e8f0);
+  border-bottom: 1px solid var(--nim-border, #e2e8f0);
 }
 
 .datamodel-export-dialog-header h2 {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
-  color: var(--text-primary, #333333);
+  color: var(--nim-text, #333333);
 }
 
 .datamodel-export-dialog-close {
@@ -804,20 +804,20 @@
   padding: 4px;
   border: none;
   background: none;
-  color: var(--text-secondary, #6b7280);
+  color: var(--nim-text-muted, #6b7280);
   cursor: pointer;
   border-radius: 4px;
   transition: all 0.15s ease;
 }
 
 .datamodel-export-dialog-close:hover {
-  color: var(--text-primary, #333333);
-  background-color: var(--surface-hover, #f3f4f6);
+  color: var(--nim-text, #333333);
+  background-color: var(--nim-bg-hover, #f3f4f6);
 }
 
 .datamodel-export-dialog-format {
   padding: 16px 20px;
-  border-bottom: 1px solid var(--border-primary, #e2e8f0);
+  border-bottom: 1px solid var(--nim-border, #e2e8f0);
 }
 
 .datamodel-export-dialog-format label {
@@ -825,7 +825,7 @@
   margin-bottom: 8px;
   font-size: 13px;
   font-weight: 500;
-  color: var(--text-primary, #333333);
+  color: var(--nim-text, #333333);
 }
 
 .datamodel-export-dialog-format select {
@@ -833,15 +833,15 @@
   padding: 8px 12px;
   font-size: 14px;
   border-radius: 6px;
-  border: 1px solid var(--border-primary, #e2e8f0);
-  background-color: var(--surface-primary, #ffffff);
-  color: var(--text-primary, #333333);
+  border: 1px solid var(--nim-border, #e2e8f0);
+  background-color: var(--nim-bg, #ffffff);
+  color: var(--nim-text, #333333);
   cursor: pointer;
 }
 
 .datamodel-export-dialog-format select:focus {
   outline: none;
-  border-color: var(--primary-color, #3b82f6);
+  border-color: var(--nim-primary, #3b82f6);
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
 }
 
@@ -864,7 +864,7 @@
 .datamodel-export-dialog-content-header label {
   font-size: 13px;
   font-weight: 500;
-  color: var(--text-primary, #333333);
+  color: var(--nim-text, #333333);
 }
 
 .datamodel-export-dialog-actions {
@@ -881,7 +881,7 @@
   font-weight: 500;
   border: none;
   background: none;
-  color: var(--primary-color, #3b82f6);
+  color: var(--nim-primary, #3b82f6);
   cursor: pointer;
   border-radius: 4px;
   transition: background-color 0.15s ease;
@@ -899,9 +899,9 @@
   font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, monospace;
   font-size: 13px;
   line-height: 1.5;
-  color: var(--text-primary, #333333);
-  background-color: var(--surface-secondary, #f8fafc);
-  border: 1px solid var(--border-primary, #e2e8f0);
+  color: var(--nim-text, #333333);
+  background-color: var(--nim-bg-secondary, #f8fafc);
+  border: 1px solid var(--nim-border, #e2e8f0);
   border-radius: 8px;
   white-space: pre;
 }
@@ -910,7 +910,7 @@
   display: flex;
   justify-content: flex-end;
   padding: 16px 20px;
-  border-top: 1px solid var(--border-primary, #e2e8f0);
+  border-top: 1px solid var(--nim-border, #e2e8f0);
 }
 
 .datamodel-export-dialog-button {
@@ -918,22 +918,22 @@
   font-size: 14px;
   font-weight: 500;
   border-radius: 6px;
-  border: 1px solid var(--border-primary, #e2e8f0);
-  background-color: var(--surface-primary, #ffffff);
-  color: var(--text-primary, #333333);
+  border: 1px solid var(--nim-border, #e2e8f0);
+  background-color: var(--nim-bg, #ffffff);
+  color: var(--nim-text, #333333);
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .datamodel-export-dialog-button:hover {
-  background-color: var(--surface-hover, #f3f4f6);
+  background-color: var(--nim-bg-hover, #f3f4f6);
 }
 
 /* Dark theme export dialog */
 [data-theme="dark"] .datamodel-export-dialog,
 [data-theme="crystal-dark"] .datamodel-export-dialog {
-  background-color: var(--surface-primary, #1a1a1a);
-  border-color: var(--border-primary, #404040);
+  background-color: var(--nim-bg, #1a1a1a);
+  border-color: var(--nim-border, #404040);
 }
 
 [data-theme="dark"] .datamodel-export-dialog-header,
@@ -942,7 +942,7 @@
 [data-theme="crystal-dark"] .datamodel-export-dialog-header,
 [data-theme="crystal-dark"] .datamodel-export-dialog-format,
 [data-theme="crystal-dark"] .datamodel-export-dialog-footer {
-  border-color: var(--border-primary, #404040);
+  border-color: var(--nim-border, #404040);
 }
 
 [data-theme="dark"] .datamodel-export-dialog-header h2,
@@ -951,42 +951,42 @@
 [data-theme="crystal-dark"] .datamodel-export-dialog-header h2,
 [data-theme="crystal-dark"] .datamodel-export-dialog-format label,
 [data-theme="crystal-dark"] .datamodel-export-dialog-content-header label {
-  color: var(--text-primary, #e5e5e5);
+  color: var(--nim-text, #e5e5e5);
 }
 
 [data-theme="dark"] .datamodel-export-dialog-close,
 [data-theme="crystal-dark"] .datamodel-export-dialog-close {
-  color: var(--text-secondary, #9ca3af);
+  color: var(--nim-text-muted, #9ca3af);
 }
 
 [data-theme="dark"] .datamodel-export-dialog-close:hover,
 [data-theme="crystal-dark"] .datamodel-export-dialog-close:hover {
-  color: var(--text-primary, #e5e5e5);
-  background-color: var(--surface-hover, #3d3d3d);
+  color: var(--nim-text, #e5e5e5);
+  background-color: var(--nim-bg-hover, #3d3d3d);
 }
 
 [data-theme="dark"] .datamodel-export-dialog-format select,
 [data-theme="crystal-dark"] .datamodel-export-dialog-format select {
-  background-color: var(--surface-secondary, #2d2d2d);
-  border-color: var(--border-primary, #404040);
-  color: var(--text-primary, #e5e5e5);
+  background-color: var(--nim-bg-secondary, #2d2d2d);
+  border-color: var(--nim-border, #404040);
+  color: var(--nim-text, #e5e5e5);
 }
 
 [data-theme="dark"] .datamodel-export-dialog-code,
 [data-theme="crystal-dark"] .datamodel-export-dialog-code {
-  background-color: var(--surface-secondary, #2d2d2d);
-  border-color: var(--border-primary, #404040);
-  color: var(--text-primary, #e5e5e5);
+  background-color: var(--nim-bg-secondary, #2d2d2d);
+  border-color: var(--nim-border, #404040);
+  color: var(--nim-text, #e5e5e5);
 }
 
 [data-theme="dark"] .datamodel-export-dialog-button,
 [data-theme="crystal-dark"] .datamodel-export-dialog-button {
-  background-color: var(--surface-secondary, #2d2d2d);
-  border-color: var(--border-primary, #404040);
-  color: var(--text-primary, #e5e5e5);
+  background-color: var(--nim-bg-secondary, #2d2d2d);
+  border-color: var(--nim-border, #404040);
+  color: var(--nim-text, #e5e5e5);
 }
 
 [data-theme="dark"] .datamodel-export-dialog-button:hover,
 [data-theme="crystal-dark"] .datamodel-export-dialog-button:hover {
-  background-color: var(--surface-hover, #3d3d3d);
+  background-color: var(--nim-bg-hover, #3d3d3d);
 }

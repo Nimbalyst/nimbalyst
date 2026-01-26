@@ -386,6 +386,16 @@
   height: 4px;
 }
 
+/* Hidden scrollbar - content still scrollable but no visible scrollbar */
+.nim-scrollbar-hidden {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+
+.nim-scrollbar-hidden::-webkit-scrollbar {
+  display: none; /* Chrome/Safari/Opera */
+}
+
 /* ============================================
    FOCUS STATES
    ============================================ */
