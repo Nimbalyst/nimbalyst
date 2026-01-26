@@ -360,6 +360,9 @@ export class PGLiteDatabaseWorker {
     });
   }
 
+  // Threshold for logging slow queries (milliseconds)
+  private static SLOW_QUERY_THRESHOLD_MS = 500;
+
   /**
    * Execute a query
    */
@@ -367,15 +370,33 @@ export class PGLiteDatabaseWorker {
     if (!this.initialized) {
       throw new Error('Database not initialized. Call initialize() first.');
     }
+    const startTime = performance.now();
     try {
-      return await this.sendMessage('query', { sql, params });
+      const result = await this.sendMessage('query', { sql, params });
+      const duration = performance.now() - startTime;
+
+      // Log slow queries
+      if (duration >= PGLiteDatabaseWorker.SLOW_QUERY_THRESHOLD_MS) {
+        const tableName = this.extractTableName(sql);
+        const rowCount = result?.rows?.length ?? 0;
+        // Truncate SQL for logging (first 200 chars)
+        const truncatedSql = sql.length > 200 ? sql.substring(0, 200) + '...' : sql;
+        logger.main.warn(`[PGLite] Slow query (${duration.toFixed(0)}ms): table=${tableName}, rows=${rowCount}, sql="${truncatedSql}"`);
+      }
+
+      return result;
     } catch (error) {
+      const duration = performance.now() - startTime;
       // Track database error
       this.analytics.sendEvent('database_error', {
         operation: 'read',
         errorType: categorizeDBError(error),
         tableName: this.extractTableName(sql)
       });
+      // Also log slow failed queries
+      if (duration >= PGLiteDatabaseWorker.SLOW_QUERY_THRESHOLD_MS) {
+        logger.main.warn(`[PGLite] Slow query failed (${duration.toFixed(0)}ms): table=${this.extractTableName(sql)}`);
+      }
       throw error;
     }
   }
@@ -388,15 +409,29 @@ export class PGLiteDatabaseWorker {
     if (!this.initialized) {
       throw new Error('Database not initialized. Call initialize() first.');
     }
+    const startTime = performance.now();
     try {
       await this.sendMessage('exec', { sql }, timeoutMs);
+      const duration = performance.now() - startTime;
+
+      // Log slow exec operations
+      if (duration >= PGLiteDatabaseWorker.SLOW_QUERY_THRESHOLD_MS) {
+        const tableName = this.extractTableName(sql);
+        const truncatedSql = sql.length > 200 ? sql.substring(0, 200) + '...' : sql;
+        logger.main.warn(`[PGLite] Slow exec (${duration.toFixed(0)}ms): table=${tableName}, sql="${truncatedSql}"`);
+      }
     } catch (error) {
+      const duration = performance.now() - startTime;
       // Track database error
       this.analytics.sendEvent('database_error', {
         operation: 'write',
         errorType: categorizeDBError(error),
         tableName: this.extractTableName(sql)
       });
+      // Also log slow failed exec operations
+      if (duration >= PGLiteDatabaseWorker.SLOW_QUERY_THRESHOLD_MS) {
+        logger.main.warn(`[PGLite] Slow exec failed (${duration.toFixed(0)}ms): table=${this.extractTableName(sql)}`);
+      }
       throw error;
     }
   }
