@@ -73,18 +73,21 @@ function generateColumns(
   columnCount: number,
   frozenColumnCount: number = 0,
   columnFormats: Record<number, ColumnFormat> = {},
+  columnWidths: Record<number, number> = {},
   diffState: DiffState | null = null
 ): ColumnRegular[] {
   const columnHeaders = generateColumnHeaders(columnCount);
+  const DEFAULT_COLUMN_WIDTH = 120;
 
   return columnHeaders.map((letter, index) => {
     const format = columnFormats[index];
     const alignClass = getColumnAlignmentClass(format);
+    const width = columnWidths[index] ?? DEFAULT_COLUMN_WIDTH;
 
     return {
       prop: letter,
       name: letter,
-      size: 120,
+      size: width,
       editor: 'sheets',
       ...(index < frozenColumnCount ? { pin: 'colPinStart' as const } : {}),
       cellProperties: (cellData: { model: Record<string, unknown>; rowIndex: number }) => {
@@ -206,12 +209,13 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
   const displayColumnCount = spreadsheetMeta.metadata.columnCount + DISPLAY_BUFFER_COLS;
   const frozenColumnCount = spreadsheetMeta.metadata.frozenColumnCount;
   const columnFormats = spreadsheetMeta.metadata.columnFormats;
+  const columnWidths = spreadsheetMeta.metadata.columnWidths;
   const headerRowCount = spreadsheetMeta.metadata.headerRowCount;
 
   // Memoized column definitions
   const columns = useMemo(
-    () => generateColumns(displayColumnCount, frozenColumnCount, columnFormats, diffState),
-    [displayColumnCount, frozenColumnCount, columnFormats, diffState]
+    () => generateColumns(displayColumnCount, frozenColumnCount, columnFormats, columnWidths, diffState),
+    [displayColumnCount, frozenColumnCount, columnFormats, columnWidths, diffState]
   );
 
   // Theme for RevoGrid
@@ -244,6 +248,7 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
       setColumnCount: spreadsheetMeta.setColumnCount,
       getDelimiter: () => spreadsheetMeta.delimiter,
       getColumnFormats: () => spreadsheetMeta.metadata.columnFormats,
+      getColumnWidths: () => spreadsheetMeta.metadata.columnWidths,
       getFrozenColumnCount: () => spreadsheetMeta.metadata.frozenColumnCount,
       onDirty: () => host.setDirty(true),
       getUndoPlugin: () => undoPluginRef.current,
@@ -653,6 +658,24 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
       host.setDirty(true);
     },
     [host]
+  );
+
+  // Handle column resize - persist the new width
+  const handleColumnResize = useCallback(
+    (event: RevoGridCustomEvent<{ [index: number]: ColumnRegular }>) => {
+      console.log('[CSV] Column resize event:', event, event.detail);
+      if (!event.detail) return;
+      // event.detail is { [columnIndex]: ColumnRegular } with updated sizes
+      for (const [indexStr, column] of Object.entries(event.detail)) {
+        console.log('[CSV] Processing column resize:', indexStr, column);
+        const columnIndex = parseInt(indexStr, 10);
+        if (!isNaN(columnIndex) && column.size !== undefined) {
+          console.log('[CSV] Setting column width:', columnIndex, column.size);
+          spreadsheetMeta.setColumnWidth(columnIndex, column.size);
+        }
+      }
+    },
+    [spreadsheetMeta]
   );
 
   // Handle cell focus (selection)
@@ -1560,6 +1583,7 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
           // @ts-expect-error onSetrange exists but not in React type defs
           onSetrange={handleSetRange}
           onBeforecellfocus={handleCellClick}
+          onAftercolumnresize={handleColumnResize}
         />
         {contextMenu && (
           <ContextMenu
