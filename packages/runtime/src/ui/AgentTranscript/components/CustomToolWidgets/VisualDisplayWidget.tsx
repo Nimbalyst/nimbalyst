@@ -80,7 +80,7 @@ function renderErrorBar(errorBars: ErrorBarConfig | undefined, isDark: boolean) 
   }
 
   const strokeWidth = errorBars.strokeWidth ?? 2;
-  const stroke = isDark ? 'var(--text-secondary)' : 'var(--text-primary)';
+  const stroke = isDark ? 'var(--nim-text-muted)' : 'var(--nim-text)';
 
   if (hasSymmetric) {
     // Symmetric error bars
@@ -351,15 +351,15 @@ function renderBarChart(config: ChartConfig, colors: string[], isDark: boolean) 
 
   return (
     <BarChart data={config.data}>
-      <CartesianGrid strokeDasharray="3 3" stroke="var(--border-primary)" />
-      <XAxis dataKey={config.xAxisKey} stroke="var(--text-secondary)" tick={{ fontSize: 12 }} />
-      <YAxis stroke="var(--text-secondary)" tick={{ fontSize: 12 }} />
+      <CartesianGrid strokeDasharray="3 3" stroke="var(--nim-border)" />
+      <XAxis dataKey={config.xAxisKey} stroke="var(--nim-text-muted)" tick={{ fontSize: 12 }} />
+      <YAxis stroke="var(--nim-text-muted)" tick={{ fontSize: 12 }} />
       <Tooltip
         contentStyle={{
-          background: 'var(--surface-secondary)',
-          border: '1px solid var(--border-primary)',
+          background: 'var(--nim-bg-secondary)',
+          border: '1px solid var(--nim-border)',
           borderRadius: '6px',
-          color: 'var(--text-primary)'
+          color: 'var(--nim-text)'
         }}
       />
       {yKeys.length > 1 && <Legend />}
@@ -383,15 +383,15 @@ function renderLineChart(config: ChartConfig, colors: string[], isDark: boolean)
 
   return (
     <LineChart data={config.data}>
-      <CartesianGrid strokeDasharray="3 3" stroke="var(--border-primary)" />
-      <XAxis dataKey={config.xAxisKey} stroke="var(--text-secondary)" tick={{ fontSize: 12 }} />
-      <YAxis stroke="var(--text-secondary)" tick={{ fontSize: 12 }} />
+      <CartesianGrid strokeDasharray="3 3" stroke="var(--nim-border)" />
+      <XAxis dataKey={config.xAxisKey} stroke="var(--nim-text-muted)" tick={{ fontSize: 12 }} />
+      <YAxis stroke="var(--nim-text-muted)" tick={{ fontSize: 12 }} />
       <Tooltip
         contentStyle={{
-          background: 'var(--surface-secondary)',
-          border: '1px solid var(--border-primary)',
+          background: 'var(--nim-bg-secondary)',
+          border: '1px solid var(--nim-border)',
           borderRadius: '6px',
-          color: 'var(--text-primary)'
+          color: 'var(--nim-text)'
         }}
       />
       {yKeys.length > 1 && <Legend />}
@@ -428,7 +428,7 @@ function renderPieChart(config: ChartConfig, colors: string[]) {
         cy="50%"
         outerRadius="70%"
         label={({ name, percent }) => `${name}: ${((percent ?? 0) * 100).toFixed(0)}%`}
-        labelLine={{ stroke: 'var(--text-secondary)' }}
+        labelLine={{ stroke: 'var(--nim-text-muted)' }}
         isAnimationActive={false}
       >
         {config.data.map((_, index) => (
@@ -437,10 +437,10 @@ function renderPieChart(config: ChartConfig, colors: string[]) {
       </Pie>
       <Tooltip
         contentStyle={{
-          background: 'var(--surface-secondary)',
-          border: '1px solid var(--border-primary)',
+          background: 'var(--nim-bg-secondary)',
+          border: '1px solid var(--nim-border)',
           borderRadius: '6px',
-          color: 'var(--text-primary)'
+          color: 'var(--nim-text)'
         }}
       />
     </PieChart>
@@ -458,15 +458,15 @@ function renderAreaChart(config: ChartConfig, colors: string[], isDark: boolean)
 
   return (
     <AreaChart data={config.data}>
-      <CartesianGrid strokeDasharray="3 3" stroke="var(--border-primary)" />
-      <XAxis dataKey={config.xAxisKey} stroke="var(--text-secondary)" tick={{ fontSize: 12 }} />
-      <YAxis stroke="var(--text-secondary)" tick={{ fontSize: 12 }} />
+      <CartesianGrid strokeDasharray="3 3" stroke="var(--nim-border)" />
+      <XAxis dataKey={config.xAxisKey} stroke="var(--nim-text-muted)" tick={{ fontSize: 12 }} />
+      <YAxis stroke="var(--nim-text-muted)" tick={{ fontSize: 12 }} />
       <Tooltip
         contentStyle={{
-          background: 'var(--surface-secondary)',
-          border: '1px solid var(--border-primary)',
+          background: 'var(--nim-bg-secondary)',
+          border: '1px solid var(--nim-border)',
           borderRadius: '6px',
-          color: 'var(--text-primary)'
+          color: 'var(--nim-text)'
         }}
       />
       {yKeys.length > 1 && <Legend />}
@@ -495,15 +495,15 @@ function renderScatterChart(config: ChartConfig, colors: string[], isDark: boole
 
   return (
     <ScatterChart>
-      <CartesianGrid strokeDasharray="3 3" stroke="var(--border-primary)" />
-      <XAxis dataKey={config.xAxisKey} stroke="var(--text-secondary)" tick={{ fontSize: 12 }} name={config.xAxisKey} />
-      <YAxis dataKey={yKey} stroke="var(--text-secondary)" tick={{ fontSize: 12 }} name={yKey} />
+      <CartesianGrid strokeDasharray="3 3" stroke="var(--nim-border)" />
+      <XAxis dataKey={config.xAxisKey} stroke="var(--nim-text-muted)" tick={{ fontSize: 12 }} name={config.xAxisKey} />
+      <YAxis dataKey={yKey} stroke="var(--nim-text-muted)" tick={{ fontSize: 12 }} name={yKey} />
       <Tooltip
         contentStyle={{
-          background: 'var(--surface-secondary)',
-          border: '1px solid var(--border-primary)',
+          background: 'var(--nim-bg-secondary)',
+          border: '1px solid var(--nim-border)',
           borderRadius: '6px',
-          color: 'var(--text-primary)'
+          color: 'var(--nim-text)'
         }}
         cursor={{ strokeDasharray: '3 3' }}
       />

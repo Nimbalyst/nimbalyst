@@ -131,62 +131,21 @@ export function PendingVoiceCommand({ sessionId, onSubmit }: PendingVoiceCommand
 
   return (
     <div
-      style={{
-        background: 'var(--surface-tertiary)',
-        border: '1px solid var(--accent-primary)',
-        borderRadius: '8px',
-        marginBottom: '8px',
-        overflow: 'hidden',
-        boxShadow: '0 2px 8px rgba(59, 130, 246, 0.15)',
-      }}
+      className="bg-nim-tertiary border border-nim-primary rounded-lg mb-2 overflow-hidden shadow-[0_2px_8px_rgba(59,130,246,0.15)]"
     >
       {/* Header */}
       <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '8px 12px',
-          background: 'rgba(59, 130, 246, 0.1)',
-          borderBottom: '1px solid rgba(59, 130, 246, 0.2)',
-        }}
+        className="flex items-center justify-between py-2 px-3 bg-[rgba(59,130,246,0.1)] border-b border-[rgba(59,130,246,0.2)]"
       >
         <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            fontSize: '13px',
-            fontWeight: 500,
-            color: 'var(--accent-primary)',
-          }}
+          className="flex items-center gap-2 text-[13px] font-medium text-nim-primary"
         >
           <MaterialSymbol icon="mic" size={18} />
           Voice Command
         </div>
         <button
           onClick={handleCancel}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: '24px',
-            height: '24px',
-            border: 'none',
-            background: 'transparent',
-            color: 'var(--text-secondary)',
-            cursor: 'pointer',
-            borderRadius: '4px',
-            transition: 'all 0.15s ease',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
-            e.currentTarget.style.color = 'var(--error-color)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'transparent';
-            e.currentTarget.style.color = 'var(--text-secondary)';
-          }}
+          className="flex items-center justify-center w-6 h-6 border-none bg-transparent text-nim-muted cursor-pointer rounded transition-all duration-150 hover:bg-[rgba(239,68,68,0.1)] hover:text-[var(--error-color)]"
           title="Cancel (Esc)"
         >
           <MaterialSymbol icon="close" size={18} />
@@ -194,7 +153,7 @@ export function PendingVoiceCommand({ sessionId, onSubmit }: PendingVoiceCommand
       </div>
 
       {/* Body - editable textarea */}
-      <div style={{ padding: '12px' }}>
+      <div className="p-3">
         <textarea
           ref={textareaRef}
           value={editedPrompt}
@@ -202,51 +161,28 @@ export function PendingVoiceCommand({ sessionId, onSubmit }: PendingVoiceCommand
           onFocus={() => setIsEditing(true)}
           onBlur={handleTextareaBlur}
           onKeyDown={handleKeyDown}
-          style={{
-            width: '100%',
-            minHeight: '60px',
-            padding: '10px 12px',
-            border: '1px solid var(--border-primary)',
-            borderRadius: '6px',
-            background: 'var(--surface-secondary)',
-            color: 'var(--text-primary)',
-            fontFamily: 'inherit',
-            fontSize: '14px',
-            lineHeight: '1.5',
-            resize: 'none',
-            transition: 'border-color 0.15s ease',
-          }}
+          className="w-full min-h-[60px] py-2.5 px-3 border border-nim rounded-md bg-nim-secondary text-nim font-inherit text-sm leading-normal resize-none transition-[border-color] duration-150"
           placeholder="Voice command..."
         />
       </div>
 
       {/* Footer */}
       <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '8px 12px',
-          borderTop: '1px solid var(--border-primary)',
-        }}
+        className="flex items-center justify-between py-2 px-3 border-t border-nim"
       >
         {/* Countdown section */}
         <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-          }}
+          className="flex items-center gap-2.5"
         >
           {/* Circular countdown */}
-          <div style={{ position: 'relative', width: '32px', height: '32px' }}>
-            <svg width="32" height="32" viewBox="0 0 32 32" style={{ transform: 'rotate(-90deg)' }}>
+          <div className="relative w-8 h-8">
+            <svg width="32" height="32" viewBox="0 0 32 32" className="-rotate-90">
               <circle
                 cx="16"
                 cy="16"
                 r="12"
                 fill="none"
-                stroke="var(--border-primary)"
+                stroke="var(--nim-border)"
                 strokeWidth="3"
               />
               <circle
@@ -254,84 +190,38 @@ export function PendingVoiceCommand({ sessionId, onSubmit }: PendingVoiceCommand
                 cy="16"
                 r="12"
                 fill="none"
-                stroke={isEditing ? 'var(--text-tertiary)' : 'var(--accent-primary)'}
+                stroke={isEditing ? 'var(--nim-text-faint)' : 'var(--nim-primary)'}
                 strokeWidth="3"
                 strokeLinecap="round"
                 strokeDasharray={circumference}
                 strokeDashoffset={strokeDashoffset}
-                style={{ transition: 'stroke-dashoffset 0.1s linear' }}
+                className="transition-[stroke-dashoffset] duration-100"
               />
             </svg>
           </div>
-          <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+          <span className="text-[13px] font-medium text-nim-muted">
             {isEditing ? (
               'Paused - editing'
             ) : (
-              <>Sending in <span style={{ color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{(remainingMs / 1000).toFixed(1)}s</span></>
+              <>Sending in <span className="text-nim tabular-nums">{(remainingMs / 1000).toFixed(1)}s</span></>
             )}
           </span>
         </div>
 
         {/* Action buttons */}
         <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-          }}
+          className="flex items-center gap-2"
         >
           <button
             onClick={handleEditClick}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 12px',
-              border: '1px solid var(--border-primary)',
-              borderRadius: '6px',
-              background: 'transparent',
-              color: 'var(--text-secondary)',
-              fontSize: '13px',
-              fontWeight: 500,
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'var(--surface-secondary)';
-              e.currentTarget.style.borderColor = 'var(--border-secondary)';
-              e.currentTarget.style.color = 'var(--text-primary)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'transparent';
-              e.currentTarget.style.borderColor = 'var(--border-primary)';
-              e.currentTarget.style.color = 'var(--text-secondary)';
-            }}
+            className="flex items-center gap-1.5 py-1.5 px-3 border border-nim rounded-md bg-transparent text-nim-muted text-[13px] font-medium cursor-pointer transition-all duration-150 hover:bg-nim-secondary hover:border-nim-focus hover:text-nim"
           >
             <MaterialSymbol icon="edit" size={16} />
             Edit
           </button>
           <button
             onClick={handleSubmit}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 14px',
-              border: 'none',
-              borderRadius: '6px',
-              background: 'var(--accent-primary)',
-              color: '#ffffff',
-              fontSize: '13px',
-              fontWeight: 500,
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'var(--accent-primary-hover)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'var(--accent-primary)';
-            }}
+            className="flex items-center gap-1.5 py-1.5 px-3.5 border-none rounded-md bg-nim-primary text-white text-[13px] font-medium cursor-pointer transition-all duration-150 hover:bg-nim-primary-hover"
           >
             Send Now
             <MaterialSymbol icon="arrow_forward" size={16} />

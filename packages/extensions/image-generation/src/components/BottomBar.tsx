@@ -78,18 +78,7 @@ export function BottomBar({
 
   return (
     <div
-      className="image-gen-bottom-bar"
-      style={{
-        flexShrink: 0,
-        flexGrow: 0,
-        background: 'var(--nim-bg-secondary)',
-        borderTop: '1px solid var(--nim-border)',
-        padding: '16px 20px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 12,
-        overflow: 'visible',
-      }}
+      className="image-gen-bottom-bar flex-shrink-0 flex-grow-0 bg-nim-secondary border-t border-nim px-5 py-4 flex flex-col gap-3 overflow-visible"
     >
       {/* Prompt textarea */}
       <textarea
@@ -99,41 +88,18 @@ export function BottomBar({
         onKeyDown={handleKeyDown}
         placeholder="Describe the image you want to generate..."
         rows={1}
-        style={{
-          width: '100%',
-          minHeight: 44,
-          maxHeight: 120,
-          padding: '12px 14px',
-          background: 'var(--nim-bg)',
-          border: '1px solid var(--nim-border)',
-          borderRadius: 8,
-          color: 'var(--nim-text)',
-          fontSize: 14,
-          fontFamily: 'inherit',
-          resize: 'none',
-          lineHeight: 1.4,
-          overflow: 'hidden',
-        }}
+        className="w-full min-h-[44px] max-h-[120px] px-3.5 py-3 bg-nim border border-nim rounded-lg text-nim text-sm font-inherit resize-none leading-[1.4] overflow-hidden"
       />
 
       {/* Settings row with Generate button */}
-      <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap', overflow: 'visible' }}>
+      <div className="flex gap-4 items-center flex-wrap overflow-visible">
         {/* Style selector */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 12, color: 'var(--nim-text-muted)' }}>Style</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-nim-muted">Style</span>
           <select
             value={style}
             onChange={(e) => setStyle(e.target.value as ImageStyle)}
-            style={{
-              padding: '6px 10px',
-              background: 'var(--nim-bg)',
-              border: '1px solid var(--nim-border)',
-              borderRadius: 5,
-              color: 'var(--nim-text)',
-              fontSize: 12,
-              fontFamily: 'inherit',
-              cursor: 'pointer',
-            }}
+            className="px-2.5 py-1.5 bg-nim border border-nim rounded text-nim text-xs font-inherit cursor-pointer"
           >
             {STYLE_PRESETS.map((preset) => (
               <option key={preset.id} value={preset.id}>
@@ -144,21 +110,12 @@ export function BottomBar({
         </div>
 
         {/* Size selector */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 12, color: 'var(--nim-text-muted)' }}>Size</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-nim-muted">Size</span>
           <select
             value={aspectRatio}
             onChange={(e) => setAspectRatio(e.target.value as AspectRatio)}
-            style={{
-              padding: '6px 10px',
-              background: 'var(--nim-bg)',
-              border: '1px solid var(--nim-border)',
-              borderRadius: 5,
-              color: 'var(--nim-text)',
-              fontSize: 12,
-              fontFamily: 'inherit',
-              cursor: 'pointer',
-            }}
+            className="px-2.5 py-1.5 bg-nim border border-nim rounded text-nim text-xs font-inherit cursor-pointer"
           >
             {ASPECT_RATIOS.map((ratio) => (
               <option key={ratio.id} value={ratio.id}>
@@ -169,8 +126,8 @@ export function BottomBar({
         </div>
 
         {/* Variations input */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 12, color: 'var(--nim-text-muted)' }}>Variations</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-nim-muted">Variations</span>
           <input
             type="number"
             min={1}
@@ -179,45 +136,18 @@ export function BottomBar({
             onChange={(e) =>
               setVariations(Math.max(1, Math.min(4, parseInt(e.target.value) || 1)))
             }
-            style={{
-              padding: '6px 10px',
-              background: 'var(--nim-bg)',
-              border: '1px solid var(--nim-border)',
-              borderRadius: 5,
-              color: 'var(--nim-text)',
-              fontSize: 12,
-              fontFamily: 'inherit',
-              width: 50,
-              textAlign: 'center',
-            }}
+            className="px-2.5 py-1.5 bg-nim border border-nim rounded text-nim text-xs font-inherit w-[50px] text-center"
           />
         </div>
 
         {/* Spacer to push button to the right */}
-        <div style={{ flex: 1 }} />
+        <div className="flex-1" />
 
         {/* Generate button */}
         <button
           onClick={handleGenerate}
           disabled={!prompt.trim() || isGenerating}
-          style={{
-            padding: '8px 20px',
-            background:
-              !prompt.trim() || isGenerating
-                ? 'var(--nim-text-disabled)'
-                : 'var(--nim-primary)',
-            border: 'none',
-            borderRadius: 6,
-            color: '#ffffff',
-            fontSize: 13,
-            fontWeight: 600,
-            cursor: !prompt.trim() || isGenerating ? 'not-allowed' : 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            whiteSpace: 'nowrap',
-            transition: 'background 0.15s ease',
-          }}
+          className={`px-5 py-2 border-none rounded-md text-white text-[13px] font-semibold flex items-center gap-2 whitespace-nowrap transition-colors duration-150 ${!prompt.trim() || isGenerating ? 'bg-nim-text-disabled cursor-not-allowed' : 'bg-nim-primary cursor-pointer'}`}
         >
           {isGenerating ? 'Generating...' : 'Generate'}
         </button>

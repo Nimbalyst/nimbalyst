@@ -140,9 +140,9 @@ export function VoiceTranscriptionDisplay({ isActive, sessionId }: VoiceTranscri
         marginBottom: '8px',
         maxHeight: '150px',
         overflowY: 'auto',
-        background: 'var(--surface-tertiary)',
+        background: 'var(--nim-bg-tertiary)',
         borderRadius: '8px',
-        border: '1px solid var(--border-primary)',
+        border: '1px solid var(--nim-border)',
       }}
     >
       {/* Past entries */}
@@ -161,7 +161,7 @@ export function VoiceTranscriptionDisplay({ isActive, sessionId }: VoiceTranscri
             style={{
               fontSize: '11px',
               fontWeight: 600,
-              color: entry.type === 'user' ? 'var(--accent-primary)' : 'var(--success-color)',
+              color: entry.type === 'user' ? 'var(--nim-primary)' : 'var(--success-color)',
               textTransform: 'uppercase',
               flexShrink: 0,
               marginTop: '2px',
@@ -172,7 +172,7 @@ export function VoiceTranscriptionDisplay({ isActive, sessionId }: VoiceTranscri
           <span
             style={{
               fontSize: '13px',
-              color: 'var(--text-primary)',
+              color: 'var(--nim-text)',
               lineHeight: '1.4',
             }}
           >
@@ -194,7 +194,7 @@ export function VoiceTranscriptionDisplay({ isActive, sessionId }: VoiceTranscri
             style={{
               fontSize: '11px',
               fontWeight: 600,
-              color: 'var(--accent-primary)',
+              color: 'var(--nim-primary)',
               textTransform: 'uppercase',
               flexShrink: 0,
               marginTop: '2px',
@@ -205,7 +205,7 @@ export function VoiceTranscriptionDisplay({ isActive, sessionId }: VoiceTranscri
           <span
             style={{
               fontSize: '13px',
-              color: 'var(--text-secondary)',
+              color: 'var(--nim-text-muted)',
               lineHeight: '1.4',
               fontStyle: 'italic',
             }}

@@ -1012,9 +1012,9 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
             flexDirection: 'row',
             gap: '8px',
             position: 'relative',
-            border: dragActive ? '2px dashed var(--primary-color)' : 'none',
+            border: dragActive ? '2px dashed var(--nim-primary)' : 'none',
             borderRadius: dragActive ? '4px' : '0',
-            backgroundColor: dragActive ? 'var(--surface-hover)' : 'transparent',
+            backgroundColor: dragActive ? 'var(--nim-bg-hover)' : 'transparent',
             transition: 'all 0.2s ease',
             padding: dragActive ? '4px' : '0'
           }}

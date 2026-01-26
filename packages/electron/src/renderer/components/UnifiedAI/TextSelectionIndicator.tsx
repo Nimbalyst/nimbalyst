@@ -147,8 +147,8 @@ export const TextSelectionIndicator: React.FC<TextSelectionIndicatorProps> = ({
           position: absolute;
           bottom: 100%;
           left: 0;
-          background: var(--surface-tertiary);
-          color: var(--text-secondary);
+          background: var(--nim-bg-tertiary);
+          color: var(--nim-text-muted);
           padding: 4px 8px;
           border-radius: 4px;
           font-size: 11px;

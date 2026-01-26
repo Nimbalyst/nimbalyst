@@ -2267,15 +2267,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   // So we don't use isActive for styling - we're always "active" when visible
   return (
       <div
-          className="tab-editor multi-editor-instance"
+          className="tab-editor multi-editor-instance flex flex-col h-full overflow-hidden relative"
           data-file-path={filePath}
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            height: '100%',
-            overflow: 'hidden',
-            position: 'relative'
-          }}
       >
         <UnifiedEditorHeaderBar
           filePath={filePath}
@@ -2308,33 +2301,13 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             if (sourceMode) {
               return (
                 <>
-                  <div className="custom-editor-source-toolbar" style={{
-                    padding: '8px 16px',
-                    borderBottom: '1px solid var(--border-primary)',
-                    display: 'flex',
-                    justifyContent: 'flex-end',
-                    alignItems: 'center',
-                    gap: '8px',
-                    background: 'var(--surface-secondary)',
-                  }}>
-                    <span style={{
-                      marginRight: 'auto',
-                      fontSize: '13px',
-                      color: 'var(--text-secondary)'
-                    }}>
+                  <div className="custom-editor-source-toolbar py-2 px-4 border-b border-nim flex justify-end items-center gap-2 bg-nim-secondary">
+                    <span className="mr-auto text-[13px] text-nim-muted">
                       Source Mode
                     </span>
                     <button
                       onClick={() => editorHost.toggleSourceMode?.()}
-                      style={{
-                        padding: '4px 12px',
-                        fontSize: '13px',
-                        cursor: 'pointer',
-                        background: 'var(--surface-primary)',
-                        border: '1px solid var(--border-primary)',
-                        borderRadius: '4px',
-                        color: 'var(--text-primary)',
-                      }}
+                      className="py-1 px-3 text-[13px] cursor-pointer bg-nim border border-nim rounded text-nim"
                     >
                       Editor
                     </button>
@@ -2450,7 +2423,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             // Fallback if custom editor is not found (shouldn't happen)
             const fileExt = filePath.substring(filePath.lastIndexOf('.'));
             return (
-              <div style={{ padding: '20px', color: 'var(--text-primary)' }}>
+              <div className="p-5 text-nim">
                 <p>No custom editor found for file type: {fileExt}</p>
               </div>
             );
@@ -2469,7 +2442,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                 sessionInfo={diffSessionInfo || undefined}
                 onGoToSession={onOpenSessionInChat ? handleGoToSession : undefined}
               />
-              <div className="tab-editor-wrapper" style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+              <div className="tab-editor-wrapper flex-1 overflow-hidden relative">
               <DocumentPathProvider documentPath={filePath}>
                 <MarkdownEditor
                   key={`${filePath}-lexical`}
@@ -2517,33 +2490,13 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               </>
           ) : isMarkdown && sourceMode ? (
             <>
-              <div className="monaco-markdown-toolbar" style={{
-                padding: '8px 16px',
-                borderBottom: '1px solid var(--border-primary)',
-                display: 'flex',
-                justifyContent: 'flex-end',
-                alignItems: 'center',
-                gap: '8px',
-                background: 'var(--surface-secondary)',
-              }}>
-                <span style={{
-                  marginRight: 'auto',
-                  fontSize: '13px',
-                  color: 'var(--text-secondary)'
-                }}>
+              <div className="monaco-markdown-toolbar py-2 px-4 border-b border-nim flex justify-end items-center gap-2 bg-nim-secondary">
+                <span className="mr-auto text-[13px] text-nim-muted">
                   Source Mode
                 </span>
                 <button
                   onClick={() => editorHost.toggleSourceMode?.()}
-                  style={{
-                    padding: '4px 12px',
-                    fontSize: '13px',
-                    cursor: 'pointer',
-                    background: 'var(--surface-primary)',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '4px',
-                    color: 'var(--text-primary)',
-                  }}
+                  className="py-1 px-3 text-[13px] cursor-pointer bg-nim border border-nim rounded text-nim"
                 >
                   Rich Text
                 </button>
@@ -2631,62 +2584,28 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
         {showConflictDialog && (
           <div
-            className="file-conflict-dialog-overlay"
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              backgroundColor: 'rgba(0, 0, 0, 0.5)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              zIndex: 1000
-            }}
+            className="file-conflict-dialog-overlay absolute inset-0 bg-black/50 flex items-center justify-center z-[1000]"
           >
             <div
-              className="file-conflict-dialog"
-              style={{
-                backgroundColor: 'var(--surface-primary)',
-                border: '1px solid var(--border-primary)',
-                borderRadius: '8px',
-                padding: '24px',
-                maxWidth: '500px',
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)'
-              }}
+              className="file-conflict-dialog bg-nim border border-nim rounded-lg p-6 max-w-[500px] shadow-[0_4px_12px_rgba(0,0,0,0.3)]"
             >
-              <h3 style={{ marginTop: 0, color: 'var(--text-primary)' }}>File Changed on Disk</h3>
-              <p style={{ color: 'var(--text-secondary)' }}>
+              <h3 className="mt-0 text-nim">File Changed on Disk</h3>
+              <p className="text-nim-muted">
                 The file "{fileName}" has been changed on disk but you have unsaved changes.
               </p>
-              <p style={{ color: 'var(--text-secondary)' }}>
+              <p className="text-nim-muted">
                 Do you want to reload the file from disk and lose your changes?
               </p>
-              <div style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'flex-end' }}>
+              <div className="flex gap-3 mt-6 justify-end">
                 <button
                   onClick={handleKeepLocalChanges}
-                  style={{
-                    padding: '8px 16px',
-                    backgroundColor: 'var(--surface-secondary)',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '4px',
-                    color: 'var(--text-primary)',
-                    cursor: 'pointer'
-                  }}
+                  className="py-2 px-4 bg-nim-secondary border border-nim rounded text-nim cursor-pointer"
                 >
                   Keep My Changes
                 </button>
                 <button
                   onClick={handleReloadFromDisk}
-                  style={{
-                    padding: '8px 16px',
-                    backgroundColor: 'var(--primary-color)',
-                    border: 'none',
-                    borderRadius: '4px',
-                    color: 'white',
-                    cursor: 'pointer'
-                  }}
+                  className="py-2 px-4 bg-nim-primary border-none rounded text-white cursor-pointer"
                 >
                   Reload from Disk
                 </button>

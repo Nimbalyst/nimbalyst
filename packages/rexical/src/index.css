@@ -810,7 +810,7 @@ i.page-break,
 .stravu-editor .dropdown .item {
   margin: 0 8px 0 8px;
   padding: 8px;
-  color: var(--text-primary);
+  color: var(--nim-text);
   cursor: pointer;
   line-height: 16px;
   font-size: 15px;
@@ -840,7 +840,7 @@ i.page-break,
 }
 
 .stravu-editor .dropdown .item .shortcut {
-  color: var(--text-tertiary);
+  color: var(--nim-text-faint);
   align-self: flex-end;
 }
 
@@ -884,7 +884,7 @@ i.page-break,
 
 .stravu-editor .dropdown .divider {
   width: auto;
-  background-color: var(--border-primary);
+  background-color: var(--nim-border);
   margin: 4px 8px;
   height: 1px;
 }
@@ -1412,7 +1412,7 @@ i.page-break,
   right: 10px;
   border-radius: 15px;
   background-color: var(--nim-bg-secondary);
-  color: var(--text-primary);
+  color: var(--nim-text);
   padding: 4px;
   display: inline-block;
   cursor: pointer;
@@ -1448,14 +1448,14 @@ i.chevron-down {
   position: relative;
   margin-left: 5px;
   border-radius: 15px;
-  color: var(--text-primary);
+  color: var(--nim-text);
   display: inline-block;
   cursor: pointer;
 }
 
 .action-button:hover {
   background-color: var(--nim-bg-hover);
-  color: var(--text-primary);
+  color: var(--nim-text);
 }
 
 .action-button-mic.active {

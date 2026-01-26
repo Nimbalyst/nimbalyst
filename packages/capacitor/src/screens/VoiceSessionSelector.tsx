@@ -36,7 +36,7 @@ function VoiceSessionCard({ session, projectName, onSelect }: VoiceSessionCardPr
     }
     if (session.pendingExecution) {
       return (
-        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-[var(--warning-color)] text-white">
+        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-[var(--nim-warning)] text-white">
           Pending
         </span>
       );
@@ -51,19 +51,19 @@ function VoiceSessionCard({ session, projectName, onSelect }: VoiceSessionCardPr
   return (
     <button
       onClick={onSelect}
-      className="w-full p-4 rounded-xl border border-[var(--border-primary)] bg-[var(--surface-secondary)] hover:bg-[var(--surface-tertiary)] hover:border-[var(--primary-color)] transition-all text-left"
+      className="w-full p-4 rounded-xl border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] hover:bg-[var(--nim-bg-tertiary)] hover:border-[var(--nim-primary)] transition-all text-left"
     >
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-center gap-2 min-w-0 flex-1">
           {/* Agent icon */}
-          <div className="w-8 h-8 rounded-lg bg-[var(--primary-color)]/10 flex items-center justify-center flex-shrink-0">
+          <div className="w-8 h-8 rounded-lg bg-[var(--nim-primary)]/10 flex items-center justify-center flex-shrink-0">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               width="18"
               height="18"
               viewBox="0 0 24 24"
               fill="none"
-              stroke="var(--primary-color)"
+              stroke="var(--nim-primary)"
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -76,7 +76,7 @@ function VoiceSessionCard({ session, projectName, onSelect }: VoiceSessionCardPr
               <path d="M9 13v2" />
             </svg>
           </div>
-          <span className="font-semibold text-[var(--text-primary)] truncate">
+          <span className="font-semibold text-[var(--nim-text)] truncate">
             {session.title || 'Untitled Session'}
           </span>
         </div>
@@ -84,18 +84,18 @@ function VoiceSessionCard({ session, projectName, onSelect }: VoiceSessionCardPr
       </div>
 
       {/* Project name */}
-      <div className="text-sm text-[var(--text-secondary)] mb-2 pl-10">
+      <div className="text-sm text-[var(--nim-text-muted)] mb-2 pl-10">
         {projectName || 'Unknown Project'}
       </div>
 
       {/* Last activity */}
       {session.lastMessagePreview && (
-        <p className="text-sm text-[var(--text-tertiary)] line-clamp-1 mb-2 pl-10">
+        <p className="text-sm text-[var(--nim-text-faint)] line-clamp-1 mb-2 pl-10">
           {session.lastMessagePreview}
         </p>
       )}
 
-      <div className="flex items-center justify-between text-xs text-[var(--text-tertiary)] pl-10">
+      <div className="flex items-center justify-between text-xs text-[var(--nim-text-faint)] pl-10">
         <span>{formattedTime}</span>
         <span>{session.messageCount || 0} messages</span>
       </div>
@@ -149,13 +149,13 @@ export function VoiceSessionSelector() {
   const isLoading = !hasReceivedInitialData;
 
   return (
-    <div className="flex flex-col w-full overflow-x-hidden bg-[var(--surface-primary)]" style={{ height: '100dvh' }}>
+    <div className="flex flex-col w-full overflow-x-hidden bg-nim h-[100dvh]">
       {/* Header */}
-      <header className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-[var(--border-primary)] bg-[var(--surface-secondary)] safe-area-top">
+      <header className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] safe-area-top">
         <div className="flex items-center gap-2">
           <button
             onClick={() => navigate(-1)}
-            className="p-1.5 rounded-lg hover:bg-[var(--surface-tertiary)] text-[var(--primary-color)]"
+            className="p-1.5 rounded-lg hover:bg-[var(--nim-bg-tertiary)] text-[var(--nim-primary)]"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -172,8 +172,8 @@ export function VoiceSessionSelector() {
             </svg>
           </button>
           <div>
-            <h1 className="font-semibold text-[17px] text-[var(--text-primary)]">Voice Control</h1>
-            <p className="text-[12px] text-[var(--text-secondary)]">Select a session to control</p>
+            <h1 className="font-semibold text-[17px] text-[var(--nim-text)]">Voice Control</h1>
+            <p className="text-[12px] text-[var(--nim-text-muted)]">Select a session to control</p>
           </div>
         </div>
 
@@ -184,7 +184,7 @@ export function VoiceSessionSelector() {
               isDesktopConnected ? 'bg-green-500' : 'bg-red-500'
             }`}
           />
-          <span className="text-xs text-[var(--text-secondary)]">
+          <span className="text-xs text-[var(--nim-text-muted)]">
             {isDesktopConnected ? 'Desktop connected' : 'Desktop offline'}
           </span>
         </div>
@@ -193,8 +193,8 @@ export function VoiceSessionSelector() {
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3 safe-area-bottom">
         {isLoading ? (
-          <div className="flex flex-col items-center justify-center h-full text-[var(--text-secondary)]">
-            <div className="w-8 h-8 border-2 border-[var(--primary-color)] border-t-transparent rounded-full animate-spin mb-3" />
+          <div className="flex flex-col items-center justify-center h-full text-[var(--nim-text-muted)]">
+            <div className="w-8 h-8 border-2 border-[var(--nim-primary)] border-t-transparent rounded-full animate-spin mb-3" />
             <p>Loading sessions...</p>
           </div>
         ) : !isDesktopConnected ? (
@@ -217,22 +217,22 @@ export function VoiceSessionSelector() {
                 <line x1="2" x2="22" y1="2" y2="22" />
               </svg>
             </div>
-            <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-2">Desktop Not Connected</h2>
-            <p className="text-sm text-[var(--text-secondary)]">
+            <h2 className="text-lg font-semibold text-[var(--nim-text)] mb-2">Desktop Not Connected</h2>
+            <p className="text-sm text-[var(--nim-text-muted)]">
               Open Nimbalyst on your desktop to use voice control. Your voice commands will be sent to the desktop for
               execution.
             </p>
           </div>
         ) : agentSessions.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center px-8">
-            <div className="w-16 h-16 rounded-full bg-[var(--primary-color)]/10 flex items-center justify-center mb-4">
+            <div className="w-16 h-16 rounded-full bg-[var(--nim-primary)]/10 flex items-center justify-center mb-4">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 width="32"
                 height="32"
                 viewBox="0 0 24 24"
                 fill="none"
-                stroke="var(--primary-color)"
+                stroke="var(--nim-primary)"
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -245,14 +245,14 @@ export function VoiceSessionSelector() {
                 <path d="M9 13v2" />
               </svg>
             </div>
-            <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-2">No Agent Sessions</h2>
-            <p className="text-sm text-[var(--text-secondary)]">
+            <h2 className="text-lg font-semibold text-[var(--nim-text)] mb-2">No Agent Sessions</h2>
+            <p className="text-sm text-[var(--nim-text-muted)]">
               Start an agent session on your desktop to control it with voice commands.
             </p>
           </div>
         ) : (
           <>
-            <p className="text-sm text-[var(--text-secondary)] mb-2">
+            <p className="text-sm text-[var(--nim-text-muted)] mb-2">
               {agentSessions.length} agent {agentSessions.length === 1 ? 'session' : 'sessions'} available
             </p>
             {agentSessions.map((session) => (

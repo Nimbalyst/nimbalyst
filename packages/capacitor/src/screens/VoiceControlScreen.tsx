@@ -268,11 +268,10 @@ export function VoiceControlScreen() {
   if (!session) {
     return (
       <div
-        className="flex flex-col items-center justify-center h-full bg-[var(--surface-primary)]"
-        style={{ height: '100dvh' }}
+        className="flex flex-col items-center justify-center h-full bg-nim h-[100dvh]"
       >
-        <p className="text-[var(--text-secondary)]">Session not found</p>
-        <button onClick={() => navigate(-1)} className="mt-4 text-[var(--primary-color)]">
+        <p className="text-[var(--nim-text-muted)]">Session not found</p>
+        <button onClick={() => navigate(-1)} className="mt-4 text-[var(--nim-primary)]">
           Go back
         </button>
       </div>
@@ -283,7 +282,7 @@ export function VoiceControlScreen() {
   const getStatusInfo = () => {
     switch (voiceState) {
       case 'idle':
-        return { text: 'Tap mic to start', color: 'text-[var(--text-secondary)]', showPulse: false };
+        return { text: 'Tap mic to start', color: 'text-[var(--nim-text-muted)]', showPulse: false };
       case 'connecting':
         return { text: 'Connecting...', color: 'text-yellow-500', showPulse: false };
       case 'connected':
@@ -308,14 +307,14 @@ export function VoiceControlScreen() {
   const latestVoiceEntry = transcriptEntries[transcriptEntries.length - 1];
 
   return (
-    <div className="flex flex-col w-full bg-[var(--surface-primary)]" style={{ height: '100dvh' }}>
+    <div className="flex flex-col w-full bg-nim h-[100dvh]">
       {/* Voice Control Header Bar */}
-      <div className="flex-shrink-0 bg-[var(--surface-secondary)] border-b border-[var(--border-primary)] safe-area-top z-10">
+      <div className="flex-shrink-0 bg-[var(--nim-bg-secondary)] border-b border-[var(--nim-border)] safe-area-top z-10">
         <div className="flex items-center justify-between px-3 py-2">
           {/* Close button */}
           <button
             onClick={exitVoiceMode}
-            className="p-1.5 rounded-lg hover:bg-[var(--surface-tertiary)] text-[var(--text-secondary)]"
+            className="p-1.5 rounded-lg hover:bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-muted)]"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -363,10 +362,10 @@ export function VoiceControlScreen() {
             disabled={permissionDenied || voiceState === 'connecting'}
             className={`p-2 rounded-full transition-all ${
               voiceState === 'connecting'
-                ? 'bg-[var(--surface-tertiary)] text-[var(--text-tertiary)]'
+                ? 'bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-faint)]'
                 : isSessionActive
                   ? 'bg-red-500 text-white scale-110'
-                  : 'bg-[var(--primary-color)] text-white hover:scale-105'
+                  : 'bg-[var(--nim-primary)] text-white hover:scale-105'
             } ${permissionDenied ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             {isSessionActive ? (
@@ -406,8 +405,8 @@ export function VoiceControlScreen() {
           <div className="px-3 pb-2">
             <div className={`px-3 py-1.5 rounded-lg text-sm ${
               latestVoiceEntry.role === 'user'
-                ? 'bg-[var(--primary-color)]/10 text-[var(--primary-color)]'
-                : 'bg-[var(--surface-tertiary)] text-[var(--text-primary)]'
+                ? 'bg-[var(--nim-primary)]/10 text-[var(--nim-primary)]'
+                : 'bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)]'
             } ${latestVoiceEntry.isStreaming ? 'animate-pulse' : ''}`}>
               <span className="text-xs font-medium opacity-70 mr-2">
                 {latestVoiceEntry.role === 'user' ? 'You:' : 'Agent:'}
@@ -420,23 +419,23 @@ export function VoiceControlScreen() {
         {/* Pending prompt preview */}
         {pendingPrompt && (
           <div className="px-3 pb-2">
-            <div className="p-2 rounded-lg bg-[var(--surface-tertiary)] border border-[var(--primary-color)]/50">
+            <div className="p-2 rounded-lg bg-[var(--nim-bg-tertiary)] border border-[var(--nim-primary)]/50">
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs text-[var(--primary-color)] font-medium">Pending Task</span>
+                <span className="text-xs text-[var(--nim-primary)] font-medium">Pending Task</span>
                 {!isEditing && (
-                  <span className="text-xs text-[var(--text-tertiary)]">Auto-send in {countdown}s</span>
+                  <span className="text-xs text-[var(--nim-text-faint)]">Auto-send in {countdown}s</span>
                 )}
               </div>
               {isEditing ? (
                 <textarea
                   value={editedPrompt}
                   onChange={(e) => setEditedPrompt(e.target.value)}
-                  className="w-full p-2 rounded border border-[var(--border-primary)] bg-[var(--surface-primary)] text-[var(--text-primary)] text-sm resize-none"
+                  className="w-full p-2 rounded border border-[var(--nim-border)] bg-[var(--nim-bg)] text-[var(--nim-text)] text-sm resize-none"
                   rows={3}
                   autoFocus
                 />
               ) : (
-                <p className="text-sm text-[var(--text-primary)] line-clamp-2">{pendingPrompt.prompt}</p>
+                <p className="text-sm text-[var(--nim-text)] line-clamp-2">{pendingPrompt.prompt}</p>
               )}
               <div className="flex items-center justify-between mt-2">
                 <div className="flex gap-2">
@@ -458,7 +457,7 @@ export function VoiceControlScreen() {
                           });
                         }, 1000);
                       }}
-                      className="text-xs text-[var(--primary-color)] font-medium"
+                      className="text-xs text-[var(--nim-primary)] font-medium"
                     >
                       Done
                     </button>
@@ -471,7 +470,7 @@ export function VoiceControlScreen() {
                         }
                         setIsEditing(true);
                       }}
-                      className="text-xs text-[var(--primary-color)] font-medium"
+                      className="text-xs text-[var(--nim-primary)] font-medium"
                     >
                       Edit
                     </button>
@@ -480,13 +479,13 @@ export function VoiceControlScreen() {
                 <div className="flex gap-2">
                   <button
                     onClick={cancelPendingPrompt}
-                    className="px-2 py-1 text-xs rounded bg-[var(--surface-primary)] text-[var(--text-secondary)] border border-[var(--border-primary)]"
+                    className="px-2 py-1 text-xs rounded bg-[var(--nim-bg)] text-[var(--nim-text-muted)] border border-[var(--nim-border)]"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={sendPendingPrompt}
-                    className="px-2 py-1 text-xs rounded bg-[var(--primary-color)] text-white font-medium"
+                    className="px-2 py-1 text-xs rounded bg-[var(--nim-primary)] text-white font-medium"
                   >
                     Send
                   </button>

@@ -79,17 +79,17 @@ export function ProjectListScreen() {
   const isLoading = isConfigured && !hasReceivedInitialData;
 
   return (
-    <div className="flex flex-col w-full overflow-x-hidden bg-[var(--surface-primary)]" style={{ height: '100dvh' }}>
+    <div className="flex flex-col w-full overflow-x-hidden bg-nim h-[100dvh]">
       {/* Header */}
-      <header className="flex-shrink-0 flex items-center justify-between px-3 py-2 border-b border-[var(--border-primary)] bg-[var(--surface-secondary)] safe-area-top">
+      <header className="flex-shrink-0 flex items-center justify-between px-3 py-2 border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] safe-area-top">
         <div className="flex items-center gap-1">
-          <span className="font-semibold text-[17px] text-[var(--text-primary)] px-2">Nimbalyst Projects</span>
+          <span className="font-semibold text-[17px] text-[var(--nim-text)] px-2">Nimbalyst Projects</span>
         </div>
         <div className="flex items-center gap-1">
           <SyncStatusBadge />
           <button
             onClick={() => navigate('/settings')}
-            className="p-1.5 rounded-lg hover:bg-[var(--surface-tertiary)] text-[var(--text-secondary)]"
+            className="p-1.5 rounded-lg hover:bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-muted)]"
             title="Settings"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -103,8 +103,7 @@ export function ProjectListScreen() {
       {/* Content */}
       <main
         ref={scrollContainerRef}
-        className="flex-1 overflow-auto min-h-0"
-        style={{ touchAction: 'pan-y' }}
+        className="flex-1 overflow-auto min-h-0 touch-pan-y"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -129,7 +128,7 @@ export function ProjectListScreen() {
               <div className="flex flex-col items-center gap-1">
                 {isRefreshing || pullDistance >= pullThreshold ? (
                   <svg
-                    className="animate-spin h-5 w-5 text-[var(--primary-color)]"
+                    className="animate-spin h-5 w-5 text-[var(--nim-primary)]"
                     viewBox="0 0 24 24"
                   >
                     <circle
@@ -158,7 +157,7 @@ export function ProjectListScreen() {
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    className="text-[var(--text-tertiary)]"
+                    className="text-[var(--nim-text-faint)]"
                     style={{
                       transform: `rotate(${(pullDistance / pullThreshold) * 180}deg)`,
                       transition: 'transform 0.1s ease-out',
@@ -174,7 +173,7 @@ export function ProjectListScreen() {
           {!isConfigured ? (
             <EmptyState
               icon={
-                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--text-tertiary)]">
+                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--nim-text-faint)]">
                   <rect x="3" y="3" width="7" height="7"/>
                   <rect x="14" y="3" width="7" height="7"/>
                   <rect x="14" y="14" width="7" height="7"/>
@@ -191,7 +190,7 @@ export function ProjectListScreen() {
               action={
                 <button
                   onClick={() => navigate('/settings')}
-                  className="px-6 py-2 rounded-lg font-medium text-white bg-[var(--primary-color)] hover:opacity-90 transition-opacity"
+                  className="px-6 py-2 rounded-lg font-medium text-white bg-[var(--nim-primary)] hover:opacity-90 transition-opacity"
                 >
                   Get Started
                 </button>
@@ -204,7 +203,7 @@ export function ProjectListScreen() {
           ) : projects.length === 0 ? (
             <EmptyState
               icon={
-                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--text-tertiary)]">
+                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--nim-text-faint)]">
                   <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>
                   <path d="M14 2v4a2 2 0 0 0 2 2h4"/>
                 </svg>
@@ -215,7 +214,7 @@ export function ProjectListScreen() {
                 <button
                   onClick={handleRefresh}
                   disabled={isRefreshing}
-                  className="px-6 py-2 rounded-lg font-medium text-[var(--primary-color)] border border-[var(--primary-color)] hover:bg-[var(--primary-color)] hover:text-white transition-colors disabled:opacity-50"
+                  className="px-6 py-2 rounded-lg font-medium text-[var(--nim-primary)] border border-[var(--nim-primary)] hover:bg-[var(--nim-primary)] hover:text-white transition-colors disabled:opacity-50"
                 >
                   {isRefreshing ? 'Refreshing...' : 'Refresh'}
                 </button>
@@ -227,13 +226,13 @@ export function ProjectListScreen() {
                 <button
                   key={project.id}
                   onClick={() => handleProjectClick(project.id)}
-                  className="w-full flex items-center justify-between px-4 py-3.5 border-b border-[var(--border-primary)] hover:bg-[var(--surface-secondary)] active:bg-[var(--surface-tertiary)] transition-colors text-left"
+                  className="w-full flex items-center justify-between px-4 py-3.5 border-b border-[var(--nim-border)] hover:bg-[var(--nim-bg-secondary)] active:bg-[var(--nim-bg-tertiary)] transition-colors text-left"
                 >
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium text-[16px] text-[var(--text-primary)] truncate">
+                    <div className="font-medium text-[16px] text-[var(--nim-text)] truncate">
                       {project.name.includes('/') ? project.name.split('/').pop() : project.name}
                     </div>
-                    <div className="text-[13px] text-[var(--text-secondary)] mt-0.5">
+                    <div className="text-[13px] text-[var(--nim-text-muted)] mt-0.5">
                       {project.sessionCount} {project.sessionCount === 1 ? 'session' : 'sessions'}
                     </div>
                   </div>
@@ -247,7 +246,7 @@ export function ProjectListScreen() {
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    className="text-[var(--text-tertiary)] flex-shrink-0 ml-3"
+                    className="text-[var(--nim-text-faint)] flex-shrink-0 ml-3"
                   >
                     <path d="m9 18 6-6-6-6"/>
                   </svg>
@@ -273,16 +272,16 @@ function EmptyState({ icon, title, description, steps, action }: EmptyStateProps
   return (
     <div className="flex flex-col items-center justify-center h-full min-h-[300px] px-8 text-center">
       <div className="mb-4">{icon}</div>
-      <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-2">{title}</h2>
-      <p className="text-sm text-[var(--text-secondary)] mb-4 max-w-xs">{description}</p>
+      <h2 className="text-lg font-semibold text-[var(--nim-text)] mb-2">{title}</h2>
+      <p className="text-sm text-[var(--nim-text-muted)] mb-4 max-w-xs">{description}</p>
       {steps && steps.length > 0 && (
         <div className="mb-6 text-left">
           {steps.map((step, index) => (
             <div key={index} className="flex items-start gap-3 mb-2">
-              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-[var(--primary-color)] text-white text-xs font-semibold flex items-center justify-center">
+              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-[var(--nim-primary)] text-white text-xs font-semibold flex items-center justify-center">
                 {index + 1}
               </span>
-              <span className="text-sm text-[var(--text-secondary)] pt-0.5">{step}</span>
+              <span className="text-sm text-[var(--nim-text-muted)] pt-0.5">{step}</span>
             </div>
           ))}
         </div>
@@ -297,13 +296,13 @@ function LoadingState() {
   return (
     <div className="flex flex-col items-center justify-center h-full min-h-[300px] px-8 text-center">
       <div className="mb-4">
-        <svg className="animate-spin h-10 w-10 text-[var(--primary-color)]" viewBox="0 0 24 24">
+        <svg className="animate-spin h-10 w-10 text-[var(--nim-primary)]" viewBox="0 0 24 24">
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
         </svg>
       </div>
-      <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-2">Loading Projects</h2>
-      <p className="text-sm text-[var(--text-secondary)]">Syncing with server...</p>
+      <h2 className="text-lg font-semibold text-[var(--nim-text)] mb-2">Loading Projects</h2>
+      <p className="text-sm text-[var(--nim-text-muted)]">Syncing with server...</p>
     </div>
   );
 }
@@ -317,17 +316,17 @@ function ErrorState({ error, onRetry }: ErrorStateProps) {
   return (
     <div className="flex flex-col items-center justify-center h-full min-h-[300px] px-8 text-center">
       <div className="mb-4">
-        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--error-color)]">
+        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--nim-error)]">
           <circle cx="12" cy="12" r="10"/>
           <line x1="12" x2="12" y1="8" y2="12"/>
           <line x1="12" x2="12.01" y1="16" y2="16"/>
         </svg>
       </div>
-      <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-2">Connection Error</h2>
-      <p className="text-sm text-[var(--text-secondary)] mb-6 max-w-xs">{error}</p>
+      <h2 className="text-lg font-semibold text-[var(--nim-text)] mb-2">Connection Error</h2>
+      <p className="text-sm text-[var(--nim-text-muted)] mb-6 max-w-xs">{error}</p>
       <button
         onClick={onRetry}
-        className="px-6 py-2 rounded-lg font-medium text-white bg-[var(--primary-color)] hover:opacity-90 transition-opacity"
+        className="px-6 py-2 rounded-lg font-medium text-white bg-[var(--nim-primary)] hover:opacity-90 transition-opacity"
       >
         Retry
       </button>

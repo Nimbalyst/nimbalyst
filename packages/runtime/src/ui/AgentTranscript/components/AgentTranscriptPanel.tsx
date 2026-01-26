@@ -248,9 +248,9 @@ const AgentTranscriptPanelComponent: React.FC<AgentTranscriptPanelProps> = ({
   }, [isDragging]);
 
   return (
-    <div className="agent-transcript-panel" style={{ display: 'flex', height: '100%', position: 'relative' }}>
+    <div className="agent-transcript-panel flex h-full relative">
       {/* Main Content */}
-      <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+      <div className="flex-1 overflow-hidden relative">
         <RichTranscriptView
           ref={transcriptRef}
           sessionId={sessionId}
@@ -290,69 +290,34 @@ const AgentTranscriptPanelComponent: React.FC<AgentTranscriptPanelProps> = ({
           {!isSidebarCollapsed && (
             <div
               onMouseDown={handleMouseDown}
-              style={{
-                width: '4px',
-                cursor: 'ew-resize',
-                background: isDragging ? 'var(--border-focus)' : 'var(--border-primary)',
-                transition: isDragging ? 'none' : 'background-color 0.15s ease',
-                flexShrink: 0,
-                position: 'relative'
-              }}
+              className={`w-1 cursor-ew-resize shrink-0 relative ${isDragging ? 'bg-nim-border-focus' : 'bg-nim-border transition-colors duration-150'}`}
             >
-              <div style={{
-                position: 'absolute',
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%, -50%)',
-                width: '8px',
-                height: '40px',
-                pointerEvents: 'none'
-              }} />
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-10 pointer-events-none" />
             </div>
           )}
           <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              width: isSidebarCollapsed ? '0' : `${sidebarWidth}px`,
-              transition: isSidebarCollapsed ? 'all 0.3s ease-in-out' : 'none',
-              flexShrink: 0
-            }}
+            className={`flex flex-col shrink-0 ${isSidebarCollapsed ? 'w-0 transition-all duration-300 ease-in-out' : ''}`}
+            style={isSidebarCollapsed ? undefined : { width: `${sidebarWidth}px` }}
           >
         {!isSidebarCollapsed && (
           <>
             {/* Header with Files label */}
-            <div className="session-files-right-panel" style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              padding: '0.75rem',
-              borderBottom: '1px solid var(--border-primary)',
-              backgroundColor: 'var(--surface-secondary)'
-            }}>
+            <div className="session-files-right-panel flex items-center gap-2 p-3 border-b border-nim bg-nim-secondary">
               <MaterialSymbol icon="description" size={16} />
-              <span style={{ fontWeight: 500, color: 'var(--text-primary)' }}>Files Edited</span>
+              <span className="font-medium text-nim">Files Edited</span>
               {fileEdits.length > 0 && (
-                <span style={{
-                  marginLeft: 'auto',
-                  padding: '0.125rem 0.375rem',
-                  backgroundColor: 'var(--surface-tertiary)',
-                  borderRadius: '0.25rem',
-                  fontSize: '11px',
-                  fontWeight: 500,
-                  color: 'var(--text-tertiary)'
-                }}>
+                <span className="ml-auto py-0.5 px-1.5 bg-nim-tertiary rounded text-[11px] font-medium text-nim-faint">
                   {fileEdits.length}
                 </span>
               )}
             </div>
 
             {/* Files Content */}
-            <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <div className="flex-1 overflow-hidden flex flex-col">
               {/* Optional header content (e.g., pending review banner) */}
               {renderFilesHeader && renderFilesHeader()}
 
-              <div style={{ flex: 1, overflow: 'hidden' }}>
+              <div className="flex-1 overflow-hidden">
                 <FileEditsSidebar
                   fileEdits={fileEdits}
                   onFileClick={onFileClick}
@@ -365,38 +330,21 @@ const AgentTranscriptPanelComponent: React.FC<AgentTranscriptPanelProps> = ({
 
               {/* TodoList below tab content */}
               {Array.isArray(todos) && todos.length > 0 && (
-                <div style={{
-                  borderTop: '1px solid var(--border-primary)',
-                  backgroundColor: 'var(--surface-secondary)',
-                  padding: '0.75rem',
-                  maxHeight: '150px',
-                  overflow: 'auto'
-                }}>
-                  <div style={{ marginBottom: '0.5rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                <div className="border-t border-nim bg-nim-secondary p-3 max-h-[150px] overflow-auto">
+                  <div className="mb-2 text-xs font-medium text-nim-muted">
                     Tasks ({todos.filter(t => t.status === 'completed').length}/{todos.length})
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                  <div className="flex flex-col gap-1">
                     {todos.map((todo, index) => {
                       const displayText = todo.status === 'in_progress' ? todo.activeForm : todo.content;
                       return (
-                        <div key={index} style={{
-                          display: 'flex',
-                          alignItems: 'flex-start',
-                          gap: '0.5rem',
-                          fontSize: '0.75rem',
-                          color: 'var(--text-primary)',
-                          opacity: todo.status === 'completed' ? 0.6 : 1
-                        }}>
-                          <div style={{ marginTop: '2px', flexShrink: 0 }}>
-                            {todo.status === 'pending' && <span style={{ fontSize: '0.625rem' }}>○</span>}
-                            {todo.status === 'in_progress' && <span style={{ fontSize: '0.625rem', animation: 'spin 1s linear infinite' }}>◐</span>}
-                            {todo.status === 'completed' && <span style={{ fontSize: '0.625rem', color: 'var(--primary-color)' }}>●</span>}
+                        <div key={index} className={`flex items-start gap-2 text-xs text-nim ${todo.status === 'completed' ? 'opacity-60' : ''}`}>
+                          <div className="mt-0.5 shrink-0 text-[0.625rem]">
+                            {todo.status === 'pending' && <span>○</span>}
+                            {todo.status === 'in_progress' && <span className="animate-spin inline-block">◐</span>}
+                            {todo.status === 'completed' && <span className="text-nim-primary">●</span>}
                           </div>
-                          <div style={{
-                            flex: 1,
-                            textDecoration: todo.status === 'completed' ? 'line-through' : 'none',
-                            wordBreak: 'break-word'
-                          }}>
+                          <div className={`flex-1 break-words ${todo.status === 'completed' ? 'line-through' : ''}`}>
                             {displayText}
                           </div>
                         </div>

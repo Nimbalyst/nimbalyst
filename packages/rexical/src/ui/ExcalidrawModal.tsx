@@ -204,9 +204,8 @@ export default function ExcalidrawModal({
   return createPortal(
     <div className="ExcalidrawModal__overlay flex items-center fixed flex-col inset-0 z-[100] bg-black/60" role="dialog">
       <div
-        className={`ExcalidrawModal__modal relative z-10 top-[50px] w-auto left-0 flex justify-center items-center rounded-lg ${isDark ? 'bg-[#333]' : 'bg-[#eee]'}`}
+        className={`ExcalidrawModal__modal relative z-10 top-[50px] w-auto left-0 flex justify-center items-center rounded-lg ${isDark ? 'bg-[#333]' : 'bg-white'}`}
         ref={excaliDrawModelRef}
-        style={{backgroundColor: isDark ? '#333' : '#fff'}}
         tabIndex={-1}>
         <div className="ExcalidrawModal__row relative p-[40px_5px_5px] w-[70vw] h-[70vh] rounded-lg shadow-[0_12px_28px_0_rgba(0,0,0,0.2),0_2px_4px_0_rgba(0,0,0,0.1),inset_0_0_0_1px_rgba(255,255,255,0.5)] [&>div]:rounded-[5px]">
           {discardModalOpen && <ShowDiscardDialog />}

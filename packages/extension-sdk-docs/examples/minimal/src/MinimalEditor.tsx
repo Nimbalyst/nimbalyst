@@ -41,7 +41,7 @@ export function MinimalEditor({ content, filePath, onChange }: MinimalEditorProp
       <div
         style={{
           marginBottom: '12px',
-          color: 'var(--text-secondary)',
+          color: 'var(--nim-text-muted)',
           fontSize: '12px',
         }}
       >
@@ -57,9 +57,9 @@ export function MinimalEditor({ content, filePath, onChange }: MinimalEditorProp
           padding: '12px',
           fontSize: '14px',
           fontFamily: 'monospace',
-          backgroundColor: 'var(--surface-secondary)',
-          color: 'var(--text-primary)',
-          border: '1px solid var(--border-primary)',
+          backgroundColor: 'var(--nim-bg-secondary)',
+          color: 'var(--nim-text)',
+          border: '1px solid var(--nim-border)',
           borderRadius: '4px',
           resize: 'none',
           outline: 'none',

@@ -65,8 +65,8 @@ export class TabEditorErrorBoundary extends Component<Props, State> {
             justifyContent: 'center',
             height: '100%',
             padding: '24px',
-            backgroundColor: 'var(--surface-secondary)',
-            color: 'var(--text-primary)',
+            backgroundColor: 'var(--nim-bg-secondary)',
+            color: 'var(--nim-text)',
           }}
         >
           <div style={{
@@ -75,7 +75,7 @@ export class TabEditorErrorBoundary extends Component<Props, State> {
           }}>
             <h3 style={{
               margin: '0 0 16px 0',
-              color: 'var(--text-primary)',
+              color: 'var(--nim-text)',
               fontSize: '18px',
             }}>
               Unable to Load Editor
@@ -83,7 +83,7 @@ export class TabEditorErrorBoundary extends Component<Props, State> {
 
             <p style={{
               margin: '0 0 8px 0',
-              color: 'var(--text-secondary)',
+              color: 'var(--nim-text-muted)',
               fontSize: '14px',
             }}>
               An error occurred while loading "{this.props.fileName}".
@@ -91,7 +91,7 @@ export class TabEditorErrorBoundary extends Component<Props, State> {
 
             <p style={{
               margin: '0 0 24px 0',
-              color: 'var(--text-tertiary)',
+              color: 'var(--nim-text-faint)',
               fontSize: '13px',
             }}>
               Other tabs should continue to work normally.
@@ -101,11 +101,11 @@ export class TabEditorErrorBoundary extends Component<Props, State> {
               <pre style={{
                 margin: '0 0 24px 0',
                 padding: '12px',
-                backgroundColor: 'var(--surface-tertiary)',
-                border: '1px solid var(--border-primary)',
+                backgroundColor: 'var(--nim-bg-tertiary)',
+                border: '1px solid var(--nim-border)',
                 borderRadius: '4px',
                 fontSize: '12px',
-                color: 'var(--text-secondary)',
+                color: 'var(--nim-text-muted)',
                 textAlign: 'left',
                 overflow: 'auto',
                 maxHeight: '150px',
@@ -125,7 +125,7 @@ export class TabEditorErrorBoundary extends Component<Props, State> {
                 onClick={this.handleRetry}
                 style={{
                   padding: '8px 16px',
-                  backgroundColor: 'var(--primary-color)',
+                  backgroundColor: 'var(--nim-primary)',
                   color: 'white',
                   border: 'none',
                   borderRadius: '4px',
@@ -141,9 +141,9 @@ export class TabEditorErrorBoundary extends Component<Props, State> {
                   onClick={this.handleClose}
                   style={{
                     padding: '8px 16px',
-                    backgroundColor: 'var(--surface-primary)',
-                    color: 'var(--text-primary)',
-                    border: '1px solid var(--border-primary)',
+                    backgroundColor: 'var(--nim-bg)',
+                    color: 'var(--nim-text)',
+                    border: '1px solid var(--nim-border)',
                     borderRadius: '4px',
                     cursor: 'pointer',
                     fontSize: '14px',

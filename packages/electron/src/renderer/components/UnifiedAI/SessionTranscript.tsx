@@ -789,7 +789,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        color: 'var(--text-secondary)',
+        color: 'var(--nim-text-muted)',
       }}>
         {isDataLoading ? 'Loading session...' : 'Session not found'}
       </div>

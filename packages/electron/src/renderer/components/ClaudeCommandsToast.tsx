@@ -16,12 +16,7 @@ export function ClaudeCommandsToast({
   return (
     <div className="claude-commands-toast-container fixed bottom-5 left-5 z-[1000]">
       <div
-        className="claude-commands-toast relative w-[380px] rounded-xl p-4 px-5"
-        style={{
-          backgroundColor: 'var(--nim-bg-secondary)',
-          border: '1px solid var(--nim-border)',
-          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 4px 10px -2px rgba(0, 0, 0, 0.2)',
-        }}
+        className="claude-commands-toast relative w-[380px] rounded-xl p-4 px-5 bg-nim-secondary border border-nim shadow-[0_10px_25px_-5px_rgba(0,0,0,0.3),0_4px_10px_-2px_rgba(0,0,0,0.2)]"
       >
         {/* Dismiss button */}
         <button
@@ -38,8 +33,7 @@ export function ClaudeCommandsToast({
         {/* Header with icon and text */}
         <div className="claude-commands-toast-header flex items-center gap-3 mb-3 pr-7">
           <div
-            className="claude-commands-toast-icon w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-            style={{ background: 'linear-gradient(135deg, #d97706 0%, #f59e0b 100%)' }}
+            className="claude-commands-toast-icon w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-gradient-to-br from-amber-600 to-amber-500"
           >
             <svg className="w-[18px] h-[18px] fill-white" viewBox="0 0 24 24">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />

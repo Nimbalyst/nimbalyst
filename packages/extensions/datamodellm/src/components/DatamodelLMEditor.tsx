@@ -192,7 +192,7 @@ export function DatamodelLMEditor({ host }: EditorHostProps) {
   if (isLoading) {
     return (
       <div className="datamodel-editor" data-theme={theme}>
-        <div style={{ padding: '20px', color: 'var(--text-secondary)' }}>Loading...</div>
+        <div className="p-5 text-nim-muted">Loading...</div>
       </div>
     );
   }
@@ -201,7 +201,7 @@ export function DatamodelLMEditor({ host }: EditorHostProps) {
   if (loadError) {
     return (
       <div className="datamodel-editor" data-theme={theme}>
-        <div style={{ padding: '20px', color: 'var(--text-error)' }}>
+        <div className="p-5 text-nim-error">
           Failed to load: {loadError.message}
         </div>
       </div>

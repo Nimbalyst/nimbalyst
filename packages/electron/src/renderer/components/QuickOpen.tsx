@@ -373,21 +373,14 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
   return (
     <>
       <div
-        className="quick-open-backdrop fixed inset-0 z-[99998] nim-animate-fade-in"
-        style={{ background: 'rgba(0, 0, 0, 0.5)' }}
+        className="quick-open-backdrop fixed inset-0 z-[99998] nim-animate-fade-in bg-black/50"
         onClick={onClose}
       />
       <div
-        className="quick-open-modal fixed top-[20%] left-1/2 -translate-x-1/2 w-[90%] max-w-[600px] max-h-[60vh] flex flex-col overflow-hidden rounded-lg z-[99999]"
-        style={{
-          background: 'var(--nim-bg)',
-          border: '1px solid var(--nim-border)',
-          boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
-        }}
+        className="quick-open-modal fixed top-[20%] left-1/2 -translate-x-1/2 w-[90%] max-w-[600px] max-h-[60vh] flex flex-col overflow-hidden rounded-lg z-[99999] bg-nim border border-nim shadow-[0_20px_60px_rgba(0,0,0,0.3)]"
       >
         <div
-          className="quick-open-header relative p-3"
-          style={{ borderBottom: '1px solid var(--nim-border)' }}
+          className="quick-open-header relative p-3 border-b border-nim"
         >
           <input
             ref={searchInputRef}
@@ -399,37 +392,19 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
           />
           {isSearching && (
             <div
-              className="quick-open-searching absolute right-6 top-1/2 -translate-y-1/2 text-xs"
-              style={{ color: 'var(--nim-text-faint)' }}
+              className="quick-open-searching absolute right-6 top-1/2 -translate-y-1/2 text-xs text-nim-faint"
             >
               {contentSearchTriggered ? 'Searching file contents...' : 'Searching...'}
             </div>
           )}
           {!isSearching && searchQuery && !contentSearchTriggered && (
             <button
-              className="quick-open-content-search-hint absolute right-6 top-1/2 -translate-y-1/2 text-xs flex items-center gap-1 px-2 py-1 rounded cursor-pointer border-none transition-colors duration-150"
-              style={{
-                background: 'transparent',
-                color: 'var(--nim-text-faint)',
-              }}
+              className="quick-open-content-search-hint absolute right-6 top-1/2 -translate-y-1/2 text-xs flex items-center gap-1 px-2 py-1 rounded cursor-pointer border-none transition-colors duration-150 bg-transparent text-nim-faint hover:bg-[var(--nim-accent-subtle)] hover:text-nim-primary"
               onClick={() => searchFileContents()}
               title="Search in file contents"
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'var(--nim-accent-subtle)';
-                e.currentTarget.style.color = 'var(--nim-primary)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent';
-                e.currentTarget.style.color = 'var(--nim-text-faint)';
-              }}
             >
               <kbd
-                className="px-1.5 py-0.5 rounded font-mono text-[10px]"
-                style={{
-                  background: 'var(--nim-bg)',
-                  border: '1px solid var(--nim-border)',
-                  color: 'var(--nim-text)',
-                }}
+                className="px-1.5 py-0.5 rounded font-mono text-[10px] bg-nim border border-nim text-nim"
               >
                 Tab
               </kbd>
@@ -441,8 +416,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
         <div className="quick-open-results flex-1 overflow-y-auto min-h-[200px]">
           {displayFiles.length === 0 ? (
             <div
-              className="quick-open-empty p-10 text-center"
-              style={{ color: 'var(--nim-text-faint)' }}
+              className="quick-open-empty p-10 text-center text-nim-faint"
             >
               {searchQuery ? 'No files found' : 'No recent files'}
             </div>
@@ -451,34 +425,18 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
               {displayFiles.map((file, index) => (
                 <li
                   key={`${file.path}-${index}`}
-                  className={`quick-open-item px-4 py-2.5 cursor-pointer border-l-[3px] border-transparent transition-all duration-100 ${
-                    index === selectedIndex ? 'selected' : ''
+                  className={`quick-open-item px-4 py-2.5 cursor-pointer border-l-[3px] transition-all duration-100 ${
+                    index === selectedIndex ? 'selected bg-nim-selected border-l-nim-primary' : 'border-transparent hover:bg-nim-hover'
                   } ${file.isContentMatch ? 'content-match' : ''} ${file.isFileNameMatch ? 'name-match' : ''}`}
-                  style={{
-                    background: index === selectedIndex ? 'var(--nim-bg-selected)' : undefined,
-                    borderLeftColor: index === selectedIndex ? 'var(--nim-primary)' : 'transparent',
-                  }}
                   onClick={() => handleFileSelect(file.path)}
-                  onMouseEnter={(e) => {
+                  onMouseEnter={() => {
                     if (mouseHasMoved) {
                       setSelectedIndex(index);
-                    }
-                    if (index !== selectedIndex) {
-                      e.currentTarget.style.background = 'var(--nim-bg-hover)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (index !== selectedIndex) {
-                      e.currentTarget.style.background = '';
                     }
                   }}
                 >
                   <div
-                    className="quick-open-item-name text-sm font-medium flex items-center gap-2"
-                    style={{
-                      color: 'var(--nim-text)',
-                      marginBottom: file.isContentMatch ? '4px' : undefined,
-                    }}
+                    className={`quick-open-item-name text-sm font-medium flex items-center gap-2 text-nim ${file.isContentMatch ? 'mb-1' : ''}`}
                   >
                     {file.name}
                     {file.isRecent && !searchQuery && (
@@ -489,44 +447,35 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
                     {/*)}*/}
                     {file.matches && file.matches.length > 0 && (
                       <span
-                        className="quick-open-badge content-badge text-[10px] px-1.5 py-0.5 rounded text-white font-semibold uppercase"
-                        style={{ background: 'var(--nim-accent-purple)' }}
+                        className="quick-open-badge content-badge text-[10px] px-1.5 py-0.5 rounded text-white font-semibold uppercase bg-[var(--nim-accent-purple)]"
                       >
                         {file.matches.length} match{file.matches.length > 1 ? 'es' : ''}
                       </span>
                     )}
                   </div>
                   <div
-                    className="quick-open-item-path text-xs mt-0.5 overflow-hidden text-ellipsis whitespace-nowrap"
-                    style={{ color: 'var(--nim-text-faint)' }}
+                    className="quick-open-item-path text-xs mt-0.5 overflow-hidden text-ellipsis whitespace-nowrap text-nim-faint"
                   >
                     {getRelativeDir(file.path, workspacePath)}
                   </div>
                   {file.matches && file.matches.length > 0 && (
                     <div
-                      className="quick-open-item-matches mt-2 pl-2"
-                      style={{ borderLeft: '2px solid var(--nim-border)' }}
+                      className="quick-open-item-matches mt-2 pl-2 border-l-2 border-nim"
                     >
                       {file.matches.slice(0, 2).map((match, i) => (
                         <div
                           key={i}
-                          className="quick-open-match text-xs leading-snug mb-1 block overflow-hidden text-ellipsis whitespace-nowrap"
-                          style={{ color: 'var(--nim-text-muted)' }}
+                          className="quick-open-match text-xs leading-snug mb-1 block overflow-hidden text-ellipsis whitespace-nowrap text-nim-muted"
                         >
                           <span
-                            className="quick-open-line-number mr-2 font-medium"
-                            style={{ color: 'var(--nim-text-faint)' }}
+                            className="quick-open-line-number mr-2 font-medium text-nim-faint"
                           >
                             Line {match.line}:
                           </span>
                           <span className="quick-open-match-text">
                             {match.text.substring(0, match.start)}
                             <mark
-                              className="px-0.5 rounded font-semibold"
-                              style={{
-                                background: 'var(--nim-highlight-bg)',
-                                color: 'var(--nim-highlight-text)',
-                              }}
+                              className="px-0.5 rounded font-semibold bg-[var(--nim-highlight-bg)] text-[var(--nim-highlight-text)]"
                             >
                               {match.text.substring(match.start, match.end)}
                             </mark>
@@ -536,8 +485,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
                       ))}
                       {file.matches.length > 2 && (
                         <div
-                          className="quick-open-more-matches text-[11px] italic mt-1"
-                          style={{ color: 'var(--nim-text-faint)' }}
+                          className="quick-open-more-matches text-[11px] italic mt-1 text-nim-faint"
                         >
                           ...and {file.matches.length - 2} more match{file.matches.length - 2 > 1 ? 'es' : ''}
                         </div>
@@ -551,39 +499,23 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
         </div>
 
         <div
-          className="quick-open-footer px-4 py-2 flex gap-4"
-          style={{
-            borderTop: '1px solid var(--nim-border)',
-            background: 'var(--nim-bg-secondary)',
-          }}
+          className="quick-open-footer px-4 py-2 flex gap-4 border-t border-nim bg-nim-secondary"
         >
           <span
-            className="quick-open-hint text-[11px] flex items-center gap-1"
-            style={{ color: 'var(--nim-text-faint)' }}
+            className="quick-open-hint text-[11px] flex items-center gap-1 text-nim-faint"
           >
             <kbd
-              className="px-1.5 py-0.5 rounded font-mono text-[10px]"
-              style={{
-                background: 'var(--nim-bg)',
-                border: '1px solid var(--nim-border)',
-                color: 'var(--nim-text)',
-              }}
+              className="px-1.5 py-0.5 rounded font-mono text-[10px] bg-nim border border-nim text-nim"
             >
               ↑↓
             </kbd>
             Navigate
           </span>
           <span
-            className="quick-open-hint text-[11px] flex items-center gap-1"
-            style={{ color: 'var(--nim-text-faint)' }}
+            className="quick-open-hint text-[11px] flex items-center gap-1 text-nim-faint"
           >
             <kbd
-              className="px-1.5 py-0.5 rounded font-mono text-[10px]"
-              style={{
-                background: 'var(--nim-bg)',
-                border: '1px solid var(--nim-border)',
-                color: 'var(--nim-text)',
-              }}
+              className="px-1.5 py-0.5 rounded font-mono text-[10px] bg-nim border border-nim text-nim"
             >
               Enter
             </kbd>
@@ -591,16 +523,10 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
           </span>
           {searchQuery && !contentSearchTriggered && (
             <span
-              className="quick-open-hint text-[11px] flex items-center gap-1"
-              style={{ color: 'var(--nim-text-faint)' }}
+              className="quick-open-hint text-[11px] flex items-center gap-1 text-nim-faint"
             >
               <kbd
-                className="px-1.5 py-0.5 rounded font-mono text-[10px]"
-                style={{
-                  background: 'var(--nim-bg)',
-                  border: '1px solid var(--nim-border)',
-                  color: 'var(--nim-text)',
-                }}
+                className="px-1.5 py-0.5 rounded font-mono text-[10px] bg-nim border border-nim text-nim"
               >
                 Tab
               </kbd>
@@ -608,16 +534,10 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
             </span>
           )}
           <span
-            className="quick-open-hint text-[11px] flex items-center gap-1"
-            style={{ color: 'var(--nim-text-faint)' }}
+            className="quick-open-hint text-[11px] flex items-center gap-1 text-nim-faint"
           >
             <kbd
-              className="px-1.5 py-0.5 rounded font-mono text-[10px]"
-              style={{
-                background: 'var(--nim-bg)',
-                border: '1px solid var(--nim-border)',
-                color: 'var(--nim-text)',
-              }}
+              className="px-1.5 py-0.5 rounded font-mono text-[10px] bg-nim border border-nim text-nim"
             >
               Esc
             </kbd>

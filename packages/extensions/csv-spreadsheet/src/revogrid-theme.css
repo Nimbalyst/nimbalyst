@@ -20,8 +20,8 @@
   --revo-border-color: var(--nim-border);
   --revo-text-color: var(--nim-text);
   --revo-header-text-color: var(--nim-text-muted);
-  --revo-selected-bg-color: rgba(var(--primary-color-rgb, 59, 130, 246), 0.15);
-  --revo-focus-bg-color: rgba(var(--primary-color-rgb, 59, 130, 246), 0.25);
+  --revo-selected-bg-color: rgba(59, 130, 246, 0.15);
+  --revo-focus-bg-color: rgba(59, 130, 246, 0.25);
 }
 
 /* Dark theme overrides */

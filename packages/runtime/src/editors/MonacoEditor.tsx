@@ -181,7 +181,7 @@ export function MonacoEditor({
         alignItems: 'center',
         justifyContent: 'center',
         height: '100%',
-        color: 'var(--text-secondary)'
+        color: 'var(--nim-text-muted)'
       }}>
         <span>Loading...</span>
       </div>
@@ -196,7 +196,7 @@ export function MonacoEditor({
         alignItems: 'center',
         justifyContent: 'center',
         height: '100%',
-        color: 'var(--text-error)'
+        color: 'var(--nim-error)'
       }}>
         <span>Failed to load: {loadError.message}</span>
       </div>

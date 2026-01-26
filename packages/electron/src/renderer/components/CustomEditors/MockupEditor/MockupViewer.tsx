@@ -612,9 +612,9 @@ export const MockupViewer: React.FC<EditorHostProps> = ({ host }) => {
             position: fixed;
             top: 60px;
             right: 20px;
-            background: var(--surface-secondary);
-            border: 1px solid var(--border-primary);
-            color: var(--text-primary);
+            background: var(--nim-bg-secondary);
+            border: 1px solid var(--nim-border);
+            color: var(--nim-text);
             padding: 12px 20px;
             border-radius: 6px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
@@ -646,15 +646,7 @@ export const MockupViewer: React.FC<EditorHostProps> = ({ host }) => {
   // Render loading state
   if (isLoading) {
     return (
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '100%',
-          color: 'var(--text-secondary)',
-        }}
-      >
+      <div className="flex items-center justify-center h-full text-nim-muted">
         Loading mockup...
       </div>
     );
@@ -663,16 +655,10 @@ export const MockupViewer: React.FC<EditorHostProps> = ({ host }) => {
   // Render error state
   if (error) {
     return (
-      <div
-        style={{
-          padding: '20px',
-          color: 'var(--text-primary)',
-          backgroundColor: 'var(--surface-primary)',
-        }}
-      >
-        <h3 style={{ color: 'var(--text-primary)' }}>Error Loading Mockup</h3>
-        <p style={{ color: 'var(--text-secondary)' }}>{error.message}</p>
-        <p style={{ fontSize: '14px', color: 'var(--text-tertiary)', marginTop: '12px' }}>
+      <div className="p-5 text-nim bg-nim">
+        <h3 className="text-nim">Error Loading Mockup</h3>
+        <p className="text-nim-muted">{error.message}</p>
+        <p className="text-sm text-nim-faint mt-3">
           File: {fileName}
         </p>
       </div>
@@ -693,56 +679,21 @@ export const MockupViewer: React.FC<EditorHostProps> = ({ host }) => {
 
   // Render preview mode
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        backgroundColor: 'var(--surface-primary)',
-        position: 'relative',
-      }}
-    >
+    <div className="flex flex-col h-full bg-nim relative">
       {/* Toolbar */}
-      <div
-        style={{
-          padding: '8px 16px',
-          borderBottom: '1px solid var(--border-primary)',
-          backgroundColor: 'var(--surface-secondary)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
+      <div className="px-4 py-2 border-b border-nim bg-nim-secondary flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-nim-muted">
             {fileName}
           </span>
           {selectedElement && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '4px 8px',
-                backgroundColor: 'rgba(0, 122, 255, 0.1)',
-                borderRadius: '4px',
-                border: '1px solid rgba(0, 122, 255, 0.3)',
-              }}
-            >
-              <span style={{ fontSize: '12px', color: 'var(--text-primary)' }}>
+            <div className="flex items-center gap-2 px-2 py-1 bg-[rgba(0,122,255,0.1)] rounded border border-[rgba(0,122,255,0.3)]">
+              <span className="text-xs text-nim">
                 Selected: {selectedElement.tagName}
               </span>
               <button
                 onClick={handleDeselectElement}
-                style={{
-                  padding: '2px 6px',
-                  fontSize: '11px',
-                  backgroundColor: 'transparent',
-                  border: '1px solid var(--border-primary)',
-                  borderRadius: '3px',
-                  color: 'var(--text-primary)',
-                  cursor: 'pointer',
-                }}
+                className="px-1.5 py-0.5 text-[11px] bg-transparent border border-nim rounded-sm text-nim cursor-pointer"
                 title="Deselect element"
               >
                 Clear
@@ -750,22 +701,17 @@ export const MockupViewer: React.FC<EditorHostProps> = ({ host }) => {
             </div>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-nim-faint">
             Mockup Preview
           </span>
           <button
             onClick={handleToggleDrawing}
-            style={{
-              padding: '4px 12px',
-              fontSize: '12px',
-              backgroundColor: isDrawingMode ? 'var(--primary-color)' : 'var(--surface-primary)',
-              border: '1px solid var(--border-primary)',
-              borderRadius: '4px',
-              color: isDrawingMode ? 'white' : 'var(--text-primary)',
-              cursor: 'pointer',
-              fontWeight: isDrawingMode ? 'bold' : 'normal',
-            }}
+            className={`px-3 py-1 text-xs border border-nim rounded cursor-pointer ${
+              isDrawingMode
+                ? 'bg-nim-primary text-white font-bold'
+                : 'bg-nim text-nim font-normal'
+            }`}
             title={isDrawingMode ? 'Exit drawing mode' : 'Draw annotations for AI'}
           >
             {isDrawingMode ? 'Done Drawing' : 'Draw'}
@@ -776,26 +722,12 @@ export const MockupViewer: React.FC<EditorHostProps> = ({ host }) => {
                 type="color"
                 value={drawingColor}
                 onChange={(e) => setDrawingColor(e.target.value)}
-                style={{
-                  width: '32px',
-                  height: '24px',
-                  border: '1px solid var(--border-primary)',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                }}
+                className="w-8 h-6 border border-nim rounded cursor-pointer"
                 title="Choose drawing color"
               />
               <button
                 onClick={handleClearDrawing}
-                style={{
-                  padding: '4px 12px',
-                  fontSize: '12px',
-                  backgroundColor: 'var(--surface-primary)',
-                  border: '1px solid var(--border-primary)',
-                  borderRadius: '4px',
-                  color: 'var(--text-primary)',
-                  cursor: 'pointer',
-                }}
+                className="px-3 py-1 text-xs bg-nim border border-nim rounded text-nim cursor-pointer"
                 title="Clear all drawings"
               >
                 Clear
@@ -805,16 +737,9 @@ export const MockupViewer: React.FC<EditorHostProps> = ({ host }) => {
           <button
             onClick={handleCaptureScreenshot}
             disabled={isCapturing}
-            style={{
-              padding: '4px 12px',
-              fontSize: '12px',
-              backgroundColor: 'var(--surface-primary)',
-              border: '1px solid var(--border-primary)',
-              borderRadius: '4px',
-              color: 'var(--text-primary)',
-              cursor: isCapturing ? 'wait' : 'pointer',
-              opacity: isCapturing ? 0.6 : 1,
-            }}
+            className={`px-3 py-1 text-xs bg-nim border border-nim rounded text-nim ${
+              isCapturing ? 'cursor-wait opacity-60' : 'cursor-pointer opacity-100'
+            }`}
             title="Capture screenshot of mockup"
           >
             {isCapturing ? 'Capturing...' : 'Screenshot'}
@@ -823,24 +748,10 @@ export const MockupViewer: React.FC<EditorHostProps> = ({ host }) => {
       </div>
 
       {/* Content Area */}
-      <div
-        style={{
-          flex: 1,
-          overflow: 'hidden',
-          backgroundColor: '#ffffff',
-          position: 'relative',
-        }}
-      >
+      <div className="flex-1 overflow-hidden bg-white relative">
         <iframe
           ref={iframeRef}
-          style={{
-            width: '100%',
-            height: '100%',
-            border: 'none',
-            position: 'absolute',
-            top: 0,
-            left: 0,
-          }}
+          className="w-full h-full border-none absolute top-0 left-0"
           sandbox="allow-scripts allow-same-origin"
           title={`Mockup: ${fileName}`}
         />
@@ -858,34 +769,15 @@ export const MockupViewer: React.FC<EditorHostProps> = ({ host }) => {
               iframeDoc.documentElement.scrollLeft += e.deltaX;
             }
           }}
+          className="absolute top-0 left-0 w-full h-full"
           style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
             pointerEvents: isDrawingMode ? 'auto' : 'none',
             cursor: isDrawingMode ? 'crosshair' : 'default',
             zIndex: isDrawingMode ? 1000 : 10,
           }}
         />
         {isDrawingMode && (
-          <div
-            style={{
-              position: 'absolute',
-              bottom: '16px',
-              left: '50%',
-              transform: 'translateX(-50%)',
-              backgroundColor: 'var(--surface-secondary)',
-              border: '1px solid var(--border-primary)',
-              borderRadius: '6px',
-              padding: '8px 16px',
-              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
-              zIndex: 1001,
-              fontSize: '12px',
-              color: 'var(--text-primary)',
-            }}
-          >
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-nim-secondary border border-nim rounded-md px-4 py-2 shadow-lg z-[1001] text-xs text-nim">
             Drawing mode active - Circle elements, draw arrows, or annotate for AI
           </div>
         )}

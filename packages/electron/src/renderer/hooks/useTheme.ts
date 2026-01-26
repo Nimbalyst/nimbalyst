@@ -8,79 +8,76 @@ import { getBaseThemeColors, type ExtendedThemeColors } from 'rexical';
 /**
  * Map of ExtendedThemeColors keys to CSS variable names.
  *
- * These are the INNER variable names that NimbalystTheme.css references via var().
- * For example, NimbalystTheme.css defines: --nim-bg: var(--surface-primary, #fff)
- * So we set --surface-primary to override the value.
- *
- * This pattern ensures that inline styles properly override the CSS defaults.
+ * These are the --nim-* variable names that components use directly.
+ * Extension themes override these variables to change the look.
  */
 const CSS_VAR_MAP: Record<keyof ExtendedThemeColors, string> = {
-  // Core colors - set inner variables that --nim-* vars reference
-  'bg': '--surface-primary',
-  'bg-secondary': '--surface-secondary',
-  'bg-tertiary': '--surface-tertiary',
-  'bg-hover': '--surface-hover',
-  'bg-selected': '--surface-selected',
-  'bg-active': '--surface-active',
-  'text': '--text-primary',
-  'text-muted': '--text-secondary',
-  'text-faint': '--text-tertiary',
-  'text-disabled': '--text-disabled',
-  'border': '--border-primary',
-  'border-focus': '--border-focus',
-  'primary': '--accent-primary',
-  'primary-hover': '--accent-primary-hover',
-  'link': '--accent-link',
-  'link-hover': '--accent-link-hover',
-  'success': '--success-color',
-  'warning': '--warning-color',
-  'error': '--error-color',
-  'info': '--info-color',
+  // Core colors - set --nim-* vars directly
+  'bg': '--nim-bg',
+  'bg-secondary': '--nim-bg-secondary',
+  'bg-tertiary': '--nim-bg-tertiary',
+  'bg-hover': '--nim-bg-hover',
+  'bg-selected': '--nim-bg-selected',
+  'bg-active': '--nim-bg-active',
+  'text': '--nim-text',
+  'text-muted': '--nim-text-muted',
+  'text-faint': '--nim-text-faint',
+  'text-disabled': '--nim-text-disabled',
+  'border': '--nim-border',
+  'border-focus': '--nim-border-focus',
+  'primary': '--nim-primary',
+  'primary-hover': '--nim-primary-hover',
+  'link': '--nim-link',
+  'link-hover': '--nim-link-hover',
+  'success': '--nim-success',
+  'warning': '--nim-warning',
+  'error': '--nim-error',
+  'info': '--nim-info',
 
   // Code blocks
-  'code-bg': '--code-background',
-  'code-text': '--code-text',
-  'code-border': '--code-border',
-  'code-gutter': '--code-gutter',
+  'code-bg': '--nim-code-bg',
+  'code-text': '--nim-code-text',
+  'code-border': '--nim-code-border',
+  'code-gutter': '--nim-code-gutter',
 
-  // Table - set --nim-* directly to override CSS fallbacks
+  // Table
   'table-border': '--nim-table-border',
   'table-header': '--nim-table-header',
   'table-cell': '--nim-table-cell',
   'table-stripe': '--nim-table-stripe',
 
   // Toolbar
-  'toolbar-bg': '--toolbar-background',
-  'toolbar-border': '--toolbar-border',
-  'toolbar-hover': '--toolbar-button-hover',
-  'toolbar-active': '--toolbar-button-active',
+  'toolbar-bg': '--nim-toolbar-bg',
+  'toolbar-border': '--nim-toolbar-border',
+  'toolbar-hover': '--nim-toolbar-hover',
+  'toolbar-active': '--nim-toolbar-active',
 
   // Special
-  'highlight-bg': '--highlight-background',
-  'highlight-border': '--highlight-border',
-  'quote-text': '--quote-text',
-  'quote-border': '--quote-border',
+  'highlight-bg': '--nim-highlight-bg',
+  'highlight-border': '--nim-highlight-border',
+  'quote-text': '--nim-quote-text',
+  'quote-border': '--nim-quote-border',
 
   // Scrollbar
-  'scrollbar-thumb': '--scrollbar-thumb',
-  'scrollbar-thumb-hover': '--scrollbar-thumb-hover',
-  'scrollbar-track': '--scrollbar-track',
+  'scrollbar-thumb': '--nim-scrollbar-thumb',
+  'scrollbar-thumb-hover': '--nim-scrollbar-thumb-hover',
+  'scrollbar-track': '--nim-scrollbar-track',
 
   // Diff
-  'diff-add-bg': '--diff-add-bg',
-  'diff-add-border': '--diff-add-border',
-  'diff-remove-bg': '--diff-remove-bg',
-  'diff-remove-border': '--diff-remove-border',
+  'diff-add-bg': '--nim-diff-add-bg',
+  'diff-add-border': '--nim-diff-add-border',
+  'diff-remove-bg': '--nim-diff-remove-bg',
+  'diff-remove-border': '--nim-diff-remove-border',
 
   // Syntax highlighting
-  'code-comment': '--code-comment',
-  'code-punctuation': '--code-punctuation',
-  'code-property': '--code-property',
-  'code-selector': '--code-selector',
-  'code-operator': '--code-operator',
-  'code-attr': '--code-attr',
-  'code-variable': '--code-variable',
-  'code-function': '--code-function',
+  'code-comment': '--nim-code-comment',
+  'code-punctuation': '--nim-code-punctuation',
+  'code-property': '--nim-code-property',
+  'code-selector': '--nim-code-selector',
+  'code-operator': '--nim-code-operator',
+  'code-attr': '--nim-code-attr',
+  'code-variable': '--nim-code-variable',
+  'code-function': '--nim-code-function',
 };
 
 // Track currently applied extension theme for cleanup

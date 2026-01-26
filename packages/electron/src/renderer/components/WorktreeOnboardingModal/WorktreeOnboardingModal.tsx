@@ -15,8 +15,7 @@ export const WorktreeOnboardingModal: React.FC<WorktreeOnboardingModalProps> = (
 
   return (
     <div
-      className="worktree-onboarding-overlay nim-overlay backdrop-blur-sm"
-      style={{ background: 'rgba(0, 0, 0, 0.6)' }}
+      className="worktree-onboarding-overlay nim-overlay backdrop-blur-sm bg-black/60"
       onClick={onCancel}
     >
       <div

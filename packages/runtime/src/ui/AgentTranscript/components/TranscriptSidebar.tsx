@@ -34,8 +34,8 @@ export const TranscriptSidebar: React.FC<TranscriptSidebarProps> = ({
       {!isCollapsed && (
         <div style={{
           width: '100%',
-          backgroundColor: 'var(--surface-secondary)',
-          borderLeft: '1px solid var(--border-primary)',
+          backgroundColor: 'var(--nim-bg-secondary)',
+          borderLeft: '1px solid var(--nim-border)',
           display: 'flex',
           flexDirection: 'column',
           height: '100%',
@@ -46,7 +46,7 @@ export const TranscriptSidebar: React.FC<TranscriptSidebarProps> = ({
           }}>
             <h3 style={{
               fontWeight: 600,
-              color: 'var(--text-primary)',
+              color: 'var(--nim-text)',
               fontSize: '0.875rem',
               margin: 0
             }}>
@@ -63,7 +63,7 @@ export const TranscriptSidebar: React.FC<TranscriptSidebarProps> = ({
             {prompts.length === 0 ? (
               <div style={{
                 padding: '1rem',
-                color: 'var(--text-tertiary)',
+                color: 'var(--nim-text-faint)',
                 fontSize: '0.875rem'
               }}>
                 No prompts yet. Start by entering a prompt.
@@ -84,14 +84,14 @@ export const TranscriptSidebar: React.FC<TranscriptSidebarProps> = ({
                       borderRadius: 0,
                       transition: 'all 0.2s ease',
                       backgroundColor: selectedPromptId === marker.id
-                        ? 'var(--surface-hover)'
+                        ? 'var(--nim-bg-hover)'
                         : 'transparent',
-                      borderTop: '1px solid var(--border-primary)',
+                      borderTop: '1px solid var(--nim-border)',
                       borderBottom: selectedPromptId === marker.id
-                        ? '1px solid var(--primary-color)'
+                        ? '1px solid var(--nim-primary)'
                         : '1px solid transparent',
                       borderLeft: selectedPromptId === marker.id
-                        ? '2px solid var(--primary-color)'
+                        ? '2px solid var(--nim-primary)'
                         : '2px solid transparent',
                       borderRight: 'none',
                       cursor: 'pointer',
@@ -101,14 +101,14 @@ export const TranscriptSidebar: React.FC<TranscriptSidebarProps> = ({
                     }}
                     onMouseEnter={(e) => {
                       if (selectedPromptId !== marker.id) {
-                        e.currentTarget.style.backgroundColor = 'var(--surface-hover)';
-                        e.currentTarget.style.borderColor = 'var(--border-primary)';
+                        e.currentTarget.style.backgroundColor = 'var(--nim-bg-hover)';
+                        e.currentTarget.style.borderColor = 'var(--nim-border)';
                       }
                     }}
                     onMouseLeave={(e) => {
                       if (selectedPromptId !== marker.id) {
                         e.currentTarget.style.backgroundColor = 'transparent';
-                        e.currentTarget.style.borderColor = 'var(--border-primary)';
+                        e.currentTarget.style.borderColor = 'var(--nim-border)';
                       }
                     }}
                   >
@@ -119,7 +119,7 @@ export const TranscriptSidebar: React.FC<TranscriptSidebarProps> = ({
                       width: '100%'
                     }}>
                       <span style={{
-                        color: 'var(--primary-color)',
+                        color: 'var(--nim-primary)',
                         fontFamily: 'monospace',
                         fontSize: '0.75rem',
                         fontWeight: 600,
@@ -134,7 +134,7 @@ export const TranscriptSidebar: React.FC<TranscriptSidebarProps> = ({
                       }}>
                         <div style={{
                           fontSize: '0.875rem',
-                          color: 'var(--text-primary)',
+                          color: 'var(--nim-text)',
                           lineHeight: '1.5',
                           marginBottom: '0.5rem',
                           display: '-webkit-box',
@@ -150,14 +150,14 @@ export const TranscriptSidebar: React.FC<TranscriptSidebarProps> = ({
                           alignItems: 'center',
                           gap: '0.5rem',
                           fontSize: '0.75rem',
-                          color: 'var(--text-tertiary)'
+                          color: 'var(--nim-text-faint)'
                         }}>
                           <span>{formatTimeAgo(marker.timestamp)}</span>
                           {marker.completionTimestamp && (
                             <>
                               <span>•</span>
                               <span style={{
-                                color: 'var(--text-secondary)'
+                                color: 'var(--nim-text-muted)'
                               }}>
                                 {formatDuration(marker.timestamp, marker.completionTimestamp)}
                               </span>

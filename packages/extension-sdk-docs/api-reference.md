@@ -311,14 +311,14 @@ Available CSS variables for theming:
 
 | Variable | Purpose |
 | --- | --- |
-| `--surface-primary` | Main background |
-| `--surface-secondary` | Toolbar/panel background |
-| `--surface-tertiary` | Nested element background |
-| `--surface-hover` | Hover state background |
-| `--text-primary` | Main text color |
-| `--text-secondary` | Muted text |
-| `--text-tertiary` | Very muted text |
-| `--border-primary` | Main borders |
-| `--primary-color` | Accent/brand color |
+| `--nim-bg` | Main background |
+| `--nim-bg-secondary` | Toolbar/panel background |
+| `--nim-bg-tertiary` | Nested element background |
+| `--nim-bg-hover` | Hover state background |
+| `--nim-text` | Main text color |
+| `--nim-text-muted` | Muted text |
+| `--nim-text-faint` | Very muted text |
+| `--nim-border` | Main borders |
+| `--nim-primary` | Accent/brand color |
 
 Always use these variables instead of hardcoded colors for theme compatibility.

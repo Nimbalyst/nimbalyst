@@ -166,7 +166,7 @@ export function HelloEditor({
       flexDirection: 'column'
     }}>
       <h2 style={{ marginBottom: '10px' }}>Hello Editor</h2>
-      <p style={{ color: 'var(--text-secondary)', marginBottom: '10px' }}>
+      <p style={{ color: 'var(--nim-text-muted)', marginBottom: '10px' }}>
         Editing: {filePath}
       </p>
       <textarea
@@ -177,9 +177,9 @@ export function HelloEditor({
           padding: '10px',
           fontSize: '16px',
           fontFamily: 'monospace',
-          backgroundColor: 'var(--surface-secondary)',
-          color: 'var(--text-primary)',
-          border: '1px solid var(--border-primary)',
+          backgroundColor: 'var(--nim-bg-secondary)',
+          color: 'var(--nim-text)',
+          border: '1px solid var(--nim-border)',
           borderRadius: '4px',
           resize: 'none'
         }}

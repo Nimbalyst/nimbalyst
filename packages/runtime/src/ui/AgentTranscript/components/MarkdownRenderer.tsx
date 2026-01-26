@@ -167,7 +167,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
     <div
       className={`markdown-content text-[0.9375rem] leading-relaxed max-w-full overflow-x-hidden break-words [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 ${isUser ? 'font-medium' : 'font-normal'} ${isSystemMessage ? 'opacity-85 font-mono text-[0.95em]' : ''}`}
       style={{
-        color: 'var(--text-primary)'
+        color: 'var(--nim-text)'
       }}
     >
       <ReactMarkdown
@@ -186,12 +186,12 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
                 <code
                   className={className}
                   style={{
-                    backgroundColor: 'var(--surface-tertiary)',
+                    backgroundColor: 'var(--nim-bg-tertiary)',
                     padding: '0.125rem 0.375rem',
                     borderRadius: '0.25rem',
                     fontSize: '0.875em',
                     fontFamily: 'var(--font-mono, monospace)',
-                    color: 'var(--text-primary)'
+                    color: 'var(--nim-text)'
                   }}
                   {...props}
                 >
@@ -201,7 +201,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
             }
 
             const codeStyle: React.CSSProperties = {
-              backgroundColor: 'var(--surface-tertiary)',
+              backgroundColor: 'var(--nim-bg-tertiary)',
               padding: isSingleLine ? '0.25rem 0.5rem' : '0.75rem',
               borderRadius: isSingleLine ? '0.25rem' : '0.375rem',
               fontSize: '0.8125rem',
@@ -241,7 +241,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
                   display: isSingleLine ? 'inline-block' : 'block',
                   ...codeStyle,
                   fontFamily: 'var(--font-mono, monospace)',
-                  color: 'var(--text-primary)'
+                  color: 'var(--nim-text)'
                 }}
                 {...props}
               >
@@ -260,8 +260,8 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
               fontWeight: 700,
               marginTop: '1.5rem',
               marginBottom: '1rem',
-              color: 'var(--text-primary)',
-              borderBottom: '1px solid var(--border-primary)',
+              color: 'var(--nim-text)',
+              borderBottom: '1px solid var(--nim-border)',
               paddingBottom: '0.5rem'
             }}>
               {children}
@@ -273,7 +273,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
               fontWeight: 600,
               marginTop: '1.25rem',
               marginBottom: '0.75rem',
-              color: 'var(--text-primary)'
+              color: 'var(--nim-text)'
             }}>
               {children}
             </h2>
@@ -284,7 +284,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
               fontWeight: 600,
               marginTop: '1rem',
               marginBottom: '0.5rem',
-              color: 'var(--text-primary)'
+              color: 'var(--nim-text)'
             }}>
               {children}
             </h3>
@@ -295,7 +295,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
               fontWeight: 600,
               marginTop: '1rem',
               marginBottom: '0.5rem',
-              color: 'var(--text-primary)'
+              color: 'var(--nim-text)'
             }}>
               {children}
             </h4>
@@ -306,7 +306,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
               fontWeight: 600,
               marginTop: '0.75rem',
               marginBottom: '0.5rem',
-              color: 'var(--text-primary)'
+              color: 'var(--nim-text)'
             }}>
               {children}
             </h5>
@@ -317,7 +317,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
               fontWeight: 600,
               marginTop: '0.75rem',
               marginBottom: '0.5rem',
-              color: 'var(--text-primary)'
+              color: 'var(--nim-text)'
             }}>
               {children}
             </h6>
@@ -328,7 +328,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
               marginTop: '0.5rem',
               marginBottom: '0.5rem',
               lineHeight: '1.625',
-              color: 'var(--text-primary)',
+              color: 'var(--nim-text)',
               ...(isUser && { whiteSpace: 'pre-wrap' })
             }}>
               {children}
@@ -341,7 +341,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
               target="_blank"
               rel="noopener noreferrer"
               style={{
-                color: 'var(--accent-primary)',
+                color: 'var(--nim-primary)',
                 textDecoration: 'underline',
                 cursor: 'pointer'
               }}
@@ -356,7 +356,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
               marginBottom: '0.5rem',
               paddingLeft: '1.5rem',
               listStyleType: 'disc',
-              color: 'var(--text-primary)'
+              color: 'var(--nim-text)'
             }}>
               {children}
             </ul>
@@ -367,7 +367,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
               marginBottom: '0.5rem',
               paddingLeft: '1.5rem',
               listStyleType: 'decimal',
-              color: 'var(--text-primary)'
+              color: 'var(--nim-text)'
             }}>
               {children}
             </ol>
@@ -384,12 +384,12 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
           // Blockquotes
           blockquote: ({ children }) => (
             <blockquote style={{
-              borderLeft: '4px solid var(--border-primary)',
+              borderLeft: '4px solid var(--nim-border)',
               paddingLeft: '1rem',
               marginLeft: '0',
               marginTop: '0.75rem',
               marginBottom: '0.75rem',
-              color: 'var(--text-secondary)',
+              color: 'var(--nim-text-muted)',
               fontStyle: 'italic'
             }}>
               {children}
@@ -402,7 +402,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
                 width: '100%',
                 borderCollapse: 'collapse',
                 fontSize: '0.875rem',
-                border: '1px solid var(--border-primary)'
+                border: '1px solid var(--nim-border)'
               }}>
                 {children}
               </table>
@@ -410,8 +410,8 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
           ),
           thead: ({ children }) => (
             <thead style={{
-              backgroundColor: 'var(--surface-secondary)',
-              borderBottom: '2px solid var(--border-primary)'
+              backgroundColor: 'var(--nim-bg-secondary)',
+              borderBottom: '2px solid var(--nim-border)'
             }}>
               {children}
             </thead>
@@ -423,7 +423,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
           ),
           tr: ({ children }) => (
             <tr style={{
-              borderBottom: '1px solid var(--border-primary)'
+              borderBottom: '1px solid var(--nim-border)'
             }}>
               {children}
             </tr>
@@ -433,7 +433,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
               padding: '0.75rem',
               textAlign: 'left',
               fontWeight: 600,
-              color: 'var(--text-primary)'
+              color: 'var(--nim-text)'
             }}>
               {children}
             </th>
@@ -441,7 +441,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
           td: ({ children }) => (
             <td style={{
               padding: '0.75rem',
-              color: 'var(--text-primary)'
+              color: 'var(--nim-text)'
             }}>
               {children}
             </td>
@@ -450,7 +450,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
           hr: () => (
             <hr style={{
               border: 'none',
-              borderTop: '1px solid var(--border-primary)',
+              borderTop: '1px solid var(--nim-border)',
               marginTop: '1rem',
               marginBottom: '1rem'
             }} />
@@ -459,7 +459,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
           strong: ({ children }) => (
             <strong style={{
               fontWeight: 700,
-              color: 'var(--text-primary)'
+              color: 'var(--nim-text)'
             }}>
               {children}
             </strong>
@@ -468,7 +468,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
           em: ({ children }) => (
             <em style={{
               fontStyle: 'italic',
-              color: 'var(--text-primary)'
+              color: 'var(--nim-text)'
             }}>
               {children}
             </em>
@@ -477,7 +477,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
           del: ({ children }) => (
             <del style={{
               textDecoration: 'line-through',
-              color: 'var(--text-tertiary)'
+              color: 'var(--nim-text-faint)'
             }}>
               {children}
             </del>

@@ -22,19 +22,8 @@ const GOOGLE_AI_KEY_STORAGE_KEY = 'google_ai_api_key';
  */
 function ApiKeyMissingBanner({ theme }: { theme: 'light' | 'dark' }) {
   return (
-    <div
-      style={{
-        padding: '12px 16px',
-        background: theme === 'dark' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(245, 158, 11, 0.1)',
-        borderBottom: '1px solid var(--warning-color, #f59e0b)',
-        color: 'var(--warning-color, #f59e0b)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        fontSize: 13,
-      }}
-    >
-      <span style={{ flex: 1 }}>
+    <div className="px-4 py-3 bg-[rgba(245,158,11,0.1)] border-b border-nim-warning text-nim-warning flex items-center gap-2 text-[13px]">
+      <span className="flex-1">
         Google AI API key not configured. Go to <strong>Settings &gt; Extensions &gt; Image Generation</strong> to add your API key.
       </span>
     </div>
@@ -328,17 +317,10 @@ export const ImageProjectEditor = forwardRef<unknown, EditorHostProps>(
     if (isLoading) {
       return (
         <div
-          className="image-project-editor"
+          className="image-project-editor w-full h-full flex items-center justify-center"
           data-theme={theme}
-          style={{
-            width: '100%',
-            height: '100%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
         >
-          <div style={{ color: theme === 'dark' ? '#b3b3b3' : '#6b7280' }}>Loading project...</div>
+          <div className="text-nim-muted">Loading project...</div>
         </div>
       );
     }
@@ -347,17 +329,10 @@ export const ImageProjectEditor = forwardRef<unknown, EditorHostProps>(
     if (loadError) {
       return (
         <div
-          className="image-project-editor"
+          className="image-project-editor w-full h-full flex items-center justify-center"
           data-theme={theme}
-          style={{
-            width: '100%',
-            height: '100%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
         >
-          <div style={{ color: '#ef4444' }}>Failed to load: {loadError.message}</div>
+          <div className="text-nim-error">Failed to load: {loadError.message}</div>
         </div>
       );
     }
@@ -368,15 +343,8 @@ export const ImageProjectEditor = forwardRef<unknown, EditorHostProps>(
 
     return (
       <div
-        className="image-project-editor"
+        className="image-project-editor w-full h-full flex flex-col overflow-hidden"
         data-theme={theme}
-        style={{
-          width: '100%',
-          height: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}
       >
         {/* API Key Missing Banner */}
         {!apiKeyConfigured && (
@@ -385,27 +353,11 @@ export const ImageProjectEditor = forwardRef<unknown, EditorHostProps>(
 
         {/* Error Banner */}
         {generationError && (
-          <div
-            style={{
-              padding: '12px 16px',
-              background: 'var(--error-background, #3f1d1d)',
-              borderBottom: '1px solid var(--error-color, #ef4444)',
-              color: 'var(--error-color, #ef4444)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-            }}
-          >
-            <span style={{ flex: 1 }}>{generationError}</span>
+          <div className="px-4 py-3 bg-[#3f1d1d] border-b border-nim-error text-nim-error flex items-center gap-2">
+            <span className="flex-1">{generationError}</span>
             <button
               onClick={() => setGenerationError(null)}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: 'var(--error-color, #ef4444)',
-                cursor: 'pointer',
-                padding: '4px 8px',
-              }}
+              className="bg-transparent border-none text-nim-error cursor-pointer px-2 py-1"
             >
               Dismiss
             </button>

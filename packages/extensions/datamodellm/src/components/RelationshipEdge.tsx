@@ -42,7 +42,7 @@ function RelationshipEdgeComponent({
 
   // Get stroke color based on selection state
   const getStrokeColor = () => {
-    return selected ? 'var(--primary-color)' : 'var(--text-secondary)';
+    return selected ? 'var(--nim-primary)' : 'var(--nim-text-muted)';
   };
 
   // Get cardinality type for source and target

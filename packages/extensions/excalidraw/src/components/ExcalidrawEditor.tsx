@@ -317,8 +317,8 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
   // Show loading state
   if (isLoading) {
     return (
-      <div className="excalidraw-editor" data-theme={theme} style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ color: 'var(--text-secondary)' }}>Loading diagram...</div>
+      <div className="excalidraw-editor w-full h-full flex items-center justify-center" data-theme={theme}>
+        <div className="text-nim-muted">Loading diagram...</div>
       </div>
     );
   }
@@ -326,8 +326,8 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
   // Show error state
   if (loadError) {
     return (
-      <div className="excalidraw-editor" data-theme={theme} style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ color: 'var(--text-error)' }}>
+      <div className="excalidraw-editor w-full h-full flex items-center justify-center" data-theme={theme}>
+        <div className="text-nim-error">
           Failed to load: {loadError.message}
         </div>
       </div>
@@ -337,7 +337,7 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
   // Render Excalidraw following the exact Rexical pattern
   // Key by theme to force remount when theme changes
   return (
-    <div className="excalidraw-editor" data-theme={theme} style={{ width: '100%', height: '100%' }}>
+    <div className="excalidraw-editor w-full h-full" data-theme={theme}>
       <Excalidraw
         key={theme}
         onChange={onChange}

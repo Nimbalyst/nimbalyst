@@ -457,79 +457,43 @@ export function VoiceModeButton({ sessionId, workspacePath, onVoiceActiveChange 
   const getButtonColor = () => {
     if (error) return 'var(--error-color, #dc3545)';
     if (isConnecting) return 'var(--warning-color, #ffc107)';
-    if (isVoiceActive) return 'var(--primary-color)';
+    if (isVoiceActive) return 'var(--nim-primary)';
     return 'transparent';
   };
 
   return (
-    <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+    <div className="relative inline-flex items-center">
       <button
         onClick={handleToggleVoice}
         disabled={isConnecting}
         data-testid="voice-mode-toggle"
-        style={{
-          padding: '0.375rem',
-          borderRadius: '0.375rem',
-          fontSize: '0.8125rem',
-          fontWeight: 500,
-          backgroundColor: getButtonColor(),
-          color: (isVoiceActive || isConnecting || error) ? 'white' : 'var(--text-secondary)',
-          border: error ? '1px solid var(--error-color, #dc3545)' : '1px solid var(--border-primary)',
-          cursor: isConnecting ? 'wait' : 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.25rem',
-          transition: 'all 0.15s ease',
-          opacity: (isVoiceActive || isConnecting || error) ? 1 : 0.7,
-        }}
-        onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-        onMouseLeave={(e) => e.currentTarget.style.opacity = (isVoiceActive || isConnecting || error) ? '1' : '0.7'}
+        className={`p-1.5 rounded-md text-[13px] font-medium flex items-center gap-1 transition-all duration-150 ${
+          error ? 'border border-[var(--error-color,#dc3545)]' : 'border border-nim'
+        } ${isConnecting ? 'cursor-wait' : 'cursor-pointer'} ${
+          (isVoiceActive || isConnecting || error) ? 'text-white opacity-100' : 'text-nim-muted opacity-70 hover:opacity-100'
+        }`}
+        style={{ backgroundColor: getButtonColor() }}
         title={getButtonTitle()}
       >
         <MaterialSymbol
           icon={getButtonIcon()}
           size={16}
-          style={isConnecting ? { animation: 'spin 1s linear infinite' } : undefined}
+          className={isConnecting ? 'animate-spin' : ''}
         />
       </button>
       {error && (
         <div
-          style={{
-            position: 'absolute',
-            bottom: 'calc(100% + 8px)',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            backgroundColor: 'var(--background-primary)',
-            border: '1px solid var(--error-color, #dc3545)',
-            borderRadius: '0.5rem',
-            padding: '0.75rem',
-            minWidth: '200px',
-            maxWidth: '300px',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-            zIndex: 1000,
-          }}
+          className="absolute bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-nim border border-[var(--error-color,#dc3545)] rounded-lg p-3 min-w-[200px] max-w-[300px] shadow-[0_4px_12px_rgba(0,0,0,0.15)] z-[1000]"
         >
-          <div style={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: '0.5rem',
-            color: 'var(--text-primary)',
-          }}>
-            <MaterialSymbol icon="error" size={18} style={{ color: 'var(--error-color, #dc3545)', flexShrink: 0 }} />
-            <div style={{ fontSize: '0.8125rem', lineHeight: '1.4' }}>
-              <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Voice Mode Error</div>
-              <div style={{ color: 'var(--text-secondary)' }}>{getErrorMessage(error)}</div>
+          <div className="flex items-start gap-2 text-nim">
+            <MaterialSymbol icon="error" size={18} className="text-[var(--error-color,#dc3545)] shrink-0" />
+            <div className="text-[13px] leading-[1.4]">
+              <div className="font-semibold mb-1">Voice Mode Error</div>
+              <div className="text-nim-muted">{getErrorMessage(error)}</div>
             </div>
             <button
               onClick={(e) => { e.stopPropagation(); setError(null); }}
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                padding: '0',
-                marginLeft: 'auto',
-                color: 'var(--text-tertiary)',
-              }}
+              className="bg-transparent border-none cursor-pointer p-0 ml-auto text-nim-faint"
             >
               <MaterialSymbol icon="close" size={16} />
             </button>
