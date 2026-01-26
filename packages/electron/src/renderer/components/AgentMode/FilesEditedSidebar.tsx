@@ -130,6 +130,74 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
     }
   }, [editedFilePaths, setStagedFilesAction, workstreamId]);
 
+  // Handle bulk selection change (for folder checkboxes)
+  const handleBulkSelectionChange = useCallback((filePaths: string[], selected: boolean) => {
+    const currentSet = new Set(stagedFilesArr);
+    if (selected) {
+      filePaths.forEach(fp => currentSet.add(fp));
+    } else {
+      filePaths.forEach(fp => currentSet.delete(fp));
+    }
+    setStagedFilesAction({ workstreamId, files: Array.from(currentSet) });
+  }, [stagedFilesArr, setStagedFilesAction, workstreamId]);
+
+  // Listen for git status changes and prune committed files from staged set
+  // This ensures that when files are committed (via any method), they're removed from staging
+  useEffect(() => {
+    if (!workspacePath || typeof window === 'undefined' || !window.electronAPI) {
+      return;
+    }
+
+    const handleGitStatusChanged = async () => {
+      // Re-check git status for staged files and remove any that are now committed
+      if (stagedFilesArr.length === 0) return;
+
+      try {
+        // Get relative paths for checking
+        const relativePaths = stagedFilesArr.map(fp => {
+          if (workspacePath && fp.startsWith(workspacePath)) {
+            return fp.slice(workspacePath.length + 1);
+          }
+          return fp;
+        });
+
+        const result = await window.electronAPI.invoke(
+          'git:get-file-status',
+          workspacePath,
+          relativePaths
+        );
+
+        if (result.success && result.status) {
+          // Filter out files that are now committed (unchanged)
+          const stillUncommitted = stagedFilesArr.filter(fp => {
+            const relativePath = fp.startsWith(workspacePath)
+              ? fp.slice(workspacePath.length + 1)
+              : fp;
+            const status = result.status[relativePath];
+            // Keep file if it still has uncommitted changes
+            return status && status.status !== 'unchanged';
+          });
+
+          // Only update if some files were pruned
+          if (stillUncommitted.length !== stagedFilesArr.length) {
+            console.log('[FilesEditedSidebar] Pruning committed files from staging:',
+              stagedFilesArr.length - stillUncommitted.length, 'files');
+            setStagedFilesAction({ workstreamId, files: stillUncommitted });
+          }
+        }
+      } catch (error) {
+        console.error('[FilesEditedSidebar] Failed to check git status for staged files:', error);
+      }
+    };
+
+    // Listen for git status changes
+    const unsubscribe = window.electronAPI.on('git:status-changed', handleGitStatusChanged);
+
+    return () => {
+      unsubscribe?.();
+    };
+  }, [workspacePath, stagedFilesArr, workstreamId, setStagedFilesAction]);
+
   // Fetch file edits from database for ALL sessions in the workstream
   useEffect(() => {
     if (!workstreamId || !workspacePath || workstreamSessions.length === 0) {
@@ -492,6 +560,7 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
           selectedFiles={stagedFiles}
           onSelectionChange={handleSelectionChange}
           onSelectAll={handleSelectAll}
+          onBulkSelectionChange={handleBulkSelectionChange}
         />
       </div>
 

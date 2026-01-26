@@ -30,6 +30,8 @@ interface FileEditsSidebarProps {
   onSelectionChange?: (filePath: string, selected: boolean) => void;
   /** Callback to select/deselect all files */
   onSelectAll?: (selected: boolean) => void;
+  /** Callback for bulk selection changes (add/remove multiple files at once) */
+  onBulkSelectionChange?: (filePaths: string[], selected: boolean) => void;
 }
 
 interface ContextMenuState {
@@ -67,7 +69,8 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
   showCheckboxes = false,
   selectedFiles,
   onSelectionChange,
-  onSelectAll
+  onSelectAll,
+  onBulkSelectionChange
 }) => {
   const [gitStatus, setGitStatus] = useState<Record<string, FileGitStatus>>({});
   // Use prop if provided, otherwise use local state
@@ -567,9 +570,16 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
 
     // If none or some are selected, select all. If all are selected, deselect all.
     const shouldSelect = selectionState !== 'all';
-    uncommittedPaths.forEach(p => {
-      onSelectionChange?.(p, shouldSelect);
-    });
+
+    // Use bulk selection if available (handles multiple files atomically)
+    if (onBulkSelectionChange) {
+      onBulkSelectionChange(uncommittedPaths, shouldSelect);
+    } else {
+      // Fallback to individual calls (may have race condition issues)
+      uncommittedPaths.forEach(p => {
+        onSelectionChange?.(p, shouldSelect);
+      });
+    }
   };
 
   const renderDirectoryNode = (node: DirectoryNode): React.ReactNode => {

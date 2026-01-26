@@ -173,6 +173,16 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
       setIsExpanded(true);
     }, [pendingProposal, setCommitMessage, setStagedFiles, setMode, setActiveProposalId]);
 
+    // When pending proposal disappears but we still have activeProposalId,
+    // it means the commit was completed via the transcript widget - clear our state
+    useEffect(() => {
+      if (!pendingProposal && activeProposalId) {
+        console.log('[GitOperationsPanel] Proposal completed externally, clearing state');
+        clearGitState(workstreamId);
+        prevProposalIdRef.current = null;
+      }
+    }, [pendingProposal, activeProposalId, clearGitState, workstreamId]);
+
     // Fetch git status
     const fetchGitStatus = useCallback(async () => {
       if (!workspacePath) return;
