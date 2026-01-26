@@ -728,6 +728,7 @@ export async function initSyncConfig(): Promise<SyncConfig> {
 export interface AIDebugSettings {
   showToolCalls: boolean;
   aiDebugLogging: boolean;
+  showPromptAdditions: boolean;
 }
 
 /**
@@ -736,6 +737,7 @@ export interface AIDebugSettings {
 const defaultAIDebugSettings: AIDebugSettings = {
   showToolCalls: false,
   aiDebugLogging: false,
+  showPromptAdditions: false,
 };
 
 /**
@@ -769,6 +771,7 @@ function scheduleAIDebugPersist(settings: AIDebugSettings): void {
           ...currentSettings,
           showToolCalls: settings.showToolCalls,
           aiDebugLogging: settings.aiDebugLogging,
+          showPromptAdditions: settings.showPromptAdditions,
         });
       } catch (error) {
         console.error('[appSettings] Failed to save AI debug settings:', error);
@@ -788,6 +791,11 @@ export const showToolCallsAtom = atom((get) => get(aiDebugSettingsAtom).showTool
  * AI debug logging setting.
  */
 export const aiDebugLoggingAtom = atom((get) => get(aiDebugSettingsAtom).aiDebugLogging);
+
+/**
+ * Show prompt additions setting.
+ */
+export const showPromptAdditionsAtom = atom((get) => get(aiDebugSettingsAtom).showPromptAdditions);
 
 // === Setter atoms ===
 
@@ -819,6 +827,7 @@ export async function initAIDebugSettings(): Promise<AIDebugSettings> {
     return {
       showToolCalls: settings?.showToolCalls ?? false,
       aiDebugLogging: settings?.aiDebugLogging ?? false,
+      showPromptAdditions: settings?.showPromptAdditions ?? false,
     };
   } catch (error) {
     console.error('[appSettings] Failed to load AI debug settings:', error);

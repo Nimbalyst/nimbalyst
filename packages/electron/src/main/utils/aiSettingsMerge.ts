@@ -17,6 +17,7 @@ export interface GlobalAISettings {
   providerSettings: Record<string, ProviderSettings>;
   showToolCalls: boolean;
   aiDebugLogging: boolean;
+  showPromptAdditions: boolean;
 }
 
 /**
@@ -48,6 +49,7 @@ export interface EffectiveAISettings {
   providerSettings: Record<string, EffectiveProviderSettings>;
   showToolCalls: boolean;
   aiDebugLogging: boolean;
+  showPromptAdditions: boolean;
   /** Which settings are overridden at project level */
   overrides: {
     defaultProvider: boolean;
@@ -140,6 +142,7 @@ export function mergeAISettings(
     providerSettings: {},
     showToolCalls: globalSettings.showToolCalls,
     aiDebugLogging: globalSettings.aiDebugLogging,
+    showPromptAdditions: globalSettings.showPromptAdditions,
     overrides: {
       defaultProvider: false,
       providers: {},

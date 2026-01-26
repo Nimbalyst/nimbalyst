@@ -24,7 +24,7 @@ export function AdvancedPanel() {
   // AI debug settings from Jotai atoms
   const [aiDebugSettings] = useAtom(aiDebugSettingsAtom);
   const [, updateAIDebugSettings] = useAtom(setAIDebugSettingsAtom);
-  const { showToolCalls, aiDebugLogging } = aiDebugSettings;
+  const { showToolCalls, aiDebugLogging, showPromptAdditions } = aiDebugSettings;
 
   const {
     releaseChannel,
@@ -300,6 +300,25 @@ export function AdvancedPanel() {
                   Capture detailed logs of all AI editing operations including LLM requests/responses,
                   diff applications, and streaming operations. Logs are saved per session in your
                   application support directory for troubleshooting integration issues.
+                </span>
+              </div>
+            </label>
+          </div>
+
+          <div className="setting-item py-3">
+            <label className="setting-label flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showPromptAdditions}
+                onChange={(e) => updateAIDebugSettings({ showPromptAdditions: e.target.checked })}
+                className="setting-checkbox w-4 h-4 mt-0.5 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
+              />
+              <div className="setting-text flex flex-col gap-0.5">
+                <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Show Prompt Additions</span>
+                <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
+                  Display system prompt additions and user message context that Nimbalyst appends
+                  to Claude Code requests. Shows as collapsible sections in the AI chat transcript.
+                  Useful for debugging prompt engineering and understanding what context is being sent.
                 </span>
               </div>
             </label>

@@ -477,6 +477,26 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       console.log('[CLAUDE-CODE] sendMessage - documentContext.sessionType:', (documentContext as any)?.sessionType);
       const systemPrompt = this.buildSystemPrompt(documentContext);
 
+      // Extract the inline system message content that was added to the user message
+      // This is the content between <NIMBALYST_SYSTEM_MESSAGE> tags
+      // This is the ONLY thing actually appended to the user's text message
+      const inlineSystemMatch = message.match(/<NIMBALYST_SYSTEM_MESSAGE>\n([\s\S]*?)\n<\/NIMBALYST_SYSTEM_MESSAGE>/);
+      const userMessageAddition = inlineSystemMatch ? inlineSystemMatch[1] : null;
+
+      // Note: Attachments (images/documents) are NOT added to the message text.
+      // They're sent as separate content blocks via the API's multimodal format.
+      // We only show what's actually appended to the user's text message.
+
+      // Emit prompt additions for debugging UI (only when there are additions)
+      if (sessionId && (systemPrompt || userMessageAddition)) {
+        this.emit('promptAdditions', {
+          sessionId,
+          systemPromptAddition: systemPrompt || null,
+          userMessageAddition: userMessageAddition,
+          timestamp: Date.now()
+        });
+      }
+
       // Require workspace path
       if (!workspacePath) {
         throw new Error('[CLAUDE-CODE] workspacePath is required but was not provided');

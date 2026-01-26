@@ -142,6 +142,119 @@ if (typeof document !== 'undefined') {
   injectRichTranscriptStyles();
 }
 
+/**
+ * Inline component for displaying prompt additions (system prompt and user message additions)
+ * Shows as collapsible sections after user messages when the developer option is enabled
+ */
+const PromptAdditionsInline: React.FC<{
+  systemPromptAddition: string | null;
+  userMessageAddition: string | null;
+  timestamp: number;
+}> = ({ systemPromptAddition, userMessageAddition, timestamp }) => {
+  const [isSystemExpanded, setIsSystemExpanded] = useState(false);
+  const [isUserExpanded, setIsUserExpanded] = useState(false);
+
+  const hasSystemPrompt = systemPromptAddition && systemPromptAddition.trim().length > 0;
+  const hasUserMessage = userMessageAddition && userMessageAddition.trim().length > 0;
+
+  if (!hasSystemPrompt && !hasUserMessage) {
+    return null;
+  }
+
+  const formatTimestamp = (ts: number) => {
+    return new Date(ts).toLocaleTimeString();
+  };
+
+  return (
+    <div
+      className="ml-6 mt-2 rounded-md border border-[var(--nim-border)] bg-[var(--nim-bg-tertiary)] text-xs"
+      style={{ maxHeight: '300px', overflowY: 'auto' }}
+    >
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--nim-border)]">
+        <span
+          className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase"
+          style={{
+            backgroundColor: 'var(--nim-warning)',
+            color: 'var(--nim-bg)',
+          }}
+        >
+          Dev
+        </span>
+        <span className="text-[var(--nim-text-muted)]">Prompt Additions</span>
+        <span className="ml-auto text-[11px] text-[var(--nim-text-faint)]">
+          {formatTimestamp(timestamp)}
+        </span>
+      </div>
+
+      <div className="p-2">
+        {hasSystemPrompt && (
+          <div className={hasUserMessage ? 'mb-2' : ''}>
+            <button
+              onClick={() => setIsSystemExpanded(!isSystemExpanded)}
+              className="flex items-center gap-1 bg-transparent border-none text-[var(--nim-text)] cursor-pointer p-1 text-xs font-medium hover:bg-[var(--nim-bg-hover)] rounded w-full text-left"
+            >
+              <span
+                style={{
+                  transform: isSystemExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.15s ease',
+                  display: 'inline-block',
+                  fontSize: '10px',
+                }}
+              >
+                {'\u25B6'}
+              </span>
+              System Prompt Addition
+              <span className="text-[11px] text-[var(--nim-text-muted)] font-normal ml-1">
+                ({systemPromptAddition!.length} chars)
+              </span>
+            </button>
+            {isSystemExpanded && (
+              <pre
+                className="m-0 mt-1 ml-3 p-2 bg-[var(--nim-bg)] rounded border border-[var(--nim-border)] text-[11px] leading-relaxed text-[var(--nim-text-muted)] overflow-auto"
+                style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '150px' }}
+              >
+                {systemPromptAddition}
+              </pre>
+            )}
+          </div>
+        )}
+
+        {hasUserMessage && (
+          <div>
+            <button
+              onClick={() => setIsUserExpanded(!isUserExpanded)}
+              className="flex items-center gap-1 bg-transparent border-none text-[var(--nim-text)] cursor-pointer p-1 text-xs font-medium hover:bg-[var(--nim-bg-hover)] rounded w-full text-left"
+            >
+              <span
+                style={{
+                  transform: isUserExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.15s ease',
+                  display: 'inline-block',
+                  fontSize: '10px',
+                }}
+              >
+                {'\u25B6'}
+              </span>
+              User Message Addition
+              <span className="text-[11px] text-[var(--nim-text-muted)] font-normal ml-1">
+                ({userMessageAddition!.length} chars)
+              </span>
+            </button>
+            {isUserExpanded && (
+              <pre
+                className="m-0 mt-1 ml-3 p-2 bg-[var(--nim-bg)] rounded border border-[var(--nim-border)] text-[11px] leading-relaxed text-[var(--nim-text-muted)] overflow-auto"
+                style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '150px' }}
+              >
+                {userMessageAddition}
+              </pre>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 interface RichTranscriptViewProps {
   sessionId: string;
   sessionStatus?: string;
@@ -161,6 +274,12 @@ interface RichTranscriptViewProps {
   onOpenFile?: (filePath: string) => void;
   /** Optional: Callback to trigger /compact command */
   onCompact?: () => void;
+  /** Optional: Prompt additions for debugging (system prompt and user message additions) */
+  promptAdditions?: {
+    systemPromptAddition: string | null;
+    userMessageAddition: string | null;
+    timestamp: number;
+  } | null;
 }
 
 const defaultSettings: TranscriptSettings = {
@@ -358,7 +477,7 @@ const extractEditsFromToolMessage = (message: Message): any[] => {
 export const RichTranscriptView = React.forwardRef<
   { scrollToMessage: (index: number) => void },
   RichTranscriptViewProps
->(({ sessionId, sessionStatus, isProcessing, messages, provider, settings: propsSettings, onSettingsChange, showSettings, documentContext, workspacePath, renderEmptyExtra, readFile, onOpenFile, onCompact }, ref) => {
+>(({ sessionId, sessionStatus, isProcessing, messages, provider, settings: propsSettings, onSettingsChange, showSettings, documentContext, workspacePath, renderEmptyExtra, readFile, onOpenFile, onCompact, promptAdditions }, ref) => {
   const [collapsedMessages, setCollapsedMessages] = useState<Set<number>>(new Set());
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -383,6 +502,16 @@ export const RichTranscriptView = React.forwardRef<
     }
     return false;
   }, [messages, sessionStatus, isProcessing]);
+
+  // Find the index of the last user message (for prompt additions display)
+  const lastUserMessageIndex = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') {
+        return i;
+      }
+    }
+    return -1;
+  }, [messages]);
 
   // Expose scroll method via ref
   React.useImperativeHandle(ref, () => ({
@@ -1020,6 +1149,14 @@ export const RichTranscriptView = React.forwardRef<
                             onCompact={onCompact}
                           />
                         </div>
+                        {/* Prompt additions debug display - show after the last user message when available */}
+                        {isUser && promptAdditions && index === lastUserMessageIndex && (
+                          <PromptAdditionsInline
+                            systemPromptAddition={promptAdditions.systemPromptAddition}
+                            userMessageAddition={promptAdditions.userMessageAddition}
+                            timestamp={promptAdditions.timestamp}
+                          />
+                        )}
                       </div>
                     );
                   })}

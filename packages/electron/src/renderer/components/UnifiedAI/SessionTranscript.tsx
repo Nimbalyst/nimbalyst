@@ -47,7 +47,7 @@ import {
   resetSessionHistoryAtom,
 } from '../../store';
 import { usePostHog } from 'posthog-js/react';
-import { setAgentModeSettingsAtom } from '../../store/atoms/appSettings';
+import { setAgentModeSettingsAtom, showPromptAdditionsAtom } from '../../store/atoms/appSettings';
 
 interface Todo {
   status: 'pending' | 'in_progress' | 'completed';
@@ -148,6 +148,9 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   const navigateHistory = useSetAtom(navigateSessionHistoryAtom);
   const resetHistory = useSetAtom(resetSessionHistoryAtom);
 
+  // Show prompt additions setting (dev mode only)
+  const showPromptAdditions = useAtomValue(showPromptAdditionsAtom);
+
   // Local state
   const [todos, setTodos] = useState<Todo[]>([]);
   const [queuedPrompts, setQueuedPrompts] = useState<any[]>([]);
@@ -155,6 +158,11 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   const [pendingAskUserQuestion, setPendingAskUserQuestion] = useState<AskUserQuestionData | null>(null);
   const [pendingToolPermissions, setPendingToolPermissions] = useState<ToolPermissionData[]>([]);
   const [pendingReviewFiles, setPendingReviewFiles] = useState<Set<string>>(new Set());
+  const [promptAdditions, setPromptAdditions] = useState<{
+    systemPromptAddition: string | null;
+    userMessageAddition: string | null;
+    timestamp: number;
+  } | null>(null);
 
   // Track if we're currently queueing a message (prevents double-submission)
   const [isQueueing, setIsQueueing] = useState(false);
@@ -322,6 +330,33 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     const cleanup = window.electronAPI.on('ai:toolPermissionResolved', handleToolPermissionResolved);
     return () => { cleanup?.(); };
   }, [sessionId]);
+
+  // ============================================================
+  // Prompt additions (dev mode debugging)
+  // ============================================================
+  useEffect(() => {
+    if (!showPromptAdditions) {
+      setPromptAdditions(null);
+      return;
+    }
+
+    const handlePromptAdditions = (data: {
+      sessionId: string;
+      systemPromptAddition: string | null;
+      userMessageAddition: string | null;
+      timestamp: number;
+    }) => {
+      if (data.sessionId === sessionId) {
+        setPromptAdditions({
+          systemPromptAddition: data.systemPromptAddition,
+          userMessageAddition: data.userMessageAddition,
+          timestamp: data.timestamp
+        });
+      }
+    };
+    const cleanup = window.electronAPI.on('ai:promptAdditions', handlePromptAdditions);
+    return () => { cleanup?.(); };
+  }, [sessionId, showPromptAdditions]);
 
   // ============================================================
   // Pending review files
@@ -828,6 +863,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
           groupByDirectory={groupByDirectory}
           onGroupByDirectoryChange={setGroupByDirectory}
           onCompact={handleCompact}
+          promptAdditions={promptAdditions}
         />
       </div>
 

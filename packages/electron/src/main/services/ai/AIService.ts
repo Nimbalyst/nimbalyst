@@ -1760,6 +1760,13 @@ export class AIService {
       provider.removeAllListeners('toolPermission:resolved');
       provider.on('toolPermission:resolved', onToolPermissionResolved);
 
+      // Listen for prompt additions and forward to renderer for debug display
+      const onPromptAdditions = (data: { sessionId: string; systemPromptAddition: string | null; userMessageAddition: string | null; timestamp: number }) => {
+        event.sender.send('ai:promptAdditions', data);
+      };
+      provider.removeAllListeners('promptAdditions');
+      provider.on('promptAdditions', onPromptAdditions);
+
       // Track user @ mentions in the message
       try {
         await sessionFileTracker.trackUserMessage(
@@ -3215,13 +3222,15 @@ export class AIService {
       const providerSettings = this.getSettingsStore().get('providerSettings', {}) as any;
       const showToolCalls = this.getSettingsStore().get('showToolCalls', false) as boolean;
       const aiDebugLogging = this.getSettingsStore().get('aiDebugLogging', false) as boolean;
+      const showPromptAdditions = this.getSettingsStore().get('showPromptAdditions', false) as boolean;
 
       return {
         defaultProvider: this.getSettingsStore().get('defaultProvider', 'claude-code'),
         apiKeys: this.maskApiKeys(apiKeys),
         providerSettings,
         showToolCalls,
-        aiDebugLogging
+        aiDebugLogging,
+        showPromptAdditions
       };
     });
 
@@ -3274,6 +3283,10 @@ export class AIService {
 
       if (settings.aiDebugLogging !== undefined) {
         this.getSettingsStore().set('aiDebugLogging', settings.aiDebugLogging);
+      }
+
+      if (settings.showPromptAdditions !== undefined) {
+        this.getSettingsStore().set('showPromptAdditions', settings.showPromptAdditions);
       }
 
       return { success: true };
@@ -3632,6 +3645,7 @@ export class AIService {
       const providerSettings = this.getSettingsStore().get('providerSettings', {}) as any;
       const showToolCalls = this.getSettingsStore().get('showToolCalls', false) as boolean;
       const aiDebugLogging = this.getSettingsStore().get('aiDebugLogging', false) as boolean;
+      const showPromptAdditions = this.getSettingsStore().get('showPromptAdditions', false) as boolean;
       const defaultProvider = this.getSettingsStore().get('defaultProvider', 'claude-code') as string;
 
       const globalSettings = {
@@ -3640,6 +3654,7 @@ export class AIService {
         providerSettings,
         showToolCalls,
         aiDebugLogging,
+        showPromptAdditions,
       };
 
       // Merge with project overrides

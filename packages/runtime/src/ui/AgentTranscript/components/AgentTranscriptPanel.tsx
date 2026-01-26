@@ -52,6 +52,12 @@ interface AgentTranscriptPanelProps {
   onGroupByDirectoryChange?: (value: boolean) => void;
   /** Optional: Callback to trigger /compact command */
   onCompact?: () => void;
+  /** Optional: Prompt additions for debugging (system prompt and user message additions) */
+  promptAdditions?: {
+    systemPromptAddition: string | null;
+    userMessageAddition: string | null;
+    timestamp: number;
+  } | null;
 }
 
 const AgentTranscriptPanelComponent: React.FC<AgentTranscriptPanelProps> = ({
@@ -76,7 +82,8 @@ const AgentTranscriptPanelComponent: React.FC<AgentTranscriptPanelProps> = ({
   pendingReviewFiles,
   groupByDirectory,
   onGroupByDirectoryChange,
-  onCompact
+  onCompact,
+  promptAdditions
 }) => {
   // Show floating actions if explicitly enabled, otherwise default to showing when sidebar is visible
   const shouldShowFloatingActions = showFloatingActions ?? !hideSidebar;
@@ -267,6 +274,7 @@ const AgentTranscriptPanelComponent: React.FC<AgentTranscriptPanelProps> = ({
           readFile={readFile}
           onOpenFile={onFileClick}
           onCompact={onCompact}
+          promptAdditions={promptAdditions}
         />
 
         {/* Floating Actions - show based on showFloatingActions prop */}
