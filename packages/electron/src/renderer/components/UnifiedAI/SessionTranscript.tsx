@@ -219,6 +219,36 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     };
   }, [sessionId, workspacePath, sessionData, reloadSessionData, updateSessionStore, onSessionTitleChanged]);
 
+  // ============================================================
+  // Subscribe to error events to show errors in the transcript
+  // ============================================================
+  useEffect(() => {
+    if (!sessionId || !window.electronAPI?.on) return;
+
+    const handleError = (data: { sessionId: string; message: string }) => {
+      if (data.sessionId !== sessionId) return;
+
+      // Add error as an assistant message so user can see what went wrong
+      const errorMessage = {
+        id: `error-${Date.now()}`,
+        role: 'assistant' as const,
+        content: `Error: ${data.message}`,
+        timestamp: Date.now(),
+        isError: true,
+      };
+      updateSessionStore({
+        sessionId,
+        updates: {
+          messages: [...(sessionData?.messages || []), errorMessage],
+        },
+      });
+      setIsProcessing(false);
+    };
+
+    const cleanup = window.electronAPI.on('ai:error', handleError);
+    return () => { cleanup?.(); };
+  }, [sessionId, sessionData?.messages, updateSessionStore, setIsProcessing]);
+
   // Derived values
   const isLoading = isProcessing;
   const sessionHasMessages = (sessionData?.messages?.length ?? 0) > 0;
@@ -500,6 +530,20 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       await window.electronAPI.invoke('ai:sendMessage', message, docContext, sessionId, workspacePath);
     } catch (error) {
       console.error('[SessionTranscript] Failed to send message:', error);
+      // Show error in transcript so user knows what went wrong
+      const errorMessage = {
+        id: `error-${Date.now()}`,
+        role: 'assistant' as const,
+        content: `Error: ${error instanceof Error ? error.message : 'Failed to send message'}`,
+        timestamp: Date.now(),
+        isError: true,
+      };
+      updateSessionStore({
+        sessionId,
+        updates: {
+          messages: [...messages, userMessage, errorMessage],
+        },
+      });
       setIsProcessing(false);
     }
   }, [sessionId, sessionData, draftInput, draftAttachments, isLoading, documentContext, aiMode, workspacePath, setDraftInput, setDraftAttachments, resetHistory, updateSessionStore, handleQueue, setIsProcessing, messages]);
