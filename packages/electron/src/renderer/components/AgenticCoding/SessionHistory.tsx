@@ -490,13 +490,14 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   }, [workspacePath, updateSessionStore]);
 
   // Client-side title filtering (instant, no database query)
+  // Note: Archived session filtering is handled by sessionListRootAtom based on showArchivedSessionsAtom
   useEffect(() => {
     // Reset content search trigger when query changes
     setContentSearchTriggered(false);
 
     // Filter out sessions that belong to worktrees (they're shown in WorktreeGroup instead)
     // But keep standalone worktree sessions that should appear as WorktreeSingle
-    let sessionsToFilter = allSessions;
+    const sessionsToFilter = allSessions;
 
     if (!searchQuery.trim()) {
       // No search query - show all sessions (filtered by mode)

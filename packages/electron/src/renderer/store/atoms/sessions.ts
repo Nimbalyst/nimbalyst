@@ -1247,14 +1247,16 @@ function sessionMetaToListItem(meta: SessionMeta, projectPath: string): SessionL
  * Derived: Root sessions only (no parent).
  * These are the sessions that should show in the main session history list.
  * Child sessions are displayed as tabs within their parent.
+ * Filters by showArchivedSessionsAtom to hide/show archived sessions.
  * Now derives from sessionRegistryAtom instead of sessionListFullAtom.
  */
 export const sessionListRootAtom = atom<SessionListItem[]>((get) => {
   const registry = get(sessionRegistryAtom);
   const workspacePath = get(sessionListWorkspaceAtom) || '';
+  const showArchived = get(showArchivedSessionsAtom);
 
   return Array.from(registry.values())
-    .filter(s => !s.parentSessionId)
+    .filter(s => !s.parentSessionId && (showArchived || !s.isArchived))
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .map(meta => sessionMetaToListItem(meta, workspacePath));
 });
