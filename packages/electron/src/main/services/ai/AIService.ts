@@ -2359,9 +2359,19 @@ export class AIService {
               // AUTO-FETCH CONTEXT USAGE: For claude-code provider, automatically send /context to get accurate token usage.
               // We defer awaiting the promise until after streaming completes so that queued prompts don't start early.
               // Skip if the response ended with an error (e.g., context overflow) to avoid showing the /context request to the user.
+              // Skip if there are queued prompts waiting - prioritize responsiveness over context accuracy.
               // CRITICAL: Use effectiveWorkspacePath so /context runs in the worktree directory for worktree sessions
               if (session.provider === 'claude-code' && !hadError) {
-                autoContextPromise = this.runAutoContextCommand(session, effectiveWorkspacePath, event);
+                // Check if there are queued prompts waiting - skip /context to prioritize responsiveness
+                const { getQueuedPromptsStore } = await import('../RepositoryManager');
+                const queueStore = getQueuedPromptsStore();
+                const pendingPrompts = await queueStore.listPending(session.id);
+
+                if (pendingPrompts.length > 0) {
+                  console.log('[AIService] Skipping auto /context - queued prompts waiting');
+                } else {
+                  autoContextPromise = this.runAutoContextCommand(session, effectiveWorkspacePath, event);
+                }
               } else if (session.provider === 'claude-code' && hadError) {
                 console.log('[AIService] Skipping auto /context due to error in response');
               }
@@ -2519,6 +2529,52 @@ export class AIService {
         if (queuedPromptId) {
           this.processingQueuedPromptIds.delete(queuedPromptId);
           logger.main.info(`[AIService] Cleared prompt tracking for ${queuedPromptId} (error path)`);
+        }
+
+        // Process next queued prompt even on error/abort
+        // This ensures queued prompts fire when user cancels a question
+        if (session?.id && event?.sender) {
+          try {
+            const { getQueuedPromptsStore } = await import('../RepositoryManager');
+            const queueStore = getQueuedPromptsStore();
+            const pendingPrompts = await queueStore.listPending(session.id);
+
+            if (pendingPrompts.length > 0) {
+              const nextPrompt = pendingPrompts[0];
+              logger.main.info(`[AIService] Processing next queued prompt after error/abort: ${nextPrompt.id} for session ${session.id}`);
+
+              // Claim the prompt atomically
+              const claimed = await queueStore.claim(nextPrompt.id);
+              if (claimed) {
+                // Notify renderer that prompt was claimed (so UI removes it from queue list)
+                event.sender.send('ai:promptClaimed', {
+                  sessionId: session.id,
+                  promptId: claimed.id,
+                });
+
+                // Recursively call sendMessage with the queued prompt
+                const docContext = {
+                  ...claimed.documentContext,
+                  queuedPromptId: claimed.id,
+                  attachments: claimed.attachments,
+                };
+
+                // Use setImmediate to avoid stack overflow and let this response complete first
+                setImmediate(async () => {
+                  try {
+                    await this.sendMessageHandler!(event, claimed.prompt, docContext as any, session.id, workspacePath);
+                    // Mark as completed
+                    await queueStore.complete(claimed.id);
+                  } catch (queueError) {
+                    logger.main.error(`[AIService] Failed to process queued prompt ${claimed.id}:`, queueError);
+                    await queueStore.fail(claimed.id, queueError instanceof Error ? queueError.message : 'Unknown error');
+                  }
+                });
+              }
+            }
+          } catch (queueError) {
+            logger.main.error('[AIService] Error checking queued prompts after error/abort:', queueError);
+          }
         }
 
         throw error;
