@@ -36,6 +36,12 @@ import { store } from '@nimbalyst/runtime/store';
  * Deep merge source into target, returning a new object.
  * Handles nested objects recursively. Arrays are replaced, not merged.
  * Used to merge persisted state with defaults so new fields are always present.
+ *
+ * STATE PERSISTENCE MIGRATION SAFETY:
+ * When adding new fields to WorkstreamState:
+ * 1. Add the field to the WorkstreamState interface
+ * 2. Add a default value in createDefaultState()
+ * That's it - this function automatically handles merging any field present in source.
  */
 function deepMergeWorkstreamState(
   target: WorkstreamState,
@@ -46,20 +52,14 @@ function deepMergeWorkstreamState(
   // Start with target defaults
   const result: WorkstreamState = { ...target };
 
-  // Merge each field from source if defined
-  if (source.id !== undefined) result.id = source.id;
-  if (source.type !== undefined) result.type = source.type;
-  if (source.childSessionIds !== undefined) result.childSessionIds = source.childSessionIds;
-  if (source.activeChildId !== undefined) result.activeChildId = source.activeChildId;
-  if (source.worktreeId !== undefined) result.worktreeId = source.worktreeId;
-  if (source.layoutMode !== undefined) result.layoutMode = source.layoutMode;
-  if (source.splitRatio !== undefined) result.splitRatio = source.splitRatio;
-  if (source.filesSidebarVisible !== undefined) result.filesSidebarVisible = source.filesSidebarVisible;
-  if (source.openFilePaths !== undefined) result.openFilePaths = source.openFilePaths;
-  if (source.activeFilePath !== undefined) result.activeFilePath = source.activeFilePath;
-  if (source.stagedFiles !== undefined) result.stagedFiles = source.stagedFiles;
-  if (source.commitMessage !== undefined) result.commitMessage = source.commitMessage;
-  if (source.activeProposalId !== undefined) result.activeProposalId = source.activeProposalId;
+  // Automatically merge any field from source that is defined
+  // This avoids the need to manually enumerate fields and prevents
+  // the bug where adding a new field requires updating this function
+  for (const key of Object.keys(source) as (keyof WorkstreamState)[]) {
+    if (source[key] !== undefined) {
+      (result as any)[key] = source[key];
+    }
+  }
 
   return result;
 }

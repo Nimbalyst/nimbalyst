@@ -616,10 +616,14 @@ export interface SyncConfig {
 
 /**
  * Default sync settings.
+ * All optional fields have explicit defaults to handle old persisted data.
  */
 const defaultSyncConfig: SyncConfig = {
   enabled: false,
   serverUrl: '',
+  enabledProjects: [],
+  environment: undefined, // Intentionally undefined (only set in dev)
+  idleTimeoutMinutes: 5,
 };
 
 /**
@@ -701,12 +705,13 @@ export async function initSyncConfig(): Promise<SyncConfig> {
   try {
     const config = await window.electronAPI.invoke('sync:get-config');
     if (config) {
+      // Merge with defaults to ensure all fields have values even when loading old persisted data
       return {
-        enabled: config.enabled ?? false,
-        serverUrl: config.serverUrl ?? '',
-        enabledProjects: config.enabledProjects,
-        environment: config.environment,
-        idleTimeoutMinutes: config.idleTimeoutMinutes,
+        enabled: config.enabled ?? defaultSyncConfig.enabled,
+        serverUrl: config.serverUrl ?? defaultSyncConfig.serverUrl,
+        enabledProjects: config.enabledProjects ?? defaultSyncConfig.enabledProjects,
+        environment: config.environment ?? defaultSyncConfig.environment,
+        idleTimeoutMinutes: config.idleTimeoutMinutes ?? defaultSyncConfig.idleTimeoutMinutes,
       };
     }
   } catch (error) {

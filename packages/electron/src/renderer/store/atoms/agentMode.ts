@@ -249,22 +249,20 @@ export async function initAgentModeLayout(workspacePath: string): Promise<void> 
     const result = workspaceState?.agenticCodingWindowState;
     console.log('[agentMode] Full workspace state:', JSON.stringify(result, null, 2));
 
-    if (result?.sessionHistoryLayout) {
-      const layout = result.sessionHistoryLayout;
-      const restoredLayout: AgentModeLayout = {
-        sessionHistoryWidth: layout.width ?? DEFAULT_LAYOUT.sessionHistoryWidth,
-        // CRITICAL: Never collapse SessionHistory in agent mode
-        sessionHistoryCollapsed: false,
-        filesEditedWidth: result.filesEditedWidth ?? DEFAULT_LAYOUT.filesEditedWidth,
-        collapsedGroups: layout.collapsedGroups ?? DEFAULT_LAYOUT.collapsedGroups,
-        sortOrder: layout.sortOrder ?? DEFAULT_LAYOUT.sortOrder,
-        viewMode: layout.viewMode ?? DEFAULT_LAYOUT.viewMode,
-      };
-      console.log('[agentMode] Restored layout:', restoredLayout);
-      store.set(agentModeLayoutAtom, restoredLayout);
-    } else {
-      console.log('[agentMode] No saved layout found, using defaults');
-    }
+    // Build restored layout with defaults for any missing fields
+    // This handles old persisted state that may be missing fields added later
+    const layout = result?.sessionHistoryLayout ?? {};
+    const restoredLayout: AgentModeLayout = {
+      sessionHistoryWidth: layout.width ?? DEFAULT_LAYOUT.sessionHistoryWidth,
+      // CRITICAL: Never collapse SessionHistory in agent mode
+      sessionHistoryCollapsed: false,
+      filesEditedWidth: result?.filesEditedWidth ?? DEFAULT_LAYOUT.filesEditedWidth,
+      collapsedGroups: layout.collapsedGroups ?? DEFAULT_LAYOUT.collapsedGroups,
+      sortOrder: layout.sortOrder ?? DEFAULT_LAYOUT.sortOrder,
+      viewMode: layout.viewMode ?? DEFAULT_LAYOUT.viewMode,
+    };
+    console.log('[agentMode] Restored layout:', restoredLayout);
+    store.set(agentModeLayoutAtom, restoredLayout);
 
     // Restore selected workstream if saved
     if (result?.selectedWorkstream) {
