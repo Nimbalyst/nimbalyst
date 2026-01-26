@@ -78,6 +78,33 @@ const CSS_VAR_MAP: Record<keyof ExtendedThemeColors, string> = {
   'code-attr': '--nim-code-attr',
   'code-variable': '--nim-code-variable',
   'code-function': '--nim-code-function',
+
+  // Terminal
+  'terminal-bg': '--terminal-bg',
+  'terminal-fg': '--terminal-fg',
+  'terminal-cursor': '--terminal-cursor',
+  'terminal-cursor-accent': '--terminal-cursor-accent',
+  'terminal-selection': '--terminal-selection',
+
+  // Terminal ANSI standard colors (0-7)
+  'terminal-ansi-black': '--terminal-ansi-black',
+  'terminal-ansi-red': '--terminal-ansi-red',
+  'terminal-ansi-green': '--terminal-ansi-green',
+  'terminal-ansi-yellow': '--terminal-ansi-yellow',
+  'terminal-ansi-blue': '--terminal-ansi-blue',
+  'terminal-ansi-magenta': '--terminal-ansi-magenta',
+  'terminal-ansi-cyan': '--terminal-ansi-cyan',
+  'terminal-ansi-white': '--terminal-ansi-white',
+
+  // Terminal ANSI bright colors (8-15)
+  'terminal-ansi-bright-black': '--terminal-ansi-bright-black',
+  'terminal-ansi-bright-red': '--terminal-ansi-bright-red',
+  'terminal-ansi-bright-green': '--terminal-ansi-bright-green',
+  'terminal-ansi-bright-yellow': '--terminal-ansi-bright-yellow',
+  'terminal-ansi-bright-blue': '--terminal-ansi-bright-blue',
+  'terminal-ansi-bright-magenta': '--terminal-ansi-bright-magenta',
+  'terminal-ansi-bright-cyan': '--terminal-ansi-bright-cyan',
+  'terminal-ansi-bright-white': '--terminal-ansi-bright-white',
 };
 
 // Track currently applied extension theme for cleanup
@@ -340,6 +367,38 @@ export function applyExtensionTheme(themeId: string): boolean {
     }
     if (!extColors['quote-border'] && extColors['border']) {
       derivedColors['quote-border'] = extColors['border'];
+    }
+
+    // Terminal colors: derive from extension's colors if not specified
+    if (!extColors['terminal-bg'] && extColors['bg-secondary']) {
+      derivedColors['terminal-bg'] = extColors['bg-secondary'];
+    }
+    if (!extColors['terminal-fg'] && extColors['text']) {
+      derivedColors['terminal-fg'] = extColors['text'];
+    }
+    if (!extColors['terminal-cursor'] && extColors['primary']) {
+      derivedColors['terminal-cursor'] = extColors['primary'];
+    }
+    if (!extColors['terminal-cursor-accent']) {
+      derivedColors['terminal-cursor-accent'] =
+        extColors['terminal-bg'] || extColors['bg-secondary'] || derivedColors['terminal-bg'];
+    }
+    if (!extColors['terminal-selection'] && extColors['bg-selected']) {
+      derivedColors['terminal-selection'] = extColors['bg-selected'];
+    }
+
+    // Terminal ANSI colors: derive from status colors if not specified
+    if (!extColors['terminal-ansi-red'] && extColors['error']) {
+      derivedColors['terminal-ansi-red'] = extColors['error'];
+    }
+    if (!extColors['terminal-ansi-green'] && extColors['success']) {
+      derivedColors['terminal-ansi-green'] = extColors['success'];
+    }
+    if (!extColors['terminal-ansi-yellow'] && extColors['warning']) {
+      derivedColors['terminal-ansi-yellow'] = extColors['warning'];
+    }
+    if (!extColors['terminal-ansi-blue'] && extColors['info']) {
+      derivedColors['terminal-ansi-blue'] = extColors['info'];
     }
 
     // Apply all theme colors as CSS variables
