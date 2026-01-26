@@ -207,7 +207,7 @@
 .session-card-status-indicator {
   display: flex;
   align-items: center;
-  justify-center;
+  justify-content: center;
   flex-shrink: 0;
 }
 
