@@ -1269,6 +1269,7 @@ ${newLines.map(line => '+' + line).join('\n')}`;
     message?: string;
     conflictedFiles?: string[];
     conflictingCommits?: { ours: string[]; theirs: string[] };
+    untrackedFiles?: string[];
   }> {
     if (!worktreePath) {
       throw new Error('worktreePath is required');
