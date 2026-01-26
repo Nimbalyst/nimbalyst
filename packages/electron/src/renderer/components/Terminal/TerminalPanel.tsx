@@ -36,6 +36,28 @@ async function ensureGhosttyInit(): Promise<void> {
   return ghosttyInitPromise;
 }
 
+/**
+ * Clean up scrollback content before restoring to terminal.
+ *
+ * The raw PTY output often contains excessive whitespace from terminal width
+ * padding (e.g., zsh's PROMPT_SP feature fills the rest of the line with spaces
+ * then uses carriage return to go back). When restoring scrollback to a terminal
+ * with a different width, these sequences cause visual issues.
+ *
+ * This function removes runs of whitespace that precede carriage returns,
+ * as these are used by shells to "clear" the rest of a line by overwriting.
+ */
+function cleanScrollback(raw: string): string {
+  // Pattern explanation:
+  // [ \t]+  - One or more spaces or tabs
+  // \r      - Followed by carriage return (which moves cursor to line start)
+  // (?!\n)  - Negative lookahead: NOT followed by newline (preserve \r\n)
+  //
+  // This specifically targets the pattern: "text... <spaces> \r <more content>"
+  // which is zsh's technique for partial line markers
+  return raw.replace(/[ \t]+\r(?!\n)/g, '\r');
+}
+
 // Get terminal theme colors from CSS variables
 function getTerminalTheme(): ITheme {
   const getCSSVar = (name: string, fallback: string): string => {
@@ -181,7 +203,9 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           // Restore scrollback if available
           const scrollback = await window.electronAPI.terminal.getScrollback(sessionId);
           if (scrollback && !disposed) {
-            terminal.write(scrollback);
+            // Clean up the scrollback to remove trailing whitespace that was
+            // added for a potentially different terminal width
+            terminal.write(cleanScrollback(scrollback));
           }
 
           // Listen for output from PTY
