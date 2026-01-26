@@ -56,7 +56,12 @@ export function getClaudeCodeModelLabel(modelId?: string): string {
   // If no variant detected (shouldn't happen with legacy handling), default to Sonnet
   if (!variant) return 'Claude Agent (Sonnet 4.5)';
   const version = CLAUDE_CODE_VARIANT_VERSIONS[variant];
-  return `Claude Agent (${formatVariantLabel(variant)} ${version})`;
+
+  // Check for extended context (1M) variant
+  const parsed = modelId ? ModelIdentifier.tryParse(modelId) : null;
+  const suffix = parsed?.isExtendedContext ? ' (1M)' : '';
+
+  return `Claude Agent (${formatVariantLabel(variant)} ${version}${suffix})`;
 }
 
 export function getClaudeCodeModelShortLabel(modelId?: string): string {
@@ -64,7 +69,12 @@ export function getClaudeCodeModelShortLabel(modelId?: string): string {
   // If no variant detected (shouldn't happen with legacy handling), default to Sonnet
   if (!variant) return 'Sonnet 4.5';
   const version = CLAUDE_CODE_VARIANT_VERSIONS[variant];
-  return `${formatVariantLabel(variant)} ${version}`;
+
+  // Check for extended context (1M) variant
+  const parsed = modelId ? ModelIdentifier.tryParse(modelId) : null;
+  const suffix = parsed?.isExtendedContext ? ' (1M)' : '';
+
+  return `${formatVariantLabel(variant)} ${version}${suffix}`;
 }
 
 /**
