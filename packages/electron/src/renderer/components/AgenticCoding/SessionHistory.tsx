@@ -23,6 +23,7 @@ import {
   setViewModeAtom,
   type SessionListItem as SessionListItemType,
 } from '../../store';
+import './SessionHistory.css';
 
 interface SessionItem {
   id: string;
@@ -1619,17 +1620,6 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       </div>
       <div className="session-history-filters flex items-center px-3 py-2 border-b border-[var(--nim-border)] gap-1.5 shrink-0">
         <button
-          className={`session-history-archive-filter flex items-center justify-center px-1.5 py-1 text-xs rounded border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] text-[var(--nim-text-faint)] cursor-pointer transition-all duration-150 outline-none hover:bg-[var(--nim-bg-tertiary)] hover:border-[var(--nim-primary)] hover:text-[var(--nim-text)] [&_svg]:block ${showArchived ? 'bg-[var(--nim-primary)] border-[var(--nim-primary)] text-white hover:opacity-90' : ''}`}
-          onClick={toggleShowArchived}
-          title={showArchived ? 'Hide archived sessions' : 'Show archived sessions'}
-          aria-label={showArchived ? 'Hide archived sessions' : 'Show archived sessions'}
-        >
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M2 5h12M4 5v8a1 1 0 001 1h6a1 1 0 001-1V5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M6 8h4" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/>
-          </svg>
-        </button>
-        <button
           className={`session-history-view-toggle flex items-center justify-center px-1.5 py-1 text-xs rounded border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] text-[var(--nim-text-faint)] cursor-pointer transition-all duration-150 outline-none hover:bg-[var(--nim-bg-tertiary)] hover:border-[var(--nim-primary)] hover:text-[var(--nim-text)] [&_svg]:block ${viewMode === 'card' ? 'bg-[var(--nim-primary)] border-[var(--nim-primary)] text-white hover:opacity-90' : ''}`}
           onClick={() => setViewMode(viewMode === 'list' ? 'card' : 'list')}
           title={viewMode === 'list' ? 'Switch to card view' : 'Switch to list view'}
@@ -1649,6 +1639,17 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
               <rect x="2" y="11" width="12" height="2" rx="0.5" fill="currentColor"/>
             </svg>
           )}
+        </button>
+        <button
+          className={`session-history-archive-filter flex items-center justify-center px-1.5 py-1 text-xs rounded border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] text-[var(--nim-text-faint)] cursor-pointer transition-all duration-150 outline-none hover:bg-[var(--nim-bg-tertiary)] hover:border-[var(--nim-primary)] hover:text-[var(--nim-text)] [&_svg]:block ${showArchived ? 'bg-[var(--nim-primary)] border-[var(--nim-primary)] text-white hover:opacity-90' : ''}`}
+          onClick={toggleShowArchived}
+          title={showArchived ? 'Hide archived sessions' : 'Show archived sessions'}
+          aria-label={showArchived ? 'Hide archived sessions' : 'Show archived sessions'}
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M2 5h12M4 5v8a1 1 0 001 1h6a1 1 0 001-1V5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M6 8h4" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/>
+          </svg>
         </button>
         <div className="session-history-sort-dropdown ml-auto relative">
           <button
@@ -1743,7 +1744,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
         ) : viewMode === 'card' ? (
           <>
             {/* Card view - flat display of top-level items only */}
-            <div className="session-history-cards-container">
+            <div className="grid gap-3.5 [container-type:inline-size] [container-name:session-cards] [grid-template-columns:repeat(auto-fill,minmax(240px,1fr))] [@container_session-cards_(max-width:550px)]:grid-cols-1 [@container_session-cards_(min-width:551px)_and_(max-width:800px)]:grid-cols-2">
               {groupKeys.map(groupKey => {
                 const items = groupedItems[groupKey];
                 return items.map(item => {
