@@ -1054,6 +1054,24 @@ Please proceed with this strategy.`;
             {/* Worktree Mode */}
             {mode === 'worktree' && worktreeId && (
               <div className="flex flex-col gap-3">
+                {/* Refresh Button */}
+                <div className="flex justify-end mb-2">
+                  <button
+                    onClick={async () => {
+                      await Promise.all([
+                        loadWorktreeChangedFiles(),
+                        loadWorktreeCommits(),
+                        loadWorktreeStatus(),
+                      ]);
+                    }}
+                    className="flex items-center gap-1 px-2 py-1 text-[10px] text-[var(--nim-primary)] hover:bg-[var(--nim-bg-hover)] rounded transition-colors"
+                    title="Refresh worktree status"
+                  >
+                    <MaterialSymbol icon="refresh" size={14} />
+                    <span>Refresh</span>
+                  </button>
+                </div>
+
                 {/* Uncommitted Changes */}
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center justify-between text-[11px] font-semibold text-[var(--nim-text)]">
