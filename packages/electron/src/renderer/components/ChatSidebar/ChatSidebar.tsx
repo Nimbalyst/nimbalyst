@@ -18,7 +18,6 @@ import {
   initSessionList,
 } from '../../store';
 import { defaultAgentModelAtom } from '../../store/atoms/appSettings';
-import './ChatSidebar.css';
 
 export interface ChatSidebarRef {
   focusInput: () => void;
