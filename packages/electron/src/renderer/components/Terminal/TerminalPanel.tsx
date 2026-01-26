@@ -1,14 +1,12 @@
 /**
- * TerminalPanel - XTerm.js based terminal component
+ * TerminalPanel - Ghostty-web based terminal component
  *
- * Connects to a PTY process via IPC and renders terminal output using XTerm.js.
+ * Connects to a PTY process via IPC and renders terminal output using Ghostty-web.
  * Handles input, resize, scrollback restoration, and cleanup.
  */
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Terminal } from '@xterm/xterm';
-import { FitAddon } from '@xterm/addon-fit';
-import '@xterm/xterm/css/xterm.css';
+import { init, Terminal, FitAddon, type ITheme } from 'ghostty-web';
 
 // Type for terminal API is defined in electron.d.ts
 
@@ -23,8 +21,23 @@ export interface TerminalPanelProps {
   onExit?: (exitCode: number) => void;
 }
 
+// Track if ghostty WASM has been initialized
+let ghosttyInitialized = false;
+let ghosttyInitPromise: Promise<void> | null = null;
+
+async function ensureGhosttyInit(): Promise<void> {
+  if (ghosttyInitialized) return;
+  if (ghosttyInitPromise) return ghosttyInitPromise;
+
+  ghosttyInitPromise = init().then(() => {
+    ghosttyInitialized = true;
+  });
+
+  return ghosttyInitPromise;
+}
+
 // Get terminal theme colors from CSS variables
-function getTerminalTheme(): any {
+function getTerminalTheme(): ITheme {
   const getCSSVar = (name: string, fallback: string): string => {
     if (typeof document === 'undefined') return fallback;
     const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -65,7 +78,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   // Support legacy sessionId prop name
   const sessionId = terminalId;
   const terminalRef = useRef<HTMLDivElement>(null);
-  const xtermRef = useRef<Terminal | null>(null);
+  const terminalInstanceRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [hasExited, setHasExited] = useState(false);
@@ -103,6 +116,11 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
 
     const initTerminal = async () => {
       try {
+        // Initialize ghostty WASM first
+        await ensureGhosttyInit();
+
+        if (disposed) return;
+
         // Initialize PTY if not already active (with timeout)
         const initPromise = window.electronAPI.terminal.initialize(terminalId, {
           workspacePath,
@@ -126,7 +144,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           return;
         }
 
-        // Create XTerm instance
+        // Create Ghostty Terminal instance
         terminal = new Terminal({
           fontSize: 13,
           fontFamily: '"SF Mono", Monaco, "Courier New", monospace',
@@ -134,7 +152,6 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           cursorBlink: true,
           cursorStyle: 'block',
           theme: getTerminalTheme(),
-          allowTransparency: true,
         });
 
         fitAddon = new FitAddon();
@@ -158,7 +175,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             }
           }, 50);
 
-          xtermRef.current = terminal;
+          terminalInstanceRef.current = terminal;
           fitAddonRef.current = fitAddon;
 
           // Restore scrollback if available
@@ -230,15 +247,15 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
       inputDisposable?.dispose();
       terminal?.dispose();
       fitAddon?.dispose();
-      xtermRef.current = null;
+      terminalInstanceRef.current = null;
       fitAddonRef.current = null;
     };
   }, [terminalId, workspacePath, isActive, hasExited, handleRestart, onExit]);
 
   // Focus terminal when becoming active
   useEffect(() => {
-    if (isActive && xtermRef.current) {
-      xtermRef.current.focus();
+    if (isActive && terminalInstanceRef.current) {
+      terminalInstanceRef.current.focus();
     }
   }, [isActive]);
 
@@ -264,9 +281,9 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
     if (!window.electronAPI?.on) return;
 
     const handleThemeChange = () => {
-      if (xtermRef.current) {
+      if (terminalInstanceRef.current) {
         // Re-read CSS variables and apply new theme to terminal
-        xtermRef.current.options.theme = getTerminalTheme();
+        terminalInstanceRef.current.options.theme = getTerminalTheme();
       }
     };
 

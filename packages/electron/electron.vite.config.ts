@@ -231,6 +231,11 @@ export default defineConfig({
         if (fs.existsSync(esModuleShims)) {
           targets.push({ src: toPosix(esModuleShims), dest: '', overwrite: true });
         }
+        // Copy ghostty-web WASM file for terminal emulation
+        const ghosttyWasm = resolve(__dirname, '../../node_modules/ghostty-web/ghostty-vt.wasm');
+        if (fs.existsSync(ghosttyWasm)) {
+          targets.push({ src: toPosix(ghosttyWasm), dest: '', overwrite: true });
+        }
         return viteStaticCopy({ targets });
       })()
     ].filter(Boolean),
