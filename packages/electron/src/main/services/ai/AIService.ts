@@ -605,6 +605,70 @@ export class AIService {
   private mobileSyncHandlerInitialized = false;
   private syncStatusUnsubscribe: (() => void) | null = null;
 
+  /**
+   * Process the next queued prompt for a session.
+   * Called from mobile sync handler to ensure prompts are processed even when session isn't open.
+   * Also used by the ai:triggerQueueProcessing IPC handler.
+   */
+  private async processQueuedPrompt(sessionId: string, workspacePath: string, targetWindow: Electron.BrowserWindow): Promise<boolean> {
+    const { getQueuedPromptsStore } = await import('../RepositoryManager');
+    const queueStore = getQueuedPromptsStore();
+    const pendingPrompts = await queueStore.listPending(sessionId);
+
+    if (pendingPrompts.length === 0) {
+      logger.main.info(`[AIService] processQueuedPrompt: no pending prompts for session ${sessionId}`);
+      return false;
+    }
+
+    const nextPrompt = pendingPrompts[0];
+    logger.main.info(`[AIService] processQueuedPrompt: processing prompt ${nextPrompt.id} for session ${sessionId}`);
+
+    // Claim the prompt atomically
+    const claimed = await queueStore.claim(nextPrompt.id);
+    if (!claimed) {
+      logger.main.info(`[AIService] processQueuedPrompt: prompt ${nextPrompt.id} already claimed`);
+      return false;
+    }
+
+    // Notify renderer that prompt was claimed (so UI removes it from queue list)
+    if (targetWindow && !targetWindow.isDestroyed()) {
+      targetWindow.webContents.send('ai:promptClaimed', {
+        sessionId,
+        promptId: claimed.id,
+      });
+    }
+
+    // Build document context for the queued prompt
+    const docContext = {
+      ...claimed.documentContext,
+      queuedPromptId: claimed.id,
+      attachments: claimed.attachments,
+    };
+
+    // Process the prompt via sendMessage
+    setImmediate(async () => {
+      try {
+        if (!this.sendMessageHandler) {
+          throw new Error('sendMessageHandler not initialized');
+        }
+        // Create a mock event with the target window's webContents
+        const mockEvent = {
+          sender: targetWindow.webContents,
+          senderFrame: targetWindow.webContents.mainFrame,
+        } as Electron.IpcMainInvokeEvent;
+
+        await this.sendMessageHandler(mockEvent, claimed.prompt, docContext as any, sessionId, workspacePath);
+        // Mark as completed
+        await queueStore.complete(claimed.id);
+      } catch (queueError) {
+        logger.main.error(`[AIService] Failed to process queued prompt ${claimed.id}:`, queueError);
+        await queueStore.fail(claimed.id, queueError instanceof Error ? queueError.message : 'Unknown error');
+      }
+    });
+
+    return true;
+  }
+
   private async initializeMobileSyncHandler() {
     // Listen for index changes from mobile sync and insert queuedPrompts into the database.
     // The renderer's processQueuedPrompts function handles execution from the database queue.
@@ -728,6 +792,11 @@ export class AIService {
                       promptCount: newPromptsCount,
                       workspacePath: session.workspacePath  // Include for renderer-side filtering
                     });
+
+                    // Directly trigger queue processing from main process
+                    // This ensures mobile messages are processed even when the session isn't open in the UI
+                    logger.main.info('[AIService] Triggering queue processing for mobile prompt');
+                    this.processQueuedPrompt(sessionId, session.workspacePath, targetWindow);
                   } else {
                     logger.main.warn('[AIService] No window found for workspace:', session.workspacePath);
                   }

@@ -977,11 +977,11 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
             )}
             {onModeChange && provider === 'claude-code' && mode && <ModeTag mode={mode} onModeChange={onModeChange} />}
 
-            {onModelChange && currentModel && (
+            {onModelChange && (
               <HelpTooltip testId="model-picker">
                 <span style={{ display: 'inline-flex' }}>
                   <ModelSelector
-                    currentModel={currentModel}
+                    currentModel={currentModel || ''}
                     onModelChange={onModelChange}
                     sessionHasMessages={sessionHasMessages}
                     currentProviderType={currentProviderType}
