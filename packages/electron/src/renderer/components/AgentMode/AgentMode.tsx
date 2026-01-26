@@ -38,9 +38,10 @@ import {
   removeSessionFullAtom,
   updateSessionStoreAtom,
   sessionRegistryAtom,
+  sessionStoreAtom,
 } from '../../store';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
-import { initWorkstreamState, loadWorkstreamStates, workstreamStateAtom, workstreamActiveChildAtom } from '../../store/atoms/workstreamState';
+import { initWorkstreamState, loadWorkstreamStates, workstreamStateAtom, workstreamActiveChildAtom, setWorktreeActiveSessionAtom } from '../../store/atoms/workstreamState';
 import { initSessionStateListeners } from '../../store/sessionStateListeners';
 
 export interface AgentModeRef {
@@ -423,6 +424,15 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
       : state.type === 'workstream' ? 'workstream'
       : 'session';
 
+    // Track active session for worktree (for "return to last session" feature)
+    const sessionData = store.get(sessionStoreAtom(sessionId));
+    if (sessionData?.worktreeId) {
+      store.set(setWorktreeActiveSessionAtom, {
+        worktreeId: sessionData.worktreeId,
+        sessionId,
+      });
+    }
+
     setSelectedWorkstream({
       workspacePath,
       selection: { type, id: sessionId },
@@ -436,23 +446,41 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
     parentId: string,
     parentType: 'workstream' | 'worktree'
   ) => {
-    // Load the parent's children to populate workstream state
-    await store.set(loadSessionChildrenAtom, {
-      parentSessionId: parentId,
-      workspacePath,
-    });
+    if (parentType === 'worktree') {
+      // For worktrees, parentId is the worktree ID (not a session ID)
+      // We need to select the child session directly, which has a worktreeId field
+      // The workstreamSessionsAtom will find sibling sessions via the worktreeId
 
-    // Set the clicked child as active
-    store.set(setWorkstreamActiveChildAtom, {
-      workstreamId: parentId,
-      childId: childSessionId,
-    });
+      // Track active session for worktree (for "return to last session" feature)
+      store.set(setWorktreeActiveSessionAtom, {
+        worktreeId: parentId,
+        sessionId: childSessionId,
+      });
 
-    // Select the parent workstream
-    setSelectedWorkstream({
-      workspacePath,
-      selection: { type: parentType, id: parentId },
-    });
+      setSelectedWorkstream({
+        workspacePath,
+        selection: { type: 'session', id: childSessionId },
+      });
+    } else {
+      // For workstreams, parentId is a session ID
+      // Load the parent's children to populate workstream state
+      await store.set(loadSessionChildrenAtom, {
+        parentSessionId: parentId,
+        workspacePath,
+      });
+
+      // Set the clicked child as active
+      store.set(setWorkstreamActiveChildAtom, {
+        workstreamId: parentId,
+        childId: childSessionId,
+      });
+
+      // Select the parent workstream
+      setSelectedWorkstream({
+        workspacePath,
+        selection: { type: parentType, id: parentId },
+      });
+    }
   }, [workspacePath, setSelectedWorkstream]);
 
   // Session management atoms

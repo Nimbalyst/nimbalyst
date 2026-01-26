@@ -324,6 +324,74 @@ export const workstreamActiveProposalIdAtom = atomFamily((id: string) =>
 );
 
 // ============================================================
+// Worktree Session Tracking
+// ============================================================
+
+/**
+ * Map of worktree ID -> last active session ID.
+ * Tracks which session was most recently viewed for each worktree.
+ * This enables returning to the last active session when clicking a worktree header.
+ * This state is persisted to workspace state for continuity across app restarts.
+ */
+const worktreeActiveSessionMapAtom = atom<Map<string, string>>(new Map());
+
+/**
+ * Get the last active session ID for a worktree.
+ */
+export const worktreeActiveSessionAtom = atomFamily((worktreeId: string) =>
+  atom((get) => get(worktreeActiveSessionMapAtom).get(worktreeId) ?? null)
+);
+
+// Debounce timer for worktree active session persistence
+let worktreeActiveSessionPersistTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Schedule persistence of worktree active sessions.
+ * Debounced to avoid excessive IPC calls when rapidly switching sessions.
+ */
+function scheduleWorktreeActiveSessionPersist(): void {
+  if (!currentWorkspacePath) return;
+
+  if (worktreeActiveSessionPersistTimer) {
+    clearTimeout(worktreeActiveSessionPersistTimer);
+  }
+
+  worktreeActiveSessionPersistTimer = setTimeout(async () => {
+    worktreeActiveSessionPersistTimer = null;
+
+    try {
+      const map = store.get(worktreeActiveSessionMapAtom);
+      const worktreeActiveSessions: Record<string, string> = {};
+      map.forEach((sessionId, worktreeId) => {
+        worktreeActiveSessions[worktreeId] = sessionId;
+      });
+
+      await window.electronAPI.invoke('workspace:update-state', currentWorkspacePath!, {
+        worktreeActiveSessions,
+      });
+    } catch (err) {
+      console.error('[workstreamState] Failed to persist worktree active sessions:', err);
+    }
+  }, 500);
+}
+
+/**
+ * Set the active session for a worktree.
+ * Persisted to workspace state for continuity across app restarts.
+ */
+export const setWorktreeActiveSessionAtom = atom(
+  null,
+  (get, set, { worktreeId, sessionId }: { worktreeId: string; sessionId: string }) => {
+    const map = new Map(get(worktreeActiveSessionMapAtom));
+    map.set(worktreeId, sessionId);
+    set(worktreeActiveSessionMapAtom, map);
+
+    // Schedule debounced persistence
+    scheduleWorktreeActiveSessionPersist();
+  }
+);
+
+// ============================================================
 // Action Atoms (Mutations)
 // ============================================================
 
@@ -646,6 +714,8 @@ export async function loadWorkstreamStates(workspacePath: string): Promise<void>
   try {
     const workspaceState = await window.electronAPI.invoke('workspace:get-state', workspacePath);
     console.log('[workstreamState] Full workspace state:', JSON.stringify(workspaceState, null, 2));
+
+    // Load workstream states
     const saved = workspaceState?.workstreamStates ?? {};
     console.log('[workstreamState] workstreamStates field:', JSON.stringify(saved, null, 2));
 
@@ -658,6 +728,15 @@ export async function loadWorkstreamStates(workspacePath: string): Promise<void>
     store.set(workstreamStatesLoadedAtom, true);
 
     console.log('[workstreamState] Loaded states for', map.size, 'workstreams');
+
+    // Load worktree active sessions
+    const worktreeActiveSessions = workspaceState?.worktreeActiveSessions ?? {};
+    const worktreeMap = new Map<string, string>();
+    for (const [worktreeId, sessionId] of Object.entries(worktreeActiveSessions)) {
+      worktreeMap.set(worktreeId, sessionId as string);
+    }
+    store.set(worktreeActiveSessionMapAtom, worktreeMap);
+    console.log('[workstreamState] Loaded active sessions for', worktreeMap.size, 'worktrees');
   } catch (err) {
     console.error('[workstreamState] Failed to load states:', err);
     // Still mark as loaded so UI doesn't hang
@@ -668,6 +747,11 @@ export async function loadWorkstreamStates(workspacePath: string): Promise<void>
 /**
  * Load saved state for a specific workstream.
  * Call this when switching to or loading a workstream.
+ *
+ * IMPORTANT: Only restores UI state fields (layoutMode, splitRatio, etc.), NOT
+ * hierarchy state (activeChildId, childSessionIds, type). Hierarchy state is
+ * managed by loadSessionChildrenAtom and setWorkstreamActiveChildAtom to avoid
+ * race conditions where persisted state overwrites in-flight updates.
  */
 export async function loadWorkstreamState(workstreamId: string): Promise<void> {
   if (!currentWorkspacePath) return;
@@ -681,7 +765,24 @@ export async function loadWorkstreamState(workstreamId: string): Promise<void> {
     const saved = workspaceState?.workstreamStates?.[workstreamId];
     if (saved) {
       const map = new Map(store.get(workstreamStatesAtom));
-      map.set(workstreamId, saved as WorkstreamState);
+      const current = map.get(workstreamId) ?? createDefaultState(workstreamId);
+
+      // Only restore UI state fields, preserve hierarchy state
+      // This prevents race conditions where persisted state overwrites
+      // activeChildId that was just set by setWorkstreamActiveChildAtom
+      const merged: WorkstreamState = {
+        ...current,
+        // UI state from persisted
+        layoutMode: (saved as WorkstreamState).layoutMode ?? current.layoutMode,
+        splitRatio: (saved as WorkstreamState).splitRatio ?? current.splitRatio,
+        filesSidebarVisible: (saved as WorkstreamState).filesSidebarVisible ?? current.filesSidebarVisible,
+        openFilePaths: (saved as WorkstreamState).openFilePaths ?? current.openFilePaths,
+        activeFilePath: (saved as WorkstreamState).activeFilePath ?? current.activeFilePath,
+        // Hierarchy state preserved from current in-memory state
+        // (id, type, childSessionIds, activeChildId, worktreeId)
+      };
+
+      map.set(workstreamId, merged);
       store.set(workstreamStatesAtom, map);
     }
   } catch (err) {

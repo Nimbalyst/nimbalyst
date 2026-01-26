@@ -304,6 +304,8 @@ export {
   workstreamWorktreeIdAtom,
   workstreamHasChildrenAtom,
   workstreamHasOpenFilesAtom,
+  worktreeActiveSessionAtom,
+  setWorktreeActiveSessionAtom,
   setWorkstreamActiveChildAtom,
   setWorkstreamLayoutModeAtom,
   setWorkstreamSplitRatioAtom,

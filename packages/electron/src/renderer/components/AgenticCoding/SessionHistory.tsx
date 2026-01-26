@@ -23,8 +23,10 @@ import {
   groupSessionStatusAtom,
   viewModeAtom,
   setViewModeAtom,
+  worktreeActiveSessionAtom,
   type SessionListItem as SessionListItemType,
 } from '../../store';
+import { store } from '@nimbalyst/runtime/store';
 import './SessionHistory.css';
 
 interface SessionItem {
@@ -2059,10 +2061,15 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                           isActive={item.sessions.some(s => s.id === activeSessionId)}
                           onToggle={() => handleToggleGroup(`worktree:${item.worktreeId}`)}
                           onSelect={() => {
-                            // Select first session in worktree when clicking header
-                            const firstSession = item.sessions[0];
-                            if (firstSession) {
-                              onSessionSelect(firstSession.id);
+                            // Select last active session in worktree when clicking header
+                            // Falls back to first session if no previous selection
+                            const lastActiveSessionId = store.get(worktreeActiveSessionAtom(item.worktreeId));
+                            const sessionToSelect = lastActiveSessionId
+                              ? item.sessions.find(s => s.id === lastActiveSessionId)
+                              : null;
+                            const targetSession = sessionToSelect || item.sessions[0];
+                            if (targetSession) {
+                              onSessionSelect(targetSession.id);
                             }
                           }}
                           sessions={item.sessions}
