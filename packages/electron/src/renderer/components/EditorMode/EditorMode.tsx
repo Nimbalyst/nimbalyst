@@ -28,6 +28,7 @@ export interface EditorModeRef {
   handleSaveAs: () => Promise<void>;
   selectFile: (filePath: string) => Promise<void>;
   openHistoryDialog: () => void;
+  toggleSidebarCollapsed: () => void;
   tabs: {
     addTab: (filePath: string, content?: string) => string | undefined;
     removeTab: (tabId: string) => void;
@@ -68,6 +69,8 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
 
   // Sidebar state
   const [sidebarWidth, setSidebarWidth] = useState<number>(250);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
+  const [preCollapseWidth, setPreCollapseWidth] = useState<number>(250);
   const [selectedFolderPath, setSelectedFolderPath] = useState<string | null>(null);
 
   // Dirty state is tracked via ref to avoid re-render cascade
@@ -485,6 +488,19 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     }
   }, [isAIChatCollapsed]);
 
+  // Toggle sidebar collapsed state
+  const toggleSidebarCollapsed = useCallback(() => {
+    if (sidebarCollapsed) {
+      // Expanding - restore previous width
+      setSidebarWidth(preCollapseWidth);
+      setSidebarCollapsed(false);
+    } else {
+      // Collapsing - save current width
+      setPreCollapseWidth(sidebarWidth);
+      setSidebarCollapsed(true);
+    }
+  }, [sidebarCollapsed, sidebarWidth, preCollapseWidth]);
+
   // Expose methods to parent via ref
   // CRITICAL: Use tabsRef.current inside closures to avoid stale closure bugs
   // The useImperativeHandle re-runs when tabs changes, but the methods it creates
@@ -513,6 +529,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     handleSaveAs,
     selectFile: handleWorkspaceFileSelect,
     openHistoryDialog: () => setIsHistoryDialogOpen(true),
+    toggleSidebarCollapsed,
     tabs: {
       addTab: (filePath: string, content?: string) => {
         const currentTabs = tabsRef.current;
@@ -563,7 +580,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
       },
       get activeTabId() { return tabsRef.current?.getSnapshot()?.activeTabId ?? null; },
     }
-  }), [handleOpen, handleSaveAs, handleWorkspaceFileSelect, handleTabClose]);
+  }), [handleOpen, handleSaveAs, handleWorkspaceFileSelect, handleTabClose, toggleSidebarCollapsed]);
 
   // Handle sidebar resize
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -809,37 +826,41 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     <>
       {/* Main content area */}
       <div className="editor-mode__content" style={{ flex: 1, display: 'flex', flexDirection: 'row', overflow: 'hidden', minWidth: 0 }}>
-        {/* Left sidebar - file tree */}
-        <div style={{ width: sidebarWidth, position: 'relative' }}>
-          <WorkspaceSidebar
-            workspaceName={workspaceName || ''}
-            workspacePath={workspacePath}
-            currentFilePath={currentFilePath}
-            currentView="files"
-            onFileSelect={handleWorkspaceFileSelect}
-            onCloseWorkspace={onCloseWorkspace || (() => {})}
-            onOpenQuickSearch={onOpenQuickSearch}
-            onViewHistory={(filePath) => {
-              setIsHistoryDialogOpen(true);
-            }}
-            onViewWorkspaceHistory={(folderPath) => {
-              setWorkspaceHistoryPath(folderPath);
-              setIsWorkspaceHistoryDialogOpen(true);
-            }}
-            onSelectedFolderChange={setSelectedFolderPath}
-            currentAISessionId={null}
-          />
-        </div>
+        {/* Left sidebar - file tree (hidden when collapsed) */}
+        {!sidebarCollapsed && (
+          <>
+            <div style={{ width: sidebarWidth, position: 'relative' }}>
+              <WorkspaceSidebar
+                workspaceName={workspaceName || ''}
+                workspacePath={workspacePath}
+                currentFilePath={currentFilePath}
+                currentView="files"
+                onFileSelect={handleWorkspaceFileSelect}
+                onCloseWorkspace={onCloseWorkspace || (() => {})}
+                onOpenQuickSearch={onOpenQuickSearch}
+                onViewHistory={(filePath) => {
+                  setIsHistoryDialogOpen(true);
+                }}
+                onViewWorkspaceHistory={(folderPath) => {
+                  setWorkspaceHistoryPath(folderPath);
+                  setIsWorkspaceHistoryDialogOpen(true);
+                }}
+                onSelectedFolderChange={setSelectedFolderPath}
+                currentAISessionId={null}
+              />
+            </div>
 
-        {/* Resize handle */}
-        <div
-          onMouseDown={handleMouseDown}
-          className="w-1 cursor-col-resize shrink-0 relative z-10 bg-nim-secondary"
-        >
-          <div
-            className="w-0.5 h-full mx-auto bg-nim-border transition-colors duration-200 hover:bg-nim-accent"
-          />
-        </div>
+            {/* Resize handle */}
+            <div
+              onMouseDown={handleMouseDown}
+              className="w-1 cursor-col-resize shrink-0 relative z-10 bg-nim-secondary"
+            >
+              <div
+                className="w-0.5 h-full mx-auto bg-nim-border transition-colors duration-200 hover:bg-nim-accent"
+              />
+            </div>
+          </>
+        )}
 
         {/* Center - editor tabs and content */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>

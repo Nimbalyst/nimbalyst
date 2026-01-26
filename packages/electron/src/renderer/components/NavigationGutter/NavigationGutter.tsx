@@ -44,6 +44,10 @@ interface NavigationGutterProps {
   activeExtensionPanel?: string | null;
   /** Callback when an extension panel is activated */
   onExtensionPanelChange?: (panelId: string | null) => void;
+  /** Callback to toggle Files mode sidebar collapsed state */
+  onToggleFilesCollapsed?: () => void;
+  /** Callback to toggle Agent mode session history collapsed state */
+  onToggleAgentCollapsed?: () => void;
 }
 
 interface NavButton {
@@ -73,6 +77,8 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
   workspacePath,
   activeExtensionPanel,
   onExtensionPanelChange,
+  onToggleFilesCollapsed,
+  onToggleAgentCollapsed,
 }) => {
   const posthog = usePostHog();
 
@@ -171,7 +177,15 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
             onClick={() => {
               // Clear any active fullscreen extension panel when switching to a content mode
               onExtensionPanelChange?.(null);
-              handleButtonClick(button);
+              if (contentMode === button.contentMode && !activeExtensionPanel) {
+                // Already on this mode - toggle collapse
+                if (button.contentMode === 'files') {
+                  onToggleFilesCollapsed?.();
+                }
+              } else {
+                // Switch modes
+                handleButtonClick(button);
+              }
             }}
             title={button.label}
             aria-label={button.label}
@@ -200,7 +214,15 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
             onClick={() => {
               // Clear any active fullscreen extension panel when switching to a content mode
               onExtensionPanelChange?.(null);
-              handleButtonClick(button);
+              if (contentMode === button.contentMode && !activeExtensionPanel) {
+                // Already on this mode - toggle collapse
+                if (button.contentMode === 'agent') {
+                  onToggleAgentCollapsed?.();
+                }
+              } else {
+                // Switch modes
+                handleButtonClick(button);
+              }
             }}
             title={button.label}
             aria-label={button.label}
