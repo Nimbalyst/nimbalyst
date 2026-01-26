@@ -277,7 +277,7 @@ export const ChatSidebar = forwardRef<ChatSidebarRef, ChatSidebarProps>(({
   if (isLoading) {
     return (
       <div className="chat-sidebar chat-sidebar-loading flex flex-col h-full overflow-hidden bg-nim border-l border-nim relative items-center justify-center text-nim-muted" style={{ width: onWidthChange ? width : undefined }}>
-        <div className="chat-sidebar-spinner w-6 h-6 border-2 border-nim border-t-nim-accent rounded-full animate-spin" />
+        <div className="chat-sidebar-spinner w-6 h-6 border-2 border-nim border-t-nim-primary rounded-full animate-spin" />
       </div>
     );
   }
@@ -302,7 +302,7 @@ export const ChatSidebar = forwardRef<ChatSidebarRef, ChatSidebarProps>(({
     >
       {onWidthChange && (
         <div
-          className="chat-sidebar-resize-handle absolute -left-0.5 top-0 bottom-0 w-[5px] cursor-col-resize z-10 before:content-[''] before:absolute before:left-0.5 before:top-0 before:bottom-0 before:w-0.5 before:bg-nim hover:before:bg-nim-accent"
+          className="chat-sidebar-resize-handle absolute -left-0.5 top-0 bottom-0 w-[5px] cursor-col-resize z-10 before:content-[''] before:absolute before:left-0.5 before:top-0 before:bottom-0 before:w-0.5 before:bg-nim hover:before:bg-nim-primary"
           onMouseDown={handleMouseDown}
         />
       )}
@@ -319,7 +319,7 @@ export const ChatSidebar = forwardRef<ChatSidebarRef, ChatSidebarProps>(({
           onOpenSessionManager={onSwitchToAgentMode}
         />
         <button
-          className="chat-sidebar-new-button flex items-center gap-1 px-3 py-1.5 rounded-md text-[0.8125rem] font-medium bg-nim-accent text-white border-none cursor-pointer transition-opacity duration-150 hover:opacity-90"
+          className="chat-sidebar-new-button flex items-center gap-1 px-3 py-1.5 rounded-md text-[0.8125rem] font-medium bg-nim-primary text-white border-none cursor-pointer transition-opacity duration-150 hover:opacity-90"
           onClick={handleNewSession}
           title="Start new conversation"
         >
