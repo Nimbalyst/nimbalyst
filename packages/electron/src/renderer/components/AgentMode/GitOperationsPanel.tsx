@@ -475,11 +475,44 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
       setRebaseConflictData(null);
 
       try {
-        // Get the base branch from repo root
-        const mainBranch = worktreeRepoRootBranch || 'main';
+        // Get the base branch from repo root and worktree info
+        const baseBranch = worktreeRepoRootBranch || 'main';
+        const wtName = worktreePath?.split('/').pop() || 'unknown';
+        const worktreeBranch = `worktree/${wtName}`;
 
-        // Create the prompt following Crystal's pattern
-        const draftMessage = `Please rebase the local ${mainBranch} branch (not origin/${mainBranch}) into this branch and resolve all conflicts`;
+        // Create a detailed prompt with specific instructions
+        const conflictFilesList = rebaseConflictData.files.map(f => `  - ${f}`).join('\n');
+        const draftMessage = `I need to rebase this worktree branch onto the latest changes from ${baseBranch}.
+
+**Context:**
+- Main repository: ${workspacePath}
+- Base branch: ${baseBranch}
+- Worktree location: ${worktreePath}
+- Worktree branch: ${worktreeBranch}
+
+**The Situation:**
+I'm trying to rebase ${worktreeBranch} onto the local ${baseBranch} branch (from the main repository at ${workspacePath}, NOT origin/${baseBranch}). These files have conflicts:
+${conflictFilesList}
+${rebaseConflictData.commits ? `
+**Conflicting Commits:**
+${rebaseConflictData.commits.ours && rebaseConflictData.commits.ours.length > 0 ? `Your commits:\n${rebaseConflictData.commits.ours.slice(0, 5).map(c => `  - ${c}`).join('\n')}` : ''}
+${rebaseConflictData.commits.theirs && rebaseConflictData.commits.theirs.length > 0 ? `\nIncoming commits from ${baseBranch}:\n${rebaseConflictData.commits.theirs.slice(0, 5).map(c => `  - ${c}`).join('\n')}` : ''}
+` : ''}
+**Important Notes:**
+- If there are any uncommitted changes (staged or unstaged), they have been auto-stashed before the rebase attempt
+- After completing the rebase, you'll need to restore the stash with \`git stash pop\`
+- Handle any conflicts that arise when restoring the stash
+
+**What you need to do:**
+1. Start the rebase: \`git rebase ${baseBranch}\`
+2. Resolve all conflicts in the files listed above
+3. After resolving each conflict, stage the file: \`git add <file>\`
+4. Continue the rebase: \`git rebase --continue\`
+5. Repeat steps 2-4 until the rebase is complete
+6. After the rebase succeeds, restore uncommitted changes: \`git stash pop\`
+7. If there are conflicts when popping the stash, resolve them as well
+
+Make sure to preserve the intent of both the worktree changes and the incoming changes from ${baseBranch}.`;
 
         console.log('[GitOperationsPanel] Creating AI session in main repo workspace...');
         // Create the session in the MAIN REPO workspace (so it appears in main session list)
@@ -865,7 +898,7 @@ Please proceed with this strategy.`;
     const effectiveWorktreeCommitsBehind = worktreeIsMerged ? 0 : worktreeCommitsBehind;
     const worktreeCanCommit = worktreeStagedCount > 0 && worktreeCommitMessage.trim().length > 0 && !worktreeIsCommitting;
     const worktreeCanMerge = worktreeHasCommits && !worktreeHasUncommittedChanges && !worktreeIsMerging && !worktreeIsMerged && effectiveWorktreeCommitsBehind === 0;
-    const worktreeCanRebase = effectiveWorktreeCommitsBehind > 0 && !worktreeHasUncommittedChanges && !worktreeIsRebasing;
+    const worktreeCanRebase = effectiveWorktreeCommitsBehind > 0 && !worktreeIsRebasing;
 
     if (!gitStatus) {
       return null;
@@ -1128,10 +1161,10 @@ Please proceed with this strategy.`;
                     onClick={handleWorktreeRebase}
                     disabled={!worktreeCanRebase}
                     title={
-                      worktreeHasUncommittedChanges
-                        ? 'Commit all changes before rebasing'
-                        : effectiveWorktreeCommitsBehind === 0
-                          ? 'Already up to date with base branch'
+                      effectiveWorktreeCommitsBehind === 0
+                        ? 'Already up to date with base branch'
+                        : worktreeHasUncommittedChanges
+                          ? `Bring in ${effectiveWorktreeCommitsBehind} commit${effectiveWorktreeCommitsBehind === 1 ? '' : 's'} from ${worktreeRepoRootBranch || 'base branch'} (uncommitted changes will be auto-stashed)`
                           : `Bring in ${effectiveWorktreeCommitsBehind} commit${effectiveWorktreeCommitsBehind === 1 ? '' : 's'} from ${worktreeRepoRootBranch || 'base branch'}`
                     }
                   >

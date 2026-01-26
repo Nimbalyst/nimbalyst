@@ -1282,15 +1282,6 @@ ${newLines.map(line => '+' + line).join('\n')}`;
     const git: SimpleGit = simpleGit(worktreePath);
 
     try {
-      // Check for uncommitted changes
-      const status = await git.status();
-      if (!status.isClean()) {
-        return {
-          success: false,
-          message: 'Cannot rebase: uncommitted changes in worktree. Please commit or discard changes first.',
-        };
-      }
-
       const currentBranch = (await git.revparse(['--abbrev-ref', 'HEAD'])).trim();
       logger.info('Rebase details', { currentBranch, baseBranch });
 
@@ -1310,11 +1301,49 @@ ${newLines.map(line => '+' + line).join('\n')}`;
         };
       }
 
+      // Check for uncommitted changes and auto-stash if needed
+      const status = await git.status();
+      let didStash = false;
+
+      if (!status.isClean()) {
+        logger.info('Auto-stashing uncommitted changes before rebase', { fileCount: status.files.length });
+        const stashStartTime = Date.now();
+        try {
+          // Don't use -u flag to avoid stashing large untracked files
+          await git.stash(['push', '-m', 'Auto-stash before rebase']);
+          didStash = true;
+          const stashDuration = Date.now() - stashStartTime;
+          logger.info('Auto-stash successful', { stashDuration });
+        } catch (stashError) {
+          logger.error('Failed to auto-stash changes', { stashError });
+          return {
+            success: false,
+            message: `Failed to stash uncommitted changes: ${stashError instanceof Error ? stashError.message : String(stashError)}`,
+          };
+        }
+      }
+
       // Perform the rebase
       try {
         await git.rebase([baseBranch]);
 
         logger.info('Rebase completed successfully');
+
+        // Pop stash if we stashed changes
+        if (didStash) {
+          try {
+            logger.info('Attempting to restore stashed changes');
+            await git.stash(['pop']);
+            logger.info('Stashed changes restored successfully');
+          } catch (popError) {
+            logger.error('Failed to restore stashed changes', { popError });
+            return {
+              success: false,
+              message: `Rebase succeeded but failed to restore stashed changes: ${popError instanceof Error ? popError.message : String(popError)}. Use 'git stash pop' manually to restore.`,
+            };
+          }
+        }
+
         return {
           success: true,
           message: `Successfully rebased ${currentBranch} onto ${baseBranch}`,
@@ -1326,11 +1355,32 @@ ${newLines.map(line => '+' + line).join('\n')}`;
           // Abort the rebase
           await git.rebase(['--abort']);
 
+          // Restore stash if we stashed
+          if (didStash) {
+            try {
+              logger.info('Restoring stashed changes after aborted rebase');
+              await git.stash(['pop']);
+            } catch (popError) {
+              logger.error('Failed to restore stashed changes after abort', { popError });
+              // Continue to return conflict error, but mention stash issue
+            }
+          }
+
           return {
             success: false,
             message: 'rebase-conflicts-detected',
             conflictedFiles: rebaseStatus.conflicted,
           };
+        }
+
+        // Restore stash on other errors too
+        if (didStash) {
+          try {
+            logger.info('Restoring stashed changes after rebase error');
+            await git.stash(['pop']);
+          } catch (popError) {
+            logger.error('Failed to restore stashed changes after error', { popError });
+          }
         }
 
         throw rebaseError;
