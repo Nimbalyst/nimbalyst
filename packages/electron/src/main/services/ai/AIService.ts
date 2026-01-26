@@ -134,7 +134,8 @@ function extractModelForProvider(
   const parsed = ModelIdentifier.tryParse(fullModel);
   if (parsed) {
     // Check for provider mismatch - Claude Code variant with non-claude-code provider
-    if (parsed.provider === 'claude-code' && provider !== 'claude-code') {
+    // Note: provider cannot be 'claude-code' here due to early return above
+    if (parsed.provider === 'claude-code') {
       logger.main.warn(`[AIService] Session has Claude Code model "${fullModel}" with ${provider} provider - using default model`);
       return null;
     }
