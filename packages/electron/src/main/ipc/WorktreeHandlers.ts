@@ -776,6 +776,7 @@ export function registerWorktreeHandlers(): void {
         message: result.message,
         conflictedFiles: result.conflictedFiles,
         conflictingCommits: result.conflictingCommits,
+        untrackedFiles: result.untrackedFiles,
       };
     } catch (error) {
       logger.error('Failed to rebase worktree:', error);

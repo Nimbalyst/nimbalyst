@@ -1349,6 +1349,47 @@ ${newLines.map(line => '+' + line).join('\n')}`;
           message: `Successfully rebased ${currentBranch} onto ${baseBranch}`,
         };
       } catch (rebaseError) {
+        const errorMessage = rebaseError instanceof Error ? rebaseError.message : String(rebaseError);
+
+        // Check for untracked files that would be overwritten
+        if (errorMessage.includes('untracked working tree files would be overwritten')) {
+          // Parse the file names from the error message
+          const untrackedFiles: string[] = [];
+          const lines = errorMessage.split('\n');
+          let inFileList = false;
+          for (const line of lines) {
+            if (line.includes('untracked working tree files would be overwritten')) {
+              inFileList = true;
+              continue;
+            }
+            if (inFileList) {
+              // File names are indented with tabs, stop when we hit a non-indented line
+              if (line.startsWith('\t')) {
+                untrackedFiles.push(line.trim());
+              } else if (line.trim() !== '' && !line.startsWith('error:')) {
+                // Hit "Please move or remove..." or other non-file line
+                break;
+              }
+            }
+          }
+
+          // Restore stash if we stashed
+          if (didStash) {
+            try {
+              logger.info('Restoring stashed changes after untracked file conflict');
+              await git.stash(['pop']);
+            } catch (popError) {
+              logger.error('Failed to restore stashed changes after untracked conflict', { popError });
+            }
+          }
+
+          return {
+            success: false,
+            message: 'untracked-files-conflict',
+            untrackedFiles,
+          };
+        }
+
         // Check for rebase conflicts
         const rebaseStatus = await git.status();
         if (rebaseStatus.conflicted.length > 0) {

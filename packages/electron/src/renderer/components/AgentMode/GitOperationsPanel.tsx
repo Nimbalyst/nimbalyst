@@ -21,6 +21,7 @@ import {
 import { RebaseConflictDialog } from './RebaseConflictDialog';
 import { MergeConflictDialog } from './MergeConflictDialog';
 import { MergeConfirmDialog } from './MergeConfirmDialog';
+import { UntrackedFilesConflictDialog } from './UntrackedFilesConflictDialog';
 import { ArchiveWorktreeDialog } from './ArchiveWorktreeDialog';
 import { SquashCommitModal } from './SquashCommitModal';
 
@@ -90,6 +91,7 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
       commits?: { ours: string[]; theirs: string[] };
     } | null>(null);
     const [mergeConflictFiles, setMergeConflictFiles] = useState<string[] | null>(null);
+    const [untrackedFilesConflict, setUntrackedFilesConflict] = useState<string[] | null>(null);
     const [worktreeName, setWorktreeName] = useState<string>('');
     const [showArchiveDialog, setShowArchiveDialog] = useState(false);
     const [showMergeConfirmDialog, setShowMergeConfirmDialog] = useState(false);
@@ -454,6 +456,9 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
               files: result.conflictedFiles,
               commits: result.conflictingCommits,
             });
+          } else if (result?.message === 'untracked-files-conflict' && result?.untrackedFiles) {
+            // Show untracked files conflict dialog
+            setUntrackedFilesConflict(result.untrackedFiles);
           } else {
             console.error('[GitOperationsPanel] Worktree rebase failed:', result?.error || result?.message);
           }
@@ -562,6 +567,92 @@ Make sure to preserve the intent of both the worktree changes and the incoming c
         console.error('[GitOperationsPanel] Failed to create agent session for rebase conflict resolution:', err);
       }
     }, [workspacePath, worktreePath, worktreeId, worktreeRepoRootBranch, rebaseConflictData]);
+
+    // Resolve untracked files conflict with Claude Agent
+    const handleResolveUntrackedFilesWithAgent = useCallback(async () => {
+      if (!untrackedFilesConflict || untrackedFilesConflict.length === 0) return;
+
+      console.log('[GitOperationsPanel] Resolving untracked files conflict with agent', { untrackedFilesConflict, worktreePath });
+
+      // Close the dialog
+      setUntrackedFilesConflict(null);
+
+      try {
+        // Get the base branch from repo root and worktree info
+        const baseBranch = worktreeRepoRootBranch || 'main';
+        const wtName = worktreePath?.split('/').pop() || 'unknown';
+        const worktreeBranch = `worktree/${wtName}`;
+
+        // Create a detailed prompt with specific instructions
+        const untrackedFilesList = untrackedFilesConflict.map(f => `  - ${f}`).join('\n');
+        const draftMessage = `I need to rebase this worktree branch onto the latest changes from ${baseBranch}, but there are untracked files blocking the rebase.
+
+**Context:**
+- Main repository: ${workspacePath}
+- Base branch: ${baseBranch}
+- Worktree location: ${worktreePath}
+- Worktree branch: ${worktreeBranch}
+
+**The Problem:**
+The rebase cannot proceed because these untracked files in the worktree would be overwritten by incoming changes from ${baseBranch}:
+${untrackedFilesList}
+
+**What you need to do:**
+1. First, examine each untracked file to understand what it contains
+2. Decide what to do with each file:
+   - If it's important and should be kept: \`git add <file>\` to track it, then commit
+   - If it's generated/temp and can be deleted: \`rm <file>\`
+   - If you're unsure, you can stash it: \`git stash -u\` (stashes untracked files too)
+3. After handling the untracked files, retry the rebase: \`git rebase ${baseBranch}\`
+4. If you stashed, remember to restore with \`git stash pop\` after the rebase
+
+Please analyze these files and recommend the best approach before taking action.`;
+
+        console.log('[GitOperationsPanel] Creating AI session for untracked files resolution...');
+        const sessionResult = await window.electronAPI.aiCreateSession(
+          'claude-code',
+          undefined, // documentContext
+          workspacePath, // workspacePath (main repo - so session appears in main session list)
+          undefined, // modelId (use default)
+          'coding', // sessionType
+          worktreeId ?? undefined  // worktreeId (associate with the worktree - Claude will run in worktree directory)
+        );
+
+        console.log('[GitOperationsPanel] Session result:', sessionResult);
+
+        if (sessionResult?.id) {
+          const sessionId = sessionResult.id;
+
+          // Load the session data first
+          console.log('[GitOperationsPanel] Loading session...', sessionId);
+          const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspacePath);
+          console.log('[GitOperationsPanel] Session data:', sessionData);
+
+          if (sessionData) {
+            // Save the draft input so it appears in the text box but isn't sent yet
+            console.log('[GitOperationsPanel] Saving draft input...');
+            await window.electronAPI.aiSaveDraftInput(
+              sessionId,
+              draftMessage,
+              workspacePath
+            );
+
+            // Dispatch a custom event to notify the AgenticPanel to open this session
+            console.log('[GitOperationsPanel] Dispatching event...');
+            window.dispatchEvent(new CustomEvent('open-ai-session', {
+              detail: {
+                sessionId: sessionId,
+                workspacePath: workspacePath,
+                draftInput: draftMessage
+              }
+            }));
+            console.log('[GitOperationsPanel] Event dispatched successfully');
+          }
+        }
+      } catch (err) {
+        console.error('[GitOperationsPanel] Failed to create agent session for untracked files resolution:', err);
+      }
+    }, [workspacePath, worktreePath, worktreeId, worktreeRepoRootBranch, untrackedFilesConflict]);
 
     // Resolve merge conflicts with Claude Agent
     const handleResolveConflictsWithAgent = useCallback(async () => {
@@ -1348,6 +1439,16 @@ Please proceed with this strategy.`;
             conflictedFiles={mergeConflictFiles}
             onResolveWithAgent={handleResolveConflictsWithAgent}
             onCancel={() => setMergeConflictFiles(null)}
+          />
+        )}
+
+        {/* Untracked files conflict dialog */}
+        {untrackedFilesConflict && untrackedFilesConflict.length > 0 && (
+          <UntrackedFilesConflictDialog
+            worktreePath={worktreePath || ''}
+            untrackedFiles={untrackedFilesConflict}
+            onResolveWithAgent={handleResolveUntrackedFilesWithAgent}
+            onCancel={() => setUntrackedFilesConflict(null)}
           />
         )}
 
